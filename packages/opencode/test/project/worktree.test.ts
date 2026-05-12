@@ -1,302 +1,292 @@
-import { $ } from "bun"
 import { afterEach, describe, expect } from "bun:test"
-import * as fs from "fs/promises"
 import path from "path"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Instance } from "../../src/project/instance"
-import { WithInstance } from "../../src/project/with-instance"
-import { InstanceRuntime } from "../../src/project/instance-runtime"
+import { Cause, Deferred, Effect, Exit, Layer } from "effect"
+import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
+import { Git } from "../../src/git"
 import { Worktree } from "../../src/worktree"
-import { disposeAllInstances, provideInstance, provideTmpdirInstance } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(Worktree.defaultLayer, CrossSpawnSpawner.defaultLayer))
-const wintest = process.platform !== "win32" ? it.live : it.live.skip
+const it = testEffect(
+  Layer.mergeAll(Worktree.defaultLayer, AppFileSystem.defaultLayer, CrossSpawnSpawner.defaultLayer, Git.defaultLayer),
+)
+const wintest = process.platform !== "win32" ? it.instance : it.instance.skip
 
 function normalize(input: string) {
   return input.replace(/\\/g, "/").toLowerCase()
 }
 
-async function waitReady() {
-  const { GlobalBus } = await import("../../src/bus/global")
+const waitReady = Effect.fn("WorktreeTest.waitReady")(function* () {
+  const ready = yield* Deferred.make<{ name: string; branch?: string }>()
+  const on = (evt: GlobalEvent) => {
+    if (evt.payload.type !== Worktree.Event.Ready.type) return
+    Deferred.doneUnsafe(ready, Effect.succeed(evt.payload.properties))
+  }
 
-  return await new Promise<{ name: string; branch?: string }>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      GlobalBus.off("event", on)
-      reject(new Error("timed out waiting for worktree.ready"))
-    }, 10_000)
+  GlobalBus.on("event", on)
+  yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", on)))
 
-    function on(evt: { directory?: string; payload: { type: string; properties: { name: string; branch?: string } } }) {
-      if (evt.payload.type !== Worktree.Event.Ready.type) return
-      clearTimeout(timer)
-      GlobalBus.off("event", on)
-      resolve(evt.payload.properties)
-    }
+  return Deferred.await(ready).pipe(
+    Effect.race(
+      Effect.sleep("10 seconds").pipe(
+        Effect.flatMap(() => Effect.fail(new Error("timed out waiting for worktree.ready"))),
+      ),
+    ),
+  )
+})
 
-    GlobalBus.on("event", on)
-  })
-}
+const git = Effect.fn("WorktreeTest.git")(function* (cwd: string, args: string[]) {
+  const service = yield* Git.Service
+  const result = yield* service.run(args, { cwd })
+  if (result.exitCode !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.stderr.toString("utf8")}`)
+  return result.text()
+})
+
+const gitResult = Effect.fn("WorktreeTest.gitResult")(function* (cwd: string, args: string[]) {
+  const service = yield* Git.Service
+  return yield* service.run(args, { cwd })
+})
 
 describe("Worktree", () => {
   afterEach(() => disposeAllInstances())
 
   describe("makeWorktreeInfo", () => {
-    it.live("returns info with name, branch, and directory", () =>
-      provideTmpdirInstance(
-        () =>
-          Effect.gen(function* () {
-            const svc = yield* Worktree.Service
-            const info = yield* svc.makeWorktreeInfo()
-
-            expect(info.name).toBeDefined()
-            expect(typeof info.name).toBe("string")
-            expect(info.branch).toBe(`opencode/${info.name}`)
-            expect(info.directory).toContain(info.name)
-          }),
-        { git: true },
-      ),
-    )
-
-    it.live("uses provided name as base", () =>
-      provideTmpdirInstance(
-        () =>
-          Effect.gen(function* () {
-            const svc = yield* Worktree.Service
-            const info = yield* svc.makeWorktreeInfo({ name: "my-feature" })
-
-            expect(info.name).toBe("my-feature")
-            expect(info.branch).toBe("opencode/my-feature")
-          }),
-        { git: true },
-      ),
-    )
-
-    it.live("slugifies the provided name", () =>
-      provideTmpdirInstance(
-        () =>
-          Effect.gen(function* () {
-            const svc = yield* Worktree.Service
-            const info = yield* svc.makeWorktreeInfo({ name: "My Feature Branch!" })
-
-            expect(info.name).toBe("my-feature-branch")
-          }),
-        { git: true },
-      ),
-    )
-
-    it.live("omits branch for detached info", () =>
-      provideTmpdirInstance(
-        (dir) =>
-          Effect.gen(function* () {
-            const svc = yield* Worktree.Service
-            yield* Effect.promise(() => $`git branch opencode/my-feature`.cwd(dir).quiet())
-
-            const info = yield* svc.makeWorktreeInfo({ name: "my-feature", detached: true })
-
-            expect(info.name).toBe("my-feature")
-            expect(info.branch).toBeUndefined()
-          }),
-        { git: true },
-      ),
-    )
-
-    it.live("throws NotGitError for non-git directories", () =>
-      provideTmpdirInstance(() =>
+    it.instance(
+      "returns info with name, branch, and directory",
+      () =>
         Effect.gen(function* () {
           const svc = yield* Worktree.Service
-          const exit = yield* Effect.exit(svc.makeWorktreeInfo())
+          const info = yield* svc.makeWorktreeInfo()
 
-          expect(Exit.isFailure(exit)).toBe(true)
-          if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Worktree.NotGitError)
+          expect(info.name).toBeDefined()
+          expect(typeof info.name).toBe("string")
+          expect(info.branch).toBe(`opencode/${info.name}`)
+          expect(info.directory).toContain(info.name)
         }),
-      ),
+      { git: true },
     )
 
-    wintest("creates detached git worktree when info has no branch", () =>
-      provideTmpdirInstance(
-        (dir) =>
-          Effect.gen(function* () {
-            const svc = yield* Worktree.Service
-            const info = yield* svc.makeWorktreeInfo({ name: "detached-test", detached: true })
-            const ready = waitReady()
-            yield* svc.createFromInfo(info)
+    it.instance(
+      "uses provided name as base",
+      () =>
+        Effect.gen(function* () {
+          const svc = yield* Worktree.Service
+          const info = yield* svc.makeWorktreeInfo({ name: "my-feature" })
 
-            const list = yield* Effect.promise(() => $`git worktree list --porcelain`.cwd(dir).quiet().text())
-            const normalizedList = normalize(list)
-            const normalizedDir = normalize(info.directory)
-            expect(normalizedList).toContain(normalizedDir)
+          expect(info.name).toBe("my-feature")
+          expect(info.branch).toBe("opencode/my-feature")
+        }),
+      { git: true },
+    )
 
-            const branch = yield* Effect.promise(() =>
-              $`git symbolic-ref -q --short HEAD`.cwd(info.directory).quiet().nothrow(),
-            )
-            expect(branch.exitCode).not.toBe(0)
+    it.instance(
+      "slugifies the provided name",
+      () =>
+        Effect.gen(function* () {
+          const svc = yield* Worktree.Service
+          const info = yield* svc.makeWorktreeInfo({ name: "My Feature Branch!" })
 
-            const props = yield* Effect.promise(() => ready)
-            expect(props.name).toBe(info.name)
-            expect(props.branch).toBeUndefined()
+          expect(info.name).toBe("my-feature-branch")
+        }),
+      { git: true },
+    )
 
-            yield* svc.remove({ directory: info.directory })
-          }),
-        { git: true },
-      ),
+    it.instance(
+      "omits branch for detached info",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const svc = yield* Worktree.Service
+          yield* git(test.directory, ["branch", "opencode/my-feature"])
+
+          const info = yield* svc.makeWorktreeInfo({ name: "my-feature", detached: true })
+
+          expect(info.name).toBe("my-feature")
+          expect(info.branch).toBeUndefined()
+        }),
+      { git: true },
+    )
+
+    it.instance("throws NotGitError for non-git directories", () =>
+      Effect.gen(function* () {
+        const svc = yield* Worktree.Service
+        const exit = yield* Effect.exit(svc.makeWorktreeInfo())
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Worktree.NotGitError)
+      }),
+    )
+
+    wintest(
+      "creates detached git worktree when info has no branch",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const svc = yield* Worktree.Service
+          const info = yield* svc.makeWorktreeInfo({ name: "detached-test", detached: true })
+          const ready = yield* waitReady()
+          yield* svc.createFromInfo(info)
+
+          const list = yield* git(test.directory, ["worktree", "list", "--porcelain"])
+          const normalizedList = normalize(list)
+          const normalizedDir = normalize(info.directory)
+          expect(normalizedList).toContain(normalizedDir)
+
+          const branch = yield* gitResult(info.directory, ["symbolic-ref", "-q", "--short", "HEAD"])
+          expect(branch.exitCode).not.toBe(0)
+
+          const props = yield* ready
+          expect(props.name).toBe(info.name)
+          expect(props.branch).toBeUndefined()
+
+          yield* svc.remove({ directory: info.directory })
+        }),
+      { git: true },
     )
   })
 
   describe("create + remove lifecycle", () => {
-    it.live("create returns worktree info and remove cleans up", () =>
-      provideTmpdirInstance(
-        () =>
-          Effect.gen(function* () {
-            const svc = yield* Worktree.Service
-            const info = yield* svc.create()
+    it.instance(
+      "create returns worktree info and remove cleans up",
+      () =>
+        Effect.gen(function* () {
+          const svc = yield* Worktree.Service
+          const ready = yield* waitReady()
+          const info = yield* svc.create()
 
-            expect(info.name).toBeDefined()
-            expect(info.branch ?? "").toStartWith("opencode/")
-            expect(info.directory).toBeDefined()
+          expect(info.name).toBeDefined()
+          expect(info.branch ?? "").toStartWith("opencode/")
+          expect(info.directory).toBeDefined()
 
-            yield* Effect.promise(() => Bun.sleep(1000))
+          yield* ready
 
-            const ok = yield* svc.remove({ directory: info.directory })
-            expect(ok).toBe(true)
-          }),
-        { git: true },
-      ),
+          const ok = yield* svc.remove({ directory: info.directory })
+          expect(ok).toBe(true)
+        }),
+      { git: true },
     )
 
-    it.live("create returns after setup and fires Event.Ready after bootstrap", () =>
-      provideTmpdirInstance(
-        (dir) =>
-          Effect.gen(function* () {
-            const svc = yield* Worktree.Service
-            const ready = waitReady()
-            const info = yield* svc.create()
+    it.instance(
+      "create returns after setup and fires Event.Ready after bootstrap",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const fs = yield* AppFileSystem.Service
+          const svc = yield* Worktree.Service
+          const ready = yield* waitReady()
+          const info = yield* svc.create()
 
-            expect(info.name).toBeDefined()
-            expect(info.branch ?? "").toStartWith("opencode/")
+          expect(info.name).toBeDefined()
+          expect(info.branch ?? "").toStartWith("opencode/")
 
-            const text = yield* Effect.promise(() => $`git worktree list --porcelain`.cwd(dir).quiet().text())
-            const next = yield* Effect.promise(() => fs.realpath(info.directory).catch(() => info.directory))
-            expect(normalize(text)).toContain(normalize(next))
+          const text = yield* git(test.directory, ["worktree", "list", "--porcelain"])
+          const next = yield* fs.realPath(info.directory).pipe(Effect.catch(() => Effect.succeed(info.directory)))
+          expect(normalize(text)).toContain(normalize(next))
 
-            const props = yield* Effect.promise(() => ready)
-            expect(props.name).toBe(info.name)
-            expect(props.branch).toBe(info.branch)
+          const props = yield* ready
+          expect(props.name).toBe(info.name)
+          expect(props.branch).toBe(info.branch)
 
-            yield* Effect.promise(() =>
-              WithInstance.provide({
-                directory: info.directory,
-                fn: () => InstanceRuntime.disposeInstance(Instance.current),
-              }),
-            )
-            yield* Effect.promise(() => Bun.sleep(100))
-            yield* svc.remove({ directory: info.directory })
-          }),
-        { git: true },
-      ),
+          yield* svc.remove({ directory: info.directory })
+        }),
+      { git: true },
     )
 
-    it.live("create with custom name", () =>
-      provideTmpdirInstance(
-        () =>
-          Effect.gen(function* () {
-            const svc = yield* Worktree.Service
-            const ready = waitReady()
-            const info = yield* svc.create({ name: "test-workspace" })
+    it.instance(
+      "create with custom name",
+      () =>
+        Effect.gen(function* () {
+          const svc = yield* Worktree.Service
+          const ready = yield* waitReady()
+          const info = yield* svc.create({ name: "test-workspace" })
 
-            expect(info.name).toBe("test-workspace")
-            expect(info.branch).toBe("opencode/test-workspace")
+          expect(info.name).toBe("test-workspace")
+          expect(info.branch).toBe("opencode/test-workspace")
 
-            yield* Effect.promise(() => ready)
-            yield* Effect.promise(() =>
-              WithInstance.provide({
-                directory: info.directory,
-                fn: () => InstanceRuntime.disposeInstance(Instance.current),
-              }),
-            )
-            yield* Effect.promise(() => Bun.sleep(100))
-            yield* svc.remove({ directory: info.directory })
-          }),
-        { git: true },
-      ),
+          yield* ready
+          yield* svc.remove({ directory: info.directory })
+        }),
+      { git: true },
     )
   })
 
   describe("createFromInfo", () => {
-    wintest("creates git worktree and boots asynchronously", () =>
-      provideTmpdirInstance(
-        (dir) =>
-          Effect.gen(function* () {
-            const svc = yield* Worktree.Service
-            const info = yield* svc.makeWorktreeInfo({ name: "from-info-test" })
-            const ready = waitReady()
-            yield* svc.createFromInfo(info)
+    wintest(
+      "creates git worktree and boots asynchronously",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const svc = yield* Worktree.Service
+          const info = yield* svc.makeWorktreeInfo({ name: "from-info-test" })
+          const ready = yield* waitReady()
+          yield* svc.createFromInfo(info)
 
-            const list = yield* Effect.promise(() => $`git worktree list --porcelain`.cwd(dir).quiet().text())
-            const normalizedList = list.replace(/\\/g, "/")
-            const normalizedDir = info.directory.replace(/\\/g, "/")
-            expect(normalizedList).toContain(normalizedDir)
+          const list = yield* git(test.directory, ["worktree", "list", "--porcelain"])
+          const normalizedList = list.replace(/\\/g, "/")
+          const normalizedDir = info.directory.replace(/\\/g, "/")
+          expect(normalizedList).toContain(normalizedDir)
 
-            yield* Effect.promise(() => ready)
-            yield* svc.remove({ directory: info.directory })
-          }),
-        { git: true },
-      ),
+          yield* ready
+          yield* svc.remove({ directory: info.directory })
+        }),
+      { git: true },
     )
   })
 
   describe("list", () => {
-    it.live("uses parent folder name when worktree basename matches the primary worktree", () =>
-      provideTmpdirInstance(
-        (dir) =>
-          Effect.gen(function* () {
-            const svc = yield* Worktree.Service
-            const parent = path.join(path.dirname(dir), `${path.basename(dir)}-parent`)
-            const target = path.join(parent, path.basename(dir))
-            const branch = `same-basename-list-${Date.now()}`
+    it.instance(
+      "uses parent folder name when worktree basename matches the primary worktree",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const fs = yield* AppFileSystem.Service
+          const svc = yield* Worktree.Service
+          const parent = path.join(path.dirname(test.directory), `${path.basename(test.directory)}-parent`)
+          const target = path.join(parent, path.basename(test.directory))
+          const branch = `same-basename-list-${Date.now()}`
 
-            yield* Effect.promise(() => fs.mkdir(parent, { recursive: true }))
-            yield* Effect.promise(() => $`git worktree add -b ${branch} ${target}`.cwd(dir).quiet())
+          yield* fs.ensureDir(parent)
+          yield* git(test.directory, ["worktree", "add", "-b", branch, target])
 
-            const list = yield* svc.list()
-            const directory = yield* Effect.promise(() => fs.realpath(target).catch(() => target))
+          const list = yield* svc.list()
+          const directory = yield* fs.realPath(target).pipe(Effect.catch(() => Effect.succeed(target)))
 
-            expect(list.map((item) => ({ ...item, directory: normalize(item.directory) }))).toContainEqual({
-              name: path.basename(parent),
-              branch,
-              directory: normalize(directory),
-            })
+          expect(list.map((item) => ({ ...item, directory: normalize(item.directory) }))).toContainEqual({
+            name: path.basename(parent),
+            branch,
+            directory: normalize(directory),
+          })
 
-            yield* svc.remove({ directory: target })
-          }),
-        { git: true },
-      ),
+          yield* svc.remove({ directory: target })
+        }),
+      { git: true },
     )
   })
 
   describe("remove edge cases", () => {
-    it.live("remove non-existent directory succeeds silently", () =>
-      provideTmpdirInstance(
-        (dir) =>
-          Effect.gen(function* () {
-            const svc = yield* Worktree.Service
-            const ok = yield* svc.remove({ directory: path.join(dir, "does-not-exist") })
-            expect(ok).toBe(true)
-          }),
-        { git: true },
-      ),
+    it.instance(
+      "remove non-existent directory succeeds silently",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const svc = yield* Worktree.Service
+          const ok = yield* svc.remove({ directory: path.join(test.directory, "does-not-exist") })
+          expect(ok).toBe(true)
+        }),
+      { git: true },
     )
 
-    it.live("throws NotGitError for non-git directories", () =>
-      provideTmpdirInstance(() =>
-        Effect.gen(function* () {
-          const svc = yield* Worktree.Service
-          const exit = yield* Effect.exit(svc.remove({ directory: "/tmp/fake" }))
+    it.instance("throws NotGitError for non-git directories", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const svc = yield* Worktree.Service
+        const exit = yield* Effect.exit(svc.remove({ directory: path.join(test.directory, "fake") }))
 
-          expect(Exit.isFailure(exit)).toBe(true)
-          if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Worktree.NotGitError)
-        }),
-      ),
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Worktree.NotGitError)
+      }),
     )
   })
 })
