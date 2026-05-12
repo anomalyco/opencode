@@ -582,6 +582,7 @@ function createGlobalSync() {
         sdk,
         store: child[0],
         setStore,
+        setProject: (projects) => setProjectsFor(domainFromDirectory(directory), projects),
         vcsCache: cache,
         translate: language.t,
         queryClient,

@@ -174,57 +174,10 @@ function projectID(directory: string, projects: Project[]) {
   return projectOwner(directory, projects)?.project.id
 }
 
-function mergeSession(setStore: SetStoreFunction<State>, session: Session) {
-  setStore("session", (list) => {
-    const next = list.slice()
-    const idx = next.findIndex((item) => item.id >= session.id)
-    if (idx === -1) return [...next, session]
-    if (next[idx]?.id === session.id) {
-      next[idx] = session
-      return next
-    }
-    next.splice(idx, 0, session)
-    return next
-  })
+export function upsertProject(projects: Project[], project: Project) {
+  const next = projects.filter((item) => item.id !== project.id)
+  return [...next, project].sort((a, b) => cmp(a.id, b.id))
 }
-
-function warmSessions(input: {
-  ids: string[]
-  store: Store<State>
-  setStore: SetStoreFunction<State>
-  sdk: OpencodeClient
-}) {
-  const known = new Set(input.store.session.map((item) => item.id))
-  const ids = [...new Set(input.ids)].filter((id) => !!id && !known.has(id))
-  if (ids.length === 0) return Promise.resolve()
-  return Promise.all(
-    ids.map((sessionID) =>
-      retry(() => input.sdk.session.get({ sessionID })).then((x) => {
-        const session = x.data
-        if (!session?.id) return
-        mergeSession(input.setStore, session)
-      }),
-    ),
-  ).then(() => undefined)
-}
-
-export const loadProvidersQuery = (directory: string | null, sdk: OpencodeClient) =>
-  queryOptions({
-    queryKey: [directory, "providers"],
-    queryFn: () => retry(() => sdk.provider.list().then((x) => normalizeProviderList(x.data!))),
-  })
-
-export const loadAgentsQuery = (directory: string | null, sdk: OpencodeClient) =>
-  queryOptions({
-    queryKey: [directory, "agents"],
-    queryFn: () => retry(() => sdk.app.agents().then((x) => normalizeAgentList(x.data))),
-  })
-
-export const loadPathQuery = (directory: string | null, sdk: OpencodeClient) =>
-  queryOptions<Path>({
-    queryKey: [directory, "path"],
-    queryFn: () => retry(() => sdk.path.get().then((x) => x.data!)),
-  })
 
 export async function bootstrapDirectory(input: {
   directory: string
@@ -232,6 +185,7 @@ export async function bootstrapDirectory(input: {
   store: Store<State>
   setStore: SetStoreFunction<State>
   vcsCache: VcsCache
+  setProject?: (projects: Project[]) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
   global: {
     config: Config
@@ -242,8 +196,8 @@ export async function bootstrapDirectory(input: {
   queryClient: QueryClient
 }) {
   const loading = input.store.status !== "complete"
-  const seededProject = projectID(input.directory, input.global.project)
-  const seededPath = input.global.path.directory === input.directory ? input.global.path : undefined
+  let projects = input.global.project
+  const seededProject = projectID(input.directory, projects)
   if (seededProject) input.setStore("project", seededProject)
   if (seededPath) input.setStore("path", seededPath)
   if (Object.keys(input.store.config).length === 0 && Object.keys(input.global.config).length > 0) {
@@ -253,15 +207,25 @@ export async function bootstrapDirectory(input: {
 
   const fast = [
     () =>
-      seededProject
-        ? Promise.resolve()
-        : retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id)),
+      retry(() => input.sdk.project.current()).then((x) => {
+        const project = x.data!
+        projects = upsertProject(projects, project)
+        input.setProject?.(projects)
+        const id = projectID(input.directory, projects) ?? project.id
+        console.debug("[global-sync] project current seeded", {
+          directory: input.directory,
+          project: project.id,
+          vcs: project.vcs ?? null,
+          worktree: project.worktree,
+        })
+        input.setStore("project", id)
+      }),
     () => retry(() => input.sdk.config.get().then((x) => input.setStore("config", x.data!))),
     () =>
       retry(() =>
         input.sdk.path.get().then((x) => {
           input.setStore("path", x.data!)
-          const next = projectID(x.data?.directory ?? input.directory, input.global.project)
+          const next = projectID(x.data?.directory ?? input.directory, projects)
           if (next) input.setStore("project", next)
         }),
       ),
