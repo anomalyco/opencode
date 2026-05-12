@@ -597,8 +597,16 @@ export function MessageTimeline(props: {
   })
   const isWorking = createMemo(() => working(sessionStatus(), sessionMessages()))
   const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
+  const pref = createMemo(() => settings.general.shellToolPartsExpanded())
+  const shell = createMemo(() => (platform.platform === "desktop" ? false : pref()))
   const [prefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
   const openApps = createMemo(() => apps(os(platform)))
+
+  createEffect(
+    on(shell, (open) => {
+      console.debug(`[session:shell] platform=${platform.platform} pref=${pref()} defaultOpen=${open}`)
+    }),
+  )
   // Windowing is only disabled while the active reply is still growing. Static
   // sessions may stay pinned to the bottom and still use history windowing;
   // otherwise long math-heavy conversations would remount the full timeline
@@ -2807,7 +2815,7 @@ export function MessageTimeline(props: {
           status={active() ? sessionStatus() : undefined}
           showReasoningSummaries={settings.general.showReasoningSummaries()}
           showCustomHookParts={settings.general.showCustomHookParts()}
-          shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
+          shellToolDefaultOpen={shell()}
           editToolDefaultOpen={settings.general.editToolPartsExpanded()}
           markdownEager={eager()}
           markdownViewport={viewport}
