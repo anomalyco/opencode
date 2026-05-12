@@ -4,7 +4,7 @@ import { GenerationOptions, LLM, LLMEvent, LLMRequest, LLMResponse, ToolChoice }
 import { LLMClient } from "../src/route"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
-import { tool, ToolFailure } from "../src/tool"
+import { tool, ToolFailure, type ToolExecuteContext } from "../src/tool"
 import { it } from "./lib/effect"
 import * as TestToolRuntime from "./lib/tool-runtime"
 import { dynamicResponse, scriptedResponses } from "./lib/http"
@@ -155,7 +155,7 @@ describe("LLMClient tools", () => {
 
   it.effect("passes tool call context to execute", () =>
     Effect.gen(function* () {
-      let context: { readonly id?: string; readonly name?: string } | undefined
+      let context: ToolExecuteContext | undefined
       const contextual = tool({
         description: "Capture tool context.",
         parameters: Schema.Struct({ value: Schema.String }),
