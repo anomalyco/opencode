@@ -95,6 +95,7 @@ export const layer = Layer.effect(
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
+        if (!command.template) continue
         commands[name] = {
           name,
           agent: command.agent,
@@ -102,7 +103,7 @@ export const layer = Layer.effect(
           description: command.description,
           source: "command",
           get template() {
-            return command.template
+            return command.template!
           },
           subtask: command.subtask,
           hints: hints(command.template),

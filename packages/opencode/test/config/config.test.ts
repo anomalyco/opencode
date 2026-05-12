@@ -727,6 +727,30 @@ test("handles command configuration", async () => {
   })
 })
 
+test("accepts partial command override without template", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        command: {
+          commit: {
+            model: "anthropic/claude-4-6-sonnet",
+          },
+        },
+      })
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.command?.["commit"]).toEqual({
+        model: "anthropic/claude-4-6-sonnet",
+      })
+    },
+  })
+})
+
 test("migrates autoshare to share field", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
