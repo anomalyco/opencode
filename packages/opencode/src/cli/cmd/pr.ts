@@ -4,10 +4,11 @@ import { AppRuntime } from "@/effect/app-runtime"
 import { Git } from "@/git"
 import { Instance } from "@/project/instance"
 import { Process } from "@/util/process"
+import { selfDisplayName, selfRespawnArgv } from "@/util/self-respawn"
 
 export const PrCommand = cmd({
   command: "pr <number>",
-  describe: "fetch and checkout a GitHub PR branch, then run securecode",
+  describe: `fetch and checkout a GitHub PR branch, then run ${selfDisplayName()}`,
   builder: (yargs) =>
     yargs.positional("number", {
       type: "number",
@@ -98,11 +99,11 @@ export const PrCommand = cmd({
               const sessionMatch = prInfo.body.match(/https:\/\/opncd\.ai\/s\/([a-zA-Z0-9_-]+)/)
               if (sessionMatch) {
                 const sessionUrl = sessionMatch[0]
-                const bin = Bun.which("securecode") ? "securecode" : "opencode"
-                UI.println(`Found securecode session: ${sessionUrl}`)
+                const self = selfRespawnArgv()
+                UI.println(`Found ${selfDisplayName()} session: ${sessionUrl}`)
                 UI.println(`Importing session...`)
 
-                const importResult = await Process.text([bin, "import", sessionUrl], {
+                const importResult = await Process.text([...self, "import", sessionUrl], {
                   nothrow: true,
                 })
                 if (importResult.code === 0) {
@@ -121,19 +122,19 @@ export const PrCommand = cmd({
 
         UI.println(`Successfully checked out PR #${prNumber} as branch '${localBranchName}'`)
         UI.println()
-        UI.println("Starting securecode...")
+        UI.println(`Starting ${selfDisplayName()}...`)
         UI.println()
 
-        const bin = Bun.which("securecode") ? "securecode" : "opencode"
+        const self = selfRespawnArgv()
         const cliArgs = sessionId ? ["-s", sessionId] : []
-        const proc = Process.spawn([bin, ...cliArgs], {
+        const proc = Process.spawn([...self, ...cliArgs], {
           stdin: "inherit",
           stdout: "inherit",
           stderr: "inherit",
           cwd: process.cwd(),
         })
         const code = await proc.exited
-        if (code !== 0) throw new Error(`${bin} exited with code ${code}`)
+        if (code !== 0) throw new Error(`${selfDisplayName()} exited with code ${code}`)
       },
     })
   },
