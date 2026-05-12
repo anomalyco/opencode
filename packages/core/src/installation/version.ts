@@ -1,8 +1,8 @@
 declare global {
-  const OPENCODE_VERSION: string
-  const OPENCODE_CHANNEL: string
+  const OCTOPUS_VERSION: string
+  const OCTOPUS_CHANNEL: string
 }
 
-export const InstallationVersion = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
-export const InstallationChannel = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
+export const InstallationVersion = typeof OCTOPUS_VERSION === "string" ? OCTOPUS_VERSION : "local"
+export const InstallationChannel = typeof OCTOPUS_CHANNEL === "string" ? OCTOPUS_CHANNEL : "local"
 export const InstallationLocal = InstallationChannel === "local"

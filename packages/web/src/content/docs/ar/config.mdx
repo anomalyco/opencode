@@ -1,17 +1,17 @@
 ---
 title: الإعدادات
-description: استخدام ملف إعدادات OpenCode بصيغة JSON.
+description: استخدام ملف إعدادات Octopus بصيغة JSON.
 ---
 
-يمكنك ضبط OpenCode باستخدام ملف إعدادات بصيغة JSON.
+يمكنك ضبط Octopus باستخدام ملف إعدادات بصيغة JSON.
 
 ---
 
 ## التنسيق
 
-يدعم OpenCode تنسيقي **JSON** و**JSONC** (JSON مع تعليقات).
+يدعم Octopus تنسيقي **JSON** و**JSONC** (JSON مع تعليقات).
 
-```jsonc title="opencode.jsonc"
+```jsonc title="octopus.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   // إعدادات السمة
@@ -43,11 +43,11 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
 تُحمَّل مصادر الإعدادات بهذا الترتيب (المصادر اللاحقة تتجاوز السابقة):
 
 1. **الإعدادات البعيدة** (من `.well-known/opencode`) - الإعدادات الافتراضية على مستوى المؤسسة
-2. **الإعدادات العامة** (`~/.config/opencode/opencode.json`) - تفضيلات المستخدم
-3. **إعدادات مخصصة** (`OPENCODE_CONFIG` env var) - تجاوزات مخصصة
-4. **إعدادات المشروع** (`opencode.json` داخل المشروع) - إعدادات خاصة بالمشروع
+2. **الإعدادات العامة** (`~/.config/octopus/octopus.json`) - تفضيلات المستخدم
+3. **إعدادات مخصصة** (`OCTOPUS_CONFIG` env var) - تجاوزات مخصصة
+4. **إعدادات المشروع** (`octopus.json` داخل المشروع) - إعدادات خاصة بالمشروع
 5. **أدلة `.opencode`** - الوكلاء، الأوامر، الإضافات
-6. **إعدادات ضمنية** (`OPENCODE_CONFIG_CONTENT` env var) - تجاوزات وقت التشغيل
+6. **إعدادات ضمنية** (`OCTOPUS_CONFIG_CONTENT` env var) - تجاوزات وقت التشغيل
 
 هذا يعني أن إعدادات المشروع يمكنها تجاوز الإعدادات العامة، وأن الإعدادات العامة يمكنها تجاوز الإعدادات الافتراضية البعيدة على مستوى المؤسسة.
 
@@ -79,7 +79,7 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
 
 يمكنك تفعيل خوادم محددة في إعداداتك المحلية:
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "mcp": {
     "jira": {
@@ -95,7 +95,7 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
 
 ### عام
 
-ضع إعدادات OpenCode العامة في `~/.config/opencode/opencode.json`. استخدم الإعدادات العامة للتفضيلات على مستوى المستخدم مثل السمات، والمزوّدين، أو اختصارات المفاتيح.
+ضع إعدادات Octopus العامة في `~/.config/octopus/octopus.json`. استخدم الإعدادات العامة للتفضيلات على مستوى المستخدم مثل السمات، والمزوّدين، أو اختصارات المفاتيح.
 
 تتجاوز الإعدادات العامة القيم الافتراضية البعيدة الخاصة بالمؤسسة.
 
@@ -103,13 +103,13 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
 
 ### لكل مشروع
 
-أضف `opencode.json` في جذر مشروعك. تمتلك إعدادات المشروع أعلى أولوية بين ملفات الإعدادات القياسية، إذ تتجاوز الإعدادات العامة والبعيدة معًا.
+أضف `octopus.json` في جذر مشروعك. تمتلك إعدادات المشروع أعلى أولوية بين ملفات الإعدادات القياسية، إذ تتجاوز الإعدادات العامة والبعيدة معًا.
 
 :::tip
 ضع إعدادات المشروع الخاصة في جذر مشروعك.
 :::
 
-عند تشغيل OpenCode، يبحث عن ملف إعدادات في الدليل الحالي أو يصعد حتى أقرب دليل Git.
+عند تشغيل Octopus، يبحث عن ملف إعدادات في الدليل الحالي أو يصعد حتى أقرب دليل Git.
 
 ومن الآمن أيضًا تضمينه في Git، كما يستخدم نفس المخطط الخاص بالإعدادات العامة.
 
@@ -117,10 +117,10 @@ description: استخدام ملف إعدادات OpenCode بصيغة JSON.
 
 ### مسار مخصص
 
-حدّد مسار ملف إعدادات مخصصًا باستخدام متغير البيئة `OPENCODE_CONFIG`.
+حدّد مسار ملف إعدادات مخصصًا باستخدام متغير البيئة `OCTOPUS_CONFIG`.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export OCTOPUS_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -130,12 +130,12 @@ opencode run "Hello world"
 
 ### دليل مخصص
 
-حدّد دليل إعدادات مخصصًا باستخدام متغير البيئة `OPENCODE_CONFIG_DIR`.
+حدّد دليل إعدادات مخصصًا باستخدام متغير البيئة `OCTOPUS_CONFIG_DIR`.
 سيتم البحث داخل هذا الدليل عن الوكلاء والأوامر والأوضاع والإضافات تمامًا مثل
 الدليل القياسي `.opencode`، ويجب أن يتبع نفس البنية.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export OCTOPUS_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
@@ -155,7 +155,7 @@ opencode run "Hello world"
 
 يمكنك ضبط الإعدادات الخاصة بـ TUI عبر الخيار `tui`.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "tui": {
@@ -182,7 +182,7 @@ opencode run "Hello world"
 
 يمكنك ضبط إعدادات الخادم لأوامر `opencode serve` و`opencode web` عبر الخيار `server`.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "server": {
@@ -199,7 +199,7 @@ opencode run "Hello world"
 
 - `port` - المنفذ الذي سيتم الاستماع عليه.
 - `hostname` - اسم المضيف الذي سيتم الاستماع عليه. عند تفعيل `mdns` وعدم ضبط اسم مضيف، تكون القيمة الافتراضية `0.0.0.0`.
-- `mdns` - تفعيل اكتشاف الخدمة عبر mDNS. يتيح ذلك للأجهزة الأخرى على الشبكة اكتشاف خادم OpenCode.
+- `mdns` - تفعيل اكتشاف الخدمة عبر mDNS. يتيح ذلك للأجهزة الأخرى على الشبكة اكتشاف خادم Octopus.
 - `mdnsDomain` - اسم نطاق مخصص لخدمة mDNS. القيمة الافتراضية هي `opencode.local`. مفيد لتشغيل عدة نُسخ على نفس الشبكة.
 - `cors` - أصول إضافية مسموح بها لـ CORS عند استخدام خادم HTTP من عميل يعتمد على المتصفح. يجب أن تكون القيم أصولًا كاملة (البروتوكول + المضيف + منفذ اختياري)، مثل `https://app.example.com`.
 
@@ -211,7 +211,7 @@ opencode run "Hello world"
 
 يمكنك إدارة الأدوات التي يمكن لـ LLM استخدامها عبر الخيار `tools`.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -227,9 +227,9 @@ opencode run "Hello world"
 
 ### النماذج
 
-يمكنك ضبط المزوّدين والنماذج التي تريد استخدامها في إعدادات OpenCode عبر الخيارات `provider` و`model` و`small_model`.
+يمكنك ضبط المزوّدين والنماذج التي تريد استخدامها في إعدادات Octopus عبر الخيارات `provider` و`model` و`small_model`.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
@@ -238,11 +238,11 @@ opencode run "Hello world"
 }
 ```
 
-يضبط الخيار `small_model` نموذجًا منفصلًا للمهام الخفيفة مثل توليد العناوين. افتراضيًا يحاول OpenCode استخدام نموذج أقل تكلفة إذا كان متاحًا لدى مزوّدك، وإلا فسيعود إلى النموذج الرئيسي.
+يضبط الخيار `small_model` نموذجًا منفصلًا للمهام الخفيفة مثل توليد العناوين. افتراضيًا يحاول Octopus استخدام نموذج أقل تكلفة إذا كان متاحًا لدى مزوّدك، وإلا فسيعود إلى النموذج الرئيسي.
 
 قد تتضمن خيارات المزوّد `timeout` و`setCacheKey`:
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -271,7 +271,7 @@ opencode run "Hello world"
 
 يدعم Amazon Bedrock إعدادات خاصة بـ AWS:
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -300,9 +300,9 @@ opencode run "Hello world"
 
 ### السمات
 
-يمكنك ضبط السمة التي تريد استخدامها في إعدادات OpenCode عبر الخيار `theme`.
+يمكنك ضبط السمة التي تريد استخدامها في إعدادات Octopus عبر الخيار `theme`.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "theme": ""
@@ -317,7 +317,7 @@ opencode run "Hello world"
 
 يمكنك ضبط وكلاء متخصصين لمهام محددة عبر الخيار `agent`.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="octopus.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -335,7 +335,7 @@ opencode run "Hello world"
 }
 ```
 
-يمكنك أيضًا تعريف الوكلاء باستخدام ملفات markdown في `~/.config/opencode/agents/` أو `.opencode/agents/`. [تعرف على المزيد هنا](/docs/agents).
+يمكنك أيضًا تعريف الوكلاء باستخدام ملفات markdown في `~/.config/octopus/agents/` أو `.octopus/agents/`. [تعرف على المزيد هنا](/docs/agents).
 
 ---
 
@@ -343,14 +343,14 @@ opencode run "Hello world"
 
 يمكنك تعيين الوكيل الافتراضي باستخدام الخيار `default_agent`. يحدد ذلك أي وكيل سيتم استخدامه عندما لا يتم تحديد وكيل صراحةً.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "plan"
 }
 ```
 
-يجب أن يكون الوكيل الافتراضي وكيلًا أساسيًا (وليس وكيلًا فرعيًا). يمكن أن يكون وكيلًا مدمجًا مثل `"build"` أو `"plan"`، أو [وكيلًا مخصصًا](/docs/agents) قمت بتعريفه. إذا لم يكن الوكيل المحدد موجودًا أو كان وكيلًا فرعيًا، فسيعود OpenCode إلى `"build"` مع تحذير.
+يجب أن يكون الوكيل الافتراضي وكيلًا أساسيًا (وليس وكيلًا فرعيًا). يمكن أن يكون وكيلًا مدمجًا مثل `"build"` أو `"plan"`، أو [وكيلًا مخصصًا](/docs/agents) قمت بتعريفه. إذا لم يكن الوكيل المحدد موجودًا أو كان وكيلًا فرعيًا، فسيعود Octopus إلى `"build"` مع تحذير.
 
 ينطبق هذا الإعداد على جميع الواجهات: TUI وCLI (`opencode run`) وتطبيق سطح المكتب وGitHub Action.
 
@@ -360,7 +360,7 @@ opencode run "Hello world"
 
 يمكنك ضبط ميزة [share](/docs/share) عبر الخيار `share`.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "manual"
@@ -381,7 +381,7 @@ opencode run "Hello world"
 
 يمكنك ضبط أوامر مخصصة للمهام المتكررة عبر الخيار `command`.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="octopus.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -399,7 +399,7 @@ opencode run "Hello world"
 }
 ```
 
-يمكنك أيضًا تعريف الأوامر باستخدام ملفات markdown في `~/.config/opencode/commands/` أو `.opencode/commands/`. [تعرف على المزيد هنا](/docs/commands).
+يمكنك أيضًا تعريف الأوامر باستخدام ملفات markdown في `~/.config/octopus/commands/` أو `.octopus/commands/`. [تعرف على المزيد هنا](/docs/commands).
 
 ---
 
@@ -407,7 +407,7 @@ opencode run "Hello world"
 
 يمكنك تخصيص اختصارات المفاتيح عبر الخيار `keybinds`.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "keybinds": {}
@@ -420,9 +420,9 @@ opencode run "Hello world"
 
 ### التحديث التلقائي
 
-سيقوم OpenCode بتنزيل أي تحديثات جديدة تلقائيًا عند بدء التشغيل. يمكنك تعطيل ذلك عبر الخيار `autoupdate`.
+سيقوم Octopus بتنزيل أي تحديثات جديدة تلقائيًا عند بدء التشغيل. يمكنك تعطيل ذلك عبر الخيار `autoupdate`.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": false
@@ -438,7 +438,7 @@ opencode run "Hello world"
 
 يمكنك ضبط منسّقات الشفرة عبر الخيار `formatter`.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {
@@ -466,7 +466,7 @@ opencode run "Hello world"
 
 على سبيل المثال، لضمان أن أداتي `edit` و`bash` تتطلبان موافقة المستخدم:
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -484,7 +484,7 @@ opencode run "Hello world"
 
 يمكنك التحكم في سلوك ضغط السياق عبر الخيار `compaction`.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
@@ -504,7 +504,7 @@ opencode run "Hello world"
 
 يمكنك ضبط أنماط التجاهل لمراقِب الملفات عبر الخيار `watcher`.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "watcher": {
@@ -521,7 +521,7 @@ opencode run "Hello world"
 
 يمكنك ضبط خوادم MCP التي تريد استخدامها عبر الخيار `mcp`.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {}
@@ -534,11 +534,11 @@ opencode run "Hello world"
 
 ### الإضافات
 
-[الإضافات](/docs/plugins) توسّع OpenCode بأدوات وخُطافات وتكاملات مخصصة.
+[الإضافات](/docs/plugins) توسّع Octopus بأدوات وخُطافات وتكاملات مخصصة.
 
-ضع ملفات الإضافات في `.opencode/plugins/` أو `~/.config/opencode/plugins/`. يمكنك أيضًا تحميل إضافات من npm عبر الخيار `plugin`.
+ضع ملفات الإضافات في `.octopus/plugins/` أو `~/.config/octopus/plugins/`. يمكنك أيضًا تحميل إضافات من npm عبر الخيار `plugin`.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
@@ -553,7 +553,7 @@ opencode run "Hello world"
 
 يمكنك ضبط التعليمات الخاصة بالنموذج الذي تستخدمه عبر الخيار `instructions`.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
@@ -569,7 +569,7 @@ opencode run "Hello world"
 
 يمكنك تعطيل المزوّدين الذين يتم تحميلهم تلقائيًا عبر الخيار `disabled_providers`. هذا مفيد عندما تريد منع تحميل مزوّدين معينين حتى لو كانت بيانات الاعتماد الخاصة بهم متاحة.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "disabled_providers": ["openai", "gemini"]
@@ -592,14 +592,14 @@ opencode run "Hello world"
 
 يمكنك تحديد قائمة سماح للمزوّدين عبر الخيار `enabled_providers`. عند ضبطه، سيتم تفعيل المزوّدين المحددين فقط وسيتم تجاهل البقية.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "enabled_providers": ["anthropic", "openai"]
 }
 ```
 
-هذا مفيد عندما تريد تقييد OpenCode لاستخدام مزوّدين محددين بدلًا من تعطيلهم واحدًا تلو الآخر.
+هذا مفيد عندما تريد تقييد Octopus لاستخدام مزوّدين محددين بدلًا من تعطيلهم واحدًا تلو الآخر.
 
 :::note
 الخيار `disabled_providers` له أولوية على `enabled_providers`.
@@ -613,7 +613,7 @@ opencode run "Hello world"
 
 يحتوي المفتاح `experimental` على خيارات قيد التطوير النشط.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "experimental": {}
@@ -636,10 +636,10 @@ opencode run "Hello world"
 
 استخدم `{env:VARIABLE_NAME}` لاستبدال متغيرات البيئة:
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:OCTOPUS_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},
@@ -659,7 +659,7 @@ opencode run "Hello world"
 
 استخدم `{file:path/to/file}` لاستبدال محتويات ملف:
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["./custom-instructions.md"],

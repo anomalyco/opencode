@@ -36,10 +36,10 @@ opencode serve --cors http://localhost:5173 --cors https://app.example.com
 
 ### Autenticación
 
-Configure `OPENCODE_SERVER_PASSWORD` para proteger el servidor con autenticación básica HTTP. El nombre de usuario predeterminado es `opencode`, o configure `OPENCODE_SERVER_USERNAME` para anularlo. Esto se aplica tanto a `opencode serve` como a `opencode web`.
+Configure `OCTOPUS_SERVER_PASSWORD` para proteger el servidor con autenticación básica HTTP. El nombre de usuario predeterminado es `opencode`, o configure `OCTOPUS_SERVER_USERNAME` para anularlo. Esto se aplica tanto a `opencode serve` como a `opencode web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+OCTOPUS_SERVER_PASSWORD=your-password opencode serve
 ```
 
 ---
@@ -65,7 +65,7 @@ opencode TUI ejecutándose, `opencode serve` iniciará un nuevo servidor.
 
 Cuando inicia el TUI, asigna aleatoriamente un puerto y un nombre de host. En su lugar, puede pasar `--hostname` y `--port` [banderas](/docs/cli). Luego use esto para conectarse a su servidor.
 
-El punto final [`/tui`](#tui) se puede utilizar para conducir el TUI a través del servidor. Por ejemplo, puede completar previamente o ejecutar un mensaje. Esta configuración es utilizada por los complementos OpenCode [IDE](/docs/ide).
+El punto final [`/tui`](#tui) se puede utilizar para conducir el TUI a través del servidor. Por ejemplo, puede completar previamente o ejecutar un mensaje. Esta configuración es utilizada por los complementos Octopus [IDE](/docs/ide).
 
 ---
 

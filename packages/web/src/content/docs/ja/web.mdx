@@ -1,11 +1,11 @@
 ---
 title: ウェブ
-description: ブラウザで OpenCode を使用する。
+description: ブラウザで Octopus を使用する。
 ---
 
-OpenCode はブラウザで Web アプリケーションとして実行でき、ターミナルを必要とせずに同じ強力な AI コーディングエクスペリエンスを提供します。
+Octopus はブラウザで Web アプリケーションとして実行でき、ターミナルを必要とせずに同じ強力な AI コーディングエクスペリエンスを提供します。
 
-![OpenCode Web - 新しいセッション](../../../assets/web/web-homepage-new-session.png)
+![Octopus Web - 新しいセッション](../../../assets/web/web-homepage-new-session.png)
 
 ---
 
@@ -17,10 +17,10 @@ OpenCode はブラウザで Web アプリケーションとして実行でき、
 opencode web
 ```
 
-これにより、利用可能なランダムなポートを使用して `127.0.0.1` でローカルサーバーが起動され、デフォルトのブラウザで OpenCode が自動的に開きます。
+これにより、利用可能なランダムなポートを使用して `127.0.0.1` でローカルサーバーが起動され、デフォルトのブラウザで Octopus が自動的に開きます。
 
 :::caution
-`OPENCODE_SERVER_PASSWORD` が設定されていない場合、サーバーは保護されません。これはローカルで使用する場合には問題ありませんが、ネットワークアクセス用に設定する必要があります。
+`OCTOPUS_SERVER_PASSWORD` が設定されていない場合、サーバーは保護されません。これはローカルで使用する場合には問題ありませんが、ネットワークアクセス用に設定する必要があります。
 :::
 :::tip[Windows ユーザー]
 最高のエクスペリエンスを得るには、PowerShell ではなく [WSL](/docs/windows-wsl) から `opencode web` を実行します。これにより、ファイルシステムへの適切なアクセスとターミナルの統合が保証されます。
@@ -34,7 +34,7 @@ opencode web
 
 ### ポート
 
-デフォルトでは、OpenCode は使用可能なポートを選択します。ポートを指定できます。
+デフォルトでは、Octopus は使用可能なポートを選択します。ポートを指定できます。
 
 ```bash
 opencode web --port 4096
@@ -42,13 +42,13 @@ opencode web --port 4096
 
 ### ホスト名
 
-デフォルトでは、サーバーは `127.0.0.1` (localhost のみ) にバインドされます。ネットワーク上で OpenCode にアクセスできるようにするには:
+デフォルトでは、サーバーは `127.0.0.1` (localhost のみ) にバインドされます。ネットワーク上で Octopus にアクセスできるようにするには:
 
 ```bash
 opencode web --hostname 0.0.0.0
 ```
 
-`0.0.0.0` を使用すると、OpenCode はローカルアドレスとネットワークアドレスの両方を表示します。
+`0.0.0.0` を使用すると、Octopus はローカルアドレスとネットワークアドレスの両方を表示します。
 
 ```
   Local access:       http://localhost:4096
@@ -81,31 +81,31 @@ opencode web --cors https://example.com
 
 ### 認証
 
-アクセスを保護するには、`OPENCODE_SERVER_PASSWORD` 環境変数を使用してパスワードを設定します。
+アクセスを保護するには、`OCTOPUS_SERVER_PASSWORD` 環境変数を使用してパスワードを設定します。
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+OCTOPUS_SERVER_PASSWORD=secret opencode web
 ```
 
-ユーザー名のデフォルトは `opencode` ですが、`OPENCODE_SERVER_USERNAME` で変更できます。
+ユーザー名のデフォルトは `opencode` ですが、`OCTOPUS_SERVER_USERNAME` で変更できます。
 
 ---
 
 ## Web インターフェースの使用
 
-開始すると、Web インターフェイスから OpenCode セッションにアクセスできるようになります。
+開始すると、Web インターフェイスから Octopus セッションにアクセスできるようになります。
 
 ### セッション
 
 ホームページからセッションを表示および管理します。アクティブなセッションを確認したり、新しいセッションを開始したりできます。
 
-![OpenCode Web - アクティブなセッション](../../../assets/web/web-homepage-active-session.png)
+![Octopus Web - アクティブなセッション](../../../assets/web/web-homepage-active-session.png)
 
 ### サーバーステータス
 
 「サーバーを表示」をクリックすると、接続されているサーバーとそのステータスが表示されます。
 
-![OpenCode Web - サーバー](../../../assets/web/web-homepage-see-servers.png)
+![Octopus Web - サーバー](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 
@@ -127,7 +127,7 @@ opencode attach http://localhost:4096
 
 ## 設定ファイル
 
-`opencode.json` 設定ファイルでサーバー設定を構成することもできます。
+`octopus.json` 設定ファイルでサーバー設定を構成することもできます。
 
 ```json
 {

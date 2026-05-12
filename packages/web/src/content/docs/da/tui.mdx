@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: Brug af OpenCode-terminalbrugergrænsefladen.
+description: Brug af Octopus-terminalbrugergrænsefladen.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode giver en interaktiv terminalgrænseflade eller TUI til at arbejde med dine projekter med en LLM.
+Octopus giver en interaktiv terminalgrænseflade eller TUI til at arbejde med dine projekter med en LLM.
 
-At køre OpenCode starter TUI for den nuværende mappe.
+At køre Octopus starter TUI for den nuværende mappe.
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ Outputtet fra kommandoen tilføjes til samtalen som et værktøjsresultat.
 
 ## Kommandoer
 
-Når du bruger OpenCode TUI, kan du skrive `/` efterfulgt af et kommandonavn for hurtigt at udføre handlinger. For eksempel:
+Når du bruger Octopus TUI, kan du skrive `/` efterfulgt af et kommandonavn for hurtigt at udføre handlinger. For eksempel:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Her er alle tilgængelige skråstregskommandoer:
 
 ### connect
 
-Tilføj en udbyder til OpenCode. Lader dig vælge fra tilgængelige udbydere og tilføje deres API-nøgler.
+Tilføj en udbyder til Octopus. Lader dig vælge fra tilgængelige udbydere og tilføje deres API-nøgler.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Skift visning af værktøjsudførelsesdetaljer.
 
 ### exit
 
-Afslut OpenCode. _Aliaser_: `/quit`, `/q`
+Afslut Octopus. _Aliaser_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -369,7 +369,7 @@ Du kan tilpasse TUI-adfærd gennem `tui.json` (eller `tui.jsonc`).
 }
 ```
 
-Dette er adskilt fra `opencode.json`, som konfigurerer server-/kørselstidsadfærd.
+Dette er adskilt fra `octopus.json`, som konfigurerer server-/kørselstidsadfærd.
 
 ### Indstillinger
 
@@ -379,7 +379,7 @@ Dette er adskilt fra `opencode.json`, som konfigurerer server-/kørselstidsadfæ
 - `scroll_speed` - Styrer hvor hurtigt TUI ruller, når du bruger rullekommandoer (minimum: `0.001`, understøtter decimalværdier). Standard er `3`. **Bemærk: Dette ignoreres hvis `scroll_acceleration.enabled` er sat til `true`.**
 - `diff_style` - Styrer diff-gengivelse. `"auto"` tilpasser sig terminalbredde, `"stacked"` viser altid et enkeltkolonne-layout.
 
-Brug `OPENCODE_TUI_CONFIG` til at indlæse en brugerdefineret TUI-konfigurationssti.
+Brug `OCTOPUS_TUI_CONFIG` til at indlæse en brugerdefineret TUI-konfigurationssti.
 
 ---
 

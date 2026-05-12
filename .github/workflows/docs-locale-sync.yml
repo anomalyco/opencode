@@ -29,8 +29,8 @@ jobs:
         id: committer
         uses: ./.github/actions/setup-git-committer
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          octopus-app-id: ${{ vars.OCTOPUS_APP_ID }}
+          octopus-app-secret: ${{ secrets.OCTOPUS_APP_SECRET }}
 
       - name: Compute changed English docs
         id: changes
@@ -48,15 +48,15 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Install OpenCode
+      - name: Install Octopus
         if: steps.changes.outputs.has_changes == 'true'
-        run: curl -fsSL https://opencode.ai/install | bash
+        run: curl -fsSL https://octopus.ai/install | bash
 
-      - name: Sync locale docs with OpenCode
+      - name: Sync locale docs with Octopus
         if: steps.changes.outputs.has_changes == 'true'
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          OPENCODE_CONFIG_CONTENT: |
+          OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
+          OCTOPUS_CONFIG_CONTENT: |
             {
               "permission": {
                 "*": "deny",
@@ -67,7 +67,7 @@ jobs:
               }
             }
         run: |
-          opencode run --agent docs --model opencode/gpt-5.3-codex <<'EOF'
+          octopus run --agent docs --model opencode/gpt-5.3-codex <<'EOF'
             Update localized docs to match the latest English docs changes.
 
             Changed English doc files:

@@ -3,7 +3,7 @@ title: MCP-servere
 description: Tilføj lokale og eksterne MCP værktøjer.
 ---
 
-Du kan tilføje eksterne værktøjer til OpenCode ved hjælp af _Model Context Protocol_ eller MCP. OpenCode understøtter både lokale og eksterne servere.
+Du kan tilføje eksterne værktøjer til Octopus ved hjælp af _Model Context Protocol_ eller MCP. Octopus understøtter både lokale og eksterne servere.
 
 Når de er tilføjet, er MCP automatisk tilgængelig for LLM sammen med indbyggede værktøjer.
 
@@ -23,9 +23,9 @@ Visse MCP-servere, som GitHub MCP-servere, har en tendens til at tilføje mange 
 
 ## Aktivering
 
-Du kan definere MCP-servere i din [OpenCode Config](https://opencode.ai/docs/config/) under `mcp`. Tilføj hver MCP med et unikt navn. Du kan henvise til denne MCP ved navn, når du spørger LLM.
+Du kan definere MCP-servere i din [Octopus Config](https://opencode.ai/docs/config/) under `mcp`. Tilføj hver MCP med et unikt navn. Du kan henvise til denne MCP ved navn, når du spørger LLM.
 
-```jsonc title="opencode.jsonc" {6}
+```jsonc title="octopus.jsonc" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -50,7 +50,7 @@ Organisationer kan levere standard MCP-servere via deres `.well-known/opencode`-
 
 For at aktivere en specifik server fra din organisationers fjernkonfiguration skal du tilføje den til din lokale konfiguration med `enabled: true`:
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -71,7 +71,7 @@ Dine lokale konfigurationsværdier tilsidesætter fjernstandarderne. Se [config 
 
 Tilføj lokale MCP-servere ved hjælp af `type` til `"local"` i MCP-objektet.
 
-```jsonc title="opencode.jsonc" {15}
+```jsonc title="octopus.jsonc" {15}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -92,7 +92,7 @@ Kommandoen er, hvordan den lokale MCP-server starter. Du kan også sende en list
 
 For eksempel kan du tilføje test-MCP-serveren [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything).
 
-```jsonc title="opencode.jsonc"
+```jsonc title="octopus.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -130,7 +130,7 @@ Her er alle muligheder for at konfigurere en lokal MCP-server.
 
 Tilføj ekstern MCP-server ved at indstille `type` til `"remote"`.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -165,7 +165,7 @@ Tilføj ekstern MCP-server ved at indstille `type` til `"remote"`.
 
 ## OAuth
 
-OpenCode håndterer automatisk OAuth-godkendelse for eksterne MCP-servere. Når en server kræver godkendelse, vil OpenCode:
+Octopus håndterer automatisk OAuth-godkendelse for eksterne MCP-servere. Når en server kræver godkendelse, vil Octopus:
 
 1. Registrer 401-svaret, og start OAuth-flowet
 2. Brug **Dynamic Client Registration (RFC 7591)**, hvis det understøtter af serveren
@@ -177,7 +177,7 @@ OpenCode håndterer automatisk OAuth-godkendelse for eksterne MCP-servere. Når 
 
 For de fleste OAuth-aktiverede MCP-servere kræver ingen speciel konfiguration. Bare konfigureret fjernserver:
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -189,7 +189,7 @@ For de fleste OAuth-aktiverede MCP-servere kræver ingen speciel konfiguration. 
 }
 ```
 
-Hvis serveren kræver godkendelse, vil OpenCode bede dig om at godkende, når du prøver at bruge den første gang. Hvis ikke, kan du [manually trigger the flow](#authenticating) med `opencode mcp auth <server-name>`.
+Hvis serveren kræver godkendelse, vil Octopus bede dig om at godkende, når du prøver at bruge den første gang. Hvis ikke, kan du [manually trigger the flow](#authenticating) med `opencode mcp auth <server-name>`.
 
 ---
 
@@ -197,7 +197,7 @@ Hvis serveren kræver godkendelse, vil OpenCode bede dig om at godkende, når du
 
 Hvis du har klientlegitimationsoplysninger fra MCP-serverudbyderen, kan du konfigurere dem:
 
-```json title="opencode.json" {7-11}
+```json title="octopus.json" {7-11}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -238,7 +238,7 @@ Fjern gemte legitimationsoplysninger:
 opencode mcp logout my-oauth-server
 ```
 
-Kommandoen `mcp auth` åbner din browser for godkendelse. Når du har godkendt, vil OpenCode opbevare tokens sikkert i `~/.local/share/opencode/mcp-auth.json`.
+Kommandoen `mcp auth` åbner din browser for godkendelse. Når du har godkendt, vil Octopus opbevare tokens sikkert i `~/.local/share/octopus/mcp-auth.json`.
 
 ---
 
@@ -246,7 +246,7 @@ Kommandoen `mcp auth` åbner din browser for godkendelse. Når du har godkendt, 
 
 Hvis du vil deaktivere automatisk OAuth for en server (f.eks. for servere, der bruger API-nøgler i stedet), skal du indstille `oauth` til `false`:
 
-```json title="opencode.json" {7}
+```json title="octopus.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -291,7 +291,7 @@ Kommandoen `mcp debug` viser den aktuelle godkendelsesstatus, tester HTTP-forbin
 
 ## Administration
 
-Dine MCPs er tilgængelige som værktøjer i **TK\_** sammen med indbyggede værktøjer. Så du kan administrere dem gennem OpenCode-konfigurationen som ethvert andet værktøj.
+Dine MCPs er tilgængelige som værktøjer i **TK\_** sammen med indbyggede værktøjer. Så du kan administrere dem gennem Octopus-konfigurationen som ethvert andet værktøj.
 
 ---
 
@@ -299,7 +299,7 @@ Dine MCPs er tilgængelige som værktøjer i **TK\_** sammen med indbyggede vær
 
 Det betyder, at du kan aktivere eller deaktivere dem globalt.
 
-```json title="opencode.json" {14}
+```json title="octopus.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -320,7 +320,7 @@ Det betyder, at du kan aktivere eller deaktivere dem globalt.
 
 Vi kan også bruge et globmønster til at deaktivere alle matchende MCPs.
 
-```json title="opencode.json" {14}
+```json title="octopus.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -350,7 +350,7 @@ Hvis du har et stort antal MCP-servere, vil du måske kun aktivere dem pr. agent
 1. Deaktiver det som et værktøj globalt.
 2. Aktiver MCP-serveren som et værktøj i din [agent config](/docs/agents#tools).
 
-```json title="opencode.json" {11, 14-18}
+```json title="octopus.json" {11, 14-18}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -404,7 +404,7 @@ Nedenfor er eksempler på nogle almindelige MCP-servere. Du kan indsende en PR, 
 
 Tilføj [Sentry MCP server](https://mcp.sentry.dev) for at interagere med dine Sentry-projekter og -problemer.
 
-```json title="opencode.json" {4-8}
+```json title="octopus.json" {4-8}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -423,7 +423,7 @@ Efter tilføjelse af konfigurationen skal du godkende med Sentry:
 opencode mcp auth sentry
 ```
 
-Dette åbner et browservindue for at fuldføre OAuth-flowet og forbinde OpenCode til din Sentry-konto.
+Dette åbner et browservindue for at fuldføre OAuth-flowet og forbinde Octopus til din Sentry-konto.
 
 Når du er godkendt, kan du bruge Sentry-værktøjer i dine prompter til at forespørge om problemer, projekter og fejldata.
 
@@ -437,7 +437,7 @@ Show me the latest unresolved issues in my project. use sentry
 
 Tilføj [Context7 MCP server](https://github.com/upstash/context7) for at søge i dokumenter.
 
-```json title="opencode.json" {4-7}
+```json title="octopus.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -451,7 +451,7 @@ Tilføj [Context7 MCP server](https://github.com/upstash/context7) for at søge 
 
 Hvis du har tilmeldt dig en gratis konto, kan du bruge din API-nøgle og få højere satsgrænser.
 
-```json title="opencode.json" {7-9}
+```json title="octopus.json" {7-9}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -486,7 +486,7 @@ When you need to search docs, use `context7` tools.
 
 Tilføj serveren [Grep by Vercel](https://grep.app) MCP for at søge gennem kodestykker på GitHub.
 
-```json title="opencode.json" {4-7}
+```json title="octopus.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {

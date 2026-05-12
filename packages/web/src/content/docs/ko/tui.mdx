@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: OpenCode 터미널 사용자 인터페이스 사용.
+description: Octopus 터미널 사용자 인터페이스 사용.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode는 LLM과 함께 프로젝트 작업을 하기 위한 대화형 터미널 인터페이스(TUI)를 제공합니다.
+Octopus는 LLM과 함께 프로젝트 작업을 하기 위한 대화형 터미널 인터페이스(TUI)를 제공합니다.
 
-OpenCode를 실행하면 현재 디렉토리에서 TUI가 시작됩니다.
+Octopus를 실행하면 현재 디렉토리에서 TUI가 시작됩니다.
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 명령
 
-OpenCode TUI를 사용할 때 `/` 뒤에 명령 이름을 입력하여 작업을 빠르게 실행할 수 있습니다. 예를 들어:
+Octopus TUI를 사용할 때 `/` 뒤에 명령 이름을 입력하여 작업을 빠르게 실행할 수 있습니다. 예를 들어:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ OpenCode TUI를 사용할 때 `/` 뒤에 명령 이름을 입력하여 작업을
 
 ### connect
 
-OpenCode에 공급자를 추가합니다. 사용 가능한 공급자 중에서 선택하고 API 키를 추가할 수 있습니다.
+Octopus에 공급자를 추가합니다. 사용 가능한 공급자 중에서 선택하고 API 키를 추가할 수 있습니다.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ OpenCode에 공급자를 추가합니다. 사용 가능한 공급자 중에서 �
 
 ### exit
 
-OpenCode를 종료합니다. _별칭_: `/quit`, `/q`
+Octopus를 종료합니다. _별칭_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -368,7 +368,7 @@ VS Code와 같은 일부 편집기는 `--wait` 플래그와 함께 시작해야 
 }
 ```
 
-이는 서버/런타임 동작을 구성하는 `opencode.json`과는 별개입니다.
+이는 서버/런타임 동작을 구성하는 `octopus.json`과는 별개입니다.
 
 ### 옵션
 
@@ -378,7 +378,7 @@ VS Code와 같은 일부 편집기는 `--wait` 플래그와 함께 시작해야 
 - `scroll_speed` - 스크롤 명령을 사용할 때 TUI 스크롤 속도를 제어합니다 (최소: `0.001`, 소수점 값 지원). 기본값은 `3`입니다. **참고: `scroll_acceleration.enabled`가 `true`로 설정되면 무시됩니다.**
 - `diff_style` - diff 렌더링 방식을 제어합니다. `"auto"`는 터미널 너비에 적응하고, `"stacked"`는 항상 단일 열 레이아웃을 표시합니다.
 
-`OPENCODE_TUI_CONFIG`를 사용하여 사용자 정의 TUI 설정 경로를 로드할 수 있습니다.
+`OCTOPUS_TUI_CONFIG`를 사용하여 사용자 정의 TUI 설정 경로를 로드할 수 있습니다.
 
 ---
 

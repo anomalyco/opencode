@@ -3,7 +3,7 @@ title: Risoluzione dei problemi
 description: Problemi comuni e come risolverli.
 ---
 
-Per diagnosticare problemi con OpenCode, inizia controllando i log e i dati locali che salva su disco.
+Per diagnosticare problemi con Octopus, inizia controllando i log e i dati locali che salva su disco.
 
 ---
 
@@ -11,7 +11,7 @@ Per diagnosticare problemi con OpenCode, inizia controllando i log e i dati loca
 
 I file di log vengono scritti in:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
+- **macOS/Linux**: `~/.local/share/octopus/log/`
 - **Windows**: premi `WIN+R` e incolla `%USERPROFILE%\.local\share\opencode\log`
 
 I file di log hanno nomi con timestamp (ad es. `2025-01-09T123456.log`) e vengono conservati i 10 file di log piu recenti.
@@ -24,7 +24,7 @@ Puoi impostare il livello di log con l'opzione a riga di comando `--log-level` p
 
 opencode salva i dati delle sessioni e altri dati dell'applicazione su disco in:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
+- **macOS/Linux**: `~/.local/share/octopus/`
 - **Windows**: premi `WIN+R` e incolla `%USERPROFILE%\.local\share\opencode`
 
 Questa directory contiene:
@@ -39,13 +39,13 @@ Questa directory contiene:
 
 ## App desktop
 
-OpenCode Desktop esegue in background un server locale di OpenCode (il sidecar `opencode-cli`). La maggior parte dei problemi e causata da un plugin che si comporta male, da una cache corrotta o da un'impostazione del server errata.
+Octopus Desktop esegue in background un server locale di Octopus (il sidecar `opencode-cli`). La maggior parte dei problemi e causata da un plugin che si comporta male, da una cache corrotta o da un'impostazione del server errata.
 
 ### Controlli rapidi
 
 - Chiudi completamente l'app e riaprila.
 - Se l'app mostra una schermata di errore, fai clic su **Restart** e copia i dettagli dell'errore.
-- Solo macOS: menu `OpenCode` -> **Reload Webview** (utile se l'interfaccia e vuota o bloccata).
+- Solo macOS: menu `Octopus` -> **Reload Webview** (utile se l'interfaccia e vuota o bloccata).
 
 ---
 
@@ -57,9 +57,9 @@ Se l'app desktop va in crash all'avvio, si blocca o si comporta in modo strano, 
 
 Apri il tuo file di configurazione globale e cerca la chiave `plugin`.
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (o `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (installazioni vecchie): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: premi `WIN+R` e incolla `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **macOS/Linux**: `~/.config/octopus/octopus.jsonc` (o `~/.config/octopus/octopus.json`)
+- **macOS/Linux** (installazioni vecchie): `~/.local/share/octopus/octopus.jsonc`
+- **Windows**: premi `WIN+R` e incolla `%USERPROFILE%\.config\opencode\octopus.jsonc`
 
 Se hai plugin configurati, disabilitali temporaneamente rimuovendo la chiave o impostandola a un array vuoto:
 
@@ -72,13 +72,13 @@ Se hai plugin configurati, disabilitali temporaneamente rimuovendo la chiave o i
 
 #### Controlla le directory dei plugin
 
-OpenCode puo anche caricare plugin locali dal disco. Spostali temporaneamente altrove (o rinomina la cartella) e riavvia l'app desktop:
+Octopus puo anche caricare plugin locali dal disco. Spostali temporaneamente altrove (o rinomina la cartella) e riavvia l'app desktop:
 
 - **Plugin globali**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **macOS/Linux**: `~/.config/octopus/plugins/`
 - **Windows**: premi `WIN+R` e incolla `%USERPROFILE%\.config\opencode\plugins`
 - **Plugin del progetto** (solo se usi una configurazione per progetto)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.octopus/plugins/`
 
 Se l'app ricomincia a funzionare, riabilita i plugin uno alla volta per capire quale stia causando il problema.
 
@@ -86,22 +86,22 @@ Se l'app ricomincia a funzionare, riabilita i plugin uno alla volta per capire q
 
 ### Svuota la cache
 
-Se disabilitare i plugin non aiuta (o l'installazione di un plugin e bloccata), svuota la cache in modo che OpenCode possa ricostruirla.
+Se disabilitare i plugin non aiuta (o l'installazione di un plugin e bloccata), svuota la cache in modo che Octopus possa ricostruirla.
 
-1. Chiudi completamente OpenCode Desktop.
+1. Chiudi completamente Octopus Desktop.
 2. Elimina la directory della cache:
 
 - **macOS**: Finder -> `Cmd+Shift+G` -> paste `~/.cache/opencode`
 - **Linux**: elimina `~/.cache/opencode` (oppure esegui `rm -rf ~/.cache/opencode`)
 - **Windows**: premi `WIN+R` e incolla `%USERPROFILE%\.cache\opencode`
 
-3. Riavvia OpenCode Desktop.
+3. Riavvia Octopus Desktop.
 
 ---
 
 ### Risolvi problemi di connessione al server
 
-OpenCode Desktop puo avviare il proprio server locale (predefinito) oppure connettersi a un URL server che hai configurato.
+Octopus Desktop puo avviare il proprio server locale (predefinito) oppure connettersi a un URL server che hai configurato.
 
 Se vedi una finestra **"Connection Failed"** (o l'app non supera mai la schermata di avvio), controlla se hai impostato un URL server personalizzato.
 
@@ -111,13 +111,13 @@ Dalla schermata Home, fai clic sul nome del server (con il pallino di stato) per
 
 #### Rimuovi `server.port` / `server.hostname` dalla tua configurazione
 
-Se il tuo `opencode.json(c)` contiene una sezione `server`, rimuovila temporaneamente e riavvia l'app desktop.
+Se il tuo `octopus.json(c)` contiene una sezione `server`, rimuovila temporaneamente e riavvia l'app desktop.
 
 #### Controlla le variabili d'ambiente
 
-Se hai `OPENCODE_PORT` impostato nell'ambiente, l'app desktop provera a usare quella porta per il server locale.
+Se hai `OCTOPUS_PORT` impostato nell'ambiente, l'app desktop provera a usare quella porta per il server locale.
 
-- Rimuovi `OPENCODE_PORT` (o scegli una porta libera) e riavvia.
+- Rimuovi `OCTOPUS_PORT` (o scegli una porta libera) e riavvia.
 
 ---
 
@@ -132,21 +132,21 @@ Su Linux, alcune configurazioni Wayland possono causare finestre vuote o errori 
 
 ### Windows: runtime WebView2
 
-Su Windows, OpenCode Desktop richiede **WebView2 Runtime** di Microsoft Edge. Se l'app si apre su una finestra vuota o non parte, installa/aggiorna WebView2 e riprova.
+Su Windows, Octopus Desktop richiede **WebView2 Runtime** di Microsoft Edge. Se l'app si apre su una finestra vuota o non parte, installa/aggiorna WebView2 e riprova.
 
 ---
 
 ### Windows: problemi generali di prestazioni
 
-Se riscontri prestazioni lente, problemi di accesso ai file o problemi del terminale su Windows, prova a usare [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL fornisce un ambiente Linux che funziona in modo piu fluido con le funzionalita di OpenCode.
+Se riscontri prestazioni lente, problemi di accesso ai file o problemi del terminale su Windows, prova a usare [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL fornisce un ambiente Linux che funziona in modo piu fluido con le funzionalita di Octopus.
 
 ---
 
 ### Notifiche non visualizzate
 
-OpenCode Desktop mostra le notifiche di sistema solo quando:
+Octopus Desktop mostra le notifiche di sistema solo quando:
 
-- le notifiche sono abilitate per OpenCode nelle impostazioni del sistema operativo, e
+- le notifiche sono abilitate per Octopus nelle impostazioni del sistema operativo, e
 - la finestra dell'app non e in primo piano.
 
 ---
@@ -155,8 +155,8 @@ OpenCode Desktop mostra le notifiche di sistema solo quando:
 
 Se l'app non si avvia e non riesci a ripulire le impostazioni dall'interfaccia, reimposta lo stato salvato dell'app desktop.
 
-1. Chiudi OpenCode Desktop.
-2. Trova ed elimina questi file (si trovano nella directory dati dell'app OpenCode Desktop):
+1. Chiudi Octopus Desktop.
+2. Trova ed elimina questi file (si trovano nella directory dati dell'app Octopus Desktop):
 
 - `opencode.settings.dat` (desktop default server URL)
 - `opencode.global.dat` e `opencode.workspace.*.dat` (stato dell'interfaccia come server/progetti recenti)
@@ -171,13 +171,13 @@ Per trovare rapidamente la directory:
 
 ## Ottenere aiuto
 
-Se riscontri problemi con OpenCode:
+Se riscontri problemi con Octopus:
 
 1. **Segnala i problemi su GitHub**
 
    Il modo migliore per segnalare bug o richiedere funzionalita e tramite il nostro repository GitHub:
 
-   [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
+   [**github.com/anomalyco/octopus/issues**](https://github.com/anomalyco/octopus/issues)
 
    Prima di creare una nuova issue, cerca tra quelle esistenti per vedere se il problema e gia stato segnalato.
 
@@ -195,7 +195,7 @@ Ecco alcuni problemi comuni e come risolverli.
 
 ---
 
-### OpenCode non si avvia
+### Octopus non si avvia
 
 1. Controlla i log per eventuali messaggi di errore
 2. Prova a eseguire con `--print-logs` per vedere l'output nel terminale

@@ -7,13 +7,13 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen, OpenCode ekibi tarafından test edilip doğrulanmış modellerin bir listesidir.
+Octopus Zen, Octopus ekibi tarafından test edilip doğrulanmış modellerin bir listesidir.
 
 :::note
-OpenCode Zen şu anda beta olarak mevcut.
+Octopus Zen şu anda beta olarak mevcut.
 :::
 
-Zen, OpenCode'daki diğer sağlayıcılar gibi çalışır. OpenCode Zen'de oturum açıp API anahtarınızı alırsınız. Bu **tamamen isteğe bağlıdır** ve OpenCode kullanmak için buna ihtiyacınız yoktur.
+Zen, Octopus'daki diğer sağlayıcılar gibi çalışır. Octopus Zen'de oturum açıp API anahtarınızı alırsınız. Bu **tamamen isteğe bağlıdır** ve Octopus kullanmak için buna ihtiyacınız yoktur.
 
 ---
 
@@ -22,7 +22,7 @@ Zen, OpenCode'daki diğer sağlayıcılar gibi çalışır. OpenCode Zen'de otur
 Piyasada çok sayıda model var, ancak bunların yalnızca birkaçı kodlama ajanı olarak iyi çalışıyor. Ayrıca çoğu sağlayıcı çok farklı şekilde yapılandırılıyor; bu yüzden performans ve kalite de ciddi ölçüde değişiyor.
 
 :::tip
-OpenCode ile iyi çalışan seçili bir model ve sağlayıcı grubunu test ettik.
+Octopus ile iyi çalışan seçili bir model ve sağlayıcı grubunu test ettik.
 :::
 
 Bu yüzden, OpenRouter gibi bir şey üzerinden model kullanıyorsanız istediğiniz modelin en iyi sürümünü alıp almadığınızdan asla emin olamazsınız.
@@ -33,16 +33,16 @@ Bunu düzeltmek için birkaç şey yaptık:
 2. Ardından, bunların doğru şekilde sunulduğundan emin olmak için birkaç sağlayıcıyla birlikte çalıştık.
 3. Son olarak, model/sağlayıcı kombinasyonlarını benchmark edip gönül rahatlığıyla önerebileceğimiz bir liste çıkardık.
 
-OpenCode Zen, bu modellere erişmenizi sağlayan bir AI ağ geçididir.
+Octopus Zen, bu modellere erişmenizi sağlayan bir AI ağ geçididir.
 
 ---
 
 ## Nasıl çalışır
 
-OpenCode Zen, OpenCode'daki diğer sağlayıcılar gibi çalışır.
+Octopus Zen, Octopus'daki diğer sağlayıcılar gibi çalışır.
 
-1. **<a href={console}>OpenCode Zen</a>**'de oturum açın, faturalandırma bilgilerinizi ekleyin ve API anahtarınızı kopyalayın.
-2. TUI'de `/connect` komutunu çalıştırın, OpenCode Zen'i seçin ve API anahtarınızı yapıştırın.
+1. **<a href={console}>Octopus Zen</a>**'de oturum açın, faturalandırma bilgilerinizi ekleyin ve API anahtarınızı kopyalayın.
+2. TUI'de `/connect` komutunu çalıştırın, Octopus Zen'i seçin ve API anahtarınızı yapıştırın.
 3. Önerdiğimiz modellerin listesini görmek için TUI'de `/models` komutunu çalıştırın.
 
 İstek başına ücretlendirilirsiniz ve hesabınıza kredi ekleyebilirsiniz.
@@ -96,7 +96,7 @@ Modellerimize aşağıdaki API uç noktaları aracılığıyla da erişebilirsin
 | Ring 2.6 1T           | ring-2.6-1t-free      | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Super Free | nemotron-3-super-free | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
-OpenCode yapılandırmanızdaki [model id](/docs/config/#models) `opencode/<model-id>` biçimini kullanır. Örneğin, GPT 5.5 için yapılandırmanızda `opencode/gpt-5.5` kullanırsınız.
+Octopus yapılandırmanızdaki [model id](/docs/config/#models) `opencode/<model-id>` biçimini kullanır. Örneğin, GPT 5.5 için yapılandırmanızda `opencode/gpt-5.5` kullanırsınız.
 
 ---
 
@@ -169,10 +169,10 @@ Kredi kartı ücretleri maliyet üzerinden yansıtılır (%4.4 + işlem başına
 
 Ücretsiz modeller:
 
-- MiniMax M2.5 Free, sınırlı bir süre için OpenCode'da ücretsizdir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
-- Ring 2.6 1T Free, sınırlı bir süre için OpenCode'da ücretsizdir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
-- Nemotron 3 Super Free, sınırlı bir süre için OpenCode'da ücretsizdir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
-- Big Pickle, sınırlı bir süre için OpenCode'da ücretsiz olan gizli bir modeldir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
+- MiniMax M2.5 Free, sınırlı bir süre için Octopus'da ücretsizdir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
+- Ring 2.6 1T Free, sınırlı bir süre için Octopus'da ücretsizdir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
+- Nemotron 3 Super Free, sınırlı bir süre için Octopus'da ücretsizdir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
+- Big Pickle, sınırlı bir süre için Octopus'da ücretsiz olan gizli bir modeldir. Ekip bu süreyi geri bildirim toplamak ve modeli iyileştirmek için kullanıyor.
 
 Sorularınız varsa <a href={email}>bizimle iletişime geçin</a>.
 
@@ -272,9 +272,9 @@ Kendi anahtarlarınızı kullandığınızda token'lar Zen tarafından değil, d
 
 ## Hedefler
 
-OpenCode Zen'i şunlar için oluşturduk:
+Octopus Zen'i şunlar için oluşturduk:
 
 1. Kodlama ajanları için en iyi modelleri/sağlayıcıları **kıyaslamak**.
 2. **En yüksek kaliteli** seçeneklere erişmek ve performansı düşürmemek ya da daha ucuz sağlayıcılara yönlendirmemek.
 3. Maliyetine satış yaparak tüm **fiyat düşüşlerini** yansıtmak; yani tek ek ücretimiz işlem ücretlerimizi karşılamak içindir.
-4. Başka herhangi bir kodlama ajanıyla kullanmanıza izin vererek **kilitlenme olmamasını** sağlamak. Ayrıca OpenCode ile her zaman başka herhangi bir sağlayıcıyı da kullanabilmenizi sağlamak.
+4. Başka herhangi bir kodlama ajanıyla kullanmanıza izin vererek **kilitlenme olmamasını** sağlamak. Ayrıca Octopus ile her zaman başka herhangi bir sağlayıcıyı da kullanabilmenizi sağlamak.

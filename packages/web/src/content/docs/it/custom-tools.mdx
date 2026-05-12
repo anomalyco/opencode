@@ -17,8 +17,8 @@ Gli strumenti sono definiti come file **TypeScript** o **JavaScript**. Tuttavia,
 
 Possono essere definiti:
 
-- In locale, mettendoli nella directory `.opencode/tools/` del progetto.
-- Oppure in globale, mettendoli in `~/.config/opencode/tools/`.
+- In locale, mettendoli nella directory `.octopus/tools/` del progetto.
+- Oppure in globale, mettendoli in `~/.config/octopus/tools/`.
 
 ---
 
@@ -26,8 +26,8 @@ Possono essere definiti:
 
 Il modo piu semplice per creare strumenti e usare l'helper `tool()` che fornisce type-safety e validazione.
 
-```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".octopus/tools/database.ts" {1}
+import { tool } from "@octopus-ai/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -49,8 +49,8 @@ Il **nome del file** diventa il **nome dello strumento**. L'esempio sopra crea l
 
 Puoi anche esportare piu strumenti da un singolo file. Ogni export diventa **uno strumento separato** con nome **`<filename>_<exportname>`**:
 
-```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+```ts title=".octopus/tools/math.ts"
+import { tool } from "@octopus-ai/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -85,8 +85,8 @@ Gli strumenti personalizzati sono indicizzati per nome. Se uno strumento persona
 
 Per esempio, questo file sostituisce lo strumento `bash` integrato:
 
-```ts title=".opencode/tools/bash.ts"
-import { tool } from "@opencode-ai/plugin"
+```ts title=".octopus/tools/bash.ts"
+import { tool } from "@octopus-ai/plugin"
 
 export default tool({
   description: "Restricted bash wrapper",
@@ -138,8 +138,8 @@ export default {
 
 Gli strumenti ricevono un contesto sulla sessione corrente:
 
-```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".octopus/tools/project.ts" {8}
+import { tool } from "@octopus-ai/plugin"
 
 export default tool({
   description: "Get project information",
@@ -165,7 +165,7 @@ Puoi scrivere gli strumenti in qualunque linguaggio. Ecco un esempio che somma d
 
 Per prima cosa, crea lo strumento come script Python:
 
-```python title=".opencode/tools/add.py"
+```python title=".octopus/tools/add.py"
 import sys
 
 a = int(sys.argv[1])
@@ -175,8 +175,8 @@ print(a + b)
 
 Poi crea la definizione dello strumento che lo invoca:
 
-```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+```ts title=".octopus/tools/python-add.ts" {10}
+import { tool } from "@octopus-ai/plugin"
 import path from "path"
 
 export default tool({
@@ -186,7 +186,7 @@ export default tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
-    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const script = path.join(context.worktree, ".octopus/tools/add.py")
     const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },

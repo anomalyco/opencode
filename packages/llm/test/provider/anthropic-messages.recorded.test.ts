@@ -1,4 +1,4 @@
-import { Redactor } from "@opencode-ai/http-recorder"
+import { Redactor } from "@octopus-ai/http-recorder"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM, LLMError } from "../../src"

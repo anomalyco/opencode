@@ -1,11 +1,11 @@
 import { createEffect, createMemo, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Button } from "@opencode-ai/ui/button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { useTheme } from "@opencode-ai/ui/theme/context"
+import { IconButton } from "@octopus-ai/ui/icon-button"
+import { Icon } from "@octopus-ai/ui/icon"
+import { Button } from "@octopus-ai/ui/button"
+import { Tooltip, TooltipKeybind } from "@octopus-ai/ui/tooltip"
+import { useTheme } from "@octopus-ai/ui/theme/context"
 
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -90,7 +90,7 @@ export function Titlebar() {
   const canBack = createMemo(() => history.index > 0)
   const canForward = createMemo(() => history.index < history.stack.length - 1)
   const hasProjects = createMemo(() => layout.projects.list().length > 0)
-  const nav = createMemo(() => import.meta.env.VITE_OPENCODE_CHANNEL !== "beta" || settings.general.showNavigation())
+  const nav = createMemo(() => import.meta.env.VITE_OCTOPUS_CHANNEL !== "beta" || settings.general.showNavigation())
 
   const back = () => {
     const next = backPath(history)
@@ -302,9 +302,9 @@ export function Titlebar() {
                   </div>
                 </Show>
                 <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
-                {["beta", "dev"].includes(import.meta.env.VITE_OPENCODE_CHANNEL) && (
+                {["beta", "dev"].includes(import.meta.env.VITE_OCTOPUS_CHANNEL) && (
                   <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
-                    {import.meta.env.VITE_OPENCODE_CHANNEL.toUpperCase()}
+                    {import.meta.env.VITE_OCTOPUS_CHANNEL.toUpperCase()}
                   </div>
                 )}
               </div>

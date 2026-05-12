@@ -1,15 +1,15 @@
 ---
 title: Server LSP
-description: OpenCode si integra con i tuoi server LSP.
+description: Octopus si integra con i tuoi server LSP.
 ---
 
-OpenCode si integra con il tuo Language Server Protocol (LSP) per aiutare l'LLM a interagire con la tua codebase. Usa le diagnostiche per fornire feedback all'LLM.
+Octopus si integra con il tuo Language Server Protocol (LSP) per aiutare l'LLM a interagire con la tua codebase. Usa le diagnostiche per fornire feedback all'LLM.
 
 ---
 
 ## Integrati
 
-OpenCode include diversi server LSP integrati per linguaggi popolari:
+Octopus include diversi server LSP integrati per linguaggi popolari:
 
 | Server LSP         | Estensioni                                                          | Requisiti                                                                |
 | ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -50,7 +50,7 @@ OpenCode include diversi server LSP integrati per linguaggi popolari:
 I server LSP vengono abilitati automaticamente quando viene rilevata una delle estensioni qui sopra e i requisiti sono soddisfatti.
 
 :::note
-Puoi disabilitare il download automatico dei server LSP impostando la variabile d'ambiente `OPENCODE_DISABLE_LSP_DOWNLOAD` a `true`.
+Puoi disabilitare il download automatico dei server LSP impostando la variabile d'ambiente `OCTOPUS_DISABLE_LSP_DOWNLOAD` a `true`.
 :::
 
 ---
@@ -68,7 +68,7 @@ Quando opencode apre un file:
 
 Puoi personalizzare i server LSP tramite la sezione `lsp` nella configurazione di opencode.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {}
@@ -93,7 +93,7 @@ Vediamo alcuni esempi.
 
 Usa la proprieta `env` per impostare variabili d'ambiente quando avvii il server LSP:
 
-```json title="opencode.json" {5-7}
+```json title="octopus.json" {5-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -112,7 +112,7 @@ Usa la proprieta `env` per impostare variabili d'ambiente quando avvii il server
 
 Usa la proprieta `initialization` per passare opzioni di inizializzazione al server LSP. Sono impostazioni specifiche del server inviate durante la richiesta LSP `initialize`:
 
-```json title="opencode.json" {5-9}
+```json title="octopus.json" {5-9}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -137,7 +137,7 @@ Le opzioni di inizializzazione variano da server a server. Consulta la documenta
 
 Per disabilitare **tutti** i server LSP globalmente, imposta `lsp` a `false`:
 
-```json title="opencode.json" {3}
+```json title="octopus.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": false
@@ -146,7 +146,7 @@ Per disabilitare **tutti** i server LSP globalmente, imposta `lsp` a `false`:
 
 Per disabilitare un server LSP **specifico**, imposta `disabled` a `true`:
 
-```json title="opencode.json" {5}
+```json title="octopus.json" {5}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -163,7 +163,7 @@ Per disabilitare un server LSP **specifico**, imposta `disabled` a `true`:
 
 Puoi aggiungere server LSP personalizzati specificando il comando e le estensioni file:
 
-```json title="opencode.json" {4-7}
+```json title="octopus.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {

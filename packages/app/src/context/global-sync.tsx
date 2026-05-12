@@ -1,14 +1,14 @@
 import type {
   Config,
-  OpencodeClient,
+  OctopusClient,
   Path,
   Project,
   ProviderAuthResponse,
   ProviderListResponse,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
-import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/core/util/path"
+} from "@octopus-ai/sdk/v2/client"
+import { showToast } from "@octopus-ai/ui/toast"
+import { getFilename } from "@octopus-ai/core/util/path"
 import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -52,7 +52,7 @@ export const loadSessionsQueryKey = (directory: string) => [directory, "loadSess
 
 export const mcpQueryKey = (directory: string) => [directory, "mcp"] as const
 
-export const loadMcpQuery = (directory: string, sdk: OpencodeClient) =>
+export const loadMcpQuery = (directory: string, sdk: OctopusClient) =>
   queryOptions({
     queryKey: mcpQueryKey(directory),
     queryFn: () => sdk.mcp.status().then((r) => r.data ?? {}),
@@ -60,7 +60,7 @@ export const loadMcpQuery = (directory: string, sdk: OpencodeClient) =>
 
 export const lspQueryKey = (directory: string) => [directory, "lsp"] as const
 
-export const loadLspQuery = (directory: string, sdk: OpencodeClient) =>
+export const loadLspQuery = (directory: string, sdk: OctopusClient) =>
   queryOptions({
     queryKey: lspQueryKey(directory),
     queryFn: () => sdk.lsp.status().then((r) => r.data ?? []),
@@ -72,7 +72,7 @@ function createGlobalSync() {
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
 
-  const sdkCache = new Map<string, OpencodeClient>()
+  const sdkCache = new Map<string, OctopusClient>()
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()

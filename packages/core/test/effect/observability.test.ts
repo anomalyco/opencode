@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { resource } from "@opencode-ai/core/effect/observability"
+import { resource } from "@octopus-ai/core/effect/observability"
 
 const otelResourceAttributes = process.env.OTEL_RESOURCE_ATTRIBUTES
-const opencodeClient = process.env.OPENCODE_CLIENT
+const octopusClient = process.env.OCTOPUS_CLIENT
 
 afterEach(() => {
   if (otelResourceAttributes === undefined) delete process.env.OTEL_RESOURCE_ATTRIBUTES
   else process.env.OTEL_RESOURCE_ATTRIBUTES = otelResourceAttributes
 
-  if (opencodeClient === undefined) delete process.env.OPENCODE_CLIENT
-  else process.env.OPENCODE_CLIENT = opencodeClient
+  if (octopusClient === undefined) delete process.env.OCTOPUS_CLIENT
+  else process.env.OCTOPUS_CLIENT = octopusClient
 })
 
 describe("resource", () => {
@@ -33,7 +33,7 @@ describe("resource", () => {
   })
 
   test("keeps built-in attributes when env values conflict", () => {
-    process.env.OPENCODE_CLIENT = "cli"
+    process.env.OCTOPUS_CLIENT = "cli"
     process.env.OTEL_RESOURCE_ATTRIBUTES =
       "opencode.client=web,service.instance.id=override,service.namespace=anomalyco"
 

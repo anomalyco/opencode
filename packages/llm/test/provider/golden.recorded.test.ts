@@ -1,4 +1,4 @@
-import { Redactor } from "@opencode-ai/http-recorder"
+import { Redactor } from "@octopus-ai/http-recorder"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import * as Gemini from "../../src/protocols/gemini"
 import * as OpenAIChat from "../../src/protocols/openai-chat"

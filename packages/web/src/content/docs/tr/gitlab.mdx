@@ -35,7 +35,7 @@ Burada opencode için topluluk tarafından oluşturulan bir CI/CD bileşeni kull
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         auth_json: $OCTOPUS_AUTH_JSON # The variable name for your Octopus authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
@@ -91,10 +91,10 @@ Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agen
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
+      - echo "Creating Octopus auth configuration"
       - mkdir --parents ~/.local/share/opencode
       - |
-        cat > ~/.local/share/opencode/auth.json << EOF
+        cat > ~/.local/share/octopus/auth.json << EOF
         {
           "anthropic": {
             "type": "api",
@@ -104,10 +104,10 @@ Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agen
         EOF
       - echo "Configuring git"
       - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.name "Octopus"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running Octopus"
       - |
         opencode run "
         You are an AI assistant helping with GitLab operations.

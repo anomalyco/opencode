@@ -59,10 +59,10 @@ WSL дает более высокую производительность фа
 :::
 
 :::caution
-При использовании `--hostname 0.0.0.0` задайте `OPENCODE_SERVER_PASSWORD`, чтобы защитить сервер.
+При использовании `--hostname 0.0.0.0` задайте `OCTOPUS_SERVER_PASSWORD`, чтобы защитить сервер.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+OCTOPUS_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 ```
 
 :::
@@ -110,4 +110,4 @@ opencode
 
 - Даже для проектов на дисках Windows запускайте opencode в WSL, чтобы получить более плавный доступ к файлам
 - Используйте opencode вместе с [расширением WSL для VS Code](https://code.visualstudio.com/docs/remote/wsl) для единого рабочего процесса
-- Конфигурация и сессии opencode хранятся в среде WSL по пути `~/.local/share/opencode/`
+- Конфигурация и сессии opencode хранятся в среде WSL по пути `~/.local/share/octopus/`

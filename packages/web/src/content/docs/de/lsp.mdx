@@ -1,15 +1,15 @@
 ---
 title: LSP Server
-description: OpenCode lässt sich in Ihren LSP-Server integrieren.
+description: Octopus lässt sich in Ihren LSP-Server integrieren.
 ---
 
-OpenCode lässt sich in Ihr Language Server Protocol (LSP) integrieren, um die Interaktion von LLM mit Ihrer Codebasis zu unterstützen. Es verwendet Diagnosefunktionen, um dem LLM Feedback zu geben.
+Octopus lässt sich in Ihr Language Server Protocol (LSP) integrieren, um die Interaktion von LLM mit Ihrer Codebasis zu unterstützen. Es verwendet Diagnosefunktionen, um dem LLM Feedback zu geben.
 
 ---
 
 ## Integriert
 
-OpenCode verfügt über mehrere integrierte LSP-Server für gängige Sprachen:
+Octopus verfügt über mehrere integrierte LSP-Server für gängige Sprachen:
 
 | LSP Server         | Erweiterungen                                                       | Anforderungen                                                             |
 | ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------- |
@@ -49,14 +49,14 @@ OpenCode verfügt über mehrere integrierte LSP-Server für gängige Sprachen:
 LSP-Server werden automatisch aktiviert, wenn eine der oben genannten Dateierweiterungen erkannt wird und die Anforderungen erfüllt sind.
 
 :::note
-Sie können LSP-Server-Downloads automatisch deaktivieren, indem Sie die Umgebungsvariable `OPENCODE_DISABLE_LSP_DOWNLOAD` auf `true` setzen.
+Sie können LSP-Server-Downloads automatisch deaktivieren, indem Sie die Umgebungsvariable `OCTOPUS_DISABLE_LSP_DOWNLOAD` auf `true` setzen.
 :::
 
 ---
 
 ## Funktionsweise
 
-Wenn OpenCode eine Datei öffnet, geschieht Folgendes:
+Wenn Octopus eine Datei öffnet, geschieht Folgendes:
 
 1. Überprüft die Dateierweiterung anhand aller aktivierten LSP-Server.
 2. Startet den entsprechenden LSP-Server, falls er noch nicht ausgeführt wird.
@@ -65,9 +65,9 @@ Wenn OpenCode eine Datei öffnet, geschieht Folgendes:
 
 ## Konfiguration
 
-Sie können LSP-Server über den Abschnitt `lsp` in Ihrer OpenCode-Konfiguration anpassen.
+Sie können LSP-Server über den Abschnitt `lsp` in Ihrer Octopus-Konfiguration anpassen.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {}
@@ -92,7 +92,7 @@ Schauen wir uns einige Beispiele an.
 
 Verwenden Sie die Eigenschaft `env`, um Umgebungsvariablen festzulegen, wenn Sie den Server LSP starten:
 
-```json title="opencode.json" {5-7}
+```json title="octopus.json" {5-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -111,7 +111,7 @@ Verwenden Sie die Eigenschaft `env`, um Umgebungsvariablen festzulegen, wenn Sie
 
 Verwenden Sie die Eigenschaft `initialization`, um Initialisierungsoptionen an den Server LSP zu übergeben. Dies sind serverspezifische Einstellungen, die während der LSP `initialize`-Anfrage gesendet werden:
 
-```json title="opencode.json" {5-9}
+```json title="octopus.json" {5-9}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -136,7 +136,7 @@ Die Initialisierungsoptionen variieren je nach LSP-Server. Überprüfen Sie die 
 
 Um **alle** LSP-Server global zu deaktivieren, setzen Sie `lsp` auf `false`:
 
-```json title="opencode.json" {3}
+```json title="octopus.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": false
@@ -145,7 +145,7 @@ Um **alle** LSP-Server global zu deaktivieren, setzen Sie `lsp` auf `false`:
 
 Um einen **bestimmten** LSP-Server zu deaktivieren, setzen Sie `disabled` auf `true`:
 
-```json title="opencode.json" {5}
+```json title="octopus.json" {5}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -162,7 +162,7 @@ Um einen **bestimmten** LSP-Server zu deaktivieren, setzen Sie `disabled` auf `t
 
 Sie können einen benutzerdefinierten LSP-Server hinzufügen, indem Sie den Befehl und die Dateierweiterungen angeben:
 
-```json title="opencode.json" {4-7}
+```json title="octopus.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {

@@ -1,6 +1,6 @@
 import type {
   Event,
-  createOpencodeClient,
+  createOctopusClient,
   Project,
   Model,
   Provider,
@@ -10,8 +10,8 @@ import type {
   Part,
   Auth,
   Config as SDKConfig,
-} from "@opencode-ai/sdk"
-import type { Provider as ProviderV2, Model as ModelV2 } from "@opencode-ai/sdk/v2"
+} from "@octopus-ai/sdk"
+import type { Provider as ProviderV2, Model as ModelV2 } from "@octopus-ai/sdk/v2"
 
 import type { BunShell } from "./shell.js"
 import { type ToolDefinition } from "./tool.js"
@@ -55,7 +55,7 @@ export type WorkspaceAdapter = {
 }
 
 export type PluginInput = {
-  client: ReturnType<typeof createOpencodeClient>
+  client: ReturnType<typeof createOctopusClient>
   project: Project
   directory: string
   worktree: string

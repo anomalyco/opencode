@@ -1,30 +1,30 @@
 ---
 title: Fournisseurs
-description: Utiliser n’importe quel fournisseur LLM en OpenCode.
+description: Utiliser n’importe quel fournisseur LLM en Octopus.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode utilise [AI SDK](https://ai-sdk.dev/) et [Models.dev](https://models.dev) pour prendre en charge **75+ fournisseurs LLM** et prend en charge l'exécution de modèles locaux.
+Octopus utilise [AI SDK](https://ai-sdk.dev/) et [Models.dev](https://models.dev) pour prendre en charge **75+ fournisseurs LLM** et prend en charge l'exécution de modèles locaux.
 
 Pour ajouter un fournisseur, vous devez :
 
 1. Ajoutez les clés API pour le fournisseur à l'aide de la commande `/connect`.
-2. Configurez le fournisseur dans votre configuration OpenCode.
+2. Configurez le fournisseur dans votre configuration Octopus.
 
 ---
 
 ### Informations d'identification
 
 Lorsque vous ajoutez les clés API d'un fournisseur avec la commande `/connect`, elles sont stockées
-en `~/.local/share/opencode/auth.json`.
+en `~/.local/share/octopus/auth.json`.
 
 ---
 
 ### Configuration
 
-Vous pouvez personnaliser les fournisseurs via la section `provider` de votre OpenCode
+Vous pouvez personnaliser les fournisseurs via la section `provider` de votre Octopus
 configuration.
 
 ---
@@ -33,7 +33,7 @@ configuration.
 
 Vous pouvez personnaliser la base URL pour n'importe quel fournisseur en définissant l'option `baseURL`. Ceci est utile lors de l'utilisation de services proxy ou de points de terminaison personnalisés.
 
-```json title="opencode.json" {6}
+```json title="octopus.json" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -48,13 +48,13 @@ Vous pouvez personnaliser la base URL pour n'importe quel fournisseur en défini
 
 ---
 
-## OpenCode Zen
+## Octopus Zen
 
-OpenCode Zen est une liste de modèles fournis par l'équipe OpenCode qui ont été
-testé et vérifié pour fonctionner correctement avec OpenCode. [En savoir plus](/docs/zen).
+Octopus Zen est une liste de modèles fournis par l'équipe Octopus qui ont été
+testé et vérifié pour fonctionner correctement avec Octopus. [En savoir plus](/docs/zen).
 
 :::tip
-Si vous êtes nouveau, nous vous recommandons de commencer par OpenCode Zen.
+Si vous êtes nouveau, nous vous recommandons de commencer par Octopus Zen.
 :::
 
 1. Exécutez la commande `/connect` dans le TUI, sélectionnez opencode et dirigez-vous vers [opencode.ai/auth](https://opencode.ai/auth).
@@ -80,16 +80,16 @@ Si vous êtes nouveau, nous vous recommandons de commencer par OpenCode Zen.
    /models
    ```
 
-Il fonctionne comme n’importe quel autre fournisseur dans OpenCode et son utilisation est totalement facultative.
+Il fonctionne comme n’importe quel autre fournisseur dans Octopus et son utilisation est totalement facultative.
 
 ---
 
-## OpenCode Go
+## Octopus Go
 
-OpenCode Go est un plan d'abonnement à faible coût qui offre un accès fiable aux modèles de codage ouverts populaires fournis par l'équipe OpenCode qui ont été
-testé et vérifié pour fonctionner correctement avec OpenCode.
+Octopus Go est un plan d'abonnement à faible coût qui offre un accès fiable aux modèles de codage ouverts populaires fournis par l'équipe Octopus qui ont été
+testé et vérifié pour fonctionner correctement avec Octopus.
 
-1. Exécutez la commande `/connect` dans le TUI, sélectionnez `OpenCode Go` et rendez-vous sur [opencode.ai/auth](https://opencode.ai/zen).
+1. Exécutez la commande `/connect` dans le TUI, sélectionnez `Octopus Go` et rendez-vous sur [opencode.ai/auth](https://opencode.ai/zen).
 
    ```txt
    /connect
@@ -112,7 +112,7 @@ testé et vérifié pour fonctionner correctement avec OpenCode.
    /models
    ```
 
-Il fonctionne comme n’importe quel autre fournisseur dans OpenCode et son utilisation est totalement facultative.
+Il fonctionne comme n’importe quel autre fournisseur dans Octopus et son utilisation est totalement facultative.
 
 ---
 
@@ -156,7 +156,7 @@ Vous ne voyez pas de fournisseur ici ? Soumettez un PR.
 
 ### Amazon Bedrock
 
-Pour utiliser Amazon Bedrock avec OpenCode :
+Pour utiliser Amazon Bedrock avec Octopus :
 
 1. Rendez-vous sur le **Catalogue de modèles** dans la console Amazon Bedrock et demandez
    accédez aux modèles que vous souhaitez.
@@ -191,9 +191,9 @@ Ou ajoutez-les à votre profil bash :
 
 #### Fichier de configuration (recommandé)
 
-Pour une configuration spécifique au projet ou persistante, utilisez `opencode.json` :
+Pour une configuration spécifique au projet ou persistante, utilisez `octopus.json` :
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -221,7 +221,7 @@ Les options du fichier de configuration sont prioritaires sur les variables d'en
 
 Si vous utilisez des points de terminaison d'un VPC pour Bedrock :
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -267,7 +267,7 @@ Lorsqu'un jeton de porteur est défini (via `/connect` ou `AWS_BEARER_TOKEN_BEDR
 :::note
 Pour les profils d'inférence personnalisés, utilisez le nom du modèle et du fournisseur dans la clé et définissez la propriété `id` sur l'arn. Cela garantit une mise en cache correcte :
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -314,7 +314,7 @@ Pour les profils d'inférence personnalisés, utilisez le nom du modèle et du f
    ```
 
 :::info
-L'utilisation de votre abonnement Claude Pro/Max dans OpenCode n'est pas officiellement prise en charge par [Anthropic](https://anthropic.com).
+L'utilisation de votre abonnement Claude Pro/Max dans Octopus n'est pas officiellement prise en charge par [Anthropic](https://anthropic.com).
 :::
 
 ##### Utilisation des clés API
@@ -329,7 +329,7 @@ Ou si vous disposez déjà d'une clé API, vous pouvez sélectionner **Entrer ma
 
 Vous pouvez configurer opencode pour utiliser des modèles locaux via [Atomic Chat](https://atomic.chat), une application de bureau qui exécute des LLM locaux derrière un serveur API compatible OpenAI (point de terminaison par défaut `http://127.0.0.1:1337/v1`).
 
-```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
+```json title="octopus.json" "atomic-chat" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -557,7 +557,7 @@ Ou définissez-le comme variable d'environnement.
 
 Vous pouvez également ajouter des modèles via votre configuration opencode.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -736,7 +736,7 @@ Sélectionnez **OAuth** et votre navigateur s'ouvrira pour autorisation.
 
 1.  Accédez à [GitLab Paramètres utilisateur > Jetons d'accès](https://gitlab.com/-/user_settings/personal_access_tokens)
 2.  Cliquez sur **Ajouter un nouveau jeton**
-3.  Nom : `OpenCode`, Portées : `api`
+3.  Nom : `Octopus`, Portées : `api`
 4.  Copiez le jeton (commence par `glpat-`)
 5.  Entrez-le dans le terminal
 
@@ -762,10 +762,10 @@ pour stocker le jeton dans le stockage d'authentification opencode.
 ##### GitLab auto-hébergé
 
 :::note[note de conformité]
-OpenCode utilise un petit modèle pour certaines tâches d'IA telles que la génération du titre de la session.
-Il est configuré pour utiliser gpt-5-nano par défaut, hébergé par Zen. Pour verrouiller OpenCode
+Octopus utilise un petit modèle pour certaines tâches d'IA telles que la génération du titre de la session.
+Il est configuré pour utiliser gpt-5-nano par défaut, hébergé par Zen. Pour verrouiller Octopus
 pour utiliser uniquement votre propre instance hébergée par GitLab, ajoutez ce qui suit à votre
-Fichier `opencode.json`. Il est également recommandé de désactiver le partage de session.
+Fichier `octopus.json`. Il est également recommandé de désactiver le partage de session.
 
 ```json
 {
@@ -827,9 +827,9 @@ Plus de documentation sur la page d'accueil [opencode-gitlab-auth](https://www.n
 
 ##### Configuration
 
-Personnalisez via `opencode.json` :
+Personnalisez via `octopus.json` :
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -846,7 +846,7 @@ Personnalisez via `opencode.json` :
 
 Pour accéder aux outils GitLab (demandes de fusion, tickets, pipelines, CI/CD, etc.) :
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-gitlab-plugin"]
@@ -896,7 +896,7 @@ Certains modèles doivent être activés manuellement dans vos [GitHub Copilot p
 
 ### Google Vertex AI
 
-Pour utiliser Google Vertex AI avec OpenCode :
+Pour utiliser Google Vertex AI avec Octopus :
 
 1. Rendez-vous sur **Model Garden** dans Google Cloud Console et vérifiez les
    modèles disponibles dans votre région.
@@ -1029,7 +1029,7 @@ Si vous voyez une fonctionnalité ou un modèle d'Helicone qui n'est pas configu
 
 Voici le [Répertoire des modèles d'Helicone](https://helicone.ai/models), vous en aurez besoin pour récupérer les identifiants des modèles que vous souhaitez ajouter.
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/octopus/octopus.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1057,7 +1057,7 @@ Voici le [Répertoire des modèles d'Helicone](https://helicone.ai/models), vous
 
 Helicone prend en charge les en-têtes personnalisés pour des fonctionnalités telles que la mise en cache, le suivi des utilisateurs et la gestion des sessions. Ajoutez-les à la configuration de votre fournisseur en utilisant `options.headers` :
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/octopus/octopus.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1078,7 +1078,7 @@ Helicone prend en charge les en-têtes personnalisés pour des fonctionnalités 
 
 ##### Suivi des sessions
 
-La fonctionnalité [Sessions](https://docs.helicone.ai/features/sessions) d'Helicone vous permet de regrouper les requêtes LLM associées. Utilisez le plugin [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) pour enregistrer automatiquement chaque conversation OpenCode en tant que session dans Helicone.
+La fonctionnalité [Sessions](https://docs.helicone.ai/features/sessions) d'Helicone vous permet de regrouper les requêtes LLM associées. Utilisez le plugin [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) pour enregistrer automatiquement chaque conversation Octopus en tant que session dans Helicone.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1086,13 +1086,13 @@ npm install -g opencode-helicone-session
 
 Ajoutez-le à votre configuration.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "plugin": ["opencode-helicone-session"]
 }
 ```
 
-Le plugin injecte les en-têtes `Helicone-Session-Id` et `Helicone-Session-Name` dans vos requêtes. Sur la page Sessions d'Helicone, vous verrez chaque conversation OpenCode répertoriée comme une session distincte.
+Le plugin injecte les en-têtes `Helicone-Session-Id` et `Helicone-Session-Name` dans vos requêtes. Sur la page Sessions d'Helicone, vous verrez chaque conversation Octopus répertoriée comme une session distincte.
 
 ##### En-têtes Helicone communs
 
@@ -1111,7 +1111,7 @@ Consultez le [Helicone Header Directory](https://docs.helicone.ai/helicone-heade
 
 Vous pouvez configurer opencode pour utiliser des modèles locaux via l'utilitaire llama-server de [llama.cpp's](https://github.com/ggml-org/llama.cpp)
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="octopus.json" "llama.cpp" {5, 6, 8, 10-15}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1178,7 +1178,7 @@ IO.NET propose 17 modèles optimisés pour différents cas d'utilisation :
 
 Vous pouvez configurer opencode pour utiliser des modèles locaux via LM Studio.
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="octopus.json" "lmstudio" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1296,10 +1296,10 @@ Pour utiliser Kimi K2 de Moonshot AI :
 Vous pouvez configurer opencode pour utiliser des modèles locaux via Ollama.
 
 :::tip
-Ollama peut se configurer automatiquement pour OpenCode. Voir les [documents d'intégration Ollama](https://docs.ollama.com/integrations/opencode) pour plus de détails.
+Ollama peut se configurer automatiquement pour Octopus. Voir les [documents d'intégration Ollama](https://docs.ollama.com/integrations/opencode) pour plus de détails.
 :::
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="octopus.json" "ollama" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1335,13 +1335,13 @@ Si les appels d'outils ne fonctionnent pas, essayez d'augmenter `num_ctx` dans O
 
 ### Ollama Cloud
 
-Pour utiliser Ollama Cloud avec OpenCode :
+Pour utiliser Ollama Cloud avec Octopus :
 
 1. Rendez-vous sur [https://ollama.com/](https://ollama.com/) et connectez-vous ou créez un compte.
 
 2. Accédez à **Paramètres** > **Clés** et cliquez sur **Ajouter une clé API** pour générer une nouvelle clé API.
 
-3. Copiez la clé API à utiliser dans OpenCode.
+3. Copiez la clé API à utiliser dans Octopus.
 
 4. Exécutez la commande `/connect` et recherchez **Ollama Cloud**.
 
@@ -1358,7 +1358,7 @@ Pour utiliser Ollama Cloud avec OpenCode :
    └ enter
    ```
 
-6. **Important** : Avant d'utiliser des modèles cloud dans OpenCode, vous devez extraire les informations du modèle localement :
+6. **Important** : Avant d'utiliser des modèles cloud dans Octopus, vous devez extraire les informations du modèle localement :
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1405,19 +1405,19 @@ Si vous disposez déjà d'une clé API, vous pouvez sélectionner **Entrer manue
 
 ---
 
-### OpenCode Zen
+### Octopus Zen
 
-OpenCode Zen est une liste de modèles testés et vérifiés fournie par l'équipe OpenCode. [En savoir plus](/docs/zen).
+Octopus Zen est une liste de modèles testés et vérifiés fournie par l'équipe Octopus. [En savoir plus](/docs/zen).
 
-1. Connectez-vous à **<a href={console}>OpenCode Zen</a>** et cliquez sur **Créer une clé API**.
+1. Connectez-vous à **<a href={console}>Octopus Zen</a>** et cliquez sur **Créer une clé API**.
 
-2. Exécutez la commande `/connect` et recherchez **OpenCode Zen**.
+2. Exécutez la commande `/connect` et recherchez **Octopus Zen**.
 
    ```txt
    /connect
    ```
 
-3. Entrez votre clé OpenCode API.
+3. Entrez votre clé Octopus API.
 
    ```txt
    ┌ API key
@@ -1461,7 +1461,7 @@ OpenCode Zen est une liste de modèles testés et vérifiés fournie par l'équi
 
 Vous pouvez également ajouter des modèles supplémentaires via votre configuration opencode.
 
-```json title="opencode.json" {6}
+```json title="octopus.json" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1476,7 +1476,7 @@ Vous pouvez également ajouter des modèles supplémentaires via votre configura
 
 5. Vous pouvez également les personnaliser via votre configuration opencode. Voici un exemple de spécification d'un fournisseur
 
-   ```json title="opencode.json"
+   ```json title="octopus.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1725,7 +1725,7 @@ Vercel AI Gateway vous permet d'accéder aux modèles de OpenAI, Anthropic, Goog
 
 Vous pouvez également personnaliser les modèles via votre configuration opencode. Voici un exemple de spécification de l'ordre de routage du fournisseur.
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1835,7 +1835,7 @@ Si vous êtes abonné au **Plan de codage GLM**, sélectionnez **Plan de codage 
 
 Vous pouvez également ajouter des modèles supplémentaires via votre configuration opencode.
 
-```json title="opencode.json" {6}
+```json title="octopus.json" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1894,16 +1894,16 @@ Vous pouvez utiliser n'importe quel fournisseur compatible OpenAI avec opencode.
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in octopus.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. Créez ou mettez à jour votre fichier `opencode.json` dans le répertoire de votre projet :
+4. Créez ou mettez à jour votre fichier `octopus.json` dans le répertoire de votre projet :
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="octopus.json" ""myprovider"" {5-15}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1942,7 +1942,7 @@ En savoir plus sur les options avancées dans l'exemple ci-dessous.
 
 Voici un exemple de définition des options `apiKey`, `headers` et modèle `limit`.
 
-```json title="opencode.json" {9,11,17-20}
+```json title="octopus.json" {9,11,17-20}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -1977,7 +1977,7 @@ Détails de configuration :
 - **limit.context** : nombre maximal de jetons d'entrée acceptés par le modèle.
 - **limit.output** : nombre maximal de jetons que le modèle peut générer.
 
-Les champs `limit` permettent à OpenCode de comprendre la quantité de contexte qu'il vous reste. Les fournisseurs standard les extraient automatiquement de models.dev.
+Les champs `limit` permettent à Octopus de comprendre la quantité de contexte qu'il vous reste. Les fournisseurs standard les extraient automatiquement de models.dev.
 
 ---
 

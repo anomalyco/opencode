@@ -6,7 +6,7 @@ import * as core from "@actions/core"
 import * as github from "@actions/github"
 import type { Context as GitHubContext } from "@actions/github/lib/context"
 import type { IssueCommentEvent, PullRequestReviewCommentEvent } from "@octokit/webhooks-types"
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createOctopusClient } from "@octopus-ai/sdk"
 import { spawn } from "node:child_process"
 import { setTimeout as sleep } from "node:timers/promises"
 
@@ -113,7 +113,7 @@ type IssueQueryResponse = {
   }
 }
 
-const { client, server } = createOpencode()
+const { client, server } = createOctopus()
 let accessToken: string
 let octoRest: Octokit
 let octoGraph: typeof graphql
@@ -228,12 +228,12 @@ try {
 }
 process.exit(exitCode)
 
-function createOpencode() {
+function createOctopus() {
   const host = "127.0.0.1"
   const port = 4096
   const url = `http://${host}:${port}`
   const proc = spawn(`opencode`, [`serve`, `--hostname=${host}`, `--port=${port}`])
-  const client = createOpencodeClient({ baseUrl: url })
+  const client = createOctopusClient({ baseUrl: url })
 
   return {
     server: { url, close: () => proc.kill() },

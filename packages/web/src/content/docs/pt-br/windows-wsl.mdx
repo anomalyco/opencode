@@ -59,10 +59,10 @@ Se `localhost` não funcionar no seu ambiente, conecte usando o IP do WSL (no WS
 :::
 
 :::caution
-Ao usar `--hostname 0.0.0.0`, defina `OPENCODE_SERVER_PASSWORD` para proteger o servidor.
+Ao usar `--hostname 0.0.0.0`, defina `OCTOPUS_SERVER_PASSWORD` para proteger o servidor.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
+OCTOPUS_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 ```
 
 :::
@@ -110,4 +110,4 @@ Para uma experiência mais fluida, considere clonar/copiar seu repositório para
 
 - Mantenha o opencode rodando no WSL para projetos armazenados em unidades do Windows - o acesso aos arquivos fica fluido
 - Use a [extensão WSL do VS Code](https://code.visualstudio.com/docs/remote/wsl) junto com o opencode para um fluxo de desenvolvimento integrado
-- Sua configuração e suas sessões do opencode ficam armazenadas no ambiente WSL em `~/.local/share/opencode/`
+- Sua configuração e suas sessões do opencode ficam armazenadas no ambiente WSL em `~/.local/share/octopus/`

@@ -36,10 +36,10 @@ opencode serve --cors http://localhost:5173 --cors https://app.example.com
 
 ### Authentication
 
-Set `OPENCODE_SERVER_PASSWORD` to protect the server with HTTP basic auth. The username defaults to `opencode`, or set `OPENCODE_SERVER_USERNAME` to override it. This applies to both `opencode serve` and `opencode web`.
+Set `OCTOPUS_SERVER_PASSWORD` to protect the server with HTTP basic auth. The username defaults to `opencode`, or set `OCTOPUS_SERVER_USERNAME` to override it. This applies to both `opencode serve` and `opencode web`.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+OCTOPUS_SERVER_PASSWORD=your-password opencode serve
 ```
 
 ---
@@ -65,7 +65,7 @@ opencode TUI running, `opencode serve` will start a new server.
 
 When you start the TUI it randomly assigns a port and hostname. You can instead pass in the `--hostname` and `--port` [flags](/docs/cli). Then use this to connect to its server.
 
-The [`/tui`](#tui) endpoint can be used to drive the TUI through the server. For example, you can prefill or run a prompt. This setup is used by the OpenCode [IDE](/docs/ide) plugins.
+The [`/tui`](#tui) endpoint can be used to drive the TUI through the server. For example, you can prefill or run a prompt. This setup is used by the Octopus [IDE](/docs/ide) plugins.
 
 ---
 

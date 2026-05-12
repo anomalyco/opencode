@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.14.46",
-  "name": "@opencode-ai/core",
+  "name": "@octopus-ai/core",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -11,7 +11,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "octopus": "./bin/octopus"
   },
   "exports": {
     "./*": "./src/*.ts"

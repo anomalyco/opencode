@@ -1,0 +1,36 @@
+# Name Policy Table
+
+> Issue: #<id> `<title>`
+> 类型：品牌重构 / 命名迁移
+> 日期：`<YYYY-MM-DD>`
+
+## 策略定义
+
+| 策略 | 含义 |
+|------|------|
+| **Hard Rename** | 全局替换，不保留旧名 |
+| **Soft Fallback** | 新名优先，旧名保留兼容，过渡期后删除 |
+| **Reserved** | 明确不替换（CHANGELOG、历史记录） |
+| **Forbidden** | 不可替换（第三方包名、.git/ 对象） |
+
+## 替换矩阵
+
+| 旧名称 | 新名称 | 策略 | 影响文件数 | 备注 |
+|--------|--------|------|----------|------|
+| `<old>` | `<new>` | Hard Rename | N | `<说明>` |
+| `<old>` | `<new>` | Soft Fallback | N | 保留兼容至 vX.Y.Z |
+
+## 排除清单（Allowlist）
+
+| 位置 | 保留原因 |
+|------|---------|
+| `CHANGELOG.md` | 历史记录 |
+| `packages/<name>` | 第三方包名 |
+| `<文件路径>` | `<原因>` |
+
+## 执行顺序
+
+| # | 替换项 | 脚本 | 验证 |
+|---|--------|------|------|
+| 1 | `<old>` → `<new>` | `grep ... \| xargs sed ...` | `bun turbo typecheck` |
+| 2 | `<old>` → `<new>` | `grep ... \| xargs sed ...` | `bun test` |

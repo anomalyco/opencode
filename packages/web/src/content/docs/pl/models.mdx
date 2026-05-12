@@ -51,14 +51,14 @@ Oto kilka modeli, które dobrze współpracują z opencode, w kolejności. (Nie 
 Aby zainstalować jeden z nich jako model domyślny, możesz zainstalować klucz `model` w swoim
 opencode konfiguracja
 
-```json title="opencode.json" {3}
+```json title="octopus.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
 }
 ```
 
-Tutaj pełny identyfikator do `provider_id/model_id`. Na przykład, użycie [OpenCode Zen](/docs/zen), przestrzeganie `opencode/gpt-5.1-codex` dla Kodeksu GPT 5.1.
+Tutaj pełny identyfikator do `provider_id/model_id`. Na przykład, użycie [Octopus Zen](/docs/zen), przestrzeganie `opencode/gpt-5.1-codex` dla Kodeksu GPT 5.1.
 
 Jeśli skonfigurowałeś [dostawcę zwykłegogo] (./providers#custom), `provider_id` jest kluczem z części `provider` twojej konfiguracji, a `model_id` jest kluczem z `provider.models`.
 
@@ -68,7 +68,7 @@ Jeśli skonfigurowałeś [dostawcę zwykłegogo] (./providers#custom), `provider
 
 Można globalnie skorzystać z opcji modelu poprzez plik config.
 
-```jsonc title="opencode.jsonc" {7-12,19-24}
+```jsonc title="octopus.jsonc" {7-12,19-24}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -107,7 +107,7 @@ Można także skorzystać z opcji dla dowolnych agentów, których używa się. 
 
 Można również zastosować alternatywne warianty, które wykluczają. Warianty konfiguracji ustawień konfiguracyjnych dla tego samego modelu bez tworzenia duplikatów wpisów:
 
-```jsonc title="opencode.jsonc" {6-21}
+```jsonc title="octopus.jsonc" {6-21}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -172,7 +172,7 @@ Lista ta nie jest kompletna. Wielu innych dostawców oferuje także opcję odchy
 
 Można uwzględnić warianty lub dodać własne:
 
-```jsonc title="opencode.jsonc" {7-18}
+```jsonc title="octopus.jsonc" {7-18}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -209,7 +209,7 @@ Po uruchomieniu opencode sprawdzanie modeli w następującej kolejności:
 
 2. Lista modeli w konstrukcji opencode.
 
-   ```json title="opencode.json"
+   ```json title="octopus.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"

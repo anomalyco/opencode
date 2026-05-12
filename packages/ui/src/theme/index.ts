@@ -60,7 +60,7 @@ export {
   nordTheme,
   oneDarkTheme,
   oneDarkProTheme,
-  opencodeTheme,
+  octopusTheme,
   orngTheme,
   osakaJadeTheme,
   palenightTheme,

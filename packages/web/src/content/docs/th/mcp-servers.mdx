@@ -3,7 +3,7 @@ title: MCP เซิร์ฟเวอร์
 description: เพิ่มเครื่องมือ MCP ในพื้นที่และระยะไกล
 ---
 
-คุณสามารถเพิ่มเครื่องมือภายนอกให้กับ OpenCode ได้โดยใช้ _Model Context Protocol_ หรือ MCP OpenCode รองรับทั้งเซิร์ฟเวอร์ภายในและเซิร์ฟเวอร์ระยะไกล
+คุณสามารถเพิ่มเครื่องมือภายนอกให้กับ Octopus ได้โดยใช้ _Model Context Protocol_ หรือ MCP Octopus รองรับทั้งเซิร์ฟเวอร์ภายในและเซิร์ฟเวอร์ระยะไกล
 
 เมื่อเพิ่มแล้ว เครื่องมือ MCP จะพร้อมใช้งานโดยอัตโนมัติสำหรับ LLM ควบคู่ไปกับเครื่องมือในตัว
 
@@ -23,9 +23,9 @@ description: เพิ่มเครื่องมือ MCP ในพื้�
 
 ## เปิดใช้งาน
 
-คุณสามารถกำหนดเซิร์ฟเวอร์ MCP ได้ใน [OpenCode Config](https://opencode.ai/docs/config/) ภายใต้ `mcp` เพิ่ม MCP แต่ละรายการด้วยชื่อที่ไม่ซ้ำใคร คุณสามารถอ้างอิงถึง MCP ด้วยชื่อได้เมื่อแจ้ง LLM
+คุณสามารถกำหนดเซิร์ฟเวอร์ MCP ได้ใน [Octopus Config](https://opencode.ai/docs/config/) ภายใต้ `mcp` เพิ่ม MCP แต่ละรายการด้วยชื่อที่ไม่ซ้ำใคร คุณสามารถอ้างอิงถึง MCP ด้วยชื่อได้เมื่อแจ้ง LLM
 
-```jsonc title="opencode.jsonc" {6}
+```jsonc title="octopus.jsonc" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -50,7 +50,7 @@ description: เพิ่มเครื่องมือ MCP ในพื้�
 
 หากต้องการเปิดใช้งานเซิร์ฟเวอร์เฉพาะจากการกำหนดค่าระยะไกลขององค์กรของคุณ ให้เพิ่มเซิร์ฟเวอร์ดังกล่าวลงในการกำหนดค่าภายในเครื่องของคุณด้วย `enabled: true`:
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -71,7 +71,7 @@ description: เพิ่มเครื่องมือ MCP ในพื้�
 
 เพิ่มเซิร์ฟเวอร์ท้องถิ่น MCP โดยใช้ `type` ไปยัง `"local"` ภายในวัตถุ MCP
 
-```jsonc title="opencode.jsonc" {15}
+```jsonc title="octopus.jsonc" {15}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -92,7 +92,7 @@ description: เพิ่มเครื่องมือ MCP ในพื้�
 
 ตัวอย่างเช่น นี่คือวิธีที่คุณสามารถเพิ่มการทดสอบเซิร์ฟเวอร์ [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP เซิร์ฟเวอร์
 
-```jsonc title="opencode.jsonc"
+```jsonc title="octopus.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -130,7 +130,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 เพิ่มเซิร์ฟเวอร์ระยะไกล MCP โดยตั้งค่า `type` เป็น `"remote"`
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -165,7 +165,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 ## OAuth
 
-OpenCode จะจัดการการตรวจสอบสิทธิ์ OAuth สำหรับเซิร์ฟเวอร์ MCP ระยะไกลโดยอัตโนมัติ เมื่อเซิร์ฟเวอร์ต้องการการรับรองความถูกต้อง OpenCode จะ:
+Octopus จะจัดการการตรวจสอบสิทธิ์ OAuth สำหรับเซิร์ฟเวอร์ MCP ระยะไกลโดยอัตโนมัติ เมื่อเซิร์ฟเวอร์ต้องการการรับรองความถูกต้อง Octopus จะ:
 
 1. ตรวจหาการตอบสนอง 401 และเริ่มโฟลว์ OAuth
 2. ใช้ **การลงทะเบียนไคลเอ็นต์แบบไดนามิก (RFC 7591)** หากเซิร์ฟเวอร์รองรับ
@@ -177,7 +177,7 @@ OpenCode จะจัดการการตรวจสอบสิทธิ�
 
 สำหรับเซิร์ฟเวอร์ MCP ที่เปิดใช้งาน OAuth ส่วนใหญ่ ไม่จำเป็นต้องมีการกำหนดค่าพิเศษ เพียงกำหนดค่าเซิร์ฟเวอร์ระยะไกล:
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -189,7 +189,7 @@ OpenCode จะจัดการการตรวจสอบสิทธิ�
 }
 ```
 
-หากเซิร์ฟเวอร์ต้องมีการตรวจสอบสิทธิ์ OpenCode จะแจ้งให้คุณตรวจสอบความถูกต้องเมื่อคุณพยายามใช้งานครั้งแรก หากไม่เป็นเช่นนั้น คุณสามารถ[ทริกเกอร์โฟลว์ด้วยตนเอง](#การตรวจสอบสิทธิ์) ด้วย `opencode mcp auth <server-name>`
+หากเซิร์ฟเวอร์ต้องมีการตรวจสอบสิทธิ์ Octopus จะแจ้งให้คุณตรวจสอบความถูกต้องเมื่อคุณพยายามใช้งานครั้งแรก หากไม่เป็นเช่นนั้น คุณสามารถ[ทริกเกอร์โฟลว์ด้วยตนเอง](#การตรวจสอบสิทธิ์) ด้วย `opencode mcp auth <server-name>`
 
 ---
 
@@ -197,7 +197,7 @@ OpenCode จะจัดการการตรวจสอบสิทธิ�
 
 หากคุณมีข้อมูลประจำตัวไคลเอ็นต์จากผู้ให้บริการเซิร์ฟเวอร์ MCP คุณสามารถกำหนดค่าได้:
 
-```json title="opencode.json" {7-11}
+```json title="octopus.json" {7-11}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -238,7 +238,7 @@ opencode mcp list
 opencode mcp logout my-oauth-server
 ```
 
-คำสั่ง `mcp auth` จะเปิดเบราว์เซอร์ของคุณเพื่อขออนุญาต หลังจากที่คุณอนุญาตแล้ว OpenCode จะจัดเก็บโทเค็นอย่างปลอดภัยใน `~/.local/share/opencode/mcp-auth.json`
+คำสั่ง `mcp auth` จะเปิดเบราว์เซอร์ของคุณเพื่อขออนุญาต หลังจากที่คุณอนุญาตแล้ว Octopus จะจัดเก็บโทเค็นอย่างปลอดภัยใน `~/.local/share/octopus/mcp-auth.json`
 
 ---
 
@@ -246,7 +246,7 @@ opencode mcp logout my-oauth-server
 
 หากคุณต้องการปิดการใช้งาน OAuth อัตโนมัติสำหรับเซิร์ฟเวอร์ (เช่น สำหรับเซิร์ฟเวอร์ที่ใช้คีย์ API แทน) ให้ตั้งค่า `oauth` เป็น `false`:
 
-```json title="opencode.json" {7}
+```json title="octopus.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -291,7 +291,7 @@ opencode mcp debug my-oauth-server
 
 ## จัดการ
 
-MCP ของคุณพร้อมใช้งานในฐานะเครื่องมือใน OpenCode ควบคู่ไปกับเครื่องมือในตัว คุณจึงสามารถจัดการผ่านการกำหนดค่า OpenCode ได้เหมือนกับเครื่องมืออื่นๆ
+MCP ของคุณพร้อมใช้งานในฐานะเครื่องมือใน Octopus ควบคู่ไปกับเครื่องมือในตัว คุณจึงสามารถจัดการผ่านการกำหนดค่า Octopus ได้เหมือนกับเครื่องมืออื่นๆ
 
 ---
 
@@ -299,7 +299,7 @@ MCP ของคุณพร้อมใช้งานในฐานะเค�
 
 ซึ่งหมายความว่าคุณสามารถเปิดหรือปิดใช้งานได้ทั่วโลก
 
-```json title="opencode.json" {14}
+```json title="octopus.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -320,7 +320,7 @@ MCP ของคุณพร้อมใช้งานในฐานะเค�
 
 นอกจากนี้เรายังสามารถใช้รูปแบบ glob เพื่อปิดใช้งาน MCP ที่ตรงกันทั้งหมดได้
 
-```json title="opencode.json" {14}
+```json title="octopus.json" {14}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -350,7 +350,7 @@ MCP ของคุณพร้อมใช้งานในฐานะเค�
 1. ปิดการใช้งานเป็นเครื่องมือทั่วโลก
 2. ใน [agent config](/docs/agents#tools) ให้เปิดใช้งานเซิร์ฟเวอร์ MCP เป็นเครื่องมือ
 
-```json title="opencode.json" {11, 14-18}
+```json title="octopus.json" {11, 14-18}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -404,7 +404,7 @@ MCP เครื่องมือเซิร์ฟเวอร์ได้ร�
 
 เพิ่ม [เซิร์ฟเวอร์ Sentry MCP](https://mcp.sentry.dev) เพื่อโต้ตอบกับโครงการและปัญหา Sentry ของคุณ
 
-```json title="opencode.json" {4-8}
+```json title="octopus.json" {4-8}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -423,7 +423,7 @@ MCP เครื่องมือเซิร์ฟเวอร์ได้ร�
 opencode mcp auth sentry
 ```
 
-ซึ่งจะเป็นการเปิดหน้าต่างเบราว์เซอร์เพื่อดำเนินการโฟลว์ OAuth ให้เสร็จสมบูรณ์ และเชื่อมต่อ OpenCode กับบัญชี Sentry ของคุณ
+ซึ่งจะเป็นการเปิดหน้าต่างเบราว์เซอร์เพื่อดำเนินการโฟลว์ OAuth ให้เสร็จสมบูรณ์ และเชื่อมต่อ Octopus กับบัญชี Sentry ของคุณ
 
 เมื่อตรวจสอบสิทธิ์แล้ว คุณจะใช้เครื่องมือ Sentry ในข้อความแจ้งเพื่อค้นหาปัญหา โปรเจ็กต์ และข้อมูลข้อผิดพลาดได้
 
@@ -437,7 +437,7 @@ Show me the latest unresolved issues in my project. use sentry
 
 เพิ่ม [Context7 MCP server](https://github.com/upstash/context7) เพื่อค้นหาในเอกสาร
 
-```json title="opencode.json" {4-7}
+```json title="octopus.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -451,7 +451,7 @@ Show me the latest unresolved issues in my project. use sentry
 
 หากคุณได้ลงทะเบียนสำหรับบัญชีฟรี คุณสามารถใช้รหัส API ของคุณและรับขีดจำกัดอัตราที่สูงขึ้น
 
-```json title="opencode.json" {7-9}
+```json title="octopus.json" {7-9}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
@@ -486,7 +486,7 @@ When you need to search docs, use `context7` tools.
 
 เพิ่มเซิร์ฟเวอร์ [Grep by Vercel](https://grep.app) MCP เพื่อค้นหาผ่านข้อมูลโค้ดบน GitHub
 
-```json title="opencode.json" {4-7}
+```json title="octopus.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {

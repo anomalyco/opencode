@@ -1,11 +1,11 @@
 ---
 title: الويب
-description: استخدام OpenCode في متصفحك.
+description: استخدام Octopus في متصفحك.
 ---
 
-يمكن تشغيل OpenCode كتطبيق ويب داخل متصفحك، ليمنحك تجربة البرمجة القوية بالذكاء الاصطناعي نفسها دون الحاجة إلى terminal.
+يمكن تشغيل Octopus كتطبيق ويب داخل متصفحك، ليمنحك تجربة البرمجة القوية بالذكاء الاصطناعي نفسها دون الحاجة إلى terminal.
 
-![OpenCode Web - جلسة جديدة](../../../assets/web/web-homepage-new-session.png)
+![Octopus Web - جلسة جديدة](../../../assets/web/web-homepage-new-session.png)
 
 ## البدء
 
@@ -15,10 +15,10 @@ description: استخدام OpenCode في متصفحك.
 opencode web
 ```
 
-يؤدي ذلك إلى تشغيل خادم محلي على `127.0.0.1` بمنفذ عشوائي متاح، ويفتح OpenCode تلقائيا في المتصفح الافتراضي لديك.
+يؤدي ذلك إلى تشغيل خادم محلي على `127.0.0.1` بمنفذ عشوائي متاح، ويفتح Octopus تلقائيا في المتصفح الافتراضي لديك.
 
 :::caution
-إذا لم يتم تعيين `OPENCODE_SERVER_PASSWORD` فسيكون الخادم دون حماية. هذا مناسب للاستخدام المحلي، لكنه يجب أن يكون مُعينا عند إتاحة الوصول عبر الشبكة.
+إذا لم يتم تعيين `OCTOPUS_SERVER_PASSWORD` فسيكون الخادم دون حماية. هذا مناسب للاستخدام المحلي، لكنه يجب أن يكون مُعينا عند إتاحة الوصول عبر الشبكة.
 :::
 
 :::tip[مستخدمو Windows]
@@ -33,7 +33,7 @@ opencode web
 
 ### المنفذ
 
-افتراضيا، يختار OpenCode منفذا متاحا. يمكنك تحديد منفذ:
+افتراضيا، يختار Octopus منفذا متاحا. يمكنك تحديد منفذ:
 
 ```bash
 opencode web --port 4096
@@ -41,13 +41,13 @@ opencode web --port 4096
 
 ### اسم المضيف
 
-افتراضيا، يرتبط الخادم بـ `127.0.0.1` (للاستخدام المحلي فقط). لجعل OpenCode متاحا على شبكتك:
+افتراضيا، يرتبط الخادم بـ `127.0.0.1` (للاستخدام المحلي فقط). لجعل Octopus متاحا على شبكتك:
 
 ```bash
 opencode web --hostname 0.0.0.0
 ```
 
-عند استخدام `0.0.0.0` سيعرض OpenCode كلا من عناوين الوصول المحلي وعناوين الشبكة:
+عند استخدام `0.0.0.0` سيعرض Octopus كلا من عناوين الوصول المحلي وعناوين الشبكة:
 
 ```
   Local access:       http://localhost:4096
@@ -80,31 +80,31 @@ opencode web --cors https://example.com
 
 ### المصادقة
 
-لحماية الوصول، عيّن كلمة مرور عبر متغير البيئة `OPENCODE_SERVER_PASSWORD`:
+لحماية الوصول، عيّن كلمة مرور عبر متغير البيئة `OCTOPUS_SERVER_PASSWORD`:
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+OCTOPUS_SERVER_PASSWORD=secret opencode web
 ```
 
-اسم المستخدم الافتراضي هو `opencode`، ويمكن تغييره عبر `OPENCODE_SERVER_USERNAME`.
+اسم المستخدم الافتراضي هو `opencode`، ويمكن تغييره عبر `OCTOPUS_SERVER_USERNAME`.
 
 ---
 
 ## استخدام واجهة الويب
 
-بعد التشغيل، تتيح لك واجهة الويب الوصول إلى جلسات OpenCode الخاصة بك.
+بعد التشغيل، تتيح لك واجهة الويب الوصول إلى جلسات Octopus الخاصة بك.
 
 ### الجلسات
 
 اعرض جلساتك وأدرها من الصفحة الرئيسية. يمكنك رؤية الجلسات النشطة وبدء جلسات جديدة.
 
-![OpenCode Web - جلسة نشطة](../../../assets/web/web-homepage-active-session.png)
+![Octopus Web - جلسة نشطة](../../../assets/web/web-homepage-active-session.png)
 
 ### حالة الخادم
 
 انقر على "See Servers" لعرض الخوادم المتصلة وحالتها.
 
-![OpenCode Web - See Servers (عرض الخوادم)](../../../assets/web/web-homepage-see-servers.png)
+![Octopus Web - See Servers (عرض الخوادم)](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 
@@ -126,7 +126,7 @@ opencode attach http://localhost:4096
 
 ## ملف الإعدادات
 
-يمكنك أيضا ضبط إعدادات الخادم داخل ملف الإعدادات `opencode.json`:
+يمكنك أيضا ضبط إعدادات الخادم داخل ملف الإعدادات `octopus.json`:
 
 ```json
 {

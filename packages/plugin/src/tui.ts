@@ -1,6 +1,6 @@
 import type {
   AgentPart,
-  OpencodeClient,
+  OctopusClient,
   Event,
   FilePart,
   LspStatus,
@@ -14,7 +14,7 @@ import type {
   SessionStatus,
   TextPart,
   Config as SdkConfig,
-} from "@opencode-ai/sdk/v2"
+} from "@octopus-ai/sdk/v2"
 import type { CliRenderer, KeyEvent, RGBA, Renderable, SlotMode } from "@opentui/core"
 import type { Binding, Keymap } from "@opentui/keymap"
 import {
@@ -526,7 +526,7 @@ export type TuiPluginApi = {
   kv: TuiKV
   state: TuiState
   theme: TuiTheme
-  client: OpencodeClient
+  client: OctopusClient
   event: TuiEventBus
   renderer: CliRenderer
   slots: TuiSlots

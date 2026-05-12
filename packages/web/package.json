@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/web",
+  "name": "@octopus-ai/web",
   "type": "module",
   "license": "MIT",
   "version": "1.14.46",
@@ -36,7 +36,7 @@
     "vscode-languageserver-types": "3.17.5"
   },
   "devDependencies": {
-    "opencode": "workspace:*",
+    "@octopus-ai/octopus": "workspace:*",
     "@types/node": "catalog:",
     "@astrojs/check": "0.9.6",
     "typescript": "catalog:"

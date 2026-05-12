@@ -1,11 +1,11 @@
 ---
 title: Web
-description: Using OpenCode in your browser.
+description: Using Octopus in your browser.
 ---
 
-OpenCode can run as a web application in your browser, providing the same powerful AI coding experience without needing a terminal.
+Octopus can run as a web application in your browser, providing the same powerful AI coding experience without needing a terminal.
 
-![OpenCode Web - New Session](../../assets/web/web-homepage-new-session.png)
+![Octopus Web - New Session](../../assets/web/web-homepage-new-session.png)
 
 ## Getting Started
 
@@ -15,10 +15,10 @@ Start the web interface by running:
 opencode web
 ```
 
-This starts a local server on `127.0.0.1` with a random available port and automatically opens OpenCode in your default browser.
+This starts a local server on `127.0.0.1` with a random available port and automatically opens Octopus in your default browser.
 
 :::caution
-If `OPENCODE_SERVER_PASSWORD` is not set, the server will be unsecured. This is fine for local use but should be set for network access.
+If `OCTOPUS_SERVER_PASSWORD` is not set, the server will be unsecured. This is fine for local use but should be set for network access.
 :::
 
 :::tip[Windows Users]
@@ -33,7 +33,7 @@ You can configure the web server using command line flags or in your [config fil
 
 ### Port
 
-By default, OpenCode picks an available port. You can specify a port:
+By default, Octopus picks an available port. You can specify a port:
 
 ```bash
 opencode web --port 4096
@@ -41,13 +41,13 @@ opencode web --port 4096
 
 ### Hostname
 
-By default, the server binds to `127.0.0.1` (localhost only). To make OpenCode accessible on your network:
+By default, the server binds to `127.0.0.1` (localhost only). To make Octopus accessible on your network:
 
 ```bash
 opencode web --hostname 0.0.0.0
 ```
 
-When using `0.0.0.0`, OpenCode will display both local and network addresses:
+When using `0.0.0.0`, Octopus will display both local and network addresses:
 
 ```
   Local access:       http://localhost:4096
@@ -80,31 +80,31 @@ opencode web --cors https://example.com
 
 ### Authentication
 
-To protect access, set a password using the `OPENCODE_SERVER_PASSWORD` environment variable:
+To protect access, set a password using the `OCTOPUS_SERVER_PASSWORD` environment variable:
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+OCTOPUS_SERVER_PASSWORD=secret opencode web
 ```
 
-The username defaults to `opencode` but can be changed with `OPENCODE_SERVER_USERNAME`.
+The username defaults to `opencode` but can be changed with `OCTOPUS_SERVER_USERNAME`.
 
 ---
 
 ## Using the Web Interface
 
-Once started, the web interface provides access to your OpenCode sessions.
+Once started, the web interface provides access to your Octopus sessions.
 
 ### Sessions
 
 View and manage your sessions from the homepage. You can see active sessions and start new ones.
 
-![OpenCode Web - Active Session](../../assets/web/web-homepage-active-session.png)
+![Octopus Web - Active Session](../../assets/web/web-homepage-active-session.png)
 
 ### Server Status
 
 Click "See Servers" to view connected servers and their status.
 
-![OpenCode Web - See Servers](../../assets/web/web-homepage-see-servers.png)
+![Octopus Web - See Servers](../../assets/web/web-homepage-see-servers.png)
 
 ---
 
@@ -126,7 +126,7 @@ This allows you to use both the web interface and terminal simultaneously, shari
 
 ## Config File
 
-You can also configure server settings in your `opencode.json` config file:
+You can also configure server settings in your `octopus.json` config file:
 
 ```json
 {

@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: Utilisation de l’interface utilisateur du terminal OpenCode.
+description: Utilisation de l’interface utilisateur du terminal Octopus.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode fournit une interface de terminal interactif ou TUI pour travailler sur vos projets avec un LLM.
+Octopus fournit une interface de terminal interactif ou TUI pour travailler sur vos projets avec un LLM.
 
-L’exécution de OpenCode démarre le TUI pour le répertoire actuel.
+L’exécution de Octopus démarre le TUI pour le répertoire actuel.
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ Le résultat de la commande est ajouté à la conversation en tant que résultat
 
 ## Commandes
 
-Lorsque vous utilisez le OpenCode TUI, vous pouvez taper `/` suivi d'un nom de commande pour exécuter rapidement des actions. Par exemple:
+Lorsque vous utilisez le Octopus TUI, vous pouvez taper `/` suivi d'un nom de commande pour exécuter rapidement des actions. Par exemple:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Voici toutes les commandes slash disponibles :
 
 ### connect
 
-Ajoutez un fournisseur à OpenCode. Vous permet de sélectionner parmi les fournisseurs disponibles et d’ajouter leurs clés API.
+Ajoutez un fournisseur à Octopus. Vous permet de sélectionner parmi les fournisseurs disponibles et d’ajouter leurs clés API.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Ouvrez un éditeur externe pour rédiger des messages. Utilise l'éditeur défin
 
 ### exit
 
-Quittez OpenCode. *Alias* : `/quit`, `/q`
+Quittez Octopus. *Alias* : `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -372,7 +372,7 @@ Vous pouvez personnaliser le comportement de TUI via `tui.json` (ou `tui.jsonc`)
 }
 ```
 
-Ceci est séparé de `opencode.json`, qui configure le comportement du serveur/d'exécution.
+Ceci est séparé de `octopus.json`, qui configure le comportement du serveur/d'exécution.
 
 ### Options
 
@@ -382,7 +382,7 @@ Ceci est séparé de `opencode.json`, qui configure le comportement du serveur/d
 - `scroll_speed` - Contrôle la vitesse de défilement du TUI lors de l'utilisation des commandes de défilement (minimum : `0.001`, prend en charge les valeurs décimales). La valeur par défaut est `3`. **Remarque : Ceci est ignoré si `scroll_acceleration.enabled` est défini sur `true`.**
 - `diff_style` - Contrôle le rendu différentiel. `"auto"` s'adapte à la largeur du terminal, `"stacked"` affiche toujours une seule colonne.
 
-Utilisez `OPENCODE_TUI_CONFIG` pour charger un chemin de configuration TUI personnalisé.
+Utilisez `OCTOPUS_TUI_CONFIG` pour charger un chemin de configuration TUI personnalisé.
 
 ---
 

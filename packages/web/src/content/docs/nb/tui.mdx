@@ -5,9 +5,9 @@ description: Bruke opencode-terminalbrukergrensesnittet.
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode gir et interaktivt terminalgrensesnitt (TUI) for å jobbe med prosjektene dine med en LLM.
+Octopus gir et interaktivt terminalgrensesnitt (TUI) for å jobbe med prosjektene dine med en LLM.
 
-Å kjøre OpenCode starter TUI for gjeldende katalog.
+Å kjøre Octopus starter TUI for gjeldende katalog.
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ Utdataene fra kommandoen legges til samtalen som et verktøyresultat.
 
 ## Kommandoer
 
-Når du bruker OpenCode TUI, kan du skrive `/` etterfulgt av et kommandonavn for raskt å utføre handlinger. For eksempel:
+Når du bruker Octopus TUI, kan du skrive `/` etterfulgt av et kommandonavn for raskt å utføre handlinger. For eksempel:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Her er alle tilgjengelige slash-kommandoer:
 
 ### connect
 
-Legg til en leverandør til OpenCode. Lar deg velge fra tilgjengelige leverandører og legge til deres API-nøkler.
+Legg til en leverandør til Octopus. Lar deg velge fra tilgjengelige leverandører og legge til deres API-nøkler.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Veksle visning av verktøydetaljer.
 
 ### exit
 
-Avslutt OpenCode. _Aliaser_: `/quit`, `/q`
+Avslutt Octopus. _Aliaser_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -372,7 +372,7 @@ Du kan tilpasse TUI-oppførselen gjennom `tui.json` (eller `tui.jsonc`).
 }
 ```
 
-Dette er atskilt fra `opencode.json`, som konfigurerer server-/kjøretidsoppførsel.
+Dette er atskilt fra `octopus.json`, som konfigurerer server-/kjøretidsoppførsel.
 
 ### Alternativer
 
@@ -382,7 +382,7 @@ Dette er atskilt fra `opencode.json`, som konfigurerer server-/kjøretidsoppfør
 - `scroll_speed` - Styrer hvor raskt TUI ruller når du bruker rullekommandoer (minimum: `0.001`, støtter desimalverdier). Standard er `3`. **Merk: Dette ignoreres hvis `scroll_acceleration.enabled` er satt til `true`.**
 - `diff_style` - Kontrollerer diff-gjengivelse. `"auto"` tilpasser seg terminalbredden, `"stacked"` viser alltid en enkeltkolonneoppsett.
 
-Bruk `OPENCODE_TUI_CONFIG` for å laste en egendefinert TUI-konfigurasjonsbane.
+Bruk `OCTOPUS_TUI_CONFIG` for å laste en egendefinert TUI-konfigurasjonsbane.
 
 ---
 

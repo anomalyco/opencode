@@ -1,11 +1,11 @@
 ---
 title: Web
-description: En utilisant OpenCode dans votre navigateur.
+description: En utilisant Octopus dans votre navigateur.
 ---
 
-OpenCode peut s'exécuter comme une application Web dans votre navigateur, offrant la même expérience puissante de codage d'IA sans avoir besoin d'un terminal.
+Octopus peut s'exécuter comme une application Web dans votre navigateur, offrant la même expérience puissante de codage d'IA sans avoir besoin d'un terminal.
 
-![OpenCode Web - Nouvelle session](../../../assets/web/web-homepage-new-session.png)
+![Octopus Web - Nouvelle session](../../../assets/web/web-homepage-new-session.png)
 
 ## Commencer
 
@@ -15,10 +15,10 @@ Démarrez l'interface Web en exécutant :
 opencode web
 ```
 
-Cela démarre un serveur local sur `127.0.0.1` avec un port disponible aléatoire et ouvre automatiquement OpenCode dans votre navigateur par défaut.
+Cela démarre un serveur local sur `127.0.0.1` avec un port disponible aléatoire et ouvre automatiquement Octopus dans votre navigateur par défaut.
 
 :::caution
-Si `OPENCODE_SERVER_PASSWORD` n'est pas défini, le serveur ne sera pas sécurisé. C'est bien pour une utilisation locale mais doit être défini pour l'accès au réseau.
+Si `OCTOPUS_SERVER_PASSWORD` n'est pas défini, le serveur ne sera pas sécurisé. C'est bien pour une utilisation locale mais doit être défini pour l'accès au réseau.
 :::
 
 :::tip[Windows Utilisateurs]
@@ -33,7 +33,7 @@ Vous pouvez configurer le serveur Web à l'aide d'indicateurs de ligne de comman
 
 ### Port
 
-Par défaut, OpenCode sélectionne un port disponible. Vous pouvez spécifier un port :
+Par défaut, Octopus sélectionne un port disponible. Vous pouvez spécifier un port :
 
 ```bash
 opencode web --port 4096
@@ -41,13 +41,13 @@ opencode web --port 4096
 
 ### Nom d'hôte
 
-Par défaut, le serveur se lie à `127.0.0.1` (localhost uniquement). Pour rendre OpenCode accessible sur votre réseau :
+Par défaut, le serveur se lie à `127.0.0.1` (localhost uniquement). Pour rendre Octopus accessible sur votre réseau :
 
 ```bash
 opencode web --hostname 0.0.0.0
 ```
 
-Lorsque vous utilisez `0.0.0.0`, OpenCode affichera les adresses locales et réseau :
+Lorsque vous utilisez `0.0.0.0`, Octopus affichera les adresses locales et réseau :
 
 ```
   Local access:       http://localhost:4096
@@ -80,31 +80,31 @@ opencode web --cors https://example.com
 
 ### Authentification
 
-Pour protéger l'accès, définissez un mot de passe à l'aide de la variable d'environnement `OPENCODE_SERVER_PASSWORD` :
+Pour protéger l'accès, définissez un mot de passe à l'aide de la variable d'environnement `OCTOPUS_SERVER_PASSWORD` :
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+OCTOPUS_SERVER_PASSWORD=secret opencode web
 ```
 
-Le nom d'utilisateur par défaut est `opencode` mais peut être modifié avec `OPENCODE_SERVER_USERNAME`.
+Le nom d'utilisateur par défaut est `opencode` mais peut être modifié avec `OCTOPUS_SERVER_USERNAME`.
 
 ---
 
 ## Utilisation de l'interface Web
 
-Une fois démarrée, l'interface web permet d'accéder à vos sessions OpenCode.
+Une fois démarrée, l'interface web permet d'accéder à vos sessions Octopus.
 
 ### Sessions
 
 Consultez et gérez vos sessions depuis la page d'accueil. Vous pouvez voir les sessions actives et en démarrer de nouvelles.
 
-![OpenCode Web - Session active](../../../assets/web/web-homepage-active-session.png)
+![Octopus Web - Session active](../../../assets/web/web-homepage-active-session.png)
 
 ### Statut du serveur
 
 Cliquez sur "Voir les serveurs" pour afficher les serveurs connectés et leur état.
 
-![OpenCode Web - Voir Serveurs](../../../assets/web/web-homepage-see-servers.png)
+![Octopus Web - Voir Serveurs](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 
@@ -126,7 +126,7 @@ Cela vous permet d'utiliser simultanément l'interface Web et le terminal, en pa
 
 ## Fichier de configuration
 
-Vous pouvez également configurer les paramètres du serveur dans votre fichier de configuration `opencode.json` :
+Vous pouvez également configurer les paramètres du serveur dans votre fichier de configuration `octopus.json` :
 
 ```json
 {

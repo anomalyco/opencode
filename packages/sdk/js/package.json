@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/sdk",
+  "name": "@octopus-ai/sdk",
   "version": "1.14.46",
   "type": "module",
   "license": "MIT",

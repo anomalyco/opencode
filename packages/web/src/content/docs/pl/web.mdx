@@ -18,7 +18,7 @@ opencode web
 Spowoduje to uruchomienie lokalnego serwera na `127.0.0.1` z losowo dostępnym portem i automatyczne otwarcie opencode w domyślnej przeglądarce.
 
 :::caution
-Jeśli `OPENCODE_SERVER_PASSWORD` nie jest ustawione, serwer będzie niezabezpieczony. Jest to dobre rozwiązanie do użytku lokalnego, ale powinno być ustawione na dostęp do sieci.
+Jeśli `OCTOPUS_SERVER_PASSWORD` nie jest ustawione, serwer będzie niezabezpieczony. Jest to dobre rozwiązanie do użytku lokalnego, ale powinno być ustawione na dostęp do sieci.
 :::
 
 :::tip[Windows Users]
@@ -80,13 +80,13 @@ opencode web --cors https://example.com
 
 ### Uwierzytelnianie
 
-Aby chronić dostęp, ustaw hasło za pomocą zmiennej środowiskowej `OPENCODE_SERVER_PASSWORD`:
+Aby chronić dostęp, ustaw hasło za pomocą zmiennej środowiskowej `OCTOPUS_SERVER_PASSWORD`:
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+OCTOPUS_SERVER_PASSWORD=secret opencode web
 ```
 
-Domyślna nazwa użytkownika to `opencode`, ale można ją zmienić za pomocą `OPENCODE_SERVER_USERNAME`.
+Domyślna nazwa użytkownika to `opencode`, ale można ją zmienić za pomocą `OCTOPUS_SERVER_USERNAME`.
 
 ---
 
@@ -126,7 +126,7 @@ Umożliwia to jednoczesne korzystanie z interfejsu sieciowego i terminala, wspó
 
 ## Plik konfiguracyjny
 
-Możesz także skonfigurować ustawienia serwera w pliku konfiguracyjnym `opencode.json`:
+Możesz także skonfigurować ustawienia serwera w pliku konfiguracyjnym `octopus.json`:
 
 ```json
 {

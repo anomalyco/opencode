@@ -7,15 +7,15 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go er et lavprisabonnement — **$5 for din første måned**, derefter **$10/måned** — der giver dig pålidelig adgang til populære åbne kodningsmodeller.
+Octopus Go er et lavprisabonnement — **$5 for din første måned**, derefter **$10/måned** — der giver dig pålidelig adgang til populære åbne kodningsmodeller.
 
 :::note
-OpenCode Go er i øjeblikket i beta.
+Octopus Go er i øjeblikket i beta.
 :::
 
-Go fungerer som enhver anden udbyder i OpenCode. Du abonnerer på OpenCode Go og
+Go fungerer som enhver anden udbyder i Octopus. Du abonnerer på Octopus Go og
 får din API-nøgle. Det er **helt valgfrit**, og du behøver ikke at bruge det for at
-bruge OpenCode.
+bruge Octopus.
 
 Det er primært designet til internationale brugere, med modeller hostet i USA, EU og Singapore for at sikre stabil global adgang.
 
@@ -31,7 +31,7 @@ Det kan dog være svært at få pålidelig adgang til dem med lav latenstid. Udb
 varierer i kvalitet og tilgængelighed.
 
 :::tip
-Vi testede en udvalgt gruppe af modeller og udbydere, der fungerer godt med OpenCode.
+Vi testede en udvalgt gruppe af modeller og udbydere, der fungerer godt med Octopus.
 :::
 
 For at løse dette, gjorde vi et par ting:
@@ -43,22 +43,22 @@ For at løse dette, gjorde vi et par ting:
 3. Til sidst benchmarkede vi kombinationen af model og udbyder, og kom frem til
    en liste, som vi trygt kan anbefale.
 
-OpenCode Go giver dig adgang til disse modeller for **$5 for din første måned**, derefter **$10/måned**.
+Octopus Go giver dig adgang til disse modeller for **$5 for din første måned**, derefter **$10/måned**.
 
 ---
 
 ## Sådan fungerer det
 
-OpenCode Go fungerer som enhver anden udbyder i OpenCode.
+Octopus Go fungerer som enhver anden udbyder i Octopus.
 
-1. Du logger ind på **<a href={console}>OpenCode Zen</a>**, abonnerer på Go, og
+1. Du logger ind på **<a href={console}>Octopus Zen</a>**, abonnerer på Go, og
    kopierer din API-nøgle.
-2. Du kører kommandoen `/connect` i TUI'en, vælger `OpenCode Go`, og indsætter
+2. Du kører kommandoen `/connect` i TUI'en, vælger `Octopus Go`, og indsætter
    din API-nøgle.
 3. Kør `/models` i TUI'en for at se listen over tilgængelige modeller gennem Go.
 
 :::note
-Kun ét medlem per arbejdsområde kan abonnere på OpenCode Go.
+Kun ét medlem per arbejdsområde kan abonnere på Octopus Go.
 :::
 
 Den nuværende liste over modeller inkluderer:
@@ -82,7 +82,7 @@ Listen over modeller kan ændre sig, efterhånden som vi tester og tilføjer nye
 
 ## Forbrugsgrænser
 
-OpenCode Go inkluderer følgende grænser:
+Octopus Go inkluderer følgende grænser:
 
 - **5-timers grænse** — forbrug for $12
 - **Ugentlig grænse** — forbrug for $30
@@ -156,7 +156,7 @@ Du kan også få adgang til Go-modeller gennem følgende API-endpoints.
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
 | Qwen3.5 Plus      | qwen3.5-plus      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/alibaba`           |
 
-Dit [model id](/docs/config/#models) i din OpenCode config
+Dit [model id](/docs/config/#models) i din Octopus config
 bruger formatet `opencode-go/<model-id>`. For eksempel for Kimi K2.6, vil du
 bruge `opencode-go/kimi-k2.6` i din config.
 
@@ -180,9 +180,9 @@ Planen er primært designet til internationale brugere med modeller hostet i US,
 
 ## Mål
 
-Vi skabte OpenCode Go for at:
+Vi skabte Octopus Go for at:
 
 1. Gøre AI-kodning **tilgængelig** for flere mennesker med et lavprisabonnement.
 2. Give **pålidelig** adgang til de bedste åbne kodningsmodeller.
 3. Kuratere modeller, der er **testet og benchmarkede** til brug med kodningsagenter.
-4. Undgå **lock-in** ved også at lade dig bruge enhver anden udbyder med OpenCode.
+4. Undgå **lock-in** ved også at lade dig bruge enhver anden udbyder med Octopus.

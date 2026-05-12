@@ -1,6 +1,6 @@
-# OpenCode Desktop
+# Octopus Desktop
 
-The OpenCode Desktop app, built with Electron.
+The Octopus Desktop app, built with Electron.
 
 ## Development
 

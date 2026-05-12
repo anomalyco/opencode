@@ -1,6 +1,6 @@
 ---
 title: Web
-description: 브라우저에서 OpenCode 사용하기.
+description: 브라우저에서 Octopus 사용하기.
 ---
 
 opencode는 브라우저에서 웹 응용 프로그램을 실행할 수 있으며 terminal을 필요로하지 않고 동일한 강력한 AI 코딩 경험을 제공합니다.
@@ -18,7 +18,7 @@ opencode web
 `127.0.0.1`의 로컬 서버를 랜덤 사용 가능한 포트로 시작하고 기본 브라우저에서 opencode를 자동으로 엽니다.
 
 :::caution
-`OPENCODE_SERVER_PASSWORD`가 설정되지 않은 경우 서버가 중단되지 않습니다. 이것은 로컬 사용을위한 괜찮지만 네트워크 액세스를 설정해야합니다.
+`OCTOPUS_SERVER_PASSWORD`가 설정되지 않은 경우 서버가 중단되지 않습니다. 이것은 로컬 사용을위한 괜찮지만 네트워크 액세스를 설정해야합니다.
 :::
 
 :::tip[Windows 사용자]
@@ -80,13 +80,13 @@ opencode web --cors https://example.com
 
 ### 인증
 
-액세스를 보호하려면 `OPENCODE_SERVER_PASSWORD` 환경 변수를 사용하여 암호를 설정하십시오.
+액세스를 보호하려면 `OCTOPUS_SERVER_PASSWORD` 환경 변수를 사용하여 암호를 설정하십시오.
 
 ```bash
-OPENCODE_SERVER_PASSWORD=secret opencode web
+OCTOPUS_SERVER_PASSWORD=secret opencode web
 ```
 
-`opencode`에 대한 사용자의 기본값은 `OPENCODE_SERVER_USERNAME`로 변경할 수 있습니다.
+`opencode`에 대한 사용자의 기본값은 `OCTOPUS_SERVER_USERNAME`로 변경할 수 있습니다.
 
 ---
 
@@ -126,7 +126,7 @@ opencode attach http://localhost:4096
 
 ## 구성 파일
 
-`opencode.json` config 파일에서 서버 설정을 구성할 수 있습니다:
+`octopus.json` config 파일에서 서버 설정을 구성할 수 있습니다:
 
 ```json
 {

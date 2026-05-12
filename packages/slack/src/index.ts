@@ -1,5 +1,5 @@
 import { App } from "@slack/bolt"
-import { createOpencode, type ToolPart } from "@opencode-ai/sdk"
+import { createOctopus, type ToolPart } from "@octopus-ai/sdk"
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -14,7 +14,7 @@ console.log("- Signing secret present:", !!process.env.SLACK_SIGNING_SECRET)
 console.log("- App token present:", !!process.env.SLACK_APP_TOKEN)
 
 console.log("🚀 Starting opencode server...")
-const opencode = await createOpencode({
+const opencode = await createOctopus({
   port: 0,
 })
 console.log("✅ Opencode server ready")

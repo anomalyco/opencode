@@ -24,14 +24,14 @@ jobs:
         id: setup-git-committer
         uses: ./.github/actions/setup-git-committer
         with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+          octopus-app-id: ${{ vars.OCTOPUS_APP_ID }}
+          octopus-app-secret: ${{ secrets.OCTOPUS_APP_SECRET }}
 
-      - name: Install OpenCode
-        run: bun i -g opencode-ai
+      - name: Install Octopus
+        run: bun i -g @octopus-ai/octopus
 
       - name: Sync beta branch
         env:
           GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
         run: bun script/beta.ts

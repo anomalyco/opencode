@@ -1,15 +1,15 @@
 ---
 title: LSP 伺服器
-description: OpenCode 與您的 LSP 伺服器整合。
+description: Octopus 與您的 LSP 伺服器整合。
 ---
 
-OpenCode 與您的語言伺服器協定（LSP）整合，協助 LLM 與您的程式碼庫進行互動。它利用診斷資訊向 LLM 提供回饋。
+Octopus 與您的語言伺服器協定（LSP）整合，協助 LLM 與您的程式碼庫進行互動。它利用診斷資訊向 LLM 提供回饋。
 
 ---
 
 ## 內建支援
 
-OpenCode 內建了多種適用於主流語言的 LSP 伺服器：
+Octopus 內建了多種適用於主流語言的 LSP 伺服器：
 
 | LSP 伺服器         | 副檔名                                                              | 要求                                                  |
 | ------------------ | ------------------------------------------------------------------- | ----------------------------------------------------- |
@@ -50,14 +50,14 @@ OpenCode 內建了多種適用於主流語言的 LSP 伺服器：
 當偵測到上述檔案副檔名且滿足相應要求時，LSP 伺服器會自動啟用。
 
 :::note
-您可以將 `OPENCODE_DISABLE_LSP_DOWNLOAD` 環境變數設定為 `true` 來停用 LSP 伺服器的自動下載。
+您可以將 `OCTOPUS_DISABLE_LSP_DOWNLOAD` 環境變數設定為 `true` 來停用 LSP 伺服器的自動下載。
 :::
 
 ---
 
 ## 工作原理
 
-當 OpenCode 開啟一個檔案時，它會：
+當 Octopus 開啟一個檔案時，它會：
 
 1. 將檔案副檔名與所有已啟用的 LSP 伺服器進行比對。
 2. 如果對應的 LSP 伺服器尚未執行，則自動啟動它。
@@ -66,9 +66,9 @@ OpenCode 內建了多種適用於主流語言的 LSP 伺服器：
 
 ## 設定
 
-您可以透過 OpenCode 設定檔中的 `lsp` 部分來自訂 LSP 伺服器。
+您可以透過 Octopus 設定檔中的 `lsp` 部分來自訂 LSP 伺服器。
 
-```json title="opencode.json"
+```json title="octopus.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {}
@@ -93,7 +93,7 @@ OpenCode 內建了多種適用於主流語言的 LSP 伺服器：
 
 使用 `env` 屬性在啟動 LSP 伺服器時設定環境變數：
 
-```json title="opencode.json" {5-7}
+```json title="octopus.json" {5-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -112,7 +112,7 @@ OpenCode 內建了多種適用於主流語言的 LSP 伺服器：
 
 使用 `initialization` 屬性向 LSP 伺服器傳遞初始化選項。這些是在 LSP `initialize` 請求期間傳送的伺服器特定設定：
 
-```json title="opencode.json" {5-9}
+```json title="octopus.json" {5-9}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -137,7 +137,7 @@ OpenCode 內建了多種適用於主流語言的 LSP 伺服器：
 
 要全域停用**所有** LSP 伺服器，將 `lsp` 設定為 `false`：
 
-```json title="opencode.json" {3}
+```json title="octopus.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": false
@@ -146,7 +146,7 @@ OpenCode 內建了多種適用於主流語言的 LSP 伺服器：
 
 要停用**特定的** LSP 伺服器，將 `disabled` 設定為 `true`：
 
-```json title="opencode.json" {5}
+```json title="octopus.json" {5}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
@@ -163,7 +163,7 @@ OpenCode 內建了多種適用於主流語言的 LSP 伺服器：
 
 您可以透過指定指令和檔案副檔名來新增自訂 LSP 伺服器：
 
-```json title="opencode.json" {4-7}
+```json title="octopus.json" {4-7}
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {

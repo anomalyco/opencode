@@ -1,7 +1,7 @@
 import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
-import type { OpencodeClient, ProviderListResponse, VcsInfo } from "@opencode-ai/sdk/v2/client"
+import type { OctopusClient, ProviderListResponse, VcsInfo } from "@octopus-ai/sdk/v2/client"
 import {
   DIR_IDLE_TTL_MS,
   MAX_DIR_STORES,
@@ -26,7 +26,7 @@ export function createChildStoreManager(input: {
   onBootstrap: (directory: string) => void
   onDispose: (directory: string) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
-  getSdk: (directory: string) => OpencodeClient
+  getSdk: (directory: string) => OctopusClient
   global: {
     provider: ProviderListResponse
   }

@@ -36,10 +36,10 @@ opencode serve --cors http://localhost:5173 --cors https://app.example.com
 
 ### 认证
 
-设置 `OPENCODE_SERVER_PASSWORD` 以使用 HTTP 基本认证保护服务器。用户名默认为 `opencode`，也可以设置 `OPENCODE_SERVER_USERNAME` 来覆盖它。这适用于 `opencode serve` 和 `opencode web`。
+设置 `OCTOPUS_SERVER_PASSWORD` 以使用 HTTP 基本认证保护服务器。用户名默认为 `opencode`，也可以设置 `OCTOPUS_SERVER_USERNAME` 来覆盖它。这适用于 `opencode serve` 和 `opencode web`。
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+OCTOPUS_SERVER_PASSWORD=your-password opencode serve
 ```
 
 ---
@@ -62,7 +62,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 
 当你启动 TUI 时，它会随机分配端口和主机名。你也可以传入 `--hostname` 和 `--port` [标志](/docs/cli)，然后用它来连接对应的服务器。
 
-[`/tui`](#tui) 端点可用于通过服务器驱动 TUI。例如，你可以预填充或运行一个提示词。此方式被 OpenCode [IDE](/docs/ide) 插件所使用。
+[`/tui`](#tui) 端点可用于通过服务器驱动 TUI。例如，你可以预填充或运行一个提示词。此方式被 Octopus [IDE](/docs/ide) 插件所使用。
 
 ---
 
