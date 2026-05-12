@@ -1,64 +1,11 @@
 #!/usr/bin/env bun
 
-import { z } from "zod"
 import { Config } from "@/config/config"
-import { zodObject } from "@opencode-ai/core/effect-zod"
-import { TuiJsonSchema } from "../src/cli/cmd/tui/config/tui-json-schema"
 import { Schema } from "effect"
+import { TuiInfo } from "../src/cli/cmd/tui/config/tui-schema"
 
 type JsonSchema = Record<string, unknown>
-
-function generate(schema: z.ZodType) {
-  const result = z.toJSONSchema(schema, {
-    io: "input", // Generate input shape (treats optional().default() as not required)
-    /**
-     * We'll use the `default` values of the field as the only value in `examples`.
-     * This will ensure no docs are needed to be read, as the configuration is
-     * self-documenting.
-     *
-     * See https://json-schema.org/draft/2020-12/draft-bhutton-json-schema-validation-00#rfc.section.9.5
-     */
-    override(ctx) {
-      const schema = ctx.jsonSchema
-
-      // Preserve strictness: set additionalProperties: false for objects
-      if (
-        schema &&
-        typeof schema === "object" &&
-        schema.type === "object" &&
-        schema.additionalProperties === undefined
-      ) {
-        schema.additionalProperties = false
-      }
-
-      // Add examples and default descriptions for string fields with defaults
-      if (schema && typeof schema === "object" && "type" in schema && schema.type === "string" && schema?.default) {
-        if (!schema.examples) {
-          schema.examples = [schema.default]
-        }
-
-        schema.description = [schema.description || "", `default: \`${formatDefault(schema.default)}\``]
-          .filter(Boolean)
-          .join("\n\n")
-          .trim()
-      }
-    },
-  }) as Record<string, unknown> & {
-    allowComments?: boolean
-    allowTrailingCommas?: boolean
-  }
-
-  // used for json lsps since config supports jsonc
-  result.allowComments = true
-  result.allowTrailingCommas = true
-
-  return result
-}
-
-function formatDefault(value: unknown) {
-  if (typeof value !== "object" || value === null) return String(value)
-  return JSON.stringify(value)
-}
+const MODEL_REF = "https://models.dev/model-schema.json#/$defs/Model"
 
 function generateEffect(schema: Schema.Top) {
   const document = Schema.toJsonSchemaDocument(schema)
@@ -68,9 +15,11 @@ function generateEffect(schema: Schema.Top) {
     $defs: document.definitions,
   })
   if (!isRecord(normalized)) throw new Error("schema generator produced a non-object schema")
-  normalized.allowComments = true
-  normalized.allowTrailingCommas = true
-  return normalized
+  const restored = restoreModelRefs(normalized)
+  if (!isRecord(restored)) throw new Error("schema generator produced a non-object schema")
+  restored.allowComments = true
+  restored.allowTrailingCommas = true
+  return restored
 }
 
 function normalize(value: unknown): unknown {
@@ -100,6 +49,17 @@ function normalize(value: unknown): unknown {
   return schema
 }
 
+function restoreModelRefs(value: unknown, key?: string): unknown {
+  if (Array.isArray(value)) return value.map((item) => restoreModelRefs(item))
+  if (!isRecord(value)) return value
+
+  const schema = Object.fromEntries(Object.entries(value).map(([name, item]) => [name, restoreModelRefs(item, name)]))
+  if ((key === "model" || key === "small_model") && schema.type === "string") {
+    return { ...schema, $ref: MODEL_REF }
+  }
+  return schema
+}
+
 function isRecord(value: unknown): value is JsonSchema {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
@@ -108,9 +68,9 @@ const configFile = process.argv[2]
 const tuiFile = process.argv[3]
 
 console.log(configFile)
-await Bun.write(configFile, JSON.stringify(generate(zodObject(Config.Info).strict().meta({ ref: "Config" })), null, 2))
+await Bun.write(configFile, JSON.stringify(generateEffect(Config.Info), null, 2))
 
 if (tuiFile) {
   console.log(tuiFile)
-  await Bun.write(tuiFile, JSON.stringify(generateEffect(TuiJsonSchema.Info), null, 2))
+  await Bun.write(tuiFile, JSON.stringify(generateEffect(TuiInfo), null, 2))
 }

@@ -1,9 +1,8 @@
 export * as TuiConfig from "./tui"
 
-import type z from "zod"
 import { createBindingLookup } from "@opentui/keymap/extras"
 import { mergeDeep, unique } from "remeda"
-import { Context, Effect, Fiber, Layer } from "effect"
+import { Context, Effect, Fiber, Layer, Schema } from "effect"
 import { ConfigParse } from "@/config/parse"
 import { InvalidError } from "@/config/error"
 import * as ConfigPaths from "@/config/paths"
@@ -22,11 +21,12 @@ import { Filesystem } from "@/util/filesystem"
 import * as Log from "@opencode-ai/core/util/log"
 import { ConfigVariable } from "@/config/variable"
 import { Npm } from "@opencode-ai/core/npm"
+import type { DeepMutable } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "tui.config" })
 
 export const Info = TuiInfo
-export type Info = z.output<typeof Info>
+export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
 
 type Acc = {
   result: Info
@@ -91,9 +91,17 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       if (!isRecord(data)) return {} as Info
       // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
       // (mirroring the old opencode.json shape) still get their settings applied.
-      const parsed = Info.safeParse(normalize(data))
-      if (!parsed.success) throw new InvalidError({ path: configFilepath, issues: parsed.error.issues })
-      const validated = parsed.data
+      const normalized = normalize(data)
+      if (isRecord(normalized.keybinds)) {
+        const invalid = TuiKeybind.unknownKeys(normalized.keybinds)
+        if (invalid.length) {
+          throw new InvalidError({
+            path: configFilepath,
+            message: `Unrecognized keybind${invalid.length === 1 ? "" : "s"}: ${invalid.join(", ")}`,
+          })
+        }
+      }
+      const validated = ConfigParse.schema(Info, normalized, configFilepath)
       return yield* resolvePlugins(validated, configFilepath)
     }).pipe(
       // catchCause (not tapErrorCause + orElseSucceed) because JSONC parsing and validation
@@ -179,16 +187,14 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
     }
   }
 
-  const keybinds = { ...(acc.result.keybinds ?? {}) }
+  const keybinds = { ...acc.result.keybinds }
   if (process.platform === "win32") {
     // Native Windows terminals do not support POSIX suspend, so prefer prompt undo.
     keybinds.terminal_suspend = "none"
-    keybinds.input_undo ??= unique([
-      "ctrl+z",
-      ...String(TuiKeybind.Keybinds.shape.input_undo.parse(undefined)).split(","),
-    ]).join(",")
+    const inputUndo = TuiKeybind.defaultValue("input_undo")
+    keybinds.input_undo ??= unique(["ctrl+z", ...(typeof inputUndo === "string" ? inputUndo.split(",") : [])]).join(",")
   }
-  const parsedKeybinds = TuiKeybind.Keybinds.parse(keybinds)
+  const parsedKeybinds = TuiKeybind.parse(keybinds)
   const result: Resolved = {
     ...acc.result,
     keybinds: createBindingLookup(TuiKeybind.toBindingConfig(parsedKeybinds), {
