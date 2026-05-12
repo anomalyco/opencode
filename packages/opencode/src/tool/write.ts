@@ -2,7 +2,7 @@ import z from "zod"
 import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
-import { createTwoFilesPatch } from "diff"
+import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./write.txt"
 import { Bus } from "../bus"
 import { File } from "../file"
@@ -11,6 +11,7 @@ import { Format } from "../format"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
+import { Snapshot } from "@/snapshot"
 import { trimDiff } from "./edit"
 import { assertExternalDirectory } from "./external-directory"
 
@@ -51,6 +52,28 @@ export const WriteTool = Tool.define("write", {
     })
     await FileTime.read(ctx.sessionID, filepath)
 
+    const contentNew = await Filesystem.readText(filepath)
+    const filediff: Snapshot.FileDiff = {
+      file: filepath,
+      before: contentOld,
+      after: contentNew,
+      additions: 0,
+      deletions: 0,
+      status: exists ? "modified" : "added",
+    }
+    for (const change of diffLines(contentOld, contentNew)) {
+      if (change.added) filediff.additions += change.count || 0
+      if (change.removed) filediff.deletions += change.count || 0
+    }
+
+    ctx.metadata({
+      metadata: {
+        diff,
+        filediff,
+        diagnostics: {},
+      },
+    })
+
     let output = "Wrote file successfully."
     await LSP.touchFile(filepath, true)
     const diagnostics = await LSP.diagnostics()
@@ -77,6 +100,8 @@ export const WriteTool = Tool.define("write", {
         diagnostics,
         filepath,
         exists: exists,
+        diff,
+        filediff,
       },
       output,
     }

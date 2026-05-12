@@ -69,7 +69,10 @@ export const dict = {
   "ui.messagePart.context.list.other": "{{count}}개 목록",
   "ui.messagePart.diagnostic.error": "오류",
   "ui.messagePart.title.edit": "편집",
+  "ui.messagePart.title.editActive": "편집 중",
   "ui.messagePart.title.write": "작성",
+  "ui.messagePart.title.writeActive": "작성 중",
+  "ui.messagePart.title.reasoning": "생각 중",
   "ui.messagePart.option.typeOwnAnswer": "직접 답변 입력",
   "ui.messagePart.review.title": "답변 검토",
 
@@ -89,6 +92,11 @@ export const dict = {
   "ui.scrollView.ariaLabel": "스크롤 가능한 콘텐츠",
 
   "ui.tool.read": "읽기",
+  "ui.tool.readActive": "읽는 중",
+  "ui.tool.shellActive": "셸 실행 중",
+  "ui.tool.lines": "{{count}}줄",
+  "ui.tool.lineRange": "{{start}}~{{end}}줄",
+  "ui.tool.lineFrom": "{{start}}줄부터",
   "ui.tool.loaded": "로드됨",
   "ui.tool.list": "목록",
   "ui.tool.glob": "Glob",

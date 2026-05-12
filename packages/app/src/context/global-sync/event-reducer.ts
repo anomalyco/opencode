@@ -263,9 +263,20 @@ export function applyDirectoryEvent(input: {
         props.messageID,
         produce((draft) => {
           const part = draft[result.index]
-          const field = props.field as keyof typeof part
-          const existing = part[field] as string | undefined
-          ;(part[field] as string) = (existing ?? "") + props.delta
+          if (!part) return
+          const segments = props.field.split(".")
+          let target: Record<string, unknown> = part as unknown as Record<string, unknown>
+          for (let i = 0; i < segments.length - 1; i++) {
+            const key = segments[i]
+            if (!key) return
+            const next = target[key]
+            if (!next || typeof next !== "object") return
+            target = next as Record<string, unknown>
+          }
+          const last = segments[segments.length - 1]
+          if (!last) return
+          const existing = target[last]
+          target[last] = (typeof existing === "string" ? existing : "") + props.delta
         }),
       )
       break

@@ -161,8 +161,22 @@ export namespace SessionProcessor {
               } satisfies MessageV2.ToolPart)
               return
 
-            case "tool-input-delta":
+            case "tool-input-delta": {
+              const part = ctx.toolcalls[value.id]
+              if (!part) return
+              if (part.state.status !== "pending") return
+              const delta = value.delta ?? ""
+              if (!delta) return
+              part.state.raw = (part.state.raw ?? "") + delta
+              yield* session.updatePartDelta({
+                sessionID: part.sessionID,
+                messageID: part.messageID,
+                partID: part.id,
+                field: "state.raw",
+                delta,
+              })
               return
+            }
 
             case "tool-input-end":
               return
