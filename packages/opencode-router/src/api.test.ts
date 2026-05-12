@@ -68,7 +68,12 @@ const { handleApi } = await import("./api.js")
 // Helpers
 // ---------------------------------------------------------------------------
 
-function fakeReq(method: string, url: string, body?: object, extraHeaders?: Record<string, string>): http.IncomingMessage {
+function fakeReq(
+  method: string,
+  url: string,
+  body?: object,
+  extraHeaders?: Record<string, string>,
+): http.IncomingMessage {
   const r = new Readable() as any
   r.method = method
   r.url = url
@@ -1616,7 +1621,12 @@ describe("POST /api/sessions/:hash/ports", () => {
   })
 
   it("returns 200 and stores valid ports", async () => {
-    const req = fakeReq("POST", "/api/sessions/abc123456789/ports", { ports: [5173, 8080] }, { "x-pod-secret": "good-secret" })
+    const req = fakeReq(
+      "POST",
+      "/api/sessions/abc123456789/ports",
+      { ports: [5173, 8080] },
+      { "x-pod-secret": "good-secret" },
+    )
     const res = fakeRes()
 
     const handled = await handleApi(req as any, res as any, EMAIL)
@@ -1669,7 +1679,9 @@ describe("POST /api/sessions/:hash/ports", () => {
   })
 
   it("returns 400 when ports field is not an array", async () => {
-    const req = fakeReq("POST", "/api/sessions/abc123456789/ports", { ports: "5173" } as any, { "x-pod-secret": "good-secret" })
+    const req = fakeReq("POST", "/api/sessions/abc123456789/ports", { ports: "5173" } as any, {
+      "x-pod-secret": "good-secret",
+    })
     const res = fakeRes()
 
     const handled = await handleApi(req as any, res as any, EMAIL)
@@ -1733,5 +1745,116 @@ describe("GET /api/sessions/:hash/ports", () => {
     expect(handled).toBe(true)
     expect(res.statusCode).toBe(200)
     expect(JSON.parse(res.body)).toEqual({ ports: [] })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// GET /api/sessions/:hash/attach-info — attach URL and password
+// ---------------------------------------------------------------------------
+
+describe("GET /api/sessions/:hash/attach-info", () => {
+  beforeEach(() => {
+    mocks.getSessionInfo.mockReset()
+  })
+
+  it("returns 200 with attachUrl and attachPassword for session owner", async () => {
+    mocks.getSessionInfo.mockImplementation(() =>
+      Promise.resolve({
+        hash: "abc123456789",
+        email: EMAIL,
+        repoUrl: "https://github.com/x/y",
+        branch: "main",
+        sourceBranch: "main",
+        state: "running" as const,
+        url: "https://abc123456789-oc.test.local",
+        lastActivity: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        idleTimeoutMinutes: 30,
+        attachUrl: "https://attach-abc123456789-oc.test.local",
+        attachPassword: "secret-password-123",
+      }),
+    )
+
+    const req = fakeReq("GET", "/api/sessions/abc123456789/attach-info")
+    const res = fakeRes()
+
+    const handled = await handleApi(req as any, res as any, EMAIL)
+
+    expect(handled).toBe(true)
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.hash).toBe("abc123456789")
+    expect(body.attachUrl).toBe("https://attach-abc123456789-oc.test.local")
+    expect(body.attachPassword).toBe("secret-password-123")
+  })
+
+  it("returns 403 for non-owner", async () => {
+    mocks.getSessionInfo.mockImplementation(() =>
+      Promise.resolve({
+        hash: "abc123456789",
+        email: "owner@example.com", // different from requesting user
+        repoUrl: "https://github.com/x/y",
+        branch: "main",
+        sourceBranch: "main",
+        state: "running" as const,
+        url: "https://abc123456789-oc.test.local",
+        lastActivity: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        idleTimeoutMinutes: 30,
+        attachUrl: "https://attach-abc123456789-oc.test.local",
+        attachPassword: "secret-password-123",
+      }),
+    )
+
+    const req = fakeReq("GET", "/api/sessions/abc123456789/attach-info")
+    const res = fakeRes()
+
+    const handled = await handleApi(req as any, res as any, EMAIL)
+
+    expect(handled).toBe(true)
+    expect(res.statusCode).toBe(403)
+    const body = JSON.parse(res.body)
+    expect(body.error).toBe("Forbidden")
+  })
+
+  it("returns 404 when session not found", async () => {
+    mocks.getSessionInfo.mockImplementation(() => Promise.resolve(null))
+
+    const req = fakeReq("GET", "/api/sessions/abc123456789/attach-info")
+    const res = fakeRes()
+
+    const handled = await handleApi(req as any, res as any, EMAIL)
+
+    expect(handled).toBe(true)
+    expect(res.statusCode).toBe(404)
+    const body = JSON.parse(res.body)
+    expect(body.error).toBe("Session not found")
+  })
+
+  it("does not return attachPassword for non-owner", async () => {
+    mocks.getSessionInfo.mockImplementation(() =>
+      Promise.resolve({
+        hash: "abc123456789",
+        email: "other@example.com",
+        repoUrl: "https://github.com/x/y",
+        branch: "main",
+        sourceBranch: "main",
+        state: "running" as const,
+        url: "https://abc123456789-oc.test.local",
+        lastActivity: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        idleTimeoutMinutes: 30,
+        attachUrl: "https://attach-abc123456789-oc.test.local",
+        attachPassword: "secret-password-123",
+      }),
+    )
+
+    const req = fakeReq("GET", "/api/sessions/abc123456789/attach-info")
+    const res = fakeRes()
+
+    const handled = await handleApi(req as any, res as any, EMAIL)
+
+    expect(handled).toBe(true)
+    expect(res.statusCode).toBe(403)
   })
 })

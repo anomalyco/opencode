@@ -17,6 +17,10 @@ export const SessionSchema = z.object({
    * The events SSE fires `complete` only once this is non-null.
    */
   url: z.string().nullable(),
+  /** Attach URL for local client connections */
+  attachUrl: z.string().optional(),
+  /** Password for attach authentication (only included for session owner) */
+  attachPassword: z.string().optional(),
   lastActivity: z.string(),
   createdAt: z.string(),
   idleTimeoutMinutes: z.number(),

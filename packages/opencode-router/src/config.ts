@@ -10,6 +10,19 @@ export const config = {
   opencodeImage: required("OPENCODE_IMAGE"),
   chromiumImage: process.env.CHROMIUM_IMAGE ?? "chromedp/headless-shell:latest",
   opencodePort: 4096,
+  /**
+   * Port for the attach server (local client connecting to router session).
+   * This server is NOT behind oauth2-proxy and handles attach subdomain requests
+   * with password-based auth instead of OAuth.
+   * Default: 4096 (different from main port 3000).
+   */
+  attachPort: Number(process.env.ATTACH_PORT ?? 4096),
+  /**
+   * Prefix for attach session subdomains.
+   * Attach URLs will be: https://<attachRoutePrefix><hash><routeSuffix>.<routerDomain>
+   * Default: "attach-"
+   */
+  attachRoutePrefix: process.env.ATTACH_ROUTE_PREFIX ?? "attach-",
   idleTimeoutMinutes: Number(process.env.IDLE_TIMEOUT_MINUTES ?? 15),
   apiKeySecretName: process.env.API_KEY_SECRET_NAME ?? "opencode-api-keys",
   configMapName: process.env.CONFIG_MAP_NAME ?? "opencode-config-dir",

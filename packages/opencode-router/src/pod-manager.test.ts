@@ -79,6 +79,18 @@ const fakeK8sApi = {
     }
     fakePods = (fakePods as any[]).filter((_, i) => i !== idx)
   },
+  patchNamespacedPersistentVolumeClaim: async ({
+    name,
+    body,
+  }: {
+    name: string
+    body: { metadata?: { annotations?: Record<string, string> } }
+  }) => {
+    const pvc = (fakePVCs as any[]).find((p) => p.metadata?.name === name)
+    if (pvc && body.metadata?.annotations) {
+      pvc.metadata.annotations = { ...pvc.metadata.annotations, ...body.metadata.annotations }
+    }
+  },
   deleteNamespacedPersistentVolumeClaim: async ({ name }: { name: string }) => {
     const idx = (fakePVCs as any[]).findIndex((p) => p.metadata?.name === name)
     if (idx === -1) {
@@ -884,6 +896,211 @@ describe("deleteIdlePods clears stores for deleted pods", () => {
     await (deleteIdlePods as any)()
     expect(messageStoreMock.delete).toHaveBeenCalledTimes(1)
     expect((messageStoreMock.delete as any).mock.calls[0][0]).toBe("abc123456789")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// generateAttachPassword — random 32-char hex string
+// ---------------------------------------------------------------------------
+
+describe("generateAttachPassword", () => {
+  it("returns a 32-character hex string", async () => {
+    const { generateAttachPassword } = await import("./pod-manager.js")
+    const password = generateAttachPassword()
+    expect(password).toMatch(/^[a-f0-9]{32}$/)
+  })
+
+  it("generates unique values on each call", async () => {
+    const { generateAttachPassword } = await import("./pod-manager.js")
+    const a = generateAttachPassword()
+    const b = generateAttachPassword()
+    expect(a).not.toBe(b)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getAttachUrl — builds attach URL from config
+// ---------------------------------------------------------------------------
+
+describe("getAttachUrl", () => {
+  it("builds attach URL with default attachRoutePrefix", async () => {
+    const { getAttachUrl } = await import("./pod-manager.js")
+    const url = getAttachUrl("abc123def456")
+    // ROUTE_SUFFIX defaults to "" in this test env, so URL is attach-<hash>.<domain>
+    expect(url).toBe("https://attach-abc123def456.test.local")
+  })
+
+  it("contains the hash and attachRoutePrefix in URL", async () => {
+    const { getAttachUrl } = await import("./pod-manager.js")
+    const url = getAttachUrl("abc123def456")
+    expect(url).toContain("attach-abc123def456")
+    expect(url).toContain("test.local")
+    expect(url).toMatch(/^https?:\/\//)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// getOrCreateAttachPassword — read or create attach password in PVC annotation
+// ---------------------------------------------------------------------------
+
+describe("getOrCreateAttachPassword", () => {
+  beforeEach(() => {
+    fakePVCs = []
+  })
+
+  it("returns existing password from PVC annotation", async () => {
+    const hash = "abc123456789"
+    fakePVCs = [
+      {
+        metadata: {
+          name: `opencode-pvc-${hash}`,
+          namespace: "opencode",
+          annotations: { "opencode.ai/attach-password": "existing-pw-123" },
+        },
+      },
+    ]
+    const { getOrCreateAttachPassword } = await import("./pod-manager.js")
+    const password = await getOrCreateAttachPassword(hash)
+    expect(password).toBe("existing-pw-123")
+  })
+
+  it("generates and stores new password when annotation is missing", async () => {
+    const hash = "abc123456789"
+    fakePVCs = [
+      {
+        metadata: {
+          name: `opencode-pvc-${hash}`,
+          namespace: "opencode",
+          annotations: {},
+        },
+      },
+    ]
+    const { getOrCreateAttachPassword } = await import("./pod-manager.js")
+    const password = await getOrCreateAttachPassword(hash)
+    expect(password).toMatch(/^[a-f0-9]{32}$/)
+  })
+
+  it("throws NotFound when PVC does not exist", async () => {
+    fakePVCs = []
+    const { getOrCreateAttachPassword } = await import("./pod-manager.js")
+    await expect(getOrCreateAttachPassword("nonexistent")).rejects.toThrow("NotFound")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// ensurePVC — stores attach password on new PVC
+// ---------------------------------------------------------------------------
+
+describe("ensurePVC — attach password annotation", () => {
+  beforeEach(() => {
+    fakePVCs = []
+  })
+
+  it("stores attach password annotation on new PVC", async () => {
+    const { ensurePVC } = await import("./pod-manager.js")
+    await ensurePVC({
+      email: "test@example.com",
+      repoUrl: "https://github.com/x/y",
+      branch: "test-branch",
+      sourceBranch: "main",
+    })
+    expect(fakePVCs).toHaveLength(1)
+    const annotations = (fakePVCs[0] as any).metadata?.annotations ?? {}
+    expect(annotations["opencode.ai/attach-password"]).toMatch(/^[a-f0-9]{32}$/)
+  })
+
+  it("does not overwrite existing PVC (already exists)", async () => {
+    const session = {
+      email: "test@example.com",
+      repoUrl: "https://github.com/x/y",
+      branch: "test-branch",
+      sourceBranch: "main",
+    }
+    const hash = computeHash(session.email, session.repoUrl, session.branch)
+    fakePVCs = [
+      {
+        metadata: {
+          name: `opencode-pvc-${hash}`,
+          namespace: "opencode",
+          labels: { "opencode.ai/session-hash": hash, "app.kubernetes.io/managed-by": "opencode-router" },
+          annotations: {
+            "opencode.ai/user-email": session.email,
+            "opencode.ai/attach-password": "existing-pw",
+          },
+        },
+      },
+    ]
+    const { ensurePVC } = await import("./pod-manager.js")
+    await ensurePVC(session)
+    // PVC count should still be 1 (not re-created)
+    expect(fakePVCs).toHaveLength(1)
+    const annotations = (fakePVCs[0] as any).metadata?.annotations ?? {}
+    expect(annotations["opencode.ai/attach-password"]).toBe("existing-pw")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// buildSessionInfo — includes attachUrl and attachPassword only for owner
+// ---------------------------------------------------------------------------
+
+describe("buildSessionInfo — attach fields in session info", () => {
+  function makePVCWithAttachPassword(hash: string, email: string, password: string) {
+    return {
+      metadata: {
+        name: `opencode-pvc-${hash}`,
+        namespace: "opencode",
+        creationTimestamp: "2025-01-01T00:00:00Z",
+        labels: {
+          "opencode.ai/session-hash": hash,
+          "app.kubernetes.io/managed-by": "opencode-router",
+        },
+        annotations: {
+          "opencode.ai/user-email": email,
+          "opencode.ai/repo-url": "https://github.com/x/y",
+          "opencode.ai/branch": "main",
+          "opencode.ai/source-branch": "main",
+          "opencode.ai/last-activity": "2025-06-01T12:00:00Z",
+          "opencode.ai/created-at": "2025-01-01T00:00:00Z",
+          "opencode.ai/attach-password": password,
+        },
+      },
+      spec: {},
+      status: { phase: "Bound" },
+    }
+  }
+
+  it("includes attachUrl in session info", async () => {
+    const hash = "abc123456789"
+    const password = "test-password-123"
+    fakePVCs = [makePVCWithAttachPassword(hash, "owner@test.com", password)]
+    fakePods = []
+
+    const sessions = await listUserSessions("owner@test.com", fakeReq)
+    expect(sessions).toHaveLength(1)
+    expect((sessions[0] as any).attachUrl).toBeDefined()
+    expect(typeof (sessions[0] as any).attachUrl).toBe("string")
+  })
+
+  it("includes attachPassword for session owner", async () => {
+    const hash = "abc123456789"
+    const password = "owner-only-secret"
+    fakePVCs = [makePVCWithAttachPassword(hash, "owner@test.com", password)]
+    fakePods = []
+
+    const sessions = await listUserSessions("owner@test.com", fakeReq)
+    expect(sessions).toHaveLength(1)
+    expect((sessions[0] as any).attachPassword).toBe("owner-only-secret")
+  })
+
+  it("non-owner does not see the session at all (filtered by listUserSessions)", async () => {
+    const hash = "abc123456789"
+    const password = "owner-only-secret"
+    fakePVCs = [makePVCWithAttachPassword(hash, "owner@test.com", password)]
+    fakePods = []
+
+    const sessions = await listUserSessions("other@test.com", fakeReq)
+    // Sessions are filtered by email before buildSessionInfo is called
+    expect(sessions).toHaveLength(0)
   })
 })
 

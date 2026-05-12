@@ -5,6 +5,7 @@ import {
   RemoteRefsUnreachableError,
   ensurePVC,
   ensurePod,
+  getAttachUrl,
   getPodState,
   getSessionHash,
   getSessionInfo,
@@ -368,6 +369,28 @@ export async function handleApi(
     return true
   }
 
+  // GET /api/sessions/:hash/attach-info — get attach URL and password for session owner
+  const attachInfoMatch = url.match(/^\/api\/sessions\/([a-f0-9]{12})\/attach-info$/)
+  if (attachInfoMatch && req.method === "GET") {
+    const hash = attachInfoMatch[1]
+    const sessionInfo = await getSessionInfo(hash)
+    if (!sessionInfo) {
+      json(res, 404, { error: "Session not found" })
+      return true
+    }
+    // Only return attach info if the requesting user owns the session
+    if (sessionInfo.email !== email) {
+      json(res, 403, { error: "Forbidden" })
+      return true
+    }
+    json(res, 200, {
+      hash,
+      attachUrl: sessionInfo.attachUrl,
+      attachPassword: sessionInfo.attachPassword,
+    })
+    return true
+  }
+
   // POST /api/sessions/:hash/resume
   const resumeMatch = url.match(/^\/api\/sessions\/([a-f0-9]{12})\/resume$/)
   if (resumeMatch && req.method === "POST") {
@@ -650,7 +673,9 @@ export async function handleApi(
     }
     const rawPorts = (parsedJson as { ports: unknown[] }).ports
     const validPorts = new Set(
-      rawPorts.filter((p): p is number => typeof p === "number" && Number.isInteger(p) && p > 3000 && p !== 4096 && p <= 65535),
+      rawPorts.filter(
+        (p): p is number => typeof p === "number" && Number.isInteger(p) && p > 3000 && p !== 4096 && p <= 65535,
+      ),
     )
     portStore.set(hash, validPorts)
     json(res, 200, { ok: true })
