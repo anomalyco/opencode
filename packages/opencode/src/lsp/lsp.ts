@@ -5,7 +5,6 @@ import * as LSPClient from "./client"
 import path from "path"
 import { pathToFileURL, fileURLToPath } from "url"
 import * as LSPServer from "./server"
-import z from "zod"
 import { Config } from "@/config/config"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Process } from "@/util/process"
@@ -14,7 +13,6 @@ import { Effect, Layer, Context, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { containsPath } from "@/project/instance-context"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
-import { ZodOverride } from "@opencode-ai/core/effect-zod"
 
 const log = Log.create({ service: "lsp" })
 
@@ -56,9 +54,7 @@ export const Status = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   root: Schema.String,
-  status: Schema.Literals(["connected", "error"]).annotate({
-    [ZodOverride]: z.union([z.literal("connected"), z.literal("error")]),
-  }),
+  status: Schema.Literals(["connected", "error"]),
 }).annotate({ identifier: "LSPStatus" })
 export type Status = typeof Status.Type
 

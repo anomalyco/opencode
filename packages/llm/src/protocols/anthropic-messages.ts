@@ -17,6 +17,7 @@ import {
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import * as Cache from "./utils/cache"
+import { Lifecycle } from "./utils/lifecycle"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "anthropic-messages"
@@ -190,6 +191,7 @@ type AnthropicEvent = Schema.Schema.Type<typeof AnthropicEvent>
 interface ParserState {
   readonly tools: ToolStream.State<number>
   readonly usage?: Usage
+  readonly lifecycle: Lifecycle.State
 }
 
 const invalid = ProviderShared.invalidRequest
@@ -500,37 +502,45 @@ const onContentBlockStart = (state: ParserState, event: AnthropicEvent): StepRes
   if (!block) return [state, NO_EVENTS]
 
   if ((block.type === "tool_use" || block.type === "server_tool_use") && event.index !== undefined) {
+    const events: LLMEvent[] = []
+    const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
     return [
       {
         ...state,
+        lifecycle,
         tools: ToolStream.start(state.tools, event.index, {
           id: block.id ?? String(event.index),
           name: block.name ?? "",
           providerExecuted: block.type === "server_tool_use",
         }),
       },
-      NO_EVENTS,
+      [...events, LLMEvent.toolInputStart({ id: block.id ?? String(event.index), name: block.name ?? "" })],
     ]
   }
 
   if (block.type === "text" && block.text) {
-    return [state, [LLMEvent.textDelta({ id: `text-${event.index ?? 0}`, text: block.text })]]
+    const events: LLMEvent[] = []
+    return [
+      { ...state, lifecycle: Lifecycle.textDelta(state.lifecycle, events, `text-${event.index ?? 0}`, block.text) },
+      events,
+    ]
   }
 
   if (block.type === "thinking" && block.thinking) {
+    const events: LLMEvent[] = []
     return [
-      state,
-      [
-        LLMEvent.reasoningDelta({
-          id: `reasoning-${event.index ?? 0}`,
-          text: block.thinking,
-        }),
-      ],
+      {
+        ...state,
+        lifecycle: Lifecycle.reasoningDelta(state.lifecycle, events, `reasoning-${event.index ?? 0}`, block.thinking),
+      },
+      events,
     ]
   }
 
   const result = serverToolResultEvent(block)
-  return [state, result ? [result] : NO_EVENTS]
+  if (!result) return [state, NO_EVENTS]
+  const events: LLMEvent[] = []
+  return [{ ...state, lifecycle: Lifecycle.stepStart(state.lifecycle, events) }, [...events, result]]
 }
 
 const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(function* (
@@ -540,25 +550,37 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
   const delta = event.delta
 
   if (delta?.type === "text_delta" && delta.text) {
-    return [state, [LLMEvent.textDelta({ id: `text-${event.index ?? 0}`, text: delta.text })]] satisfies StepResult
+    const events: LLMEvent[] = []
+    return [
+      { ...state, lifecycle: Lifecycle.textDelta(state.lifecycle, events, `text-${event.index ?? 0}`, delta.text) },
+      events,
+    ] satisfies StepResult
   }
 
   if (delta?.type === "thinking_delta" && delta.thinking) {
+    const events: LLMEvent[] = []
     return [
-      state,
-      [LLMEvent.reasoningDelta({ id: `reasoning-${event.index ?? 0}`, text: delta.thinking })],
+      {
+        ...state,
+        lifecycle: Lifecycle.reasoningDelta(state.lifecycle, events, `reasoning-${event.index ?? 0}`, delta.thinking),
+      },
+      events,
     ] satisfies StepResult
   }
 
   if (delta?.type === "signature_delta" && delta.signature) {
+    const events: LLMEvent[] = []
     return [
-      state,
-      [
-        LLMEvent.reasoningEnd({
-          id: `reasoning-${event.index ?? 0}`,
-          providerMetadata: anthropicMetadata({ signature: delta.signature }),
-        }),
-      ],
+      {
+        ...state,
+        lifecycle: Lifecycle.reasoningEnd(
+          state.lifecycle,
+          events,
+          `reasoning-${event.index ?? 0}`,
+          anthropicMetadata({ signature: delta.signature }),
+        ),
+      },
+      events,
     ] satisfies StepResult
   }
 
@@ -572,7 +594,10 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
       "Anthropic Messages tool argument delta is missing its tool call",
     )
     if (ToolStream.isError(result)) return yield* result
-    return [{ ...state, tools: result.tools }, result.event ? [result.event] : NO_EVENTS] satisfies StepResult
+    const events: LLMEvent[] = []
+    const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
+    events.push(...result.events)
+    return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
   }
 
   return [state, NO_EVENTS] satisfies StepResult
@@ -584,23 +609,30 @@ const onContentBlockStop = Effect.fn("AnthropicMessages.onContentBlockStop")(fun
 ) {
   if (event.index === undefined) return [state, NO_EVENTS] satisfies StepResult
   const result = yield* ToolStream.finish(ADAPTER, state.tools, event.index)
-  return [{ ...state, tools: result.tools }, result.event ? [result.event] : NO_EVENTS] satisfies StepResult
+  const events: LLMEvent[] = []
+  const resultEvents = result.events ?? []
+  const lifecycle = resultEvents.length
+    ? Lifecycle.stepStart(state.lifecycle, events)
+    : Lifecycle.reasoningEnd(
+        Lifecycle.textEnd(state.lifecycle, events, `text-${event.index}`),
+        events,
+        `reasoning-${event.index}`,
+      )
+  events.push(...resultEvents)
+  return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
 })
 
 const onMessageDelta = (state: ParserState, event: AnthropicEvent): StepResult => {
   const usage = mergeUsage(state.usage, mapUsage(event.usage))
-  return [
-    { ...state, usage },
-    [
-      LLMEvent.requestFinish({
-        reason: mapFinishReason(event.delta?.stop_reason),
-        usage,
-        providerMetadata: event.delta?.stop_sequence
-          ? anthropicMetadata({ stopSequence: event.delta.stop_sequence })
-          : undefined,
-      }),
-    ],
-  ]
+  const events: LLMEvent[] = []
+  const lifecycle = Lifecycle.finish(state.lifecycle, events, {
+    reason: mapFinishReason(event.delta?.stop_reason),
+    usage,
+    providerMetadata: event.delta?.stop_sequence
+      ? anthropicMetadata({ stopSequence: event.delta.stop_sequence })
+      : undefined,
+  })
+  return [{ ...state, lifecycle, usage }, events]
 }
 
 const onError = (state: ParserState, event: AnthropicEvent): StepResult => [
@@ -634,7 +666,7 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(AnthropicEvent),
-    initial: () => ({ tools: ToolStream.empty<number>() }),
+    initial: () => ({ tools: ToolStream.empty<number>(), lifecycle: Lifecycle.initial() }),
     step,
   },
 })

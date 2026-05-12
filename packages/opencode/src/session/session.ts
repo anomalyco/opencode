@@ -87,6 +87,16 @@ export function fromRow(row: SessionRow): Info {
       : undefined,
     version: row.version,
     summary,
+    cost: row.cost,
+    tokens: {
+      input: row.tokens_input,
+      output: row.tokens_output,
+      reasoning: row.tokens_reasoning,
+      cache: {
+        read: row.tokens_cache_read,
+        write: row.tokens_cache_write,
+      },
+    },
     share,
     revert,
     permission: row.permission ?? undefined,
@@ -117,6 +127,12 @@ export function toRow(info: Info) {
     summary_deletions: info.summary?.deletions,
     summary_files: info.summary?.files,
     summary_diffs: info.summary?.diffs,
+    cost: info.cost ?? 0,
+    tokens_input: (info.tokens ?? EmptyTokens).input,
+    tokens_output: (info.tokens ?? EmptyTokens).output,
+    tokens_reasoning: (info.tokens ?? EmptyTokens).reasoning,
+    tokens_cache_read: (info.tokens ?? EmptyTokens).cache.read,
+    tokens_cache_write: (info.tokens ?? EmptyTokens).cache.write,
     revert: info.revert ?? null,
     permission: info.permission,
     time_created: info.time.created,
@@ -146,6 +162,18 @@ const Summary = Schema.Struct({
   files: Schema.Finite,
   diffs: optionalOmitUndefined(Schema.Array(Snapshot.FileDiff)),
 })
+
+const Tokens = Schema.Struct({
+  input: Schema.Finite,
+  output: Schema.Finite,
+  reasoning: Schema.Finite,
+  cache: Schema.Struct({
+    read: Schema.Finite,
+    write: Schema.Finite,
+  }),
+})
+
+const EmptyTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
 
 const Share = Schema.Struct({
   url: Schema.String,
@@ -184,6 +212,8 @@ export const Info = Schema.Struct({
   path: optionalOmitUndefined(Schema.String),
   parentID: optionalOmitUndefined(SessionID),
   summary: optionalOmitUndefined(Summary),
+  cost: optionalOmitUndefined(Schema.Finite),
+  tokens: optionalOmitUndefined(Tokens),
   share: optionalOmitUndefined(Share),
   title: Schema.String,
   agent: optionalOmitUndefined(Schema.String),
@@ -281,6 +311,8 @@ const UpdatedInfo = Schema.Struct({
   path: Schema.optional(Schema.NullOr(Schema.String)),
   parentID: Schema.optional(Schema.NullOr(SessionID)),
   summary: Schema.optional(Schema.NullOr(Summary)),
+  cost: Schema.optional(Schema.Finite),
+  tokens: Schema.optional(Tokens),
   share: Schema.optional(UpdatedShare),
   title: Schema.optional(Schema.NullOr(Schema.String)),
   agent: Schema.optional(Schema.NullOr(Schema.String)),
@@ -503,6 +535,8 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
         agent: input.agent,
         model: input.model,
         permission: input.permission,
+        cost: 0,
+        tokens: EmptyTokens,
         time: {
           created: Date.now(),
           updated: Date.now(),
