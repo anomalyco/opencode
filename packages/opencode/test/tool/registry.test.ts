@@ -15,7 +15,9 @@ import { Question } from "@/question"
 import { Todo } from "@/session/todo"
 import { Skill } from "@/skill"
 import { Agent } from "@/agent/agent"
+import { BackgroundJob } from "@/background/job"
 import { Session } from "@/session/session"
+import { SessionStatus } from "@/session/status"
 import { Provider } from "@/provider/provider"
 import { Git } from "@/git"
 import { LSP } from "@/lsp/lsp"
@@ -32,6 +34,7 @@ import { ToolJsonSchema } from "@/tool/json-schema"
 
 const node = CrossSpawnSpawner.defaultLayer
 const originalExperimentalScout = Flag.OPENCODE_EXPERIMENTAL_SCOUT
+const originalBackgroundAgents = Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS
 const configLayer = TestConfig.layer({
   directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
 })
@@ -44,6 +47,7 @@ const registryLayer = ToolRegistry.layer.pipe(
   Layer.provide(Skill.defaultLayer),
   Layer.provide(Agent.defaultLayer),
   Layer.provide(Session.defaultLayer),
+  Layer.provide(Layer.mergeAll(SessionStatus.defaultLayer, BackgroundJob.defaultLayer)),
   Layer.provide(Provider.defaultLayer),
   Layer.provide(Git.defaultLayer),
   Layer.provide(Reference.defaultLayer),
@@ -62,6 +66,7 @@ const it = testEffect(Layer.mergeAll(registryLayer, node, Agent.defaultLayer))
 
 afterEach(async () => {
   Flag.OPENCODE_EXPERIMENTAL_SCOUT = originalExperimentalScout
+  Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = originalBackgroundAgents
   await disposeAllInstances()
 })
 
@@ -85,6 +90,41 @@ describe("tool.registry", () => {
 
       expect(ids).toContain("repo_clone")
       expect(ids).toContain("repo_overview")
+    }),
+  )
+
+  it.instance("hides task_status unless experimental background agents are enabled", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = false
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).not.toContain("task_status")
+    }),
+  )
+
+  it.instance("hides task background parameter unless experimental background agents are enabled", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = false
+      const registry = yield* ToolRegistry.Service
+      const agent = yield* Agent.Service
+      const build = yield* agent.get("build")
+      const task = (yield* registry.tools({ providerID: ProviderID.opencode, modelID: ModelID.make("test"), agent: build })).find(
+        (tool) => tool.id === "task",
+      )
+
+      expect(task?.jsonSchema).toBeDefined()
+      expect((task?.jsonSchema?.properties as Record<string, unknown> | undefined)?.background).toBeUndefined()
+    }),
+  )
+
+  it.instance("shows task_status when experimental background agents are enabled", () =>
+    Effect.gen(function* () {
+      Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = true
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).toContain("task_status")
     }),
   )
 
