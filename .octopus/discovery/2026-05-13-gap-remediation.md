@@ -51,29 +51,29 @@
 
 ### 类别 A: 视觉形象闭环（参考 D3）
 
-| # | 标题 | 价值 | 预估文件 |
-|:--|------|------|:--:|
-| A1 | Web, UI & Favicon 章鱼集成 | 用户在所有 Web 触点看到章鱼而非 O-ring | ~25 |
-| A2 | Console Brand Kit 迁移 | `/brand` 下载页提供章鱼品牌资产包 | ~40 |
-| A3 | Desktop App Icons 重新生成 | Dock/任务栏图标显示章鱼 | ~270 |
-| A4 | Marketing Assets 更新 | 社交分享卡和邮件显示章鱼 logo | ~6 |
-| A5 | CLI ASCII Octopus 重写 | TUI 启动屏显示章鱼主题，不再拼写 "OPCODE" | ~2 |
-| A6 | CSS Brand Palette Refresh | 品牌色 token 与章鱼 artwork 色调协调 | ~3 |
+| # | 标题 | 价值 | 预估文件 | GitHub |
+|:--|------|------|:--:|:--:|
+| A1 | Web, UI & Favicon 章鱼集成 | 用户在所有 Web 触点看到章鱼而非 O-ring | ~25 | #36 |
+| A2 | Console Brand Kit 迁移 | `/brand` 下载页提供章鱼品牌资产包 | ~40 | #37 |
+| A3 | Desktop App Icons 重新生成 | Dock/任务栏图标显示章鱼 | ~270 | #38 |
+| A4 | Marketing Assets 更新 | 社交分享卡和邮件显示章鱼 logo | ~6 | #39 |
+| A5 | CLI ASCII Octopus 重写 | TUI 启动屏显示章鱼主题，不再拼写 "OPCODE" | ~2 | #40 |
+| A6 | CSS Brand Palette Refresh | 品牌色 token 与章鱼 artwork 色调协调 | ~3 | #41 |
 
 ### 类别 B: 已 Close Issue 实现补完
 
-| # | 标题 | 价值 | 预估文件 |
-|:--|------|------|:--:|
-| B1 | README 多语言删除 & opencode 清洗 | 根目录只保留中英双语文档，减少维护负担 | ~22 |
-| B2 | i18n JSON opencode 清洗 | 16 个 locale 文件的品牌文本统一为 Octopus | ~16 |
-| B3 | CI/CD workflow opencode 残留清洗 | 8 个 workflow 文件品牌引用清理 | ~8 |
-| B4 | 测试文件 opencode 残留清洗 | ~20 个测试文件 clean，避免测试名/路径歧义 | ~20 |
+| # | 标题 | 价值 | 预估文件 | GitHub |
+|:--|------|------|:--:|:--:|
+| B1 | README 多语言删除 & opencode 清洗 | 根目录只保留中英双语文档，减少维护负担 | ~22 | #42 |
+| B2 | i18n JSON opencode 清洗 | 16 个 locale 文件的品牌文本统一为 Octopus | ~16 | #43 |
+| B3 | CI/CD workflow opencode 残留清洗 | 8 个 workflow 文件品牌引用清理 | ~8 | #44 |
+| B4 | 测试文件 opencode 残留清洗 | ~20 个测试文件 clean，避免测试名/路径歧义 | ~20 | #45 |
 
 ### 类别 C: 资产清理
 
-| # | 标题 | 价值 | 预估文件 |
-|:--|------|------|:--:|
-| C1 | 删除旧 OpenCode mark.svg | `packages/identity/` 仅含章鱼品牌文件，消除歧义 | ~2 |
+| # | 标题 | 价值 | 预估文件 | GitHub |
+|:--|------|------|:--:|:--:|
+| C1 | 删除旧 OpenCode mark.svg | `packages/identity/` 仅含章鱼品牌文件，消除歧义 | ~2 | #46 |
 
 ## 决策
 
