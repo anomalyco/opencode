@@ -647,19 +647,17 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
 
   switch (part.tool) {
     case "read": {
-      if (isPending) {
-        const start = offset !== undefined && offset > 0 ? offset : 1
-        return {
-          title: i18n.t("ui.tool.readActive"),
-          subtitle: filePath ? getFilename(filePath) : "",
-          args: filePath ? [i18n.t("ui.tool.lines", { count: start })] : [],
-        }
-      }
-      const args: string[] = []
-      if (offset !== undefined) args.push("offset=" + offset)
-      if (limit !== undefined) args.push("limit=" + limit)
+      const start = offset !== undefined && offset > 0 ? offset : 1
+      const end = limit !== undefined && limit > 0 ? start + limit - 1 : undefined
+      const rangeLabel =
+        end !== undefined
+          ? i18n.t("ui.tool.lineRange", { start, end })
+          : offset !== undefined
+            ? i18n.t("ui.tool.lineFrom", { start })
+            : ""
+      const args = filePath && rangeLabel ? [rangeLabel] : []
       return {
-        title: i18n.t("ui.tool.read"),
+        title: i18n.t(isPending ? "ui.tool.readActive" : "ui.tool.read"),
         subtitle: filePath ? getFilename(filePath) : "",
         args,
       }
@@ -1524,15 +1522,14 @@ ToolRegistry.register({
               return getFilename(filePath)
             },
             get args() {
-              if (pending()) {
-                if (!props.input.filePath) return []
-                const start = typeof props.input.offset === "number" && props.input.offset > 0 ? props.input.offset : 1
-                return [i18n.t("ui.tool.lines", { count: start })]
-              }
-              const list: string[] = []
-              if (props.input.offset) list.push("offset=" + props.input.offset)
-              if (props.input.limit) list.push("limit=" + props.input.limit)
-              return list
+              if (!props.input.filePath) return []
+              const offset = typeof props.input.offset === "number" ? props.input.offset : undefined
+              const limit = typeof props.input.limit === "number" ? props.input.limit : undefined
+              const start = offset !== undefined && offset > 0 ? offset : 1
+              const end = limit !== undefined && limit > 0 ? start + limit - 1 : undefined
+              if (end !== undefined) return [i18n.t("ui.tool.lineRange", { start, end })]
+              if (offset !== undefined) return [i18n.t("ui.tool.lineFrom", { start })]
+              return []
             },
           }}
         />

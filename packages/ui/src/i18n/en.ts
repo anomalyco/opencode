@@ -101,6 +101,8 @@ export const dict: Record<string, string> = {
   "ui.tool.readActive": "Reading",
   "ui.tool.shellActive": "Running shell",
   "ui.tool.lines": "{{count}} lines",
+  "ui.tool.lineRange": "lines {{start}}–{{end}}",
+  "ui.tool.lineFrom": "from line {{start}}",
   "ui.tool.loaded": "Loaded",
   "ui.tool.list": "List",
   "ui.tool.glob": "Glob",

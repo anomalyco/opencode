@@ -95,6 +95,8 @@ export const dict = {
   "ui.tool.readActive": "읽는 중",
   "ui.tool.shellActive": "셸 실행 중",
   "ui.tool.lines": "{{count}}줄",
+  "ui.tool.lineRange": "{{start}}~{{end}}줄",
+  "ui.tool.lineFrom": "{{start}}줄부터",
   "ui.tool.loaded": "로드됨",
   "ui.tool.list": "목록",
   "ui.tool.glob": "Glob",
