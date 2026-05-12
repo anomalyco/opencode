@@ -178,7 +178,13 @@ export const listTasks = (fs: AppFileSystem.Interface, worktree: string, teamID:
     if (!entry.name.endsWith(".json")) continue
     const text = yield* fs.readFileStringSafe(path.join(dir, entry.name)).pipe(Effect.orDie)
     if (!text) continue
-    tasks.push(JSON.parse(text) as TaskEntry)
+    const task = yield* Effect.try({
+      try: () => JSON.parse(text) as TaskEntry,
+      catch: (error) => {
+        return error
+      },
+    }).pipe(Effect.option)
+    if (task._tag === "Some") tasks.push(task.value)
   }
   return tasks
 })
@@ -215,8 +221,16 @@ export const readMessages = (fs: AppFileSystem.Interface, worktree: string, inpu
     if (!entry.name.endsWith(".json")) continue
     const text = yield* fs.readFileStringSafe(path.join(dir, entry.name)).pipe(Effect.orDie)
     if (!text) continue
-    const msg = JSON.parse(text) as TeamMessage
-    if (msg.to === input.sessionID || msg.to === "*") messages.push(msg)
+    const msg = yield* Effect.try({
+      try: () => JSON.parse(text) as TeamMessage,
+      catch: (error) => {
+        return error
+      },
+    }).pipe(Effect.option)
+    if (msg._tag === "Some") {
+      const m = msg.value
+      if (m.to === input.sessionID || m.to === "*") messages.push(m)
+    }
   }
   return messages.sort((a, b) => a.time - b.time)
 })
