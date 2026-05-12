@@ -153,6 +153,35 @@ describe("LLMClient tools", () => {
     }),
   )
 
+  it.effect("passes tool call context to execute", () =>
+    Effect.gen(function* () {
+      let context: { readonly id?: string; readonly name?: string } | undefined
+      const contextual = tool({
+        description: "Capture tool context.",
+        parameters: Schema.Struct({ value: Schema.String }),
+        success: Schema.Struct({ ok: Schema.Boolean }),
+        execute: (_params, ctx) =>
+          Effect.sync(() => {
+            context = ctx
+            return { ok: true }
+          }),
+      })
+      const events = Array.from(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { contextual } }).pipe(
+          Stream.runCollect,
+          Effect.provide(
+            scriptedResponses([
+              sseEvents(toolCallChunk("call_ctx", "contextual", '{"value":"x"}'), finishChunk("tool_calls")),
+            ]),
+          ),
+        ),
+      )
+
+      expect(events.some(LLMEvent.is.toolResult)).toBe(true)
+      expect(context).toEqual({ id: "call_ctx", name: "contextual" })
+    }),
+  )
+
   it.effect("can expose tool schemas without executing tool calls", () =>
     Effect.gen(function* () {
       const layer = scriptedResponses([

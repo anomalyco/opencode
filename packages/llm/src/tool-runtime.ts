@@ -200,17 +200,17 @@ const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<ToolResultVal
   if (!tool.execute)
     return Effect.succeed({ type: "error" as const, value: `Tool has no execute handler: ${call.name}` })
 
-  return decodeAndExecute(tool, call.input).pipe(
+  return decodeAndExecute(tool, call).pipe(
     Effect.catchTag("LLM.ToolFailure", (failure) =>
       Effect.succeed({ type: "error" as const, value: failure.message } satisfies ToolResultValue),
     ),
   )
 }
 
-const decodeAndExecute = (tool: AnyTool, input: unknown): Effect.Effect<ToolResultValue, ToolFailure> =>
-  tool._decode(input).pipe(
+const decodeAndExecute = (tool: AnyTool, call: ToolCallPart): Effect.Effect<ToolResultValue, ToolFailure> =>
+  tool._decode(call.input).pipe(
     Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
-    Effect.flatMap((decoded) => tool.execute!(decoded)),
+    Effect.flatMap((decoded) => tool.execute!(decoded, { id: call.id, name: call.name })),
     Effect.flatMap((value) =>
       tool._encode(value).pipe(
         Effect.mapError(

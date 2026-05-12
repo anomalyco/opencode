@@ -222,6 +222,9 @@ const llmEventTagged = Schema.Union([
 ]).pipe(Schema.toTaggedUnion("type"))
 
 type WithID<Event extends { readonly id: unknown }, ID> = Omit<Event, "type" | "id"> & { readonly id: ID | string }
+type WithUsage<Event extends { readonly usage?: Usage }> = Omit<Event, "type" | "usage"> & {
+  readonly usage?: Usage | ConstructorParameters<typeof Usage>[0]
+}
 
 const responseID = (value: ResponseID | string) => ResponseID.make(value)
 const contentBlockID = (value: ContentBlockID | string) => ContentBlockID.make(value)
@@ -252,8 +255,18 @@ export const LLMEvent = Object.assign(llmEventTagged, {
   toolCall: (input: WithID<ToolCall, ToolCallID>) => ToolCall.make({ ...input, id: toolCallID(input.id) }),
   toolResult: (input: WithID<ToolResult, ToolCallID>) => ToolResult.make({ ...input, id: toolCallID(input.id) }),
   toolError: (input: WithID<ToolError, ToolCallID>) => ToolError.make({ ...input, id: toolCallID(input.id) }),
-  stepFinish: StepFinish.make,
-  requestFinish: RequestFinish.make,
+  stepFinish: (input: WithUsage<StepFinish>) =>
+    StepFinish.make({
+      ...input,
+      usage:
+        input.usage === undefined ? undefined : input.usage instanceof Usage ? input.usage : new Usage(input.usage),
+    }),
+  requestFinish: (input: WithUsage<RequestFinish>) =>
+    RequestFinish.make({
+      ...input,
+      usage:
+        input.usage === undefined ? undefined : input.usage instanceof Usage ? input.usage : new Usage(input.usage),
+    }),
   providerError: ProviderErrorEvent.make,
   is: {
     requestStart: llmEventTagged.guards["request-start"],
