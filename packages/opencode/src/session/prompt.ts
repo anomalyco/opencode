@@ -1,6 +1,5 @@
 import path from "path"
 import os from "os"
-import * as EffectZod from "@opencode-ai/core/effect-zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import * as Log from "@opencode-ai/core/util/log"
@@ -21,6 +20,7 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { ToolRegistry } from "@/tool/registry"
+import { ToolJsonSchema } from "@/tool/json-schema"
 import { MCP } from "../mcp"
 import { LSP } from "@/lsp/lsp"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -46,8 +46,6 @@ import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { withStatics } from "@opencode-ai/core/schema"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
@@ -121,6 +119,49 @@ function referencePromptMetadata(input: unknown): ReferencePromptMetadata | unde
   }
 }
 
+function referenceTextPart(input: {
+  reference: Reference.Resolved
+  source: ReferencePromptMetadata["source"]
+  target?: string
+  targetPath?: string
+  problem?: string
+}): MessageV2.TextPartInput {
+  const metadata: ReferencePromptMetadata = {
+    name: input.reference.name,
+    kind: input.reference.kind,
+    ...(input.reference.kind === "invalid"
+      ? { repository: input.reference.repository }
+      : { path: input.reference.path }),
+    ...(input.reference.kind === "git"
+      ? { repository: input.reference.repository, branch: input.reference.branch }
+      : {}),
+    ...(input.target === undefined ? {} : { target: input.target }),
+    ...(input.targetPath ? { targetPath: input.targetPath } : {}),
+    problem: input.problem ?? (input.reference.kind === "invalid" ? input.reference.message : undefined),
+    source: input.source,
+  }
+  const label = metadata.target === undefined ? `@${metadata.name}` : `@${metadata.name}/${metadata.target}`
+  return {
+    type: "text",
+    synthetic: true,
+    text: [
+      `Referenced configured reference ${label}.`,
+      ...(metadata.kind === "local" ? ["Kind: local directory"] : []),
+      ...(metadata.kind === "git" ? ["Kind: git repository"] : []),
+      ...(metadata.repository ? [`Repository: ${metadata.repository}`] : []),
+      ...(metadata.branch ? [`Branch/ref: ${metadata.branch}`] : []),
+      ...(metadata.path ? [`Reference root: ${metadata.path}`] : []),
+      ...(metadata.targetPath ? [`Resolved path: ${metadata.targetPath}`] : []),
+      ...(metadata.problem
+        ? [`Problem: ${metadata.problem}`]
+        : [
+            "For targeted context, inspect the reference path directly with Read, Glob, and Grep. For broader research, call the task tool with subagent scout and include this reference path.",
+          ]),
+    ].join("\n"),
+    metadata: { reference: metadata },
+  }
+}
+
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
@@ -185,48 +226,6 @@ export const layer = Layer.effect(
       const mentionSource = (match: RegExpMatchArray) => {
         const start = match.index ?? 0
         return { value: match[0], start, end: start + match[0].length }
-      }
-      const referenceTextPart = (input: {
-        reference: Reference.Resolved
-        source: ReturnType<typeof mentionSource>
-        target?: string
-        targetPath?: string
-        problem?: string
-      }): MessageV2.TextPartInput => {
-        const metadata: ReferencePromptMetadata = {
-          name: input.reference.name,
-          kind: input.reference.kind,
-          ...(input.reference.kind === "invalid"
-            ? { repository: input.reference.repository }
-            : { path: input.reference.path }),
-          ...(input.reference.kind === "git"
-            ? { repository: input.reference.repository, branch: input.reference.branch }
-            : {}),
-          ...(input.target === undefined ? {} : { target: input.target }),
-          ...(input.targetPath ? { targetPath: input.targetPath } : {}),
-          problem: input.problem ?? (input.reference.kind === "invalid" ? input.reference.message : undefined),
-          source: input.source,
-        }
-        const label = metadata.target === undefined ? `@${metadata.name}` : `@${metadata.name}/${metadata.target}`
-        return {
-          type: "text",
-          synthetic: true,
-          text: [
-            `Referenced configured reference ${label}.`,
-            ...(metadata.kind === "local" ? ["Kind: local directory"] : []),
-            ...(metadata.kind === "git" ? ["Kind: git repository"] : []),
-            ...(metadata.repository ? [`Repository: ${metadata.repository}`] : []),
-            ...(metadata.branch ? [`Branch/ref: ${metadata.branch}`] : []),
-            ...(metadata.path ? [`Reference root: ${metadata.path}`] : []),
-            ...(metadata.targetPath ? [`Resolved path: ${metadata.targetPath}`] : []),
-            ...(metadata.problem
-              ? [`Problem: ${metadata.problem}`]
-              : [
-                  "For targeted context, inspect the reference path directly with Read, Glob, and Grep. For broader research, call the task tool with subagent scout and include this reference path.",
-                ]),
-          ].join("\n"),
-          metadata: { reference: metadata },
-        }
       }
       yield* Effect.forEach(
         files,
@@ -566,7 +565,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         providerID: input.model.providerID,
         agent: input.agent,
       })) {
-        const schema = ProviderTransform.schema(input.model, EffectZod.toJsonSchema(item.parameters))
+        const schema = ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))
         tools[item.id] = tool({
           description: item.description,
           inputSchema: jsonSchema(schema),
@@ -1156,6 +1155,30 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         id: part.id ? PartID.make(part.id) : PartID.ascending(),
       })
 
+      const referenceContextFromFilePart = Effect.fnUntraced(function* (
+        part: Extract<PromptInput["parts"][number], { type: "file" }>,
+        filepath: string,
+      ) {
+        const name = part.filename?.replace(/#\d+(?:-\d*)?$/, "")
+        if (!name) return
+        const slash = name.indexOf("/")
+        if (slash === -1) return
+
+        const reference = yield* references.get(name.slice(0, slash))
+        if (!reference || reference.kind === "invalid") return
+        if (!AppFileSystem.contains(reference.path, filepath)) return
+
+        const target = path.relative(reference.path, filepath).split(path.sep).join("/")
+        if (!target || target.startsWith("../") || target === "..") return
+
+        return referenceTextPart({
+          reference,
+          source: part.source?.text ?? { value: `@${name}`, start: 0, end: name.length + 1 },
+          target,
+          targetPath: filepath,
+        })
+      })
+
       const resolvePart: (part: PromptInput["parts"][number]) => Effect.Effect<Draft<MessageV2.Part>[]> = Effect.fn(
         "SessionPrompt.resolveUserPart",
       )(function* (part) {
@@ -1238,6 +1261,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             case "file:": {
               log.info("file", { mime: part.mime })
               const filepath = fileURLToPath(part.url)
+              const referenceContext = yield* referenceContextFromFilePart(part, filepath)
               const mime = (yield* fsys.isDir(filepath)) ? "application/x-directory" : part.mime
 
               const { read } = yield* registry.named()
@@ -1283,6 +1307,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 }
                 const args = { filePath: filepath, offset, limit }
                 const pieces: Draft<MessageV2.Part>[] = [
+                  ...(referenceContext
+                    ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }]
+                    : []),
                   {
                     messageID: info.id,
                     sessionID: input.sessionID,
@@ -1348,6 +1375,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     error: new NamedError.Unknown({ message }).toObject(),
                   })
                   return [
+                    ...(referenceContext
+                      ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }]
+                      : []),
                     {
                       messageID: info.id,
                       sessionID: input.sessionID,
@@ -1358,6 +1388,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   ]
                 }
                 return [
+                  ...(referenceContext
+                    ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }]
+                    : []),
                   {
                     messageID: info.id,
                     sessionID: input.sessionID,
@@ -1377,6 +1410,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }
 
               return [
+                ...(referenceContext ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }] : []),
                 {
                   messageID: info.id,
                   sessionID: input.sessionID,
@@ -2018,14 +2052,12 @@ export const PromptInput = Schema.Struct({
       MessageV2.SubtaskPartInput,
     ]).annotate({ discriminator: "type" }),
   ),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type PromptInput = Schema.Schema.Type<typeof PromptInput>
 
 export class LoopInput extends Schema.Class<LoopInput>("SessionPrompt.LoopInput")({
   sessionID: SessionID,
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
 export const ShellInput = Schema.Struct({
   sessionID: SessionID,
@@ -2033,7 +2065,7 @@ export const ShellInput = Schema.Struct({
   agent: Schema.String,
   model: Schema.optional(ModelRef),
   command: Schema.String,
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type ShellInput = Schema.Schema.Type<typeof ShellInput>
 
 export const CommandInput = Schema.Struct({
@@ -2061,7 +2093,7 @@ export const CommandInput = Schema.Struct({
       ]).annotate({ discriminator: "type" }),
     ),
   ),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type CommandInput = Schema.Schema.Type<typeof CommandInput>
 
 /** @internal Exported for testing */

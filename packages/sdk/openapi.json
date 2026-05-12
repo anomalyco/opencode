@@ -8540,7 +8540,7 @@
                     ]
                   }
                 },
-                "required": ["type", "branch"],
+                "required": ["type"],
                 "additionalProperties": false
               }
             }
@@ -11018,6 +11018,38 @@
             "required": ["additions", "deletions", "files"],
             "additionalProperties": false
           },
+          "cost": {
+            "type": "number"
+          },
+          "tokens": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "number"
+              },
+              "output": {
+                "type": "number"
+              },
+              "reasoning": {
+                "type": "number"
+              },
+              "cache": {
+                "type": "object",
+                "properties": {
+                  "read": {
+                    "type": "number"
+                  },
+                  "write": {
+                    "type": "number"
+                  }
+                },
+                "required": ["read", "write"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["input", "output", "reasoning", "cache"],
+            "additionalProperties": false
+          },
           "share": {
             "type": "object",
             "properties": {
@@ -11597,9 +11629,6 @@
                 "$ref": "#/components/schemas/PermissionActionConfig"
               },
               "websearch": {
-                "$ref": "#/components/schemas/PermissionActionConfig"
-              },
-              "codesearch": {
                 "$ref": "#/components/schemas/PermissionActionConfig"
               },
               "repo_clone": {
@@ -12803,7 +12832,7 @@
             "type": "string"
           }
         },
-        "required": ["name", "branch", "directory"],
+        "required": ["name", "directory"],
         "additionalProperties": false
       },
       "WorktreeRemoveInput": {
@@ -12889,6 +12918,38 @@
               }
             },
             "required": ["additions", "deletions", "files"],
+            "additionalProperties": false
+          },
+          "cost": {
+            "type": "number"
+          },
+          "tokens": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "number"
+              },
+              "output": {
+                "type": "number"
+              },
+              "reasoning": {
+                "type": "number"
+              },
+              "cache": {
+                "type": "object",
+                "properties": {
+                  "read": {
+                    "type": "number"
+                  },
+                  "write": {
+                    "type": "number"
+                  }
+                },
+                "required": ["read", "write"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["input", "output", "reasoning", "cache"],
             "additionalProperties": false
           },
           "share": {
@@ -14027,7 +14088,7 @@
             ]
           }
         },
-        "required": ["id", "type", "name", "branch", "directory", "extra", "projectID", "timeUsed"],
+        "required": ["id", "type", "name", "projectID", "timeUsed"],
         "additionalProperties": false
       },
       "WorkspaceWarpError": {
@@ -14382,6 +14443,52 @@
                           }
                         },
                         "required": ["additions", "deletions", "files"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "cost": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "tokens": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "input": {
+                            "type": "number"
+                          },
+                          "output": {
+                            "type": "number"
+                          },
+                          "reasoning": {
+                            "type": "number"
+                          },
+                          "cache": {
+                            "type": "object",
+                            "properties": {
+                              "read": {
+                                "type": "number"
+                              },
+                              "write": {
+                                "type": "number"
+                              }
+                            },
+                            "required": ["read", "write"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["input", "output", "reasoning", "cache"],
                         "additionalProperties": false
                       },
                       {
@@ -16580,7 +16687,7 @@
                 "type": "string"
               }
             },
-            "required": ["name", "branch"],
+            "required": ["name"],
             "additionalProperties": false
           }
         },
@@ -18138,6 +18245,38 @@
             "required": ["id", "providerID", "variant"],
             "additionalProperties": false
           },
+          "cost": {
+            "type": "number"
+          },
+          "tokens": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "number"
+              },
+              "output": {
+                "type": "number"
+              },
+              "reasoning": {
+                "type": "number"
+              },
+              "cache": {
+                "type": "object",
+                "properties": {
+                  "read": {
+                    "type": "number"
+                  },
+                  "write": {
+                    "type": "number"
+                  }
+                },
+                "required": ["read", "write"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["input", "output", "reasoning", "cache"],
+            "additionalProperties": false
+          },
           "time": {
             "type": "object",
             "properties": {
@@ -18158,7 +18297,7 @@
             "type": "string"
           }
         },
-        "required": ["id", "projectID", "time", "title"],
+        "required": ["id", "projectID", "cost", "tokens", "time", "title"],
         "additionalProperties": false
       },
       "SessionDelivery": {

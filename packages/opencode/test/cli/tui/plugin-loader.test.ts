@@ -5,7 +5,7 @@ import { pathToFileURL } from "url"
 import { createTestKeymap } from "@opentui/keymap/testing"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
-import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
+import { createTuiResolvedConfig, mockTuiRuntime } from "../../fixture/tui-runtime"
 import { Global } from "@opencode-ai/core/global"
 import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
 import { Filesystem } from "@/util/filesystem"
@@ -644,6 +644,36 @@ export default {
     } else {
       await Bun.write(globalJsonc, backupJsonc)
     }
+  }
+})
+
+test("does not bootstrap server plugins while initializing tui plugins", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const marker = path.join(dir, "server-plugin-called.txt")
+      const plugin = path.join(dir, "server-plugin.ts")
+      await Bun.write(
+        plugin,
+        [
+          "export default async () => {",
+          `  await Bun.write(${JSON.stringify(marker)}, "called")`,
+          "  return {}",
+          "}",
+          "",
+        ].join("\n"),
+      )
+      await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [pathToFileURL(plugin).href] }))
+      return { marker }
+    },
+  })
+
+  const mock = mockTuiRuntime(tmp.path, [])
+  try {
+    await TuiPluginRuntime.init({ api: createTuiPluginApi(), config: mock.config })
+    await expect(fs.stat(tmp.extra.marker)).rejects.toThrow()
+  } finally {
+    await TuiPluginRuntime.dispose()
+    mock.restore()
   }
 })
 

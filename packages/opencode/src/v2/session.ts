@@ -29,6 +29,16 @@ export class Info extends Schema.Class<Info>("Session.Info")({
   path: optionalOmitUndefined(Schema.String),
   agent: optionalOmitUndefined(Schema.String),
   model: Modelv2.Ref.pipe(optionalOmitUndefined),
+  cost: Schema.Finite,
+  tokens: Schema.Struct({
+    input: Schema.Finite,
+    output: Schema.Finite,
+    reasoning: Schema.Finite,
+    cache: Schema.Struct({
+      read: Schema.Finite,
+      write: Schema.Finite,
+    }),
+  }),
   time: Schema.Struct({
     created: V2Schema.DateTimeUtcFromMillis,
     updated: V2Schema.DateTimeUtcFromMillis,
@@ -136,6 +146,16 @@ export const layer = Layer.effect(
               variant: Modelv2.VariantID.make(row.model.variant ?? "default"),
             }
           : undefined,
+        cost: row.cost,
+        tokens: {
+          input: row.tokens_input,
+          output: row.tokens_output,
+          reasoning: row.tokens_reasoning,
+          cache: {
+            read: row.tokens_cache_read,
+            write: row.tokens_cache_write,
+          },
+        },
         time: {
           created: DateTime.makeUnsafe(row.time_created),
           updated: DateTime.makeUnsafe(row.time_updated),

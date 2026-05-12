@@ -292,6 +292,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       },
       session: {
         count: opts.state?.session?.count ?? (() => 0),
+        get: opts.state?.session?.get ?? (() => undefined),
         diff: opts.state?.session?.diff ?? (() => []),
         todo: opts.state?.session?.todo ?? (() => []),
         messages: opts.state?.session?.messages ?? (() => []),

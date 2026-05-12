@@ -30,28 +30,28 @@ function runActive(options: Options, scenario: ActiveScenario) {
 
   return withContext(options, scenario, "shared", (ctx) =>
     Effect.gen(function* () {
-      yield* trace(options, scenario, "effect request start")
-      const effect = yield* call("effect", scenario, ctx)
-      yield* trace(options, scenario, `effect response ${effect.status}`)
-      yield* trace(options, scenario, "effect expect start")
-      yield* scenario.expect(ctx, ctx.state, effect)
-      yield* trace(options, scenario, "effect expect done")
+      yield* trace(options, scenario, "request start")
+      const result = yield* call(scenario, ctx)
+      yield* trace(options, scenario, `response ${result.status}`)
+      yield* trace(options, scenario, "expect start")
+      yield* scenario.expect(ctx, ctx.state, result)
+      yield* trace(options, scenario, "expect done")
     }),
   )
 }
 
 function runAuth(scenario: ActiveScenario) {
   return Effect.gen(function* () {
-    const effect = yield* callAuthProbe("effect", scenario, "missing")
+    const result = yield* callAuthProbe(scenario, "missing")
     if (scenario.auth === "protected") {
-      if (effect.status !== 401) throw new Error(`effect auth expected 401, got ${effect.status}`)
-      const effectAuthed = yield* callAuthProbe("effect", scenario, "valid")
-      if (effectAuthed.status === 401) throw new Error("effect auth rejected valid credentials")
+      if (result.status !== 401) throw new Error(`auth expected 401, got ${result.status}`)
+      const authed = yield* callAuthProbe(scenario, "valid")
+      if (authed.status === 401) throw new Error("auth rejected valid credentials")
       return
     }
 
-    if (effect.status === 401) throw new Error("effect auth expected public access, got 401")
-    if (effect.timedOut) throw new Error("effect auth expected public access, probe timed out")
+    if (result.status === 401) throw new Error("auth expected public access, got 401")
+    if (result.timedOut) throw new Error("auth expected public access, probe timed out")
   })
 }
 
