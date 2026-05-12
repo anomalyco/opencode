@@ -197,6 +197,7 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
         yield* auth.set(input.providerID, {
           type: "api",
           key: result.key,
+          ...(result.metadata ? { metadata: result.metadata } : {}),
         })
       }
 

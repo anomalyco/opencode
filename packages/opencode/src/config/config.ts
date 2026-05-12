@@ -55,6 +55,16 @@ function mergeConfigConcatArrays(target: Info, source: Info): Info {
   if (target.instructions && source.instructions) {
     merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
   }
+  // Accumulate permission layers for later merging as rulesets.
+  // This preserves the ordering semantics: later rules override earlier rules.
+  // Each layer keeps the raw shape the user wrote on disk; consumers should use
+  // ConfigPermission.toLayers to normalise.
+  if (source.permission) {
+    merged.permission = [
+      ...ConfigPermission.toLayers(target.permission),
+      ...ConfigPermission.toLayers(source.permission),
+    ]
+  }
   return merged
 }
 
@@ -228,7 +238,12 @@ export const Info = Schema.Struct({
     description: "Additional instruction files or patterns to include",
   }),
   layout: Schema.optional(ConfigLayout.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
-  permission: Schema.optional(ConfigPermission.Info),
+  permission: Schema.optional(
+    Schema.Union([ConfigPermission.Info, Schema.mutable(Schema.Array(ConfigPermission.Info))]),
+  ).annotate({
+    description:
+      "Permission configuration. Accepts a single object (per-tool action map) or an array of layered configs; arrays are merged in order so later layers override earlier ones.",
+  }),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
   attachment: Schema.optional(ConfigAttachment.Info).annotate({
     description: "Attachment processing configuration, including image size limits and resizing behavior",
@@ -704,11 +719,12 @@ export const layer = Layer.effect(
         }
 
         if (Flag.OPENCODE_PERMISSION) {
-          result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
+          const envPermission = JSON.parse(Flag.OPENCODE_PERMISSION) as ConfigPermission.Info
+          result.permission = [...ConfigPermission.toLayers(result.permission), envPermission]
         }
 
         if (result.tools) {
-          const perms: Record<string, ConfigPermission.Action> = {}
+          const perms: ConfigPermission.Info = {}
           for (const [tool, enabled] of Object.entries(result.tools)) {
             const action: ConfigPermission.Action = enabled ? "allow" : "deny"
             if (tool === "write" || tool === "edit" || tool === "patch") {
@@ -717,7 +733,8 @@ export const layer = Layer.effect(
             }
             perms[tool] = action
           }
-          result.permission = mergeDeep(perms, result.permission ?? {})
+          // Tools permissions come before other permissions (they can be overridden)
+          result.permission = [perms, ...ConfigPermission.toLayers(result.permission)]
         }
 
         if (!result.username) result.username = os.userInfo().username

@@ -124,6 +124,7 @@ const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
           yield* put(saveProvider, {
             type: "api",
             key: result.key,
+            ...(result.metadata ? { metadata: result.metadata } : {}),
           })
         }
         yield* spinner.stop("Login successful")
@@ -156,6 +157,7 @@ const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
           yield* put(saveProvider, {
             type: "api",
             key: result.key,
+            ...(result.metadata ? { metadata: result.metadata } : {}),
           })
         }
         yield* Prompt.log.success("Login successful")
@@ -191,10 +193,11 @@ const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
     }
     if (result.type === "success") {
       const saveProvider = result.provider ?? provider
+      const merged = { ...(metadata.metadata ?? {}), ...(result.metadata ?? {}) }
       yield* put(saveProvider, {
         type: "api",
         key: result.key ?? apiKey,
-        ...metadata,
+        ...(Object.keys(merged).length ? { metadata: merged } : {}),
       })
       yield* Prompt.log.success("Login successful")
     }
