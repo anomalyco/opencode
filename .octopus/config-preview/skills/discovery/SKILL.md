@@ -42,14 +42,14 @@ P0 开始时必须执行：
 
 ### INVEST 原则
 
-| 字母 | 含义 | 检查 |
-|------|------|------|
-| I | Independent | 每个 Issue 可独立开发？ |
-| N | Negotiable | 实现细节可协商？ |
-| V | Valuable | 每个 Issue 独立交付价值？ |
-| E | Estimable | 文件数可预估？ |
-| S | Small | 单个 Issue ≤ 150 文件（L 级）？ |
-| T | Testable | 验收标准可用 Given/When/Then 描述？ |
+| 字母 | 含义        | 检查                                |
+| ---- | ----------- | ----------------------------------- |
+| I    | Independent | 每个 Issue 可独立开发？             |
+| N    | Negotiable  | 实现细节可协商？                    |
+| V    | Valuable    | 每个 Issue 独立交付价值？           |
+| E    | Estimable   | 文件数可预估？                      |
+| S    | Small       | 单个 Issue ≤ 150 文件（L 级）？     |
+| T    | Testable    | 验收标准可用 Given/When/Then 描述？ |
 
 ### 拆解策略
 
@@ -67,15 +67,18 @@ P0 开始时必须执行：
 ## 代码库探索
 
 判定影响范围时关注：
+
 - `package.json` workspaces — 包列表和依赖关系
 - 包间 import 图 — `@project/core` → `@project/ui` 等
 - 关键目录结构 — 每个包的 `src/` 子目录
 
 不做的事：
+
 - 不读具体代码实现
 - 不分析架构细节
 - 不评估技术难度
 - 不写代码
 
 ## 参考
+
 `.octopus/WORKFLOW.md`

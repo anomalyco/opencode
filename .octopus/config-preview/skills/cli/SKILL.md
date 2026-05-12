@@ -11,14 +11,14 @@ description: CLI/TUI/PTY best practices for terminal applications
 
 ### 支持的终端
 
-| 终端 | 平台 | 最低版本 |
-|------|------|---------|
-| WezTerm | 全平台 | latest |
-| Alacritty | 全平台 | 0.12+ |
-| Ghostty | Linux/macOS | 1.0+ |
-| Kitty | Linux/macOS | 0.32+ |
-| Windows Terminal | Windows | 1.18+ |
-| iTerm2 | macOS | 3.5+ |
+| 终端             | 平台        | 最低版本 |
+| ---------------- | ----------- | -------- |
+| WezTerm          | 全平台      | latest   |
+| Alacritty        | 全平台      | 0.12+    |
+| Ghostty          | Linux/macOS | 1.0+     |
+| Kitty            | Linux/macOS | 0.32+    |
+| Windows Terminal | Windows     | 1.18+    |
+| iTerm2           | macOS       | 3.5+     |
 
 ### 兼容性模式
 
@@ -31,12 +31,12 @@ description: CLI/TUI/PTY best practices for terminal applications
 
 ### 必须处理的信号
 
-| 信号 | 行为 |
-|------|------|
-| `SIGINT` (Ctrl+C) | 取消当前操作，不退出 TUI |
-| `SIGTERM` | 保存状态后安全退出 |
-| `SIGWINCH` | 重新计算布局，重新渲染 |
-| `SIGHUP` | 同 SIGTERM（终端关闭时） |
+| 信号               | 行为                     |
+| ------------------ | ------------------------ |
+| `SIGINT` (Ctrl+C)  | 取消当前操作，不退出 TUI |
+| `SIGTERM`          | 保存状态后安全退出       |
+| `SIGWINCH`         | 重新计算布局，重新渲染   |
+| `SIGHUP`           | 同 SIGTERM（终端关闭时） |
 | `SIGTSTP` (Ctrl+Z) | 暂停进程，恢复后刷新全屏 |
 
 ### PTY 管理
@@ -82,6 +82,7 @@ description: CLI/TUI/PTY best practices for terminal applications
 - 对 `rm`、`git push --force` 等破坏性命令提升权限级别到 `ask`
 
 ## 参考
+
 - `packages/octopus/src/pty/` — PTY 管理
 - `packages/octopus/src/shell/` — Shell 执行
 - `opencode.json` schema — `shell` 配置项

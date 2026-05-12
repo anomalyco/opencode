@@ -78,12 +78,12 @@ opencode attach http://10.20.30.40:4096
 
 #### 旗標
 
-| 旗標                                     | 簡寫 | 說明                                                                    |
-| ---------------------------------------- | ---- | ----------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |      | 啟動 TUI 的工作目錄                                                     |
-| <nobr><code>{"--continue"}</code></nobr> | `-c` | 繼續上一個工作階段                                                      |
-| <nobr><code>{"--session"}</code></nobr>  | `-s` | 要繼續的工作階段 ID                                                     |
-| <nobr><code>{"--fork"}</code></nobr>     |      | 繼續時分支工作階段（與 `--continue` 或 `--session` 一起使用）           |
+| 旗標                                     | 簡寫 | 說明                                                                   |
+| ---------------------------------------- | ---- | ---------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |      | 啟動 TUI 的工作目錄                                                    |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | 繼續上一個工作階段                                                     |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | 要繼續的工作階段 ID                                                    |
+| <nobr><code>{"--fork"}</code></nobr>     |      | 繼續時分支工作階段（與 `--continue` 或 `--session` 一起使用）          |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | 基本驗證密碼（預設使用 `OCTOPUS_SERVER_PASSWORD`）                     |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | 基本驗證使用者名稱（預設使用 `OCTOPUS_SERVER_USERNAME` 或 `opencode`） |
 
@@ -339,25 +339,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### 旗標
 
-| 旗標                                     | 簡寫 | 說明                                                                    |
-| ---------------------------------------- | ---- | ----------------------------------------------------------------------- |
-| <nobr><code>{"--command"}</code></nobr>  |      | 要執行的指令，使用 message 作為參數                                     |
-| <nobr><code>{"--continue"}</code></nobr> | `-c` | 繼續上一個工作階段                                                      |
-| <nobr><code>{"--session"}</code></nobr>  | `-s` | 要繼續的工作階段 ID                                                     |
-| <nobr><code>{"--fork"}</code></nobr>     |      | 繼續時分岔工作階段（與 `--continue` 或 `--session` 搭配使用）           |
-| <nobr><code>{"--share"}</code></nobr>    |      | 分享工作階段                                                            |
-| <nobr><code>{"--model"}</code></nobr>    | `-m` | 要使用的模型，格式為 provider/model                                     |
-| <nobr><code>{"--agent"}</code></nobr>    |      | 要使用的代理                                                            |
-| <nobr><code>{"--file"}</code></nobr>     | `-f` | 附加到訊息的檔案                                                        |
-| <nobr><code>{"--format"}</code></nobr>   |      | 格式：default（格式化輸出）或 json（原始 JSON 事件）                    |
-| <nobr><code>{"--title"}</code></nobr>    |      | 工作階段標題（未提供值時使用截斷的提示詞）                              |
-| <nobr><code>{"--attach"}</code></nobr>   |      | 連接到正在執行的 opencode 伺服器（例如 http://localhost:4096）          |
+| 旗標                                     | 簡寫 | 說明                                                                   |
+| ---------------------------------------- | ---- | ---------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |      | 要執行的指令，使用 message 作為參數                                    |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | 繼續上一個工作階段                                                     |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | 要繼續的工作階段 ID                                                    |
+| <nobr><code>{"--fork"}</code></nobr>     |      | 繼續時分岔工作階段（與 `--continue` 或 `--session` 搭配使用）          |
+| <nobr><code>{"--share"}</code></nobr>    |      | 分享工作階段                                                           |
+| <nobr><code>{"--model"}</code></nobr>    | `-m` | 要使用的模型，格式為 provider/model                                    |
+| <nobr><code>{"--agent"}</code></nobr>    |      | 要使用的代理                                                           |
+| <nobr><code>{"--file"}</code></nobr>     | `-f` | 附加到訊息的檔案                                                       |
+| <nobr><code>{"--format"}</code></nobr>   |      | 格式：default（格式化輸出）或 json（原始 JSON 事件）                   |
+| <nobr><code>{"--title"}</code></nobr>    |      | 工作階段標題（未提供值時使用截斷的提示詞）                             |
+| <nobr><code>{"--attach"}</code></nobr>   |      | 連接到正在執行的 opencode 伺服器（例如 http://localhost:4096）         |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | 基本驗證密碼（預設使用 `OCTOPUS_SERVER_PASSWORD`）                     |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | 基本驗證使用者名稱（預設使用 `OCTOPUS_SERVER_USERNAME` 或 `opencode`） |
-| <nobr><code>{"--dir"}</code></nobr>      |      | 執行目錄，或附加時遠端伺服器上的路徑                                    |
-| <nobr><code>{"--variant"}</code></nobr>  |      | 模型變體（特定於提供者的推理級別）                                      |
-| <nobr><code>{"--thinking"}</code></nobr> |      | 顯示思考區塊                                                            |
-| <nobr><code>{"--port"}</code></nobr>     |      | 本地伺服器連接埠（預設為隨機連接埠）                                    |
+| <nobr><code>{"--dir"}</code></nobr>      |      | 執行目錄，或附加時遠端伺服器上的路徑                                   |
+| <nobr><code>{"--variant"}</code></nobr>  |      | 模型變體（特定於提供者的推理級別）                                     |
+| <nobr><code>{"--thinking"}</code></nobr> |      | 顯示思考區塊                                                           |
+| <nobr><code>{"--port"}</code></nobr>     |      | 本地伺服器連接埠（預設為隨機連接埠）                                   |
 
 ---
 
@@ -562,8 +562,8 @@ Octopus CLI 接受以下全域旗標。
 
 Octopus 可以透過環境變數進行設定。
 
-| 變數                                  | 類型    | 說明                                        |
-| ------------------------------------- | ------- | ------------------------------------------- |
+| 變數                                 | 類型    | 說明                                        |
+| ------------------------------------ | ------- | ------------------------------------------- |
 | `OCTOPUS_AUTO_SHARE`                 | boolean | 自動分享工作階段                            |
 | `OCTOPUS_GIT_BASH_PATH`              | string  | Windows 上 Git Bash 可執行檔的路徑          |
 | `OCTOPUS_CONFIG`                     | string  | 設定檔路徑                                  |
@@ -595,8 +595,8 @@ Octopus 可以透過環境變數進行設定。
 
 這些環境變數用於啟用可能會變更或移除的實驗性功能。
 
-| 變數                                            | 類型    | 說明                            |
-| ----------------------------------------------- | ------- | ------------------------------- |
+| 變數                                           | 類型    | 說明                            |
+| ---------------------------------------------- | ------- | ------------------------------- |
 | `OCTOPUS_EXPERIMENTAL`                         | boolean | 啟用所有實驗性功能              |
 | `OCTOPUS_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 啟用圖示探索                    |
 | `OCTOPUS_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | 停用 TUI 中的選取即複製         |

@@ -9,15 +9,15 @@ description: 7方LLM并行同行评审——通过 opencode CLI 调用多模型�
 
 ## 评审模型
 
-| 模型 | 提供方 | CLI ID |
-|------|--------|--------|
-| Claude Opus 4.7 | opencode Zen | `opencode/claude-opus-4-7` |
-| GPT 5.5 | GitHub Copilot | `github-copilot/gpt-5.5` |
-| Gemini 3.1 Pro | GitHub Copilot | `github-copilot/gemini-3.1-pro-preview` |
-| DeepSeek V4 Pro | DeepSeek | `deepseek/deepseek-v4-pro` |
-| QWen 3.6 Plus | opencode Go | `opencode-go/qwen3.6-plus` |
-| Kimi K2.6 | opencode Go | `opencode-go/kimi-k2.6` |
-| MiniMax M2.7 | opencode Go | `opencode-go/minimax-m2.7` |
+| 模型            | 提供方         | CLI ID                                  |
+| --------------- | -------------- | --------------------------------------- |
+| Claude Opus 4.7 | opencode Zen   | `opencode/claude-opus-4-7`              |
+| GPT 5.5         | GitHub Copilot | `github-copilot/gpt-5.5`                |
+| Gemini 3.1 Pro  | GitHub Copilot | `github-copilot/gemini-3.1-pro-preview` |
+| DeepSeek V4 Pro | DeepSeek       | `deepseek/deepseek-v4-pro`              |
+| QWen 3.6 Plus   | opencode Go    | `opencode-go/qwen3.6-plus`              |
+| Kimi K2.6       | opencode Go    | `opencode-go/kimi-k2.6`                 |
+| MiniMax M2.7    | opencode Go    | `opencode-go/minimax-m2.7`              |
 
 ## Prompt 设计规范（关键）
 
@@ -25,11 +25,11 @@ description: 7方LLM并行同行评审——通过 opencode CLI 调用多模型�
 
 原因（经实测定位）：
 
-| 根因 | 现象 | 影响 |
-|------|------|------|
-| **串行 tool call** | 模型逐个读文件（每次 ~1.5s），17 个 skill × 1.5s = 25s+ | DeepSeek V4 Pro 是此模式 |
-| **Extended Thinking** | 大量上下文触发 2000+ reasoning tokens，单步 90s | DeepSeek V4 Pro 末段推理 |
-| 两者叠加 | 总计 ~180s，刚好踩在 180s 超时线 | DeepSeek 超时、无效评审 |
+| 根因                  | 现象                                                    | 影响                     |
+| --------------------- | ------------------------------------------------------- | ------------------------ |
+| **串行 tool call**    | 模型逐个读文件（每次 ~1.5s），17 个 skill × 1.5s = 25s+ | DeepSeek V4 Pro 是此模式 |
+| **Extended Thinking** | 大量上下文触发 2000+ reasoning tokens，单步 90s         | DeepSeek V4 Pro 末段推理 |
+| 两者叠加              | 总计 ~180s，刚好踩在 180s 超时线                        | DeepSeek 超时、无效评审  |
 
 **Prompt 模板**（< 500 字，把关键内容内联）：
 
@@ -93,21 +93,21 @@ done
 
 ## 共识规则
 
-| 一致度 | 决策 | 说明 |
-|--------|------|------|
-| ≥5/7 一致 | **强制采纳** | 超过半数评审一致，必须执行 |
-| 4/7 一致 | **默认采纳**，architect 可覆写 | 多数意见，architect 有否决权 |
-| <4/7 一致 | **architect 裁定** | 分歧较大，architect 根据上下文做最终决策 |
+| 一致度    | 决策                           | 说明                                     |
+| --------- | ------------------------------ | ---------------------------------------- |
+| ≥5/7 一致 | **强制采纳**                   | 超过半数评审一致，必须执行               |
+| 4/7 一致  | **默认采纳**，architect 可覆写 | 多数意见，architect 有否决权             |
+| <4/7 一致 | **architect 裁定**             | 分歧较大，architect 根据上下文做最终决策 |
 
 超时的 LLM 不计入统计分母——**≥5 方有效结果即构成完整评审**。
 
 ## 评审维度（按 Phase）
 
-| Phase | 评审对象 | 评审维度 |
-|-------|---------|---------|
-| P2 | 版本计划 | 范围合理性、排序正确性、冲突检测完整性、Fast-track 判定准确性、风险识别完整度 |
-| P4 | 需求分析报告 | 需求完整性、技术可行性准确度、验收标准可测试性、工作量合理性 |
-| P5 | 技术设计 + 任务拆解 | 架构合理性、接口契约完整性、测试覆盖度、发布风险 |
+| Phase | 评审对象            | 评审维度                                                                      |
+| ----- | ------------------- | ----------------------------------------------------------------------------- |
+| P2    | 版本计划            | 范围合理性、排序正确性、冲突检测完整性、Fast-track 判定准确性、风险识别完整度 |
+| P4    | 需求分析报告        | 需求完整性、技术可行性准确度、验收标准可测试性、工作量合理性                  |
+| P5    | 技术设计 + 任务拆解 | 架构合理性、接口契约完整性、测试覆盖度、发布风险                              |
 
 ## 迭代规则
 
@@ -119,10 +119,12 @@ done
 ## 归档
 
 评审报告写入 `.octopus/review/<issue-id>-<phase>.md`，包含：
+
 - 各方 LLM 原始输出（完整文件内容）
 - 共识统计（Go 票数 / NoGo 票数 / 超时不计）
 - 修正记录（每轮的改动 + 重新评审结果）
 
 ## 参考
+
 - `.octopus/WORKFLOW.md` 五、LLM Panel 同行评审机制
 - `.octopus/config-preview/commands/peer-review.md`

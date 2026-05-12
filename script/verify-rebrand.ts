@@ -2,13 +2,13 @@
 
 /**
  * verify-rebrand.ts — Verify OpenCode→Octopus rebrand completion
- * 
+ *
  * Usage:
  *   bun run script/verify-rebrand.ts              # Verify all Issues
  *   bun run script/verify-rebrand.ts --issue 1,2   # Verify specific Issues
  *   bun run script/verify-rebrand.ts --verbose      # Show match details
  *   bun run script/verify-rebrand.ts --json         # JSON output for CI
- * 
+ *
  * Run from repo root.
  */
 
@@ -66,11 +66,22 @@ const checks: CheckDef[] = [
       const start = Date.now()
       const matches = await grepFiles("@opencode-ai/", "*.ts")
       const tsxMatches = await grepFiles("@opencode-ai/", "*.tsx")
-      const allMatches = [...matches, ...tsxMatches].filter(m => 
-        !m.includes("gitlab/opencode") && !m.includes("opencode-poe") && !m.includes("opencode-gitlab") && !m.includes("@opentui")
+      const allMatches = [...matches, ...tsxMatches].filter(
+        (m) =>
+          !m.includes("gitlab/opencode") &&
+          !m.includes("opencode-poe") &&
+          !m.includes("opencode-gitlab") &&
+          !m.includes("@opentui"),
       )
-      return { issue: 1, name: "npm scope", passed: allMatches.length === 0, matches: allMatches, fileCount: new Set(allMatches.map(m => m.split(":")[0])).size, durationMs: Date.now() - start }
-    }
+      return {
+        issue: 1,
+        name: "npm scope",
+        passed: allMatches.length === 0,
+        matches: allMatches,
+        fileCount: new Set(allMatches.map((m) => m.split(":")[0])).size,
+        durationMs: Date.now() - start,
+      }
+    },
   },
   // Issue 2: directory rename
   {
@@ -80,8 +91,15 @@ const checks: CheckDef[] = [
       const dirExists = existsSync(resolve(ROOT, "packages/opencode"))
       const matches: string[] = []
       if (dirExists) matches.push("packages/opencode/ directory still exists")
-      return { issue: 2, name: "directory rename", passed: !dirExists, matches, fileCount: dirExists ? 1 : 0, durationMs: Date.now() - start }
-    }
+      return {
+        issue: 2,
+        name: "directory rename",
+        passed: !dirExists,
+        matches,
+        fileCount: dirExists ? 1 : 0,
+        durationMs: Date.now() - start,
+      }
+    },
   },
   // Issue 3: API identifiers
   {
@@ -90,9 +108,16 @@ const checks: CheckDef[] = [
       const start = Date.now()
       const matches = await grepFiles("OpencodeClient", "*.ts")
       const matches2 = await grepFiles("createOpencode", "*.ts")
-      const allMatches = matches.filter(m => !m.includes("OCTOPUS_CLIENT")).concat(matches2)
-      return { issue: 3, name: "API identifiers", passed: allMatches.length === 0, matches: allMatches, fileCount: new Set(allMatches.map(m => m.split(":")[0])).size, durationMs: Date.now() - start } 
-    }
+      const allMatches = matches.filter((m) => !m.includes("OCTOPUS_CLIENT")).concat(matches2)
+      return {
+        issue: 3,
+        name: "API identifiers",
+        passed: allMatches.length === 0,
+        matches: allMatches,
+        fileCount: new Set(allMatches.map((m) => m.split(":")[0])).size,
+        durationMs: Date.now() - start,
+      }
+    },
   },
   // Issue 4: env vars (OPENCODE_ prefix)
   {
@@ -100,11 +125,19 @@ const checks: CheckDef[] = [
     run: async () => {
       const start = Date.now()
       const matches = await grepFiles("OPENCODE_", "*.ts")
-      const filtered = matches.filter(m => 
-        !m.includes("OTEL_") && !m.includes("@openauthjs") && !m.includes("/opencode.") && !m.includes(".opencode/")
+      const filtered = matches.filter(
+        (m) =>
+          !m.includes("OTEL_") && !m.includes("@openauthjs") && !m.includes("/opencode.") && !m.includes(".opencode/"),
       )
-      return { issue: 4, name: "OPENCODE_ env vars", passed: filtered.length === 0, matches: filtered, fileCount: new Set(filtered.map(m => m.split(":")[0])).size, durationMs: Date.now() - start }
-    }
+      return {
+        issue: 4,
+        name: "OPENCODE_ env vars",
+        passed: filtered.length === 0,
+        matches: filtered,
+        fileCount: new Set(filtered.map((m) => m.split(":")[0])).size,
+        durationMs: Date.now() - start,
+      }
+    },
   },
   // Issue 9: docs paths (quick check)
   {
@@ -112,8 +145,15 @@ const checks: CheckDef[] = [
     run: async () => {
       const start = Date.now()
       const matches = await grepFiles("~/.config/opencode/", "*.md")
-      return { issue: 9, name: "docs config paths", passed: matches.length === 0, matches, fileCount: new Set(matches.map(m => m.split(":")[0])).size, durationMs: Date.now() - start }
-    }
+      return {
+        issue: 9,
+        name: "docs config paths",
+        passed: matches.length === 0,
+        matches,
+        fileCount: new Set(matches.map((m) => m.split(":")[0])).size,
+        durationMs: Date.now() - start,
+      }
+    },
   },
 ]
 
@@ -135,13 +175,13 @@ async function main() {
       const icon = r.passed ? "✅" : "❌"
       console.log(`${icon} ${r.name}: ${r.passed ? "PASS" : "FAIL"} (${r.durationMs}ms, ${r.fileCount} files)`)
       if (!r.passed && r.matches.length > 0) {
-        for (const m of (verbose ? r.matches : r.matches.slice(0, 5))) {
+        for (const m of verbose ? r.matches : r.matches.slice(0, 5)) {
           console.log(`   ${m}`)
         }
         if (!verbose && r.matches.length > 5) console.log(`   ... and ${r.matches.length - 5} more`)
       }
     }
-    const failed = results.filter(r => !r.passed)
+    const failed = results.filter((r) => !r.passed)
     if (failed.length > 0) {
       console.log(`\n❌ ${failed.length} check(s) failed`)
       process.exit(1)

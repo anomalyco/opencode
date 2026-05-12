@@ -15,15 +15,15 @@ so the user's editor catches mistakes as they type.
 
 ## Where files live
 
-| Scope                         | Path                                                                                                                      |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Scope                         | Path                                                                                                                 |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Project config                | `./octopus.json`, `./octopus.jsonc`, or `.octopus/octopus.json` (Octopus walks up from the cwd to the worktree root) |
-| Global config                 | `~/.config/octopus/octopus.json` (NOT `~/.octopus/`)                                                                   |
-| Project agents                | `.octopus/agent/<name>.md` or `.octopus/agents/<name>.md`                                                               |
-| Global agents                 | `~/.config/octopus/agent(s)/<name>.md`                                                                                   |
-| Project skills                | `.octopus/skill(s)/<name>/SKILL.md`                                                                                      |
-| Global skills                 | `~/.config/octopus/skill(s)/<name>/SKILL.md`                                                                             |
-| External skills (auto-loaded) | `~/.claude/skills/<name>/SKILL.md`, `~/.agents/skills/<name>/SKILL.md`                                                    |
+| Global config                 | `~/.config/octopus/octopus.json` (NOT `~/.octopus/`)                                                                 |
+| Project agents                | `.octopus/agent/<name>.md` or `.octopus/agents/<name>.md`                                                            |
+| Global agents                 | `~/.config/octopus/agent(s)/<name>.md`                                                                               |
+| Project skills                | `.octopus/skill(s)/<name>/SKILL.md`                                                                                  |
+| Global skills                 | `~/.config/octopus/skill(s)/<name>/SKILL.md`                                                                         |
+| External skills (auto-loaded) | `~/.claude/skills/<name>/SKILL.md`, `~/.agents/skills/<name>/SKILL.md`                                               |
 
 Configs from each scope are deep-merged. Project overrides global. Unknown
 top-level keys in `octopus.json` are rejected with `ConfigInvalidError`.

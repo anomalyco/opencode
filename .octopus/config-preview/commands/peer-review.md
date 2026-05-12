@@ -2,6 +2,7 @@
 description: 7方LLM同行评审
 agent: orchestrator
 ---
+
 你正在执行 LLM Panel 同行评审。Phase: $1, Issue: $2
 
 ## 评审方法
@@ -12,15 +13,15 @@ agent: orchestrator
 
 ## 评审模型
 
-| CLI ID | 提供方 |
-|--------|--------|
-| `opencode/claude-opus-4-7` | opencode Zen |
-| `github-copilot/gpt-5.5` | GitHub Copilot |
+| CLI ID                                  | 提供方         |
+| --------------------------------------- | -------------- |
+| `opencode/claude-opus-4-7`              | opencode Zen   |
+| `github-copilot/gpt-5.5`                | GitHub Copilot |
 | `github-copilot/gemini-3.1-pro-preview` | GitHub Copilot |
-| `deepseek/deepseek-v4-pro` | DeepSeek |
-| `opencode-go/qwen3.6-plus` | opencode Go |
-| `opencode-go/kimi-k2.6` | opencode Go |
-| `opencode-go/minimax-m2.7` | opencode Go |
+| `deepseek/deepseek-v4-pro`              | DeepSeek       |
+| `opencode-go/qwen3.6-plus`              | opencode Go    |
+| `opencode-go/kimi-k2.6`                 | opencode Go    |
+| `opencode-go/minimax-m2.7`              | opencode Go    |
 
 ## 关键规范
 

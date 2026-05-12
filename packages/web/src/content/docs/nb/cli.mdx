@@ -78,12 +78,12 @@ opencode attach http://10.20.30.40:4096
 
 #### Flagg
 
-| Flagg                                    | Kort | Beskrivelse                                                                                        |
-| ---------------------------------------- | ---- | -------------------------------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |      | Arbeidskatalog for å starte TUI i                                                                  |
-| <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsett siste økt                                                                                 |
-| <nobr><code>{"--session"}</code></nobr>  | `-s` | Økt ID for å fortsette                                                                             |
-| <nobr><code>{"--fork"}</code></nobr>     |      | Forgren økten ved fortsettelse (bruk med `--continue` eller `--session`)                           |
+| Flagg                                    | Kort | Beskrivelse                                                                                       |
+| ---------------------------------------- | ---- | ------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |      | Arbeidskatalog for å starte TUI i                                                                 |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsett siste økt                                                                                |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | Økt ID for å fortsette                                                                            |
+| <nobr><code>{"--fork"}</code></nobr>     |      | Forgren økten ved fortsettelse (bruk med `--continue` eller `--session`)                          |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | Passord for grunnleggende autentisering (standard: `OCTOPUS_SERVER_PASSWORD`)                     |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | Brukernavn for grunnleggende autentisering (standard: `OCTOPUS_SERVER_USERNAME` eller `opencode`) |
 
@@ -339,25 +339,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Flagg
 
-| Flagg                                    | Kort | Beskrivelse                                                                                        |
-| ---------------------------------------- | ---- | -------------------------------------------------------------------------------------------------- |
-| <nobr><code>{"--command"}</code></nobr>  |      | Kommandoen for å kjøre, bruk melding for args                                                      |
-| <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsett siste økt                                                                                 |
-| <nobr><code>{"--session"}</code></nobr>  | `-s` | Økt ID for å fortsette                                                                             |
-| <nobr><code>{"--fork"}</code></nobr>     |      | Forgren økten ved fortsettelse (bruk med `--continue` eller `--session`)                           |
-| <nobr><code>{"--share"}</code></nobr>    |      | Del økten                                                                                          |
-| <nobr><code>{"--model"}</code></nobr>    | `-m` | Modell å bruke i form av leverandør/modell                                                         |
-| <nobr><code>{"--agent"}</code></nobr>    |      | Agent å bruke                                                                                      |
-| <nobr><code>{"--file"}</code></nobr>     | `-f` | Fil(er) som skal legges ved meldingen                                                              |
-| <nobr><code>{"--format"}</code></nobr>   |      | Format: standard (formatert) eller json (rå JSON hendelser)                                        |
-| <nobr><code>{"--title"}</code></nobr>    |      | Tittel for økten (bruker avkortet ledetekst hvis ingen verdi er oppgitt)                           |
+| Flagg                                    | Kort | Beskrivelse                                                                                       |
+| ---------------------------------------- | ---- | ------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |      | Kommandoen for å kjøre, bruk melding for args                                                     |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsett siste økt                                                                                |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | Økt ID for å fortsette                                                                            |
+| <nobr><code>{"--fork"}</code></nobr>     |      | Forgren økten ved fortsettelse (bruk med `--continue` eller `--session`)                          |
+| <nobr><code>{"--share"}</code></nobr>    |      | Del økten                                                                                         |
+| <nobr><code>{"--model"}</code></nobr>    | `-m` | Modell å bruke i form av leverandør/modell                                                        |
+| <nobr><code>{"--agent"}</code></nobr>    |      | Agent å bruke                                                                                     |
+| <nobr><code>{"--file"}</code></nobr>     | `-f` | Fil(er) som skal legges ved meldingen                                                             |
+| <nobr><code>{"--format"}</code></nobr>   |      | Format: standard (formatert) eller json (rå JSON hendelser)                                       |
+| <nobr><code>{"--title"}</code></nobr>    |      | Tittel for økten (bruker avkortet ledetekst hvis ingen verdi er oppgitt)                          |
 | <nobr><code>{"--attach"}</code></nobr>   |      | Koble til en kjørende Octopus-server (f.eks. http://localhost:4096)                               |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | Passord for grunnleggende autentisering (standard: `OCTOPUS_SERVER_PASSWORD`)                     |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | Brukernavn for grunnleggende autentisering (standard: `OCTOPUS_SERVER_USERNAME` eller `opencode`) |
-| <nobr><code>{"--dir"}</code></nobr>      |      | Katalog å kjøre i, eller sti på fjernserveren ved tilkobling                                       |
-| <nobr><code>{"--variant"}</code></nobr>  |      | Modellvariant (leverandørspesifikk resonneringsinnsats)                                            |
-| <nobr><code>{"--thinking"}</code></nobr> |      | Vis tenkeblokker                                                                                   |
-| <nobr><code>{"--port"}</code></nobr>     |      | Port for den lokale serveren (standard til tilfeldig port)                                         |
+| <nobr><code>{"--dir"}</code></nobr>      |      | Katalog å kjøre i, eller sti på fjernserveren ved tilkobling                                      |
+| <nobr><code>{"--variant"}</code></nobr>  |      | Modellvariant (leverandørspesifikk resonneringsinnsats)                                           |
+| <nobr><code>{"--thinking"}</code></nobr> |      | Vis tenkeblokker                                                                                  |
+| <nobr><code>{"--port"}</code></nobr>     |      | Port for den lokale serveren (standard til tilfeldig port)                                        |
 
 ---
 
@@ -562,8 +562,8 @@ Octopus CLI bruker følgende globale flagg.
 
 Octopus kan konfigureres ved hjelp av miljøvariabler.
 
-| Variabel                              | Type   | Beskrivelse                                                           |
-| ------------------------------------- | ------ | --------------------------------------------------------------------- |
+| Variabel                             | Type   | Beskrivelse                                                           |
+| ------------------------------------ | ------ | --------------------------------------------------------------------- |
 | `OCTOPUS_AUTO_SHARE`                 | boolsk | Del økter automatisk                                                  |
 | `OCTOPUS_GIT_BASH_PATH`              | streng | Bane til Git Bash-kjørbar på Windows                                  |
 | `OCTOPUS_CONFIG`                     | streng | Bane til konfigurasjonsfil                                            |
@@ -595,8 +595,8 @@ Octopus kan konfigureres ved hjelp av miljøvariabler.
 
 Disse miljøvariablene muliggjør eksperimentelle funksjoner som kan endres eller fjernes.
 
-| Variabel                                        | Type   | Beskrivelse                                   |
-| ----------------------------------------------- | ------ | --------------------------------------------- |
+| Variabel                                       | Type   | Beskrivelse                                   |
+| ---------------------------------------------- | ------ | --------------------------------------------- |
 | `OCTOPUS_EXPERIMENTAL`                         | boolsk | Aktiver alle eksperimentelle funksjoner       |
 | `OCTOPUS_EXPERIMENTAL_ICON_DISCOVERY`          | boolsk | Aktiver ikonoppdagelse                        |
 | `OCTOPUS_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolsk | Deaktiver kopi ved valg i TUI                 |

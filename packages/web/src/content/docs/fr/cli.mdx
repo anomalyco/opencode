@@ -78,12 +78,12 @@ opencode attach http://10.20.30.40:4096
 
 #### Options
 
-| Option                                   | Court | Description                                                                                        |
-| ---------------------------------------- | ----- | -------------------------------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |       | Répertoire de travail dans lequel démarrer TUI                                                     |
-| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continuer la dernière session                                                                      |
-| <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID de session pour continuer                                                                       |
-| <nobr><code>{"--fork"}</code></nobr>     |       | Dupliquer la session lors de la reprise (à utiliser avec `--continue` ou `--session`)              |
+| Option                                   | Court | Description                                                                                       |
+| ---------------------------------------- | ----- | ------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |       | Répertoire de travail dans lequel démarrer TUI                                                    |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continuer la dernière session                                                                     |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID de session pour continuer                                                                      |
+| <nobr><code>{"--fork"}</code></nobr>     |       | Dupliquer la session lors de la reprise (à utiliser avec `--continue` ou `--session`)             |
 | <nobr><code>{"--password"}</code></nobr> | `-p`  | Mot de passe d'authentification de base (par défaut `OCTOPUS_SERVER_PASSWORD`)                    |
 | <nobr><code>{"--username"}</code></nobr> | `-u`  | Nom d'utilisateur d'authentification de base (par défaut `OCTOPUS_SERVER_USERNAME` ou `opencode`) |
 
@@ -339,25 +339,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Options
 
-| Option                                   | Court | Description                                                                                        |
-| ---------------------------------------- | ----- | -------------------------------------------------------------------------------------------------- |
-| <nobr><code>{"--command"}</code></nobr>  |       | La commande à exécuter, utilisez le message pour les arguments                                     |
-| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continuer la dernière session                                                                      |
-| <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID de session pour continuer                                                                       |
-| <nobr><code>{"--fork"}</code></nobr>     |       | Forker la session en continuant (à utiliser avec `--continue` ou `--session`)                      |
-| <nobr><code>{"--share"}</code></nobr>    |       | Partager la session                                                                                |
-| <nobr><code>{"--model"}</code></nobr>    | `-m`  | Modèle à utiliser sous forme de fournisseur/modèle                                                 |
-| <nobr><code>{"--agent"}</code></nobr>    |       | Agent à utiliser                                                                                   |
-| <nobr><code>{"--file"}</code></nobr>     | `-f`  | Fichier(s) à joindre au message                                                                    |
-| <nobr><code>{"--format"}</code></nobr>   |       | Format : par défaut (formaté) ou json (événements JSON bruts)                                      |
-| <nobr><code>{"--title"}</code></nobr>    |       | Titre de la session (utilise un prompt tronqué si aucune valeur n'est fournie)                     |
-| <nobr><code>{"--attach"}</code></nobr>   |       | Connectez-vous à un serveur opencode en cours d'exécution (par exemple, http://localhost:4096)     |
+| Option                                   | Court | Description                                                                                       |
+| ---------------------------------------- | ----- | ------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |       | La commande à exécuter, utilisez le message pour les arguments                                    |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continuer la dernière session                                                                     |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID de session pour continuer                                                                      |
+| <nobr><code>{"--fork"}</code></nobr>     |       | Forker la session en continuant (à utiliser avec `--continue` ou `--session`)                     |
+| <nobr><code>{"--share"}</code></nobr>    |       | Partager la session                                                                               |
+| <nobr><code>{"--model"}</code></nobr>    | `-m`  | Modèle à utiliser sous forme de fournisseur/modèle                                                |
+| <nobr><code>{"--agent"}</code></nobr>    |       | Agent à utiliser                                                                                  |
+| <nobr><code>{"--file"}</code></nobr>     | `-f`  | Fichier(s) à joindre au message                                                                   |
+| <nobr><code>{"--format"}</code></nobr>   |       | Format : par défaut (formaté) ou json (événements JSON bruts)                                     |
+| <nobr><code>{"--title"}</code></nobr>    |       | Titre de la session (utilise un prompt tronqué si aucune valeur n'est fournie)                    |
+| <nobr><code>{"--attach"}</code></nobr>   |       | Connectez-vous à un serveur opencode en cours d'exécution (par exemple, http://localhost:4096)    |
 | <nobr><code>{"--password"}</code></nobr> | `-p`  | Mot de passe d'authentification de base (par défaut `OCTOPUS_SERVER_PASSWORD`)                    |
 | <nobr><code>{"--username"}</code></nobr> | `-u`  | Nom d'utilisateur d'authentification de base (par défaut `OCTOPUS_SERVER_USERNAME` ou `opencode`) |
-| <nobr><code>{"--dir"}</code></nobr>      |       | Répertoire d'exécution, ou chemin sur le serveur distant lors de l'attachement                     |
-| <nobr><code>{"--variant"}</code></nobr>  |       | Variante du modèle (effort de raisonnement spécifique au fournisseur)                              |
-| <nobr><code>{"--thinking"}</code></nobr> |       | Afficher les blocs de réflexion                                                                    |
-| <nobr><code>{"--port"}</code></nobr>     |       | Port du serveur local (port aléatoire par défaut)                                                  |
+| <nobr><code>{"--dir"}</code></nobr>      |       | Répertoire d'exécution, ou chemin sur le serveur distant lors de l'attachement                    |
+| <nobr><code>{"--variant"}</code></nobr>  |       | Variante du modèle (effort de raisonnement spécifique au fournisseur)                             |
+| <nobr><code>{"--thinking"}</code></nobr> |       | Afficher les blocs de réflexion                                                                   |
+| <nobr><code>{"--port"}</code></nobr>     |       | Port du serveur local (port aléatoire par défaut)                                                 |
 
 ---
 
@@ -562,8 +562,8 @@ La CLI opencode prend les flags globaux suivants.
 
 Octopus peut être configuré à l'aide de variables d'environnement.
 
-| Variables                             | Type    | Description                                                                       |
-| ------------------------------------- | ------- | --------------------------------------------------------------------------------- |
+| Variables                            | Type    | Description                                                                       |
+| ------------------------------------ | ------- | --------------------------------------------------------------------------------- |
 | `OCTOPUS_AUTO_SHARE`                 | booléen | Partager automatiquement des sessions                                             |
 | `OCTOPUS_GIT_BASH_PATH`              | chaîne  | Chemin vers l'exécutable Git Bash sur Windows                                     |
 | `OCTOPUS_CONFIG`                     | chaîne  | Chemin d'accès au fichier de configuration                                        |
@@ -595,8 +595,8 @@ Octopus peut être configuré à l'aide de variables d'environnement.
 
 Ces variables d'environnement activent des fonctionnalités expérimentales qui peuvent être modifiées ou supprimées.
 
-| Variables                                       | Type    | Description                                                     |
-| ----------------------------------------------- | ------- | --------------------------------------------------------------- |
+| Variables                                      | Type    | Description                                                     |
+| ---------------------------------------------- | ------- | --------------------------------------------------------------- |
 | `OCTOPUS_EXPERIMENTAL`                         | booléen | Activer toutes les fonctionnalités expérimentales               |
 | `OCTOPUS_EXPERIMENTAL_ICON_DISCOVERY`          | booléen | Activer la découverte d'icônes                                  |
 | `OCTOPUS_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | booléen | Désactiver la copie lors de la sélection dans TUI               |

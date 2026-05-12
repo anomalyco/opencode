@@ -78,12 +78,12 @@ opencode attach http://10.20.30.40:4096
 
 #### 标志
 
-| 标志                                     | 简写 | 描述                                                                |
-| ---------------------------------------- | ---- | ------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |      | 启动 TUI 的工作目录                                                 |
-| <nobr><code>{"--continue"}</code></nobr> | `-c` | 继续上一个会话                                                      |
-| <nobr><code>{"--session"}</code></nobr>  | `-s` | 要继续的会话 ID                                                     |
-| <nobr><code>{"--fork"}</code></nobr>     |      | 继续时派生会话（与 `--continue` 或 `--session` 一起使用）           |
+| 标志                                     | 简写 | 描述                                                               |
+| ---------------------------------------- | ---- | ------------------------------------------------------------------ |
+| <nobr><code>{"--dir"}</code></nobr>      |      | 启动 TUI 的工作目录                                                |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | 继续上一个会话                                                     |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | 要继续的会话 ID                                                    |
+| <nobr><code>{"--fork"}</code></nobr>     |      | 继续时派生会话（与 `--continue` 或 `--session` 一起使用）          |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | 基本认证密码（默认使用 `OCTOPUS_SERVER_PASSWORD`）                 |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | 基本认证用户名（默认使用 `OCTOPUS_SERVER_USERNAME` 或 `opencode`） |
 
@@ -339,25 +339,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### 标志
 
-| 标志                                     | 简写 | 描述                                                                |
-| ---------------------------------------- | ---- | ------------------------------------------------------------------- |
-| <nobr><code>{"--command"}</code></nobr>  |      | 要运行的命令，使用 message 作为参数                                 |
-| <nobr><code>{"--continue"}</code></nobr> | `-c` | 继续上一个会话                                                      |
-| <nobr><code>{"--session"}</code></nobr>  | `-s` | 要继续的会话 ID                                                     |
-| <nobr><code>{"--fork"}</code></nobr>     |      | 继续时分叉会话（与 `--continue` 或 `--session` 配合使用）           |
-| <nobr><code>{"--share"}</code></nobr>    |      | 分享会话                                                            |
-| <nobr><code>{"--model"}</code></nobr>    | `-m` | 要使用的模型，格式为 provider/model                                 |
-| <nobr><code>{"--agent"}</code></nobr>    |      | 要使用的代理                                                        |
-| <nobr><code>{"--file"}</code></nobr>     | `-f` | 附加到消息的文件                                                    |
-| <nobr><code>{"--format"}</code></nobr>   |      | 格式：default（格式化输出）或 json（原始 JSON 事件）                |
-| <nobr><code>{"--title"}</code></nobr>    |      | 会话标题（未提供值时使用截断的提示词）                              |
-| <nobr><code>{"--attach"}</code></nobr>   |      | 连接到正在运行的 opencode 服务器（例如 http://localhost:4096）      |
+| 标志                                     | 简写 | 描述                                                               |
+| ---------------------------------------- | ---- | ------------------------------------------------------------------ |
+| <nobr><code>{"--command"}</code></nobr>  |      | 要运行的命令，使用 message 作为参数                                |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | 继续上一个会话                                                     |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | 要继续的会话 ID                                                    |
+| <nobr><code>{"--fork"}</code></nobr>     |      | 继续时分叉会话（与 `--continue` 或 `--session` 配合使用）          |
+| <nobr><code>{"--share"}</code></nobr>    |      | 分享会话                                                           |
+| <nobr><code>{"--model"}</code></nobr>    | `-m` | 要使用的模型，格式为 provider/model                                |
+| <nobr><code>{"--agent"}</code></nobr>    |      | 要使用的代理                                                       |
+| <nobr><code>{"--file"}</code></nobr>     | `-f` | 附加到消息的文件                                                   |
+| <nobr><code>{"--format"}</code></nobr>   |      | 格式：default（格式化输出）或 json（原始 JSON 事件）               |
+| <nobr><code>{"--title"}</code></nobr>    |      | 会话标题（未提供值时使用截断的提示词）                             |
+| <nobr><code>{"--attach"}</code></nobr>   |      | 连接到正在运行的 opencode 服务器（例如 http://localhost:4096）     |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | 基本认证密码（默认使用 `OCTOPUS_SERVER_PASSWORD`）                 |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | 基本认证用户名（默认使用 `OCTOPUS_SERVER_USERNAME` 或 `opencode`） |
-| <nobr><code>{"--dir"}</code></nobr>      |      | 运行目录，或附加时远程服务器上的路径                                |
-| <nobr><code>{"--variant"}</code></nobr>  |      | 模型变体（特定于提供商的推理级别）                                  |
-| <nobr><code>{"--thinking"}</code></nobr> |      | 显示思考块                                                          |
-| <nobr><code>{"--port"}</code></nobr>     |      | 本地服务器端口（默认为随机端口）                                    |
+| <nobr><code>{"--dir"}</code></nobr>      |      | 运行目录，或附加时远程服务器上的路径                               |
+| <nobr><code>{"--variant"}</code></nobr>  |      | 模型变体（特定于提供商的推理级别）                                 |
+| <nobr><code>{"--thinking"}</code></nobr> |      | 显示思考块                                                         |
+| <nobr><code>{"--port"}</code></nobr>     |      | 本地服务器端口（默认为随机端口）                                   |
 
 ---
 
@@ -562,8 +562,8 @@ Octopus CLI 接受以下全局标志。
 
 Octopus 可以通过环境变量进行配置。
 
-| 变量                                  | 类型    | 描述                                    |
-| ------------------------------------- | ------- | --------------------------------------- |
+| 变量                                 | 类型    | 描述                                    |
+| ------------------------------------ | ------- | --------------------------------------- |
 | `OCTOPUS_AUTO_SHARE`                 | boolean | 自动分享会话                            |
 | `OCTOPUS_GIT_BASH_PATH`              | string  | Windows 上 Git Bash 可执行文件的路径    |
 | `OCTOPUS_CONFIG`                     | string  | 配置文件路径                            |
@@ -595,8 +595,8 @@ Octopus 可以通过环境变量进行配置。
 
 这些环境变量用于启用可能会更改或移除的实验性功能。
 
-| 变量                                            | 类型    | 描述                            |
-| ----------------------------------------------- | ------- | ------------------------------- | --- | -------------------------------- | ------- | ------------------------ |
+| 变量                                           | 类型    | 描述                            |
+| ---------------------------------------------- | ------- | ------------------------------- | --- | ------------------------------- | ------- | ------------------------ |
 | `OCTOPUS_EXPERIMENTAL`                         | boolean | 启用所有实验性功能              |
 | `OCTOPUS_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 启用图标发现                    |
 | `OCTOPUS_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | 禁用 TUI 中的选中即复制         |

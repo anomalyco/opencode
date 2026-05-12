@@ -1,7 +1,7 @@
 {
   "$schema": "https://v2-8-13.turborepo.dev/schema.json",
-"globalEnv": ["CI", "OCTOPUS_DISABLE_SHARE"],
-"globalPassThroughEnv": ["CI", "OCTOPUS_DISABLE_SHARE"],
+  "globalEnv": ["CI", "OCTOPUS_DISABLE_SHARE"],
+  "globalPassThroughEnv": ["CI", "OCTOPUS_DISABLE_SHARE"],
   "tasks": {
     "typecheck": {},
     "build": {

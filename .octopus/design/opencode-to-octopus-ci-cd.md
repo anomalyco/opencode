@@ -50,16 +50,17 @@
 
 ### 2.1 文件重命名
 
-| 当前文件名 | 新文件名 | 理由 |
-|-----------|---------|------|
-| `opencode.yml` | `octopus.yml` | 文件名含品牌名 |
-| 其余 26 个文件 | 保持不变 | 文件名不包含品牌名 |
+| 当前文件名     | 新文件名      | 理由               |
+| -------------- | ------------- | ------------------ |
+| `opencode.yml` | `octopus.yml` | 文件名含品牌名     |
+| 其余 26 个文件 | 保持不变      | 文件名不包含品牌名 |
 
 ### 2.2 仓库路径引用变更
 
 所有 `anomalyco/opencode` 引用在 3 个 workflow 中出现 7 处：
 
 **`opencode.yml`** (重命名为 `octopus.yml`):
+
 ```yaml
 # 变更前
 uses: anomalyco/opencode/github@latest
@@ -71,6 +72,7 @@ OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
 ```
 
 **`publish.yml`** (4 处):
+
 ```yaml
 # 变更前
 if: github.repository == 'anomalyco/opencode'
@@ -82,6 +84,7 @@ GH_REPO: ${{ (github.ref_name == 'beta' && 'anomalyco/octopus-beta') || github.r
 ```
 
 **`stats.yml`** (1 处):
+
 ```yaml
 # 变更前
 if: github.repository == 'anomalyco/opencode'
@@ -93,6 +96,7 @@ if: github.repository == 'anomalyco/octopus'
 ### 2.3 Action 引用变更
 
 **`docs-update.yml`**:
+
 ```yaml
 # 变更前
 uses: sst/opencode/github@latest
@@ -105,9 +109,9 @@ uses: anomalyco/octopus/github@latest
 
 3 个 workflow 中涉及 git config email:
 
-| 文件 | 变更前 | 变更后 |
-|------|--------|--------|
-| `publish.yml` L476 | `opencode@sst.dev` | `octopus@sst.dev` |
+| 文件                            | 变更前             | 变更后            |
+| ------------------------------- | ------------------ | ----------------- |
+| `publish.yml` L476              | `opencode@sst.dev` | `octopus@sst.dev` |
 | `release-github-action.yml` L27 | `opencode@sst.dev` | `octopus@sst.dev` |
 | `publish-github-action.yml` L27 | `opencode@sst.dev` | `octopus@sst.dev` |
 
@@ -134,22 +138,22 @@ OCTOPUS_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'octopus-cli-windows') || '
 
 ### 2.7 变更清单总表
 
-| # | Workflow | 变更类型 | 变更内容 |
-|---|----------|---------|---------|
-| 1 | `opencode.yml` | 重命名 + 内容 | → `octopus.yml`, action URL, secrets |
-| 2 | `publish.yml` | 内容 | repo 检查, email, artifact 名, secrets |
-| 3 | `stats.yml` | 内容 | repo 检查 |
-| 4 | `docs-update.yml` | 内容 | action URL, secrets |
-| 5 | `docs-locale-sync.yml` | 内容 | secrets (间接) |
-| 6 | `review.yml` | 内容 | secrets (间接) |
-| 7 | `duplicate-issues.yml` | 内容 | secrets (间接) |
-| 8 | `triage.yml` | 内容 | secrets (间接) |
-| 9 | `beta.yml` | 内容 | secrets (间接) |
-| 10 | `release-github-action.yml` | 内容 | email |
-| 11 | `publish-github-action.yml` | 内容 | email |
-| 12 | `generate.yml` | 内容 | setup-git-committer inputs (间接) |
-| 13 | `sync-zed-extension.yml` | 内容 | setup-git-committer inputs (间接) |
-| 14 | `nix-hashes.yml` | 内容 | setup-git-committer inputs (间接) |
+| #   | Workflow                    | 变更类型      | 变更内容                               |
+| --- | --------------------------- | ------------- | -------------------------------------- |
+| 1   | `opencode.yml`              | 重命名 + 内容 | → `octopus.yml`, action URL, secrets   |
+| 2   | `publish.yml`               | 内容          | repo 检查, email, artifact 名, secrets |
+| 3   | `stats.yml`                 | 内容          | repo 检查                              |
+| 4   | `docs-update.yml`           | 内容          | action URL, secrets                    |
+| 5   | `docs-locale-sync.yml`      | 内容          | secrets (间接)                         |
+| 6   | `review.yml`                | 内容          | secrets (间接)                         |
+| 7   | `duplicate-issues.yml`      | 内容          | secrets (间接)                         |
+| 8   | `triage.yml`                | 内容          | secrets (间接)                         |
+| 9   | `beta.yml`                  | 内容          | secrets (间接)                         |
+| 10  | `release-github-action.yml` | 内容          | email                                  |
+| 11  | `publish-github-action.yml` | 内容          | email                                  |
+| 12  | `generate.yml`              | 内容          | setup-git-committer inputs (间接)      |
+| 13  | `sync-zed-extension.yml`    | 内容          | setup-git-committer inputs (间接)      |
+| 14  | `nix-hashes.yml`            | 内容          | setup-git-committer inputs (间接)      |
 
 ---
 
@@ -159,44 +163,44 @@ OCTOPUS_CLI_ARTIFACT: ${{ (runner.os == 'Windows' && 'octopus-cli-windows') || '
 
 #### GitHub Secrets （加密值）
 
-| 当前名 | 新名 | 使用 Workflow |
-|--------|------|-------------|
-| `OPENCODE_API_KEY` | `OCTOPUS_API_KEY` | opencode, publish, docs-update, review, duplicate-issues, triage, beta, docs-locale-sync |
-| `OPENCODE_APP_SECRET` | `OCTOPUS_APP_SECRET` | publish, generate, beta, sync-zed, docs-locale-sync, nix-hashes |
-| `VSCE_PAT` | 不变 | publish-vscode |
-| `OPENVSX_TOKEN` | 不变 | publish-vscode |
-| `AZURE_CLIENT_ID` | 不变 | publish |
-| `AZURE_TENANT_ID` | 不变 | publish |
-| `AZURE_SUBSCRIPTION_ID` | 不变 | publish |
-| `AZURE_TRUSTED_SIGNING_*` | 不变 | publish |
-| `APPLE_CERTIFICATE` | 不变 | publish |
-| `APPLE_CERTIFICATE_PASSWORD` | 不变 | publish |
-| `APPLE_API_KEY` | 不变 | publish |
-| `APPLE_API_KEY_PATH` | 不变 | publish |
-| `APPLE_API_ISSUER` | 不变 | publish |
-| `AUR_KEY` | 不变 | publish |
-| `TAURI_SIGNING_PRIVATE_KEY` | 不变 | publish |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 不变 | publish |
-| `CLOUDFLARE_API_TOKEN` | 不变 | deploy |
-| `PLANETSCALE_SERVICE_TOKEN` | 不变 | deploy |
-| `STRIPE_SECRET_KEY_*` | 不变 | deploy |
-| `HONEYCOMB_API_KEY` | 不变 | deploy |
-| `SENTRY_AUTH_TOKEN` | 不变 | publish, deploy |
-| `DISCORD_WEBHOOK` | 不变 | notify-discord |
-| `ZED_EXTENSIONS_PAT` | 不变 | sync-zed-extension |
-| `ZED_PR_PAT` | 不变 | sync-zed-extension |
-| `POSTHOG_KEY` | 不变 | stats |
-| `GITHUB_TOKEN` | 不变（内置） | 所有 |
+| 当前名                               | 新名                 | 使用 Workflow                                                                            |
+| ------------------------------------ | -------------------- | ---------------------------------------------------------------------------------------- |
+| `OPENCODE_API_KEY`                   | `OCTOPUS_API_KEY`    | opencode, publish, docs-update, review, duplicate-issues, triage, beta, docs-locale-sync |
+| `OPENCODE_APP_SECRET`                | `OCTOPUS_APP_SECRET` | publish, generate, beta, sync-zed, docs-locale-sync, nix-hashes                          |
+| `VSCE_PAT`                           | 不变                 | publish-vscode                                                                           |
+| `OPENVSX_TOKEN`                      | 不变                 | publish-vscode                                                                           |
+| `AZURE_CLIENT_ID`                    | 不变                 | publish                                                                                  |
+| `AZURE_TENANT_ID`                    | 不变                 | publish                                                                                  |
+| `AZURE_SUBSCRIPTION_ID`              | 不变                 | publish                                                                                  |
+| `AZURE_TRUSTED_SIGNING_*`            | 不变                 | publish                                                                                  |
+| `APPLE_CERTIFICATE`                  | 不变                 | publish                                                                                  |
+| `APPLE_CERTIFICATE_PASSWORD`         | 不变                 | publish                                                                                  |
+| `APPLE_API_KEY`                      | 不变                 | publish                                                                                  |
+| `APPLE_API_KEY_PATH`                 | 不变                 | publish                                                                                  |
+| `APPLE_API_ISSUER`                   | 不变                 | publish                                                                                  |
+| `AUR_KEY`                            | 不变                 | publish                                                                                  |
+| `TAURI_SIGNING_PRIVATE_KEY`          | 不变                 | publish                                                                                  |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 不变                 | publish                                                                                  |
+| `CLOUDFLARE_API_TOKEN`               | 不变                 | deploy                                                                                   |
+| `PLANETSCALE_SERVICE_TOKEN`          | 不变                 | deploy                                                                                   |
+| `STRIPE_SECRET_KEY_*`                | 不变                 | deploy                                                                                   |
+| `HONEYCOMB_API_KEY`                  | 不变                 | deploy                                                                                   |
+| `SENTRY_AUTH_TOKEN`                  | 不变                 | publish, deploy                                                                          |
+| `DISCORD_WEBHOOK`                    | 不变                 | notify-discord                                                                           |
+| `ZED_EXTENSIONS_PAT`                 | 不变                 | sync-zed-extension                                                                       |
+| `ZED_PR_PAT`                         | 不变                 | sync-zed-extension                                                                       |
+| `POSTHOG_KEY`                        | 不变                 | stats                                                                                    |
+| `GITHUB_TOKEN`                       | 不变（内置）         | 所有                                                                                     |
 
 #### GitHub Variables （非加密值）
 
-| 当前名 | 新名 | 使用 Workflow |
-|--------|------|-------------|
-| `OPENCODE_APP_ID` | `OCTOPUS_APP_ID` | publish, generate, beta, sync-zed, docs-locale-sync, nix-hashes |
-| `SENTRY_ORG` | 不变 | publish, deploy |
-| `SENTRY_PROJECT` | 不变 | publish, deploy (web) |
-| `WEB_SENTRY_*` | 不变 | publish, deploy |
-| 其余 OpenCode 相关变量 | 不变 | — |
+| 当前名                 | 新名             | 使用 Workflow                                                   |
+| ---------------------- | ---------------- | --------------------------------------------------------------- |
+| `OPENCODE_APP_ID`      | `OCTOPUS_APP_ID` | publish, generate, beta, sync-zed, docs-locale-sync, nix-hashes |
+| `SENTRY_ORG`           | 不变             | publish, deploy                                                 |
+| `SENTRY_PROJECT`       | 不变             | publish, deploy (web)                                           |
+| `WEB_SENTRY_*`         | 不变             | publish, deploy                                                 |
+| 其余 OpenCode 相关变量 | 不变             | —                                                               |
 
 ### 3.2 双轨过渡方案
 
@@ -252,6 +256,7 @@ gantt
 ```
 
 **关键规则**:
+
 - Phase 1 (设置新 Secrets) **必须先于** Phase 2 (代码变更) 完成
 - 新旧 Secrets 在 Phase 2 期间**同时有效**
 - 验证 CI 绿色后才能合并 PR
@@ -324,17 +329,18 @@ Job: publish (final)
 
 ### 4.3 npm 发布策略
 
-| 包名 | 当前 scope | 新 scope | 发布方式 |
-|------|-----------|---------|---------|
-| `@opencode-ai/script` | `@opencode-ai` | `@octopus-ai/script` | 自底向上，按依赖顺序 |
-| `@opencode-ai/core` | `@opencode-ai` | `@octopus-ai/core` | 依赖 script |
-| `@opencode-ai/sdk` | `@opencode-ai` | `@octopus-ai/sdk` | 依赖 core |
-| `@opencode-ai/ui` | `@opencode-ai` | `@octopus-ai/ui` | 依赖 sdk |
-| `@opencode-ai/plugin` | `@opencode-ai` | `@octopus-ai/plugin` | 依赖 sdk |
-| `@opencode-ai/app` | `@opencode-ai` | `@octopus-ai/app` | 依赖 sdk |
-| `opencode` (CLI) | — | `@octopus-ai/octopus` | 依赖以上所有 |
+| 包名                  | 当前 scope     | 新 scope              | 发布方式             |
+| --------------------- | -------------- | --------------------- | -------------------- |
+| `@opencode-ai/script` | `@opencode-ai` | `@octopus-ai/script`  | 自底向上，按依赖顺序 |
+| `@opencode-ai/core`   | `@opencode-ai` | `@octopus-ai/core`    | 依赖 script          |
+| `@opencode-ai/sdk`    | `@opencode-ai` | `@octopus-ai/sdk`     | 依赖 core            |
+| `@opencode-ai/ui`     | `@opencode-ai` | `@octopus-ai/ui`      | 依赖 sdk             |
+| `@opencode-ai/plugin` | `@opencode-ai` | `@octopus-ai/plugin`  | 依赖 sdk             |
+| `@opencode-ai/app`    | `@opencode-ai` | `@octopus-ai/app`     | 依赖 sdk             |
+| `opencode` (CLI)      | —              | `@octopus-ai/octopus` | 依赖以上所有         |
 
 **过渡发布**:
+
 - 在旧包 `@opencode-ai/*` 上发布 deprecation 版本
 - `npm deprecate @opencode-ai/core@"<2.0.0" "@opencode-ai/core is now @octopus-ai/core"`
 
@@ -353,21 +359,21 @@ const image = "ghcr.io/anomalyco/octopus"
 
 ```typescript
 // 变更前
-pkgname='opencode-bin'
+pkgname = "opencode-bin"
 // 变更后
-pkgname='octopus-bin'
+pkgname = "octopus-bin"
 
 // 变更前
-source_aarch64=".../opencode-linux-arm64.tar.gz"
+source_aarch64 = ".../opencode-linux-arm64.tar.gz"
 // 变更后
-source_aarch64=".../octopus-linux-arm64.tar.gz"
+source_aarch64 = ".../octopus-linux-arm64.tar.gz"
 
 // 变更前
-provides=('opencode')
-conflicts=('opencode')
+provides = "opencode"
+conflicts = "opencode"
 // 变更后
-provides=('octopus')
-conflicts=('octopus')
+provides = "octopus"
+conflicts = "octopus"
 ```
 
 **Homebrew** (同上文件):
@@ -459,14 +465,14 @@ await $`docker buildx create --name octopus --use`
 
 ### 5.4 Docker 镜像清单
 
-| 镜像 | 当前名 | 新名 | 修改位置 |
-|------|--------|------|---------|
-| CLI | `ghcr.io/anomalyco/opencode` | `ghcr.io/anomalyco/octopus` | `packages/octopus/script/publish.ts` |
-| base | `ghcr.io/anomalyco/build/base` | 不变 | `packages/containers/script/build.ts` (registry) |
-| bun-node | `ghcr.io/anomalyco/build/bun-node` | 不变 | 同上 |
-| rust | `ghcr.io/anomalyco/build/rust` | 不变 | 同上 |
-| tauri-linux | `ghcr.io/anomalyco/build/tauri-linux` | 不变 | 同上 |
-| publish | `ghcr.io/anomalyco/build/publish` | 不变 | 同上 |
+| 镜像        | 当前名                                | 新名                        | 修改位置                                         |
+| ----------- | ------------------------------------- | --------------------------- | ------------------------------------------------ |
+| CLI         | `ghcr.io/anomalyco/opencode`          | `ghcr.io/anomalyco/octopus` | `packages/octopus/script/publish.ts`             |
+| base        | `ghcr.io/anomalyco/build/base`        | 不变                        | `packages/containers/script/build.ts` (registry) |
+| bun-node    | `ghcr.io/anomalyco/build/bun-node`    | 不变                        | 同上                                             |
+| rust        | `ghcr.io/anomalyco/build/rust`        | 不变                        | 同上                                             |
+| tauri-linux | `ghcr.io/anomalyco/build/tauri-linux` | 不变                        | 同上                                             |
+| publish     | `ghcr.io/anomalyco/build/publish`     | 不变                        | 同上                                             |
 
 > 容器构建镜像（`build/` 子命名空间）属于内部 CI 基础设施，不对外发布，不需要重命名。
 
@@ -580,12 +586,12 @@ OPTIONAL_PACKAGES="desktop"
 
 ### 6.6 Nix 变更文件总表
 
-| 文件 | 变更类型 | 关键变更 |
-|------|---------|---------|
-| `flake.nix` | 内容 | description, package 属性名 |
-| `nix/opencode.nix` | **重命名** → `nix/octopus.nix` + 内容 | pname, env vars, paths |
-| `nix/desktop.nix` | 内容 | pname, binary refs |
-| `nix/node_modules.nix` | 内容 | pname, package.json path |
+| 文件                   | 变更类型                              | 关键变更                    |
+| ---------------------- | ------------------------------------- | --------------------------- |
+| `flake.nix`            | 内容                                  | description, package 属性名 |
+| `nix/opencode.nix`     | **重命名** → `nix/octopus.nix` + 内容 | pname, env vars, paths      |
+| `nix/desktop.nix`      | 内容                                  | pname, binary refs          |
+| `nix/node_modules.nix` | 内容                                  | pname, package.json path    |
 
 ---
 
@@ -597,38 +603,40 @@ OPTIONAL_PACKAGES="desktop"
 
 ```typescript
 const name = [
-  pkg.name,       // ← "opencode" → "octopus" (after package.json rename)
+  pkg.name, // ← "opencode" → "octopus" (after package.json rename)
   item.os === "win32" ? "windows" : item.os,
   item.arch,
   item.avx2 === false ? "baseline" : undefined,
   item.abi === undefined ? undefined : item.abi,
-].filter(Boolean).join("-")
+]
+  .filter(Boolean)
+  .join("-")
 ```
 
 当 `packages/octopus/package.json` 中的 `"name"` 字段从 `"opencode"` 改为 `"octopus"` (Issue #1)，所有产物名称自动生效：
 
-| 平台 | 旧名 | 新名 |
-|------|------|------|
-| macOS x64 | `opencode-darwin-x64.zip` | `octopus-darwin-x64.zip` |
-| macOS arm64 | `opencode-darwin-arm64.zip` | `octopus-darwin-arm64.zip` |
-| Linux x64 | `opencode-linux-x64.tar.gz` | `octopus-linux-x64.tar.gz` |
-| Linux arm64 | `opencode-linux-arm64.tar.gz` | `octopus-linux-arm64.tar.gz` |
-| Linux x64 musl | `opencode-linux-x64-musl.tar.gz` | `octopus-linux-x64-musl.tar.gz` |
+| 平台             | 旧名                               | 新名                              |
+| ---------------- | ---------------------------------- | --------------------------------- |
+| macOS x64        | `opencode-darwin-x64.zip`          | `octopus-darwin-x64.zip`          |
+| macOS arm64      | `opencode-darwin-arm64.zip`        | `octopus-darwin-arm64.zip`        |
+| Linux x64        | `opencode-linux-x64.tar.gz`        | `octopus-linux-x64.tar.gz`        |
+| Linux arm64      | `opencode-linux-arm64.tar.gz`      | `octopus-linux-arm64.tar.gz`      |
+| Linux x64 musl   | `opencode-linux-x64-musl.tar.gz`   | `octopus-linux-x64-musl.tar.gz`   |
 | Linux arm64 musl | `opencode-linux-arm64-musl.tar.gz` | `octopus-linux-arm64-musl.tar.gz` |
-| Windows x64 | `opencode-windows-x64.zip` | `octopus-windows-x64.zip` |
-| Windows arm64 | `opencode-windows-arm64.zip` | `octopus-windows-arm64.zip` |
+| Windows x64      | `opencode-windows-x64.zip`         | `octopus-windows-x64.zip`         |
+| Windows arm64    | `opencode-windows-arm64.zip`       | `octopus-windows-arm64.zip`       |
 
 ### 7.2 手动设置的产物名
 
 **`publish.yml`** 中的 upload-artifact 名称需要手动更新：
 
-| 当前 artifact name | 新 artifact name |
-|-------------------|-----------------|
-| `opencode-cli` | `octopus-cli` |
-| `opencode-cli-windows` | `octopus-cli-windows` |
+| 当前 artifact name            | 新 artifact name             |
+| ----------------------------- | ---------------------------- |
+| `opencode-cli`                | `octopus-cli`                |
+| `opencode-cli-windows`        | `octopus-cli-windows`        |
 | `opencode-cli-signed-windows` | `octopus-cli-signed-windows` |
-| `opencode-desktop-{target}` | `octopus-desktop-{target}` |
-| `latest-yml-{target}` | `latest-yml-{target}` (不变) |
+| `opencode-desktop-{target}`   | `octopus-desktop-{target}`   |
+| `latest-yml-{target}`         | `latest-yml-{target}` (不变) |
 
 **`publish.yml` sign-cli-windows 步骤**中的文件名：
 
@@ -683,18 +691,18 @@ const binaryPath = `dist/${name}/bin/octopus`
 
 ### 7.7 产物重命名变更总表
 
-| 位置 | 变更前 | 变更后 | 自动/手动 |
-|------|--------|--------|:-------:|
-| build.ts (目录/archive) | `pkg.name` → `opencode` | `pkg.name` → `octopus` | **自动** (依赖 #1) |
-| build.ts (outfile) | `bin/opencode` | `bin/octopus` | 手动 |
-| build.ts (execArgv) | `opencode/${version}` | `octopus/${version}` | 手动 |
-| build.ts (define) | `OPENCODE_*` | `OCTOPUS_*` | 手动 |
-| build.ts (smoke test) | `bin/opencode` | `bin/octopus` | 手动 |
-| publish.yml (artifact upload) | `opencode-cli` | `octopus-cli` | 手动 |
-| publish.yml (artifact upload) | `opencode-desktop-*` | `octopus-desktop-*` | 手动 |
-| publish.yml (compress-archive) | `opencode-windows-*` | `octopus-windows-*` | 手动 |
-| publish.yml (desktop tar.gz) | `opencode-desktop-mac-*` | `octopus-desktop-mac-*` | 手动 |
-| publish.yml (env var) | `OPENCODE_CLI_ARTIFACT` | `OCTOPUS_CLI_ARTIFACT` | 手动 |
+| 位置                           | 变更前                   | 变更后                  |     自动/手动      |
+| ------------------------------ | ------------------------ | ----------------------- | :----------------: |
+| build.ts (目录/archive)        | `pkg.name` → `opencode`  | `pkg.name` → `octopus`  | **自动** (依赖 #1) |
+| build.ts (outfile)             | `bin/opencode`           | `bin/octopus`           |        手动        |
+| build.ts (execArgv)            | `opencode/${version}`    | `octopus/${version}`    |        手动        |
+| build.ts (define)              | `OPENCODE_*`             | `OCTOPUS_*`             |        手动        |
+| build.ts (smoke test)          | `bin/opencode`           | `bin/octopus`           |        手动        |
+| publish.yml (artifact upload)  | `opencode-cli`           | `octopus-cli`           |        手动        |
+| publish.yml (artifact upload)  | `opencode-desktop-*`     | `octopus-desktop-*`     |        手动        |
+| publish.yml (compress-archive) | `opencode-windows-*`     | `octopus-windows-*`     |        手动        |
+| publish.yml (desktop tar.gz)   | `opencode-desktop-mac-*` | `octopus-desktop-mac-*` |        手动        |
+| publish.yml (env var)          | `OPENCODE_CLI_ARTIFACT`  | `OCTOPUS_CLI_ARTIFACT`  |        手动        |
 
 ---
 
@@ -738,18 +746,19 @@ Phase 2: CI/CD 变更 (Group 2C, platform agent)
 
 执行 `script/verify-rebrand.ts` 的 Issue #8 验证项：
 
-| 验证项 | 命令 | 预期 |
-|--------|------|------|
-| CI 仓库引用残留 | `grep 'anomalyco/opencode' .github/` | 零结果 |
-| 产物名残留 | `rg 'opencode-darwin' packages/octopus/script/` | 零结果 |
-| 二进制名残留 | `rg '/bin/opencode' packages/octopus/script/build.ts` | 零结果 |
-| email 残留 | `rg 'opencode@sst.dev' .github/` | 零结果 |
-| Docker 镜像名 | `rg 'anomalyco/opencode' packages/octopus/script/publish.ts` | 零结果 |
-| Nix pname | `rg 'pname = "opencode"' nix/` | 零结果 |
+| 验证项          | 命令                                                         | 预期   |
+| --------------- | ------------------------------------------------------------ | ------ |
+| CI 仓库引用残留 | `grep 'anomalyco/opencode' .github/`                         | 零结果 |
+| 产物名残留      | `rg 'opencode-darwin' packages/octopus/script/`              | 零结果 |
+| 二进制名残留    | `rg '/bin/opencode' packages/octopus/script/build.ts`        | 零结果 |
+| email 残留      | `rg 'opencode@sst.dev' .github/`                             | 零结果 |
+| Docker 镜像名   | `rg 'anomalyco/opencode' packages/octopus/script/publish.ts` | 零结果 |
+| Nix pname       | `rg 'pname = "opencode"' nix/`                               | 零结果 |
 
 ### 8.4 回退方案
 
 若 CI 在 Phase 2 后出现红色：
+
 1. 检查 Secrets 是否已设置（最常见的失败原因）
 2. 检查 `OCTOPUS_*` env var 是否在 workflow 中正确传递
 3. 检查 setup-git-committer inputs 名是否与 action.yml 一致
@@ -759,45 +768,45 @@ Phase 2: CI/CD 变更 (Group 2C, platform agent)
 
 ## 附录 A: 变更文件完整清单
 
-| # | 文件 | 状态 | 主要变更 |
-|---|------|:----:|---------|
-| 1 | `.github/workflows/opencode.yml` | **重命名** | → `octopus.yml`; action URL, secrets |
-| 2 | `.github/workflows/publish.yml` | 内容 | repo check, email, artifact names |
-| 3 | `.github/workflows/stats.yml` | 内容 | repo check |
-| 4 | `.github/workflows/docs-update.yml` | 内容 | action URL, secrets |
-| 5 | `.github/workflows/beta.yml` | 内容 | setup-git-committer inputs |
-| 6 | `.github/workflows/generate.yml` | 内容 | setup-git-committer inputs |
-| 7 | `.github/workflows/sync-zed-extension.yml` | 内容 | setup-git-committer inputs |
-| 8 | `.github/workflows/docs-locale-sync.yml` | 内容 | setup-git-committer inputs |
-| 9 | `.github/workflows/release-github-action.yml` | 内容 | email |
-| 10 | `.github/workflows/publish-github-action.yml` | 内容 | email |
-| 11 | `.github/workflows/review.yml` | 内容 | secrets (间接) |
-| 12 | `.github/workflows/duplicate-issues.yml` | 内容 | secrets (间接) |
-| 13 | `.github/workflows/triage.yml` | 内容 | secrets (间接) |
-| 14 | `.github/actions/setup-git-committer/action.yml` | 内容 | inputs rename |
-| 15 | `script/publish.ts` | 内容 | `@opencode-ai/script` → `@octopus-ai/script` |
-| 16 | `script/version.ts` | 内容 | `@opencode-ai/script`, release notes file |
-| 17 | `packages/octopus/script/build.ts` | 内容 | binary name, env flags |
-| 18 | `packages/octopus/script/publish.ts` | 内容 | Docker image, AUR, Homebrew |
-| 19 | `packages/octopus/Dockerfile` | 内容 | binary path, entrypoint |
-| 20 | `packages/containers/script/build.ts` | 内容 | buildx builder name |
-| 21 | `sdks/vscode/script/publish` | 内容 | vsix filename |
-| 22 | `flake.nix` | 内容 | description, package names |
-| 23 | `nix/opencode.nix` | **重命名** | → `nix/octopus.nix`; pname, env, paths |
-| 24 | `nix/desktop.nix` | 内容 | pname, binary refs |
-| 25 | `nix/node_modules.nix` | 内容 | pname, package.json path |
-| 26 | `.github/workflows/nix-eval.yml` | 内容 | package names |
-| 27 | `.github/workflows/nix-hashes.yml` | 内容 | setup-git-committer inputs |
+| #   | 文件                                             |    状态    | 主要变更                                     |
+| --- | ------------------------------------------------ | :--------: | -------------------------------------------- |
+| 1   | `.github/workflows/opencode.yml`                 | **重命名** | → `octopus.yml`; action URL, secrets         |
+| 2   | `.github/workflows/publish.yml`                  |    内容    | repo check, email, artifact names            |
+| 3   | `.github/workflows/stats.yml`                    |    内容    | repo check                                   |
+| 4   | `.github/workflows/docs-update.yml`              |    内容    | action URL, secrets                          |
+| 5   | `.github/workflows/beta.yml`                     |    内容    | setup-git-committer inputs                   |
+| 6   | `.github/workflows/generate.yml`                 |    内容    | setup-git-committer inputs                   |
+| 7   | `.github/workflows/sync-zed-extension.yml`       |    内容    | setup-git-committer inputs                   |
+| 8   | `.github/workflows/docs-locale-sync.yml`         |    内容    | setup-git-committer inputs                   |
+| 9   | `.github/workflows/release-github-action.yml`    |    内容    | email                                        |
+| 10  | `.github/workflows/publish-github-action.yml`    |    内容    | email                                        |
+| 11  | `.github/workflows/review.yml`                   |    内容    | secrets (间接)                               |
+| 12  | `.github/workflows/duplicate-issues.yml`         |    内容    | secrets (间接)                               |
+| 13  | `.github/workflows/triage.yml`                   |    内容    | secrets (间接)                               |
+| 14  | `.github/actions/setup-git-committer/action.yml` |    内容    | inputs rename                                |
+| 15  | `script/publish.ts`                              |    内容    | `@opencode-ai/script` → `@octopus-ai/script` |
+| 16  | `script/version.ts`                              |    内容    | `@opencode-ai/script`, release notes file    |
+| 17  | `packages/octopus/script/build.ts`               |    内容    | binary name, env flags                       |
+| 18  | `packages/octopus/script/publish.ts`             |    内容    | Docker image, AUR, Homebrew                  |
+| 19  | `packages/octopus/Dockerfile`                    |    内容    | binary path, entrypoint                      |
+| 20  | `packages/containers/script/build.ts`            |    内容    | buildx builder name                          |
+| 21  | `sdks/vscode/script/publish`                     |    内容    | vsix filename                                |
+| 22  | `flake.nix`                                      |    内容    | description, package names                   |
+| 23  | `nix/opencode.nix`                               | **重命名** | → `nix/octopus.nix`; pname, env, paths       |
+| 24  | `nix/desktop.nix`                                |    内容    | pname, binary refs                           |
+| 25  | `nix/node_modules.nix`                           |    内容    | pname, package.json path                     |
+| 26  | `.github/workflows/nix-eval.yml`                 |    内容    | package names                                |
+| 27  | `.github/workflows/nix-hashes.yml`               |    内容    | setup-git-committer inputs                   |
 
 **总计**: 27 个文件变更 (2 个重命名 + 25 个内容更新)
 
 ## 附录 B: Secrets 完整映射
 
-| 当前 | 新 | 类型 | 使用范围 |
-|------|----|:---:|---------|
-| `OPENCODE_API_KEY` | `OCTOPUS_API_KEY` | Secret | 所有 AI agent workflow |
-| `OPENCODE_APP_ID` | `OCTOPUS_APP_ID` | Variable | setup-git-committer (all callers) |
-| `OPENCODE_APP_SECRET` | `OCTOPUS_APP_SECRET` | Secret | setup-git-committer (all callers) |
+| 当前                  | 新                   |   类型   | 使用范围                          |
+| --------------------- | -------------------- | :------: | --------------------------------- |
+| `OPENCODE_API_KEY`    | `OCTOPUS_API_KEY`    |  Secret  | 所有 AI agent workflow            |
+| `OPENCODE_APP_ID`     | `OCTOPUS_APP_ID`     | Variable | setup-git-committer (all callers) |
+| `OPENCODE_APP_SECRET` | `OCTOPUS_APP_SECRET` |  Secret  | setup-git-committer (all callers) |
 
 ## 附录 C: 保留不变的项目
 

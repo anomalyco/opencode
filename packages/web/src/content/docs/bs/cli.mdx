@@ -78,12 +78,12 @@ opencode attach http://10.20.30.40:4096
 
 #### Opcije
 
-| Opcija                                   | Kratko | Opis                                                                                          |
-| ---------------------------------------- | ------ | --------------------------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |        | Radni direktorij za pokretanje TUI-a                                                          |
-| <nobr><code>{"--continue"}</code></nobr> | `-c`   | Nastavi posljednju sesiju                                                                     |
-| <nobr><code>{"--session"}</code></nobr>  | `-s`   | ID sesije za nastavak                                                                         |
-| <nobr><code>{"--fork"}</code></nobr>     |        | Forkuj sesiju prilikom nastavka (koristite sa `--continue` ili `--session`)                   |
+| Opcija                                   | Kratko | Opis                                                                                         |
+| ---------------------------------------- | ------ | -------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |        | Radni direktorij za pokretanje TUI-a                                                         |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`   | Nastavi posljednju sesiju                                                                    |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`   | ID sesije za nastavak                                                                        |
+| <nobr><code>{"--fork"}</code></nobr>     |        | Forkuj sesiju prilikom nastavka (koristite sa `--continue` ili `--session`)                  |
 | <nobr><code>{"--password"}</code></nobr> | `-p`   | Lozinka za osnovnu autentifikaciju (zadano: `OCTOPUS_SERVER_PASSWORD`)                       |
 | <nobr><code>{"--username"}</code></nobr> | `-u`   | Korisničko ime za osnovnu autentifikaciju (zadano: `OCTOPUS_SERVER_USERNAME` ili `opencode`) |
 
@@ -336,25 +336,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Opcije
 
-| Opcija                                   | Kratko | Opis                                                                                          |
-| ---------------------------------------- | ------ | --------------------------------------------------------------------------------------------- |
-| <nobr><code>{"--command"}</code></nobr>  |        | Naredba za pokretanje, koristite poruku za argumente                                          |
-| <nobr><code>{"--continue"}</code></nobr> | `-c`   | Nastavite posljednju sesiju                                                                   |
-| <nobr><code>{"--session"}</code></nobr>  | `-s`   | ID sesije za nastavak                                                                         |
-| <nobr><code>{"--fork"}</code></nobr>     |        | Forkujte sesiju pri nastavku (koristiti sa `--continue` ili `--session`)                      |
-| <nobr><code>{"--share"}</code></nobr>    |        | Podijelite sesiju                                                                             |
-| <nobr><code>{"--model"}</code></nobr>    | `-m`   | Model za korištenje u obliku provider/model                                                   |
-| <nobr><code>{"--agent"}</code></nobr>    |        | Agent za korištenje                                                                           |
-| <nobr><code>{"--file"}</code></nobr>     | `-f`   | Fajlovi koje treba priložiti poruci                                                           |
-| <nobr><code>{"--format"}</code></nobr>   |        | Format: default (formatiran) ili json (sirovi JSON događaji)                                  |
-| <nobr><code>{"--title"}</code></nobr>    |        | Naslov sesije (koristi skraćeni prompt ako nije navedena vrijednost)                          |
+| Opcija                                   | Kratko | Opis                                                                                         |
+| ---------------------------------------- | ------ | -------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |        | Naredba za pokretanje, koristite poruku za argumente                                         |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`   | Nastavite posljednju sesiju                                                                  |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`   | ID sesije za nastavak                                                                        |
+| <nobr><code>{"--fork"}</code></nobr>     |        | Forkujte sesiju pri nastavku (koristiti sa `--continue` ili `--session`)                     |
+| <nobr><code>{"--share"}</code></nobr>    |        | Podijelite sesiju                                                                            |
+| <nobr><code>{"--model"}</code></nobr>    | `-m`   | Model za korištenje u obliku provider/model                                                  |
+| <nobr><code>{"--agent"}</code></nobr>    |        | Agent za korištenje                                                                          |
+| <nobr><code>{"--file"}</code></nobr>     | `-f`   | Fajlovi koje treba priložiti poruci                                                          |
+| <nobr><code>{"--format"}</code></nobr>   |        | Format: default (formatiran) ili json (sirovi JSON događaji)                                 |
+| <nobr><code>{"--title"}</code></nobr>    |        | Naslov sesije (koristi skraćeni prompt ako nije navedena vrijednost)                         |
 | <nobr><code>{"--attach"}</code></nobr>   |        | Priključite na pokrenuti Octopus server (npr. http://localhost:4096)                         |
 | <nobr><code>{"--password"}</code></nobr> | `-p`   | Lozinka za osnovnu autentifikaciju (zadano: `OCTOPUS_SERVER_PASSWORD`)                       |
 | <nobr><code>{"--username"}</code></nobr> | `-u`   | Korisničko ime za osnovnu autentifikaciju (zadano: `OCTOPUS_SERVER_USERNAME` ili `opencode`) |
-| <nobr><code>{"--dir"}</code></nobr>      |        | Direktorij za pokretanje, ili putanja na udaljenom serveru pri spajanju                       |
-| <nobr><code>{"--variant"}</code></nobr>  |        | Varijanta modela (napor zaključivanja specifičan za provajdera)                               |
-| <nobr><code>{"--thinking"}</code></nobr> |        | Prikaži blokove razmišljanja                                                                  |
-| <nobr><code>{"--port"}</code></nobr>     |        | Port za lokalni server (zadano na nasumični port)                                             |
+| <nobr><code>{"--dir"}</code></nobr>      |        | Direktorij za pokretanje, ili putanja na udaljenom serveru pri spajanju                      |
+| <nobr><code>{"--variant"}</code></nobr>  |        | Varijanta modela (napor zaključivanja specifičan za provajdera)                              |
+| <nobr><code>{"--thinking"}</code></nobr> |        | Prikaži blokove razmišljanja                                                                 |
+| <nobr><code>{"--port"}</code></nobr>     |        | Port za lokalni server (zadano na nasumični port)                                            |
 
 ---
 
@@ -559,8 +559,8 @@ Octopus CLI prihvata sljedeće globalne zastavice.
 
 Octopus se može konfigurirati pomoću varijabli okruženja.
 
-| Varijabla                             | Tip     | Opis                                                               |
-| ------------------------------------- | ------- | ------------------------------------------------------------------ |
+| Varijabla                            | Tip     | Opis                                                               |
+| ------------------------------------ | ------- | ------------------------------------------------------------------ |
 | `OCTOPUS_AUTO_SHARE`                 | boolean | Automatski dijeli sesije                                           |
 | `OCTOPUS_GIT_BASH_PATH`              | string  | Putanja do Git Bash izvršne datoteke na Windows-u                  |
 | `OCTOPUS_CONFIG`                     | string  | Putanja do konfiguracijskog fajla                                  |
@@ -592,8 +592,8 @@ Octopus se može konfigurirati pomoću varijabli okruženja.
 
 Ove varijable okruženja omogućavaju eksperimentalne karakteristike koje se mogu promijeniti ili ukloniti.
 
-| Varijabla                                       | Tip     | Opis                                              |
-| ----------------------------------------------- | ------- | ------------------------------------------------- |
+| Varijabla                                      | Tip     | Opis                                              |
+| ---------------------------------------------- | ------- | ------------------------------------------------- |
 | `OCTOPUS_EXPERIMENTAL`                         | boolean | Omogući sve eksperimentalne funkcije              |
 | `OCTOPUS_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Omogući otkrivanje ikona                          |
 | `OCTOPUS_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Onemogući kopiranje pri odabiru u TUI             |

@@ -105,8 +105,8 @@ Or you can set it up manually.
 
 Octopus can be triggered by the following GitHub events:
 
-| Event Type                    | Triggered By                           | Details                                                                                                           |
-| ----------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Event Type                    | Triggered By                           | Details                                                                                                          |
+| ----------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `issue_comment`               | Comment on an issue or PR              | Mention `/opencode` or `/oc` in your comment. Octopus reads context and can create branches, open PRs, or reply. |
 | `pull_request_review_comment` | Comment on specific code lines in a PR | Mention `/opencode` or `/oc` while reviewing code. Octopus receives file path, line numbers, and diff context.   |
 | `issues`                      | Issue opened or edited                 | Automatically trigger Octopus when issues are created or modified. Requires `prompt` input.                      |

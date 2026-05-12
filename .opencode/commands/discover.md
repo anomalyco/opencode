@@ -2,6 +2,7 @@
 description: 启动需求发现流程（P0 Discovery）
 agent: analyst
 ---
+
 用户原始需求: $ARGUMENTS
 
 请按以下流程操作：

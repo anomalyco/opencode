@@ -78,12 +78,12 @@ opencode attach http://10.20.30.40:4096
 
 #### Optionen
 
-| Flag                                     | Kurz | Beschreibung                                                                       |
-| ---------------------------------------- | ---- | ---------------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |      | Arbeitsverzeichnis zum Starten von TUI in                                          |
-| <nobr><code>{"--continue"}</code></nobr> | `-c` | Letzte Sitzung fortsetzen                                                          |
-| <nobr><code>{"--session"}</code></nobr>  | `-s` | Session-ID zum Fortfahren                                                          |
-| <nobr><code>{"--fork"}</code></nobr>     |      | Sitzung beim Fortsetzen abzweigen (mit `--continue` oder `--session` verwenden)    |
+| Flag                                     | Kurz | Beschreibung                                                                      |
+| ---------------------------------------- | ---- | --------------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |      | Arbeitsverzeichnis zum Starten von TUI in                                         |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | Letzte Sitzung fortsetzen                                                         |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | Session-ID zum Fortfahren                                                         |
+| <nobr><code>{"--fork"}</code></nobr>     |      | Sitzung beim Fortsetzen abzweigen (mit `--continue` oder `--session` verwenden)   |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | Basic-Auth-Passwort (standardmäßig `OCTOPUS_SERVER_PASSWORD`)                     |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | Basic-Auth-Benutzername (standardmäßig `OCTOPUS_SERVER_USERNAME` oder `opencode`) |
 
@@ -351,9 +351,9 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--file"}</code></nobr>     | `-f` | Datei(en) zum Anhängen an die Nachricht                                                             |
 | <nobr><code>{"--format"}</code></nobr>   |      | Format: default (formatiert) oder json (rohe JSON-Ereignisse)                                       |
 | <nobr><code>{"--title"}</code></nobr>    |      | Titel für die Sitzung (verwendet eine verkürzte Eingabeaufforderung, wenn kein Wert angegeben wird) |
-| <nobr><code>{"--attach"}</code></nobr>   |      | An einen laufenden Octopus-Server anschließen (z.B. http://localhost:4096)                         |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | Basic-Auth-Passwort (standardmäßig `OCTOPUS_SERVER_PASSWORD`)                                      |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | Basic-Auth-Benutzername (standardmäßig `OCTOPUS_SERVER_USERNAME` oder `opencode`)                  |
+| <nobr><code>{"--attach"}</code></nobr>   |      | An einen laufenden Octopus-Server anschließen (z.B. http://localhost:4096)                          |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | Basic-Auth-Passwort (standardmäßig `OCTOPUS_SERVER_PASSWORD`)                                       |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Basic-Auth-Benutzername (standardmäßig `OCTOPUS_SERVER_USERNAME` oder `opencode`)                   |
 | <nobr><code>{"--dir"}</code></nobr>      |      | Verzeichnis für die Ausführung, oder Pfad auf dem Remote-Server beim Anhängen                       |
 | <nobr><code>{"--variant"}</code></nobr>  |      | Modellvariante (anbieterspezifischer Reasoning-Aufwand)                                             |
 | <nobr><code>{"--thinking"}</code></nobr> |      | Denkblöcke anzeigen                                                                                 |
@@ -562,8 +562,8 @@ Der Octopus CLI akzeptiert die folgenden globalen Flags.
 
 Octopus kann mithilfe von Umgebungsvariablen konfiguriert werden.
 
-| Variable                              | Typ             | Beschreibung                                                                     |
-| ------------------------------------- | --------------- | -------------------------------------------------------------------------------- |
+| Variable                             | Typ             | Beschreibung                                                                     |
+| ------------------------------------ | --------------- | -------------------------------------------------------------------------------- |
 | `OCTOPUS_AUTO_SHARE`                 | boolescher Wert | Sitzungen automatisch teilen                                                     |
 | `OCTOPUS_GIT_BASH_PATH`              | Zeichenfolge    | Pfad zur ausführbaren Git Bash-Datei unter Windows                               |
 | `OCTOPUS_CONFIG`                     | Zeichenfolge    | Pfad zur Konfigurationsdatei                                                     |
@@ -594,8 +594,8 @@ Octopus kann mithilfe von Umgebungsvariablen konfiguriert werden.
 
 Diese Umgebungsvariablen ermöglichen experimentelle Funktionen, die sich ändern oder entfernt werden können.
 
-| Variable                                        | Typ             | Beschreibung                                            |
-| ----------------------------------------------- | --------------- | ------------------------------------------------------- |
+| Variable                                       | Typ             | Beschreibung                                            |
+| ---------------------------------------------- | --------------- | ------------------------------------------------------- |
 | `OCTOPUS_EXPERIMENTAL`                         | boolescher Wert | Alle experimentellen Funktionen aktivieren              |
 | `OCTOPUS_EXPERIMENTAL_ICON_DISCOVERY`          | boolescher Wert | Symbolerkennung aktivieren                              |
 | `OCTOPUS_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolescher Wert | Kopieren bei Auswahl in TUI deaktivieren                |

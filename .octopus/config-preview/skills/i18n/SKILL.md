@@ -9,12 +9,12 @@ description: Multi-language i18n key management across 4 directories, 66 locale 
 
 ## i18n 目录结构
 
-| 目录 | 语言数 | 格式 | 键示例 |
-|------|--------|------|--------|
-| `packages/app/src/i18n/` | 15 | `export const dict = { "key": "value" }` | flat key-value |
-| `packages/ui/src/i18n/` | 17 | `export const dict: Record<string, string> = { ... }` | flat key-value |
-| `packages/desktop/src/renderer/i18n/` | 16 | 同上 | flat key-value |
-| `packages/web/src/content/i18n/` | 18 | JSON | nested: `app.head.titleSuffix` |
+| 目录                                  | 语言数 | 格式                                                  | 键示例                         |
+| ------------------------------------- | ------ | ----------------------------------------------------- | ------------------------------ |
+| `packages/app/src/i18n/`              | 15     | `export const dict = { "key": "value" }`              | flat key-value                 |
+| `packages/ui/src/i18n/`               | 17     | `export const dict: Record<string, string> = { ... }` | flat key-value                 |
+| `packages/desktop/src/renderer/i18n/` | 16     | 同上                                                  | flat key-value                 |
+| `packages/web/src/content/i18n/`      | 18     | JSON                                                  | nested: `app.head.titleSuffix` |
 
 ## 翻译键替换
 
@@ -25,6 +25,7 @@ description: Multi-language i18n key management across 4 directories, 66 locale 
 ## 文档翻译
 
 `packages/web/src/content/docs/` 包含 612 个 .mdx 文件，17 种语言。翻译时注意：
+
 - 保留技术术语和代码块不变
 - 保留 Markdown/MDX 结构
 - 遵循 `.opencode/glossary/<locale>.md` 的术语表
@@ -46,6 +47,7 @@ description: Multi-language i18n key management across 4 directories, 66 locale 
 ## Glossary
 
 `.opencode/glossary/` 提供了 17 种语言的术语标准：
+
 - `zh-cn.md`：提示词(prompt)、会话(session)、提供商(provider)
 - 其他 locale 同理
 

@@ -78,12 +78,12 @@ opencode attach http://10.20.30.40:4096
 
 #### Flagi
 
-| Flaga                                    | Skrót | Opis                                                                                                  |
-| ---------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |       | Katalog roboczy, w którym uruchomić TUI                                                               |
-| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Kontynuuj ostatnią sesję                                                                              |
-| <nobr><code>{"--session"}</code></nobr>  | `-s`  | Identyfikator sesji do kontynuowania                                                                  |
-| <nobr><code>{"--fork"}</code></nobr>     |       | Rozgałęź sesję podczas kontynuowania (użyj z `--continue` lub `--session`)                            |
+| Flaga                                    | Skrót | Opis                                                                                                 |
+| ---------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |       | Katalog roboczy, w którym uruchomić TUI                                                              |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Kontynuuj ostatnią sesję                                                                             |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`  | Identyfikator sesji do kontynuowania                                                                 |
+| <nobr><code>{"--fork"}</code></nobr>     |       | Rozgałęź sesję podczas kontynuowania (użyj z `--continue` lub `--session`)                           |
 | <nobr><code>{"--password"}</code></nobr> | `-p`  | Hasło uwierzytelniania podstawowego (domyślnie `OCTOPUS_SERVER_PASSWORD`)                            |
 | <nobr><code>{"--username"}</code></nobr> | `-u`  | Nazwa użytkownika uwierzytelniania podstawowego (domyślnie `OCTOPUS_SERVER_USERNAME` lub `opencode`) |
 
@@ -339,25 +339,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Flagi
 
-| Flaga                                    | Skrót | Opis                                                                                                  |
-| ---------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------- |
-| <nobr><code>{"--command"}</code></nobr>  |       | Polecenie do uruchomienia, reszta to argumenty                                                        |
-| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Kontynuuj ostatnią sesję                                                                              |
-| <nobr><code>{"--session"}</code></nobr>  | `-s`  | Identyfikator sesji do kontynuowania                                                                  |
-| <nobr><code>{"--fork"}</code></nobr>     |       | Sklonuj sesję podczas kontynuacji (użyj z `--continue` lub `--session`)                               |
-| <nobr><code>{"--share"}</code></nobr>    |       | Udostępnij sesję po zakończeniu                                                                       |
-| <nobr><code>{"--model"}</code></nobr>    | `-m`  | Model do użycia w formacie dostawca/model                                                             |
-| <nobr><code>{"--agent"}</code></nobr>    |       | Agent do użycia                                                                                       |
-| <nobr><code>{"--file"}</code></nobr>     | `-f`  | Pliki do załączenia do wiadomości                                                                     |
-| <nobr><code>{"--format"}</code></nobr>   |       | Format wyjściowy: `default` (sformatowany) lub `json` (surowy JSON)                                   |
-| <nobr><code>{"--title"}</code></nobr>    |       | Tytuł sesji (jeśli nie podano, zostanie wygenerowany z promptu)                                       |
+| Flaga                                    | Skrót | Opis                                                                                                 |
+| ---------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |       | Polecenie do uruchomienia, reszta to argumenty                                                       |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Kontynuuj ostatnią sesję                                                                             |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`  | Identyfikator sesji do kontynuowania                                                                 |
+| <nobr><code>{"--fork"}</code></nobr>     |       | Sklonuj sesję podczas kontynuacji (użyj z `--continue` lub `--session`)                              |
+| <nobr><code>{"--share"}</code></nobr>    |       | Udostępnij sesję po zakończeniu                                                                      |
+| <nobr><code>{"--model"}</code></nobr>    | `-m`  | Model do użycia w formacie dostawca/model                                                            |
+| <nobr><code>{"--agent"}</code></nobr>    |       | Agent do użycia                                                                                      |
+| <nobr><code>{"--file"}</code></nobr>     | `-f`  | Pliki do załączenia do wiadomości                                                                    |
+| <nobr><code>{"--format"}</code></nobr>   |       | Format wyjściowy: `default` (sformatowany) lub `json` (surowy JSON)                                  |
+| <nobr><code>{"--title"}</code></nobr>    |       | Tytuł sesji (jeśli nie podano, zostanie wygenerowany z promptu)                                      |
 | <nobr><code>{"--attach"}</code></nobr>   |       | Dołącz do działającego serwera Octopus (np. http://localhost:4096)                                   |
 | <nobr><code>{"--password"}</code></nobr> | `-p`  | Hasło uwierzytelniania podstawowego (domyślnie `OCTOPUS_SERVER_PASSWORD`)                            |
 | <nobr><code>{"--username"}</code></nobr> | `-u`  | Nazwa użytkownika uwierzytelniania podstawowego (domyślnie `OCTOPUS_SERVER_USERNAME` lub `opencode`) |
-| <nobr><code>{"--dir"}</code></nobr>      |       | Katalog do uruchomienia lub ścieżka na zdalnym serwerze podczas dołączania                            |
-| <nobr><code>{"--variant"}</code></nobr>  |       | Wariant modelu (poziom wnioskowania specyficzny dla dostawcy)                                         |
-| <nobr><code>{"--thinking"}</code></nobr> |       | Pokaż bloki myślenia                                                                                  |
-| <nobr><code>{"--port"}</code></nobr>     |       | Port dla serwera lokalnego (domyślnie losowy)                                                         |
+| <nobr><code>{"--dir"}</code></nobr>      |       | Katalog do uruchomienia lub ścieżka na zdalnym serwerze podczas dołączania                           |
+| <nobr><code>{"--variant"}</code></nobr>  |       | Wariant modelu (poziom wnioskowania specyficzny dla dostawcy)                                        |
+| <nobr><code>{"--thinking"}</code></nobr> |       | Pokaż bloki myślenia                                                                                 |
+| <nobr><code>{"--port"}</code></nobr>     |       | Port dla serwera lokalnego (domyślnie losowy)                                                        |
 
 ---
 
@@ -562,8 +562,8 @@ Interfejs CLI Octopus przyjmuje następujące flagi globalne dla każdego polece
 
 Octopus można skonfigurować za pomocą zmiennych środowiskowych.
 
-| Zmienna                               | Typ     | Opis                                                       |
-| ------------------------------------- | ------- | ---------------------------------------------------------- |
+| Zmienna                              | Typ     | Opis                                                       |
+| ------------------------------------ | ------- | ---------------------------------------------------------- |
 | `OCTOPUS_AUTO_SHARE`                 | boolean | Automatycznie udostępniaj sesje                            |
 | `OCTOPUS_GIT_BASH_PATH`              | string  | Ścieżka do pliku wykonywalnego Git Bash w systemie Windows |
 | `OCTOPUS_CONFIG`                     | string  | Ścieżka do pliku konfiguracyjnego                          |
@@ -595,8 +595,8 @@ Octopus można skonfigurować za pomocą zmiennych środowiskowych.
 
 Te zmienne włączają funkcje eksperymentalne, które mogą ulec zmianie lub zostać usunięte.
 
-| Zmienna                                         | Typ     | Opis                                         |
-| ----------------------------------------------- | ------- | -------------------------------------------- |
+| Zmienna                                        | Typ     | Opis                                         |
+| ---------------------------------------------- | ------- | -------------------------------------------- |
 | `OCTOPUS_EXPERIMENTAL`                         | boolean | Włącz wszystkie funkcje eksperymentalne      |
 | `OCTOPUS_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Włącz wykrywanie ikon                        |
 | `OCTOPUS_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Wyłącz kopiowanie przy zaznaczaniu w TUI     |

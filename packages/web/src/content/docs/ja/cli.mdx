@@ -78,12 +78,12 @@ opencode attach http://10.20.30.40:4096
 
 #### フラグ
 
-| フラグ                                   | ショート | 説明                                                                              |
-| ---------------------------------------- | -------- | --------------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |          | TUI を開始する作業ディレクトリ                                                    |
-| <nobr><code>{"--continue"}</code></nobr> | `-c`     | 最後のセッションを続行                                                            |
-| <nobr><code>{"--session"}</code></nobr>  | `-s`     | 続行するセッション ID                                                             |
-| <nobr><code>{"--fork"}</code></nobr>     |          | 続行時にセッションをフォーク（`--continue` または `--session` と使用）            |
+| フラグ                                   | ショート | 説明                                                                             |
+| ---------------------------------------- | -------- | -------------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |          | TUI を開始する作業ディレクトリ                                                   |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`     | 最後のセッションを続行                                                           |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`     | 続行するセッション ID                                                            |
+| <nobr><code>{"--fork"}</code></nobr>     |          | 続行時にセッションをフォーク（`--continue` または `--session` と使用）           |
 | <nobr><code>{"--password"}</code></nobr> | `-p`     | Basic 認証パスワード（デフォルトは `OCTOPUS_SERVER_PASSWORD`）                   |
 | <nobr><code>{"--username"}</code></nobr> | `-u`     | Basic 認証ユーザー名（デフォルトは `OCTOPUS_SERVER_USERNAME` または `opencode`） |
 
@@ -352,8 +352,8 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--format"}</code></nobr>   |          | 形式: デフォルト (フォーマット済み) または json (生の JSON イベント)                      |
 | <nobr><code>{"--title"}</code></nobr>    |          | セッションのタイトル (値が指定されていない場合は、切り詰められたプロンプトが使用されます) |
 | <nobr><code>{"--attach"}</code></nobr>   |          | 実行中の opencode サーバー (http://localhost:4096 など) に接続します。                    |
-| <nobr><code>{"--password"}</code></nobr> | `-p`     | Basic 認証パスワード（デフォルトは `OCTOPUS_SERVER_PASSWORD`）                           |
-| <nobr><code>{"--username"}</code></nobr> | `-u`     | Basic 認証ユーザー名（デフォルトは `OCTOPUS_SERVER_USERNAME` または `opencode`）         |
+| <nobr><code>{"--password"}</code></nobr> | `-p`     | Basic 認証パスワード（デフォルトは `OCTOPUS_SERVER_PASSWORD`）                            |
+| <nobr><code>{"--username"}</code></nobr> | `-u`     | Basic 認証ユーザー名（デフォルトは `OCTOPUS_SERVER_USERNAME` または `opencode`）          |
 | <nobr><code>{"--dir"}</code></nobr>      |          | 実行ディレクトリ、またはアタッチ時のリモートサーバー上のパス                              |
 | <nobr><code>{"--variant"}</code></nobr>  |          | モデルバリアント（プロバイダー固有の推論レベル）                                          |
 | <nobr><code>{"--thinking"}</code></nobr> |          | 思考ブロックを表示                                                                        |
@@ -562,8 +562,8 @@ opencode CLI は次のグローバルフラグを受け取ります。
 
 Octopus は環境変数を使用して構成できます。
 
-| 変数                                  | タイプ   | 説明                                                                |
-| ------------------------------------- | -------- | ------------------------------------------------------------------- |
+| 変数                                 | タイプ   | 説明                                                                |
+| ------------------------------------ | -------- | ------------------------------------------------------------------- |
 | `OCTOPUS_AUTO_SHARE`                 | ブール値 | セッションを自動的に共有する                                        |
 | `OCTOPUS_GIT_BASH_PATH`              | 文字列   | Windows 上で実行可能な Git Bash へのパス                            |
 | `OCTOPUS_CONFIG`                     | 文字列   | 構成ファイルへのパス                                                |
@@ -594,8 +594,8 @@ Octopus は環境変数を使用して構成できます。
 
 これらの環境変数により、変更または削除される可能性のある実験的な機能が有効になります。
 
-| 変数                                            | タイプ   | 説明                                             |
-| ----------------------------------------------- | -------- | ------------------------------------------------ |
+| 変数                                           | タイプ   | 説明                                             |
+| ---------------------------------------------- | -------- | ------------------------------------------------ |
 | `OCTOPUS_EXPERIMENTAL`                         | ブール値 | すべての実験的機能を有効にする                   |
 | `OCTOPUS_EXPERIMENTAL_ICON_DISCOVERY`          | ブール値 | アイコン検出を有効にする                         |
 | `OCTOPUS_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | ブール値 | TUI で選択時のコピーを無効にする                 |

@@ -39,11 +39,11 @@ script/
 
 `opencode` 存在三态大小写，必须分阶段精确替换避免误伤：
 
-| 阶段 | 原字符串 | 目标字符串 | 文件类型 | 排除规则 |
-|------|---------|-----------|----------|---------|
-| **A - 全小写** | `opencode` | `octopus` | `.ts`, `.json`, `.yml`, `.toml`, `.md`, `.mdx`, `.js` | 排除列表（见 §4.1） |
-| **B - 全大写** | `OPENCODE_` | `OCTOPUS_` | `.ts`, `.yml` | `OTEL_*` |
-| **C - 首字母大写** | `Opencode` / `OpenCode` | `Octopus` | `.ts`, `.json`, `.mdx` | 仅精确匹配标识符 |
+| 阶段               | 原字符串                | 目标字符串 | 文件类型                                              | 排除规则            |
+| ------------------ | ----------------------- | ---------- | ----------------------------------------------------- | ------------------- |
+| **A - 全小写**     | `opencode`              | `octopus`  | `.ts`, `.json`, `.yml`, `.toml`, `.md`, `.mdx`, `.js` | 排除列表（见 §4.1） |
+| **B - 全大写**     | `OPENCODE_`             | `OCTOPUS_` | `.ts`, `.yml`                                         | `OTEL_*`            |
+| **C - 首字母大写** | `Opencode` / `OpenCode` | `Octopus`  | `.ts`, `.json`, `.mdx`                                | 仅精确匹配标识符    |
 
 ### 1.3 排除清单（所有脚本共享）
 
@@ -76,6 +76,7 @@ OTEL_*
 所有脚本内部的 import/引用必须自身使用新名称（`@octopus-ai/*`），这意味着脚本需要在 Issue #1 完成（scope 改名）**之后**才能写入并运行。同时脚本自身不引用任何 `@opencode-ai/*` 包——它们应该是独立的 `bun` 脚本。
 
 具体实现：
+
 - `verify-rebrand.ts` 和 `rebrand-smoke.ts` **不 import 任何 `@opencode-ai/*` 或 `@octopus-ai/*` 包**
 - 使用标准 `node:` imports + `bun` 内置 API（`Bun.$, Bun.Glob, Bun.file`）
 - `rebrand-smoke.ts` 中需要运行的命令（typecheck, test）通过 `$` 执行 `bun turbo` CLI 间接调用
@@ -133,11 +134,14 @@ bun run script/verify-rebrand.ts --json
 ```ts
 function checkIssue1(): CheckResult {
   const patterns = [
-    { name: "ts import",     grep: { pattern: "@opencode-ai/", include: "*.ts",  exclude: "node_modules|dist|.turbo|migration" } },
-    { name: "tsx import",    grep: { pattern: "@opencode-ai/", include: "*.tsx", exclude: "node_modules|dist|.turbo" } },
-    { name: "json package",  grep: { pattern: "@opencode-ai/", include: "package.json", exclude: "node_modules" } },
-    { name: "turbo tasks",   grep: { pattern: "@opencode-ai/|opencode#", include: "turbo.json" } },
-    { name: "js sdk import", grep: { pattern: "@opencode-ai/", include: "*.js",  exclude: "node_modules|dist" } },
+    {
+      name: "ts import",
+      grep: { pattern: "@opencode-ai/", include: "*.ts", exclude: "node_modules|dist|.turbo|migration" },
+    },
+    { name: "tsx import", grep: { pattern: "@opencode-ai/", include: "*.tsx", exclude: "node_modules|dist|.turbo" } },
+    { name: "json package", grep: { pattern: "@opencode-ai/", include: "package.json", exclude: "node_modules" } },
+    { name: "turbo tasks", grep: { pattern: "@opencode-ai/|opencode#", include: "turbo.json" } },
+    { name: "js sdk import", grep: { pattern: "@opencode-ai/", include: "*.js", exclude: "node_modules|dist" } },
   ]
   // ...
 }
@@ -171,11 +175,11 @@ function checkIssue2(): CheckResult {
 ```ts
 function checkIssue3(): CheckResult {
   const identifiers = [
-    "createOpencode",       // → createOctopus
+    "createOpencode", // → createOctopus
     "createOpencodeClient", // → createOctopusClient
     "createOpencodeServer", // → createOctopusServer
-    "createOpencodeTui",    // → createOctopusTui
-    "OpencodeClient",       // → OctopusClient
+    "createOpencodeTui", // → createOctopusTui
+    "OpencodeClient", // → OctopusClient
     "OpencodeClientConfig", // → OctopusClientConfig
   ]
   // 构建精确的 word-boundary regex: /\b(createOpencode|OpencodeClient)\b/
@@ -213,9 +217,9 @@ function checkIssue4(): CheckResult {
 ```ts
 function checkIssue5(): CheckResult {
   const patterns = [
-    { name: ".opencode dir",  grep: { pattern: "\\.opencode/",  include: "*.{ts,json,yml,md,mdx}" } },
+    { name: ".opencode dir", grep: { pattern: "\\.opencode/", include: "*.{ts,json,yml,md,mdx}" } },
     { name: "opencode.jsonc", grep: { pattern: "opencode\\.jsonc", include: "*.{ts,json,yml,md,mdx}" } },
-    { name: "opencode.json",  grep: { pattern: '"[^"]*opencode\\.json"', include: "*.ts" } },
+    { name: "opencode.json", grep: { pattern: '"[^"]*opencode\\.json"', include: "*.ts" } },
   ]
   // 注意: .opencode/ 目录的文件系统存在性在 Issue #5 本身检查
   // ...
@@ -228,9 +232,12 @@ function checkIssue5(): CheckResult {
 function checkIssue6(): CheckResult {
   const patterns = [
     { name: "theme variable", grep: { pattern: "opencodeTheme", path: "packages/ui" } },
-    { name: "theme file",     grep: { pattern: 'opencode\\.json', path: "packages/ui" } },
-    { name: "css class",      grep: { pattern: "opencode-theme|opencode-find|opencode-line-comment", include: "*.{ts,tsx,css}" } },
-    { name: "icon file",      grep: { pattern: "opencode\\.svg", include: "*.{ts,toml}" } },
+    { name: "theme file", grep: { pattern: "opencode\\.json", path: "packages/ui" } },
+    {
+      name: "css class",
+      grep: { pattern: "opencode-theme|opencode-find|opencode-line-comment", include: "*.{ts,tsx,css}" },
+    },
+    { name: "icon file", grep: { pattern: "opencode\\.svg", include: "*.{ts,toml}" } },
   ]
   // ...
 }
@@ -255,9 +262,15 @@ function checkIssue7(): CheckResult {
 ```ts
 function checkIssue8(): CheckResult {
   const patterns = [
-    { name: "repo url",          grep: { pattern: "anomalyco/opencode",        path: ".github" } },
-    { name: "artifact name",     grep: { pattern: "opencode-darwin|opencode-linux|opencode-windows", path: "packages/octopus/script|packages/octopus/script" } },
-    { name: "email",             grep: { pattern: "opencode@sst\\.dev",         include: "*.{ts,json,yml,md,mdx}" } },
+    { name: "repo url", grep: { pattern: "anomalyco/opencode", path: ".github" } },
+    {
+      name: "artifact name",
+      grep: {
+        pattern: "opencode-darwin|opencode-linux|opencode-windows",
+        path: "packages/octopus/script|packages/octopus/script",
+      },
+    },
+    { name: "email", grep: { pattern: "opencode@sst\\.dev", include: "*.{ts,json,yml,md,mdx}" } },
     // 以下不检查（保留清单）
     // anomalyco/opencode/github@latest 中的 model: opencode/claude-opus-4-5（外部模型ID）
     // https://discord.gg/opencode（外部 URL）
@@ -271,10 +284,10 @@ function checkIssue8(): CheckResult {
 ```ts
 function checkIssue9(): CheckResult {
   const patterns = [
-    { name: ".config/opencode", grep: { pattern: "\\.config/opencode/",  path: "packages/web" } },
-    { name: "CLI command doc",  grep: { pattern: "`opencode\\b",         path: "packages/web" } },
-    { name: "i18n key",         grep: { pattern: '"[^"]*\\.opencode_',   path: "packages/web" } },
-    { name: "AGENTS.md",        grep: { pattern: "openCode|OpenCode|OPENCODE", path: "AGENTS.md" } },
+    { name: ".config/opencode", grep: { pattern: "\\.config/opencode/", path: "packages/web" } },
+    { name: "CLI command doc", grep: { pattern: "`opencode\\b", path: "packages/web" } },
+    { name: "i18n key", grep: { pattern: '"[^"]*\\.opencode_', path: "packages/web" } },
+    { name: "AGENTS.md", grep: { pattern: "openCode|OpenCode|OPENCODE", path: "AGENTS.md" } },
   ]
   // 排除: 模型 ID（opencode-go/deepseek-v4-pro 等）
   // 排除: 外部 URL（https://opencode.ai/install, https://discord.gg/opencode）
@@ -412,8 +425,7 @@ const testFrozenInstall: SmokeTest = {
   name: "frozen-lockfile",
   description: "bun install --frozen-lockfile — 无 workspace 解析错误",
   async run() {
-    const { exitCode, stderr } =
-      await $`bun install --frozen-lockfile`.nothrow().quiet()
+    const { exitCode, stderr } = await $`bun install --frozen-lockfile`.nothrow().quiet()
     return {
       passed: exitCode === 0,
       error: exitCode !== 0 ? stderr.toString() : undefined,
@@ -431,9 +443,9 @@ const testPackageNames: SmokeTest = {
   async run() {
     // 扫描所有 package.json（排除 node_modules）
     const files = await Array.fromAsync(
-      new Bun.Glob("**/package.json").scan({ absolute: true, cwd: process.cwd() })
+      new Bun.Glob("**/package.json").scan({ absolute: true, cwd: process.cwd() }),
     ).then((arr) => arr.filter((f) => !f.includes("node_modules")))
-    
+
     const violations: string[] = []
     for (const file of files) {
       const pkg = await Bun.file(file).json()
@@ -458,9 +470,7 @@ const testBinaryNames: SmokeTest = {
   name: "binary-names",
   description: "package.json bin 字段和 bin/ 目录不含 opencode",
   async run() {
-    const files = await Array.fromAsync(
-      new Bun.Glob("{packages/*/,sdks/*/}package.json").scan({ absolute: true })
-    )
+    const files = await Array.fromAsync(new Bun.Glob("{packages/*/,sdks/*/}package.json").scan({ absolute: true }))
     const violations: string[] = []
     for (const file of files) {
       const pkg = await Bun.file(file).json()
@@ -473,9 +483,7 @@ const testBinaryNames: SmokeTest = {
       }
     }
     // 检查 bin/ 目录中是否存在 opencode 文件
-    const binFiles = await Array.fromAsync(
-      new Bun.Glob("packages/octopus/bin/opencode").scan()
-    )
+    const binFiles = await Array.fromAsync(new Bun.Glob("packages/octopus/bin/opencode").scan())
     if (binFiles.length > 0) violations.push(`bin/opencode still exists`)
 
     return {
@@ -495,9 +503,9 @@ const testTurboTasks: SmokeTest = {
   async run() {
     const turbo = await Bun.file("turbo.json").json()
     const violations: string[] = []
-    
+
     // 检查 globalEnv
-    for (const env of (turbo.globalEnv || [])) {
+    for (const env of turbo.globalEnv || []) {
       if (/opencode/i.test(env) && !/DISABLE/i.test(env)) {
         violations.push(`turbo.json globalEnv: ${env}`)
       }
@@ -508,7 +516,7 @@ const testTurboTasks: SmokeTest = {
         violations.push(`turbo.json task: ${key}`)
       }
     }
-    
+
     return {
       passed: violations.length === 0,
       error: violations.length > 0 ? violations.join("\n") : undefined,
@@ -525,9 +533,8 @@ const testServiceTags: SmokeTest = {
   description: "Effect ServiceTag 不含 @opencode/",
   async run() {
     // 使用 rg 搜索 `@opencode/` pattern（仅在 .ts 文件中）
-    const { exitCode, stdout } =
-      await $`rg -n '@opencode/' --include='*.ts' packages/octopus/src/`.nothrow().quiet()
-    
+    const { exitCode, stdout } = await $`rg -n '@opencode/' --include='*.ts' packages/octopus/src/`.nothrow().quiet()
+
     return {
       passed: exitCode !== 0, // rg returns 1 when no matches
       error: exitCode === 0 ? stdout.toString() : undefined,
@@ -544,21 +551,21 @@ const testConfigPaths: SmokeTest = {
   description: "代码中的配置路径引用一致",
   async run() {
     const violations: string[] = []
-    
+
     // 检查 core/src/global.ts 中的 app 变量
     const globalFile = await Bun.file("packages/core/src/global.ts").text()
     const appMatch = globalFile.match(/const app\s*=\s*"([^"]+)"/)
     if (appMatch && appMatch[1] !== "octopus") {
       violations.push(`global.ts: app = "${appMatch[1]}" (should be "octopus")`)
     }
-    
+
     // 检查 OPENCODE_ 枚举残留
     const flagFile = await Bun.file("packages/core/src/flag/flag.ts").text()
     const opencodeMatches = flagFile.match(/OPENCODE_\w+/g)
     if (opencodeMatches) {
       violations.push(`flag.ts: ${opencodeMatches.length} OPENCODE_* references remaining`)
     }
-    
+
     return {
       passed: violations.length === 0,
       error: violations.length > 0 ? violations.join("\n") : undefined,
@@ -574,8 +581,7 @@ const testExtensionPack: SmokeTest = {
   name: "extension-pack",
   description: "VS Code 扩展打包成功",
   async run() {
-    const { exitCode, stderr } =
-      await $`bun run --cwd sdks/vscode package`.nothrow().quiet()
+    const { exitCode, stderr } = await $`bun run --cwd sdks/vscode package`.nothrow().quiet()
     return {
       passed: exitCode === 0,
       error: exitCode !== 0 ? stderr.toString() : undefined,
@@ -592,20 +598,15 @@ const testPublishDryRun: SmokeTest = {
   description: "npm publish --dry-run 成功（SDK 包）",
   async run() {
     // 对 SDK 包执行 dry-run
-    const { exitCode, stderr } =
-      await $`npm publish --dry-run`.cwd("packages/sdk/js").nothrow().quiet()
-    
+    const { exitCode, stderr } = await $`npm publish --dry-run`.cwd("packages/sdk/js").nothrow().quiet()
+
     // 检查 package name 不含 opencode
     const pkg = await Bun.file("packages/sdk/js/package.json").json()
     const nameOk = pkg.name && !/opencode/i.test(pkg.name)
-    
+
     return {
       passed: exitCode === 0 && nameOk,
-      error: !nameOk
-        ? `package name: ${pkg.name}`
-        : exitCode !== 0
-          ? stderr.toString()
-          : undefined,
+      error: !nameOk ? `package name: ${pkg.name}` : exitCode !== 0 ? stderr.toString() : undefined,
     }
   },
 }
@@ -632,10 +633,10 @@ let allPassed = true
 for (const test of tests) {
   const start = performance.now()
   process.stdout.write(`[ SMOKE ] ${test.description} ... `)
-  
+
   const result = await test.run()
   const elapsed = (performance.now() - start).toFixed(0)
-  
+
   if (result.passed) {
     console.log(`OK (${elapsed}ms)`)
   } else {
@@ -697,6 +698,7 @@ rg '@opencode/' --include='*.ts' -l \
 ```
 
 **安全性验证**：ServiceTag 替换 `@opencode/` → `@octopus/` 不会误伤任何合法引用，因为：
+
 - `@opentui/` 是 `@opentui/` 不是 `@opencode/`
 - `@openauthjs/` 是 `@openauthjs/` 不是 `@opencode/`
 - 第三方包 `@gitlab/opencode-gitlab-auth` 不含 `@opencode/` 模式
@@ -729,7 +731,7 @@ sed -i 's|@opencode-ai/|@octopus-ai/|g' turbo.json
 sed -i 's|OPENCODE_DISABLE_SHARE|OCTOPUS_DISABLE_SHARE|g' turbo.json
 ```
 
-#### 命令 5: workspace:* 依赖引用（root package.json）
+#### 命令 5: workspace:\* 依赖引用（root package.json）
 
 ```bash
 # root package.json 的 workspaces 块不变（它用的是目录路径模式，不是包名）
@@ -774,6 +776,7 @@ git mv packages/opencode packages/octopus
 ```
 
 此命令会:
+
 1. 重命名目录
 2. 将变更暂存到 Git index（`packages/octopus/*` → `packages/octopus/*`）
 3. 保留所有文件的 Git 历史（blob 不丢失）
@@ -1043,30 +1046,30 @@ rg '\.opencode/' --include='*.ts' --include='*.json' --include='*.yml' \
 
 ## 附录 A: 文件影响统计（Issue × 文件类型矩阵）
 
-| Issue | `.ts`/`.tsx` | `.json` | `.yml` | `.md`/`.mdx` | `.toml` | `.nix` | 其他 | 合计 |
-|-------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| #1 | ~200 | ~20 | 1 | ~30 | — | — | ~5 | ~256 |
-| #2 | ~60 | ~10 | ~5 | ~5 | 1 | ~3 | ~3 | ~87 |
-| #4 | ~75 | — | — | — | — | — | ~5 | ~80 |
-| #5 | ~30 | ~3 | ~3 | ~3 | — | — | ~3 | ~42 |
-| #6 | ~5 | ~2 | — | — | — | — | ~5 | ~12 |
-| #7 | 1 | ~1 | — | — | 1 | — | — | ~3 |
-| #8 | ~5 | ~2 | ~27 | — | — | — | ~3 | ~37 |
-| #9 | — | ~18 | — | ~195 | — | — | — | ~213 |
-| **总计** | **~376** | **~56** | **~36** | **~233** | **2** | **~3** | **~24** | **~730** |
+| Issue    | `.ts`/`.tsx` | `.json` | `.yml`  | `.md`/`.mdx` | `.toml` | `.nix` |  其他   |   合计   |
+| -------- | :----------: | :-----: | :-----: | :----------: | :-----: | :----: | :-----: | :------: |
+| #1       |     ~200     |   ~20   |    1    |     ~30      |    —    |   —    |   ~5    |   ~256   |
+| #2       |     ~60      |   ~10   |   ~5    |      ~5      |    1    |   ~3   |   ~3    |   ~87    |
+| #4       |     ~75      |    —    |    —    |      —       |    —    |   —    |   ~5    |   ~80    |
+| #5       |     ~30      |   ~3    |   ~3    |      ~3      |    —    |   —    |   ~3    |   ~42    |
+| #6       |      ~5      |   ~2    |    —    |      —       |    —    |   —    |   ~5    |   ~12    |
+| #7       |      1       |   ~1    |    —    |      —       |    1    |   —    |    —    |    ~3    |
+| #8       |      ~5      |   ~2    |   ~27   |      —       |    —    |   —    |   ~3    |   ~37    |
+| #9       |      —       |   ~18   |    —    |     ~195     |    —    |   —    |    —    |   ~213   |
+| **总计** |   **~376**   | **~56** | **~36** |   **~233**   |  **2**  | **~3** | **~24** | **~730** |
 
 ---
 
 ## 附录 B: 替换安全性矩阵
 
-| 替换 | 模式 | 误伤风险 | 验证方法 |
-|------|------|:---:|------|
-| `@opencode-ai/` → `@octopus-ai/` | 精确字符串 | **零** | grep 零残留 + typecheck |
-| `@opencode/` → `@octopus/` (ServiceTag) | 精确字符串 | **极低** | grep 排除 `@opentui`/`@openauthjs` |
-| `OPENCODE_` → `OCTOPUS_` | 精确字符串 | **极低** | grep 排除 `OTEL_` |
-| `"opencode"` → `"octopus"` (JSON) | Context-aware | **中** | 手动抽查 20% |
-| `const app = "opencode"` | Context-aware | **低** | 单点修改 |
-| `./opencode` → `./octopus` (TOML) | Context-aware | **中** | 在 Zed extension.toml 中精确匹配 |
+| 替换                                    | 模式          | 误伤风险 | 验证方法                           |
+| --------------------------------------- | ------------- | :------: | ---------------------------------- |
+| `@opencode-ai/` → `@octopus-ai/`        | 精确字符串    |  **零**  | grep 零残留 + typecheck            |
+| `@opencode/` → `@octopus/` (ServiceTag) | 精确字符串    | **极低** | grep 排除 `@opentui`/`@openauthjs` |
+| `OPENCODE_` → `OCTOPUS_`                | 精确字符串    | **极低** | grep 排除 `OTEL_`                  |
+| `"opencode"` → `"octopus"` (JSON)       | Context-aware |  **中**  | 手动抽查 20%                       |
+| `const app = "opencode"`                | Context-aware |  **低**  | 单点修改                           |
+| `./opencode` → `./octopus` (TOML)       | Context-aware |  **中**  | 在 Zed extension.toml 中精确匹配   |
 
 ---
 

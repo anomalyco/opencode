@@ -126,7 +126,14 @@ export async function load(dir: string) {
     })
     if (!md) continue
 
-    const patterns = ["/.octopus/agent/", "/.octopus/agents/", "/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
+    const patterns = [
+      "/.octopus/agent/",
+      "/.octopus/agents/",
+      "/.opencode/agent/",
+      "/.opencode/agents/",
+      "/agent/",
+      "/agents/",
+    ]
     const name = configEntryNameFromPath(item, patterns)
 
     const config = {

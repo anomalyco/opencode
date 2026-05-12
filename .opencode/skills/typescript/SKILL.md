@@ -67,6 +67,7 @@ export * as Foo from "."
 - 索引：`<table>_<column>_idx`
 
 ## 参考
+
 - `AGENTS.md`（根目录）
 - `packages/octopus/AGENTS.md`（Effect 详细规范）
 - `specs/effect/migration.md`

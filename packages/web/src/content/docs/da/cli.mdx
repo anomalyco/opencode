@@ -78,12 +78,12 @@ opencode attach http://10.20.30.40:4096
 
 #### Flag
 
-| Flag                                     | Kort | Beskrivelse                                                                       |
-| ---------------------------------------- | ---- | --------------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |      | Arbejdsmappe til at starte TUI i                                                  |
-| <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsæt den seneste session                                                       |
-| <nobr><code>{"--session"}</code></nobr>  | `-s` | Sessions-id for at fortsætte                                                      |
-| <nobr><code>{"--fork"}</code></nobr>     |      | Forgren sessionen ved fortsættelse (brug med `--continue` eller `--session`)      |
+| Flag                                     | Kort | Beskrivelse                                                                      |
+| ---------------------------------------- | ---- | -------------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |      | Arbejdsmappe til at starte TUI i                                                 |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsæt den seneste session                                                      |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | Sessions-id for at fortsætte                                                     |
+| <nobr><code>{"--fork"}</code></nobr>     |      | Forgren sessionen ved fortsættelse (brug med `--continue` eller `--session`)     |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | Adgangskode til basic auth (standard: `OCTOPUS_SERVER_PASSWORD`)                 |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | Brugernavn til basic auth (standard: `OCTOPUS_SERVER_USERNAME` eller `opencode`) |
 
@@ -352,8 +352,8 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--format"}</code></nobr>   |      | Format: standard (formateret) eller json (rå JSON hændelser)                        |
 | <nobr><code>{"--title"}</code></nobr>    |      | Titel for sessionen (bruger trunkeret prompt, hvis der ikke er angivet nogen værdi) |
 | <nobr><code>{"--attach"}</code></nobr>   |      | Tilslut til en kørende opencode-server (f.eks. http://localhost:4096)               |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | Adgangskode til basic auth (standard: `OCTOPUS_SERVER_PASSWORD`)                   |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | Brugernavn til basic auth (standard: `OCTOPUS_SERVER_USERNAME` eller `opencode`)   |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | Adgangskode til basic auth (standard: `OCTOPUS_SERVER_PASSWORD`)                    |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | Brugernavn til basic auth (standard: `OCTOPUS_SERVER_USERNAME` eller `opencode`)    |
 | <nobr><code>{"--dir"}</code></nobr>      |      | Mappe at køre i, eller sti på fjernserveren ved tilkobling                          |
 | <nobr><code>{"--variant"}</code></nobr>  |      | Modelvariant (udbyder-specifik ræsonneringsindsats)                                 |
 | <nobr><code>{"--thinking"}</code></nobr> |      | Vis tænkeblokke                                                                     |
@@ -562,8 +562,8 @@ opencode CLI tager følgende globale flag.
 
 Octopus kan konfigureres ved hjælp af miljøvariabler.
 
-| Variabel                              | Skriv   | Beskrivelse                                                           |
-| ------------------------------------- | ------- | --------------------------------------------------------------------- |
+| Variabel                             | Skriv   | Beskrivelse                                                           |
+| ------------------------------------ | ------- | --------------------------------------------------------------------- |
 | `OCTOPUS_AUTO_SHARE`                 | boolean | Del automatisk session                                                |
 | `OCTOPUS_GIT_BASH_PATH`              | string  | Sti til Git Bash eksekverbar på Windows                               |
 | `OCTOPUS_CONFIG`                     | string  | Sti til konfigurationsfil                                             |
@@ -595,8 +595,8 @@ Octopus kan konfigureres ved hjælp af miljøvariabler.
 
 Disse miljøvariabler muliggør eksperimentelle funktioner, der kan ændres eller fjernes.
 
-| Variabel                                        | Skriv   | Beskrivelse                                |
-| ----------------------------------------------- | ------- | ------------------------------------------ |
+| Variabel                                       | Skriv   | Beskrivelse                                |
+| ---------------------------------------------- | ------- | ------------------------------------------ |
 | `OCTOPUS_EXPERIMENTAL`                         | boolean | Aktiver alle eksperimentelle funktioner    |
 | `OCTOPUS_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Aktiver ikonopdagelse                      |
 | `OCTOPUS_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Deaktiver kopi ved valg i TUI              |

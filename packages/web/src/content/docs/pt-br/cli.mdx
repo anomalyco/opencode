@@ -78,12 +78,12 @@ opencode attach http://10.20.30.40:4096
 
 #### Opções
 
-| Flag                                     | Curto | Descrição                                                                         |
-| ---------------------------------------- | ----- | --------------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |       | Diretório de trabalho para iniciar o TUI                                          |
-| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continuar a última sessão                                                         |
-| <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID da sessão para continuar                                                       |
-| <nobr><code>{"--fork"}</code></nobr>     |       | Bifurcar a sessão ao continuar (use com `--continue` ou `--session`)              |
+| Flag                                     | Curto | Descrição                                                                        |
+| ---------------------------------------- | ----- | -------------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |       | Diretório de trabalho para iniciar o TUI                                         |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continuar a última sessão                                                        |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID da sessão para continuar                                                      |
+| <nobr><code>{"--fork"}</code></nobr>     |       | Bifurcar a sessão ao continuar (use com `--continue` ou `--session`)             |
 | <nobr><code>{"--password"}</code></nobr> | `-p`  | Senha de autenticação básica (padrão: `OCTOPUS_SERVER_PASSWORD`)                 |
 | <nobr><code>{"--username"}</code></nobr> | `-u`  | Usuário de autenticação básica (padrão: `OCTOPUS_SERVER_USERNAME` ou `opencode`) |
 
@@ -339,25 +339,25 @@ opencode run --attach http://localhost:4096 "Explique async/await em JavaScript"
 
 #### Opções
 
-| Flag                                     | Curto | Descrição                                                                         |
-| ---------------------------------------- | ----- | --------------------------------------------------------------------------------- |
-| <nobr><code>{"--command"}</code></nobr>  |       | O comando a ser executado, use mensagem para argumentos                           |
-| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continue a última sessão                                                          |
-| <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID da sessão para continuar                                                       |
-| <nobr><code>{"--fork"}</code></nobr>     |       | Criar um fork da sessão ao continuar (use com `--continue` ou `--session`)        |
-| <nobr><code>{"--share"}</code></nobr>    |       | Compartilhe a sessão                                                              |
-| <nobr><code>{"--model"}</code></nobr>    | `-m`  | Modelo a ser usado na forma de provider/model                                     |
-| <nobr><code>{"--agent"}</code></nobr>    |       | Agente a ser usado                                                                |
-| <nobr><code>{"--file"}</code></nobr>     | `-f`  | Arquivo(s) a serem anexados à mensagem                                            |
-| <nobr><code>{"--format"}</code></nobr>   |       | Formato: padrão (formatado) ou json (eventos JSON brutos)                         |
-| <nobr><code>{"--title"}</code></nobr>    |       | Título para a sessão (usa o prompt truncado se nenhum valor for fornecido)        |
-| <nobr><code>{"--attach"}</code></nobr>   |       | Anexe a um servidor opencode em execução (por exemplo, http://localhost:4096)     |
+| Flag                                     | Curto | Descrição                                                                        |
+| ---------------------------------------- | ----- | -------------------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |       | O comando a ser executado, use mensagem para argumentos                          |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continue a última sessão                                                         |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID da sessão para continuar                                                      |
+| <nobr><code>{"--fork"}</code></nobr>     |       | Criar um fork da sessão ao continuar (use com `--continue` ou `--session`)       |
+| <nobr><code>{"--share"}</code></nobr>    |       | Compartilhe a sessão                                                             |
+| <nobr><code>{"--model"}</code></nobr>    | `-m`  | Modelo a ser usado na forma de provider/model                                    |
+| <nobr><code>{"--agent"}</code></nobr>    |       | Agente a ser usado                                                               |
+| <nobr><code>{"--file"}</code></nobr>     | `-f`  | Arquivo(s) a serem anexados à mensagem                                           |
+| <nobr><code>{"--format"}</code></nobr>   |       | Formato: padrão (formatado) ou json (eventos JSON brutos)                        |
+| <nobr><code>{"--title"}</code></nobr>    |       | Título para a sessão (usa o prompt truncado se nenhum valor for fornecido)       |
+| <nobr><code>{"--attach"}</code></nobr>   |       | Anexe a um servidor opencode em execução (por exemplo, http://localhost:4096)    |
 | <nobr><code>{"--password"}</code></nobr> | `-p`  | Senha de autenticação básica (padrão: `OCTOPUS_SERVER_PASSWORD`)                 |
 | <nobr><code>{"--username"}</code></nobr> | `-u`  | Usuário de autenticação básica (padrão: `OCTOPUS_SERVER_USERNAME` ou `opencode`) |
-| <nobr><code>{"--dir"}</code></nobr>      |       | Diretório de execução, ou caminho no servidor remoto ao anexar                    |
-| <nobr><code>{"--variant"}</code></nobr>  |       | Variante do modelo (nível de raciocínio específico do provedor)                   |
-| <nobr><code>{"--thinking"}</code></nobr> |       | Mostrar blocos de pensamento                                                      |
-| <nobr><code>{"--port"}</code></nobr>     |       | Porta para o servidor local (padrão para porta aleatória)                         |
+| <nobr><code>{"--dir"}</code></nobr>      |       | Diretório de execução, ou caminho no servidor remoto ao anexar                   |
+| <nobr><code>{"--variant"}</code></nobr>  |       | Variante do modelo (nível de raciocínio específico do provedor)                  |
+| <nobr><code>{"--thinking"}</code></nobr> |       | Mostrar blocos de pensamento                                                     |
+| <nobr><code>{"--port"}</code></nobr>     |       | Porta para o servidor local (padrão para porta aleatória)                        |
 
 ---
 
@@ -562,8 +562,8 @@ A CLI do opencode aceita as seguintes flags globais.
 
 O opencode pode ser configurado usando variáveis de ambiente.
 
-| Variável                              | Tipo    | Descrição                                                             |
-| ------------------------------------- | ------- | --------------------------------------------------------------------- |
+| Variável                             | Tipo    | Descrição                                                             |
+| ------------------------------------ | ------- | --------------------------------------------------------------------- |
 | `OCTOPUS_AUTO_SHARE`                 | boolean | Compartilhar sessões automaticamente                                  |
 | `OCTOPUS_GIT_BASH_PATH`              | string  | Caminho para o executável do Git Bash no Windows                      |
 | `OCTOPUS_CONFIG`                     | string  | Caminho para o arquivo de configuração                                |
@@ -594,8 +594,8 @@ O opencode pode ser configurado usando variáveis de ambiente.
 
 Essas variáveis de ambiente habilitam recursos experimentais que podem mudar ou ser removidos.
 
-| Variável                                        | Tipo    | Descrição                                                 |
-| ----------------------------------------------- | ------- | --------------------------------------------------------- |
+| Variável                                       | Tipo    | Descrição                                                 |
+| ---------------------------------------------- | ------- | --------------------------------------------------------- |
 | `OCTOPUS_EXPERIMENTAL`                         | boolean | Habilitar todos os recursos experimentais                 |
 | `OCTOPUS_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Habilitar descoberta de ícones                            |
 | `OCTOPUS_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Desabilitar cópia ao selecionar no TUI                    |

@@ -38,6 +38,7 @@ bun run db generate --name <slug>
 ## 配置
 
 `drizzle.config.ts`：
+
 ```ts
 schema: "./src/**/*.sql.ts"
 output: "./migration"

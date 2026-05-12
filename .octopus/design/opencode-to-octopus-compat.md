@@ -128,7 +128,7 @@ function readFromEnv(octopusKey: string): string | undefined {
       warnedDeprecations.add(warnKey)
       console.warn(
         `[DEPRECATED] ${opencodeKey} is deprecated. Use ${octopusKey} instead. ` +
-        `Support for ${opencodeKey} will be removed in v0.3.0.`
+          `Support for ${opencodeKey} will be removed in v0.3.0.`,
       )
     }
   }
@@ -216,9 +216,7 @@ export const Flag = {
 
   // Experimental
   OCTOPUS_EXPERIMENTAL: readTruthyFromEnv("OCTOPUS_EXPERIMENTAL"),
-  OCTOPUS_EXPERIMENTAL_FILEWATCHER: Config.boolean("OCTOPUS_EXPERIMENTAL_FILEWATCHER").pipe(
-    Config.withDefault(false),
-  ),
+  OCTOPUS_EXPERIMENTAL_FILEWATCHER: Config.boolean("OCTOPUS_EXPERIMENTAL_FILEWATCHER").pipe(Config.withDefault(false)),
   OCTOPUS_EXPERIMENTAL_DISABLE_FILEWATCHER: Config.boolean("OCTOPUS_EXPERIMENTAL_DISABLE_FILEWATCHER").pipe(
     Config.withDefault(false),
   ),
@@ -266,11 +264,11 @@ get OPENCODE_CONFIG_DIR()   { return Flag.OCTOPUS_CONFIG_DIR }
 
 以下变量是 CLI 启动时由代码内部设置的，不是用户配置。它们不需要双读 fallback：
 
-| 变量 | 设置位置 | 说明 |
-|------|---------|------|
+| 变量                         | 设置位置       | 说明                         |
+| ---------------------------- | -------------- | ---------------------------- |
 | `process.env.OPENCODE = "1"` | `index.ts:108` | 标记进程身份，改为 `OCTOPUS` |
-| `process.env.OPENCODE_PID` | `index.ts:109` | 进程 PID，改为 `OCTOPUS_PID` |
-| `process.env.AGENT = "1"` | `index.ts:107` | 不变，非品牌相关 |
+| `process.env.OPENCODE_PID`   | `index.ts:109` | 进程 PID，改为 `OCTOPUS_PID` |
+| `process.env.AGENT = "1"`    | `index.ts:107` | 不变，非品牌相关             |
 
 ```typescript
 // packages/octopus/src/index.ts — 启动时设置
@@ -423,9 +421,8 @@ export const MigrateCommand = effectCmd({
 import { MigrateCommand } from "./cli/cmd/migrate"
 
 // 在 .command() 链中添加
-cli
-  .command(MigrateCommand)
-  // ... 其他命令保持不变
+cli.command(MigrateCommand)
+// ... 其他命令保持不变
 ```
 
 ### 2.4 迁移服务实现
@@ -477,12 +474,16 @@ export const MigrateService = {
     await fs.mkdir(markerDir, { recursive: true })
     await fs.writeFile(
       path.join(markerDir, ".migrated-to-octopus"),
-      JSON.stringify({
-        migratedAt: new Date().toISOString(),
-        version: "v0.1.0",
-        from: ".opencode/",
-        to: ".octopus/",
-      }, null, 2),
+      JSON.stringify(
+        {
+          migratedAt: new Date().toISOString(),
+          version: "v0.1.0",
+          from: ".opencode/",
+          to: ".octopus/",
+        },
+        null,
+        2,
+      ),
     )
   }),
 
@@ -598,12 +599,12 @@ Migrated: ~/.config/opencode/ → ~/.config/octopus/
 
 ### 3.1 方案选择
 
-| 方案 | 自动程度 | 风险 | 选择 |
-|------|---------|------|:---:|
-| 安装脚本注入 shell profile | 全自动 | 可能污染用户 shell 配置，部分用户反感 | ✗ |
-| 首次运行检测 argv[0] 并提示 | 半自动，用户可控 | 非侵入式，尊重用户选择 | **✓ 主方案** |
-| 在 `octopus migrate` 中可选安装 | 手动 | 用户需主动执行 | **✓ 补充方案** |
-| 发行版 package 自动创建 symlink | 自动 | Homebrew/AUR 可管理 | **✓ 包管理器方案** |
+| 方案                            | 自动程度         | 风险                                  |        选择        |
+| ------------------------------- | ---------------- | ------------------------------------- | :----------------: |
+| 安装脚本注入 shell profile      | 全自动           | 可能污染用户 shell 配置，部分用户反感 |         ✗          |
+| 首次运行检测 argv[0] 并提示     | 半自动，用户可控 | 非侵入式，尊重用户选择                |    **✓ 主方案**    |
+| 在 `octopus migrate` 中可选安装 | 手动             | 用户需主动执行                        |   **✓ 补充方案**   |
+| 发行版 package 自动创建 symlink | 自动             | Homebrew/AUR 可管理                   | **✓ 包管理器方案** |
 
 ### 3.2 主方案：首次运行检测 + 提示
 
@@ -626,7 +627,7 @@ export function checkOpencodeAlias() {
   if (basename === "opencode" || basename === "opencode.js") {
     console.warn(
       `\nℹ️  OpenCode has been renamed to Octopus.\n` +
-      `   The command is now 'octopus'. The 'opencode' binary will be removed in a future version.\n`
+        `   The command is now 'octopus'. The 'opencode' binary will be removed in a future version.\n`,
     )
     return
   }
@@ -648,9 +649,8 @@ export async function installShellAlias(dryRun = false): Promise<string | null> 
   }
   const rcFile = rcFiles[shell] ?? "~/.bashrc"
   const expanded = rcFile.replace("~", os.homedir())
-  const aliasLine = shell === "fish"
-    ? "alias opencode=octopus"
-    : "alias opencode=octopus  # opencode → octopus (migrated)"
+  const aliasLine =
+    shell === "fish" ? "alias opencode=octopus" : "alias opencode=octopus  # opencode → octopus (migrated)"
 
   if (dryRun) {
     console.log(`[dry-run] Would add to ${expanded}:`)
@@ -676,14 +676,15 @@ export async function installShellAlias(dryRun = false): Promise<string | null> 
 
 各包管理器自动处理 symlink 或别名：
 
-| 包管理器 | 实现方式 |
-|---------|---------|
-| **Homebrew** | `brew install octopus` 同时创建 `opencode` → `octopus` symlink (使用 `bin.install_symlink`) |
-| **AUR** | `PKGBUILD` 中 `provides=('opencode')` + `conflicts=('opencode')` |
-| **Chocolatey** | package 自动安装 `opencode` shim 到 `octopus` |
-| **npm** | `postinstall` 脚本创建 symlink: `ln -sf octopus opencode` |
+| 包管理器       | 实现方式                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------- |
+| **Homebrew**   | `brew install octopus` 同时创建 `opencode` → `octopus` symlink (使用 `bin.install_symlink`) |
+| **AUR**        | `PKGBUILD` 中 `provides=('opencode')` + `conflicts=('opencode')`                            |
+| **Chocolatey** | package 自动安装 `opencode` shim 到 `octopus`                                               |
+| **npm**        | `postinstall` 脚本创建 symlink: `ln -sf octopus opencode`                                   |
 
 Homebrew 示例 (`packages/octopus/script/homebrew.rb`):
+
 ```ruby
 class Octopus < Formula
   # ...
@@ -705,14 +706,14 @@ end
 
 ### 4.1 涉及包列表
 
-| 旧包名 | 新包名 | 消费者影响 |
-|--------|--------|----------|
-| `@opencode-ai/core` | `@octopus-ai/core` | SDK 消费者 import 路径变 |
-| `@opencode-ai/sdk` | `@octopus-ai/sdk` | SDK 消费者 |
-| `@opencode-ai/app` | `@octopus-ai/app` | Console/app 消费者 |
-| `@opencode-ai/ui` | `@octopus-ai/ui` | UI 组件消费者 |
-| `@opencode-ai/plugin` | `@octopus-ai/plugin` | 插件开发者 |
-| `opencode` | `@octopus-ai/octopus` | CLI 消费者 |
+| 旧包名                | 新包名                | 消费者影响               |
+| --------------------- | --------------------- | ------------------------ |
+| `@opencode-ai/core`   | `@octopus-ai/core`    | SDK 消费者 import 路径变 |
+| `@opencode-ai/sdk`    | `@octopus-ai/sdk`     | SDK 消费者               |
+| `@opencode-ai/app`    | `@octopus-ai/app`     | Console/app 消费者       |
+| `@opencode-ai/ui`     | `@octopus-ai/ui`      | UI 组件消费者            |
+| `@opencode-ai/plugin` | `@octopus-ai/plugin`  | 插件开发者               |
+| `opencode`            | `@octopus-ai/octopus` | CLI 消费者               |
 
 ### 4.2 第一阶段：Deprecation Message（v0.1.0 发布时）
 
@@ -739,7 +740,7 @@ To update:
   2. Install the new package:     npm install <新包名>
   3. Update all imports:          <旧 scope> → <新 scope>
 
-See https://octopus.ai/docs/migration for the full migration guide. 
+See https://octopus.ai/docs/migration for the full migration guide.
 Support for @opencode-ai/* will be removed on 2026-08-01.
 ```
 
@@ -762,6 +763,7 @@ Support for @opencode-ai/* will be removed on 2026-08-01.
 ```
 
 > **决策**: 初始版本**不发布 re-export shim**。因为：
+>
 > 1. monorepo 中有 20+ 包，维护 shim 版本矩阵成本高
 > 2. npm deprecation message 已提供明确迁移指引
 > 3. 消费者只需 `s/@opencode-ai/@octopus-ai/g` 即可完成迁移
@@ -787,7 +789,7 @@ v0.3.0 发布日: 旧包从 npm 设置为 "unpublished" 或继续 deprecated（�
 ```typescript
 // packages/core/src/global.ts — 改造后
 
-const app = "octopus"        // 新目录名
+const app = "octopus" // 新目录名
 const app_legacy = "opencode" // 旧目录名（仅用于检测）
 
 const data = path.join(xdgData!, app)
@@ -850,8 +852,8 @@ export async function detectLegacyXdgPaths(): Promise<void> {
   const dirNames = found.map((d) => d.name).join(", ")
   console.warn(
     `\n⚠️  Detected legacy OpenCode XDG directories: ${dirNames}\n` +
-    `   Run 'octopus migrate --all' to migrate them to the new Octopus paths.\n` +
-    `   Legacy directories are still readable but will be ignored in v0.3.0.\n`
+      `   Run 'octopus migrate --all' to migrate them to the new Octopus paths.\n` +
+      `   Legacy directories are still readable but will be ignored in v0.3.0.\n`,
   )
 
   // 写入标记（即使未迁移也标记"已提示"）
@@ -892,11 +894,11 @@ function getDbPath(): string {
 
 ### 6.1 版本对照表
 
-| 版本 | 环境变量 | 配置目录 | `opencode` 命令 | npm 包 | XDG 路径 |
-|------|---------|---------|----------------|--------|---------|
-| **v0.1.0** (当前) | 双读: `OCTOPUS_*` + `OPENCODE_*` | 新 `.octopus/` + 旧 `.opencode/` 自动检测 | 仍可通过 symlink/alias 使用 | 新 `@octopus-ai/*` deprecate 旧包 | 新路径为主，旧路径自动检测并提示迁移 |
-| **v0.2.0** (+2 个月) | 双读 + `OPENCODE_*` 显式 WARNING | 旧目录读取仍支持但输出 WARNING | `opencode` 命令输出 WARNING | 可选 Top-3 re-export shim | 旧路径仍读但输出 WARNING |
-| **v0.3.0** (+4 个月) | 仅 `OCTOPUS_*` | 仅 `.octopus/` | `opencode` 不再可用 | 旧包仍 deprecated，不下架 | 仅新路径 |
+| 版本                 | 环境变量                         | 配置目录                                  | `opencode` 命令             | npm 包                            | XDG 路径                             |
+| -------------------- | -------------------------------- | ----------------------------------------- | --------------------------- | --------------------------------- | ------------------------------------ |
+| **v0.1.0** (当前)    | 双读: `OCTOPUS_*` + `OPENCODE_*` | 新 `.octopus/` + 旧 `.opencode/` 自动检测 | 仍可通过 symlink/alias 使用 | 新 `@octopus-ai/*` deprecate 旧包 | 新路径为主，旧路径自动检测并提示迁移 |
+| **v0.2.0** (+2 个月) | 双读 + `OPENCODE_*` 显式 WARNING | 旧目录读取仍支持但输出 WARNING            | `opencode` 命令输出 WARNING | 可选 Top-3 re-export shim         | 旧路径仍读但输出 WARNING             |
+| **v0.3.0** (+4 个月) | 仅 `OCTOPUS_*`                   | 仅 `.octopus/`                            | `opencode` 不再可用         | 旧包仍 deprecated，不下架         | 仅新路径                             |
 
 ### 6.2 各版本行为详情
 
@@ -995,47 +997,47 @@ gantt
 
 ### 新增文件
 
-| 文件路径 | 说明 |
-|---------|------|
-| `packages/core/src/flag/env-map.ts` | `OCTOPUS_*` → `OPENCODE_*` 映射表 |
-| `packages/octopus/src/cli/cmd/migrate.ts` | `octopus migrate` 命令注册 |
-| `packages/octopus/src/cli/cmd/migrate/migrate-service.ts` | 迁移服务实现 |
-| `packages/octopus/src/cli/alias.ts` | CLI alias 检测和安装 |
+| 文件路径                                                  | 说明                              |
+| --------------------------------------------------------- | --------------------------------- |
+| `packages/core/src/flag/env-map.ts`                       | `OCTOPUS_*` → `OPENCODE_*` 映射表 |
+| `packages/octopus/src/cli/cmd/migrate.ts`                 | `octopus migrate` 命令注册        |
+| `packages/octopus/src/cli/cmd/migrate/migrate-service.ts` | 迁移服务实现                      |
+| `packages/octopus/src/cli/alias.ts`                       | CLI alias 检测和安装              |
 
 ### 修改文件
 
-| 文件路径 | 修改内容 |
-|---------|---------|
-| `packages/core/src/flag/flag.ts` | 引入 `readFromEnv` 系列函数；`Flag.OCTOPUS_*` 替换 `Flag.OPENCODE_*` |
-| `packages/core/src/global.ts` | `app = "octopus"`；新增旧路径检测逻辑；`Path.home` 双读 `OCTOPUS_TEST_HOME` |
-| `packages/octopus/src/index.ts` | `.scriptName("octopus")`；注册 `MigrateCommand`；middleware 添加旧配置检测 |
-| `packages/octopus/src/config/paths.ts` | 搜索目标从 `.opencode` 改为 `.octopus`，回退搜索 `.opencode` |
-| `packages/octopus/src/config/config.ts` | 配置文件加载路径更新，旧名回退 |
-| `packages/octopus/src/storage/db.ts` | 数据库路径双读 |
+| 文件路径                                | 修改内容                                                                    |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| `packages/core/src/flag/flag.ts`        | 引入 `readFromEnv` 系列函数；`Flag.OCTOPUS_*` 替换 `Flag.OPENCODE_*`        |
+| `packages/core/src/global.ts`           | `app = "octopus"`；新增旧路径检测逻辑；`Path.home` 双读 `OCTOPUS_TEST_HOME` |
+| `packages/octopus/src/index.ts`         | `.scriptName("octopus")`；注册 `MigrateCommand`；middleware 添加旧配置检测  |
+| `packages/octopus/src/config/paths.ts`  | 搜索目标从 `.opencode` 改为 `.octopus`，回退搜索 `.opencode`                |
+| `packages/octopus/src/config/config.ts` | 配置文件加载路径更新，旧名回退                                              |
+| `packages/octopus/src/storage/db.ts`    | 数据库路径双读                                                              |
 
 ---
 
 ## 附录 B：验证清单
 
-| 验证项 | 方法 | 预期 |
-|--------|------|------|
-| `OCTOPUS_*` 优先于 `OPENCODE_*` | set both, read Flag | 返回 `OCTOPUS_*` 的值 |
-| `OPENCODE_*` 回退 | unset `OCTOPUS_*`, set `OPENCODE_*` | 正确读取 `OPENCODE_*` 值 |
-| `octopus migrate` 干跑 | `octopus migrate --dry-run` | 显示预期操作，不修改文件 |
-| `octopus migrate` 执行 | `octopus migrate --yes` 在含 `.opencode/` 的目录 | `.opencode/` → `.octopus/`，创建标记文件 |
-| XDG 迁移 | `octopus migrate --all --dry-run` | 检测旧 XDG 目录并列出 |
-| 旧 npm scope import | 检索 `@opencode-ai` 引用 | 零结果 |
-| 无双读时正常启动 | 仅设 `OCTOPUS_*` 或不设 | 正常启动，无警告 |
-| deprecation 警告 | 仅设 `OPENCODE_*` | 每个变量一次 WARNING（stderr） |
+| 验证项                          | 方法                                             | 预期                                     |
+| ------------------------------- | ------------------------------------------------ | ---------------------------------------- |
+| `OCTOPUS_*` 优先于 `OPENCODE_*` | set both, read Flag                              | 返回 `OCTOPUS_*` 的值                    |
+| `OPENCODE_*` 回退               | unset `OCTOPUS_*`, set `OPENCODE_*`              | 正确读取 `OPENCODE_*` 值                 |
+| `octopus migrate` 干跑          | `octopus migrate --dry-run`                      | 显示预期操作，不修改文件                 |
+| `octopus migrate` 执行          | `octopus migrate --yes` 在含 `.opencode/` 的目录 | `.opencode/` → `.octopus/`，创建标记文件 |
+| XDG 迁移                        | `octopus migrate --all --dry-run`                | 检测旧 XDG 目录并列出                    |
+| 旧 npm scope import             | 检索 `@opencode-ai` 引用                         | 零结果                                   |
+| 无双读时正常启动                | 仅设 `OCTOPUS_*` 或不设                          | 正常启动，无警告                         |
+| deprecation 警告                | 仅设 `OPENCODE_*`                                | 每个变量一次 WARNING（stderr）           |
 
 ---
 
 ## 附录 C：风险与缓解
 
-| 风险 | 等级 | 缓解 |
-|------|:---:|------|
+| 风险                                                  |  等级  | 缓解                                                     |
+| ----------------------------------------------------- | :----: | -------------------------------------------------------- |
 | 用户 CI 中使用了 `OPENCODE_*` 但未迁移，v0.3.0 后断裂 | **高** | v0.1.0 + v0.2.0 共 4 个月兼容窗口期；v0.2.0 醒目 WARNING |
-| 迁移过程中出现数据丢失（XDG 目录 rename 失败） | **中** | 全部迁移操作支持 `--dry-run`；rename 前检查目标不存在 |
-| 用户同时使用新旧两版工具交叉读写同一数据目录 | **中** | 标记文件机制确保双向兼容；旧工具写新目录不会丢失 |
-| Config.boolean() Effect 层未获得双读 fallback | **中** | ConfigProvider 层注入双读映射（第 1.7 节） |
-| `process.env.OPENCODE` 标记变量被外部脚本依赖 | **低** | 维护双写（`OCTOPUS` + `OPENCODE`）直到 v0.3.0 |
+| 迁移过程中出现数据丢失（XDG 目录 rename 失败）        | **中** | 全部迁移操作支持 `--dry-run`；rename 前检查目标不存在    |
+| 用户同时使用新旧两版工具交叉读写同一数据目录          | **中** | 标记文件机制确保双向兼容；旧工具写新目录不会丢失         |
+| Config.boolean() Effect 层未获得双读 fallback         | **中** | ConfigProvider 层注入双读映射（第 1.7 节）               |
+| `process.env.OPENCODE` 标记变量被外部脚本依赖         | **低** | 维护双写（`OCTOPUS` + `OPENCODE`）直到 v0.3.0            |

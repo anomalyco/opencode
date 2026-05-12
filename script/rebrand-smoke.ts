@@ -2,10 +2,10 @@
 
 /**
  * rebrand-smoke.ts — End-to-end smoke tests for OpenCode→Octopus rebrand
- * 
+ *
  * Usage:
  *   bun run script/rebrand-smoke.ts
- * 
+ *
  * Run from repo root after all 9 Issues are complete.
  */
 
@@ -98,8 +98,10 @@ const tests: SmokeTest[] = [
 
 async function main() {
   console.log("🔍 Octopus Rebrand Smoke Tests\n")
-  let passed = 0, failed = 0, criticalFailed = 0
-  
+  let passed = 0,
+    failed = 0,
+    criticalFailed = 0
+
   for (const test of tests) {
     process.stdout.write(`  ${test.name}... `)
     try {
@@ -118,7 +120,7 @@ async function main() {
       if (test.critical) criticalFailed++
     }
   }
-  
+
   console.log(`\n📊 Results: ${passed} passed, ${failed} failed (${criticalFailed} critical)`)
   if (criticalFailed > 0) {
     console.log("❌ Critical failures — rebrand incomplete")

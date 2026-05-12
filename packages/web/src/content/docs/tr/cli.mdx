@@ -78,12 +78,12 @@ opencode attach http://10.20.30.40:4096
 
 #### Bayraklar
 
-| Bayrak                                   | Kısa | Tanım                                                                                         |
-| ---------------------------------------- | ---- | --------------------------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |      | TUI'yi başlatmak için çalışma dizini                                                          |
-| <nobr><code>{"--continue"}</code></nobr> | `-c` | Son oturuma devam et                                                                          |
-| <nobr><code>{"--session"}</code></nobr>  | `-s` | Devam edecek oturum açma bilgileri                                                            |
-| <nobr><code>{"--fork"}</code></nobr>     |      | Devam ederken oturumu çatalla (`--continue` veya `--session` ile kullanın)                    |
+| Bayrak                                   | Kısa | Tanım                                                                                        |
+| ---------------------------------------- | ---- | -------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |      | TUI'yi başlatmak için çalışma dizini                                                         |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | Son oturuma devam et                                                                         |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | Devam edecek oturum açma bilgileri                                                           |
+| <nobr><code>{"--fork"}</code></nobr>     |      | Devam ederken oturumu çatalla (`--continue` veya `--session` ile kullanın)                   |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | Temel kimlik doğrulama parolası (varsayılan: `OCTOPUS_SERVER_PASSWORD`)                      |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | Temel kimlik doğrulama kullanıcı adı (varsayılan: `OCTOPUS_SERVER_USERNAME` veya `opencode`) |
 
@@ -339,25 +339,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Bayraklar
 
-| Bayrak                                   | Kısa | Açıklama                                                                                      |
-| ---------------------------------------- | ---- | --------------------------------------------------------------------------------------------- |
-| <nobr><code>{"--command"}</code></nobr>  |      | Çalıştırılacak komut, args için mesajı kullanın                                               |
-| <nobr><code>{"--continue"}</code></nobr> | `-c` | Son oturuma devam et                                                                          |
-| <nobr><code>{"--session"}</code></nobr>  | `-s` | Devam edecek oturum kimliği                                                                   |
-| <nobr><code>{"--fork"}</code></nobr>     |      | Devam ederken oturumu fork'lar (`--continue` veya `--session` ile kullanın)                   |
-| <nobr><code>{"--share"}</code></nobr>    |      | Oturumu paylaşın                                                                              |
-| <nobr><code>{"--model"}</code></nobr>    | `-m` | provider/model biçiminde kullanılacak model                                                   |
-| <nobr><code>{"--agent"}</code></nobr>    |      | Kullanılacak temsilci                                                                         |
-| <nobr><code>{"--file"}</code></nobr>     | `-f` | Mesaja eklenecek dosya(lar)                                                                   |
-| <nobr><code>{"--format"}</code></nobr>   |      | Biçim: varsayılan (biçimlendirilmiş) veya json (ham JSON olayları)                            |
-| <nobr><code>{"--title"}</code></nobr>    |      | Oturumun başlığı (değer sağlanmazsa kısaltılmış bilgi istemi kullanılır)                      |
-| <nobr><code>{"--attach"}</code></nobr>   |      | Çalışan bir opencode sunucusuna ekleyin (ör. http://localhost:4096)                           |
+| Bayrak                                   | Kısa | Açıklama                                                                                     |
+| ---------------------------------------- | ---- | -------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |      | Çalıştırılacak komut, args için mesajı kullanın                                              |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | Son oturuma devam et                                                                         |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | Devam edecek oturum kimliği                                                                  |
+| <nobr><code>{"--fork"}</code></nobr>     |      | Devam ederken oturumu fork'lar (`--continue` veya `--session` ile kullanın)                  |
+| <nobr><code>{"--share"}</code></nobr>    |      | Oturumu paylaşın                                                                             |
+| <nobr><code>{"--model"}</code></nobr>    | `-m` | provider/model biçiminde kullanılacak model                                                  |
+| <nobr><code>{"--agent"}</code></nobr>    |      | Kullanılacak temsilci                                                                        |
+| <nobr><code>{"--file"}</code></nobr>     | `-f` | Mesaja eklenecek dosya(lar)                                                                  |
+| <nobr><code>{"--format"}</code></nobr>   |      | Biçim: varsayılan (biçimlendirilmiş) veya json (ham JSON olayları)                           |
+| <nobr><code>{"--title"}</code></nobr>    |      | Oturumun başlığı (değer sağlanmazsa kısaltılmış bilgi istemi kullanılır)                     |
+| <nobr><code>{"--attach"}</code></nobr>   |      | Çalışan bir opencode sunucusuna ekleyin (ör. http://localhost:4096)                          |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | Temel kimlik doğrulama parolası (varsayılan: `OCTOPUS_SERVER_PASSWORD`)                      |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | Temel kimlik doğrulama kullanıcı adı (varsayılan: `OCTOPUS_SERVER_USERNAME` veya `opencode`) |
-| <nobr><code>{"--dir"}</code></nobr>      |      | Çalıştırılacak dizin veya bağlanırken uzak sunucudaki yol                                     |
-| <nobr><code>{"--variant"}</code></nobr>  |      | Model varyantı (sağlayıcıya özgü muhakeme düzeyi)                                             |
-| <nobr><code>{"--thinking"}</code></nobr> |      | Düşünme bloklarını göster                                                                     |
-| <nobr><code>{"--port"}</code></nobr>     |      | Yerel sunucunun bağlantı noktası (varsayılan olarak rastgele bağlantı noktasıdır)             |
+| <nobr><code>{"--dir"}</code></nobr>      |      | Çalıştırılacak dizin veya bağlanırken uzak sunucudaki yol                                    |
+| <nobr><code>{"--variant"}</code></nobr>  |      | Model varyantı (sağlayıcıya özgü muhakeme düzeyi)                                            |
+| <nobr><code>{"--thinking"}</code></nobr> |      | Düşünme bloklarını göster                                                                    |
+| <nobr><code>{"--port"}</code></nobr>     |      | Yerel sunucunun bağlantı noktası (varsayılan olarak rastgele bağlantı noktasıdır)            |
 
 ---
 
@@ -562,8 +562,8 @@ opencode CLI aşağıdaki global bayrakları destekler.
 
 opencode ortam değişkenleri kullanılarak yapılandırılabilir.
 
-| Değişken                              | Tip     | Açıklama                                                                    |
-| ------------------------------------- | ------- | --------------------------------------------------------------------------- |
+| Değişken                             | Tip     | Açıklama                                                                    |
+| ------------------------------------ | ------- | --------------------------------------------------------------------------- |
 | `OCTOPUS_AUTO_SHARE`                 | boolean | Oturumları otomatik olarak paylaş                                           |
 | `OCTOPUS_GIT_BASH_PATH`              | string  | Windows'ta yürütülebilir Git Bash'in Yolu                                   |
 | `OCTOPUS_CONFIG`                     | string  | Yapılandırma dosyasının yolu                                                |
@@ -595,8 +595,8 @@ opencode ortam değişkenleri kullanılarak yapılandırılabilir.
 
 Bu ortam değişkenleri değişebilecek veya kaldırılabilecek deneysel özellikleri etkinleştirir.
 
-| Değişken                                        | Tip     | Tanım                                                   |
-| ----------------------------------------------- | ------- | ------------------------------------------------------- |
+| Değişken                                       | Tip     | Tanım                                                   |
+| ---------------------------------------------- | ------- | ------------------------------------------------------- |
 | `OCTOPUS_EXPERIMENTAL`                         | boolean | Tüm deneysel özellikleri etkinleştir                    |
 | `OCTOPUS_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Simge bulmayı etkinleştir                               |
 | `OCTOPUS_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | TUI'da seçim yapıldığında kopyalamayı devre dışı bırak  |

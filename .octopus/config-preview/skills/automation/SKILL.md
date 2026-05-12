@@ -63,6 +63,7 @@ grep -rl 'pattern' --include="*.ts" packages/ | wc -l
 ## 排除规则
 
 以下内容不参与批量替换：
+
 - `node_modules/`、`dist/`、`.turbo/`、`.git/`
 - CHANGELOG 历史记录
 - 第三方 npm 包名（`opencode-gitlab-auth`、`opencode-poe-auth`）

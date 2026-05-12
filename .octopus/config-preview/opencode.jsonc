@@ -3,74 +3,74 @@
   "provider": {},
   "permission": {
     "edit": {
-      "packages/octopus/migration/*": "ask"
-    }
+      "packages/octopus/migration/*": "ask",
+    },
   },
   "mcp": {},
   "tools": {
     "github-triage": false,
-    "github-pr-search": false
+    "github-pr-search": false,
   },
   "agent": {
     "analyst": {
       "mode": "primary",
       "model": "opencode-go/deepseek-v4-pro",
       "color": "#FF8800",
-      "description": "需求发现 — 澄清模糊 idea、探索代码库、查重、拆解为 Issue（P0）"
+      "description": "需求发现 — 澄清模糊 idea、探索代码库、查重、拆解为 Issue（P0）",
     },
     "orchestrator": {
       "mode": "primary",
       "model": "opencode-go/deepseek-v4-flash",
       "color": "#FF4444",
-      "description": "流程编排 — 分派 Agent、汇总分析、门控决策、发布审批（P1-P10）"
+      "description": "流程编排 — 分派 Agent、汇总分析、门控决策、发布审批（P1-P10）",
     },
     "architect": {
       "mode": "subagent",
       "model": "opencode-go/deepseek-v4-pro",
       "color": "#DD3333",
-      "description": "架构师 — 技术设计审定、PR 技术审批、架构 RCA。由 @architect 调用"
+      "description": "架构师 — 技术设计审定、PR 技术审批、架构 RCA。由 @architect 调用",
     },
     "platform": {
       "mode": "subagent",
       "model": "opencode-go/deepseek-v4-flash",
       "color": "#3366FF",
-      "description": "平台基础设施 — Monorepo、CI/CD、构建管线、Docker、Nix。由 @platform 调用"
+      "description": "平台基础设施 — Monorepo、CI/CD、构建管线、Docker、Nix。由 @platform 调用",
     },
     "core-dev": {
       "mode": "subagent",
       "model": "opencode-go/deepseek-v4-pro",
       "color": "#4488FF",
-      "description": "核心开发 — 核心代码、Effect 服务、包依赖拓扑、自动化脚本。由 @core-dev 调用"
+      "description": "核心开发 — 核心代码、Effect 服务、包依赖拓扑、自动化脚本。由 @core-dev 调用",
     },
     "feature-dev": {
       "mode": "subagent",
       "model": "opencode-go/deepseek-v4-flash",
       "color": "#44CC88",
-      "description": "功能开发 — UI/App、编辑器扩展、文档、i18n、品牌资产。由 @feature-dev 调用"
+      "description": "功能开发 — UI/App、编辑器扩展、文档、i18n、品牌资产。由 @feature-dev 调用",
     },
     "qa": {
       "mode": "subagent",
       "model": "opencode-go/deepseek-v4-flash",
       "color": "#FFAA00",
-      "description": "质量保障 — 测试、质量门、Canary 监控、冒烟、质量否决权。由 @qa 调用"
+      "description": "质量保障 — 测试、质量门、Canary 监控、冒烟、质量否决权。由 @qa 调用",
     },
     "security": {
       "mode": "subagent",
       "model": "opencode-go/deepseek-v4-flash",
       "color": "#CC4444",
-      "description": "安全合规 — 安全审计、合规检查、Secrets 管理、bundle size。由 @security 调用"
+      "description": "安全合规 — 安全审计、合规检查、Secrets 管理、bundle size。由 @security 调用",
     },
     "compat": {
       "mode": "subagent",
       "model": "opencode-go/deepseek-v4-flash",
       "color": "#8866FF",
-      "description": "兼容性 — 迁移、deprecation、环境变量 fallback、MIGRATION.md。由 @compat 调用"
+      "description": "兼容性 — 迁移、deprecation、环境变量 fallback、MIGRATION.md。由 @compat 调用",
     },
     "release": {
       "mode": "subagent",
       "model": "opencode-go/deepseek-v4-pro",
       "color": "#AA44FF",
-      "description": "发布管理 — 版本发布、回滚、Hotfix、RCA 复盘。由 @release 调用"
-    }
+      "description": "发布管理 — 版本发布、回滚、Hotfix、RCA 复盘。由 @release 调用",
+    },
   },
 }
