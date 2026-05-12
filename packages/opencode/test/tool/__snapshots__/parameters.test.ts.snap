@@ -213,54 +213,60 @@ exports[`tool parameters JSON Schema (wire shape) plan 1`] = `
 
 exports[`tool parameters JSON Schema (wire shape) question 1`] = `
 {
+  "$defs": {
+    "QuestionOption": {
+      "properties": {
+        "description": {
+          "description": "Explanation of choice",
+          "type": "string",
+        },
+        "label": {
+          "description": "Display text (1-5 words, concise)",
+          "type": "string",
+        },
+      },
+      "required": [
+        "label",
+        "description",
+      ],
+      "type": "object",
+    },
+    "QuestionPrompt": {
+      "properties": {
+        "header": {
+          "description": "Very short label (max 30 chars)",
+          "type": "string",
+        },
+        "multiple": {
+          "description": "Allow selecting multiple choices",
+          "type": "boolean",
+        },
+        "options": {
+          "description": "Available choices",
+          "items": {
+            "$ref": "#/$defs/QuestionOption",
+          },
+          "type": "array",
+        },
+        "question": {
+          "description": "Complete question",
+          "type": "string",
+        },
+      },
+      "required": [
+        "question",
+        "header",
+        "options",
+      ],
+      "type": "object",
+    },
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "questions": {
       "description": "Questions to ask",
       "items": {
-        "properties": {
-          "header": {
-            "description": "Very short label (max 30 chars)",
-            "type": "string",
-          },
-          "multiple": {
-            "description": "Allow selecting multiple choices",
-            "type": "boolean",
-          },
-          "options": {
-            "description": "Available choices",
-            "items": {
-              "properties": {
-                "description": {
-                  "description": "Explanation of choice",
-                  "type": "string",
-                },
-                "label": {
-                  "description": "Display text (1-5 words, concise)",
-                  "type": "string",
-                },
-              },
-              "ref": "QuestionOption",
-              "required": [
-                "label",
-                "description",
-              ],
-              "type": "object",
-            },
-            "type": "array",
-          },
-          "question": {
-            "description": "Complete question",
-            "type": "string",
-          },
-        },
-        "ref": "QuestionPrompt",
-        "required": [
-          "question",
-          "header",
-          "options",
-        ],
-        "type": "object",
+        "$ref": "#/$defs/QuestionPrompt",
       },
       "type": "array",
     },
@@ -393,8 +399,6 @@ exports[`tool parameters JSON Schema (wire shape) webfetch 1`] = `
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "format": {
-      "default": "markdown",
-      "description": "The format to return the content in (text, markdown, or html). Defaults to markdown.",
       "enum": [
         "text",
         "markdown",

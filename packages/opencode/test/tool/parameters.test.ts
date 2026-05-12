@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { Result, Schema } from "effect"
-import { toJsonSchema } from "@opencode-ai/core/effect-zod"
+import { ToolJsonSchema } from "../../src/tool/json-schema"
 
 // Each tool exports its parameters schema at module scope so this test can
 // import them without running the tool's Effect-based init. The JSON Schema
 // snapshot captures what the LLM sees; the parse assertions pin down the
-// accepts/rejects contract. `toJsonSchema` is the same helper `session/
+// accepts/rejects contract. `ToolJsonSchema.fromSchema` is the same helper `session/
 // prompt.ts` uses to emit tool schemas to the LLM, so the snapshots stay
-// byte-identical regardless of whether a tool has migrated from zod to Schema.
+// provider-compatible while tools use Effect Schema internally.
 
 import { Parameters as ApplyPatch } from "../../src/tool/apply_patch"
 import { Parameters as Edit } from "../../src/tool/edit"
@@ -31,6 +31,8 @@ const parse = <S extends Schema.Decoder<unknown>>(schema: S, input: unknown): S[
 
 const accepts = (schema: Schema.Decoder<unknown>, input: unknown): boolean =>
   Result.isSuccess(Schema.decodeUnknownResult(schema)(input))
+
+const toJsonSchema = ToolJsonSchema.fromSchema
 
 describe("tool parameters", () => {
   describe("JSON Schema (wire shape)", () => {
