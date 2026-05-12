@@ -28,6 +28,12 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
   const permission = usePermission()
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
   const loaded = createMemo(() => dirs().some((directory) => globalSync.loaded(directory)))
+  const loadingSessions = createMemo(() =>
+    dirs().some((directory) => {
+      const [store] = globalSync.child(directory, { bootstrap: false })
+      return store.sessions === "loading"
+    }),
+  )
   const unseenCount = createMemo(() =>
     dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
   )
@@ -45,7 +51,8 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
   return (
     <div
       data-loaded={loaded() ? "true" : "false"}
-      class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}
+      data-component={loadingSessions() ? "project-icon-loading" : undefined}
+      class={`relative size-8 shrink-0 rounded overflow-hidden ${props.class ?? ""}`}
     >
       <div class="size-full rounded overflow-clip">
         <Avatar
@@ -67,6 +74,9 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
           classList={{ "badge-mask": notify() }}
         />
       </div>
+      <Show when={loadingSessions()}>
+        <div data-slot="sheen" class="pointer-events-none absolute inset-0 z-[5]" />
+      </Show>
       <Show when={notify()}>
         <div
           classList={{
