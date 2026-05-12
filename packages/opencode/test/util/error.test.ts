@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { errorData, errorFormat, errorMessage } from "../../src/util/error"
-import { UI } from "../../src/cli/ui"
 import { MessageError } from "../../src/session/message-error"
 
 describe("util.error", () => {
@@ -60,9 +58,7 @@ describe("util.error", () => {
     expect(error.toObject()).toEqual({ name: "ProviderAuthError", data: { providerID: "anthropic", message: "boom" } })
   })
 
-  test("void named errors accept JSON without data", () => {
-    const serialized = JSON.parse(JSON.stringify(new UI.CancelledError(undefined).toObject()))
-
-    expect(Schema.decodeUnknownOption(UI.CancelledError.Schema)(serialized)._tag).toBe("Some")
+  test("named errors without fields serialize data", () => {
+    expect(new MessageError.OutputLengthError({}).toObject()).toEqual({ name: "MessageOutputLengthError", data: {} })
   })
 })
