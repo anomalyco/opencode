@@ -291,25 +291,19 @@ const main = Effect.gen(function* () {
       if (mainWindow) sendSqliteMigrationProgress(mainWindow, progress)
     })
 
+    ensureLoopbackNoProxy()
+    useEnvProxy()
+
     logger.log("spawning sidecar", { url })
     const { listener, health } = yield* Effect.promise(() =>
-      spawnLocalServer(
-        hostname,
-        port,
-        password,
-        () => {
-          ensureLoopbackNoProxy()
-          useEnvProxy()
-        },
-        {
-          needsMigration,
-          userDataPath: app.getPath("userData"),
-          onSqliteProgress: (progress) => initEmitter.emit("sqlite", progress),
-          onStdout: (message) => logger.log("sidecar stdout", { message }),
-          onStderr: (message) => logger.warn("sidecar stderr", { message }),
-          onExit: (code) => logger.warn("sidecar exited", { code }),
-        },
-      ),
+      spawnLocalServer(hostname, port, password, {
+        needsMigration,
+        userDataPath: app.getPath("userData"),
+        onSqliteProgress: (progress) => initEmitter.emit("sqlite", progress),
+        onStdout: (message) => logger.log("sidecar stdout", { message }),
+        onStderr: (message) => logger.warn("sidecar stderr", { message }),
+        onExit: (code) => logger.warn("sidecar exited", { code }),
+      }),
     )
     server = listener
     yield* Deferred.succeed(serverReady, {

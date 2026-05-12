@@ -41,8 +41,7 @@
     "minimatch": "10.2.5",
     "npm-package-arg": "13.0.2",
     "semver": "^7.6.3",
-    "xdg-basedir": "5.1.0",
-    "zod": "catalog:"
+    "xdg-basedir": "5.1.0"
   },
   "overrides": {
     "drizzle-orm": "catalog:"

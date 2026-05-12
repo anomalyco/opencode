@@ -25,7 +25,7 @@ afterEach(async () => {
 })
 
 describe("config HttpApi", () => {
-  test("serves config update through Hono bridge", async () => {
+  test("serves config update through the default server app", async () => {
     await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     const disposed = waitDisposed(tmp.path)
 

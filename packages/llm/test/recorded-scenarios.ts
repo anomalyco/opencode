@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMEvent, LLMResponse, type LLMRequest, type ModelRef } from "../src"
+import { LLM, LLMEvent, LLMResponse, ToolChoice, ToolDefinition, type LLMRequest, type ModelRef } from "../src"
 import { LLMClient } from "../src/route"
 import { tool } from "../src/tool"
 
@@ -18,7 +18,7 @@ export const LARGE_CACHEABLE_SYSTEM = (() => {
   return sentence.repeat(250)
 })()
 
-export const weatherTool = LLM.toolDefinition({
+export const weatherTool = ToolDefinition.make({
   name: weatherToolName,
   description: "Get current weather for a city.",
   inputSchema: {
@@ -70,7 +70,7 @@ export const weatherToolRequest = (input: {
     system: "Call tools exactly as requested.",
     prompt: "Call get_weather with city exactly Paris.",
     tools: [weatherTool],
-    toolChoice: LLM.toolChoice(weatherTool),
+    toolChoice: ToolChoice.make(weatherTool),
     cache: "none",
     generation:
       input.temperature === false

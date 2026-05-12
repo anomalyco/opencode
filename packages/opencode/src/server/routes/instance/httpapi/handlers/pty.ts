@@ -153,7 +153,7 @@ export const ptyConnectRoute = HttpRouter.use((router) =>
           return HttpServerResponse.empty()
         }
 
-        // No `pending[]`-style early-frame buffer (the legacy Hono handler had one).
+        // No `pending[]`-style early-frame buffer (the legacy handler had one).
         // `request.upgrade` returns a Socket without running the WS handshake; the
         // handshake fires inside `socket.runRaw` below, AFTER `pty.connect` resolves
         // and the message callback is registered. The client therefore can't fire

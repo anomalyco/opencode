@@ -1,4 +1,4 @@
-import z from "zod"
+import { Schema } from "effect"
 import * as path from "path"
 import * as fs from "fs/promises"
 import { readFileSync } from "fs"
@@ -7,12 +7,11 @@ import * as Bom from "../util/bom"
 
 const log = Log.create({ service: "patch" })
 
-// Schema definitions
-export const PatchSchema = z.object({
-  patchText: z.string().describe("The full patch text that describes all changes to be made"),
+export const PatchSchema = Schema.Struct({
+  patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
 })
 
-export type PatchParams = z.infer<typeof PatchSchema>
+export type PatchParams = Schema.Schema.Type<typeof PatchSchema>
 
 // Core types matching the Rust implementation
 export interface ApplyPatchArgs {
