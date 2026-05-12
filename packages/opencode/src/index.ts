@@ -33,7 +33,8 @@ import { DbCommand } from "./cli/cmd/db"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
 import { JsonMigration } from "@/storage/json-migration"
-import { Database } from "@/storage/db"
+import { Database, desc } from "@/storage/db"
+import { SessionTable } from "./session/session.sql"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
@@ -153,7 +154,48 @@ const cli = yargs(args)
     }
   })
   .usage("")
-  .completion("completion", "generate shell completion script")
+  .completion(
+    "completion",
+    "generate shell completion script",
+    // Use FallbackCompletionFunction (4 args) to access default completions when not completing session IDs
+    function completionHandler(
+      current: string,
+      _argv: Record<string, unknown>,
+      defaultCompletions: (onCompleted?: (defaultCompletions: string[]) => void) => void,
+      done: (completions: string[]) => void,
+    ) {
+      const args = process.argv.slice(2)
+      const idx = args.indexOf("--get-yargs-completions")
+      const tokens = idx >= 0 ? args.slice(idx + 1) : []
+      const prev = tokens[tokens.length - 2]
+      const pprev = tokens[tokens.length - 3]
+
+      const wantsSessionID =
+        prev === "-s" ||
+        prev === "--session" ||
+        prev === "export" ||
+        (prev === "delete" && pprev === "session")
+
+      if (wantsSessionID) {
+        const rows = Database.use((db) =>
+          db
+            .select({ id: SessionTable.id, title: SessionTable.title })
+            .from(SessionTable)
+            .orderBy(desc(SessionTable.time_updated))
+            .limit(50)
+            .all(),
+        )
+        done(rows.map((r) => `${r.id}:${r.title}`))
+        return
+      }
+
+      // yargs internally calls onCompleted(err, completions) but the type expects (completions) => void
+      defaultCompletions(((_err: unknown, completions: string[]) => {
+        done(completions)
+      }) as any)
+      // yargs FallbackCompletionFunction overload does not resolve correctly; cast is required
+    } as any,
+  )
   .command(AcpCommand)
   .command(McpCommand)
   .command(TuiThreadCommand)
