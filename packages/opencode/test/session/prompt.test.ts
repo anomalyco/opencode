@@ -1225,6 +1225,37 @@ unix("shell commands can change directory after startup", () =>
   ),
 )
 
+unix(
+  "shell preserves newlines with configured bash",
+  () =>
+    withSh(() =>
+      provideTmpdirInstance(
+        (_dir) =>
+          Effect.gen(function* () {
+            if (!Bun.which("bash")) return
+
+            const { prompt, run, chat } = yield* boot()
+            const result = yield* prompt.shell({
+              sessionID: chat.id,
+              agent: "build",
+              command: "printf first\nprintf second",
+            })
+
+            expect(result.info.role).toBe("assistant")
+            const tool = completedTool(result.parts)
+            if (!tool) return
+
+            expect(tool.state.input.command).toBe("printf first\nprintf second")
+            expect(tool.state.output).toContain("firstsecond")
+            expect(tool.state.output).not.toContain("firstnprintf")
+            yield* run.assertNotBusy(chat.id)
+          }),
+        { git: true, config: { ...cfg, shell: "bash" } },
+      ),
+    ),
+  30_000,
+)
+
 unix("shell lists files from the project directory", () =>
   provideTmpdirInstance(
     (dir) =>
