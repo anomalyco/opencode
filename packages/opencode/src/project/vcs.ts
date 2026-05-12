@@ -6,8 +6,6 @@ import { InstanceState } from "@/effect/instance-state"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
 import * as Log from "@opencode-ai/core/util/log"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, withStatics } from "@/util/schema"
 
 const log = Log.create({ service: "vcs" })
 const PATCH_CONTEXT_LINES = 2_147_483_647
@@ -208,7 +206,7 @@ const track = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, ref:
   return yield* diffAgainstRef(git, cwd, ref)
 })
 
-export const Mode = Schema.Literals(["git", "branch"]).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const Mode = Schema.Literals(["git", "branch"])
 export type Mode = Schema.Schema.Type<typeof Mode>
 
 export const Event = {
@@ -223,27 +221,52 @@ export const Event = {
 export const Info = Schema.Struct({
   branch: Schema.optional(Schema.String),
   default_branch: Schema.optional(Schema.String),
-})
-  .annotate({ identifier: "VcsInfo" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "VcsInfo" })
 export type Info = Schema.Schema.Type<typeof Info>
 
 export const FileDiff = Schema.Struct({
   file: Schema.String,
-  patch: Schema.String,
-  additions: NonNegativeInt,
-  deletions: NonNegativeInt,
+  // Mirrors Snapshot.FileDiff (see #26574). The current producer always
+  // populates patch, but loosening matches the sibling schema so a
+  // future code path that omits it can't crash /instance/vcs/diff.
+  patch: Schema.optional(Schema.String),
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
-})
-  .annotate({ identifier: "VcsFileDiff" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "VcsFileDiff" })
 export type FileDiff = Schema.Schema.Type<typeof FileDiff>
+
+export const FileStatus = Schema.Struct({
+  file: Schema.String,
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
+  status: Schema.Literals(["added", "deleted", "modified"]),
+}).annotate({ identifier: "VcsFileStatus" })
+export type FileStatus = Schema.Schema.Type<typeof FileStatus>
+
+export const ApplyInput = Schema.Struct({
+  patch: Schema.String,
+})
+export type ApplyInput = Schema.Schema.Type<typeof ApplyInput>
+
+export const ApplyResult = Schema.Struct({
+  applied: Schema.Boolean,
+})
+export type ApplyResult = Schema.Schema.Type<typeof ApplyResult>
+
+export class PatchApplyError extends Schema.TaggedErrorClass<PatchApplyError>()("VcsPatchApplyError", {
+  message: Schema.String,
+  reason: Schema.Literals(["non-git", "not-clean"]),
+}) {}
 
 export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly branch: () => Effect.Effect<string | undefined>
   readonly defaultBranch: () => Effect.Effect<string | undefined>
+  readonly status: () => Effect.Effect<FileStatus[]>
   readonly diff: (mode: Mode) => Effect.Effect<FileDiff[]>
+  readonly diffRaw: () => Effect.Effect<string>
+  readonly apply: (input: ApplyInput) => Effect.Effect<ApplyResult, PatchApplyError>
 }
 
 interface State {
@@ -304,6 +327,31 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
       defaultBranch: Effect.fn("Vcs.defaultBranch")(function* () {
         return yield* InstanceState.use(state, (x) => x.root?.name)
       }),
+      status: Effect.fn("Vcs.status")(function* () {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") return []
+        const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
+        const [list, stats] = yield* Effect.all(
+          [git.status(ctx.directory), ref ? git.stats(ctx.directory, ref) : Effect.succeed([])],
+          { concurrency: 2 },
+        )
+        const map = nums(stats)
+        return yield* Effect.forEach(
+          list.toSorted((a, b) => a.file.localeCompare(b.file)),
+          (item) =>
+            Effect.gen(function* () {
+              const stat =
+                map.get(item.file) ??
+                (item.status === "added" ? yield* git.statUntracked(ctx.worktree, item.file) : undefined)
+              return {
+                file: item.file,
+                additions: stat?.additions ?? 0,
+                deletions: stat?.deletions ?? 0,
+                status: item.status,
+              } satisfies FileStatus
+            }),
+        )
+      }),
       diff: Effect.fn("Vcs.diff")(function* (mode: Mode) {
         const value = yield* InstanceState.get(state)
         const ctx = yield* InstanceState.context
@@ -317,6 +365,36 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
         const ref = yield* git.mergeBase(ctx.directory, value.root.ref)
         if (!ref) return []
         return yield* diffAgainstRef(git, ctx.directory, ref)
+      }),
+      diffRaw: Effect.fn("Vcs.diffRaw")(function* () {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") return ""
+        const [hasHead, status] = yield* Effect.all([git.hasHead(ctx.directory), git.status(ctx.directory)], {
+          concurrency: 2,
+        })
+        const tracked = hasHead ? (yield* git.patchAll(ctx.directory, "HEAD")).text : ""
+        const untracked = yield* Effect.forEach(
+          status.filter((item) => item.code === "??"),
+          (item) => git.patchUntracked(ctx.directory, item.file).pipe(Effect.map((patch) => patch.text)),
+        )
+        return [tracked, ...untracked].filter(Boolean).join("\n")
+      }),
+      apply: Effect.fn("Vcs.apply")(function* (input: ApplyInput) {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") {
+          return yield* new PatchApplyError({
+            message: "Patch can't be applied because the project is not git-based",
+            reason: "non-git",
+          })
+        }
+        const applied = yield* git.applyPatch(ctx.directory, input.patch)
+        if (applied.exitCode !== 0) {
+          return yield* new PatchApplyError({
+            message: "Patch can't be applied",
+            reason: "not-clean",
+          })
+        }
+        return { applied: true }
       }),
     })
   }),

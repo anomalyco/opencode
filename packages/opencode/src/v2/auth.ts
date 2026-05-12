@@ -1,7 +1,7 @@
 import path from "path"
 import { Effect, Layer, Option, Schema, Context, SynchronizedRef } from "effect"
 import { Identifier } from "@opencode-ai/core/util/identifier"
-import { NonNegativeInt, withStatics } from "@/util/schema"
+import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/core/global"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 

@@ -1,4 +1,4 @@
-import type { BoxRenderable, TextareaRenderable, KeyEvent, ScrollBoxRenderable } from "@opentui/core"
+import type { BoxRenderable, TextareaRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { pathToFileURL } from "bun"
 import fuzzysort from "fuzzysort"
 import path from "path"
@@ -12,11 +12,14 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
-import { useCommandDialog } from "@tui/component/dialog-command"
+import { useCommandPalette } from "../../context/command-palette"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
+import { useBindings } from "../../keymap"
+import { Reference } from "@/reference/reference"
+import type { Config } from "@/config/config"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -52,7 +55,6 @@ function extractLineRange(input: string) {
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
-  onKeyDown: (e: KeyEvent) => void
   visible: false | "@" | "/"
 }
 
@@ -82,12 +84,11 @@ export function Autocomplete(props: {
   const editor = useEditorContext()
   const sdk = useSDK()
   const sync = useSync()
-  const command = useCommandDialog()
+  const command = useCommandPalette()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
   const tuiConfig = useTuiConfig()
-
   const [store, setStore] = createStore({
     index: 0,
     selected: 0,
@@ -261,6 +262,87 @@ export function Autocomplete(props: {
     }
   }
 
+  function createReferenceFilePart(input: {
+    alias: string
+    root: string
+    item: string
+    lineRange?: { startLine: number; endLine?: number }
+  }) {
+    const filename = `${input.alias}/${
+      input.lineRange && !input.item.endsWith("/")
+        ? `${input.item}#${input.lineRange.startLine}${input.lineRange.endLine ? `-${input.lineRange.endLine}` : ""}`
+        : input.item
+    }`
+    const urlObj = pathToFileURL(path.join(input.root, input.item))
+
+    if (input.lineRange && !input.item.endsWith("/")) {
+      urlObj.searchParams.set("start", String(input.lineRange.startLine))
+      if (input.lineRange.endLine !== undefined) {
+        urlObj.searchParams.set("end", String(input.lineRange.endLine))
+      }
+    }
+
+    return {
+      filename,
+      url: urlObj.href,
+      part: {
+        type: "file" as const,
+        mime: input.item.endsWith("/") ? "application/x-directory" : "text/plain",
+        filename,
+        url: urlObj.href,
+        source: {
+          type: "file" as const,
+          text: {
+            start: 0,
+            end: 0,
+            value: "",
+          },
+          path: filename,
+        },
+      },
+    }
+  }
+
+  function referencePromptText(reference: Reference.Resolved) {
+    const problem = reference.kind === "invalid" ? reference.message : undefined
+    return [
+      `Referenced configured reference @${reference.name}.`,
+      ...(reference.kind === "local" ? ["Kind: local directory"] : []),
+      ...(reference.kind === "git" ? ["Kind: git repository"] : []),
+      ...(reference.kind === "invalid" ? [`Repository: ${reference.repository}`] : []),
+      ...(reference.kind === "git" ? [`Repository: ${reference.repository}`] : []),
+      ...(reference.kind === "git" && reference.branch ? [`Branch/ref: ${reference.branch}`] : []),
+      ...(reference.kind === "invalid" ? [] : [`Reference root: ${reference.path}`]),
+      ...(problem
+        ? [`Problem: ${problem}`]
+        : [
+            "For targeted context, inspect the reference path directly with Read, Glob, and Grep. For broader research, call the task tool with subagent scout and include this reference path.",
+          ]),
+    ].join("\n")
+  }
+
+  const references = createMemo(() =>
+    Reference.resolveAll({
+      references: (sync.data.config.reference ?? {}) as NonNullable<Config.Info["reference"]>,
+      directory: sync.path.directory || process.cwd(),
+      worktree: sync.path.worktree || sync.path.directory || process.cwd(),
+    }),
+  )
+
+  const referenceSearch = createMemo(() => {
+    if (!store.visible || store.visible === "/") return
+    const { lineRange, baseQuery } = extractLineRange(search())
+    const slash = baseQuery.indexOf("/")
+    if (slash === -1) return
+    const reference = references().find((item) => item.name === baseQuery.slice(0, slash))
+    if (!reference || reference.kind === "invalid") return
+    return {
+      reference,
+      query: baseQuery.slice(slash + 1),
+      lineRange,
+    }
+  })
+
   function normalizeMentionPath(filePath: string) {
     const baseDir = sync.path.directory || process.cwd()
     const absolute = path.resolve(filePath)
@@ -282,7 +364,7 @@ export function Autocomplete(props: {
     const { filename, part } = createFilePart(item, lineRange)
     const index = store.visible === "@" ? store.index : props.input().cursorOffset
 
-    command.keybinds(true)
+    command.suspend(false)
     setStore("visible", false)
     setStore("index", index)
     insertPart(filename, part)
@@ -292,6 +374,7 @@ export function Autocomplete(props: {
     () => search(),
     async (query) => {
       if (!store.visible || store.visible === "/") return []
+      if (referenceSearch()) return []
 
       const { lineRange, baseQuery } = extractLineRange(query ?? "")
 
@@ -334,6 +417,43 @@ export function Autocomplete(props: {
       }
 
       return options
+    },
+    {
+      initialValue: [],
+    },
+  )
+
+  const [referenceFiles] = createResource(
+    () => referenceSearch(),
+    async (match) => {
+      if (!match) return []
+
+      const result = await sdk.client.find.files({
+        directory: match.reference.path,
+        query: match.query,
+        limit: 50,
+      })
+
+      if (result.error || !result.data) return []
+
+      const width = props.anchor().width - 4
+      return result.data.map((item): AutocompleteOption => {
+        const { filename, part } = createReferenceFilePart({
+          alias: match.reference.name,
+          root: match.reference.path,
+          item,
+          lineRange: match.lineRange,
+        })
+        return {
+          display: Locale.truncateMiddle(filename, width),
+          value: filename,
+          isDirectory: item.endsWith("/"),
+          path: filename,
+          onSelect: () => {
+            insertPart(filename, part)
+          },
+        }
+      })
     },
     {
       initialValue: [],
@@ -398,6 +518,22 @@ export function Autocomplete(props: {
       )
   })
 
+  const referenceAliases = createMemo(() =>
+    references().map(
+      (reference): AutocompleteOption => ({
+        display: "@" + reference.name,
+        description: reference.kind === "invalid" ? reference.message : " configured reference",
+        onSelect: () => {
+          insertPart(reference.name, {
+            type: "text",
+            text: referencePromptText(reference),
+            synthetic: true,
+          })
+        },
+      }),
+    ),
+  )
+
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...command.slashes()]
 
@@ -429,11 +565,18 @@ export function Autocomplete(props: {
 
   const options = createMemo((prev: AutocompleteOption[] | undefined) => {
     const filesValue = files()
+    const referenceFilesValue = referenceFiles()
+    const referenceSearchValue = referenceSearch()
     const agentsValue = agents()
+    const referenceAliasesValue = referenceAliases()
     const commandsValue = commands()
 
     const mixed: AutocompleteOption[] =
-      store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
+      store.visible === "@"
+        ? referenceSearchValue
+          ? referenceFilesValue || []
+          : [...referenceAliasesValue, ...agentsValue, ...(filesValue || []), ...mcpResources()]
+        : [...commandsValue]
 
     const searchValue = search()
 
@@ -441,7 +584,7 @@ export function Autocomplete(props: {
       return mixed
     }
 
-    if (files.loading && prev && prev.length > 0) {
+    if ((files.loading || referenceFiles.loading) && prev && prev.length > 0) {
       return prev
     }
 
@@ -506,7 +649,7 @@ export function Autocomplete(props: {
     const input = props.input()
     const currentCursorOffset = input.cursorOffset
 
-    const displayText = selected.display.trimEnd()
+    const displayText = (selected.value ?? selected.display).trimEnd()
     const path = displayText.startsWith("@") ? displayText.slice(1) : displayText
 
     input.cursorOffset = store.index
@@ -520,8 +663,70 @@ export function Autocomplete(props: {
     setStore("selected", 0)
   }
 
+  useBindings(() => ({
+    target: props.input,
+    enabled: () => Boolean(store.visible),
+    commands: [
+      {
+        name: "prompt.autocomplete.prev",
+        title: "Previous autocomplete item",
+        category: "Autocomplete",
+        run() {
+          setStore("input", "keyboard")
+          move(-1)
+        },
+      },
+      {
+        name: "prompt.autocomplete.next",
+        title: "Next autocomplete item",
+        category: "Autocomplete",
+        run() {
+          setStore("input", "keyboard")
+          move(1)
+        },
+      },
+      {
+        name: "prompt.autocomplete.hide",
+        title: "Hide autocomplete",
+        category: "Autocomplete",
+        run() {
+          hide()
+        },
+      },
+      {
+        name: "prompt.autocomplete.select",
+        title: "Select autocomplete item",
+        category: "Autocomplete",
+        run() {
+          select()
+        },
+      },
+      {
+        name: "prompt.autocomplete.complete",
+        title: "Complete autocomplete item",
+        category: "Autocomplete",
+        run() {
+          const selected = options()[store.selected]
+          if (selected?.isDirectory) {
+            expandDirectory()
+            return
+          }
+
+          select()
+        },
+      },
+    ],
+    bindings: tuiConfig.keybinds.gather("prompt.autocomplete", [
+      "prompt.autocomplete.prev",
+      "prompt.autocomplete.next",
+      "prompt.autocomplete.hide",
+      "prompt.autocomplete.select",
+      "prompt.autocomplete.complete",
+    ]),
+  }))
+
   function show(mode: "@" | "/") {
-    command.keybinds(false)
+    command.suspend(true)
     setStore({
       visible: mode,
       index: props.input().cursorOffset,
@@ -538,7 +743,7 @@ export function Autocomplete(props: {
         draft.input = props.input().plainText
       })
     }
-    command.keybinds(true)
+    command.suspend(false)
     setStore("visible", false)
   }
 
@@ -591,60 +796,6 @@ export function Autocomplete(props: {
         if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
           show("@")
           setStore("index", idx)
-        }
-      },
-      onKeyDown(e: KeyEvent) {
-        if (store.visible) {
-          const name = e.name?.toLowerCase()
-          const ctrlOnly = e.ctrl && !e.meta && !e.shift
-          const isNavUp = name === "up" || (ctrlOnly && name === "p")
-          const isNavDown = name === "down" || (ctrlOnly && name === "n")
-
-          if (isNavUp) {
-            setStore("input", "keyboard")
-            move(-1)
-            e.preventDefault()
-            return
-          }
-          if (isNavDown) {
-            setStore("input", "keyboard")
-            move(1)
-            e.preventDefault()
-            return
-          }
-          if (name === "escape") {
-            hide()
-            e.preventDefault()
-            return
-          }
-          if (name === "return") {
-            select()
-            e.preventDefault()
-            return
-          }
-          if (name === "tab") {
-            const selected = options()[store.selected]
-            if (selected?.isDirectory) {
-              expandDirectory()
-            } else {
-              select()
-            }
-            e.preventDefault()
-            return
-          }
-        }
-        if (!store.visible) {
-          if (e.name === "@") {
-            const cursorOffset = props.input().cursorOffset
-            const charBeforeCursor =
-              cursorOffset === 0 ? undefined : props.input().getTextRange(cursorOffset - 1, cursorOffset)
-            const canTrigger = charBeforeCursor === undefined || charBeforeCursor === "" || /\s/.test(charBeforeCursor)
-            if (canTrigger) show("@")
-          }
-
-          if (e.name === "/") {
-            if (props.input().cursorOffset === 0) show("/")
-          }
         }
       },
     })

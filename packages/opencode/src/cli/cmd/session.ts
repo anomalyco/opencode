@@ -9,6 +9,7 @@ import { Locale } from "@/util/locale"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
+import { NotFoundError } from "@/storage/storage"
 import { EOL } from "os"
 import path from "path"
 import { which } from "../../util/which"
@@ -59,9 +60,9 @@ export const SessionDeleteCommand = effectCmd({
   handler: Effect.fn("Cli.session.delete")(function* (args) {
     const svc = yield* Session.Service
     const sessionID = SessionID.make(args.sessionID)
-    // Match legacy try/catch — Session.get surfaces NotFoundError as a defect.
-    yield* svc.get(sessionID).pipe(Effect.catchCause(() => fail(`Session not found: ${args.sessionID}`)))
-    yield* svc.remove(sessionID)
+    yield* svc
+      .remove(sessionID)
+      .pipe(Effect.catchIf(NotFoundError.isInstance, () => fail(`Session not found: ${args.sessionID}`)))
     UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
   }),
 })
