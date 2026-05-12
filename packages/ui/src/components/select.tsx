@@ -13,21 +13,10 @@ function debug() {
   }
 }
 
-function log(kind: string, fields: Record<string, string | number | boolean | undefined>) {
-  if (!debug()) return
-  const line = Object.entries(fields)
-    .map(([key, value]) => `${key}=${String(value)}`)
-    .join(" ")
-  console.debug(`[select:perf] ${kind} ${line}`)
+function log(_kind: string, _fields: Record<string, string | number | boolean | undefined>) {
 }
 
-function stage(name: string | undefined, stage: string, fields: Record<string, string | number | boolean | undefined>) {
-  if (!debug()) return
-  if (!name) return
-  const line = Object.entries(fields)
-    .map(([key, value]) => `${key}=${String(value)}`)
-    .join(" ")
-  console.debug(`[open:stage] name=${name} stage=${stage} ${line}`)
+function stage(_name: string | undefined, _stage: string, _fields: Record<string, string | number | boolean | undefined>) {
 }
 
 export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "onSelect" | "children"> & {
@@ -161,26 +150,29 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
         stop()
       }}
       onOpenChange={(open) => {
-        if (open && stageAt === 0) stageAt = performance.now()
-        if (!open) stageAt = 0
-        log("toggle", {
-          open,
-          options: local.options.length,
-          groups: grouped().length,
-          trigger: !!triggerRef,
-          content: !!contentRef,
-        })
-        stage(local.debugName, "open-change", {
-          ms: stageAt ? Math.round(performance.now() - stageAt) : 0,
-          open,
-          trigger: !!triggerRef,
-          content: !!contentRef,
-          options: local.options.length,
-          groups: grouped().length,
-        })
+        const trace = debug()
+        if (trace && open && stageAt === 0) stageAt = performance.now()
+        if (trace && !open) stageAt = 0
+        if (trace) {
+          log("toggle", {
+            open,
+            options: local.options.length,
+            groups: grouped().length,
+            trigger: !!triggerRef,
+            content: !!contentRef,
+          })
+          stage(local.debugName, "open-change", {
+            ms: stageAt ? Math.round(performance.now() - stageAt) : 0,
+            open,
+            trigger: !!triggerRef,
+            content: !!contentRef,
+            options: local.options.length,
+            groups: grouped().length,
+          })
+        }
         local.onOpenChange?.(open)
         if (!open) stop()
-        if (!open) return
+        if (!trace || !open) return
         requestAnimationFrame(() => {
           const trigger = triggerRef
           const content = contentRef
@@ -278,6 +270,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
         <Kobalte.Content
           ref={(el: HTMLElement | undefined) => {
             contentRef = el
+            if (!debug()) return
             if (el) stageAt = performance.now()
             stage(local.debugName, "content-mount", {
               ms: stageAt ? Math.round(performance.now() - stageAt) : "none",

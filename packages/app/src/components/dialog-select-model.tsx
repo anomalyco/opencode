@@ -16,18 +16,19 @@ import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 
-function logModelOpen(kind: string, fields: Record<string, string | number | boolean | undefined>) {
-  const line = Object.entries(fields)
-    .map(([key, value]) => `${key}=${String(value)}`)
-    .join(" ")
-  console.debug(`[model:open] ${kind} ${line}`)
+function dbg() {
+  if (typeof window === "undefined") return false
+  try {
+    return window.localStorage.getItem("opencode.ui.debug") === "1"
+  } catch {
+    return false
+  }
 }
 
-function logStage(stage: string, fields: Record<string, string | number | boolean | undefined>) {
-  const line = Object.entries(fields)
-    .map(([key, value]) => `${key}=${String(value)}`)
-    .join(" ")
-  console.debug(`[open:stage] name=model-selector stage=${stage} ${line}`)
+function logModelOpen(_kind: string, _fields: Record<string, string | number | boolean | undefined>) {
+}
+
+function logStage(_stage: string, _fields: Record<string, string | number | boolean | undefined>) {
 }
 
 function since(at: number) {
@@ -135,6 +136,7 @@ export function ModelSelectorPopover(props: {
   children?: JSX.Element
   triggerAs?: ValidComponent
   triggerProps?: ModelSelectorTriggerProps
+  debugName?: string
   onOpenChange?: (open: boolean) => void
 }) {
   const model = props.model ?? useLocal().model
@@ -180,35 +182,38 @@ export function ModelSelectorPopover(props: {
     <Kobalte
       open={store.open}
       onOpenChange={(next) => {
-        const id = ++seq
-        if (next && stageAt === 0) stageAt = performance.now()
-        if (!next) stageAt = 0
+        const trace = dbg()
+        const id = trace ? ++seq : seq
+        if (trace && next && stageAt === 0) stageAt = performance.now()
+        if (trace && !next) stageAt = 0
         if (next) setStore("dismiss", null)
         setStore("open", next)
-        if (next) {
+        if (trace && next) {
           logStage("after-set-open", {
             seq: id,
             ms: since(stageAt),
             content: !!content,
           })
         }
-        logModelOpen("open-change", {
-          seq: id,
-          open: next,
-          dismiss: store.dismiss ?? "none",
-          content: !!content,
-        })
-        logStage("open-change", {
-          seq: id,
-          ms: stageAt ? Math.round(performance.now() - stageAt) : 0,
-          open: next,
-          content: !!content,
-        })
+        if (trace) {
+          logModelOpen("open-change", {
+            seq: id,
+            open: next,
+            dismiss: store.dismiss ?? "none",
+            content: !!content,
+          })
+          logStage("open-change", {
+            seq: id,
+            ms: stageAt ? Math.round(performance.now() - stageAt) : 0,
+            open: next,
+            content: !!content,
+          })
+        }
         if (!next && resizeObserver) {
           resizeObserver.disconnect()
           resizeObserver = undefined
         }
-        if (next) {
+        if (trace && next) {
           const list = model.list().filter((item) => (props.provider ? item.provider.id === props.provider : true))
           const visible = list.filter((item) =>
             model.visible({ modelID: item.id, providerID: item.provider.id }),
@@ -341,7 +346,7 @@ export function ModelSelectorPopover(props: {
           })
         }
         props.onOpenChange?.(next)
-        if (next) {
+        if (trace && next) {
           logStage("after-parent", {
             seq: id,
             ms: since(stageAt),
@@ -362,6 +367,7 @@ export function ModelSelectorPopover(props: {
             resizeObserver?.disconnect()
             resizeObserver = undefined
             content = el
+            if (!dbg()) return
             if (el) stageAt = performance.now()
             const box = rect(el)
             logModelOpen("mount", {

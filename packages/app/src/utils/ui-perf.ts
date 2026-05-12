@@ -32,21 +32,6 @@ export function uiPerfOpen(name: string, open: boolean) {
     pending.delete(name)
     return
   }
-  const start = pending.get(name)
-  if (!start) return
+  if (!pending.has(name)) return
   pending.delete(name)
-  const openAt = performance.now()
-  requestAnimationFrame(() => {
-    const commitAt = performance.now()
-    requestAnimationFrame(() => {
-      const paintAt = performance.now()
-      const handler = (start.handlerTime - start.eventTime).toFixed(1)
-      const onOpen = (openAt - start.eventTime).toFixed(1)
-      const commit = (commitAt - start.eventTime).toFixed(1)
-      const paint = (paintAt - start.eventTime).toFixed(1)
-      console.debug(
-        `[ui:perf] open name=${name} handler=${handler} open=${onOpen} commit=${commit} paint=${paint}ms`,
-      )
-    })
-  })
 }

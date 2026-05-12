@@ -25,173 +25,17 @@ type Entry = {
 
 type Mark = Record<string, string | number | boolean | undefined>
 
-type Sum = {
-  count: number
-  parse: number
-  dom: number
-  cache: number
-  skip: number
-  parseMs: number
-  domMs: number
-  text: number
-  html: number
-  append: number
-  morph: number
-  replace: number
-  other: number
-}
-
 export type MarkdownStage = "lite" | "structure" | "full"
 
 type MarkedApi = ReturnType<typeof useMarked>
 
 const max = 200
 const cache = new Map<string, Entry>()
-const debugKey = "opencode.markdown.debug"
-const impactKey = "opencode.prompt.impact"
-const sumMs = 5_000
-const sum: Sum = {
-  count: 0,
-  parse: 0,
-  dom: 0,
-  cache: 0,
-  skip: 0,
-  parseMs: 0,
-  domMs: 0,
-  text: 0,
-  html: 0,
-  append: 0,
-  morph: 0,
-  replace: 0,
-  other: 0,
-}
-let sumTimer: ReturnType<typeof setTimeout> | undefined
 
-function debug() {
-  if (isServer) return false
-  try {
-    return window.localStorage.getItem(debugKey) === "1"
-  } catch {
-    return false
-  }
+function mark(_name: string, _data: Mark = {}) {
 }
 
-function mark(name: string, data: Mark = {}) {
-  if (!debug()) return
-  console.debug(`[markdown:perf] ${name} ${line(data)}`)
-  collect(name, data)
-}
-
-function line(data: Mark) {
-  return Object.entries(data)
-    .filter(([, value]) => value !== undefined)
-    .map(([key, value]) => `${key}=${value}`)
-    .join(" ")
-}
-
-function impact() {
-  if (isServer) return
-  try {
-    const raw = window.localStorage.getItem(impactKey)
-    if (!raw) return
-    const [name, at, until] = raw.split(":")
-    const end = Number(until)
-    if (!Number.isFinite(end)) return
-    const now = Math.round(performance.now())
-    if (now > end) return
-    return {
-      name: name || "unknown",
-      age: Math.max(0, now - (Number(at) || 0)),
-      left: Math.max(0, end - now),
-    }
-  } catch {
-    return
-  }
-}
-
-function markImpact(kind: string, data: Mark = {}) {
-  const tag = impact()
-  if (!tag) return
-  console.debug(
-    `[markdown:update] ${kind} ${line({
-      impact: tag.name,
-      impactAge: tag.age,
-      impactLeft: tag.left,
-      ...data,
-    })}`,
-  )
-}
-
-function collect(name: string, data: Mark) {
-  sum.count++
-  if (name === "parse") {
-    sum.parse++
-    sum.parseMs += Number(data.took ?? 0)
-    sum.text += Number(data.text ?? 0)
-    sum.html += Number(data.html ?? 0)
-  } else if (name === "dom") {
-    sum.dom++
-    sum.domMs += Number(data.took ?? 0)
-    const mode = data.mode
-    if (mode === "append") sum.append++
-    else if (mode === "morph") sum.morph++
-    else if (mode === "replace") sum.replace++
-    else sum.other++
-  } else if (name === "cache-hit") {
-    sum.cache++
-  } else if (name === "skip-math") {
-    sum.skip++
-  }
-  scheduleSummary()
-}
-
-function resetSummary() {
-  sum.count = 0
-  sum.parse = 0
-  sum.dom = 0
-  sum.cache = 0
-  sum.skip = 0
-  sum.parseMs = 0
-  sum.domMs = 0
-  sum.text = 0
-  sum.html = 0
-  sum.append = 0
-  sum.morph = 0
-  sum.replace = 0
-  sum.other = 0
-}
-
-function scheduleSummary() {
-  if (sumTimer !== undefined) return
-  sumTimer = setTimeout(() => {
-    sumTimer = undefined
-    if (sum.count === 0) return
-    const tag = impact()
-    console.debug(
-      `[markdown:perf] summary ${line({
-        window: sumMs,
-        count: sum.count,
-        parse: sum.parse,
-        dom: sum.dom,
-        cache: sum.cache,
-        skip: sum.skip,
-        parseMs: Math.round(sum.parseMs),
-        domMs: Math.round(sum.domMs),
-        avgParse: sum.parse ? Math.round(sum.parseMs / sum.parse) : 0,
-        avgDom: sum.dom ? Math.round(sum.domMs / sum.dom) : 0,
-        text: sum.text,
-        html: sum.html,
-        append: sum.append,
-        morph: sum.morph,
-        replace: sum.replace,
-        other: sum.other,
-        impact: tag?.name,
-        impactAge: tag?.age,
-        impactLeft: tag?.left,
-      })}`,
-    )
-    resetSummary()
-  }, sumMs)
+function markImpact(_kind: string, _data: Mark = {}) {
 }
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {

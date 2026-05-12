@@ -14,12 +14,7 @@ function debug() {
   }
 }
 
-function log(kind: string, fields: Record<string, string | number | boolean | undefined>) {
-  if (!debug()) return
-  const line = Object.entries(fields)
-    .map(([key, value]) => `${key}=${String(value)}`)
-    .join(" ")
-  console.debug(`[popover:perf] ${kind} ${line}`)
+function log(_kind: string, _fields: Record<string, string | number | boolean | undefined>) {
 }
 
 export interface PopoverProps<T extends ValidComponent = "div">
@@ -150,12 +145,14 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
         }}
         style={local.style}
         onOpenAutoFocus={(event: Event) => {
-          log("open-autofocus", {
-            dismiss: state.dismiss ?? "none",
-            width: state.contentRef ? Math.round(state.contentRef.getBoundingClientRect().width) : "none",
-            height: state.contentRef ? Math.round(state.contentRef.getBoundingClientRect().height) : "none",
-            nodes: state.contentRef ? state.contentRef.querySelectorAll("*").length : "none",
-          })
+          if (debug()) {
+            log("open-autofocus", {
+              dismiss: state.dismiss ?? "none",
+              width: state.contentRef ? Math.round(state.contentRef.getBoundingClientRect().width) : "none",
+              height: state.contentRef ? Math.round(state.contentRef.getBoundingClientRect().height) : "none",
+              nodes: state.contentRef ? state.contentRef.querySelectorAll("*").length : "none",
+            })
+          }
           event.preventDefault()
         }}
         onCloseAutoFocus={(event: Event) => {
