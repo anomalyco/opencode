@@ -210,3 +210,147 @@ describe("综合 dedup 场景", () => {
     expect(processed).toEqual(["你好", "再问"])
   })
 })
+
+// ============================================================
+// 持久化(persistPath option)— [feat: dedup-cache-persist] 2026-05-12
+// ============================================================
+
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { afterEach, beforeEach } from "bun:test"
+
+describe("DedupCache 持久化", () => {
+  let tmpDir: string
+  let persistPath: string
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "dedup-persist-test-"))
+    persistPath = join(tmpDir, "dedup.json")
+  })
+
+  afterEach(() => {
+    if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  test("无 persistPath → 不写盘 + flushNow 是 noop", () => {
+    const c = new DedupCache()
+    c.mark("k1")
+    c.flushNow() // 不报错
+    expect(existsSync(persistPath)).toBe(false)
+  })
+
+  test("配 persistPath + mark + flushNow → 文件存在,包含 key", () => {
+    const c = new DedupCache({ persistPath, flushDebounceMs: 1000 }) // 大 debounce 强制走 flushNow
+    c.mark("alpha")
+    c.mark("beta")
+    c.flushNow()
+    expect(existsSync(persistPath)).toBe(true)
+    const data = JSON.parse(readFileSync(persistPath, "utf-8")) as Record<string, number>
+    expect(Object.keys(data).sort()).toEqual(["alpha", "beta"])
+    expect(typeof data.alpha).toBe("number")
+  })
+
+  test("mark debounce flush — 短 debounce 自动写盘", async () => {
+    const c = new DedupCache({ persistPath, flushDebounceMs: 10 })
+    c.mark("auto-flush")
+    expect(existsSync(persistPath)).toBe(false) // 还在 debounce
+    await sleep(30) // 等 debounce 触发
+    expect(existsSync(persistPath)).toBe(true)
+    const data = JSON.parse(readFileSync(persistPath, "utf-8")) as Record<string, number>
+    expect(data["auto-flush"]).toBeDefined()
+  })
+
+  test("第二实例 load 上次写盘的 entries(模拟 sidecar 重启)", () => {
+    const c1 = new DedupCache({ persistPath, ttlMs: 60_000, flushDebounceMs: 1000 })
+    c1.mark("survives-restart-1")
+    c1.mark("survives-restart-2")
+    c1.flushNow()
+
+    // 第二实例(模拟 sidecar 重启)load 上次状态
+    const c2 = new DedupCache({ persistPath, ttlMs: 60_000 })
+    expect(c2.has("survives-restart-1")).toBe(true)
+    expect(c2.has("survives-restart-2")).toBe(true)
+    expect(c2.has("not-in-disk")).toBe(false)
+  })
+
+  test("load 时过滤过期 entries", () => {
+    // 写一个 expireAt 已过期的 entry 到文件
+    const past = Date.now() - 10_000
+    const future = Date.now() + 60_000
+    writeFileSync(
+      persistPath,
+      JSON.stringify({ "expired-key": past, "fresh-key": future }),
+      "utf-8",
+    )
+
+    const c = new DedupCache({ persistPath, ttlMs: 60_000 })
+    expect(c.has("expired-key")).toBe(false) // 过期不 load
+    expect(c.has("fresh-key")).toBe(true)
+    expect(c.size).toBe(1)
+  })
+
+  test("corrupt JSON → 空 cache 启动不报错", () => {
+    writeFileSync(persistPath, "not-valid-json {", "utf-8")
+    const c = new DedupCache({ persistPath })
+    expect(c.size).toBe(0)
+    c.mark("after-corrupt") // 仍可用
+    expect(c.has("after-corrupt")).toBe(true)
+  })
+
+  test("clear() 也触发 flush(清空磁盘内容)", async () => {
+    const c = new DedupCache({ persistPath, flushDebounceMs: 10 })
+    c.mark("will-be-cleared")
+    c.flushNow()
+    expect(JSON.parse(readFileSync(persistPath, "utf-8"))["will-be-cleared"]).toBeDefined()
+
+    c.clear()
+    c.flushNow()
+    const data = JSON.parse(readFileSync(persistPath, "utf-8")) as Record<string, unknown>
+    expect(Object.keys(data)).toEqual([])
+  })
+
+  test("WSS 重连场景实战 — 重启后老 message_id 仍被识别", () => {
+    // 实战:user 发 message X → sidecar mark
+    const sidecar1 = new DedupCache({ persistPath, ttlMs: 12 * 60 * 60 * 1000, flushDebounceMs: 1000 })
+    expect(sidecar1.hasAndMark(makeDedupKey("om_real_msg", "1715499480"))).toBe(false) // 首次
+    sidecar1.flushNow()
+
+    // sidecar 重启
+    const sidecar2 = new DedupCache({ persistPath, ttlMs: 12 * 60 * 60 * 1000 })
+
+    // 飞书 WSS 重连后服务端重推老 message
+    expect(sidecar2.hasAndMark(makeDedupKey("om_real_msg", "1715499480"))).toBe(true) // 识别为旧,skip ✅
+  })
+
+  test("12h TTL 过期模拟 — 重启后超时 entry 不 load", () => {
+    // 直接写一个 11h 前 ttl-15h 的 entry(过期了)
+    writeFileSync(
+      persistPath,
+      JSON.stringify({
+        "old-expired": Date.now() - 1000, // 1s 前过期
+      }),
+      "utf-8",
+    )
+    const c = new DedupCache({ persistPath })
+    expect(c.size).toBe(0)
+  })
+
+  test("文件不存在时(首次启动)→ 空 cache", () => {
+    expect(existsSync(persistPath)).toBe(false)
+    const c = new DedupCache({ persistPath })
+    expect(c.size).toBe(0)
+    // 仍能用
+    c.mark("first-run")
+    expect(c.has("first-run")).toBe(true)
+  })
+
+  test("写盘文件用原子 rename(中途 crash 不留半写)", () => {
+    const c = new DedupCache({ persistPath, flushDebounceMs: 1000 })
+    c.mark("atomic")
+    c.flushNow()
+    // .tmp 不应存在(rename 完成)
+    expect(existsSync(`${persistPath}.tmp`)).toBe(false)
+    expect(existsSync(persistPath)).toBe(true)
+  })
+})
