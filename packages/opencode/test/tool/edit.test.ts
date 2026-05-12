@@ -1,10 +1,9 @@
-import { afterAll, afterEach, describe, test, expect } from "bun:test"
+import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { Cause, Deferred, Effect, Exit, Layer, ManagedRuntime } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { EditTool } from "../../src/tool/edit"
-import { WithInstance } from "../../src/project/with-instance"
-import { disposeAllInstances, TestInstance, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { LSP } from "@/lsp/lsp"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Format } from "../../src/format"
@@ -41,20 +40,6 @@ const layer = Layer.mergeAll(
 )
 
 const it = testEffect(layer)
-
-const runtime = ManagedRuntime.make(layer)
-
-afterAll(async () => {
-  await runtime.dispose()
-})
-
-const resolve = () =>
-  runtime.runPromise(
-    Effect.gen(function* () {
-      const info = yield* EditTool
-      return yield* info.init()
-    }),
-  )
 
 const init = Effect.fn("EditToolTest.init")(function* () {
   const info = yield* EditTool
@@ -500,58 +485,49 @@ describe("tool.edit", () => {
   })
 
   describe("concurrent editing", () => {
-    test("preserves concurrent edits to different sections of the same file", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "file.txt")
-      await fs.writeFile(filepath, "top = 0\nmiddle = keep\nbottom = 0\n", "utf-8")
+    it.instance("preserves concurrent edits to different sections of the same file", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "file.txt")
+        yield* put(filepath, "top = 0\nmiddle = keep\nbottom = 0\n")
 
-      await WithInstance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const edit = await resolve()
-          let asks = 0
-          const firstAsk = Promise.withResolvers<void>()
-          const delayedCtx = {
-            ...ctx,
-            ask: () =>
-              Effect.gen(function* () {
-                asks++
-                if (asks !== 1) return
-                firstAsk.resolve()
-                yield* Effect.promise(() => Bun.sleep(50))
-              }),
-          }
+        const firstAsk = yield* Deferred.make<void>()
+        let asks = 0
+        const delayedCtx = {
+          ...ctx,
+          ask: () =>
+            Effect.gen(function* () {
+              asks++
+              if (asks !== 1) return
+              yield* Deferred.succeed(firstAsk, undefined)
+              yield* Effect.promise(() => Bun.sleep(50))
+            }),
+        }
 
-          const promise1 = Effect.runPromise(
-            edit.execute(
-              {
-                filePath: filepath,
-                oldString: "top = 0",
-                newString: "top = 1",
-              },
-              delayedCtx,
-            ),
-          )
+        const first = yield* run(
+          {
+            filePath: filepath,
+            oldString: "top = 0",
+            newString: "top = 1",
+          },
+          delayedCtx,
+        ).pipe(Effect.forkScoped)
 
-          await firstAsk.promise
+        yield* Deferred.await(firstAsk)
+        yield* Effect.all([
+          Fiber.join(first),
+          run(
+            {
+              filePath: filepath,
+              oldString: "bottom = 0",
+              newString: "bottom = 2",
+            },
+            delayedCtx,
+          ),
+        ])
 
-          const promise2 = Effect.runPromise(
-            edit.execute(
-              {
-                filePath: filepath,
-                oldString: "bottom = 0",
-                newString: "bottom = 2",
-              },
-              delayedCtx,
-            ),
-          )
-
-          const results = await Promise.allSettled([promise1, promise2])
-          expect(results[0]?.status).toBe("fulfilled")
-          expect(results[1]?.status).toBe("fulfilled")
-          expect(await fs.readFile(filepath, "utf-8")).toBe("top = 1\nmiddle = keep\nbottom = 2\n")
-        },
-      })
-    })
+        expect(yield* load(filepath)).toBe("top = 1\nmiddle = keep\nbottom = 2\n")
+      }),
+    )
   })
 })
