@@ -535,6 +535,8 @@ P0/Hotfix 抢占当前 Agent 时：
 - [ ] `tsgo --noEmit` 零错误
 - [ ] `bun test` 全通过（从包目录运行）
 - [ ] `prettier --check .` 无差异
+- [ ] `bun run script/check-cross-package-refs.ts` 通过
+- [ ] `bun run script/verify-rebrand.ts` 通过（涉及品牌迁移/重命名的 PR 必做）
 
 **代码规范 Checklist**
 
