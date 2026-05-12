@@ -650,7 +650,7 @@ describe("MessageV2.filterCompacted", () => {
     ),
   )
 
-  it.instance("ignores original tail when compaction stores tail_start_id", () =>
+  it.instance("retains original tail when compaction stores tail_start_id", () =>
     withSession(({ session, sessionID }) =>
       Effect.gen(function* () {
         const u1 = yield* addUser(sessionID, "first")
@@ -696,12 +696,12 @@ describe("MessageV2.filterCompacted", () => {
 
         const result = MessageV2.filterCompacted(MessageV2.stream(sessionID))
 
-        expect(result.map((item) => item.info.id)).toEqual([c1, s1, u3, a3])
+        expect(result.map((item) => item.info.id)).toEqual([c1, s1, u2, a2, u3, a3])
       }),
     ),
   )
 
-  it.instance("fork keeps legacy tail_start_id without replaying the tail", () =>
+  it.instance("fork remaps compaction tail_start_id for filterCompacted", () =>
     Effect.gen(function* () {
       const session = yield* SessionNs.Service
       const created = yield* session.create({})
@@ -748,7 +748,7 @@ describe("MessageV2.filterCompacted", () => {
       })
 
       const parentFiltered = MessageV2.filterCompacted(MessageV2.stream(created.id))
-      expect(parentFiltered.map((item) => item.info.id)).toEqual([c1, s1, u3, a3])
+      expect(parentFiltered.map((item) => item.info.id)).toEqual([c1, s1, u2, a2, u3, a3])
 
       const forked = yield* session.fork({ sessionID: created.id })
       const childFiltered = MessageV2.filterCompacted(MessageV2.stream(forked.id))
@@ -758,14 +758,14 @@ describe("MessageV2.filterCompacted", () => {
       expect(tailPart?.type).toBe("compaction")
       if (!tailPart || tailPart.type !== "compaction") throw new Error("Expected forked compaction part")
       expect(tailPart.tail_start_id).toBeDefined()
-      expect(childFiltered.some((m) => m.info.id === tailPart.tail_start_id)).toBe(false)
+      expect(childFiltered.some((m) => m.info.id === tailPart.tail_start_id)).toBe(true)
 
       yield* session.remove(forked.id)
       yield* session.remove(created.id)
     }),
   )
 
-  it.instance("does not replay an assistant tail when compaction starts inside a turn", () =>
+  it.instance("retains an assistant tail when compaction starts inside a turn", () =>
     withSession(({ session, sessionID }) =>
       Effect.gen(function* () {
         const u1 = yield* addUser(sessionID, "first")
@@ -819,7 +819,7 @@ describe("MessageV2.filterCompacted", () => {
 
         const result = MessageV2.filterCompacted(MessageV2.stream(sessionID))
 
-        expect(result.map((item) => item.info.id)).toEqual([c1, s1, u3, a4])
+        expect(result.map((item) => item.info.id)).toEqual([c1, s1, a3, u3, a4])
       }),
     ),
   )
@@ -891,7 +891,7 @@ describe("MessageV2.filterCompacted", () => {
 
         const result = MessageV2.filterCompacted(MessageV2.stream(sessionID))
 
-        expect(result.map((item) => item.info.id)).toEqual([c2, s2, u4, a4])
+        expect(result.map((item) => item.info.id)).toEqual([c2, s2, u3, a3, u4, a4])
       }),
     ),
   )

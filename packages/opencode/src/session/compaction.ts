@@ -79,10 +79,12 @@ Rules:
 type Turn = {
   start: number
   end: number
+  id: MessageID
 }
 
 type Tail = {
   start: number
+  id: MessageID
 }
 
 type CompletedCompaction = {
@@ -119,40 +121,18 @@ function completedCompactions(messages: MessageV2.WithParts[]) {
   })
 }
 
-function buildPrompt(input: { previousSummary?: string; context: string[]; tail?: string }) {
-  const source = input.tail
-    ? "the conversation history above and the serialized recent conversation tail below"
-    : "the conversation history above"
+function buildPrompt(input: { previousSummary?: string; context: string[] }) {
   const anchor = input.previousSummary
     ? [
-        `Update the anchored summary below using ${source}.`,
+        "Update the anchored summary below using the conversation history above.",
         "Preserve still-true details, remove stale details, and merge in the new facts.",
         "<previous-summary>",
         input.previousSummary,
         "</previous-summary>",
       ].join("\n")
-    : `Create a new anchored summary from ${source}.`
-  const tail = input.tail
-    ? [
-        "Fold this serialized recent conversation tail into the summary; it is not provider message history.",
-        "<recent-conversation-tail>",
-        input.tail,
-        "</recent-conversation-tail>",
-      ].join("\n")
-    : undefined
-  return [anchor, ...(tail ? [tail] : []), SUMMARY_TEMPLATE, ...input.context].join("\n\n")
+    : "Create a new anchored summary from the conversation history above."
+  return [anchor, SUMMARY_TEMPLATE, ...input.context].join("\n\n")
 }
-
-const serialize = Effect.fn("SessionCompaction.serialize")(function* (input: {
-  messages: MessageV2.WithParts[]
-  model: Provider.Model
-}) {
-  const messages = yield* MessageV2.toModelMessagesEffect(input.messages, input.model, {
-    stripMedia: true,
-    toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
-  })
-  return messages.length ? JSON.stringify(messages, null, 2) : undefined
-})
 
 function preserveRecentBudget(input: { cfg: Config.Info; model: Provider.Model }) {
   return (
@@ -170,6 +150,7 @@ function turns(messages: MessageV2.WithParts[]) {
     result.push({
       start: i,
       end: messages.length,
+      id: msg.info.id,
     })
   }
   for (let i = 0; i < result.length - 1; i++) {
@@ -196,6 +177,7 @@ function splitTurn(input: {
       if (size > input.budget) continue
       return {
         start,
+        id: input.messages[start]!.info.id,
       } satisfies Tail
     }
     return undefined
@@ -262,7 +244,8 @@ export const layer: Layer.Layer<
       messages: MessageV2.WithParts[]
       model: Provider.Model
     }) {
-      return Token.estimate((yield* serialize(input)) ?? "")
+      const msgs = yield* MessageV2.toModelMessagesEffect(input.messages, input.model)
+      return Token.estimate(JSON.stringify(msgs))
     })
 
     const select = Effect.fn("SessionCompaction.select")(function* (input: {
@@ -271,10 +254,10 @@ export const layer: Layer.Layer<
       model: Provider.Model
     }) {
       const limit = input.cfg.compaction?.tail_turns ?? DEFAULT_TAIL_TURNS
-      if (limit <= 0) return { head: input.messages, tail: [] }
+      if (limit <= 0) return { head: input.messages, tail_start_id: undefined }
       const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model })
       const all = turns(input.messages)
-      if (!all.length) return { head: input.messages, tail: [] }
+      if (!all.length) return { head: input.messages, tail_start_id: undefined }
       const recent = all.slice(-limit)
       const sizes = yield* Effect.forEach(
         recent,
@@ -293,7 +276,7 @@ export const layer: Layer.Layer<
         const size = sizes[i]
         if (total + size <= budget) {
           total += size
-          keep = { start: turn.start }
+          keep = { start: turn.start, id: turn.id }
           continue
         }
         const remaining = budget - total
@@ -309,10 +292,10 @@ export const layer: Layer.Layer<
         break
       }
 
-      if (!keep) return { head: input.messages, tail: [] }
+      if (!keep || keep.start === 0) return { head: input.messages, tail_start_id: undefined }
       return {
         head: input.messages.slice(0, keep.start),
-        tail: input.messages.slice(keep.start),
+        tail_start_id: keep.id,
       }
     })
 
@@ -423,10 +406,7 @@ export const layer: Layer.Layer<
         { sessionID: input.sessionID },
         { context: [], prompt: undefined },
       )
-      const tailMessages = structuredClone(selected.tail)
-      yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: tailMessages })
-      const tail = yield* serialize({ messages: tailMessages, model })
-      const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context, tail })
+      const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {
@@ -491,6 +471,13 @@ export const layer: Layer.Layer<
         processor.message.finish = "error"
         yield* session.updateMessage(processor.message)
         return "stop"
+      }
+
+      if (compactionPart && selected.tail_start_id && compactionPart.tail_start_id !== selected.tail_start_id) {
+        yield* session.updatePart({
+          ...compactionPart,
+          tail_start_id: selected.tail_start_id,
+        })
       }
 
       if (result === "continue" && input.auto) {
@@ -588,6 +575,7 @@ export const layer: Layer.Layer<
             sessionID: input.sessionID,
             timestamp: DateTime.makeUnsafe(Date.now()),
             text: summary ?? "",
+            include: selected.tail_start_id,
           })
         }
         yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
