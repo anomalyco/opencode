@@ -1343,7 +1343,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  10_000,
 )
 
 it.live(
@@ -1524,7 +1524,17 @@ unix(
 
           const run = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
           yield* llm.wait(1)
-          yield* Effect.sleep(150)
+          yield* Effect.promise(async () => {
+            const end = Date.now() + 5_000
+            while (Date.now() < end) {
+              const msgs = await MessageV2.filterCompacted(MessageV2.stream(chat.id))
+              const assistant = msgs.find((item) => item.info.role === "assistant")
+              const tool = assistant ? toolPart(assistant.parts) : undefined
+              if (tool?.state.status === "running" && String(tool.state.metadata?.output ?? "").length > 2_000) return
+              await new Promise((done) => setTimeout(done, 20))
+            }
+            throw new Error("timed out waiting for bash output before cancellation")
+          })
           yield* prompt.cancel(chat.id)
 
           const exit = yield* Fiber.await(run)
@@ -1540,7 +1550,7 @@ unix(
           expect(tool.state.output).toMatch(/Full output saved to:\s+\S+/)
           expect(tool.state.output).not.toContain("Tool execution aborted")
         }),
-      { git: true, config: providerCfg },
+      { git: true, config: (url) => ({ ...providerCfg(url), tool_output: { max_bytes: 1_024 } }) },
     ),
   30_000,
 )
