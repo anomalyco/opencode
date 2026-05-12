@@ -77,10 +77,64 @@ function createMinimaxAuthPlugin(config: MinimaxRegionConfig) {
   }
 
   return async function MinimaxPlugin(_input: PluginInput): Promise<Hooks> {
+    // Per-instance mutable auth state for runtime token refresh
+    let authState: {
+      access: string
+      refresh: string
+      expires: number
+      resourceUrl: string
+    } | null = null
+    let refreshing: Promise<boolean> | null = null
+
+    async function persistAuth(token: string, refresh: string, expires: number, resourceUrl: string) {
+      await _input.client.auth.set({
+        path: { id: provider },
+        body: {
+          type: "oauth",
+          access: token,
+          refresh,
+          expires,
+          enterpriseUrl: resourceUrl,
+        },
+      })
+    }
+
+    async function ensureFreshToken(): Promise<boolean> {
+      if (!authState || authState.expires <= 0) return !!authState
+      if (authState.expires >= Date.now() + REFRESH_BUFFER_MS) return true
+      if (refreshing) return refreshing
+
+      refreshing = (async () => {
+        try {
+          const refreshed = await doRefresh(authState!.refresh)
+          if (!refreshed) return false
+          authState!.access = refreshed.access_token
+          authState!.refresh = refreshed.refresh_token
+          authState!.expires = refreshed.expired_in
+          if (refreshed.resource_url) authState!.resourceUrl = refreshed.resource_url
+          await persistAuth(refreshed.access_token, refreshed.refresh_token, refreshed.expired_in, authState!.resourceUrl)
+          return true
+        } catch {
+          return false
+        } finally {
+          refreshing = null
+        }
+      })()
+      return refreshing
+    }
+
     return {
       "chat.headers": async (input, output) => {
         if (!input.model.providerID.startsWith("minimax")) return
         Object.assign(output.headers, LANE_HEADERS)
+
+        // Runtime token refresh: the auth loader only runs once at init,
+        // so long-running sessions need per-request expiry checks here.
+        if (authState && input.model.providerID === provider) {
+          await ensureFreshToken()
+          output.headers["x-api-key"] = authState.access
+          output.headers["Authorization"] = `Bearer ${authState.access}`
+        }
       },
       auth: {
         provider,
@@ -94,22 +148,23 @@ function createMinimaxAuthPlugin(config: MinimaxRegionConfig) {
           const resourceUrl = info.enterpriseUrl ?? defaultResourceUrl
 
           // Proactively refresh if token is expired or about to expire
+          let refreshToken = info.refresh
+          let expiresAt = info.expires
           if (info.expires > 0 && info.expires < Date.now() + REFRESH_BUFFER_MS) {
             const refreshed = await doRefresh(info.refresh).catch(() => null)
             if (refreshed) {
               accessToken = refreshed.access_token
-              // Persist refreshed tokens so subsequent calls use the updated values
-              await _input.client.auth.set({
-                path: { id: provider },
-                body: {
-                  type: "oauth",
-                  access: refreshed.access_token,
-                  refresh: refreshed.refresh_token,
-                  expires: refreshed.expired_in,
-                  enterpriseUrl: refreshed.resource_url || resourceUrl,
-                },
-              })
+              refreshToken = refreshed.refresh_token
+              expiresAt = refreshed.expired_in
+              await persistAuth(refreshed.access_token, refreshed.refresh_token, refreshed.expired_in, refreshed.resource_url || resourceUrl)
             }
+          }
+
+          authState = {
+            access: accessToken,
+            refresh: refreshToken,
+            expires: expiresAt,
+            resourceUrl,
           }
 
           return {
