@@ -73,6 +73,7 @@
     "solid-js": "catalog:",
     "solid-list": "catalog:",
     "tailwindcss": "catalog:",
-    "virtua": "catalog:"
+    "virtua": "catalog:",
+    "zod": "catalog:"
   }
 }
