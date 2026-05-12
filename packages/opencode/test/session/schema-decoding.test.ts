@@ -14,12 +14,7 @@ import { WorkspaceID } from "../../src/control-plane/schema"
 // Covers the session-domain Effect Schema migration. For each migrated
 // schema we assert:
 //   1. The Effect decoder (`Schema.decodeUnknownSync`) accepts valid input.
-//   2. The derived Zod (`X.zod.parse`) accepts the same input and returns the
-//      same shape for schemas that still expose Zod statics.
-//   3. Clearly-invalid input is rejected by both paths where both exist.
-//
-// The point is to lock down the Schema <-> Zod bridge so a future edit to
-// any input schema can't silently drop or widen a field on one side.
+//   2. Clearly-invalid input is rejected.
 
 // Representative valid IDs — the branded schemas require the right prefix
 // (see src/id/id.ts).
@@ -27,7 +22,7 @@ const sessionID = Schema.decodeUnknownSync(SessionID)("ses_01J5Y5H0AH4Q4NXJ6P4C3
 const sessionIDChild = Schema.decodeUnknownSync(SessionID)("ses_01J5Y5H0AH4Q4NXJ6P4C3P5V2L")
 const messageID = Schema.decodeUnknownSync(MessageID)("msg_01J5Y5H0AH4Q4NXJ6P4C3P5V2M")
 const partID = Schema.decodeUnknownSync(PartID)("prt_01J5Y5H0AH4Q4NXJ6P4C3P5V2N")
-const projectID = ProjectID.zod.parse("proj-alpha")
+const projectID = ProjectID.make("proj-alpha")
 const workspaceID = Schema.decodeUnknownSync(WorkspaceID)("wrk-primary")
 
 function decodeUnknown<S extends Schema.Top>(schema: S) {
@@ -50,7 +45,6 @@ describe("Session.Info", () => {
       time: { created: 1, updated: 2 },
     }
     expect(decode(input)).toEqual(input)
-    expect(Session.Info.zod.parse(input)).toEqual(input)
   })
 
   test("round-trips every optional field", () => {
@@ -82,7 +76,6 @@ describe("Session.Info", () => {
       },
     }
     expect(decode(input)).toEqual(input)
-    expect(Session.Info.zod.parse(input)).toEqual(input)
   })
 
   test("accepts migrated summary diffs without file details", () => {
@@ -103,19 +96,16 @@ describe("Session.Info", () => {
       time: { created: 1, updated: 2 },
     }
     expect(decode(input)).toEqual(input)
-    expect(Session.Info.zod.parse(input)).toEqual(input)
   })
 
   test("rejects unbranded session id", () => {
     const bad = { id: "not-a-session-id" } as unknown
     expect(() => decode(bad)).toThrow()
-    expect(() => Session.Info.zod.parse(bad)).toThrow()
   })
 
   test("rejects missing required fields", () => {
     const bad = { id: sessionID } as unknown
     expect(() => decode(bad)).toThrow()
-    expect(() => Session.Info.zod.parse(bad)).toThrow()
   })
 })
 
@@ -127,8 +117,6 @@ describe("Session.ProjectInfo", () => {
     const withName = { ...noName, name: "alpha" }
     expect(decode(noName)).toEqual(noName)
     expect(decode(withName)).toEqual(withName)
-    expect(Session.ProjectInfo.zod.parse(noName)).toEqual(noName)
-    expect(Session.ProjectInfo.zod.parse(withName)).toEqual(withName)
   })
 })
 
@@ -148,7 +136,6 @@ describe("Session.GlobalInfo", () => {
       project: null,
     }
     expect(decode(input)).toEqual(input)
-    expect(Session.GlobalInfo.zod.parse(input)).toEqual(input)
   })
 
   test("accepts populated project", () => {
@@ -164,7 +151,6 @@ describe("Session.GlobalInfo", () => {
       project: { id: projectID, worktree: "/tmp/wt", name: "alpha" },
     }
     expect(decode(input)).toEqual(input)
-    expect(Session.GlobalInfo.zod.parse(input)).toEqual(input)
   })
 })
 
@@ -172,7 +158,6 @@ describe("Session input schemas", () => {
   test("CreateInput accepts undefined and populated forms", () => {
     const decode = decodeUnknown(Session.CreateInput)
     expect(decode(undefined)).toBeUndefined()
-    expect(Session.CreateInput.zod.parse(undefined)).toBeUndefined()
 
     const populated = {
       parentID: sessionID,
@@ -182,23 +167,19 @@ describe("Session input schemas", () => {
       workspaceID,
     }
     expect(decode(populated)).toEqual(populated)
-    expect(Session.CreateInput.zod.parse(populated)).toEqual(populated)
   })
 
   test("ForkInput round-trips", () => {
     const decode = decodeUnknown(Session.ForkInput)
     const input = { sessionID, messageID, copyMetadata: false }
     expect(decode(input)).toEqual(input)
-    expect(Session.ForkInput.zod.parse(input)).toEqual(input)
     // messageID is optional
     const bare = { sessionID }
     expect(decode(bare)).toEqual(bare)
-    expect(Session.ForkInput.zod.parse(bare)).toEqual(bare)
   })
 
   test("SetTitleInput rejects missing title", () => {
     expect(() => decodeUnknown(Session.SetTitleInput)({ sessionID })).toThrow()
-    expect(() => Session.SetTitleInput.zod.parse({ sessionID })).toThrow()
   })
 
   test("SetArchivedInput accepts both with and without time", () => {
@@ -227,14 +208,11 @@ describe("SessionRevert.RevertInput", () => {
   test("messageID is required, partID is optional", () => {
     const withPart = { sessionID, messageID, partID }
     expect(decode(withPart)).toEqual(withPart)
-    expect(SessionRevert.RevertInput.zod.parse(withPart)).toEqual(withPart)
 
     const noPart = { sessionID, messageID }
     expect(decode(noPart)).toEqual(noPart)
-    expect(SessionRevert.RevertInput.zod.parse(noPart)).toEqual(noPart)
 
     expect(() => decode({ sessionID })).toThrow()
-    expect(() => SessionRevert.RevertInput.zod.parse({ sessionID })).toThrow()
   })
 })
 
@@ -253,7 +231,6 @@ describe("SessionStatus.Info", () => {
   test("idle / busy discriminators", () => {
     expect(decode({ type: "idle" })).toEqual({ type: "idle" })
     expect(decode({ type: "busy" })).toEqual({ type: "busy" })
-    expect(SessionStatus.Info.zod.parse({ type: "idle" })).toEqual({ type: "idle" })
   })
 
   test("retry carries attempt/message/action/next", () => {
@@ -272,12 +249,10 @@ describe("SessionStatus.Info", () => {
       next: 500,
     }
     expect(decode(input)).toEqual(input)
-    expect(SessionStatus.Info.zod.parse(input)).toEqual(input)
   })
 
   test("rejects unknown type", () => {
     expect(() => decode({ type: "bogus" })).toThrow()
-    expect(() => SessionStatus.Info.zod.parse({ type: "bogus" })).toThrow()
   })
 })
 
@@ -287,7 +262,6 @@ describe("Todo.Info", () => {
   test("three-field round-trip", () => {
     const input = { content: "do a thing", status: "pending", priority: "high" }
     expect(decode(input)).toEqual(input)
-    expect(Todo.Info.zod.parse(input)).toEqual(input)
   })
 })
 
@@ -295,7 +269,6 @@ describe("SessionPrompt input schemas", () => {
   test("LoopInput is just sessionID", () => {
     const decode = decodeUnknown(SessionPrompt.LoopInput)
     expect(decode({ sessionID })).toEqual({ sessionID })
-    expect(SessionPrompt.LoopInput.zod.parse({ sessionID } as unknown)).toEqual({ sessionID })
   })
 
   test("ShellInput requires agent + command", () => {
@@ -303,7 +276,6 @@ describe("SessionPrompt input schemas", () => {
     const expected = { sessionID, agent: "build", command: "echo hi" }
     const input: unknown = expected
     expect(decode(input)).toEqual(expected)
-    expect(SessionPrompt.ShellInput.zod.parse(input as unknown)).toEqual(expected)
     expect(() => decode({ sessionID })).toThrow()
   })
 
@@ -321,9 +293,6 @@ describe("SessionPrompt input schemas", () => {
     expect(decoded.parts).toHaveLength(2)
     expect(decoded.parts[0]).toMatchObject({ type: "text", text: "hello" })
     expect(decoded.parts[1]).toMatchObject({ type: "file", mime: "image/png" })
-
-    const viaZod = SessionPrompt.PromptInput.zod.parse(input)
-    expect(viaZod.parts).toHaveLength(2)
   })
 
   test("PromptInput rejects unknown part type", () => {
@@ -333,7 +302,6 @@ describe("SessionPrompt input schemas", () => {
       parts: [{ type: "nonsense", payload: 42 }],
     }
     expect(() => decode(bad)).toThrow()
-    expect(() => SessionPrompt.PromptInput.zod.parse(bad)).toThrow()
   })
 
   test("CommandInput round-trips core fields", () => {
@@ -345,6 +313,5 @@ describe("SessionPrompt input schemas", () => {
     }
     const input: unknown = expected
     expect(decode(input)).toEqual(expected)
-    expect(SessionPrompt.CommandInput.zod.parse(input)).toEqual(expected)
   })
 })
