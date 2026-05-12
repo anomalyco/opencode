@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMEvent, LLMRequest, LLMResponse } from "../src"
+import { GenerationOptions, LLM, LLMEvent, LLMRequest, LLMResponse, ToolChoice } from "../src"
 import { LLMClient } from "../src/route"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
@@ -78,8 +78,8 @@ describe("LLMClient tools", () => {
 
       yield* TestToolRuntime.runTools({
         request: LLMRequest.update(baseRequest, {
-          generation: LLM.generation({ maxTokens: 50 }),
-          toolChoice: LLM.toolChoice("auto"),
+          generation: GenerationOptions.make({ maxTokens: 50 }),
+          toolChoice: ToolChoice.make("auto"),
         }),
         tools: { get_weather },
       }).pipe(Stream.runCollect, Effect.provide(layer))
@@ -313,7 +313,14 @@ describe("LLMClient tools", () => {
         ),
       )
 
-      expect(events.map((event) => event.type)).toEqual(["text-delta", "request-finish"])
+      expect(events.map((event) => event.type)).toEqual([
+        "step-start",
+        "text-start",
+        "text-delta",
+        "text-end",
+        "step-finish",
+        "request-finish",
+      ])
       expect(LLMResponse.text({ events })).toBe("Done.")
     }),
   )

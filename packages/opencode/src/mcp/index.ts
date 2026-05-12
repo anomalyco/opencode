@@ -31,8 +31,6 @@ import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { zod as effectZod } from "@opencode-ai/core/effect-zod"
-import { withStatics } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "mcp" })
 const DEFAULT_TIMEOUT = 30_000
@@ -52,9 +50,7 @@ export const Resource = Schema.Struct({
   description: Schema.optional(Schema.String),
   mimeType: Schema.optional(Schema.String),
   client: Schema.String,
-})
-  .annotate({ identifier: "McpResource" })
-  .pipe(withStatics((s) => ({ zod: effectZod(s) })))
+}).annotate({ identifier: "McpResource" })
 export type Resource = Schema.Schema.Type<typeof Resource>
 
 export const ToolsChanged = BusEvent.define(
@@ -104,9 +100,7 @@ export const Status = Schema.Union([
   StatusFailed,
   StatusNeedsAuth,
   StatusNeedsClientRegistration,
-])
-  .annotate({ identifier: "MCPStatus", discriminator: "status" })
-  .pipe(withStatics((s) => ({ zod: effectZod(s) })))
+]).annotate({ identifier: "MCPStatus", discriminator: "status" })
 export type Status = Schema.Schema.Type<typeof Status>
 
 // Store transports for OAuth servers to allow finishing auth
