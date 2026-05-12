@@ -1,11 +1,14 @@
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, on } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
+import { useRoute } from "@tui/context/route"
+import { useEvent } from "@tui/context/event"
 import { uniqueBy } from "remeda"
 import path from "path"
 import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { iife } from "@/util/iife"
 import { useToast } from "../ui/toast"
 import { useArgs } from "./args"
@@ -380,6 +383,192 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
+    const session = iife(() => {
+      const [sessionStore, setSessionStore] = createStore<{
+        ready: boolean
+        pinned: string[]
+        dismissedRecent: string[]
+        recentOrder: string[]
+      }>({
+        ready: false,
+        pinned: [],
+        dismissedRecent: [],
+        recentOrder: [],
+      })
+
+      const filePath = path.join(Global.Path.state, "session.json")
+      const state = {
+        pending: false,
+      }
+
+      function save() {
+        if (!sessionStore.ready) {
+          state.pending = true
+          return
+        }
+        state.pending = false
+        void Filesystem.writeJson(filePath, {
+          pinned: sessionStore.pinned,
+          dismissedRecent: sessionStore.dismissedRecent,
+          recentOrder: sessionStore.recentOrder,
+        })
+      }
+
+      Filesystem.readJson(filePath)
+        .then((x: any) => {
+          if (Array.isArray(x.pinned)) setSessionStore("pinned", x.pinned)
+          if (Array.isArray(x.dismissedRecent)) setSessionStore("dismissedRecent", x.dismissedRecent)
+          if (Array.isArray(x.recentOrder)) setSessionStore("recentOrder", x.recentOrder)
+        })
+        .catch(() => {})
+        .finally(() => {
+          setSessionStore("ready", true)
+          if (state.pending) save()
+        })
+
+      const route = useRoute()
+      const event = useEvent()
+      let cycling = false
+
+      const slots = createMemo(() => {
+        const rootSessions = sync.data.session.filter((x) => x.parentID === undefined)
+        const existing = new Set(rootSessions.map((x) => x.id))
+        const dismissed = new Set(sessionStore.dismissedRecent)
+        const pins = sessionStore.pinned.filter((id) => existing.has(id))
+        const pinnedSet = new Set(pins)
+        const recent = rootSessions
+          .filter((x) => !pinnedSet.has(x.id) && !dismissed.has(x.id))
+          .toSorted((a, b) => b.time.updated - a.time.updated)
+          .map((x) => x.id)
+        return [...pins, ...recent].slice(0, 9)
+      })
+
+      function prune(sessionID: string) {
+        batch(() => {
+          if (sessionStore.pinned.includes(sessionID)) {
+            setSessionStore(
+              "pinned",
+              sessionStore.pinned.filter((x) => x !== sessionID),
+            )
+          }
+          if (sessionStore.dismissedRecent.includes(sessionID)) {
+            setSessionStore(
+              "dismissedRecent",
+              sessionStore.dismissedRecent.filter((x) => x !== sessionID),
+            )
+          }
+          if (sessionStore.recentOrder.includes(sessionID)) {
+            setSessionStore(
+              "recentOrder",
+              sessionStore.recentOrder.filter((x) => x !== sessionID),
+            )
+          }
+          save()
+        })
+      }
+
+      event.on("session.deleted", (evt) => {
+        prune(evt.properties.info.id)
+      })
+
+      if (Flag.OPENCODE_EXPERIMENTAL_SESSION_SWITCHING) {
+        createEffect(
+          on(
+            () => (sessionStore.ready && route.data.type === "session" ? route.data.sessionID : undefined),
+            (sessionID) => {
+              if (!sessionID) return
+              if (cycling) {
+                cycling = false
+                return
+              }
+              const filtered = sessionStore.recentOrder.filter((x) => x !== sessionID)
+              const next = [sessionID, ...filtered].slice(0, 20)
+              setSessionStore("recentOrder", next)
+              save()
+            },
+          ),
+        )
+      }
+
+      return {
+        get ready() {
+          return sessionStore.ready
+        },
+        pinned() {
+          return sessionStore.pinned
+        },
+        dismissedRecent() {
+          return sessionStore.dismissedRecent
+        },
+        recentOrder() {
+          return sessionStore.recentOrder
+        },
+        slots,
+        isPinned(sessionID: string) {
+          return sessionStore.pinned.includes(sessionID)
+        },
+        isDismissed(sessionID: string) {
+          return sessionStore.dismissedRecent.includes(sessionID)
+        },
+        togglePin(sessionID: string) {
+          batch(() => {
+            const exists = sessionStore.pinned.includes(sessionID)
+            const next = exists
+              ? sessionStore.pinned.filter((x) => x !== sessionID)
+              : [sessionID, ...sessionStore.pinned]
+            setSessionStore("pinned", next)
+            save()
+          })
+        },
+        toggleRecent(sessionID: string) {
+          batch(() => {
+            const exists = sessionStore.dismissedRecent.includes(sessionID)
+            const next = exists
+              ? sessionStore.dismissedRecent.filter((x) => x !== sessionID)
+              : [sessionID, ...sessionStore.dismissedRecent]
+            setSessionStore("dismissedRecent", next)
+            save()
+          })
+        },
+        quickSwitch(slot: number) {
+          const target = slots()[slot - 1]
+          if (!target) return
+          if (route.data.type === "session" && route.data.sessionID === target) return
+          route.navigate({ type: "session", sessionID: target })
+        },
+        cycleRecent(direction: 1 | -1) {
+          if (route.data.type !== "session") {
+            toast.show({
+              variant: "info",
+              message: "Open a session first to cycle between recent sessions",
+              duration: 3000,
+            })
+            return
+          }
+          const current = route.data.sessionID
+          const order = sessionStore.recentOrder.filter((id) =>
+            sync.data.session.some((s) => s.id === id && s.parentID === undefined),
+          )
+          if (order.length < 2) {
+            toast.show({
+              variant: "info",
+              message: "No other recent sessions to cycle to",
+              duration: 3000,
+            })
+            return
+          }
+          const index = order.indexOf(current)
+          if (index === -1) return
+          const next = index + direction
+          if (next < 0 || next >= order.length) return
+          const target = order[next]
+          if (!target || target === current) return
+          cycling = true
+          route.navigate({ type: "session", sessionID: target })
+        },
+      }
+    })
+
     const mcp = {
       isEnabled(name: string) {
         const status = sync.data.mcp[name]
@@ -412,6 +601,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       model,
       agent,
       mcp,
+      session,
     }
     return result
   },

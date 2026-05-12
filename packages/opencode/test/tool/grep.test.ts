@@ -10,6 +10,7 @@ import { Agent } from "../../src/agent/agent"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { testEffect } from "../lib/effect"
+import { Reference } from "@/reference/reference"
 
 const it = testEffect(
   Layer.mergeAll(
@@ -18,6 +19,7 @@ const it = testEffect(
     Ripgrep.defaultLayer,
     Truncate.defaultLayer,
     Agent.defaultLayer,
+    Reference.defaultLayer,
   ),
 )
 

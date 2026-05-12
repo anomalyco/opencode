@@ -4,7 +4,6 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import path from "path"
-import z from "zod"
 import { BusEvent } from "@/bus/bus-event"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Log from "@opencode-ai/core/util/log"
@@ -45,15 +44,11 @@ export function getReleaseType(current: string, latest: string): ReleaseType {
   return "patch"
 }
 
-export const Info = z
-  .object({
-    version: z.string(),
-    latest: z.string(),
-  })
-  .meta({
-    ref: "InstallationInfo",
-  })
-export type Info = z.infer<typeof Info>
+export const Info = Schema.Struct({
+  version: Schema.String,
+  latest: Schema.String,
+}).annotate({ identifier: "InstallationInfo" })
+export type Info = Schema.Schema.Type<typeof Info>
 
 export const USER_AGENT = `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
 

@@ -22,9 +22,9 @@ import { InstanceState } from "@/effect/instance-state"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath } from "../project/instance-context"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { NonNegativeInt, PositiveInt, withStatics, type DeepMutable } from "@opencode-ai/core/schema"
+import { NonNegativeInt, PositiveInt, type DeepMutable } from "@opencode-ai/core/schema"
 import { ConfigAgent } from "./agent"
+import { ConfigAttachment } from "./attachment"
 import { ConfigCommand } from "./command"
 import { ConfigFormatter } from "./formatter"
 import { ConfigLayout } from "./layout"
@@ -111,8 +111,6 @@ async function resolveLoadedPlugins<T extends { plugin?: ConfigPlugin.Spec[] }>(
   return config
 }
 
-export const Server = ConfigServer.Server.zod
-export const Layout = ConfigLayout.Layout.zod
 export type Layout = ConfigLayout.Layout
 
 const LogLevelRef = Schema.Literals(["DEBUG", "INFO", "WARN", "ERROR"]).annotate({
@@ -120,14 +118,6 @@ const LogLevelRef = Schema.Literals(["DEBUG", "INFO", "WARN", "ERROR"]).annotate
   description: "Log level",
 })
 
-// The Effect Schema is the canonical source of truth. The `.zod` compatibility
-// surface is derived from it so plugin/SDK Zod consumers keep working without
-// a parallel hand-maintained Zod definition.
-//
-// The walker emits `z.object({...})` which is non-strict by default. Config
-// historically uses `.strict()` (additionalProperties: false in openapi.json),
-// so layer that on after derivation. Re-apply the Config ref afterward
-// since `.strict()` strips the walker's meta annotation.
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String).annotate({
     description: "JSON schema reference for configuration validation",
@@ -144,7 +134,7 @@ export const Info = Schema.Struct({
   }),
   skills: Schema.optional(ConfigSkills.Info).annotate({ description: "Additional skill folder paths" }),
   reference: Schema.optional(ConfigReference.Info).annotate({
-    description: "Named git or local directory references that can be @ mentioned as Scout-backed subagents",
+    description: "Named git or local directory references that can be mentioned as @alias or @alias/path",
   }),
   watcher: Schema.optional(
     Schema.Struct({
@@ -241,6 +231,9 @@ export const Info = Schema.Struct({
   layout: Schema.optional(ConfigLayout.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
   permission: Schema.optional(ConfigPermission.Info),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+  attachment: Schema.optional(ConfigAttachment.Info).annotate({
+    description: "Attachment processing configuration, including image size limits and resizing behavior",
+  }),
   enterprise: Schema.optional(
     Schema.Struct({
       url: Schema.optional(Schema.String).annotate({ description: "Enterprise URL" }),
@@ -269,10 +262,10 @@ export const Info = Schema.Struct({
       }),
       tail_turns: Schema.optional(NonNegativeInt).annotate({
         description:
-          "Number of recent user turns, including their following assistant/tool responses, to keep verbatim during compaction (default: 2)",
+          "Number of recent user turns, including their following assistant/tool responses, to serialize into the compaction summary (default: 2)",
       }),
       preserve_recent_tokens: Schema.optional(NonNegativeInt).annotate({
-        description: "Maximum number of tokens from recent turns to preserve verbatim after compaction",
+        description: "Maximum number of tokens from recent turns to serialize into the compaction summary",
       }),
       reserved: Schema.optional(NonNegativeInt).annotate({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
@@ -297,15 +290,7 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
-})
-  .annotate({ identifier: "Config" })
-  .pipe(
-    withStatics((s) => ({
-      zod: (zod(s) as unknown as z.ZodObject<any>).strict().meta({ ref: "Config" }) as unknown as z.ZodType<
-        DeepMutable<Schema.Schema.Type<typeof s>>
-      >,
-    })),
-  )
+}).annotate({ identifier: "Config" })
 
 // Uses the shared `DeepMutable` from `@opencode-ai/core/schema`. See the definition
 // there for why the local variant is needed over `Types.DeepMutable` from
@@ -403,7 +388,7 @@ export const layer = Layer.effect(
         ),
       )
       const parsed = ConfigParse.jsonc(expanded, source)
-      const data = ConfigParse.effectSchema(Info, normalizeLoadedConfig(parsed, source), source)
+      const data = ConfigParse.schema(Info, normalizeLoadedConfig(parsed, source), source)
       if (!("path" in options)) return data
 
       yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
@@ -801,7 +786,7 @@ export const layer = Layer.effect(
       let next: Info
       let changed: boolean
       if (!file.endsWith(".jsonc")) {
-        const existing = ConfigParse.effectSchema(Info, ConfigParse.jsonc(before, file), file)
+        const existing = ConfigParse.schema(Info, ConfigParse.jsonc(before, file), file)
         const merged = mergeDeep(writable(existing), patch)
         const serialized = JSON.stringify(merged, null, 2)
         changed = serialized !== before
@@ -809,7 +794,7 @@ export const layer = Layer.effect(
         next = merged
       } else {
         const updated = patchJsonc(before, patch)
-        next = ConfigParse.effectSchema(Info, ConfigParse.jsonc(updated, file), file)
+        next = ConfigParse.schema(Info, ConfigParse.jsonc(updated, file), file)
         changed = updated !== before
         if (changed) yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
       }
