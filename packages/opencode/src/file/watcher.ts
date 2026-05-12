@@ -135,7 +135,7 @@ export const layer = Layer.effect(
             const vcsDir = resolved
               ? yield* Effect.promise(() => realpath(resolved).catch(() => resolved))
               : undefined
-            if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
+            if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir) && (!resolved || !cfgIgnores.includes(resolved))) {
               const ignore = (yield* Effect.promise(() => readdir(vcsDir).catch(() => []))).filter(
                 (entry) => entry !== "HEAD",
               )
