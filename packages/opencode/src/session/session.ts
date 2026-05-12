@@ -1,5 +1,6 @@
 import { Slug } from "@opencode-ai/core/util/slug"
 import path from "path"
+import { BackgroundJob } from "@/background/job"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
@@ -503,9 +504,10 @@ export type Patch = Types.DeepMutable<SyncEvent.Event<typeof Event.Updated>["dat
 const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
   Effect.sync(() => Database.use(fn))
 
-export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | SyncEvent.Service> = Layer.effect(
+export const layer: Layer.Layer<Service, never, BackgroundJob.Service | Bus.Service | Storage.Service | SyncEvent.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const background = yield* BackgroundJob.Service
     const bus = yield* Bus.Service
     const storage = yield* Storage.Service
     const sync = yield* SyncEvent.Service
@@ -583,6 +585,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
     const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
       const session = yield* get(sessionID)
       try {
+        yield* cancelBackgroundJobs(background, sessionID)
         const kids = yield* children(sessionID)
         for (const child of kids) {
           yield* remove(child.id)
@@ -833,10 +836,28 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
 )
 
 export const defaultLayer = layer.pipe(
+  Layer.provide(BackgroundJob.defaultLayer),
   Layer.provide(Bus.layer),
   Layer.provide(Storage.defaultLayer),
   Layer.provide(SyncEvent.defaultLayer),
 )
+
+const cancelBackgroundJobs = Effect.fn("Session.cancelBackgroundJobs")(function* (
+  background: BackgroundJob.Interface,
+  sessionID: SessionID,
+) {
+  const jobs = yield* background.list()
+  yield* Effect.forEach(
+    jobs.filter((job) => {
+      if (job.status !== "running") return false
+      if (job.id === sessionID) return true
+      if (job.metadata?.sessionId === sessionID) return true
+      return job.metadata?.parentSessionId === sessionID
+    }),
+    (job) => background.cancel(job.id),
+    { concurrency: "unbounded", discard: true },
+  )
+})
 
 function* listByProject(
   input: ListInput & {
