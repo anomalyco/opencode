@@ -68,12 +68,9 @@ export const BrowserOpenFailed = BusEvent.define(
   }),
 )
 
-export const Failed = NamedError.create(
-  "MCPFailed",
-  z.object({
-    name: z.string(),
-  }),
-)
+export const Failed = NamedError.create("MCPFailed", {
+  name: Schema.String,
+})
 
 type MCPClient = Client
 

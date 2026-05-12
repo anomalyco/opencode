@@ -382,9 +382,7 @@ export type Part =
 
 const AssistantErrorSchema = Schema.Union([
   AuthError.EffectSchema,
-  Schema.Struct({ name: Schema.Literal("UnknownError"), data: Schema.Struct({ message: Schema.String }) }).annotate({
-    identifier: "UnknownError",
-  }),
+  NamedError.Unknown.EffectSchema,
   OutputLengthError.EffectSchema,
   AbortedError.EffectSchema,
   StructuredOutputError.EffectSchema,
