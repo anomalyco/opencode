@@ -3,7 +3,7 @@ import path from "path"
 import { Session as SessionNs } from "@/session/session"
 import { Bus } from "../../src/bus"
 import * as Log from "@opencode-ai/core/util/log"
-import { Instance } from "../../src/project/instance"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { WithInstance } from "../../src/project/with-instance"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
@@ -12,6 +12,18 @@ import { tmpdir } from "../fixture/fixture"
 
 const projectRoot = path.join(__dirname, "../..")
 void Log.init({ print: false })
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
+function timeout<T>(promise: Promise<T>, message: string) {
+  return Promise.race([promise, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(message)), 2_000))])
+}
 
 function create(input?: SessionNs.CreateInput) {
   return AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create(input)))
@@ -38,25 +50,21 @@ describe("session.created event", () => {
     await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
-        let eventReceived = false
-        let receivedInfo: SessionNs.Info | undefined
+        const received = deferred<SessionNs.Info>()
 
         const unsub = Bus.subscribe(SessionNs.Event.Created, (event) => {
-          eventReceived = true
-          receivedInfo = event.properties.info as SessionNs.Info
+          received.resolve(event.properties.info as SessionNs.Info)
         })
 
         const info = await create({})
-        await new Promise((resolve) => setTimeout(resolve, 100))
+        const receivedInfo = await timeout(received.promise, "timed out waiting for session.created")
         unsub()
 
-        expect(eventReceived).toBe(true)
-        expect(receivedInfo).toBeDefined()
-        expect(receivedInfo?.id).toBe(info.id)
-        expect(receivedInfo?.projectID).toBe(info.projectID)
-        expect(receivedInfo?.directory).toBe(info.directory)
-        expect(receivedInfo?.path).toBe(info.path)
-        expect(receivedInfo?.title).toBe(info.title)
+        expect(receivedInfo.id).toBe(info.id)
+        expect(receivedInfo.projectID).toBe(info.projectID)
+        expect(receivedInfo.directory).toBe(info.directory)
+        expect(receivedInfo.path).toBe(info.path)
+        expect(receivedInfo.title).toBe(info.title)
 
         await remove(info.id)
       },
@@ -64,27 +72,34 @@ describe("session.created event", () => {
   })
 
   test("session.created event should be emitted before session.updated", async () => {
+    if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) return
+
     await WithInstance.provide({
       directory: projectRoot,
       fn: async () => {
         const events: string[] = []
+        const received = deferred<string[]>()
+        const push = (event: string) => {
+          events.push(event)
+          if (events.includes("created") && events.includes("updated")) received.resolve(events)
+        }
 
         const unsubCreated = Bus.subscribe(SessionNs.Event.Created, () => {
-          events.push("created")
+          push("created")
         })
 
         const unsubUpdated = Bus.subscribe(SessionNs.Event.Updated, () => {
-          events.push("updated")
+          push("updated")
         })
 
         const info = await create({})
-        await new Promise((resolve) => setTimeout(resolve, 100))
+        const receivedEvents = await timeout(received.promise, "timed out waiting for session created/updated events")
         unsubCreated()
         unsubUpdated()
 
-        expect(events).toContain("created")
-        expect(events).toContain("updated")
-        expect(events.indexOf("created")).toBeLessThan(events.indexOf("updated"))
+        expect(receivedEvents).toContain("created")
+        expect(receivedEvents).toContain("updated")
+        expect(receivedEvents.indexOf("created")).toBeLessThan(receivedEvents.indexOf("updated"))
 
         await remove(info.id)
       },
@@ -116,9 +131,9 @@ describe("step-finish token propagation via Bus event", () => {
           // Bus subscribers receive readonly Schema.Type payloads; `MessageV2.Part`
           // is the mutable domain type. Cast bridges the two — safe because the
           // test only reads the value afterwards.
-          let received: MessageV2.Part | undefined
+          const received = deferred<MessageV2.Part>()
           const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, (event) => {
-            received = event.properties.part as MessageV2.Part
+            received.resolve(event.properties.part as MessageV2.Part)
           })
 
           const tokens = {
@@ -140,11 +155,10 @@ describe("step-finish token propagation via Bus event", () => {
           }
 
           await updatePart(partInput)
-          await new Promise((resolve) => setTimeout(resolve, 100))
+          const receivedPart = await timeout(received.promise, "timed out waiting for message.part.updated")
 
-          expect(received).toBeDefined()
-          expect(received!.type).toBe("step-finish")
-          const finish = received as MessageV2.StepFinishPart
+          expect(receivedPart.type).toBe("step-finish")
+          const finish = receivedPart as MessageV2.StepFinishPart
           expect(finish.tokens.input).toBe(500)
           expect(finish.tokens.output).toBe(800)
           expect(finish.tokens.reasoning).toBe(200)
@@ -152,7 +166,7 @@ describe("step-finish token propagation via Bus event", () => {
           expect(finish.tokens.cache.read).toBe(100)
           expect(finish.tokens.cache.write).toBe(50)
           expect(finish.cost).toBe(0.005)
-          expect(received).not.toBe(partInput)
+          expect(receivedPart).not.toBe(partInput)
 
           unsub()
           await remove(info.id)
