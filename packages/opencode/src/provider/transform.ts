@@ -1312,10 +1312,7 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
     }
 
     const sanitized = sanitizeMoonshot(schema)
-    if (
-      typeof sanitized === "boolean" ||
-      (typeof sanitized === "object" && sanitized !== null && !Array.isArray(sanitized))
-    ) {
+    if (typeof sanitized === "object" && sanitized !== null && !Array.isArray(sanitized)) {
       schema = sanitized
     }
   }
