@@ -1,3 +1,4 @@
+import { context as otelContext, trace, type Context } from "@opentelemetry/api"
 import { Effect, Layer, Logger } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { OtlpLogger, OtlpSerialization } from "effect/unstable/observability"
@@ -104,4 +105,22 @@ export const layer = !base
       }),
     )
 
-export const Observability = { enabled, layer }
+// Injects the W3C trace context for the given (or active) OTel context into
+// an env object using the OTel env-carrier variable names (TRACEPARENT,
+// TRACESTATE). Subprocess instrumentation that follows the spec will then
+// adopt this trace as its parent. No-op when no valid span context is active.
+export function injectTraceContext(
+  env: NodeJS.ProcessEnv,
+  ctx: Context = otelContext.active(),
+): NodeJS.ProcessEnv {
+  const sc = trace.getSpan(ctx)?.spanContext()
+  if (!sc || !trace.isSpanContextValid(sc)) return env
+  const flags = (sc.traceFlags ?? 0).toString(16).padStart(2, "0")
+  const out: NodeJS.ProcessEnv = { ...env, TRACEPARENT: `00-${sc.traceId}-${sc.spanId}-${flags}` }
+  const tracestate = sc.traceState?.serialize()
+  if (tracestate) out.TRACESTATE = tracestate
+  else delete out.TRACESTATE
+  return out
+}
+
+export const Observability = { enabled, layer, injectTraceContext }

@@ -24,6 +24,7 @@ import {
 import * as NodeChildProcess from "node:child_process"
 import { PassThrough } from "node:stream"
 import launch from "cross-spawn"
+import { injectTraceContext } from "./effect/observability"
 
 const toError = (err: unknown): Error => (err instanceof globalThis.Error ? err : new globalThis.Error(String(err)))
 
@@ -104,8 +105,17 @@ export const make = Effect.gen(function* () {
     return path.resolve(opts.cwd)
   })
 
-  const env = (opts: ChildProcess.CommandOptions) =>
-    opts.extendEnv ? { ...globalThis.process.env, ...opts.env } : opts.env
+  const env = (opts: ChildProcess.CommandOptions) => {
+    if (opts.env === undefined && !opts.extendEnv) {
+      // Caller relies on default env inheritance. Only synthesize an env object
+      // when there's an active trace context to inject — otherwise leave it
+      // undefined so node passes through process.env unchanged.
+      const injected = injectTraceContext({ ...globalThis.process.env })
+      return injected.TRACEPARENT ? injected : undefined
+    }
+    const merged = opts.extendEnv ? { ...globalThis.process.env, ...opts.env } : opts.env!
+    return injectTraceContext(merged)
+  }
 
   const input = (x: ChildProcess.CommandInput | undefined): NodeChildProcess.IOType | undefined =>
     Stream.isStream(x) ? "pipe" : x

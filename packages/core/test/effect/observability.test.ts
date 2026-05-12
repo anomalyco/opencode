@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { resource } from "@opencode-ai/core/effect/observability"
+import { context, ROOT_CONTEXT, trace, TraceFlags } from "@opentelemetry/api"
+import { injectTraceContext, resource } from "@opencode-ai/core/effect/observability"
 
 const otelResourceAttributes = process.env.OTEL_RESOURCE_ATTRIBUTES
 const opencodeClient = process.env.OPENCODE_CLIENT
@@ -42,5 +43,54 @@ describe("resource", () => {
       "service.namespace": "anomalyco",
     })
     expect(resource().attributes["service.instance.id"]).not.toBe("override")
+  })
+})
+
+describe("injectTraceContext", () => {
+  const traceId = "0af7651916cd43dd8448eb211c80319c"
+  const spanId = "b7ad6b7169203331"
+
+  const ctxFor = (sc: { traceId: string; spanId: string; traceFlags: number }) =>
+    trace.setSpan(ROOT_CONTEXT, trace.wrapSpanContext(sc))
+
+  test("leaves env unchanged when no active span", () => {
+    const env = { FOO: "bar" }
+    expect(injectTraceContext(env, ROOT_CONTEXT)).toEqual({ FOO: "bar" })
+  })
+
+  test("injects TRACEPARENT from the given OTel context", () => {
+    const env = injectTraceContext({ FOO: "bar" }, ctxFor({ traceId, spanId, traceFlags: TraceFlags.SAMPLED }))
+    expect(env.FOO).toBe("bar")
+    expect(env.TRACEPARENT).toBe(`00-${traceId}-${spanId}-01`)
+  })
+
+  test("encodes unsampled trace flags as 00", () => {
+    expect(injectTraceContext({}, ctxFor({ traceId, spanId, traceFlags: TraceFlags.NONE })).TRACEPARENT).toBe(
+      `00-${traceId}-${spanId}-00`,
+    )
+  })
+
+  test("ignores invalid span contexts", () => {
+    expect(
+      injectTraceContext({ FOO: "bar" }, ctxFor({ traceId: "0".repeat(32), spanId, traceFlags: 1 })),
+    ).toEqual({ FOO: "bar" })
+  })
+
+  test("overwrites any stale TRACEPARENT inherited from the env", () => {
+    const env = injectTraceContext(
+      { TRACEPARENT: "00-stale-stale-00" },
+      ctxFor({ traceId, spanId, traceFlags: TraceFlags.SAMPLED }),
+    )
+    expect(env.TRACEPARENT).toBe(`00-${traceId}-${spanId}-01`)
+  })
+
+  test("falls back to the global active context when ctx is omitted", () => {
+    // Without a registered context manager, the global active context is ROOT,
+    // so injection should be a no-op rather than throw.
+    expect(injectTraceContext({ FOO: "bar" })).toEqual({ FOO: "bar" })
+    // Sanity: context.with does not propagate without a context manager.
+    context.with(ctxFor({ traceId, spanId, traceFlags: TraceFlags.SAMPLED }), () => {
+      expect(injectTraceContext({}).TRACEPARENT).toBeUndefined()
+    })
   })
 })
