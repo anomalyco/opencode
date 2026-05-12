@@ -169,7 +169,9 @@ export const layer = Layer.effect(
               ).pipe(
                 Effect.asVoid,
                 Effect.catchCause((cause) =>
-                  Effect.logWarning("failed to materialize reference repository", { name: reference.name, cause }),
+                  Effect.logWarning("failed to materialize reference repository").pipe(
+                    Effect.annotateLogs({ name: reference.name, cause }),
+                  ),
                 ),
               ),
             )

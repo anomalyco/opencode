@@ -22,7 +22,6 @@ import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
-import { CodeSearchTool } from "./codesearch"
 import { RepoCloneTool } from "./repo_clone"
 import { RepoOverviewTool } from "./repo_overview"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -120,7 +119,6 @@ export const layer: Layer.Layer<
     const plan = yield* PlanExitTool
     const webfetch = yield* WebFetchTool
     const websearch = yield* WebSearchTool
-    const codesearch = yield* CodeSearchTool
     const repoClone = yield* RepoCloneTool
     const repoOverview = yield* RepoOverviewTool
     const shell = yield* ShellTool
@@ -224,7 +222,6 @@ export const layer: Layer.Layer<
           fetch: Tool.init(webfetch),
           todo: Tool.init(todo),
           search: Tool.init(websearch),
-          code: Tool.init(codesearch),
           repo_clone: Tool.init(repoClone),
           repo_overview: Tool.init(repoOverview),
           skill: Tool.init(skilltool),
@@ -249,7 +246,7 @@ export const layer: Layer.Layer<
             tool.fetch,
             tool.todo,
             tool.search,
-            ...(Flag.OPENCODE_EXPERIMENTAL_SCOUT ? [tool.code, tool.repo_clone, tool.repo_overview] : []),
+            ...(Flag.OPENCODE_EXPERIMENTAL_SCOUT ? [tool.repo_clone, tool.repo_overview] : []),
             tool.skill,
             tool.patch,
             ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),

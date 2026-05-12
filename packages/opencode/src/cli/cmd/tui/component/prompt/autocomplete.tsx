@@ -20,6 +20,7 @@ import { useFrecency } from "./frecency"
 import { useBindings } from "../../keymap"
 import { Reference } from "@/reference/reference"
 import type { Config } from "@/config/config"
+import { displayCharAt, mentionTriggerIndex } from "@/cli/cmd/prompt-display"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -159,7 +160,7 @@ export function Autocomplete(props: {
     const input = props.input()
     const currentCursorOffset = input.cursorOffset
 
-    const charAfterCursor = props.value.at(currentCursorOffset)
+    const charAfterCursor = displayCharAt(props.value, currentCursorOffset)
     const needsSpace = charAfterCursor !== " "
     const append = "@" + text + (needsSpace ? " " : "")
 
@@ -787,13 +788,8 @@ export function Autocomplete(props: {
         }
 
         // Check for "@" trigger - find the nearest "@" before cursor with no whitespace between
-        const text = value.slice(0, offset)
-        const idx = text.lastIndexOf("@")
-        if (idx === -1) return
-
-        const between = text.slice(idx)
-        const before = idx === 0 ? undefined : value[idx - 1]
-        if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
+        const idx = mentionTriggerIndex(value, offset)
+        if (idx !== undefined) {
           show("@")
           setStore("index", idx)
         }
