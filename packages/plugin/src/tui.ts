@@ -11,6 +11,7 @@ import type {
   Provider,
   PermissionRequest,
   QuestionRequest,
+  Session,
   SessionStatus,
   TextPart,
   Config as SdkConfig,
@@ -273,6 +274,7 @@ export type TuiState = {
   readonly vcs: { branch?: string } | undefined
   session: {
     count: () => number
+    sessions: () => ReadonlyArray<Session>
     diff: (sessionID: string) => ReadonlyArray<TuiSidebarFileItem>
     todo: (sessionID: string) => ReadonlyArray<TuiSidebarTodoItem>
     messages: (sessionID: string) => ReadonlyArray<Message>

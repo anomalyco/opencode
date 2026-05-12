@@ -33,11 +33,23 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   })
 
 const totalTokens = createMemo(() => {
-    const childTokens = 0
+    const childSessions = props.api.state.session.sessions().filter((s) => s.parentID === props.session_id)
+    const childTokens = childSessions.reduce((sum: number, child) => {
+      const childMessages = props.api.state.session.messages(child.id)
+      const assistantMessages = childMessages.filter(
+        (m) => m.role === "assistant" && !(m.mode === "compaction" || m.summary === true),
+      )
+      if (assistantMessages.length === 0) return sum
+      const lastAssistant = assistantMessages.at(-1) as typeof assistantMessages[number] & { tokens: NonNullable<AssistantMessage["tokens"]> }
+      if (lastAssistant) {
+        sum += lastAssistant.tokens.input + lastAssistant.tokens.output + lastAssistant.tokens.reasoning + lastAssistant.tokens.cache.read + lastAssistant.tokens.cache.write
+      }
+      return sum
+    }, 0)
+
     const compactedTokens = 0
 
-    return state().tokens + childTokens + compactedTokens
-  })
+    return state().tokens + childTokens + compactedTokens  })
 
   return (
     <box flexDirection="column" gap={1}>
