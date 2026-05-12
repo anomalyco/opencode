@@ -66,13 +66,13 @@ export class Usage extends Schema.Class<Usage>("LLM.Usage")({
   get visibleOutputTokens() {
     return Math.max(0, (this.outputTokens ?? 0) - (this.reasoningTokens ?? 0))
   }
+
+  static from(input: UsageInput) {
+    return input instanceof Usage ? input : new Usage(input)
+  }
 }
 
-export namespace Usage {
-  export type Input = Usage | ConstructorParameters<typeof Usage>[0]
-
-  export const make = (input: Input) => (input instanceof Usage ? input : new Usage(input))
-}
+export type UsageInput = Usage | ConstructorParameters<typeof Usage>[0]
 
 export const RequestStart = Schema.Struct({
   type: Schema.tag("request-start"),
@@ -229,7 +229,7 @@ const llmEventTagged = Schema.Union([
 
 type WithID<Event extends { readonly id: unknown }, ID> = Omit<Event, "type" | "id"> & { readonly id: ID | string }
 type WithUsage<Event extends { readonly usage?: Usage }> = Omit<Event, "type" | "usage"> & {
-  readonly usage?: Usage.Input
+  readonly usage?: UsageInput
 }
 
 const responseID = (value: ResponseID | string) => ResponseID.make(value)
@@ -264,12 +264,12 @@ export const LLMEvent = Object.assign(llmEventTagged, {
   stepFinish: (input: WithUsage<StepFinish>) =>
     StepFinish.make({
       ...input,
-      usage: input.usage === undefined ? undefined : Usage.make(input.usage),
+      usage: input.usage === undefined ? undefined : Usage.from(input.usage),
     }),
   requestFinish: (input: WithUsage<RequestFinish>) =>
     RequestFinish.make({
       ...input,
-      usage: input.usage === undefined ? undefined : Usage.make(input.usage),
+      usage: input.usage === undefined ? undefined : Usage.from(input.usage),
     }),
   providerError: ProviderErrorEvent.make,
   is: {
