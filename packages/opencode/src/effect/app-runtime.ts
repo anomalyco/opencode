@@ -24,6 +24,7 @@ import { Question } from "@/question"
 import { Permission } from "@/permission"
 import { Todo } from "@/session/todo"
 import { Session } from "@/session/session"
+import { SessionGoal } from "@/session/goal"
 import { SessionStatus } from "@/session/status"
 import { SessionRunState } from "@/session/run-state"
 import { SessionProcessor } from "@/session/processor"
@@ -83,6 +84,7 @@ export const AppLayer = Layer.mergeAll(
   Permission.defaultLayer,
   Todo.defaultLayer,
   Session.defaultLayer,
+  SessionGoal.defaultLayer,
   SessionStatus.defaultLayer,
   BackgroundJob.defaultLayer,
   RuntimeFlags.defaultLayer,

@@ -10,6 +10,7 @@ import type {
   PermissionRequest,
   QuestionRequest,
   Session,
+  SessionGoal,
   SessionStatus,
   SnapshotFileDiff,
   Todo,
@@ -47,6 +48,9 @@ export type State = {
     [sessionID: string]: SessionStatus
   }
   session_working(id: string): boolean
+  session_goal: {
+    [sessionID: string]: SessionGoal | undefined
+  }
   session_diff: {
     [sessionID: string]: SnapshotFileDiff[]
   }

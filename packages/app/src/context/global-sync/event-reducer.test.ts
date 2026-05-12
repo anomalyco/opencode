@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
+import type {
+  Message,
+  Part,
+  PermissionRequest,
+  Project,
+  QuestionRequest,
+  Session,
+  SessionGoal,
+} from "@opencode-ai/sdk/v2/client"
 import { createStore } from "solid-js/store"
 import type { State } from "./types"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
@@ -57,6 +65,16 @@ const questionRequest = (id: string, sessionID: string, title = id) =>
     ],
   }) as QuestionRequest
 
+const goal = (sessionID: string, objective = "finish it") =>
+  ({
+    id: "goal_1",
+    sessionID,
+    objective,
+    status: "active",
+    tokens: { used: 0 },
+    time: { used: 0, created: 1, updated: 1 },
+  }) as SessionGoal
+
 const baseState = (input: Partial<State> = {}) =>
   ({
     status: "complete",
@@ -71,6 +89,7 @@ const baseState = (input: Partial<State> = {}) =>
     session: [],
     sessionTotal: 0,
     session_status: {},
+    session_goal: {},
     session_diff: {},
     todo: {},
     permission: {},
@@ -179,6 +198,7 @@ describe("applyDirectoryEvent", () => {
         permission: { ses_1: [] },
         question: { ses_1: [] },
         session_status: { ses_1: { type: "busy" } },
+        session_goal: { ses_1: goal("ses_1") },
       }),
     )
 
@@ -200,6 +220,7 @@ describe("applyDirectoryEvent", () => {
     expect(store.permission.ses_1).toBeUndefined()
     expect(store.question.ses_1).toBeUndefined()
     expect(store.session_status.ses_1).toBeUndefined()
+    expect(store.session_goal.ses_1).toBeUndefined()
   })
 
   test("cleans session caches when deleted and decrements only root totals", () => {
@@ -225,6 +246,7 @@ describe("applyDirectoryEvent", () => {
           permission: { [item.info.id]: [] },
           question: { [item.info.id]: [] },
           session_status: { [item.info.id]: { type: "busy" } },
+          session_goal: { [item.info.id]: goal(item.info.id) },
         }),
       )
 
@@ -246,6 +268,7 @@ describe("applyDirectoryEvent", () => {
       expect(store.permission[item.info.id]).toBeUndefined()
       expect(store.question[item.info.id]).toBeUndefined()
       expect(store.session_status[item.info.id]).toBeUndefined()
+      expect(store.session_goal[item.info.id]).toBeUndefined()
     }
   })
 
@@ -265,6 +288,7 @@ describe("applyDirectoryEvent", () => {
         permission: { [dropped.id]: [] },
         question: { [dropped.id]: [] },
         session_status: { [dropped.id]: { type: "busy" } },
+        session_goal: { [dropped.id]: goal(dropped.id) },
       }),
     )
 
@@ -289,7 +313,33 @@ describe("applyDirectoryEvent", () => {
     expect(store.permission[dropped.id]).toBeUndefined()
     expect(store.question[dropped.id]).toBeUndefined()
     expect(store.session_status[dropped.id]).toBeUndefined()
+    expect(store.session_goal[dropped.id]).toBeUndefined()
     expect(todos).toEqual([dropped.id])
+  })
+
+  test("tracks session goal update and clear events", () => {
+    const sessionID = "ses_1"
+    const [store, setStore] = createStore(baseState())
+
+    applyDirectoryEvent({
+      event: { type: "session.goal.updated", properties: { sessionID, goal: goal(sessionID, "ship it") } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+    expect(store.session_goal[sessionID]?.objective).toBe("ship it")
+
+    applyDirectoryEvent({
+      event: { type: "session.goal.cleared", properties: { sessionID } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+    expect(store.session_goal[sessionID]).toBeUndefined()
   })
 
   test("cleanupDroppedSessionCaches clears part-only orphan state", () => {

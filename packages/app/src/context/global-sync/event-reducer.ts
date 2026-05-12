@@ -71,6 +71,7 @@ export function cleanupDroppedSessionCaches(
   const stale = [
     ...Object.keys(store.message),
     ...Object.keys(store.session_diff),
+    ...Object.keys(store.session_goal),
     ...Object.keys(store.todo),
     ...Object.keys(store.permission),
     ...Object.keys(store.question),
@@ -180,6 +181,16 @@ export function applyDirectoryEvent(input: {
     case "session.status": {
       const props = event.properties as { sessionID: string; status: SessionStatus }
       input.setStore("session_status", props.sessionID, reconcile(props.status))
+      break
+    }
+    case "session.goal.updated": {
+      const props = event.properties as { sessionID: string; goal: State["session_goal"][string] }
+      input.setStore("session_goal", props.sessionID, reconcile(props.goal))
+      break
+    }
+    case "session.goal.cleared": {
+      const props = event.properties as { sessionID: string }
+      input.setStore("session_goal", props.sessionID, undefined)
       break
     }
     case "message.updated": {
