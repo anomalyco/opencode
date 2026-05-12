@@ -72,6 +72,35 @@ P0 开始时必须执行：
 - 包间 import 图 — `@project/core` → `@project/ui` 等
 - 关键目录结构 — 每个包的 `src/` 子目录
 
+### 双维度影响范围评估
+
+P0 必须从两个维度交叉评估影响范围，避免单维度盲区（历史教训：v0.2.0 i18n 低估 3×，CI/CD 低估 25%）：
+
+**维度 1: 文件类型分布**
+
+```
+rg <pattern> --count -g '*.ts'     # 代码文件
+rg <pattern> --count -g '*.json'   # 配置/i18n
+rg <pattern> --count -g '*.mdx'    # 文档
+rg <pattern> --count -g '*.yml'    # CI/CD
+```
+
+**维度 2: 目录拓扑分布**
+
+```
+rg <pattern> --count -g 'packages/*/'  | awk -F: '{print $1}' | cut -d/ -f1-3 | sort | uniq -c
+```
+
+输出示例：
+```
+120 packages/core
+ 50 packages/ui
+ 51 packages/web/src/content/i18n   ← 容易被遗漏的子目录
+ 25 .github/workflows               ← 不在 packages/ 下
+```
+
+**交叉判定**: 两个维度的结果必须在 Discovery 文档中并列表格，差距 >20% 的标注为 ⚠️。
+
 不做的事：
 
 - 不读具体代码实现
