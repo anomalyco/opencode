@@ -18,110 +18,85 @@
  * permissions are passed through, and Plan Mode's restrictions live on the
  * agent, not the session.
  */
-import { test, expect, afterEach } from "bun:test"
+import { expect } from "bun:test"
 import { Effect } from "effect"
-import { disposeAllInstances, provideInstance, tmpdir } from "../fixture/fixture"
-import { WithInstance } from "../../src/project/with-instance"
 import { Agent } from "../../src/agent/agent"
 import { deriveSubagentSessionPermission } from "../../src/agent/subagent-permissions"
 import { Permission } from "../../src/permission"
+import { testEffect } from "../lib/effect"
 
-afterEach(async () => {
-  await disposeAllInstances()
-})
-
-function load<A>(dir: string, fn: (svc: Agent.Interface) => Effect.Effect<A>) {
-  return Effect.runPromise(provideInstance(dir)(Agent.Service.use(fn)).pipe(Effect.provide(Agent.defaultLayer)))
-}
+const it = testEffect(Agent.defaultLayer)
 
 // `deriveSubagentSessionPermission` is imported from production. The test
 // exercises the actual helper that task.ts uses to build the subagent's
 // session permission, so any regression in that helper trips this test.
 
-test("[#26514] subagent spawned from plan mode inherits read-only restriction (edit denied)", async () => {
-  await using tmp = await tmpdir()
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const planAgent = await load(tmp.path, (svc) => svc.get("plan"))
-      const generalAgent = await load(tmp.path, (svc) => svc.get("general"))
+it.instance("[#26514] subagent spawned from plan mode inherits read-only restriction (edit denied)", () =>
+  Effect.gen(function* () {
+    const planAgent = yield* Agent.Service.use((svc) => svc.get("plan"))
+    const generalAgent = yield* Agent.Service.use((svc) => svc.get("general"))
 
-      expect(planAgent).toBeDefined()
-      expect(generalAgent).toBeDefined()
-      // Sanity: the plan agent itself blocks edit. (Note: `write` and
-      // `apply_patch` route through the `edit` permission at the runtime
-      // tool layer — see Permission.disabled / EDIT_TOOLS.)
-      expect(Permission.evaluate("edit", "/some/file.ts", planAgent!.permission).action).toBe("deny")
+    expect(planAgent).toBeDefined()
+    expect(generalAgent).toBeDefined()
+    // Sanity: the plan agent itself blocks edit. (Note: `write` and
+    // `apply_patch` route through the `edit` permission at the runtime
+    // tool layer — see Permission.disabled / EDIT_TOOLS.)
+    expect(Permission.evaluate("edit", "/some/file.ts", planAgent!.permission).action).toBe("deny")
 
-      // Simulate the plan-mode parent session: in real flow the plan
-      // session's `permission` field is empty (Plan Mode lives on the agent
-      // ruleset, not the session). So we pass [] through as the parent
-      // session permission, exactly like the actual code path.
-      const parentSessionPermission: Permission.Ruleset = []
+    // Simulate the plan-mode parent session: in real flow the plan
+    // session's `permission` field is empty (Plan Mode lives on the agent
+    // ruleset, not the session). So we pass [] through as the parent
+    // session permission, exactly like the actual code path.
+    const parentSessionPermission: Permission.Ruleset = []
 
-      const subagentSessionPermission = deriveSubagentSessionPermission({
-        parentSessionPermission,
-        parentAgent: planAgent,
-        subagent: generalAgent!,
-      })
+    const subagentSessionPermission = deriveSubagentSessionPermission({
+      parentSessionPermission,
+      parentAgent: planAgent,
+      subagent: generalAgent!,
+    })
 
-      // Mirror the runtime evaluation in session/prompt.ts (~line 410, 639):
-      //   ruleset: Permission.merge(agent.permission, session.permission ?? [])
-      const effective = Permission.merge(generalAgent!.permission, subagentSessionPermission)
+    // Mirror the runtime evaluation in session/prompt.ts (~line 410, 639):
+    //   ruleset: Permission.merge(agent.permission, session.permission ?? [])
+    const effective = Permission.merge(generalAgent!.permission, subagentSessionPermission)
 
-      expect(Permission.evaluate("edit", "/some/file.ts", effective).action).toBe("deny")
-      expect(Permission.evaluate("edit", "/another/path/index.tsx", effective).action).toBe("deny")
-    },
-  })
-})
+    expect(Permission.evaluate("edit", "/some/file.ts", effective).action).toBe("deny")
+    expect(Permission.evaluate("edit", "/another/path/index.tsx", effective).action).toBe("deny")
+  }),
+)
 
-test("[#26514] explore subagent launched from plan mode also stays read-only", async () => {
+it.instance("[#26514] explore subagent launched from plan mode also stays read-only", () =>
   // Sibling check: even though `explore` is intrinsically read-only, the
   // bug surface is the same. Including this case to document that the fix
   // should propagate the parent **agent** permissions, not just deny edit
   // when the subagent happens to already deny it.
-  await using tmp = await tmpdir()
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const planAgent = await load(tmp.path, (svc) => svc.get("plan"))
-      const explore = await load(tmp.path, (svc) => svc.get("explore"))
-      expect(planAgent).toBeDefined()
-      expect(explore).toBeDefined()
+  Effect.gen(function* () {
+    const planAgent = yield* Agent.Service.use((svc) => svc.get("plan"))
+    const explore = yield* Agent.Service.use((svc) => svc.get("explore"))
+    expect(planAgent).toBeDefined()
+    expect(explore).toBeDefined()
 
-      const parentSessionPermission: Permission.Ruleset = []
-      const subagentSessionPermission = deriveSubagentSessionPermission({
-        parentSessionPermission,
-        parentAgent: planAgent,
-        subagent: explore!,
-      })
-      const effective = Permission.merge(explore!.permission, subagentSessionPermission)
+    const parentSessionPermission: Permission.Ruleset = []
+    const subagentSessionPermission = deriveSubagentSessionPermission({
+      parentSessionPermission,
+      parentAgent: planAgent,
+      subagent: explore!,
+    })
+    const effective = Permission.merge(explore!.permission, subagentSessionPermission)
 
-      // Already deny — sanity check.
-      expect(Permission.evaluate("edit", "/x.ts", effective).action).toBe("deny")
-    },
-  })
-})
+    // Already deny — sanity check.
+    expect(Permission.evaluate("edit", "/x.ts", effective).action).toBe("deny")
+  }),
+)
 
-test("[#26514] custom user subagent launched from plan mode bypasses Plan Mode read-only", async () => {
+it.instance(
+  "[#26514] custom user subagent launched from plan mode bypasses Plan Mode read-only",
   // The most damaging case: a user-defined subagent with default
   // permissions (allow-by-default, like `general`). The subagent must NOT
   // be able to edit when the parent agent is `plan`.
-  await using tmp = await tmpdir({
-    config: {
-      agent: {
-        my_subagent: {
-          description: "A user-defined subagent",
-          mode: "subagent",
-        },
-      },
-    },
-  })
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const planAgent = await load(tmp.path, (svc) => svc.get("plan"))
-      const my = await load(tmp.path, (svc) => svc.get("my_subagent"))
+  () =>
+    Effect.gen(function* () {
+      const planAgent = yield* Agent.Service.use((svc) => svc.get("plan"))
+      const my = yield* Agent.Service.use((svc) => svc.get("my_subagent"))
       expect(planAgent).toBeDefined()
       expect(my).toBeDefined()
 
@@ -136,6 +111,15 @@ test("[#26514] custom user subagent launched from plan mode bypasses Plan Mode r
       // BUG: on origin/dev edit resolves to "allow" because the plan
       // agent's `edit: deny *` rule never reaches the subagent.
       expect(Permission.evaluate("edit", "/some/file.ts", effective).action).toBe("deny")
+    }),
+  {
+    config: {
+      agent: {
+        my_subagent: {
+          description: "A user-defined subagent",
+          mode: "subagent",
+        },
+      },
     },
-  })
-})
+  },
+)
