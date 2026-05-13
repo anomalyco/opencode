@@ -1,6 +1,6 @@
 export * as PluginBoot from "./boot"
 
-import { Effect, Layer } from "effect"
+import { Context, Deferred, Effect, Layer } from "effect"
 import { AuthV2 } from "../auth"
 import { Catalog } from "../catalog"
 import { Npm } from "../npm"
@@ -15,12 +15,20 @@ type Plugin = {
   effect: Effect.Effect<PluginV2.HookFunctions | void, never, Catalog.Service | AuthV2.Service | Npm.Service>
 }
 
-export const layer = Layer.effectDiscard(
+export interface Interface {
+  readonly wait: () => Effect.Effect<void>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/PluginBoot") {}
+
+export const layer: Layer.Layer<Service, never, Catalog.Service | PluginV2.Service | AuthV2.Service | Npm.Service> = Layer.effect(
+  Service,
   Effect.gen(function* () {
     const catalog = yield* Catalog.Service
     const plugin = yield* PluginV2.Service
     const auth = yield* AuthV2.Service
     const npm = yield* Npm.Service
+    const done = yield* Deferred.make<void>()
 
     const add = Effect.fn("PluginBoot.add")(function* (input: Plugin) {
       yield* plugin.add({
@@ -33,12 +41,20 @@ export const layer = Layer.effectDiscard(
       })
     })
 
-    yield* add(EnvPlugin)
-    yield* add(AuthPlugin)
-    for (const item of ProviderPlugins) {
-      yield* add(item)
-    }
-    yield* add(ModelsDevPlugin)
+    const boot = Effect.gen(function* () {
+      yield* add(EnvPlugin)
+      yield* add(AuthPlugin)
+      for (const item of ProviderPlugins) {
+        yield* add(item)
+      }
+      yield* add(ModelsDevPlugin)
+    }).pipe(Effect.withSpan("PluginBoot.boot"))
+
+    yield* boot.pipe(Effect.exit, Effect.flatMap((exit) => Deferred.done(done, exit)), Effect.forkScoped)
+
+    return Service.of({
+      wait: () => Deferred.await(done),
+    })
   }),
 )
 

@@ -4,7 +4,7 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { effectCmd } from "../../effect-cmd"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 
-const layer = Catalog.defaultLayer.pipe(Layer.provide(PluginBoot.defaultLayer))
+const layer = Layer.mergeAll(Catalog.defaultLayer, PluginBoot.defaultLayer)
 
 export const V2Command = effectCmd({
   command: "v2",
@@ -12,6 +12,7 @@ export const V2Command = effectCmd({
   instance: false,
   handler: Effect.fn("Cli.debug.v2")(function* () {
     const result = yield* Effect.gen(function* () {
+      yield* PluginBoot.Service.use((s) => s.wait())
       const catalog = yield* Catalog.Service
 
       const providers = (yield* catalog.provider.available()).sort((a, b) => a.id.localeCompare(b.id))
