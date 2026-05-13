@@ -1,5 +1,9 @@
 // @refresh reload
 
+import { SentryReporter } from "@/utils/sentry"
+
+SentryReporter.init()
+
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
 import { type Platform, PlatformProvider } from "@/context/platform"

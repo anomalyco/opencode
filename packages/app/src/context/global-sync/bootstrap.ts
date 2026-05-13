@@ -14,6 +14,7 @@ import type {
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
 import { retry } from "@opencode-ai/util/retry"
+import { SentryReporter } from "@/utils/sentry"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
@@ -116,6 +117,7 @@ export async function bootstrapGlobal(input: {
       retry(() =>
         input.globalSDK.env.get().then((x) => {
           input.setGlobalStore("env", x.data!)
+          if (x.data?.environment) SentryReporter.setEnvironment(x.data.environment)
         }),
       ),
     () =>
@@ -261,6 +263,7 @@ export async function bootstrapDirectory(input: {
         : retry(() =>
             input.sdk.env.get().then((x) => {
               input.setStore("env", x.data!)
+              if (x.data?.environment) SentryReporter.setEnvironment(x.data.environment)
             }),
           ),
     () =>

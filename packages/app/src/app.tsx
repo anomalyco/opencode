@@ -16,7 +16,6 @@ import {
   createMemo,
   createResource,
   createSignal,
-  ErrorBoundary,
   For,
   type JSX,
   lazy,
@@ -25,6 +24,7 @@ import {
   Show,
   Suspense,
 } from "solid-js"
+import { ErrorBoundary } from "@/utils/sentry"
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
