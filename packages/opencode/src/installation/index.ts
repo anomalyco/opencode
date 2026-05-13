@@ -1,6 +1,7 @@
 import { Effect, Layer, Schema, Context, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { withTransientReadRetry } from "@/util/effect-http-client"
+import { errorMessage } from "@/util/error"
 import { ChildProcess } from "effect/unstable/process"
 import { AppProcess } from "@opencode-ai/core/process"
 import path from "path"
@@ -124,7 +125,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
           stderr: result.stderr.toString("utf8"),
         }
       },
-      Effect.catch(() => Effect.succeed({ code: 1, stdout: "", stderr: "" })),
+      Effect.catch((err) => Effect.succeed({ code: 1, stdout: "", stderr: errorMessage(err) })),
     )
 
     const getBrewFormula = Effect.fnUntraced(function* () {
