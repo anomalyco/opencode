@@ -239,12 +239,21 @@ export const layer = Layer.effect(
           }).pipe(Effect.ignore)
         }
 
-        // Subscribe to bus events, fiber interrupted when scope closes
+        // Subscribe to bus events, fiber interrupted when scope closes.
+        // Hooks are user-supplied async functions; if one rejects, isolate it
+        // so a plugin defect can't surface as an unhandledRejection that an
+        // outer process supervisor (e.g. agent wrappers that intercept
+        // uncaughtException/unhandledRejection) might escalate to process exit.
         yield* bus.subscribeAll().pipe(
           Stream.runForEach((input) =>
             Effect.sync(() => {
               for (const hook of hooks) {
-                void hook["event"]?.({ event: input as any })
+                const result = hook["event"]?.({ event: input as any })
+                if (result && typeof (result as Promise<unknown>).catch === "function") {
+                  ;(result as Promise<unknown>).catch((err) => {
+                    log.error("plugin event hook failed", { error: err })
+                  })
+                }
               }
             }),
           ),
