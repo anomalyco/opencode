@@ -1,6 +1,6 @@
 [data-component="file"] {
   content-visibility: auto;
-  contain-intrinsic-size: auto 600px;
+  contain-intrinsic-size: auto 200px;
 }
 
 [data-component="file"][data-mode="text"] {
