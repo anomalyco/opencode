@@ -6,9 +6,10 @@ import { Flag } from "../flag/flag"
 // 로컬/CLI/npm 배포 등에서는 비어 있어 자연스럽게 비활성화된다.
 // hub-auth.ts 의 isHubMode 와 동일한 게이팅 시그널을 사용한다.
 //
-// environment/release 는 일부러 설정하지 않는다: 현재 빌드에서는 두 값 모두
-// 모든 파드에 동일한 상수값이 되어 의미를 갖지 못한다. 추후 helm 이 의미있는
-// 환경 메타데이터를 주입하거나 빌드 시 git SHA 가 inject 되면 그때 추가한다.
+// environment 는 helm 이 주입하는 ENVIRONMENT env var 를 사용한다 (jce-jupyter-hub-helm
+// 컨벤션과 동일: dev/prd 클러스터에서 각각 "development"/"production" 주입).
+// release 는 빌드 시 OPENCODE_VERSION 이 모든 빌드에 "0.0.0-enk" 로 동일하게 박혀 있어
+// 의미가 없으므로 설정하지 않는다. 빌드 시 git SHA 가 inject 되면 그때 추가.
 const DSN = "https://e22b8291293e6d85e775ae7313a804d3@o1200796.ingest.us.sentry.io/4511380949565440"
 
 export namespace SentryReporter {
@@ -22,6 +23,7 @@ export namespace SentryReporter {
 
     SentryBun.init({
       dsn: DSN,
+      environment: process.env["ENVIRONMENT"],
       sendDefaultPii: false,
       tracesSampleRate: 0,
       initialScope: {
