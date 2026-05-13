@@ -1,4 +1,3 @@
-import z from "zod"
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
 import { GlobalBus } from "@/bus/global"
@@ -10,9 +9,7 @@ import type { WorkspaceID } from "@/control-plane/schema"
 import { EventID } from "./schema"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Effect, Layer, Schema as EffectSchema } from "effect"
-import { zodObject } from "@/util/effect-zod"
-import type { DeepMutable } from "@/util/schema"
-import { makeRuntime } from "@/effect/run-service"
+import type { DeepMutable } from "@opencode-ai/core/schema"
 import { serviceUse } from "@/effect/service-use"
 import { InstanceState } from "@/effect/instance-state"
 
@@ -59,9 +56,13 @@ export interface Interface {
     data: Event<Def>["data"],
     options?: { publish?: boolean },
   ) => Effect.Effect<void>
-  readonly replay: (event: SerializedEvent, options?: { publish: boolean }) => Effect.Effect<void>
-  readonly replayAll: (events: SerializedEvent[], options?: { publish: boolean }) => Effect.Effect<string | undefined>
+  readonly replay: (event: SerializedEvent, options?: { publish: boolean; ownerID?: string }) => Effect.Effect<void>
+  readonly replayAll: (
+    events: SerializedEvent[],
+    options?: { publish: boolean; ownerID?: string },
+  ) => Effect.Effect<string | undefined>
   readonly remove: (aggregateID: string) => Effect.Effect<void>
+  readonly claim: (aggregateID: string, ownerID: string) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SyncEvent") {}
@@ -76,7 +77,7 @@ export const layer = Layer.effect(Service)(
 
       const row = Database.use((db) =>
         db
-          .select({ seq: EventSequenceTable.seq })
+          .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
           .from(EventSequenceTable)
           .where(eq(EventSequenceTable.aggregate_id, event.aggregateID))
           .get(),
@@ -84,6 +85,10 @@ export const layer = Layer.effect(Service)(
 
       const latest = row?.seq ?? -1
       if (event.seq <= latest) return
+
+      if (row?.ownerID && row.ownerID !== options?.ownerID) {
+        return
+      }
 
       const expected = latest + 1
       if (event.seq !== expected) {
@@ -99,7 +104,7 @@ export const layer = Layer.effect(Service)(
             workspace: yield* InstanceState.workspaceID,
           }
         : undefined
-      process(def, event, { publish, context })
+      process(def, event, { publish, context, ownerID: options?.ownerID })
     })
 
     const replayAll: Interface["replayAll"] = Effect.fn("SyncEvent.replayAll")(function* (events, options) {
@@ -170,11 +175,24 @@ export const layer = Layer.effect(Service)(
       })
     })
 
+    const claim: Interface["claim"] = Effect.fn("SyncEvent.claim")((aggregateID, ownerID) =>
+      Effect.sync(() =>
+        Database.use((db) =>
+          db
+            .update(EventSequenceTable)
+            .set({ owner_id: ownerID })
+            .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+            .run(),
+        ),
+      ),
+    )
+
     return Service.of({
       run,
       replay,
       replayAll,
       remove,
+      claim,
     })
   }),
 )
@@ -182,8 +200,6 @@ export const layer = Layer.effect(Service)(
 export const defaultLayer = layer
 
 export const use = serviceUse(Service)
-
-const runtime = makeRuntime(Service, defaultLayer)
 
 export const registry = new Map<string, Definition>()
 let projectors: Map<Definition, ProjectorFunc> | undefined
@@ -263,7 +279,7 @@ export function project<Def extends Definition>(
 function process<Def extends Definition>(
   def: Def,
   event: Event<Def>,
-  options: { publish: boolean; context?: PublishContext },
+  options: { publish: boolean; context?: PublishContext; ownerID?: string },
 ) {
   if (projectors == null) {
     throw new Error("No projectors available. Call `SyncEvent.init` to install projectors")
@@ -274,8 +290,6 @@ function process<Def extends Definition>(
     throw new Error(`Projector not found for event: ${def.type}`)
   }
 
-  // idempotent: need to ignore any events already logged
-
   Database.transaction((tx) => {
     projector(tx, event.data, event)
 
@@ -284,6 +298,7 @@ function process<Def extends Definition>(
         .values({
           aggregate_id: event.aggregateID,
           seq: event.seq,
+          owner_id: options?.ownerID,
         })
         .onConflictDoUpdate({
           target: EventSequenceTable.aggregate_id,
@@ -330,42 +345,6 @@ function process<Def extends Definition>(
       }
     })
   })
-}
-
-export function replay(event: SerializedEvent, options?: { publish: boolean }) {
-  return runtime.runSync((sync) => sync.replay(event, options))
-}
-
-export function replayAll(events: SerializedEvent[], options?: { publish: boolean }) {
-  return runtime.runSync((sync) => sync.replayAll(events, options))
-}
-
-export function run<Def extends Definition>(def: Def, data: Event<Def>["data"], options?: { publish?: boolean }) {
-  return runtime.runSync((sync) => sync.run(def, data, options))
-}
-
-export function remove(aggregateID: string) {
-  return runtime.runSync((sync) => sync.remove(aggregateID))
-}
-
-export function payloads() {
-  return registry
-    .entries()
-    .map(([type, def]) => {
-      return z
-        .object({
-          type: z.literal("sync"),
-          name: z.literal(type),
-          id: z.string(),
-          seq: z.number(),
-          aggregateID: z.literal(def.aggregate),
-          data: zodObject(def.schema),
-        })
-        .meta({
-          ref: `SyncEvent.${def.type}`,
-        })
-    })
-    .toArray()
 }
 
 export function effectPayloads() {

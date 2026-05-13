@@ -255,7 +255,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Недорогие модели для кодинга для всех",
   "go.meta.description":
-    "Go начинается с $5 за первый месяц, затем $10/месяц, с щедрыми лимитами запросов за 5 часов для GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash.",
+    "Go начинается с $5 за первый месяц, затем $10/месяц, с щедрыми лимитами запросов за 5 часов для GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash.",
   "go.hero.title": "Недорогие модели для кодинга для всех",
   "go.hero.body":
     "Go открывает доступ к агентам-программистам разработчикам по всему миру. Предлагая щедрые лимиты и надежный доступ к наиболее способным моделям с открытым исходным кодом, вы можете создавать проекты с мощными агентами, не беспокоясь о затратах или доступности.",
@@ -267,8 +267,6 @@ export const dict = {
   "go.cta.promo": "$5 первый месяц",
   "go.pricing.body":
     "Используйте с любым агентом. $5 за первый месяц, затем $10/месяц. Пополняйте баланс при необходимости. Отменить можно в любое время.",
-  "go.banner.badge": "3x",
-  "go.banner.text": "Kimi K2.6: лимит использования увеличен в 3 раза до 27 апреля",
   "go.graph.free": "Бесплатно",
   "go.graph.freePill": "Big Pickle и бесплатные модели",
   "go.graph.go": "Go",
@@ -307,7 +305,7 @@ export const dict = {
   "go.problem.item2": "Щедрые лимиты и надежный доступ",
   "go.problem.item3": "Создан для максимального числа программистов",
   "go.problem.item4":
-    "Включает GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash",
+    "Включает GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash",
   "go.how.title": "Как работает Go",
   "go.how.body":
     "Go начинается с $5 за первый месяц, затем $10/месяц. Вы можете использовать его с OpenCode или любым агентом.",
@@ -333,7 +331,7 @@ export const dict = {
   "go.faq.a2": "Go включает перечисленные ниже модели с щедрыми лимитами и надежным доступом.",
   "go.faq.q3": "Go — это то же самое, что и Zen?",
   "go.faq.a3":
-    "Нет. Zen - это оплата по мере использования, в то время как Go начинается с $5 за первый месяц, затем $10/месяц, с щедрыми лимитами и надежным доступом к моделям с открытым исходным кодом GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash.",
+    "Нет. Zen - это оплата по мере использования, в то время как Go начинается с $5 за первый месяц, затем $10/месяц, с щедрыми лимитами и надежным доступом к моделям с открытым исходным кодом GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash.",
   "go.faq.q4": "Сколько стоит Go?",
   "go.faq.a4.p1.beforePricing": "Go стоит",
   "go.faq.a4.p1.pricingLink": "$5 за первый месяц",
@@ -357,7 +355,7 @@ export const dict = {
 
   "go.faq.q9": "В чем разница между бесплатными моделями и Go?",
   "go.faq.a9":
-    "Бесплатные модели включают Big Pickle плюс промо-модели, доступные на данный момент, с квотой 200 запросов/день. Go включает GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash с более высокими квотами запросов, применяемыми в скользящих окнах (5 часов, неделя и месяц), что примерно эквивалентно $12 за 5 часов, $30 в неделю и $60 в месяц (фактическое количество запросов зависит от модели и использования).",
+    "Бесплатные модели включают Big Pickle плюс промо-модели, доступные на данный момент, с квотой 200 запросов/день. Go включает GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro и DeepSeek V4 Flash с более высокими квотами запросов, применяемыми в скользящих окнах (5 часов, неделя и месяц), что примерно эквивалентно $12 за 5 часов, $30 в неделю и $60 в месяц (фактическое количество запросов зависит от модели и использования).",
 
   "zen.api.error.rateLimitExceeded": "Превышен лимит запросов. Пожалуйста, попробуйте позже.",
   "zen.api.error.modelNotSupported": "Модель {{model}} не поддерживается",
@@ -367,8 +365,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "Отсутствует API ключ.",
   "zen.api.error.invalidApiKey": "Неверный API ключ.",
   "zen.api.error.subscriptionQuotaExceeded": "Квота подписки превышена. Повторите попытку через {{retryIn}}.",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "Квота подписки превышена. Вы можете продолжить использовать бесплатные модели.",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "Достигнут лимит использования за 5 часов. Сбросится через {{retryIn}}. Чтобы продолжить использовать эту модель сейчас, включите оплату с доступного баланса: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "Достигнут недельный лимит использования. Сбросится через {{retryIn}}. Чтобы продолжить использовать эту модель сейчас, включите оплату с доступного баланса: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "Достигнут месячный лимит использования. Сбросится через {{retryIn}}. Чтобы продолжить использовать эту модель сейчас, включите оплату с доступного баланса: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "Нет способа оплаты. Добавьте способ оплаты здесь: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "Недостаточно средств. Управляйте оплатой здесь: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":

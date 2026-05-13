@@ -11,15 +11,44 @@ import type {
   Provider,
   PermissionRequest,
   QuestionRequest,
+  Session,
   SessionStatus,
   TextPart,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
-import type { CliRenderer, ParsedKey, RGBA, SlotMode } from "@opentui/core"
+import type { CliRenderer, KeyEvent, RGBA, Renderable, SlotMode } from "@opentui/core"
+import type { Binding, Keymap } from "@opentui/keymap"
+import {
+  createBindingLookup as createKeymapBindingLookup,
+  type BindingConfig,
+  type CreateBindingLookupOptions,
+  type KeySequenceFormatPart,
+  type SequenceBindingLike,
+} from "@opentui/keymap/extras"
 import type { JSX, SolidPlugin } from "@opentui/solid"
 import type { Config as PluginConfig, PluginOptions } from "./index.js"
 
-export type { CliRenderer, SlotMode } from "@opentui/core"
+export type { CliRenderer, KeyEvent, Renderable, SlotMode } from "@opentui/core"
+export { stringifyKeySequence, stringifyKeyStroke } from "@opentui/keymap"
+export type { Binding, KeyLike, KeySequencePart, KeyStringifyInput, StringifyOptions } from "@opentui/keymap"
+export { formatCommandBindings, formatKeySequence } from "@opentui/keymap/extras"
+export type {
+  BindingConfig,
+  BindingLookup,
+  BindingValue,
+  CreateBindingLookupOptions,
+  FormatCommandBindingsOptions,
+  FormatKeySequenceOptions,
+  KeySequenceFormatPart,
+  SequenceBindingLike,
+} from "@opentui/keymap/extras"
+
+export function createBindingLookup(
+  config: BindingConfig<Renderable, KeyEvent> | undefined,
+  options?: CreateBindingLookupOptions<Renderable, KeyEvent>,
+) {
+  return createKeymapBindingLookup<Renderable, KeyEvent>(config ?? {}, options)
+}
 
 export type TuiRouteCurrent =
   | {
@@ -42,6 +71,18 @@ export type TuiRouteDefinition = {
   render: (input: { params?: Record<string, unknown> }) => JSX.Element
 }
 
+export type TuiKeys = {
+  formatSequence: (parts: readonly KeySequenceFormatPart[] | undefined) => string
+  formatBindings: (bindings: readonly SequenceBindingLike[] | undefined) => string | undefined
+}
+
+export type TuiKeymap = Keymap<Renderable, KeyEvent>
+
+/**
+ * Legacy `api.command` shape kept so v1 plugins can initialize. Remove in v2.
+ *
+ * @deprecated Use `api.keymap.registerLayer({ commands, bindings })` instead.
+ */
 export type TuiCommand = {
   title: string
   value: string
@@ -55,25 +96,22 @@ export type TuiCommand = {
     name: string
     aliases?: string[]
   }
-  onSelect?: () => void
+  onSelect?: (dialog?: TuiDialogStack) => void | Promise<void>
 }
 
-export type TuiKeybind = {
-  name: string
-  ctrl: boolean
-  meta: boolean
-  shift: boolean
-  super?: boolean
-  leader: boolean
-}
-
-export type TuiKeybindMap = Record<string, string>
-
-export type TuiKeybindSet = {
-  readonly all: TuiKeybindMap
-  get: (name: string) => string
-  match: (name: string, evt: ParsedKey) => boolean
-  print: (name: string) => string
+/**
+ * Legacy `api.command` API kept so v1 plugins can initialize. Remove in v2.
+ *
+ * @deprecated Use `api.keymap.registerLayer`, `api.keymap.dispatchCommand`, and
+ * `api.keymap.dispatchCommand("command.palette.show")` instead.
+ */
+export type TuiCommandApi = {
+  /** @deprecated Use `api.keymap.registerLayer({ commands, bindings })` instead. */
+  register: (cb: () => TuiCommand[]) => () => void
+  /** @deprecated Use `api.keymap.dispatchCommand(name)` instead. */
+  trigger: (value: string) => void
+  /** @deprecated Use `api.keymap.dispatchCommand("command.palette.show")` instead. */
+  show: () => void
 }
 
 export type TuiDialogProps = {
@@ -188,6 +226,76 @@ export type TuiToast = {
   duration?: number
 }
 
+export type TuiAttentionWhen = "always" | "focused" | "blurred"
+
+export const TuiAttentionSoundNames = ["default", "question", "permission", "error", "done", "subagent_done"] as const
+export type TuiAttentionSoundName = (typeof TuiAttentionSoundNames)[number]
+
+export type TuiAttentionSound =
+  | boolean
+  | {
+      name?: TuiAttentionSoundName
+      volume?: number
+      when?: TuiAttentionWhen
+    }
+
+export type TuiAttentionNotification =
+  | boolean
+  | {
+      when?: TuiAttentionWhen
+    }
+
+export type TuiAttentionSoundPack = {
+  id: string
+  name?: string
+  sounds: Partial<Record<TuiAttentionSoundName, string>>
+}
+
+export type TuiAttentionSoundPackInfo = {
+  id: string
+  name?: string
+  active: boolean
+  builtin: boolean
+}
+
+export type TuiAttentionSoundboardActivateOptions = {
+  persist?: boolean
+}
+
+export type TuiAttentionSoundboard = {
+  registerPack(pack: TuiAttentionSoundPack): () => void
+  activate(id: string, options?: TuiAttentionSoundboardActivateOptions): boolean
+  current(): string
+  list(): ReadonlyArray<TuiAttentionSoundPackInfo>
+}
+
+export type TuiAttentionNotifyInput = {
+  title?: string
+  message: string
+  notification?: TuiAttentionNotification
+  sound?: TuiAttentionSound
+}
+
+export type TuiAttentionNotifySkipReason =
+  | "attention_disabled"
+  | "empty_message"
+  | "blurred"
+  | "focused"
+  | "focus_unknown"
+  | "renderer_destroyed"
+
+export type TuiAttentionNotifyResult = {
+  ok: boolean
+  notification: boolean
+  sound: boolean
+  skipped?: TuiAttentionNotifySkipReason
+}
+
+export type TuiAttention = {
+  notify(input: TuiAttentionNotifyInput): Promise<TuiAttentionNotifyResult>
+  soundboard: TuiAttentionSoundboard
+}
+
 export type TuiThemeCurrent = {
   readonly primary: RGBA
   readonly secondary: RGBA
@@ -273,6 +381,7 @@ export type TuiState = {
   readonly vcs: { branch?: string } | undefined
   session: {
     count: () => number
+    get: (sessionID: string) => Session | undefined
     diff: (sessionID: string) => ReadonlyArray<TuiSidebarFileItem>
     todo: (sessionID: string) => ReadonlyArray<TuiSidebarTodoItem>
     messages: (sessionID: string) => ReadonlyArray<Message>
@@ -285,9 +394,30 @@ export type TuiState = {
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>
 }
 
-type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "keybinds" | "plugin"> &
+type TuiBindingLookupView = {
+  readonly bindings: ReadonlyArray<Binding<Renderable, KeyEvent>>
+  get: (command: string) => ReadonlyArray<Binding<Renderable, KeyEvent>>
+  has: (command: string) => boolean
+  gather: (name: string, commands: readonly string[]) => ReadonlyArray<Binding<Renderable, KeyEvent>>
+  pick: (name: string, commands: readonly string[]) => Binding<Renderable, KeyEvent>[]
+  omit: (name: string, commands: readonly string[]) => Binding<Renderable, KeyEvent>[]
+}
+
+type TuiAttentionConfigView = {
+  enabled: boolean
+  notifications: boolean
+  sound: boolean
+  volume: number
+  sound_pack: string
+  sounds: Partial<Record<TuiAttentionSoundName, string>>
+}
+
+type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "plugin"> &
   NonNullable<PluginConfig["tui"]> & {
+    leader_timeout: number
+    attention: TuiAttentionConfigView
     plugin_enabled?: Record<string, boolean>
+    keybinds: TuiBindingLookupView
   }
 
 export type TuiApp = {
@@ -320,6 +450,7 @@ export type TuiSidebarFileItem = {
 
 export type TuiHostSlotMap = {
   app: {}
+  app_bottom: {}
   home_logo: {}
   home_prompt: {
     workspace_id?: string
@@ -448,11 +579,16 @@ export type TuiWorkspace = {
 
 export type TuiPluginApi = {
   app: TuiApp
-  command: {
-    register: (cb: () => TuiCommand[]) => () => void
-    trigger: (value: string) => void
-    show: () => void
-  }
+  attention: TuiAttention
+  /**
+   * Legacy `api.command` API kept so v1 plugins can initialize. Remove in v2.
+   *
+   * @deprecated Use `api.keymap.registerLayer`, `api.keymap.dispatchCommand`, and
+   * `api.keymap.dispatchCommand("command.palette.show")` instead.
+   */
+  command?: TuiCommandApi
+  keys: TuiKeys
+  keymap: TuiKeymap
   route: {
     register: (routes: TuiRouteDefinition[]) => () => void
     navigate: (name: string, params?: Record<string, unknown>) => void
@@ -468,11 +604,6 @@ export type TuiPluginApi = {
     Prompt: (props: TuiPromptProps) => JSX.Element
     toast: (input: TuiToast) => void
     dialog: TuiDialogStack
-  }
-  keybind: {
-    match: (key: string, evt: ParsedKey) => boolean
-    print: (key: string) => string
-    create: (defaults: TuiKeybindMap, overrides?: Record<string, unknown>) => TuiKeybindSet
   }
   readonly tuiConfig: Frozen<TuiConfigView>
   kv: TuiKV
