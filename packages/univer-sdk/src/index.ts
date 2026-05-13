@@ -1,6 +1,7 @@
 /** Pulls in `interface FUniver` augmentation (sheets API: `getActiveWorkbook`, etc.). */
 import "@univerjs/sheets/facade"
 import type { CellValue, Univer } from "@univerjs/core"
+import { ICommandService } from "@univerjs/core"
 import { FUniver } from "@univerjs/core/facade"
 import type { FRange, FWorkbook, FWorksheet } from "@univerjs/sheets/facade"
 
@@ -315,6 +316,41 @@ function chartDrawing(input: { chart: InsertChartMutationParams; sheetName: stri
   }
 }
 
+const MUTATION_INSERT_CHART = "sheet.mutation.insert-chart"
+const MUTATION_SET_DRAWING_APPLY = "sheet.mutation.set-drawing-apply"
+
+function commandService(rt: UniverSdkRuntime): ICommandService | null {
+  const u = rt.univer
+  if (!u) return null
+  return u.__getInjector().get(ICommandService)
+}
+
+function setDrawingApplyPayload(input: {
+  chartParams: InsertChartMutationParams
+  sheetName: string
+}): SetDrawingApplyMutationParams {
+  const drawing = chartDrawing({ chart: input.chartParams, sheetName: input.sheetName })
+  return {
+    op: [
+      input.chartParams.unitId,
+      input.chartParams.subUnitId,
+      ["data", input.chartParams.chartId, { i: drawing }],
+      ["order", 0, { i: input.chartParams.chartId }],
+    ],
+    unitId: input.chartParams.unitId,
+    subUnitId: input.chartParams.subUnitId,
+    objects: [
+      {
+        unitId: input.chartParams.unitId,
+        subUnitId: input.chartParams.subUnitId,
+        drawingId: input.chartParams.chartId,
+      },
+    ],
+    type: 0,
+    trigger: input.chartParams.trigger,
+  }
+}
+
 async function addChartViaFacade(input: {
   runtime: UniverSdkRuntime
   chartParams: InsertChartMutationParams
@@ -323,32 +359,31 @@ async function addChartViaFacade(input: {
   sheetName: string
   rangeObj: { addChart?: (params: InsertChartMutationParams) => Promise<boolean> | boolean }
 }) {
-  const ok = await input.runtime.univerAPI.executeCommand("sheet.mutation.insert-chart", input.chartParams)
-  if (ok) {
-    const drawing = chartDrawing({ chart: input.chartParams, sheetName: input.sheetName })
-    const apply: SetDrawingApplyMutationParams = {
-      op: [
-        input.chartParams.unitId,
-        input.chartParams.subUnitId,
-        ["data", input.chartParams.chartId, { i: drawing }],
-        ["order", 0, { i: input.chartParams.chartId }],
-      ],
-      unitId: input.chartParams.unitId,
-      subUnitId: input.chartParams.subUnitId,
-      objects: [
-        {
-          unitId: input.chartParams.unitId,
-          subUnitId: input.chartParams.subUnitId,
-          drawingId: input.chartParams.chartId,
-        },
-      ],
-      type: 0,
-      trigger: input.chartParams.trigger,
-    }
-    const drawOk = await input.runtime.univerAPI.executeCommand("sheet.mutation.set-drawing-apply", apply)
-    if (drawOk) return true
-    throw new SdkError("insert-chart succeeded but set-drawing-apply was rejected")
+  const svc = commandService(input.runtime)
+  const apply = setDrawingApplyPayload({ chartParams: input.chartParams, sheetName: input.sheetName })
+
+  async function applyDrawing(): Promise<boolean> {
+    return Boolean(await input.runtime.univerAPI.executeCommand(MUTATION_SET_DRAWING_APPLY, apply))
   }
+
+  if (svc) {
+    if (svc.hasCommand(MUTATION_INSERT_CHART)) {
+      const ok = await input.runtime.univerAPI.executeCommand(MUTATION_INSERT_CHART, input.chartParams)
+      if (ok) {
+        if (await applyDrawing()) return true
+        throw new SdkError("insert-chart succeeded but set-drawing-apply was rejected")
+      }
+    } else if (svc.hasCommand(MUTATION_SET_DRAWING_APPLY)) {
+      if (await applyDrawing()) return true
+    }
+  } else {
+    const ok = await input.runtime.univerAPI.executeCommand(MUTATION_INSERT_CHART, input.chartParams)
+    if (ok) {
+      if (await applyDrawing()) return true
+      throw new SdkError("insert-chart succeeded but set-drawing-apply was rejected")
+    }
+  }
+
   if (input.rangeObj.addChart) return await input.rangeObj.addChart(input.chartParams)
   if (input.sheet.addChart) return await input.sheet.addChart(input.chartParams)
   if (input.wb.addChart) return await input.wb.addChart(input.chartParams)

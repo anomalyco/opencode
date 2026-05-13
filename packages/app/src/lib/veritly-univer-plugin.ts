@@ -1,8 +1,16 @@
-import { Injector, Plugin, UniverInstanceType } from "@univerjs/core"
+import type { FUniver } from "@univerjs/core/facade"
+import { Inject, Injector, Plugin, UniverInstanceType } from "@univerjs/core"
+import { MessageType } from "@univerjs/design"
+import type { IFacadeMenuItem, IFUniverUIMixin } from "@univerjs/ui/facade"
+import { IMessageService, RibbonInsertGroup } from "@univerjs/ui"
+import { dict } from "@/i18n/en"
+import { requestVeritlyChartPanel, veritlyUniverHost } from "@/lib/veritly-univer-runtime"
+
+const MENU_ID = "veritly-insert-chart"
 
 /**
- * Extension point for Veritly-specific Univer wiring (menus, commands, auth).
- * Resolve services via `this._injector` in lifecycle hooks — e.g. menu APIs when adding ribbon entries.
+ * Veritly-specific Univer wiring: ribbon Insert → Chart opens the Veritly ECharts dock (see {@link requestVeritlyChartPanel}).
+ * Runtime is bound from {@link bindVeritlyUniverHost} in the spreadsheet viewer after `createUniver`.
  */
 export class VeritlyUniverGluePlugin extends Plugin {
   static override pluginName = "VERITLY_UNIVER_GLUE"
@@ -11,14 +19,48 @@ export class VeritlyUniverGluePlugin extends Plugin {
   static override version = "0.18.0"
   static override type = UniverInstanceType.UNIVER_SHEET
 
-  protected readonly _injector: Injector
+  private registered = false
 
-  constructor(injector: Injector) {
+  constructor(@Inject(Injector) protected readonly _injector: Injector) {
     super()
-    this._injector = injector
   }
 
-  override onStarting(): void {
-    void this._injector
+  override onStarting(): void {}
+
+  override onSteady(): void {
+    if (this.registered) return
+    const slot = veritlyUniverHost()
+    if (!slot) return
+    const api = slot.univerAPI as FUniver & IFUniverUIMixin
+    const msg = this._injector.get(IMessageService)
+
+    const insert = () => {
+      const cur = veritlyUniverHost()
+      if (!cur) return
+      const wb = cur.univerAPI.getActiveWorkbook?.()
+      if (!wb) {
+        msg.show({ content: dict["univer.insertChart.noWorkbook"], type: MessageType.Warning })
+        return
+      }
+      const sh = wb.getActiveSheet()
+      if (!sh) {
+        msg.show({ content: dict["univer.insertChart.noSheet"], type: MessageType.Warning })
+        return
+      }
+      if (requestVeritlyChartPanel()) return
+      msg.show({ content: dict["univer.insertChart.panelUnavailable"], type: MessageType.Warning })
+    }
+
+    const item: IFacadeMenuItem = {
+      id: MENU_ID,
+      title: dict["univer.insertChart"],
+      tooltip: dict["univer.insertChart.tooltip"],
+      order: 50,
+      action: () => {
+        insert()
+      },
+    }
+    api.createMenu(item).appendTo(RibbonInsertGroup.MEDIA)
+    this.registered = true
   }
 }

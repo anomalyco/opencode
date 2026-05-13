@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import "@univerjs/sheets/facade"
-import type { Nullable, CellValue } from "@univerjs/core"
+import type { Nullable, CellValue, Univer } from "@univerjs/core"
+import { ICommandService } from "@univerjs/core"
 import { createUniverSdk, type UniverHostApi } from "./index"
 
 function setup() {
@@ -79,5 +80,61 @@ describe("univer-sdk", () => {
       range: { startRow: 0, endRow: 2, startColumn: 0, endColumn: 1 },
     })
     expect(calls.map((x) => x.id)).toEqual(["facade.insert-chart", "facade.set-drawing-apply"])
+  })
+
+  test("OSS: when insert-chart is not registered, applies set-drawing-apply only", async () => {
+    const cell: Nullable<CellValue>[][] = [
+      ["h1", "h2"],
+      [1, 2],
+    ]
+    const calls: Array<{ id: string; data: object }> = []
+    const sheet = {
+      getSheetId: () => "sheet-1",
+      getSheetName: () => "Sheet 1",
+      getRange: (_r1: number, _c1: number, _numRows: number, _numCols: number) => ({
+        getValues: () => cell,
+        setValues: (_v: CellValue[][]) => undefined,
+      }),
+    }
+    const wb = {
+      getId: () => "unit-1",
+      getActiveSheet: () => sheet,
+      getSheets: () => [sheet],
+      getSheetBySheetId: (id: string) => (id === "sheet-1" ? sheet : null),
+    }
+    const api = {
+      importXLSXToUnitIdAsync: async () => "unit-x",
+      loadServerUnit: () => undefined,
+      toggleDarkMode: () => undefined,
+      executeCommand: async (id: string, params?: object) => {
+        if (id === "sheet.mutation.insert-chart") {
+          calls.push({ id: "facade.insert-chart", data: params ?? {} })
+          return true
+        }
+        if (id === "sheet.mutation.set-drawing-apply") {
+          calls.push({ id: "facade.set-drawing-apply", data: params ?? {} })
+          return true
+        }
+        return false
+      },
+      getActiveWorkbook: () => wb,
+    } as unknown as UniverHostApi
+
+    const univer = {
+      __getInjector: () => ({
+        get: (token: unknown) => {
+          if (token !== ICommandService) throw new Error("unexpected injector get")
+          return {
+            hasCommand: (cmd: string) => cmd === "sheet.mutation.set-drawing-apply",
+          }
+        },
+      }),
+    }
+
+    const sdk = createUniverSdk({ univerAPI: api, univer: univer as Univer })
+    await sdk.addChart({
+      range: { startRow: 0, endRow: 1, startColumn: 0, endColumn: 1 },
+    })
+    expect(calls.map((x) => x.id)).toEqual(["facade.set-drawing-apply"])
   })
 })

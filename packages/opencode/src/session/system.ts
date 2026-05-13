@@ -78,7 +78,7 @@ For the **pyodide** tool in the browser: reuse the same \`async def main()\` bod
 
 ## Charts and advanced mutations
 
-add_chart uses Univer's insert-chart path. For drawing-level commands, use execute_command with the command id and params your app supports.
+The spreadsheet ribbon **Insert → Chart** opens a **Veritly ECharts** preview panel in the browser (not Univer Pro). The Python \`add_chart(...)\` relay method still calls Univer's native chart path when the runtime exposes \`sheet.mutation.insert-chart\` (for example with a licensed Pro build). For drawing-level commands, use \`execute_command\` with the command id and params your app supports.
 
 ## Troubleshooting
 
