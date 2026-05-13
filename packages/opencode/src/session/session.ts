@@ -759,14 +759,14 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
 
     const messages: Interface["messages"] = Effect.fn("Session.messages")(function* (input) {
       if (input.limit) {
-        return (yield* MessageV2.pageEffect({ sessionID: input.sessionID, limit: input.limit })).items
+        return (yield* MessageV2.page({ sessionID: input.sessionID, limit: input.limit })).items
       }
 
       const size = 50
       const result = [] as MessageV2.WithParts[]
       let before: string | undefined
       while (true) {
-        const page = yield* MessageV2.pageEffect({ sessionID: input.sessionID, limit: size, before })
+        const page = yield* MessageV2.page({ sessionID: input.sessionID, limit: size, before })
         if (page.items.length === 0) break
         for (let i = page.items.length - 1; i >= 0; i--) {
           const item = page.items[i]
@@ -817,7 +817,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
       const size = 50
       let before: string | undefined
       while (true) {
-        const page = yield* MessageV2.pageEffect({ sessionID, limit: size, before })
+        const page = yield* MessageV2.page({ sessionID, limit: size, before })
         if (page.items.length === 0) break
         for (let i = page.items.length - 1; i >= 0; i--) {
           const item = page.items[i]

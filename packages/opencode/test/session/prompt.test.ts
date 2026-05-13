@@ -1787,7 +1787,7 @@ it.instance(
 
       if (msg.info.role !== "user") throw new Error("expected user message")
 
-      const stored = MessageV2.get({
+      const stored = yield* MessageV2.get({
         sessionID: session.id,
         messageID: msg.info.id,
       })
@@ -1875,7 +1875,7 @@ it.instance(
         parts: yield* prompt.resolvePromptParts("Use @docs for context"),
       })
 
-      const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
       const synthetic = stored.parts.filter(
         (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
       )
@@ -1931,7 +1931,7 @@ it.instance(
         ],
       })
 
-      const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
       const synthetic = stored.parts.filter(
         (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
       )
@@ -1991,7 +1991,7 @@ it.instance(
         parts,
         noReply: true,
       })
-      const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
       const textParts = stored.parts.filter((part) => part.type === "text")
       const hasContent = textParts.some((part) => part.text.includes("special content"))
       expect(hasContent).toBe(true)

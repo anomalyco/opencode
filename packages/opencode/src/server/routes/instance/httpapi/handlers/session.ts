@@ -105,7 +105,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       }
 
       const page = yield* SessionError.mapStorageNotFound(
-        MessageV2.pageEffect({
+        MessageV2.page({
           sessionID: ctx.params.sessionID,
           limit: ctx.query.limit,
           before: ctx.query.before,
@@ -132,7 +132,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID; messageID: MessageID }
     }) {
       return yield* SessionError.mapStorageNotFound(
-        MessageV2.getEffect({ sessionID: ctx.params.sessionID, messageID: ctx.params.messageID }),
+        MessageV2.get({ sessionID: ctx.params.sessionID, messageID: ctx.params.messageID }),
       )
     })
 
