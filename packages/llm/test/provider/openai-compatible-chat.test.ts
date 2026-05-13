@@ -231,7 +231,7 @@ describe("OpenAI-compatible Chat route", () => {
 
       expect(response.text).toBe("Hello!")
       expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
-      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "stop" })
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
     }),
   )
 })

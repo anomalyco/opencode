@@ -94,6 +94,7 @@ export const layer = Layer.effect(
                         tokens_reasoning: value.tokens.reasoning,
                         tokens_cache_read: value.tokens.cache.read,
                         tokens_cache_write: value.tokens.cache.write,
+                        time_updated: sql`${SessionTable.time_updated}`,
                       })
                       .where(eq(SessionTable.id, sessionID))
                       .run()
@@ -145,7 +146,9 @@ export const layer = Layer.effect(
         )
       }
     }).pipe(
-      Effect.tapCause((cause) => Effect.logError("failed to run data migrations", { cause })),
+      Effect.tapCause((cause) =>
+        Effect.logError("failed to run data migrations").pipe(Effect.annotateLogs("cause", cause)),
+      ),
       Effect.ignore,
       Effect.forkScoped,
     )

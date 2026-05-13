@@ -80,7 +80,7 @@ export const finish = (
       usage: input.usage,
       providerMetadata: input.providerMetadata,
     }),
-    LLMEvent.requestFinish(input),
+    LLMEvent.finish(input),
   )
   return { ...stepped, stepStarted: false }
 }

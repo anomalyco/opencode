@@ -8,8 +8,7 @@ import type {
   ToolStatePending,
   ToolStateRunning,
 } from "@opencode-ai/sdk/v2"
-import { WithInstance } from "../../src/project/with-instance"
-import { tmpdir } from "../fixture/fixture"
+import { provideTestInstance, tmpdir } from "../fixture/fixture"
 
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
 type RequestPermissionParams = Parameters<AgentSideConnection["requestPermission"]>[0]
@@ -317,7 +316,7 @@ function createFakeAgent() {
 describe("acp.agent event subscription", () => {
   test("routes message.part.delta by the event sessionID (no cross-session pollution)", async () => {
     await using tmp = await tmpdir()
-    await WithInstance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, updates, stop } = createFakeAgent()
@@ -352,7 +351,7 @@ describe("acp.agent event subscription", () => {
 
   test("does not emit user_message_chunk for live prompt parts", async () => {
     await using tmp = await tmpdir()
-    await WithInstance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop } = createFakeAgent()
@@ -392,7 +391,7 @@ describe("acp.agent event subscription", () => {
 
   test("keeps concurrent sessions isolated when message.part.delta events are interleaved", async () => {
     await using tmp = await tmpdir()
-    await WithInstance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, chunks, stop } = createFakeAgent()
@@ -444,7 +443,7 @@ describe("acp.agent event subscription", () => {
 
   test("does not create additional event subscriptions on repeated loadSession()", async () => {
     await using tmp = await tmpdir()
-    await WithInstance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, calls, stop } = createFakeAgent()
@@ -466,7 +465,7 @@ describe("acp.agent event subscription", () => {
 
   test("permission.asked events are handled and replied", async () => {
     await using tmp = await tmpdir()
-    await WithInstance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const permissionReplies: string[] = []
@@ -505,7 +504,7 @@ describe("acp.agent event subscription", () => {
 
   test("permission prompt on session A does not block message updates for session B", async () => {
     await using tmp = await tmpdir()
-    await WithInstance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const permissionReplies: string[] = []
@@ -592,7 +591,7 @@ describe("acp.agent event subscription", () => {
 
   test("streams running bash output snapshots and de-dupes identical snapshots", async () => {
     await using tmp = await tmpdir()
-    await WithInstance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop } = createFakeAgent()
@@ -626,7 +625,7 @@ describe("acp.agent event subscription", () => {
 
   test("emits synthetic pending before first running update for any tool", async () => {
     await using tmp = await tmpdir()
-    await WithInstance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop } = createFakeAgent()
@@ -671,7 +670,7 @@ describe("acp.agent event subscription", () => {
 
   test("emits image attachments as ACP tool content blocks on live completed tool updates", async () => {
     await using tmp = await tmpdir()
-    await WithInstance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop } = createFakeAgent()
@@ -728,7 +727,7 @@ describe("acp.agent event subscription", () => {
 
   test("replays completed tool image attachments as ACP tool content blocks", async () => {
     await using tmp = await tmpdir()
-    await WithInstance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, sessionUpdates, stop, sdk } = createFakeAgent()
@@ -795,7 +794,7 @@ describe("acp.agent event subscription", () => {
 
   test("does not emit duplicate synthetic pending after replayed running tool", async () => {
     await using tmp = await tmpdir()
-    await WithInstance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop, sdk } = createFakeAgent()
@@ -854,7 +853,7 @@ describe("acp.agent event subscription", () => {
 
   test("clears bash snapshot marker on pending state", async () => {
     await using tmp = await tmpdir()
-    await WithInstance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop } = createFakeAgent()

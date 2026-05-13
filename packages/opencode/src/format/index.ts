@@ -1,6 +1,6 @@
 import { Effect, Layer, Context, Schema } from "effect"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { ChildProcess } from "effect/unstable/process"
+import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
 import path from "path"
 import { mergeDeep } from "remeda"
@@ -29,7 +29,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const appProcess = yield* AppProcess.Service
 
     const state = yield* InstanceState.make(
       Effect.fn("Format.state")(function* (ctx) {
@@ -81,8 +81,8 @@ export const layer = Layer.effect(
               log.info("running", { command: cmd })
               const replaced = cmd.map((x) => x.replace("$FILE", filepath))
               const dir = yield* InstanceState.directory
-              const code = yield* spawner
-                .spawn(
+              const result = yield* appProcess
+                .run(
                   ChildProcess.make(replaced[0]!, replaced.slice(1), {
                     cwd: dir,
                     env: item.environment,
@@ -93,21 +93,20 @@ export const layer = Layer.effect(
                   }),
                 )
                 .pipe(
-                  Effect.flatMap((handle) => handle.exitCode),
-                  Effect.scoped,
-                  Effect.catch(() =>
+                  Effect.catch((error) =>
                     Effect.sync(() => {
                       log.error("failed to format file", {
                         error: "spawn failed",
                         command: cmd,
                         ...item.environment,
                         file: filepath,
+                        cause: error.message,
                       })
-                      return ChildProcessSpawner.ExitCode(1)
+                      return undefined
                     }),
                   ),
                 )
-              if (code !== 0) {
+              if (result && result.exitCode !== 0) {
                 log.error("failed", {
                   command: cmd,
                   ...item.environment,
@@ -198,9 +197,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
-  Layer.provide(Config.defaultLayer),
-  Layer.provide(CrossSpawnSpawner.defaultLayer),
-)
+export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(AppProcess.defaultLayer))
 
 export * as Format from "."
