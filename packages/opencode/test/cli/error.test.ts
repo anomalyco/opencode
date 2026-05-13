@@ -39,6 +39,17 @@ describe("cli.error", () => {
     }
   })
 
+  test("preserves multiline JSONC diagnostics for tagged config errors", () => {
+    const data = {
+      path: "/tmp/opencode.jsonc",
+      message: '\n--- JSONC Input ---\n{\n  "model": \n}\n--- Errors ---\nValueExpected at line 3, column 1\n   Line 3: }\n          ^\n--- End ---',
+    }
+    const expected = `Config file at ${data.path} is not valid JSON(C): ${data.message}`
+
+    expect(FormatError({ name: "ConfigJsonError", data })).toBe(expected)
+    expect(FormatError({ _tag: "ConfigJsonError", ...data })).toBe(expected)
+  })
+
   test("formats account transport errors clearly", () => {
     const error = new AccountTransportError({
       method: "POST",
