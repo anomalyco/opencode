@@ -45,6 +45,7 @@ export const Flag = {
 
   OPENCODE_WORKSPACE_ID: process.env["OPENCODE_WORKSPACE_ID"],
   OPENCODE_EXPERIMENTAL_WORKSPACES: OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_WORKSPACES"),
+  OPENCODE_EXPERIMENTAL_CUSTOMIZE_SKILL: OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_CUSTOMIZE_SKILL"),
 
   // Evaluated at access time (not module load) because tests, the CLI, and
   // external tooling set these env vars at runtime.

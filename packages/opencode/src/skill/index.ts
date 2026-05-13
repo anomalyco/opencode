@@ -12,6 +12,7 @@ import { Config } from "@/config/config"
 import { ConfigMarkdown } from "@/config/markdown"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Glob } from "@opencode-ai/core/util/glob"
+import { withStatics } from "@opencode-ai/core/schema"
 import * as Log from "@opencode-ai/core/util/log"
 import { Discovery } from "./discovery"
 import CUSTOMIZE_OPENCODE_SKILL_BODY from "./prompt/customize-opencode.md" with { type: "text" }
@@ -39,7 +40,7 @@ export const Info = Schema.Struct({
   location: Schema.String,
   content: Schema.String,
   scope: Schema.Union([Schema.Literal("global"), Schema.Literal("project")]),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+}).pipe(withStatics(() => ({})))
 export type Info = Schema.Schema.Type<typeof Info>
 
 const Issue = Schema.StructWithRest(
@@ -271,7 +272,6 @@ export const layer = Layer.effect(
             content: CUSTOMIZE_OPENCODE_SKILL_BODY,
             scope: "global",
           }
-        }
         }
         yield* loadSkills(s, yield* InstanceState.get(discovered), bus)
         return s
