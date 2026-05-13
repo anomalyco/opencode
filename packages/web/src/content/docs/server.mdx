@@ -36,11 +36,46 @@ opencode serve --cors http://localhost:5173 --cors https://app.example.com
 
 ### Authentication
 
-Set `OPENCODE_SERVER_PASSWORD` to protect the server with HTTP basic auth. The username defaults to `opencode`, or set `OPENCODE_SERVER_USERNAME` to override it. This applies to both `opencode serve` and `opencode web`.
+By default the server is unsecured unless you configure authentication. Set `OPENCODE_SERVER_PASSWORD` to keep using HTTP Basic auth. The username defaults to `opencode`, or set `OPENCODE_SERVER_USERNAME` to override it. This applies to both `opencode serve` and `opencode web`.
 
 ```bash
 OPENCODE_SERVER_PASSWORD=your-password opencode serve
 ```
+
+For exposed servers, use OIDC:
+
+```bash
+OPENCODE_AUTH_MODE=oidc \
+OPENCODE_OIDC_ISSUER=https://id.example.com/application/o/opencode/ \
+OPENCODE_OIDC_CLIENT_ID=opencode \
+OPENCODE_OIDC_CLIENT_SECRET=secret \
+OPENCODE_AUTH_SESSION_SECRET=$(openssl rand -base64 32) \
+opencode serve --hostname 0.0.0.0 --port 4096
+```
+
+OIDC uses `/auth/login` and `/auth/callback` for browser sign-in, then stores a signed HTTP-only session cookie. `OPENCODE_AUTH_SESSION_SECRET` must be at least 32 characters; generate it with a password manager or `openssl rand -base64 32`. Set `OPENCODE_AUTH_COOKIE_SECURE=true` when serving over HTTPS. API clients can authenticate with `Authorization: Bearer <jwt>`; the token must be a JWT from the configured issuer. Use `OPENCODE_OIDC_ALLOWED_EMAILS`, `OPENCODE_OIDC_ALLOWED_DOMAINS`, or `OPENCODE_OIDC_ALLOWED_GROUPS` to restrict access.
+
+You can also configure auth in `opencode.json`:
+
+```json
+{
+  "server": {
+    "auth": {
+      "mode": "oidc",
+      "oidc": {
+        "issuer": "https://id.example.com/application/o/opencode/",
+        "clientID": "opencode",
+        "allowedDomains": ["example.com"]
+      },
+      "session": {
+        "secret": "replace-with-a-long-random-secret"
+      }
+    }
+  }
+}
+```
+
+The legacy `auth_token` query parameter is still accepted for Basic auth compatibility, but it is not recommended for exposed servers because URL credentials can leak through logs and browser history.
 
 ---
 
