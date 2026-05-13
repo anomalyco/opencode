@@ -2,7 +2,7 @@ import { Cause, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context, S
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Hash } from "@opencode-ai/core/util/hash"
@@ -58,12 +58,12 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Sn
 export const layer: Layer.Layer<
   Service,
   never,
-  AppFileSystem.Service | ChildProcessSpawner.ChildProcessSpawner | Config.Service
+  AppFileSystem.Service | AppProcess.Service | Config.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const appProcess = yield* AppProcess.Service
     const config = yield* Config.Service
     const locks = new Map<string, Semaphore.Semaphore>()
 
@@ -90,18 +90,20 @@ export const layer: Layer.Layer<
         const enc = new TextEncoder()
         const feed = (list: string[]) => Stream.make(enc.encode(list.join("\0") + "\0"))
 
-        const git = Effect.fnUntraced(
+        const gitWithStdin = Effect.fnUntraced(
           function* (
             cmd: string[],
-            opts?: { cwd?: string; env?: Record<string, string>; stdin?: ChildProcess.CommandInput },
+            opts: { cwd?: string; env?: Record<string, string>; stdin: ChildProcess.CommandInput },
           ) {
+            // stdin-feed calls still need raw spawn — AppProcess.run does not yet
+            // expose a stdin Stream API. Tracked as future AppProcess helper.
             const proc = ChildProcess.make("git", cmd, {
-              cwd: opts?.cwd,
-              env: opts?.env,
+              cwd: opts.cwd,
+              env: opts.env,
               extendEnv: true,
-              stdin: opts?.stdin,
+              stdin: opts.stdin,
             })
-            const handle = yield* spawner.spawn(proc)
+            const handle = yield* appProcess.spawn(proc)
             const [text, stderr] = yield* Effect.all(
               [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
               { concurrency: 2 },
@@ -119,9 +121,33 @@ export const layer: Layer.Layer<
           ),
         )
 
+        const git = Effect.fnUntraced(
+          function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string> }) {
+            const result = yield* appProcess.run(
+              ChildProcess.make("git", cmd, {
+                cwd: opts?.cwd,
+                env: opts?.env,
+                extendEnv: true,
+              }),
+            )
+            return {
+              code: ChildProcessSpawner.ExitCode(result.exitCode),
+              text: result.stdout.toString("utf8"),
+              stderr: result.stderr.toString("utf8"),
+            } satisfies GitResult
+          },
+          Effect.catch((err) =>
+            Effect.succeed({
+              code: ChildProcessSpawner.ExitCode(1),
+              text: "",
+              stderr: err instanceof Error ? err.message : String(err),
+            }),
+          ),
+        )
+
         const ignore = Effect.fnUntraced(function* (files: string[]) {
           if (!files.length) return new Set<string>()
-          const check = yield* git(
+          const check = yield* gitWithStdin(
             [
               ...quote,
               "--git-dir",
@@ -144,7 +170,7 @@ export const layer: Layer.Layer<
 
         const drop = Effect.fnUntraced(function* (files: string[]) {
           if (!files.length) return
-          yield* git(
+          yield* gitWithStdin(
             [
               ...cfg,
               ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
@@ -158,7 +184,7 @@ export const layer: Layer.Layer<
 
         const stage = Effect.fnUntraced(function* (files: string[]) {
           if (!files.length) return
-          const result = yield* git(
+          const result = yield* gitWithStdin(
             [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
             {
               cwd: state.directory,
@@ -565,12 +591,14 @@ export const layer: Layer.Layer<
                   })
                   if (!refs.length) return new Map<string, { before: string; after: string }>()
 
+                  // cat-file --batch is a stdin-feed call — kept on raw spawn
+                  // until AppProcess.run exposes a stdin Stream API.
                   const proc = ChildProcess.make("git", [...cfg, ...args(["cat-file", "--batch"])], {
                     cwd: state.directory,
                     extendEnv: true,
                     stdin: Stream.make(new TextEncoder().encode(refs.map((item) => item.ref).join("\n") + "\n")),
                   })
-                  const handle = yield* spawner.spawn(proc)
+                  const handle = yield* appProcess.spawn(proc)
                   const [out, err] = yield* Effect.all(
                     [Stream.mkUint8Array(handle.stdout), Stream.mkString(Stream.decodeText(handle.stderr))],
                     { concurrency: 2 },
@@ -767,7 +795,7 @@ export const layer: Layer.Layer<
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(CrossSpawnSpawner.defaultLayer),
+  Layer.provide(AppProcess.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Config.defaultLayer),
 )
