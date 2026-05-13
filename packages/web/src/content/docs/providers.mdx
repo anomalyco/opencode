@@ -2274,6 +2274,50 @@ The `limit` fields allow OpenCode to understand how much context you have left. 
 
 ---
 
+##### Responses API support
+
+The examples above use `@ai-sdk/openai-compatible`, which connects to the **Chat Completions API** (`/v1/chat/completions`). This works for most models, but some features and models require the **Responses API** (`/v1/responses`):
+
+- **Codex models** like `gpt-5.3-codex` are only available through the Responses API.
+- **Reasoning summaries** (`reasoningSummary`) are exclusive to the Responses API.
+- **Message phases** (`commentary` / `final_answer`) for Codex models require the Responses API.
+
+If your server supports the OpenAI Responses API endpoint (`/v1/responses`) (e.g. [LiteLLM](https://docs.litellm.ai), [OpenRouter](https://openrouter.ai)), use `@ai-sdk/openai` instead of `@ai-sdk/openai-compatible`:
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "my-proxy": {
+      "npm": "@ai-sdk/openai",
+      "name": "My Proxy",
+      "options": {
+        "baseURL": "http://localhost:4000/v1"
+      },
+      "models": {
+        "gpt-5.3-codex": {
+          "name": "GPT-5.3 Codex"
+        },
+        "gpt-5-mini": {
+          "name": "GPT-5 Mini"
+        }
+      }
+    }
+  }
+}
+```
+
+| SDK package | API endpoint | Use when |
+| --- | --- | --- |
+| `@ai-sdk/openai-compatible` | `/v1/chat/completions` | Your provider only supports Chat Completions |
+| `@ai-sdk/openai` | `/v1/responses` | Your provider supports the Responses API and you need Codex models, reasoning summaries, or message phases |
+
+:::tip
+When in doubt, try `@ai-sdk/openai` first — it supports the latest OpenAI features. Fall back to `@ai-sdk/openai-compatible` if your provider doesn't support the Responses API.
+:::
+
+---
+
 ## Troubleshooting
 
 If you are having trouble with configuring a provider, check the following:
