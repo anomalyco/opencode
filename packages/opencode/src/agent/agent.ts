@@ -1,4 +1,5 @@
 import { Config } from "@/config/config"
+import { ConfigPermission } from "@/config/permission"
 import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { generateObject, streamObject, type ModelMessage } from "ai"
@@ -117,7 +118,10 @@ export const layer = Layer.effect(
           },
         })
 
-        const user = Permission.fromConfig(cfg.permission ?? {})
+        // Convert permission layers to rulesets and merge them
+        // Each layer's rules come after the previous, so later configs override earlier ones
+        const layers = ConfigPermission.toLayers(cfg.permission)
+        const user = Permission.merge(...layers.map((p) => Permission.fromConfig(p)))
 
         const agents: Record<string, Info> = {
           build: {

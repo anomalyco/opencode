@@ -153,6 +153,9 @@ declare module "sst" {
       "type": "sst.sst.Linkable"
       "value": string
     }
+    "Stat": {
+      "type": "sst.cloudflare.Worker"
+    }
     "Teams": {
       "type": "sst.cloudflare.SolidStart"
       "url": string

@@ -1265,7 +1265,10 @@ export type Config = {
       }
   instructions?: Array<string>
   layout?: LayoutConfig
-  permission?: PermissionConfig
+  /**
+   * Permission configuration. Accepts a single object (per-tool action map) or an array of layered configs; arrays are merged in order so later layers override earlier ones.
+   */
+  permission?: PermissionConfig | Array<PermissionConfig>
   tools?: {
     [key: string]: boolean
   }
@@ -1336,6 +1339,18 @@ export type Model = {
       read: number
       write: number
     }
+    tiers?: Array<{
+      input: number
+      output: number
+      cache: {
+        read: number
+        write: number
+      }
+      tier: {
+        type: "context"
+        size: number
+      }
+    }>
     experimentalOver200K?: {
       input: number
       output: number

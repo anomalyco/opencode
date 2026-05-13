@@ -1,8 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
-import { Cause, Effect, Exit, Fiber, Layer } from "effect"
-import fs from "fs/promises"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -48,10 +47,11 @@ import * as Database from "../../src/storage/db"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
 import { Reference } from "../../src/reference/reference"
-import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
+import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
 import { SyncEvent } from "@/sync"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 void Log.init({ print: false })
 
@@ -67,14 +67,6 @@ const summary = Layer.succeed(
 const ref = {
   providerID: ProviderID.make("test"),
   modelID: ModelID.make("test-model"),
-}
-
-function defer<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void
-  const promise = new Promise<T>((done) => {
-    resolve = done
-  })
-  return { promise, resolve }
 }
 
 function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
@@ -188,6 +180,7 @@ function makeHttp() {
     Layer.provide(Reference.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
+    Layer.provide(RuntimeFlags.layer()),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),
@@ -219,7 +212,7 @@ function makeHttp() {
 }
 
 const it = testEffect(makeHttp())
-const unix = process.platform !== "win32" ? it.live : it.live.skip
+const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 
 // Config that registers a custom "test" provider with a "test-model" model
 // so provider model lookup succeeds inside the loop.
@@ -266,6 +259,84 @@ function providerCfg(url: string) {
       },
     },
   }
+}
+
+const writeText = Effect.fn("test.writeText")(function* (file: string, text: string) {
+  const fs = yield* AppFileSystem.Service
+  yield* fs.writeWithDirs(file, text)
+})
+
+const ensureDir = Effect.fn("test.ensureDir")(function* (dir: string) {
+  const fs = yield* AppFileSystem.Service
+  yield* fs.ensureDir(dir)
+})
+
+const writeConfig = Effect.fn("test.writeConfig")(function* (dir: string, config: Partial<Config.Info>) {
+  yield* writeText(
+    path.join(dir, "opencode.json"),
+    JSON.stringify({ $schema: "https://opencode.ai/config.json", ...config }),
+  )
+})
+
+const useServerConfig = Effect.fn("test.useServerConfig")(function* (config: (url: string) => Partial<Config.Info>) {
+  const { directory: dir } = yield* TestInstance
+  const llm = yield* TestLLMServer
+  yield* writeConfig(dir, config(llm.url))
+  return { dir, llm }
+})
+
+const awaitWithTimeout = <A, E, R>(
+  self: Effect.Effect<A, E, R>,
+  message: string,
+  duration: Duration.Input = "2 seconds",
+) =>
+  self.pipe(
+    Effect.timeoutOrElse({
+      duration,
+      orElse: () => Effect.fail(new Error(message)),
+    }),
+  )
+
+const pollWithTimeout = <A, E, R>(
+  self: Effect.Effect<A | undefined, E, R>,
+  message: string,
+  duration: Duration.Input = "5 seconds",
+) =>
+  Effect.gen(function* () {
+    while (true) {
+      const result = yield* self
+      if (result !== undefined) return result
+      yield* Effect.sleep("20 millis")
+    }
+  }).pipe(
+    Effect.timeoutOrElse({
+      duration,
+      orElse: () => Effect.fail(new Error(message)),
+    }),
+  )
+
+const hasBash = Effect.sync(() => Bun.which("bash") !== null)
+
+const deferredAsPromise = <A>(deferred: Deferred.Deferred<A>): PromiseLike<A> => ({
+  then: (onfulfilled, onrejected) => {
+    Effect.runFork(
+      Deferred.await(deferred).pipe(
+        Effect.match({
+          onFailure: (error) => {
+            onrejected?.(error)
+          },
+          onSuccess: (value) => {
+            onfulfilled?.(value)
+          },
+        }),
+      ),
+    )
+    return deferredAsPromise(deferred) as PromiseLike<never>
+  },
+})
+
+const succeedVoid = (deferred: Deferred.Deferred<void>) => {
+  Effect.runSync(Deferred.succeed(deferred, void 0).pipe(Effect.ignore))
 }
 
 const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: string) {
@@ -344,9 +415,11 @@ const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
 
 // Loop semantics
 
-it.live("loop exits immediately when last assistant has stop finish", () =>
-  provideTmpdirServer(
-    Effect.fnUntraced(function* ({ llm }) {
+it.instance(
+  "loop exits immediately when last assistant has stop finish",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
       const chat = yield* sessions.create({ title: "Pinned" })
@@ -357,13 +430,14 @@ it.live("loop exits immediately when last assistant has stop finish", () =>
       if (result.info.role === "assistant") expect(result.info.finish).toBe("stop")
       expect(yield* llm.calls).toBe(0)
     }),
-    { git: true, config: providerCfg },
-  ),
+  { git: true },
 )
 
-it.live("loop calls LLM and returns assistant message", () =>
-  provideTmpdirServer(
-    Effect.fnUntraced(function* ({ llm }) {
+it.instance(
+  "loop calls LLM and returns assistant message",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
       const chat = yield* sessions.create({
@@ -384,13 +458,14 @@ it.live("loop calls LLM and returns assistant message", () =>
       expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
       expect(yield* llm.hits).toHaveLength(1)
     }),
-    { git: true, config: providerCfg },
-  ),
+  { git: true },
 )
 
-it.live("prompt emits v2 prompted and synthetic events", () =>
-  provideTmpdirServer(
-    Effect.fnUntraced(function* () {
+it.instance(
+  "prompt emits v2 prompted and synthetic events",
+  () =>
+    Effect.gen(function* () {
+      yield* useServerConfig(providerCfg)
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
       const chat = yield* sessions.create({ title: "Pinned" })
@@ -425,13 +500,14 @@ it.live("prompt emits v2 prompted and synthetic events", () =>
         ]),
       )
     }),
-    { git: true, config: providerCfg },
-  ),
+  { git: true },
 )
 
-it.live("static loop returns assistant text through local provider", () =>
-  provideTmpdirServer(
-    Effect.fnUntraced(function* ({ llm }) {
+it.instance(
+  "static loop returns assistant text through local provider",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
       const session = yield* sessions.create({
@@ -454,13 +530,14 @@ it.live("static loop returns assistant text through local provider", () =>
       expect(yield* llm.hits).toHaveLength(1)
       expect(yield* llm.pending).toBe(0)
     }),
-    { git: true, config: providerCfg },
-  ),
+  { git: true },
 )
 
-it.live("static loop consumes queued replies across turns", () =>
-  provideTmpdirServer(
-    Effect.fnUntraced(function* ({ llm }) {
+it.instance(
+  "static loop consumes queued replies across turns",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
       const session = yield* sessions.create({
@@ -497,13 +574,14 @@ it.live("static loop consumes queued replies across turns", () =>
       expect(yield* llm.hits).toHaveLength(2)
       expect(yield* llm.pending).toBe(0)
     }),
-    { git: true, config: providerCfg },
-  ),
+  { git: true },
 )
 
-it.live("loop continues when finish is tool-calls", () =>
-  provideTmpdirServer(
-    Effect.fnUntraced(function* ({ llm }) {
+it.instance(
+  "loop continues when finish is tool-calls",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
       const session = yield* sessions.create({
@@ -527,55 +605,56 @@ it.live("loop continues when finish is tool-calls", () =>
         expect(result.info.finish).toBe("stop")
       }
     }),
-    { git: true, config: providerCfg },
-  ),
+  { git: true },
 )
 
-it.live("glob tool keeps instance context during prompt runs", () =>
-  provideTmpdirServer(
-    ({ dir, llm }) =>
-      Effect.gen(function* () {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const session = yield* sessions.create({
-          title: "Glob context",
-          permission: [{ permission: "*", pattern: "*", action: "allow" }],
-        })
-        const file = path.join(dir, "probe.txt")
-        yield* Effect.promise(() => Bun.write(file, "probe"))
+it.instance(
+  "glob tool keeps instance context during prompt runs",
+  () =>
+    Effect.gen(function* () {
+      const { dir, llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Glob context",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      const file = path.join(dir, "probe.txt")
+      yield* writeText(file, "probe")
 
-        yield* prompt.prompt({
-          sessionID: session.id,
-          agent: "build",
-          noReply: true,
-          parts: [{ type: "text", text: "find text files" }],
-        })
-        yield* llm.tool("glob", { pattern: "**/*.txt" })
-        yield* llm.text("done")
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "find text files" }],
+      })
+      yield* llm.tool("glob", { pattern: "**/*.txt" })
+      yield* llm.text("done")
 
-        const result = yield* prompt.loop({ sessionID: session.id })
-        expect(result.info.role).toBe("assistant")
+      const result = yield* prompt.loop({ sessionID: session.id })
+      expect(result.info.role).toBe("assistant")
 
-        const msgs = yield* MessageV2.filterCompactedEffect(session.id)
-        const tool = msgs
-          .flatMap((msg) => msg.parts)
-          .find(
-            (part): part is CompletedToolPart =>
-              part.type === "tool" && part.tool === "glob" && part.state.status === "completed",
-          )
-        if (!tool) return
+      const msgs = yield* MessageV2.filterCompactedEffect(session.id)
+      const tool = msgs
+        .flatMap((msg) => msg.parts)
+        .find(
+          (part): part is CompletedToolPart =>
+            part.type === "tool" && part.tool === "glob" && part.state.status === "completed",
+        )
+      if (!tool) return
 
-        expect(tool.state.output).toContain(file)
-        expect(tool.state.output).not.toContain("No context found for instance")
-        expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
-      }),
-    { git: true, config: providerCfg },
-  ),
+      expect(tool.state.output).toContain(file)
+      expect(tool.state.output).not.toContain("No context found for instance")
+      expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+    }),
+  { git: true },
 )
 
-it.live("loop continues when finish is stop but assistant has tool parts", () =>
-  provideTmpdirServer(
-    Effect.fnUntraced(function* ({ llm }) {
+it.instance(
+  "loop continues when finish is stop but assistant has tool parts",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
       const session = yield* sessions.create({
@@ -599,13 +678,21 @@ it.live("loop continues when finish is stop but assistant has tool parts", () =>
         expect(result.info.finish).toBe("stop")
       }
     }),
-    { git: true, config: providerCfg },
-  ),
+  { git: true },
 )
 
-it.live("failed subtask preserves metadata on error tool state", () =>
-  provideTmpdirServer(
-    Effect.fnUntraced(function* ({ llm }) {
+it.instance(
+  "failed subtask preserves metadata on error tool state",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig((url) => ({
+        ...providerCfg(url),
+        agent: {
+          general: {
+            model: "test/missing-model",
+          },
+        },
+      }))
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
       const chat = yield* sessions.create({ title: "Pinned" })
@@ -638,479 +725,897 @@ it.live("failed subtask preserves metadata on error tool state", () =>
         modelID: ModelID.make("missing-model"),
       })
     }),
-    {
-      git: true,
-      config: (url) => ({
-        ...providerCfg(url),
-        agent: {
-          general: {
-            model: "test/missing-model",
-          },
-        },
-      }),
-    },
-  ),
+  { git: true },
 )
 
-it.live(
+it.instance(
   "running subtask preserves metadata after tool-call transition",
   () =>
-    provideTmpdirServer(
-      Effect.fnUntraced(function* ({ llm }) {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const chat = yield* sessions.create({ title: "Pinned" })
-        yield* llm.hang
-        const msg = yield* user(chat.id, "hello")
-        yield* addSubtask(chat.id, msg.id)
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* llm.hang
+      const msg = yield* user(chat.id, "hello")
+      yield* addSubtask(chat.id, msg.id)
 
-        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
 
-        const tool = yield* Effect.promise(async () => {
-          const end = Date.now() + 5_000
-          while (Date.now() < end) {
-            const msgs = await Effect.runPromise(MessageV2.filterCompactedEffect(chat.id))
-            const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
-            const tool = taskMsg?.parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
-            if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
-            await new Promise((done) => setTimeout(done, 20))
-          }
-          throw new Error("timed out waiting for running subtask metadata")
-        })
+      const tool = yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+          const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
+          const tool = taskMsg?.parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+          if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
+        }),
+        "timed out waiting for running subtask metadata",
+      )
 
-        if (tool.state.status !== "running") return
-        expect(typeof tool.state.metadata?.sessionId).toBe("string")
-        expect(tool.state.title).toBeDefined()
-        expect(tool.state.metadata?.model).toBeDefined()
+      if (tool.state.status !== "running") return
+      expect(typeof tool.state.metadata?.sessionId).toBe("string")
+      expect(tool.state.title).toBeDefined()
+      expect(tool.state.metadata?.model).toBeDefined()
 
-        yield* prompt.cancel(chat.id)
-        yield* Fiber.await(fiber)
-      }),
-      { git: true, config: providerCfg },
-    ),
+      yield* prompt.cancel(chat.id)
+      yield* Fiber.await(fiber)
+    }),
+  { git: true },
   5_000,
 )
 
-it.live(
+it.instance(
   "running task tool preserves metadata after tool-call transition",
   () =>
-    provideTmpdirServer(
-      Effect.fnUntraced(function* ({ llm }) {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const chat = yield* sessions.create({
-          title: "Pinned",
-          permission: [{ permission: "*", pattern: "*", action: "allow" }],
-        })
-        yield* llm.tool("task", {
-          description: "inspect bug",
-          prompt: "look into the cache key path",
-          subagent_type: "general",
-        })
-        yield* llm.hang
-        yield* user(chat.id, "hello")
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* llm.tool("task", {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+      })
+      yield* llm.hang
+      yield* user(chat.id, "hello")
 
-        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
 
-        const tool = yield* Effect.promise(async () => {
-          const end = Date.now() + 5_000
-          while (Date.now() < end) {
-            const msgs = await Effect.runPromise(MessageV2.filterCompactedEffect(chat.id))
-            const assistant = msgs.findLast((item) => item.info.role === "assistant" && item.info.agent === "build")
-            const tool = assistant?.parts.find(
-              (part): part is MessageV2.ToolPart => part.type === "tool" && part.tool === "task",
-            )
-            if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
-            await new Promise((done) => setTimeout(done, 20))
-          }
-          throw new Error("timed out waiting for running task metadata")
-        })
+      const tool = yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+          const assistant = msgs.findLast((item) => item.info.role === "assistant" && item.info.agent === "build")
+          const tool = assistant?.parts.find(
+            (part): part is MessageV2.ToolPart => part.type === "tool" && part.tool === "task",
+          )
+          if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
+        }),
+        "timed out waiting for running task metadata",
+      )
 
-        if (tool.state.status !== "running") return
-        expect(typeof tool.state.metadata?.sessionId).toBe("string")
-        expect(tool.state.title).toBe("inspect bug")
-        expect(tool.state.metadata?.model).toBeDefined()
+      if (tool.state.status !== "running") return
+      expect(typeof tool.state.metadata?.sessionId).toBe("string")
+      expect(tool.state.title).toBe("inspect bug")
+      expect(tool.state.metadata?.model).toBeDefined()
 
-        yield* prompt.cancel(chat.id)
-        yield* Fiber.await(fiber)
-      }),
-      { git: true, config: providerCfg },
-    ),
+      yield* prompt.cancel(chat.id)
+      yield* Fiber.await(fiber)
+    }),
+  { git: true },
   10_000,
 )
 
-it.live(
+it.instance(
   "loop sets status to busy then idle",
   () =>
-    provideTmpdirServer(
-      Effect.fnUntraced(function* ({ llm }) {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const status = yield* SessionStatus.Service
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const status = yield* SessionStatus.Service
 
-        yield* llm.hang
+      yield* llm.hang
 
-        const chat = yield* sessions.create({})
-        yield* user(chat.id, "hi")
+      const chat = yield* sessions.create({})
+      yield* user(chat.id, "hi")
 
-        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-        yield* llm.wait(1)
-        expect((yield* status.get(chat.id)).type).toBe("busy")
-        yield* prompt.cancel(chat.id)
-        yield* Fiber.await(fiber)
-        expect((yield* status.get(chat.id)).type).toBe("idle")
-      }),
-      { git: true, config: providerCfg },
-    ),
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
+      expect((yield* status.get(chat.id)).type).toBe("busy")
+      yield* prompt.cancel(chat.id)
+      yield* Fiber.await(fiber)
+      expect((yield* status.get(chat.id)).type).toBe("idle")
+    }),
+  { git: true },
   3_000,
 )
 
 // Cancel semantics
 
-it.live(
+it.instance(
   "cancel interrupts loop and resolves with an assistant message",
   () =>
-    provideTmpdirServer(
-      Effect.fnUntraced(function* ({ llm }) {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const chat = yield* sessions.create({ title: "Pinned" })
-        yield* seed(chat.id)
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* seed(chat.id)
 
-        yield* llm.hang
+      yield* llm.hang
 
-        yield* user(chat.id, "more")
+      yield* user(chat.id, "more")
 
-        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-        yield* llm.wait(1)
-        yield* prompt.cancel(chat.id)
-        const exit = yield* Fiber.await(fiber)
-        expect(Exit.isSuccess(exit)).toBe(true)
-        if (Exit.isSuccess(exit)) {
-          expect(exit.value.info.role).toBe("assistant")
-        }
-      }),
-      { git: true, config: providerCfg },
-    ),
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
+      yield* prompt.cancel(chat.id)
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (Exit.isSuccess(exit)) {
+        expect(exit.value.info.role).toBe("assistant")
+      }
+    }),
+  { git: true },
   3_000,
 )
 
-it.live(
+it.instance(
   "cancel records MessageAbortedError on interrupted process",
   () =>
-    provideTmpdirServer(
-      Effect.fnUntraced(function* ({ llm }) {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const chat = yield* sessions.create({ title: "Pinned" })
-        yield* llm.hang
-        yield* user(chat.id, "hello")
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* llm.hang
+      yield* user(chat.id, "hello")
 
-        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-        yield* llm.wait(1)
-        yield* prompt.cancel(chat.id)
-        const exit = yield* Fiber.await(fiber)
-        expect(Exit.isSuccess(exit)).toBe(true)
-        if (Exit.isSuccess(exit)) {
-          const info = exit.value.info
-          if (info.role === "assistant") {
-            expect(info.error?.name).toBe("MessageAbortedError")
-          }
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
+      yield* prompt.cancel(chat.id)
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (Exit.isSuccess(exit)) {
+        const info = exit.value.info
+        if (info.role === "assistant") {
+          expect(info.error?.name).toBe("MessageAbortedError")
         }
-      }),
-      { git: true, config: providerCfg },
-    ),
+      }
+    }),
+  { git: true },
   3_000,
 )
 
-it.live(
+it.instance(
   "cancel finalizes subtask tool state",
   () =>
-    provideTmpdirInstance(
-      () =>
-        Effect.gen(function* () {
-          const ready = defer<void>()
-          const aborted = defer<void>()
-          const registry = yield* ToolRegistry.Service
-          const { task } = yield* registry.named()
-          const original = task.execute
-          task.execute = (_args, ctx) =>
-            Effect.callback<never>((_resume) => {
-              ready.resolve()
-              ctx.abort.addEventListener("abort", () => aborted.resolve(), { once: true })
-              return Effect.sync(() => aborted.resolve())
-            })
-          yield* Effect.addFinalizer(() => Effect.sync(() => void (task.execute = original)))
+    Effect.gen(function* () {
+      const ready = yield* Deferred.make<void>()
+      const aborted = yield* Deferred.make<void>()
+      const registry = yield* ToolRegistry.Service
+      const { task } = yield* registry.named()
+      const original = task.execute
+      task.execute = (_args, ctx) =>
+        Effect.callback<never>((_resume) => {
+          ctx.abort.addEventListener("abort", () => succeedVoid(aborted), { once: true })
+          if (ctx.abort.aborted) succeedVoid(aborted)
+          succeedVoid(ready)
+          return Effect.sync(() => succeedVoid(aborted))
+        })
+      yield* Effect.addFinalizer(() => Effect.sync(() => void (task.execute = original)))
 
-          const { prompt, chat } = yield* boot()
-          const msg = yield* user(chat.id, "hello")
-          yield* addSubtask(chat.id, msg.id)
+      const { prompt, chat } = yield* boot()
+      const msg = yield* user(chat.id, "hello")
+      yield* addSubtask(chat.id, msg.id)
 
-          const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-          yield* Effect.promise(() => ready.promise)
-          yield* prompt.cancel(chat.id)
-          yield* Effect.promise(() => aborted.promise)
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* awaitWithTimeout(Deferred.await(ready), "timed out waiting for task tool to start", "10 seconds")
+      yield* prompt.cancel(chat.id)
 
-          const exit = yield* Fiber.await(fiber)
-          expect(Exit.isSuccess(exit)).toBe(true)
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      yield* awaitWithTimeout(Deferred.await(aborted), "timed out waiting for task tool abort", "10 seconds")
 
-          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
-          const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
-          expect(taskMsg?.info.role).toBe("assistant")
-          if (!taskMsg || taskMsg.info.role !== "assistant") return
+      const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+      const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
+      expect(taskMsg?.info.role).toBe("assistant")
+      if (!taskMsg || taskMsg.info.role !== "assistant") return
 
-          const tool = toolPart(taskMsg.parts)
-          expect(tool?.type).toBe("tool")
-          if (!tool) return
+      const tool = toolPart(taskMsg.parts)
+      expect(tool?.type).toBe("tool")
+      if (!tool) return
 
-          expect(tool.state.status).not.toBe("running")
-          expect(taskMsg.info.time.completed).toBeDefined()
-          expect(taskMsg.info.finish).toBeDefined()
-        }),
-      { git: true, config: cfg },
-    ),
+      expect(tool.state.status).not.toBe("running")
+      expect(taskMsg.info.time.completed).toBeDefined()
+      expect(taskMsg.info.finish).toBeDefined()
+    }),
+  { git: true, config: cfg },
   30_000,
 )
 
-it.live(
+it.instance(
   "cancel propagates from slash command subtask to child session",
   () =>
-    provideTmpdirServer(
-      Effect.fnUntraced(function* ({ llm }) {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const status = yield* SessionStatus.Service
-        const chat = yield* sessions.create({ title: "Pinned" })
-        yield* llm.hang
-        const msg = yield* user(chat.id, "hello")
-        yield* addSubtask(chat.id, msg.id)
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const status = yield* SessionStatus.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* llm.hang
+      const msg = yield* user(chat.id, "hello")
+      yield* addSubtask(chat.id, msg.id)
 
-        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-        yield* llm.wait(1)
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
 
-        const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
-        const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
-        const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
-        const sessionID = tool?.state.status === "running" ? tool.state.metadata?.sessionId : undefined
-        expect(typeof sessionID).toBe("string")
-        if (typeof sessionID !== "string") throw new Error("missing child session id")
-        const childID = SessionID.make(sessionID)
-        expect((yield* status.get(childID)).type).toBe("busy")
+      const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+      const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
+      const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
+      const sessionID = tool?.state.status === "running" ? tool.state.metadata?.sessionId : undefined
+      expect(typeof sessionID).toBe("string")
+      if (typeof sessionID !== "string") throw new Error("missing child session id")
+      const childID = SessionID.make(sessionID)
+      expect((yield* status.get(childID)).type).toBe("busy")
 
-        yield* prompt.cancel(chat.id)
-        const exit = yield* Fiber.await(fiber)
-        expect(Exit.isSuccess(exit)).toBe(true)
+      yield* prompt.cancel(chat.id)
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isSuccess(exit)).toBe(true)
 
-        expect((yield* status.get(chat.id)).type).toBe("idle")
-        expect((yield* status.get(childID)).type).toBe("idle")
-      }),
-      { git: true, config: providerCfg },
-    ),
+      expect((yield* status.get(chat.id)).type).toBe("idle")
+      expect((yield* status.get(childID)).type).toBe("idle")
+    }),
+  { git: true },
   10_000,
 )
 
-it.live(
+it.instance(
   "cancel with queued callers resolves all cleanly",
   () =>
-    provideTmpdirServer(
-      Effect.fnUntraced(function* ({ llm }) {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const chat = yield* sessions.create({ title: "Pinned" })
-        yield* llm.hang
-        yield* user(chat.id, "hello")
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* llm.hang
+      yield* user(chat.id, "hello")
 
-        const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-        yield* llm.wait(1)
-        const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
+      const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
+      const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* Effect.sleep(50)
 
-        yield* prompt.cancel(chat.id)
-        const [exitA, exitB] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
-        expect(Exit.isSuccess(exitA)).toBe(true)
-        expect(Exit.isSuccess(exitB)).toBe(true)
-        if (Exit.isSuccess(exitA) && Exit.isSuccess(exitB)) {
-          expect(exitA.value.info.id).toBe(exitB.value.info.id)
-        }
-      }),
-      { git: true, config: providerCfg },
-    ),
+      yield* prompt.cancel(chat.id)
+      const [exitA, exitB] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+      expect(Exit.isSuccess(exitA)).toBe(true)
+      expect(Exit.isSuccess(exitB)).toBe(true)
+      if (Exit.isSuccess(exitA) && Exit.isSuccess(exitB)) {
+        expect(exitA.value.info.id).toBe(exitB.value.info.id)
+      }
+    }),
+  { git: true },
   3_000,
 )
 
 // Queue semantics
 
-it.live("concurrent loop callers get same result", () =>
-  provideTmpdirInstance(
-    (_dir) =>
-      Effect.gen(function* () {
-        const { prompt, run, chat } = yield* boot()
-        yield* seed(chat.id, { finish: "stop" })
+it.instance(
+  "concurrent loop callers get same result",
+  () =>
+    Effect.gen(function* () {
+      const { prompt, run, chat } = yield* boot()
+      yield* seed(chat.id, { finish: "stop" })
 
-        const [a, b] = yield* Effect.all([prompt.loop({ sessionID: chat.id }), prompt.loop({ sessionID: chat.id })], {
-          concurrency: "unbounded",
-        })
+      const [a, b] = yield* Effect.all([prompt.loop({ sessionID: chat.id }), prompt.loop({ sessionID: chat.id })], {
+        concurrency: "unbounded",
+      })
 
-        expect(a.info.id).toBe(b.info.id)
-        expect(a.info.role).toBe("assistant")
-        yield* run.assertNotBusy(chat.id)
-      }),
-    { git: true },
-  ),
+      expect(a.info.id).toBe(b.info.id)
+      expect(a.info.role).toBe("assistant")
+      yield* run.assertNotBusy(chat.id)
+    }),
+  { git: true },
 )
 
-it.live(
+it.instance(
   "concurrent loop callers all receive same error result",
   () =>
-    provideTmpdirServer(
-      Effect.fnUntraced(function* ({ llm }) {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const chat = yield* sessions.create({ title: "Pinned" })
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
 
-        yield* llm.fail("boom")
-        yield* user(chat.id, "hello")
+      yield* llm.fail("boom")
+      yield* user(chat.id, "hello")
 
-        const [a, b] = yield* Effect.all([prompt.loop({ sessionID: chat.id }), prompt.loop({ sessionID: chat.id })], {
-          concurrency: "unbounded",
-        })
-        expect(a.info.id).toBe(b.info.id)
-        expect(a.info.role).toBe("assistant")
-      }),
-      { git: true, config: providerCfg },
-    ),
+      const [a, b] = yield* Effect.all([prompt.loop({ sessionID: chat.id }), prompt.loop({ sessionID: chat.id })], {
+        concurrency: "unbounded",
+      })
+      expect(a.info.id).toBe(b.info.id)
+      expect(a.info.role).toBe("assistant")
+    }),
+  { git: true },
   3_000,
 )
 
-it.live(
+it.instance(
   "prompt submitted during an active run is included in the next LLM input",
   () =>
-    provideTmpdirServer(
-      Effect.fnUntraced(function* ({ llm }) {
-        const gate = defer<void>()
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const chat = yield* sessions.create({ title: "Pinned" })
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const gate = yield* Deferred.make<void>()
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
 
-        yield* llm.hold("first", gate.promise)
-        yield* llm.text("second")
+      yield* llm.hold("first", deferredAsPromise(gate))
+      yield* llm.text("second")
 
-        const a = yield* prompt
-          .prompt({
-            sessionID: chat.id,
-            agent: "build",
-            model: ref,
-            parts: [{ type: "text", text: "first" }],
-          })
-          .pipe(Effect.forkChild)
-
-        yield* llm.wait(1)
-
-        const id = MessageID.ascending()
-        const b = yield* prompt
-          .prompt({
-            sessionID: chat.id,
-            messageID: id,
-            agent: "build",
-            model: ref,
-            parts: [{ type: "text", text: "second" }],
-          })
-          .pipe(Effect.forkChild)
-
-        yield* Effect.promise(async () => {
-          const end = Date.now() + 5000
-          while (Date.now() < end) {
-            const msgs = await Effect.runPromise(sessions.messages({ sessionID: chat.id }))
-            if (msgs.some((msg) => msg.info.role === "user" && msg.info.id === id)) return
-            await new Promise((done) => setTimeout(done, 20))
-          }
-          throw new Error("timed out waiting for second prompt to save")
+      const a = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "first" }],
         })
+        .pipe(Effect.forkChild)
 
-        gate.resolve()
+      yield* llm.wait(1)
 
-        const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
-        expect(Exit.isSuccess(ea)).toBe(true)
-        expect(Exit.isSuccess(eb)).toBe(true)
-        expect(yield* llm.calls).toBe(2)
+      const id = MessageID.ascending()
+      const b = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          messageID: id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "second" }],
+        })
+        .pipe(Effect.forkChild)
 
-        const msgs = yield* sessions.messages({ sessionID: chat.id })
-        const assistants = msgs.filter((msg) => msg.info.role === "assistant")
-        expect(assistants).toHaveLength(2)
-        const last = assistants.at(-1)
-        if (!last || last.info.role !== "assistant") throw new Error("expected second assistant")
-        expect(last.info.parentID).toBe(id)
-        expect(last.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
+      yield* pollWithTimeout(
+        sessions
+          .messages({ sessionID: chat.id })
+          .pipe(
+            Effect.map((msgs) =>
+              msgs.some((msg) => msg.info.role === "user" && msg.info.id === id) ? true : undefined,
+            ),
+          ),
+        "timed out waiting for second prompt to save",
+      )
 
-        const inputs = yield* llm.inputs
-        expect(inputs).toHaveLength(2)
-        expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("second")
-      }),
-      { git: true, config: providerCfg },
-    ),
+      yield* Deferred.succeed(gate, void 0)
+
+      const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+      expect(Exit.isSuccess(ea)).toBe(true)
+      expect(Exit.isSuccess(eb)).toBe(true)
+      expect(yield* llm.calls).toBe(2)
+
+      const msgs = yield* sessions.messages({ sessionID: chat.id })
+      const assistants = msgs.filter((msg) => msg.info.role === "assistant")
+      expect(assistants).toHaveLength(2)
+      const last = assistants.at(-1)
+      if (!last || last.info.role !== "assistant") throw new Error("expected second assistant")
+      expect(last.info.parentID).toBe(id)
+      expect(last.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
+
+      const inputs = yield* llm.inputs
+      expect(inputs).toHaveLength(2)
+      expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("second")
+    }),
+  { git: true },
   3_000,
 )
 
-it.live(
+it.instance(
   "assertNotBusy throws BusyError when loop running",
   () =>
-    provideTmpdirServer(
-      Effect.fnUntraced(function* ({ llm }) {
-        const prompt = yield* SessionPrompt.Service
-        const run = yield* SessionRunState.Service
-        const sessions = yield* Session.Service
-        yield* llm.hang
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const run = yield* SessionRunState.Service
+      const sessions = yield* Session.Service
+      yield* llm.hang
 
-        const chat = yield* sessions.create({})
-        yield* user(chat.id, "hi")
+      const chat = yield* sessions.create({})
+      yield* user(chat.id, "hi")
 
-        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-        yield* llm.wait(1)
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
 
-        const exit = yield* run.assertNotBusy(chat.id).pipe(Effect.exit)
-        expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit)) {
-          expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
-        }
+      const exit = yield* run.assertNotBusy(chat.id).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
+      }
 
-        yield* prompt.cancel(chat.id)
-        yield* Fiber.await(fiber)
-      }),
-      { git: true, config: providerCfg },
-    ),
+      yield* prompt.cancel(chat.id)
+      yield* Fiber.await(fiber)
+    }),
+  { git: true },
   3_000,
 )
 
-it.live("assertNotBusy succeeds when idle", () =>
-  provideTmpdirInstance(
-    (_dir) =>
-      Effect.gen(function* () {
-        const run = yield* SessionRunState.Service
-        const sessions = yield* Session.Service
+it.instance(
+  "assertNotBusy succeeds when idle",
+  () =>
+    Effect.gen(function* () {
+      const run = yield* SessionRunState.Service
+      const sessions = yield* Session.Service
 
-        const chat = yield* sessions.create({})
-        const exit = yield* run.assertNotBusy(chat.id).pipe(Effect.exit)
-        expect(Exit.isSuccess(exit)).toBe(true)
-      }),
-    { git: true },
-  ),
+      const chat = yield* sessions.create({})
+      const exit = yield* run.assertNotBusy(chat.id).pipe(Effect.exit)
+      expect(Exit.isSuccess(exit)).toBe(true)
+    }),
+  { git: true },
 )
 
 // Shell semantics
 
-it.live(
+it.instance(
   "shell rejects with BusyError when loop running",
   () =>
-    provideTmpdirServer(
-      Effect.fnUntraced(function* ({ llm }) {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const chat = yield* sessions.create({ title: "Pinned" })
-        yield* llm.hang
-        yield* user(chat.id, "hi")
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* llm.hang
+      yield* user(chat.id, "hi")
 
-        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-        yield* llm.wait(1)
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
+
+      const exit = yield* prompt.shell({ sessionID: chat.id, agent: "build", command: "echo hi" }).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
+      }
+
+      yield* prompt.cancel(chat.id)
+      yield* Fiber.await(fiber)
+    }),
+  { git: true },
+  3_000,
+)
+
+unix(
+  "shell captures stdout and stderr in completed tool output",
+  () =>
+    Effect.gen(function* () {
+      const { prompt, run, chat } = yield* boot()
+      const result = yield* prompt.shell({
+        sessionID: chat.id,
+        agent: "build",
+        command: "printf out && printf err >&2",
+      })
+
+      expect(result.info.role).toBe("assistant")
+      const tool = completedTool(result.parts)
+      if (!tool) return
+
+      expect(tool.state.output).toContain("out")
+      expect(tool.state.output).toContain("err")
+      expect(tool.state.metadata.output).toContain("out")
+      expect(tool.state.metadata.output).toContain("err")
+      yield* run.assertNotBusy(chat.id)
+    }),
+  { git: true, config: cfg },
+)
+
+unix(
+  "shell completes a fast command on the preferred shell",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const { prompt, run, chat } = yield* boot()
+      const result = yield* prompt.shell({
+        sessionID: chat.id,
+        agent: "build",
+        command: "pwd",
+      })
+
+      expect(result.info.role).toBe("assistant")
+      const tool = completedTool(result.parts)
+      if (!tool) return
+
+      expect(tool.state.input.command).toBe("pwd")
+      expect(tool.state.output).toContain(dir)
+      expect(tool.state.metadata.output).toContain(dir)
+      yield* run.assertNotBusy(chat.id)
+    }),
+  { git: true, config: cfg },
+)
+
+unix(
+  "shell uses configured shell over env shell",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        if (!(yield* hasBash)) return
+
+        const { prompt, chat } = yield* boot()
+        const result = yield* prompt.shell({
+          sessionID: chat.id,
+          agent: "build",
+          command: "[[ 1 -eq 1 ]] && printf configured",
+        })
+
+        const tool = completedTool(result.parts)
+        if (!tool) return
+        expect(tool.state.output).toContain("configured")
+      }),
+    ),
+  { git: true, config: { ...cfg, shell: "bash" } },
+  30_000,
+)
+
+unix(
+  "shell commands can change directory after startup",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const { prompt, run, chat } = yield* boot()
+      const parent = path.dirname(dir)
+      const result = yield* prompt.shell({
+        sessionID: chat.id,
+        agent: "build",
+        command: "cd .. && pwd",
+      })
+
+      expect(result.info.role).toBe("assistant")
+      const tool = completedTool(result.parts)
+      if (!tool) return
+
+      expect(tool.state.output).toContain(parent)
+      expect(tool.state.metadata.output).toContain(parent)
+      yield* run.assertNotBusy(chat.id)
+    }),
+  { git: true, config: cfg },
+)
+
+unix(
+  "shell lists files from the project directory",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const { prompt, run, chat } = yield* boot()
+      yield* writeText(path.join(dir, "README.md"), "# e2e\n")
+
+      const result = yield* prompt.shell({
+        sessionID: chat.id,
+        agent: "build",
+        command: "command ls",
+      })
+
+      expect(result.info.role).toBe("assistant")
+      const tool = completedTool(result.parts)
+      if (!tool) return
+
+      expect(tool.state.input.command).toBe("command ls")
+      expect(tool.state.output).toContain("README.md")
+      expect(tool.state.metadata.output).toContain("README.md")
+      yield* run.assertNotBusy(chat.id)
+    }),
+  { git: true, config: cfg },
+)
+
+unix(
+  "shell captures stderr from a failing command",
+  () =>
+    Effect.gen(function* () {
+      const { prompt, run, chat } = yield* boot()
+      const result = yield* prompt.shell({
+        sessionID: chat.id,
+        agent: "build",
+        command: "command -v __nonexistent_cmd_e2e__ || echo 'not found' >&2; exit 1",
+      })
+
+      expect(result.info.role).toBe("assistant")
+      const tool = completedTool(result.parts)
+      if (!tool) return
+
+      expect(tool.state.output).toContain("not found")
+      expect(tool.state.metadata.output).toContain("not found")
+      yield* run.assertNotBusy(chat.id)
+    }),
+  { git: true, config: cfg },
+)
+
+unix(
+  "shell updates running metadata before process exit",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        const { prompt, chat } = yield* boot()
+
+        const fiber = yield* prompt
+          .shell({ sessionID: chat.id, agent: "build", command: "printf first && sleep 0.2 && printf second" })
+          .pipe(Effect.forkChild)
+
+        yield* pollWithTimeout(
+          Effect.gen(function* () {
+            const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+            const taskMsg = msgs.find((item) => item.info.role === "assistant")
+            const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
+            if (tool?.state.status === "running" && tool.state.metadata?.output.includes("first")) return true
+          }),
+          "timed out waiting for running shell metadata",
+        )
+
+        const exit = yield* Fiber.await(fiber)
+        expect(Exit.isSuccess(exit)).toBe(true)
+      }),
+    ),
+  { git: true, config: cfg },
+  30_000,
+)
+
+it.instance(
+  "loop waits while shell runs and starts after shell exits",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* llm.text("after-shell")
+
+      const sh = yield* prompt
+        .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
+        .pipe(Effect.forkChild)
+      yield* Effect.sleep(50)
+
+      const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* Effect.sleep(50)
+
+      expect(yield* llm.calls).toBe(0)
+
+      yield* Fiber.await(sh)
+      const exit = yield* Fiber.await(loop)
+
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (Exit.isSuccess(exit)) {
+        expect(exit.value.info.role).toBe("assistant")
+        expect(exit.value.parts.some((part) => part.type === "text" && part.text === "after-shell")).toBe(true)
+      }
+      expect(yield* llm.calls).toBe(1)
+    }),
+  { git: true },
+  3_000,
+)
+
+it.instance(
+  "shell completion resumes queued loop callers",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* llm.text("done")
+
+      const sh = yield* prompt
+        .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
+        .pipe(Effect.forkChild)
+      yield* Effect.sleep(50)
+
+      const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* Effect.sleep(50)
+
+      expect(yield* llm.calls).toBe(0)
+
+      yield* Fiber.await(sh)
+      const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+
+      expect(Exit.isSuccess(ea)).toBe(true)
+      expect(Exit.isSuccess(eb)).toBe(true)
+      if (Exit.isSuccess(ea) && Exit.isSuccess(eb)) {
+        expect(ea.value.info.id).toBe(eb.value.info.id)
+        expect(ea.value.info.role).toBe("assistant")
+      }
+      expect(yield* llm.calls).toBe(1)
+    }),
+  { git: true },
+  3_000,
+)
+
+unix(
+  "command ! expansion uses configured shell over env shell",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        if (!(yield* hasBash)) return
+        const { llm } = yield* useServerConfig((url) => ({
+          ...providerCfg(url),
+          shell: "bash",
+          command: {
+            probe: {
+              template: "Probe: !`[[ 1 -eq 1 ]] && printf configured`",
+            },
+          },
+        }))
+
+        const { prompt, chat } = yield* boot()
+        yield* llm.text("done")
+
+        const result = yield* prompt.command({
+          sessionID: chat.id,
+          command: "probe",
+          arguments: "",
+        })
+
+        expect(result.info.role).toBe("assistant")
+        const inputs = yield* llm.inputs
+        expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("configured")
+      }),
+    ),
+  { git: true },
+  30_000,
+)
+
+unix(
+  "cancel interrupts shell and resolves cleanly",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        const { prompt, run, chat } = yield* boot()
+
+        const sh = yield* prompt
+          .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
+          .pipe(Effect.forkChild)
+        yield* Effect.sleep(50)
+
+        yield* prompt.cancel(chat.id)
+
+        const status = yield* SessionStatus.Service
+        expect((yield* status.get(chat.id)).type).toBe("idle")
+        const busy = yield* run.assertNotBusy(chat.id).pipe(Effect.exit)
+        expect(Exit.isSuccess(busy)).toBe(true)
+
+        const exit = yield* Fiber.await(sh)
+        expect(Exit.isSuccess(exit)).toBe(true)
+        if (Exit.isSuccess(exit)) {
+          expect(exit.value.info.role).toBe("assistant")
+          const tool = completedTool(exit.value.parts)
+          if (tool) {
+            expect(tool.state.output).toContain("User aborted the command")
+          }
+        }
+      }),
+    ),
+  { git: true, config: cfg },
+  30_000,
+)
+
+unix(
+  "cancel persists aborted shell result when shell ignores TERM",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        const { prompt, chat } = yield* boot()
+
+        const sh = yield* prompt
+          .shell({ sessionID: chat.id, agent: "build", command: "trap '' TERM; sleep 30" })
+          .pipe(Effect.forkChild)
+        yield* Effect.sleep(50)
+
+        yield* prompt.cancel(chat.id)
+
+        const exit = yield* Fiber.await(sh)
+        expect(Exit.isSuccess(exit)).toBe(true)
+        if (Exit.isSuccess(exit)) {
+          expect(exit.value.info.role).toBe("assistant")
+          const tool = completedTool(exit.value.parts)
+          if (tool) {
+            expect(tool.state.output).toContain("User aborted the command")
+          }
+        }
+      }),
+    ),
+  { git: true, config: cfg },
+  30_000,
+)
+
+unix(
+  "cancel finalizes interrupted bash tool output through normal truncation",
+  () =>
+    Effect.gen(function* () {
+      const { dir, llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Interrupted bash truncation",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "run bash" }],
+      })
+
+      yield* llm.tool("bash", {
+        command:
+          'i=0; while [ "$i" -lt 4000 ]; do printf "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx %05d\\n" "$i"; i=$((i + 1)); done; sleep 30',
+        description: "Print many lines",
+        timeout: 30_000,
+        workdir: path.resolve(dir),
+      })
+
+      const run = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
+      yield* Effect.sleep(150)
+      yield* prompt.cancel(chat.id)
+
+      const exit = yield* Fiber.await(run)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (Exit.isFailure(exit)) return
+
+      const tool = completedTool(exit.value.parts)
+      if (!tool) return
+
+      expect(tool.state.metadata.truncated).toBe(true)
+      expect(typeof tool.state.metadata.outputPath).toBe("string")
+      expect(tool.state.output).toMatch(/\.\.\.output truncated\.\.\./)
+      expect(tool.state.output).toMatch(/Full output saved to:\s+\S+/)
+      expect(tool.state.output).not.toContain("Tool execution aborted")
+    }),
+  { git: true },
+  30_000,
+)
+
+unix(
+  "cancel interrupts loop queued behind shell",
+  () =>
+    Effect.gen(function* () {
+      const { prompt, chat } = yield* boot()
+
+      const sh = yield* prompt.shell({ sessionID: chat.id, agent: "build", command: "sleep 30" }).pipe(Effect.forkChild)
+      yield* Effect.sleep(50)
+
+      const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* Effect.sleep(50)
+
+      yield* prompt.cancel(chat.id)
+
+      const exit = yield* Fiber.await(loop)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (Exit.isSuccess(exit)) {
+        const tool = completedTool(exit.value.parts)
+        expect(tool?.state.output).toContain("User aborted the command")
+      }
+
+      yield* Fiber.await(sh)
+    }),
+  { git: true, config: cfg },
+  30_000,
+)
+
+unix(
+  "shell rejects when another shell is already running",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        const { prompt, chat } = yield* boot()
+
+        const a = yield* prompt
+          .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
+          .pipe(Effect.forkChild)
+        yield* Effect.sleep(50)
 
         const exit = yield* prompt.shell({ sessionID: chat.id, agent: "build", command: "echo hi" }).pipe(Effect.exit)
         expect(Exit.isFailure(exit)).toBe(true)
@@ -1119,884 +1624,390 @@ it.live(
         }
 
         yield* prompt.cancel(chat.id)
-        yield* Fiber.await(fiber)
+        yield* Fiber.await(a)
       }),
-      { git: true, config: providerCfg },
     ),
-  3_000,
-)
-
-unix("shell captures stdout and stderr in completed tool output", () =>
-  provideTmpdirInstance(
-    (_dir) =>
-      Effect.gen(function* () {
-        const { prompt, run, chat } = yield* boot()
-        const result = yield* prompt.shell({
-          sessionID: chat.id,
-          agent: "build",
-          command: "printf out && printf err >&2",
-        })
-
-        expect(result.info.role).toBe("assistant")
-        const tool = completedTool(result.parts)
-        if (!tool) return
-
-        expect(tool.state.output).toContain("out")
-        expect(tool.state.output).toContain("err")
-        expect(tool.state.metadata.output).toContain("out")
-        expect(tool.state.metadata.output).toContain("err")
-        yield* run.assertNotBusy(chat.id)
-      }),
-    { git: true, config: cfg },
-  ),
-)
-
-unix("shell completes a fast command on the preferred shell", () =>
-  provideTmpdirInstance(
-    (dir) =>
-      Effect.gen(function* () {
-        const { prompt, run, chat } = yield* boot()
-        const result = yield* prompt.shell({
-          sessionID: chat.id,
-          agent: "build",
-          command: "pwd",
-        })
-
-        expect(result.info.role).toBe("assistant")
-        const tool = completedTool(result.parts)
-        if (!tool) return
-
-        expect(tool.state.input.command).toBe("pwd")
-        expect(tool.state.output).toContain(dir)
-        expect(tool.state.metadata.output).toContain(dir)
-        yield* run.assertNotBusy(chat.id)
-      }),
-    { git: true, config: cfg },
-  ),
-)
-
-unix(
-  "shell uses configured shell over env shell",
-  () =>
-    withSh(() =>
-      provideTmpdirInstance(
-        (_dir) =>
-          Effect.gen(function* () {
-            if (!Bun.which("bash")) return
-
-            const { prompt, chat } = yield* boot()
-            const result = yield* prompt.shell({
-              sessionID: chat.id,
-              agent: "build",
-              command: "[[ 1 -eq 1 ]] && printf configured",
-            })
-
-            const tool = completedTool(result.parts)
-            if (!tool) return
-            expect(tool.state.output).toContain("configured")
-          }),
-        { git: true, config: { ...cfg, shell: "bash" } },
-      ),
-    ),
-  30_000,
-)
-
-unix("shell commands can change directory after startup", () =>
-  provideTmpdirInstance(
-    (dir) =>
-      Effect.gen(function* () {
-        const { prompt, run, chat } = yield* boot()
-        const parent = path.dirname(dir)
-        const result = yield* prompt.shell({
-          sessionID: chat.id,
-          agent: "build",
-          command: "cd .. && pwd",
-        })
-
-        expect(result.info.role).toBe("assistant")
-        const tool = completedTool(result.parts)
-        if (!tool) return
-
-        expect(tool.state.output).toContain(parent)
-        expect(tool.state.metadata.output).toContain(parent)
-        yield* run.assertNotBusy(chat.id)
-      }),
-    { git: true, config: cfg },
-  ),
-)
-
-unix("shell lists files from the project directory", () =>
-  provideTmpdirInstance(
-    (dir) =>
-      Effect.gen(function* () {
-        const { prompt, run, chat } = yield* boot()
-        yield* Effect.promise(() => Bun.write(path.join(dir, "README.md"), "# e2e\n"))
-
-        const result = yield* prompt.shell({
-          sessionID: chat.id,
-          agent: "build",
-          command: "command ls",
-        })
-
-        expect(result.info.role).toBe("assistant")
-        const tool = completedTool(result.parts)
-        if (!tool) return
-
-        expect(tool.state.input.command).toBe("command ls")
-        expect(tool.state.output).toContain("README.md")
-        expect(tool.state.metadata.output).toContain("README.md")
-        yield* run.assertNotBusy(chat.id)
-      }),
-    { git: true, config: cfg },
-  ),
-)
-
-unix("shell captures stderr from a failing command", () =>
-  provideTmpdirInstance(
-    (_dir) =>
-      Effect.gen(function* () {
-        const { prompt, run, chat } = yield* boot()
-        const result = yield* prompt.shell({
-          sessionID: chat.id,
-          agent: "build",
-          command: "command -v __nonexistent_cmd_e2e__ || echo 'not found' >&2; exit 1",
-        })
-
-        expect(result.info.role).toBe("assistant")
-        const tool = completedTool(result.parts)
-        if (!tool) return
-
-        expect(tool.state.output).toContain("not found")
-        expect(tool.state.metadata.output).toContain("not found")
-        yield* run.assertNotBusy(chat.id)
-      }),
-    { git: true, config: cfg },
-  ),
-)
-
-unix(
-  "shell updates running metadata before process exit",
-  () =>
-    withSh(() =>
-      provideTmpdirInstance(
-        (_dir) =>
-          Effect.gen(function* () {
-            const { prompt, chat } = yield* boot()
-
-            const fiber = yield* prompt
-              .shell({ sessionID: chat.id, agent: "build", command: "printf first && sleep 0.2 && printf second" })
-              .pipe(Effect.forkChild)
-
-            yield* Effect.promise(async () => {
-              const start = Date.now()
-              while (Date.now() - start < 5000) {
-                const msgs = await MessageV2.filterCompacted(MessageV2.stream(chat.id))
-                const taskMsg = msgs.find((item) => item.info.role === "assistant")
-                const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
-                if (tool?.state.status === "running" && tool.state.metadata?.output.includes("first")) return
-                await new Promise((done) => setTimeout(done, 20))
-              }
-              throw new Error("timed out waiting for running shell metadata")
-            })
-
-            const exit = yield* Fiber.await(fiber)
-            expect(Exit.isSuccess(exit)).toBe(true)
-          }),
-        { git: true, config: cfg },
-      ),
-    ),
-  30_000,
-)
-
-it.live(
-  "loop waits while shell runs and starts after shell exits",
-  () =>
-    provideTmpdirServer(
-      Effect.fnUntraced(function* ({ llm }) {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const chat = yield* sessions.create({
-          title: "Pinned",
-          permission: [{ permission: "*", pattern: "*", action: "allow" }],
-        })
-        yield* llm.text("after-shell")
-
-        const sh = yield* prompt
-          .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
-          .pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
-
-        const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
-
-        expect(yield* llm.calls).toBe(0)
-
-        yield* Fiber.await(sh)
-        const exit = yield* Fiber.await(loop)
-
-        expect(Exit.isSuccess(exit)).toBe(true)
-        if (Exit.isSuccess(exit)) {
-          expect(exit.value.info.role).toBe("assistant")
-          expect(exit.value.parts.some((part) => part.type === "text" && part.text === "after-shell")).toBe(true)
-        }
-        expect(yield* llm.calls).toBe(1)
-      }),
-      { git: true, config: providerCfg },
-    ),
-  3_000,
-)
-
-it.live(
-  "shell completion resumes queued loop callers",
-  () =>
-    provideTmpdirServer(
-      Effect.fnUntraced(function* ({ llm }) {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const chat = yield* sessions.create({
-          title: "Pinned",
-          permission: [{ permission: "*", pattern: "*", action: "allow" }],
-        })
-        yield* llm.text("done")
-
-        const sh = yield* prompt
-          .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
-          .pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
-
-        const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-        const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
-
-        expect(yield* llm.calls).toBe(0)
-
-        yield* Fiber.await(sh)
-        const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
-
-        expect(Exit.isSuccess(ea)).toBe(true)
-        expect(Exit.isSuccess(eb)).toBe(true)
-        if (Exit.isSuccess(ea) && Exit.isSuccess(eb)) {
-          expect(ea.value.info.id).toBe(eb.value.info.id)
-          expect(ea.value.info.role).toBe("assistant")
-        }
-        expect(yield* llm.calls).toBe(1)
-      }),
-      { git: true, config: providerCfg },
-    ),
-  3_000,
-)
-
-unix(
-  "command ! expansion uses configured shell over env shell",
-  () =>
-    withSh(() =>
-      provideTmpdirServer(
-        ({ llm }) =>
-          Effect.gen(function* () {
-            if (!Bun.which("bash")) return
-
-            const { prompt, chat } = yield* boot()
-            yield* llm.text("done")
-
-            const result = yield* prompt.command({
-              sessionID: chat.id,
-              command: "probe",
-              arguments: "",
-            })
-
-            expect(result.info.role).toBe("assistant")
-            const inputs = yield* llm.inputs
-            expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("configured")
-          }),
-        {
-          git: true,
-          config: (url) => ({
-            ...providerCfg(url),
-            shell: "bash",
-            command: {
-              probe: {
-                template: "Probe: !`[[ 1 -eq 1 ]] && printf configured`",
-              },
-            },
-          }),
-        },
-      ),
-    ),
-  30_000,
-)
-
-unix(
-  "cancel interrupts shell and resolves cleanly",
-  () =>
-    withSh(() =>
-      provideTmpdirInstance(
-        (_dir) =>
-          Effect.gen(function* () {
-            const { prompt, run, chat } = yield* boot()
-
-            const sh = yield* prompt
-              .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
-              .pipe(Effect.forkChild)
-            yield* Effect.sleep(50)
-
-            yield* prompt.cancel(chat.id)
-
-            const status = yield* SessionStatus.Service
-            expect((yield* status.get(chat.id)).type).toBe("idle")
-            const busy = yield* run.assertNotBusy(chat.id).pipe(Effect.exit)
-            expect(Exit.isSuccess(busy)).toBe(true)
-
-            const exit = yield* Fiber.await(sh)
-            expect(Exit.isSuccess(exit)).toBe(true)
-            if (Exit.isSuccess(exit)) {
-              expect(exit.value.info.role).toBe("assistant")
-              const tool = completedTool(exit.value.parts)
-              if (tool) {
-                expect(tool.state.output).toContain("User aborted the command")
-              }
-            }
-          }),
-        { git: true, config: cfg },
-      ),
-    ),
-  30_000,
-)
-
-unix(
-  "cancel persists aborted shell result when shell ignores TERM",
-  () =>
-    withSh(() =>
-      provideTmpdirInstance(
-        (_dir) =>
-          Effect.gen(function* () {
-            const { prompt, chat } = yield* boot()
-
-            const sh = yield* prompt
-              .shell({ sessionID: chat.id, agent: "build", command: "trap '' TERM; sleep 30" })
-              .pipe(Effect.forkChild)
-            yield* Effect.sleep(50)
-
-            yield* prompt.cancel(chat.id)
-
-            const exit = yield* Fiber.await(sh)
-            expect(Exit.isSuccess(exit)).toBe(true)
-            if (Exit.isSuccess(exit)) {
-              expect(exit.value.info.role).toBe("assistant")
-              const tool = completedTool(exit.value.parts)
-              if (tool) {
-                expect(tool.state.output).toContain("User aborted the command")
-              }
-            }
-          }),
-        { git: true, config: cfg },
-      ),
-    ),
-  30_000,
-)
-
-unix(
-  "cancel finalizes interrupted bash tool output through normal truncation",
-  () =>
-    provideTmpdirServer(
-      ({ dir, llm }) =>
-        Effect.gen(function* () {
-          const prompt = yield* SessionPrompt.Service
-          const sessions = yield* Session.Service
-          const chat = yield* sessions.create({
-            title: "Interrupted bash truncation",
-            permission: [{ permission: "*", pattern: "*", action: "allow" }],
-          })
-
-          yield* prompt.prompt({
-            sessionID: chat.id,
-            agent: "build",
-            noReply: true,
-            parts: [{ type: "text", text: "run bash" }],
-          })
-
-          yield* llm.tool("bash", {
-            command:
-              'i=0; while [ "$i" -lt 4000 ]; do printf "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx %05d\\n" "$i"; i=$((i + 1)); done; sleep 30',
-            description: "Print many lines",
-            timeout: 30_000,
-            workdir: path.resolve(dir),
-          })
-
-          const run = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-          yield* llm.wait(1)
-          yield* Effect.sleep(150)
-          yield* prompt.cancel(chat.id)
-
-          const exit = yield* Fiber.await(run)
-          expect(Exit.isSuccess(exit)).toBe(true)
-          if (Exit.isFailure(exit)) return
-
-          const tool = completedTool(exit.value.parts)
-          if (!tool) return
-
-          expect(tool.state.metadata.truncated).toBe(true)
-          expect(typeof tool.state.metadata.outputPath).toBe("string")
-          expect(tool.state.output).toMatch(/\.\.\.output truncated\.\.\./)
-          expect(tool.state.output).toMatch(/Full output saved to:\s+\S+/)
-          expect(tool.state.output).not.toContain("Tool execution aborted")
-        }),
-      { git: true, config: providerCfg },
-    ),
-  30_000,
-)
-
-unix(
-  "cancel interrupts loop queued behind shell",
-  () =>
-    provideTmpdirInstance(
-      (_dir) =>
-        Effect.gen(function* () {
-          const { prompt, chat } = yield* boot()
-
-          const sh = yield* prompt
-            .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
-            .pipe(Effect.forkChild)
-          yield* Effect.sleep(50)
-
-          const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-          yield* Effect.sleep(50)
-
-          yield* prompt.cancel(chat.id)
-
-          const exit = yield* Fiber.await(loop)
-          expect(Exit.isSuccess(exit)).toBe(true)
-          if (Exit.isSuccess(exit)) {
-            const tool = completedTool(exit.value.parts)
-            expect(tool?.state.output).toContain("User aborted the command")
-          }
-
-          yield* Fiber.await(sh)
-        }),
-      { git: true, config: cfg },
-    ),
-  30_000,
-)
-
-unix(
-  "shell rejects when another shell is already running",
-  () =>
-    withSh(() =>
-      provideTmpdirInstance(
-        (_dir) =>
-          Effect.gen(function* () {
-            const { prompt, chat } = yield* boot()
-
-            const a = yield* prompt
-              .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
-              .pipe(Effect.forkChild)
-            yield* Effect.sleep(50)
-
-            const exit = yield* prompt
-              .shell({ sessionID: chat.id, agent: "build", command: "echo hi" })
-              .pipe(Effect.exit)
-            expect(Exit.isFailure(exit)).toBe(true)
-            if (Exit.isFailure(exit)) {
-              expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
-            }
-
-            yield* prompt.cancel(chat.id)
-            yield* Fiber.await(a)
-          }),
-        { git: true, config: cfg },
-      ),
-    ),
+  { git: true, config: cfg },
   30_000,
 )
 
 // Abort signal propagation tests for inline tool execution
 
-/** Override a tool's execute to hang until aborted. Returns ready/aborted defers and a finalizer. */
 function hangUntilAborted(tool: { execute: (...args: any[]) => any }) {
-  const ready = defer<void>()
-  const aborted = defer<void>()
-  const original = tool.execute
-  tool.execute = (_args: any, ctx: any) => {
-    ready.resolve()
-    ctx.abort.addEventListener("abort", () => aborted.resolve(), { once: true })
-    return Effect.callback<never>(() => {})
-  }
-  const restore = Effect.addFinalizer(() => Effect.sync(() => void (tool.execute = original)))
-  return { ready, aborted, restore }
+  return Effect.gen(function* () {
+    const ready = yield* Deferred.make<void>()
+    const aborted = yield* Deferred.make<void>()
+    const original = tool.execute
+    tool.execute = (_args: any, ctx: any) => {
+      ctx.abort.addEventListener("abort", () => succeedVoid(aborted), { once: true })
+      if (ctx.abort.aborted) succeedVoid(aborted)
+      succeedVoid(ready)
+      return Effect.callback<never>(() => Effect.sync(() => succeedVoid(aborted)))
+    }
+    const restore = Effect.addFinalizer(() => Effect.sync(() => void (tool.execute = original)))
+    return { ready, aborted, restore }
+  })
 }
 
-it.live(
+it.instance(
   "interrupt propagates abort signal to read tool via file part (text/plain)",
   () =>
-    provideTmpdirInstance(
-      (dir) =>
-        Effect.gen(function* () {
-          const registry = yield* ToolRegistry.Service
-          const { read } = yield* registry.named()
-          const { ready, aborted, restore } = hangUntilAborted(read)
-          yield* restore
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const registry = yield* ToolRegistry.Service
+      const { read } = yield* registry.named()
+      const { ready, restore } = yield* hangUntilAborted(read)
+      yield* restore
 
-          const prompt = yield* SessionPrompt.Service
-          const sessions = yield* Session.Service
-          const chat = yield* sessions.create({ title: "Abort Test" })
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Abort Test" })
 
-          const testFile = path.join(dir, "test.txt")
-          yield* Effect.promise(() => Bun.write(testFile, "hello world"))
+      const testFile = path.join(dir, "test.txt")
+      yield* writeText(testFile, "hello world")
 
-          const fiber = yield* prompt
-            .prompt({
-              sessionID: chat.id,
-              agent: "build",
-              parts: [
-                { type: "text", text: "read this" },
-                { type: "file", url: `file://${testFile}`, filename: "test.txt", mime: "text/plain" },
-              ],
-            })
-            .pipe(Effect.forkChild)
+      const fiber = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          agent: "build",
+          parts: [
+            { type: "text", text: "read this" },
+            { type: "file", url: `file://${testFile}`, filename: "test.txt", mime: "text/plain" },
+          ],
+        })
+        .pipe(Effect.forkChild)
 
-          yield* Effect.promise(() => ready.promise)
-          yield* Fiber.interrupt(fiber)
-
-          yield* Effect.promise(() =>
-            Promise.race([
-              aborted.promise,
-              new Promise<void>((_, reject) =>
-                setTimeout(() => reject(new Error("abort signal not propagated within 2s")), 2_000),
-              ),
-            ]),
-          )
-        }),
-      { git: true, config: cfg },
-    ),
+      yield* awaitWithTimeout(Deferred.await(ready), "timed out waiting for read tool to start", "10 seconds")
+      yield* prompt.cancel(chat.id)
+      yield* Fiber.interrupt(fiber)
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isFailure(exit)).toBe(true)
+    }),
+  { git: true, config: cfg },
   30_000,
 )
 
-it.live(
+it.instance(
   "interrupt propagates abort signal to read tool via file part (directory)",
   () =>
-    provideTmpdirInstance(
-      (dir) =>
-        Effect.gen(function* () {
-          const registry = yield* ToolRegistry.Service
-          const { read } = yield* registry.named()
-          const { ready, aborted, restore } = hangUntilAborted(read)
-          yield* restore
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const registry = yield* ToolRegistry.Service
+      const { read } = yield* registry.named()
+      const { ready, restore } = yield* hangUntilAborted(read)
+      yield* restore
 
-          const prompt = yield* SessionPrompt.Service
-          const sessions = yield* Session.Service
-          const chat = yield* sessions.create({ title: "Abort Test" })
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Abort Test" })
 
-          const fiber = yield* prompt
-            .prompt({
-              sessionID: chat.id,
-              agent: "build",
-              parts: [
-                { type: "text", text: "read this" },
-                { type: "file", url: `file://${dir}`, filename: "dir", mime: "application/x-directory" },
-              ],
-            })
-            .pipe(Effect.forkChild)
+      const fiber = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          agent: "build",
+          parts: [
+            { type: "text", text: "read this" },
+            { type: "file", url: `file://${dir}`, filename: "dir", mime: "application/x-directory" },
+          ],
+        })
+        .pipe(Effect.forkChild)
 
-          yield* Effect.promise(() => ready.promise)
-          yield* Fiber.interrupt(fiber)
-
-          yield* Effect.promise(() =>
-            Promise.race([
-              aborted.promise,
-              new Promise<void>((_, reject) =>
-                setTimeout(() => reject(new Error("abort signal not propagated within 2s")), 2_000),
-              ),
-            ]),
-          )
-        }),
-      { git: true, config: cfg },
-    ),
+      yield* awaitWithTimeout(Deferred.await(ready), "timed out waiting for read tool to start", "10 seconds")
+      yield* prompt.cancel(chat.id)
+      yield* Fiber.interrupt(fiber)
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isFailure(exit)).toBe(true)
+    }),
+  { git: true, config: cfg },
   30_000,
 )
 
 // Missing file handling
 
-it.live("does not fail the prompt when a file part is missing", () =>
-  provideTmpdirInstance(
-    (dir) =>
-      Effect.gen(function* () {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const session = yield* sessions.create({})
+it.instance(
+  "does not fail the prompt when a file part is missing",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
 
-        const missing = path.join(dir, "does-not-exist.ts")
-        const msg = yield* prompt.prompt({
-          sessionID: session.id,
-          agent: "build",
-          noReply: true,
-          parts: [
-            { type: "text", text: "please review @does-not-exist.ts" },
-            {
-              type: "file",
-              mime: "text/plain",
-              url: `file://${missing}`,
-              filename: "does-not-exist.ts",
-            },
-          ],
-        })
+      const missing = path.join(dir, "does-not-exist.ts")
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "please review @does-not-exist.ts" },
+          {
+            type: "file",
+            mime: "text/plain",
+            url: `file://${missing}`,
+            filename: "does-not-exist.ts",
+          },
+        ],
+      })
 
-        if (msg.info.role !== "user") throw new Error("expected user message")
-        const hasFailure = msg.parts.some(
-          (part) => part.type === "text" && part.synthetic && part.text.includes("Read tool failed to read"),
-        )
-        expect(hasFailure).toBe(true)
+      if (msg.info.role !== "user") throw new Error("expected user message")
+      const hasFailure = msg.parts.some(
+        (part) => part.type === "text" && part.synthetic && part.text.includes("Read tool failed to read"),
+      )
+      expect(hasFailure).toBe(true)
 
-        yield* sessions.remove(session.id)
-      }),
-    { git: true, config: cfg },
-  ),
+      yield* sessions.remove(session.id)
+    }),
+  { git: true, config: cfg },
 )
 
-it.live("keeps stored part order stable when file resolution is async", () =>
-  provideTmpdirInstance(
-    (dir) =>
-      Effect.gen(function* () {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const session = yield* sessions.create({})
+it.instance(
+  "keeps stored part order stable when file resolution is async",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
 
-        const missing = path.join(dir, "still-missing.ts")
-        const msg = yield* prompt.prompt({
-          sessionID: session.id,
-          agent: "build",
-          noReply: true,
-          parts: [
-            {
-              type: "file",
-              mime: "text/plain",
-              url: `file://${missing}`,
-              filename: "still-missing.ts",
-            },
-            { type: "text", text: "after-file" },
-          ],
-        })
+      const missing = path.join(dir, "still-missing.ts")
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          {
+            type: "file",
+            mime: "text/plain",
+            url: `file://${missing}`,
+            filename: "still-missing.ts",
+          },
+          { type: "text", text: "after-file" },
+        ],
+      })
 
-        if (msg.info.role !== "user") throw new Error("expected user message")
+      if (msg.info.role !== "user") throw new Error("expected user message")
 
-        const stored = MessageV2.get({
-          sessionID: session.id,
-          messageID: msg.info.id,
-        })
-        const text = stored.parts.filter((part) => part.type === "text").map((part) => part.text)
+      const stored = MessageV2.get({
+        sessionID: session.id,
+        messageID: msg.info.id,
+      })
+      const text = stored.parts.filter((part) => part.type === "text").map((part) => part.text)
 
-        expect(text[0]?.startsWith("Called the Read tool with the following input:")).toBe(true)
-        expect(text[1]?.includes("Read tool failed to read")).toBe(true)
-        expect(text[2]).toBe("after-file")
+      expect(text[0]?.startsWith("Called the Read tool with the following input:")).toBe(true)
+      expect(text[1]?.includes("Read tool failed to read")).toBe(true)
+      expect(text[2]).toBe("after-file")
 
-        yield* sessions.remove(session.id)
-      }),
-    { git: true, config: cfg },
-  ),
+      yield* sessions.remove(session.id)
+    }),
+  { git: true, config: cfg },
 )
 
-it.live("resolves configured reference mentions before workspace paths and agents", () =>
-  provideTmpdirInstance(
-    (dir) =>
-      Effect.gen(function* () {
-        const docs = path.join(dir, "external-docs")
-        yield* Effect.promise(() => fs.mkdir(path.join(docs, "guide"), { recursive: true }))
-        yield* Effect.promise(() => fs.mkdir(path.join(dir, "docs"), { recursive: true }))
-        yield* Effect.promise(() => Bun.write(path.join(docs, "README.md"), "reference readme"))
-        yield* Effect.promise(() => Bun.write(path.join(docs, "guide", "intro.md"), "reference intro"))
-        yield* Effect.promise(() => Bun.write(path.join(dir, "docs", "README.md"), "workspace readme"))
+it.instance(
+  "resolves configured reference mentions before workspace paths and agents",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const docs = path.join(dir, "external-docs")
+      yield* ensureDir(path.join(docs, "guide"))
+      yield* ensureDir(path.join(dir, "docs"))
+      yield* writeText(path.join(docs, "README.md"), "reference readme")
+      yield* writeText(path.join(docs, "guide", "intro.md"), "reference intro")
+      yield* writeText(path.join(dir, "docs", "README.md"), "workspace readme")
 
-        const prompt = yield* SessionPrompt.Service
-        const parts = yield* prompt.resolvePromptParts(
-          "Use @docs and @docs/README.md and @docs/guide and @docs/missing.md and @docs/README.md and @build",
-        )
-        const references = parts.filter(
-          (part): part is MessageV2.TextPartInput =>
-            part.type === "text" && part.synthetic === true && part.text.startsWith("Referenced configured reference "),
-        )
-        const files = parts.filter((part): part is MessageV2.FilePartInput => part.type === "file")
-        const agents = parts.filter((part): part is MessageV2.AgentPartInput => part.type === "agent")
-        const bare = references.find((part) => part.text.includes("@docs."))
-        const missing = references.find((part) => part.text.includes("@docs/missing.md"))
-        const guide = files.find((part) => part.filename === "docs/guide")
+      const prompt = yield* SessionPrompt.Service
+      const parts = yield* prompt.resolvePromptParts(
+        "Use @docs and @docs/README.md and @docs/guide and @docs/missing.md and @docs/README.md and @build",
+      )
+      const references = parts.filter(
+        (part): part is MessageV2.TextPartInput =>
+          part.type === "text" && part.synthetic === true && part.text.startsWith("Referenced configured reference "),
+      )
+      const files = parts.filter((part): part is MessageV2.FilePartInput => part.type === "file")
+      const agents = parts.filter((part): part is MessageV2.AgentPartInput => part.type === "agent")
+      const bare = references.find((part) => part.text.includes("@docs."))
+      const missing = references.find((part) => part.text.includes("@docs/missing.md"))
+      const guide = files.find((part) => part.filename === "docs/guide")
 
-        expect(references.length).toBe(2)
-        expect(bare?.metadata?.reference).toMatchObject({
-          name: "docs",
-          kind: "local",
-          path: docs,
-        })
-        expect(missing?.text).toContain("Path does not exist inside configured reference @docs")
-        expect(missing?.metadata?.reference).toMatchObject({
-          target: "missing.md",
-          targetPath: path.join(docs, "missing.md"),
-        })
+      expect(references.length).toBe(2)
+      expect(bare?.metadata?.reference).toMatchObject({
+        name: "docs",
+        kind: "local",
+        path: docs,
+      })
+      expect(missing?.text).toContain("Path does not exist inside configured reference @docs")
+      expect(missing?.metadata?.reference).toMatchObject({
+        target: "missing.md",
+        targetPath: path.join(docs, "missing.md"),
+      })
 
-        expect(files.length).toBe(2)
-        expect(files.map((file) => fileURLToPath(file.url)).sort()).toEqual(
-          [path.join(docs, "README.md"), path.join(docs, "guide")].sort(),
-        )
-        expect(guide?.mime).toBe("application/x-directory")
-        expect(agents.map((agent) => agent.name)).toEqual(["build"])
-      }),
-    {
-      git: true,
-      config: {
-        ...cfg,
-        reference: {
-          docs: "./external-docs",
-        },
+      expect(files.length).toBe(2)
+      expect(files.map((file) => fileURLToPath(file.url)).sort()).toEqual(
+        [path.join(docs, "README.md"), path.join(docs, "guide")].sort(),
+      )
+      expect(guide?.mime).toBe("application/x-directory")
+      expect(agents.map((agent) => agent.name)).toEqual(["build"])
+    }),
+  {
+    git: true,
+    config: {
+      ...cfg,
+      reference: {
+        docs: "./external-docs",
       },
     },
-  ),
+  },
 )
 
-it.live("injects metadata for bare configured reference mentions", () =>
-  provideTmpdirInstance(
-    (dir) =>
-      Effect.gen(function* () {
-        const docs = path.join(dir, "external-docs")
-        yield* Effect.promise(() => fs.mkdir(docs, { recursive: true }))
+it.instance(
+  "injects metadata for bare configured reference mentions",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const docs = path.join(dir, "external-docs")
+      yield* ensureDir(docs)
 
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const session = yield* sessions.create({})
-        const message = yield* prompt.prompt({
-          sessionID: session.id,
-          noReply: true,
-          parts: yield* prompt.resolvePromptParts("Use @docs for context"),
-        })
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+      const message = yield* prompt.prompt({
+        sessionID: session.id,
+        noReply: true,
+        parts: yield* prompt.resolvePromptParts("Use @docs for context"),
+      })
 
-        const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
-        const synthetic = stored.parts.filter(
-          (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
-        )
-        const reference = synthetic.find((part) => part.text.startsWith("Referenced configured reference @docs."))
+      const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+      const synthetic = stored.parts.filter(
+        (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
+      )
+      const reference = synthetic.find((part) => part.text.startsWith("Referenced configured reference @docs."))
 
-        expect(reference?.metadata?.reference).toMatchObject({ name: "docs", kind: "local", path: docs })
-        expect(synthetic.some((part) => part.text.includes(`Reference root: ${docs}`))).toBe(true)
-        expect(synthetic.some((part) => part.text.includes("subagent scout"))).toBe(true)
+      expect(reference?.metadata?.reference).toMatchObject({ name: "docs", kind: "local", path: docs })
+      expect(synthetic.some((part) => part.text.includes(`Reference root: ${docs}`))).toBe(true)
+      expect(synthetic.some((part) => part.text.includes("subagent scout"))).toBe(true)
 
-        yield* sessions.remove(session.id)
-      }),
-    {
-      git: true,
-      config: {
-        ...cfg,
-        reference: {
-          docs: "./external-docs",
-        },
+      yield* sessions.remove(session.id)
+    }),
+  {
+    git: true,
+    config: {
+      ...cfg,
+      reference: {
+        docs: "./external-docs",
       },
     },
-  ),
+  },
 )
 
-it.live("injects metadata for configured reference file attachments", () =>
-  provideTmpdirInstance(
-    (dir) =>
-      Effect.gen(function* () {
-        const docs = path.join(dir, "external-docs")
-        const readme = path.join(docs, "README.md")
-        yield* Effect.promise(() => fs.mkdir(docs, { recursive: true }))
-        yield* Effect.promise(() => Bun.write(readme, "reference readme"))
+it.instance(
+  "injects metadata for configured reference file attachments",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const docs = path.join(dir, "external-docs")
+      const readme = path.join(docs, "README.md")
+      yield* ensureDir(docs)
+      yield* writeText(readme, "reference readme")
 
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const session = yield* sessions.create({})
-        const message = yield* prompt.prompt({
-          sessionID: session.id,
-          agent: "build",
-          noReply: true,
-          parts: [
-            { type: "text", text: "Read @docs/README.md" },
-            {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+      const message = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "Read @docs/README.md" },
+          {
+            type: "file",
+            mime: "text/plain",
+            filename: "docs/README.md",
+            url: pathToFileURL(readme).href,
+            source: {
               type: "file",
-              mime: "text/plain",
-              filename: "docs/README.md",
-              url: pathToFileURL(readme).href,
-              source: {
-                type: "file",
-                path: "docs/README.md",
-                text: { value: "@docs/README.md", start: 5, end: 20 },
-              },
+              path: "docs/README.md",
+              text: { value: "@docs/README.md", start: 5, end: 20 },
             },
-          ],
-        })
+          },
+        ],
+      })
 
-        const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
-        const synthetic = stored.parts.filter(
-          (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
-        )
-        const reference = synthetic.find((part) =>
-          part.text.startsWith("Referenced configured reference @docs/README.md."),
-        )
+      const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+      const synthetic = stored.parts.filter(
+        (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
+      )
+      const reference = synthetic.find((part) =>
+        part.text.startsWith("Referenced configured reference @docs/README.md."),
+      )
 
-        expect(reference?.metadata?.reference).toMatchObject({
-          name: "docs",
-          kind: "local",
-          path: docs,
-          target: "README.md",
-          targetPath: readme,
-          source: { value: "@docs/README.md", start: 5, end: 20 },
-        })
-        expect(synthetic.findIndex((part) => part === reference)).toBeLessThan(
-          synthetic.findIndex((part) => part.text.startsWith("Called the Read tool with the following input:")),
-        )
+      expect(reference?.metadata?.reference).toMatchObject({
+        name: "docs",
+        kind: "local",
+        path: docs,
+        target: "README.md",
+        targetPath: readme,
+        source: { value: "@docs/README.md", start: 5, end: 20 },
+      })
+      expect(synthetic.findIndex((part) => part === reference)).toBeLessThan(
+        synthetic.findIndex((part) => part.text.startsWith("Called the Read tool with the following input:")),
+      )
 
-        yield* sessions.remove(session.id)
-      }),
-    {
-      git: true,
-      config: {
-        ...cfg,
-        reference: {
-          docs: "./external-docs",
-        },
+      yield* sessions.remove(session.id)
+    }),
+  {
+    git: true,
+    config: {
+      ...cfg,
+      reference: {
+        docs: "./external-docs",
       },
     },
-  ),
+  },
 )
 
 // Special characters in filenames
 
-it.live("handles filenames with # character", () =>
-  provideTmpdirInstance(
-    (dir) =>
-      Effect.gen(function* () {
-        yield* Effect.promise(() => Bun.write(path.join(dir, "file#name.txt"), "special content\n"))
+it.instance(
+  "handles filenames with # character",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      yield* writeText(path.join(dir, "file#name.txt"), "special content\n")
 
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const session = yield* sessions.create({})
-        const parts = yield* prompt.resolvePromptParts("Read @file#name.txt")
-        const fileParts = parts.filter((part) => part.type === "file")
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+      const parts = yield* prompt.resolvePromptParts("Read @file#name.txt")
+      const fileParts = parts.filter((part) => part.type === "file")
 
-        expect(fileParts.length).toBe(1)
-        expect(fileParts[0].filename).toBe("file#name.txt")
-        expect(fileParts[0].url).toContain("%23")
+      expect(fileParts.length).toBe(1)
+      expect(fileParts[0].filename).toBe("file#name.txt")
+      expect(fileParts[0].url).toContain("%23")
 
-        const decodedPath = fileURLToPath(fileParts[0].url)
-        expect(decodedPath).toBe(path.join(dir, "file#name.txt"))
+      const decodedPath = fileURLToPath(fileParts[0].url)
+      expect(decodedPath).toBe(path.join(dir, "file#name.txt"))
 
-        const message = yield* prompt.prompt({
-          sessionID: session.id,
-          parts,
-          noReply: true,
-        })
-        const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
-        const textParts = stored.parts.filter((part) => part.type === "text")
-        const hasContent = textParts.some((part) => part.text.includes("special content"))
-        expect(hasContent).toBe(true)
+      const message = yield* prompt.prompt({
+        sessionID: session.id,
+        parts,
+        noReply: true,
+      })
+      const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+      const textParts = stored.parts.filter((part) => part.type === "text")
+      const hasContent = textParts.some((part) => part.text.includes("special content"))
+      expect(hasContent).toBe(true)
 
-        yield* sessions.remove(session.id)
-      }),
-    { git: true, config: cfg },
-  ),
+      yield* sessions.remove(session.id)
+    }),
+  { git: true, config: cfg },
 )
 
 // Regression: empty assistant turn loop
 
-it.live("does not loop empty assistant turns for a simple reply", () =>
-  provideTmpdirServer(
-    Effect.fnUntraced(function* ({ llm }) {
+it.instance(
+  "does not loop empty assistant turns for a simple reply",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
       const session = yield* sessions.create({ title: "Prompt regression" })
@@ -2016,222 +2027,210 @@ it.live("does not loop empty assistant turns for a simple reply", () =>
       expect(msgs.filter((msg) => msg.info.role === "assistant")).toHaveLength(1)
       expect(yield* llm.calls).toBe(1)
     }),
-    { git: true, config: providerCfg },
-  ),
+  { git: true },
 )
 
-it.live(
+it.instance(
   "records aborted errors when prompt is cancelled mid-stream",
   () =>
-    provideTmpdirServer(
-      Effect.fnUntraced(function* ({ llm }) {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const session = yield* sessions.create({ title: "Prompt cancel regression" })
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({ title: "Prompt cancel regression" })
 
-        yield* llm.hang
+      yield* llm.hang
 
-        const fiber = yield* prompt
-          .prompt({
-            sessionID: session.id,
-            agent: "build",
-            parts: [{ type: "text", text: "Cancel me" }],
-          })
-          .pipe(Effect.forkChild)
+      const fiber = yield* prompt
+        .prompt({
+          sessionID: session.id,
+          agent: "build",
+          parts: [{ type: "text", text: "Cancel me" }],
+        })
+        .pipe(Effect.forkChild)
 
-        yield* llm.wait(1)
-        yield* prompt.cancel(session.id)
+      yield* llm.wait(1)
+      yield* prompt.cancel(session.id)
 
-        const exit = yield* Fiber.await(fiber)
-        expect(Exit.isSuccess(exit)).toBe(true)
-        if (Exit.isSuccess(exit)) {
-          expect(exit.value.info.role).toBe("assistant")
-          if (exit.value.info.role === "assistant") {
-            expect(exit.value.info.error?.name).toBe("MessageAbortedError")
-          }
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (Exit.isSuccess(exit)) {
+        expect(exit.value.info.role).toBe("assistant")
+        if (exit.value.info.role === "assistant") {
+          expect(exit.value.info.error?.name).toBe("MessageAbortedError")
         }
+      }
 
-        const msgs = yield* sessions.messages({ sessionID: session.id })
-        const last = msgs.findLast((msg) => msg.info.role === "assistant")
-        expect(last?.info.role).toBe("assistant")
-        if (last?.info.role === "assistant") {
-          expect(last.info.error?.name).toBe("MessageAbortedError")
-        }
-      }),
-      { git: true, config: providerCfg },
-    ),
+      const msgs = yield* sessions.messages({ sessionID: session.id })
+      const last = msgs.findLast((msg) => msg.info.role === "assistant")
+      expect(last?.info.role).toBe("assistant")
+      if (last?.info.role === "assistant") {
+        expect(last.info.error?.name).toBe("MessageAbortedError")
+      }
+    }),
+  { git: true },
   3_000,
 )
 
 // Agent variant
 
-it.live("applies agent variant only when using agent model", () =>
-  provideTmpdirInstance(
-    (_dir) =>
-      Effect.gen(function* () {
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-        const session = yield* sessions.create({})
+it.instance(
+  "applies agent variant only when using agent model",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
 
-        const other = yield* prompt.prompt({
-          sessionID: session.id,
-          agent: "build",
-          model: { providerID: ProviderID.make("opencode"), modelID: ModelID.make("kimi-k2.5-free") },
-          noReply: true,
-          parts: [{ type: "text", text: "hello" }],
-        })
-        if (other.info.role !== "user") throw new Error("expected user message")
-        expect(other.info.model.variant).toBeUndefined()
+      const other = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        model: { providerID: ProviderID.make("opencode"), modelID: ModelID.make("kimi-k2.5-free") },
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      if (other.info.role !== "user") throw new Error("expected user message")
+      expect(other.info.model.variant).toBeUndefined()
 
-        const match = yield* prompt.prompt({
-          sessionID: session.id,
-          agent: "build",
-          noReply: true,
-          parts: [{ type: "text", text: "hello again" }],
-        })
-        if (match.info.role !== "user") throw new Error("expected user message")
-        expect(match.info.model).toEqual({
-          providerID: ProviderID.make("test"),
-          modelID: ModelID.make("test-model"),
-          variant: "xhigh",
-        })
-        expect(match.info.model.variant).toBe("xhigh")
+      const match = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello again" }],
+      })
+      if (match.info.role !== "user") throw new Error("expected user message")
+      expect(match.info.model).toEqual({
+        providerID: ProviderID.make("test"),
+        modelID: ModelID.make("test-model"),
+        variant: "xhigh",
+      })
+      expect(match.info.model.variant).toBe("xhigh")
 
-        const override = yield* prompt.prompt({
-          sessionID: session.id,
-          agent: "build",
-          noReply: true,
-          variant: "high",
-          parts: [{ type: "text", text: "hello third" }],
-        })
-        if (override.info.role !== "user") throw new Error("expected user message")
-        expect(override.info.model.variant).toBe("high")
+      const override = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        variant: "high",
+        parts: [{ type: "text", text: "hello third" }],
+      })
+      if (override.info.role !== "user") throw new Error("expected user message")
+      expect(override.info.model.variant).toBe("high")
 
-        yield* sessions.remove(session.id)
-      }),
-    {
-      git: true,
-      config: {
-        ...cfg,
-        provider: {
-          ...cfg.provider,
-          test: {
-            ...cfg.provider.test,
-            models: {
-              "test-model": {
-                ...cfg.provider.test.models["test-model"],
-                variants: { xhigh: {}, high: {} },
-              },
+      yield* sessions.remove(session.id)
+    }),
+  {
+    git: true,
+    config: {
+      ...cfg,
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": {
+              ...cfg.provider.test.models["test-model"],
+              variants: { xhigh: {}, high: {} },
             },
           },
         },
-        agent: {
-          build: {
-            model: "test/test-model",
-            variant: "xhigh",
-          },
+      },
+      agent: {
+        build: {
+          model: "test/test-model",
+          variant: "xhigh",
         },
       },
     },
-  ),
+  },
 )
 
 // Agent / command resolution errors
 
-it.live(
+it.instance(
   "unknown agent throws typed error",
   () =>
-    provideTmpdirInstance(
-      (_dir) =>
-        Effect.gen(function* () {
-          const prompt = yield* SessionPrompt.Service
-          const sessions = yield* Session.Service
-          const session = yield* sessions.create({})
-          const exit = yield* prompt
-            .prompt({
-              sessionID: session.id,
-              agent: "nonexistent-agent-xyz",
-              noReply: true,
-              parts: [{ type: "text", text: "hello" }],
-            })
-            .pipe(Effect.exit)
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+      const exit = yield* prompt
+        .prompt({
+          sessionID: session.id,
+          agent: "nonexistent-agent-xyz",
+          noReply: true,
+          parts: [{ type: "text", text: "hello" }],
+        })
+        .pipe(Effect.exit)
 
-          expect(Exit.isFailure(exit)).toBe(true)
-          if (Exit.isFailure(exit)) {
-            const err = Cause.squash(exit.cause)
-            expect(err).not.toBeInstanceOf(TypeError)
-            expect(NamedError.Unknown.isInstance(err)).toBe(true)
-            if (NamedError.Unknown.isInstance(err)) {
-              expect(err.data.message).toContain('Agent not found: "nonexistent-agent-xyz"')
-            }
-          }
-        }),
-      { git: true },
-    ),
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause)
+        expect(err).not.toBeInstanceOf(TypeError)
+        expect(NamedError.Unknown.isInstance(err)).toBe(true)
+        if (NamedError.Unknown.isInstance(err)) {
+          expect(err.data.message).toContain('Agent not found: "nonexistent-agent-xyz"')
+        }
+      }
+    }),
+  { git: true },
   30_000,
 )
 
-it.live(
+it.instance(
   "unknown agent error includes available agent names",
   () =>
-    provideTmpdirInstance(
-      (_dir) =>
-        Effect.gen(function* () {
-          const prompt = yield* SessionPrompt.Service
-          const sessions = yield* Session.Service
-          const session = yield* sessions.create({})
-          const exit = yield* prompt
-            .prompt({
-              sessionID: session.id,
-              agent: "nonexistent-agent-xyz",
-              noReply: true,
-              parts: [{ type: "text", text: "hello" }],
-            })
-            .pipe(Effect.exit)
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+      const exit = yield* prompt
+        .prompt({
+          sessionID: session.id,
+          agent: "nonexistent-agent-xyz",
+          noReply: true,
+          parts: [{ type: "text", text: "hello" }],
+        })
+        .pipe(Effect.exit)
 
-          expect(Exit.isFailure(exit)).toBe(true)
-          if (Exit.isFailure(exit)) {
-            const err = Cause.squash(exit.cause)
-            expect(NamedError.Unknown.isInstance(err)).toBe(true)
-            if (NamedError.Unknown.isInstance(err)) {
-              expect(err.data.message).toContain("build")
-            }
-          }
-        }),
-      { git: true },
-    ),
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause)
+        expect(NamedError.Unknown.isInstance(err)).toBe(true)
+        if (NamedError.Unknown.isInstance(err)) {
+          expect(err.data.message).toContain("build")
+        }
+      }
+    }),
+  { git: true },
   30_000,
 )
 
-it.live(
+it.instance(
   "unknown command throws typed error with available names",
   () =>
-    provideTmpdirInstance(
-      (_dir) =>
-        Effect.gen(function* () {
-          const prompt = yield* SessionPrompt.Service
-          const sessions = yield* Session.Service
-          const session = yield* sessions.create({})
-          const exit = yield* prompt
-            .command({
-              sessionID: session.id,
-              command: "nonexistent-command-xyz",
-              arguments: "",
-            })
-            .pipe(Effect.exit)
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+      const exit = yield* prompt
+        .command({
+          sessionID: session.id,
+          command: "nonexistent-command-xyz",
+          arguments: "",
+        })
+        .pipe(Effect.exit)
 
-          expect(Exit.isFailure(exit)).toBe(true)
-          if (Exit.isFailure(exit)) {
-            const err = Cause.squash(exit.cause)
-            expect(err).not.toBeInstanceOf(TypeError)
-            expect(NamedError.Unknown.isInstance(err)).toBe(true)
-            if (NamedError.Unknown.isInstance(err)) {
-              expect(err.data.message).toContain('Command not found: "nonexistent-command-xyz"')
-              expect(err.data.message).toContain("init")
-            }
-          }
-        }),
-      { git: true },
-    ),
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause)
+        expect(err).not.toBeInstanceOf(TypeError)
+        expect(NamedError.Unknown.isInstance(err)).toBe(true)
+        if (NamedError.Unknown.isInstance(err)) {
+          expect(err.data.message).toContain('Command not found: "nonexistent-command-xyz"')
+          expect(err.data.message).toContain("init")
+        }
+      }
+    }),
+  { git: true },
   30_000,
 )

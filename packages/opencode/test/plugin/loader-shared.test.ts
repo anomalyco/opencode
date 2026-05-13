@@ -1,4 +1,4 @@
-import { afterAll, afterEach, describe, expect, spyOn } from "bun:test"
+import { afterEach, describe, expect, spyOn } from "bun:test"
 import { Effect, Layer } from "effect"
 import fs from "fs/promises"
 import path from "path"
@@ -8,23 +8,13 @@ import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/f
 import { testEffect } from "../lib/effect"
 import { Filesystem } from "@/util/filesystem"
 
-const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
-process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
-
 const { Plugin } = await import("../../src/plugin/index")
 const { PluginLoader } = await import("../../src/plugin/loader")
 const { readPackageThemes } = await import("../../src/plugin/shared")
 const { Bus } = await import("../../src/bus")
 const { Npm } = await import("@opencode-ai/core/npm")
 const { TestConfig } = await import("../fixture/config")
-
-afterAll(() => {
-  if (disableDefault === undefined) {
-    delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
-    return
-  }
-  process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = disableDefault
-})
+const { RuntimeFlags } = await import("../../src/effect/runtime-flags")
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -43,7 +33,7 @@ function withTmp<T, A, E, R>(
   })
 }
 
-function load(dir: string) {
+function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0]) {
   const source = path.join(dir, "opencode.json")
   return Effect.gen(function* () {
     const config = yield* Effect.promise(
@@ -57,6 +47,7 @@ function load(dir: string) {
       Effect.provide(
         Plugin.layer.pipe(
           Layer.provide(Bus.layer),
+          Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true, ...flags })),
           Layer.provide(
             TestConfig.layer({
               get: () =>
@@ -934,25 +925,14 @@ export default {
       },
       (tmp) =>
         Effect.gen(function* () {
-          const pure = process.env.OPENCODE_PURE
-          process.env.OPENCODE_PURE = "1"
-
-          try {
-            yield* load(tmp.path)
-            const called = yield* Effect.promise(() =>
-              fs
-                .readFile(tmp.extra.mark, "utf8")
-                .then(() => true)
-                .catch(() => false),
-            )
-            expect(called).toBe(false)
-          } finally {
-            if (pure === undefined) {
-              delete process.env.OPENCODE_PURE
-            } else {
-              process.env.OPENCODE_PURE = pure
-            }
-          }
+          yield* load(tmp.path, { pure: true })
+          const called = yield* Effect.promise(() =>
+            fs
+              .readFile(tmp.extra.mark, "utf8")
+              .then(() => true)
+              .catch(() => false),
+          )
+          expect(called).toBe(false)
         }),
     ),
   )
