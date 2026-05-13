@@ -11,6 +11,7 @@ import { described } from "./metadata"
 const root = "/provider"
 
 const ProviderAuthErrorName = Schema.Union([
+  Schema.Literal("BadRequest"),
   Schema.Literal("ProviderAuthOauthMissing"),
   Schema.Literal("ProviderAuthOauthCodeMissing"),
   Schema.Literal("ProviderAuthOauthCallbackFailed"),
@@ -23,6 +24,7 @@ export class ProviderAuthApiError extends Schema.ErrorClass<ProviderAuthApiError
       providerID: Schema.optional(ProviderID),
       field: Schema.optional(Schema.String),
       message: Schema.optional(Schema.String),
+      kind: Schema.optional(Schema.String),
     }),
   },
   { httpApiStatus: 400 },
@@ -57,7 +59,7 @@ export const ProviderApi = HttpApi.make("provider")
           query: WorkspaceRoutingQuery,
           payload: ProviderAuth.AuthorizeInput,
           success: described(Schema.UndefinedOr(ProviderAuth.Authorization), "Authorization URL and method"),
-          error: [HttpApiError.BadRequest, ProviderAuthApiError],
+          error: ProviderAuthApiError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "provider.oauth.authorize",
@@ -70,7 +72,7 @@ export const ProviderApi = HttpApi.make("provider")
           query: WorkspaceRoutingQuery,
           payload: ProviderAuth.CallbackInput,
           success: described(Schema.Boolean, "OAuth callback processed successfully"),
-          error: [HttpApiError.BadRequest, ProviderAuthApiError],
+          error: ProviderAuthApiError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "provider.oauth.callback",

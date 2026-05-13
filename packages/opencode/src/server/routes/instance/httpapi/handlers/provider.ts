@@ -6,7 +6,7 @@ import { ProviderID } from "@/provider/schema"
 import { mapValues } from "remeda"
 import { Effect, Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { ProviderAuthApiError } from "../groups/provider"
 
@@ -25,7 +25,7 @@ function mapProviderAuthError<A, R>(self: Effect.Effect<A, ProviderAuth.Error, R
       if (error instanceof ProviderAuth.ValidationFailed) {
         return new ProviderAuthApiError({ name: error._tag, data: { field: error.field, message: error.message } })
       }
-      return new HttpApiError.BadRequest({})
+      return new ProviderAuthApiError({ name: "BadRequest", data: {} })
     }),
   )
 }
@@ -80,7 +80,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
     }) {
       const body = yield* Effect.orDie(ctx.request.text)
       const payload = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(ProviderAuth.AuthorizeInput))(body).pipe(
-        Effect.mapError(() => new HttpApiError.BadRequest({})),
+        Effect.mapError(() => new ProviderAuthApiError({ name: "BadRequest", data: {} })),
       )
       // Match legacy route behavior: when authorize() resolves without a
       // result (e.g. no further redirect), serialize as JSON `null` instead
