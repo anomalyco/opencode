@@ -1810,6 +1810,100 @@ test("provider options are deeply merged", async () => {
   })
 })
 
+test("hosted nvidia provider adds billing origin header", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            nvidia: {
+              options: {
+                apiKey: "test-api-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      expect(providers[ProviderID.make("nvidia")].options.headers).toEqual({
+        "HTTP-Referer": "https://opencode.ai/",
+        "X-Title": "opencode",
+        "X-BILLING-INVOKE-ORIGIN": "OpenCode",
+      })
+    },
+  })
+})
+
+test("custom nvidia baseURL adds billing origin header", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            nvidia: {
+              options: {
+                apiKey: "test-api-key",
+                baseURL: "http://localhost:8000/v1",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      expect(providers[ProviderID.make("nvidia")].options.headers).toEqual({
+        "HTTP-Referer": "https://opencode.ai/",
+        "X-Title": "opencode",
+        "X-BILLING-INVOKE-ORIGIN": "OpenCode",
+      })
+    },
+  })
+})
+
+test("explicit nvidia billing origin header is preserved", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            nvidia: {
+              options: {
+                apiKey: "test-api-key",
+                baseURL: "http://localhost:8000/v1",
+                headers: {
+                  "X-BILLING-INVOKE-ORIGIN": "CustomOrigin",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      expect(providers[ProviderID.make("nvidia")].options.headers["X-BILLING-INVOKE-ORIGIN"]).toBe("CustomOrigin")
+    },
+  })
+})
+
 test("custom model inherits npm package from models.dev provider config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

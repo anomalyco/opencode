@@ -427,13 +427,14 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
-    nvidia: () =>
+    nvidia: (provider) =>
       Effect.succeed({
-        autoload: false,
+        autoload: provider.source === "config",
         options: {
           headers: {
             "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
+            "X-BILLING-INVOKE-ORIGIN": "OpenCode",
           },
         },
       }),
