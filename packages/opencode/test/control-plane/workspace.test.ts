@@ -749,30 +749,39 @@ describe("workspace CRUD", () => {
     })
   })
 
-  test("remove deletes the workspace, associated sessions, adapter resources, and status", async () => {
-    await withInstance(async (dir) => {
-      const type = unique("remove-local")
-      const recorded = localAdapter(path.join(dir, "remove-local"))
-      registerAdapter(Instance.project.id, type, recorded.adapter)
-      const info = await createWorkspace({ type, branch: null, projectID: Instance.project.id, extra: null })
-      const one = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
-      const two = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
-      attachSessionToWorkspace(one.id, info.id)
-      attachSessionToWorkspace(two.id, info.id)
+  it.instance(
+    "remove deletes the workspace, associated sessions, adapter resources, and status",
+    () => {
+      return Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
+        const instance = yield* InstanceRef
+        if (!instance) return yield* Effect.die(new Error("missing test instance"))
+        const workspace = yield* Workspace.Service
+        const sessionSvc = yield* SessionNs.Service
+        const type = unique("remove-local")
+        const recorded = localAdapter(path.join(dir, "remove-local"))
+        registerAdapter(instance.project.id, type, recorded.adapter)
+        const info = yield* workspace.create({ type, branch: null, projectID: instance.project.id, extra: null })
+        const one = yield* sessionSvc.create({})
+        const two = yield* sessionSvc.create({})
+        attachSessionToWorkspace(one.id, info.id)
+        attachSessionToWorkspace(two.id, info.id)
 
-      const removed = await removeWorkspace(info.id)
+        const removed = yield* workspace.remove(info.id)
 
-      expect(removed).toEqual(info)
-      expect(await getWorkspace(info.id)).toBeUndefined()
-      expect(recorded.calls.remove).toEqual([info])
-      expect((await workspaceStatus()).find((item) => item.workspaceID === info.id)?.status).toBeUndefined()
-      expect(
-        Database.use((db) =>
-          db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.workspace_id, info.id)).all(),
-        ),
-      ).toEqual([])
-    })
-  })
+        expect(removed).toEqual(info)
+        expect(yield* workspace.get(info.id)).toBeUndefined()
+        expect(recorded.calls.remove).toEqual([info])
+        expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBeUndefined()
+        expect(
+          Database.use((db) =>
+            db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.workspace_id, info.id)).all(),
+          ),
+        ).toEqual([])
+      })
+    },
+    { git: true },
+  )
 
   test("remove still deletes the row when the adapter cannot remove resources", async () => {
     await withInstance(async () => {
@@ -797,84 +806,111 @@ describe("workspace CRUD", () => {
     })
   })
 
-  test("sessionWarp moves a session into a local workspace and claims ownership", async () => {
-    await withInstance(async (dir) => {
-      const previousType = unique("warp-prev-local")
-      const targetType = unique("warp-target-local")
-      const previous = workspaceInfo(Instance.project.id, previousType)
-      const target = workspaceInfo(Instance.project.id, targetType)
-      insertWorkspace(previous)
-      insertWorkspace(target)
-      registerAdapter(Instance.project.id, previousType, localAdapter(path.join(dir, "warp-prev-local")).adapter)
-      registerAdapter(Instance.project.id, targetType, localAdapter(path.join(dir, "warp-target-local")).adapter)
-      const session = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
-      attachSessionToWorkspace(session.id, previous.id)
+  it.instance(
+    "sessionWarp moves a session into a local workspace and claims ownership",
+    () => {
+      return Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
+        const instance = yield* InstanceRef
+        if (!instance) return yield* Effect.die(new Error("missing test instance"))
+        const workspace = yield* Workspace.Service
+        const sessionSvc = yield* SessionNs.Service
+        const previousType = unique("warp-prev-local")
+        const targetType = unique("warp-target-local")
+        const previous = workspaceInfo(instance.project.id, previousType)
+        const target = workspaceInfo(instance.project.id, targetType)
+        insertWorkspace(previous)
+        insertWorkspace(target)
+        registerAdapter(instance.project.id, previousType, localAdapter(path.join(dir, "warp-prev-local")).adapter)
+        registerAdapter(instance.project.id, targetType, localAdapter(path.join(dir, "warp-target-local")).adapter)
+        const session = yield* sessionSvc.create({})
+        attachSessionToWorkspace(session.id, previous.id)
 
-      await warpWorkspaceSession({ workspaceID: target.id, sessionID: session.id })
+        yield* workspace.sessionWarp({ workspaceID: target.id, sessionID: session.id })
 
-      expect(
-        Database.use((db) =>
-          db
-            .select({ workspaceID: SessionTable.workspace_id })
-            .from(SessionTable)
-            .where(eq(SessionTable.id, session.id))
-            .get(),
-        )?.workspaceID,
-      ).toBe(target.id)
-      expect(sessionSequenceOwner(session.id)).toBe(target.id)
-    })
-  })
+        expect(
+          Database.use((db) =>
+            db
+              .select({ workspaceID: SessionTable.workspace_id })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, session.id))
+              .get(),
+          )?.workspaceID,
+        ).toBe(target.id)
+        expect(sessionSequenceOwner(session.id)).toBe(target.id)
+      })
+    },
+    { git: true },
+  )
 
-  test("sessionWarp applies source workspace patch to local target workspace", async () => {
-    await withInstance(async (dir) => {
-      const previousType = unique("warp-patch-prev-local")
-      const targetType = unique("warp-patch-target-local")
-      const previousDir = path.join(dir, "warp-patch-prev-local")
-      const targetDir = path.join(dir, "warp-patch-target-local")
-      await initGitRepo(previousDir)
-      await initGitRepo(targetDir)
-      await fs.writeFile(path.join(previousDir, "tracked.txt"), "changed\n")
-      await fs.writeFile(path.join(previousDir, "new.txt"), "new\n")
+  it.instance(
+    "sessionWarp applies source workspace patch to local target workspace",
+    () => {
+      return Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
+        const instance = yield* InstanceRef
+        if (!instance) return yield* Effect.die(new Error("missing test instance"))
+        const workspace = yield* Workspace.Service
+        const sessionSvc = yield* SessionNs.Service
+        const previousType = unique("warp-patch-prev-local")
+        const targetType = unique("warp-patch-target-local")
+        const previousDir = path.join(dir, "warp-patch-prev-local")
+        const targetDir = path.join(dir, "warp-patch-target-local")
+        yield* Effect.promise(() => initGitRepo(previousDir))
+        yield* Effect.promise(() => initGitRepo(targetDir))
+        yield* Effect.promise(() => fs.writeFile(path.join(previousDir, "tracked.txt"), "changed\n"))
+        yield* Effect.promise(() => fs.writeFile(path.join(previousDir, "new.txt"), "new\n"))
 
-      const previous = workspaceInfo(Instance.project.id, previousType)
-      const target = workspaceInfo(Instance.project.id, targetType)
-      insertWorkspace(previous)
-      insertWorkspace(target)
-      registerAdapter(Instance.project.id, previousType, localAdapter(previousDir, { createDir: false }).adapter)
-      registerAdapter(Instance.project.id, targetType, localAdapter(targetDir, { createDir: false }).adapter)
-      const session = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
-      attachSessionToWorkspace(session.id, previous.id)
+        const previous = workspaceInfo(instance.project.id, previousType)
+        const target = workspaceInfo(instance.project.id, targetType)
+        insertWorkspace(previous)
+        insertWorkspace(target)
+        registerAdapter(instance.project.id, previousType, localAdapter(previousDir, { createDir: false }).adapter)
+        registerAdapter(instance.project.id, targetType, localAdapter(targetDir, { createDir: false }).adapter)
+        const session = yield* sessionSvc.create({})
+        attachSessionToWorkspace(session.id, previous.id)
 
-      await warpWorkspaceSession({ workspaceID: target.id, sessionID: session.id, copyChanges: true })
+        yield* workspace.sessionWarp({ workspaceID: target.id, sessionID: session.id, copyChanges: true })
 
-      expect(await fs.readFile(path.join(targetDir, "tracked.txt"), "utf8")).toBe("changed\n")
-      expect(await fs.readFile(path.join(targetDir, "new.txt"), "utf8")).toBe("new\n")
-    })
-  })
+        expect(yield* Effect.promise(() => fs.readFile(path.join(targetDir, "tracked.txt"), "utf8"))).toBe("changed\n")
+        expect(yield* Effect.promise(() => fs.readFile(path.join(targetDir, "new.txt"), "utf8"))).toBe("new\n")
+      })
+    },
+    { git: true },
+  )
 
-  test("sessionWarp detaches a session to the local project and claims project ownership", async () => {
-    await withInstance(async (dir) => {
-      const previousType = unique("warp-detach-local")
-      const previous = workspaceInfo(Instance.project.id, previousType)
-      insertWorkspace(previous)
-      registerAdapter(Instance.project.id, previousType, localAdapter(path.join(dir, "warp-detach-local")).adapter)
-      const session = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
-      attachSessionToWorkspace(session.id, previous.id)
+  it.instance(
+    "sessionWarp detaches a session to the local project and claims project ownership",
+    () => {
+      return Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
+        const instance = yield* InstanceRef
+        if (!instance) return yield* Effect.die(new Error("missing test instance"))
+        const workspace = yield* Workspace.Service
+        const sessionSvc = yield* SessionNs.Service
+        const previousType = unique("warp-detach-local")
+        const previous = workspaceInfo(instance.project.id, previousType)
+        insertWorkspace(previous)
+        registerAdapter(instance.project.id, previousType, localAdapter(path.join(dir, "warp-detach-local")).adapter)
+        const session = yield* sessionSvc.create({})
+        attachSessionToWorkspace(session.id, previous.id)
 
-      await warpWorkspaceSession({ workspaceID: null, sessionID: session.id })
+        yield* workspace.sessionWarp({ workspaceID: null, sessionID: session.id })
 
-      expect(
-        Database.use((db) =>
-          db
-            .select({ workspaceID: SessionTable.workspace_id })
-            .from(SessionTable)
-            .where(eq(SessionTable.id, session.id))
-            .get(),
-        )?.workspaceID,
-      ).toBeNull()
-      expect(sessionSequenceOwner(session.id)).toBe(Instance.project.id)
-    })
-  })
+        expect(
+          Database.use((db) =>
+            db
+              .select({ workspaceID: SessionTable.workspace_id })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, session.id))
+              .get(),
+          )?.workspaceID,
+        ).toBeNull()
+        expect(sessionSequenceOwner(session.id)).toBe(instance.project.id)
+      })
+    },
+    { git: true },
+  )
 
   test("sessionWarp detaches to the source project when invoked from a workspace instance", async () => {
     await withInstance(async () => {
