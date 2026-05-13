@@ -13,7 +13,7 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { namedSchemaError } from "@/util/named-schema-error"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
@@ -869,10 +869,21 @@ const ProviderCacheCost = Schema.Struct({
   write: Schema.Finite,
 })
 
+const ProviderCostTier = Schema.Struct({
+  input: Schema.Finite,
+  output: Schema.Finite,
+  cache: ProviderCacheCost,
+  tier: Schema.Struct({
+    type: Schema.Literal("context"),
+    size: Schema.Finite,
+  }),
+})
+
 const ProviderCost = Schema.Struct({
   input: Schema.Finite,
   output: Schema.Finite,
   cache: ProviderCacheCost,
+  tiers: optionalOmitUndefined(Schema.Array(ProviderCostTier)),
   experimentalOver200K: optionalOmitUndefined(
     Schema.Struct({
       input: Schema.Finite,
@@ -976,6 +987,17 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
       read: c?.cache_read ?? 0,
       write: c?.cache_write ?? 0,
     },
+  }
+  if (c?.tiers) {
+    result.tiers = c.tiers.map((item) => ({
+      input: item.input,
+      output: item.output,
+      cache: {
+        read: item.cache_read ?? 0,
+        write: item.cache_write ?? 0,
+      },
+      tier: item.tier,
+    }))
   }
   if (c?.context_over_200k) {
     result.experimentalOver200K = {
@@ -1749,13 +1771,13 @@ export function parseModel(model: string) {
   }
 }
 
-export const ModelNotFoundError = namedSchemaError("ProviderModelNotFoundError", {
+export const ModelNotFoundError = NamedError.create("ProviderModelNotFoundError", {
   providerID: ProviderID,
   modelID: ModelID,
   suggestions: Schema.optional(Schema.Array(Schema.String)),
 })
 
-export const InitError = namedSchemaError("ProviderInitError", {
+export const InitError = NamedError.create("ProviderInitError", {
   providerID: ProviderID,
 })
 
