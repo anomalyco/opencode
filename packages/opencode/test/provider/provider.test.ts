@@ -563,6 +563,21 @@ test("resolveSelection picks only valid opencode free listings", async () => {
               options: {
                 apiKey: "test-api-key",
               },
+              models: {
+                plainfree: {
+                  name: "Plainfree Custom",
+                  cost: {
+                    input: 0,
+                    output: 0,
+                    cache_read: 0,
+                    cache_write: 0,
+                  },
+                  limit: {
+                    context: 128000,
+                    output: 4096,
+                  },
+                },
+              },
             },
             openrouter: {
               options: {
@@ -606,7 +621,7 @@ test("resolveSelection picks only valid opencode free listings", async () => {
 
       expect(listedModels.length).toBeGreaterThan(0)
       expect(rest.length).toBeGreaterThan(0)
-      expect(rest).toContain("gpt-5-nano")
+      expect(rest).toContain("plainfree")
 
       spyOn(Math, "random").mockReturnValue(0)
 

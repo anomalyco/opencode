@@ -8,6 +8,7 @@ import * as Timeout from "../../../src/util/timeout"
 import * as Network from "../../../src/cli/network"
 import * as Win32 from "../../../src/cli/cmd/tui/win32"
 import { Provider } from "../../../src/provider/provider"
+import { Effect } from "effect"
 
 const stop = new Error("stop")
 const packageRoot = path.resolve(import.meta.dir, "../../..")
@@ -58,13 +59,15 @@ function setup() {
   })
   spyOn(UI, "error").mockImplementation(() => {})
   spyOn(Timeout, "withTimeout").mockImplementation((input) => input)
-  spyOn(Network, "resolveNetworkOptions").mockResolvedValue({
-    mdns: false,
-    port: 0,
-    hostname: "127.0.0.1",
-    mdnsDomain: "opencode.local",
-    cors: [],
-  })
+  spyOn(Network, "resolveNetworkOptions").mockImplementation(() =>
+    Effect.succeed({
+      mdns: false,
+      port: 0,
+      hostname: "127.0.0.1",
+      mdnsDomain: "opencode.local",
+      cors: [],
+    }),
+  )
   spyOn(Win32, "win32DisableProcessedInput").mockImplementation(() => {})
   spyOn(Win32, "win32InstallCtrlCGuard").mockReturnValue(undefined)
   spyOn(Provider, "resolveSelection").mockImplementation(async (model, variant) => ({

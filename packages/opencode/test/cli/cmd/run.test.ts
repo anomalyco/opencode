@@ -24,6 +24,9 @@ function setup() {
             stream: (async function* () {})(),
           }),
         },
+        path: {
+          get: async () => ({ data: { directory: process.cwd() } }),
+        },
         session: {
           create: async () => ({ data: { id: "session-1" } }),
           prompt: async (input: any) => {
