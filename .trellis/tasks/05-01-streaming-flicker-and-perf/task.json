@@ -1,0 +1,37 @@
+{
+  "id": "05-01-streaming-flicker-and-perf",
+  "name": "05-01-streaming-flicker-and-perf",
+  "title": "Fix streaming-time turn unmount flicker and slow markdown morph in math-heavy sessions",
+  "description": "Long math-heavy sessions exhibit two regressions during streaming: (1) the entire assistant reply (from start to current paragraph) flashes blank for one frame and reappears the next, repeatedly; (2) UI freezes for several seconds during streaming. Diagnosis traces both to virtualization windowing flipping at tool-call boundaries and to KaTeX-induced markdown morph fall-back. Plan documents minimal A+B patch on message-timeline plus a paragraph-level stable/tail split in markdown.tsx.",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "priority": "P1",
+  "creator": "claude-agent",
+  "assignee": "claude-agent",
+  "createdAt": "2026-05-01",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {"phase": 1, "action": "implement"},
+    {"phase": 2, "action": "check"},
+    {"phase": 3, "action": "finish"},
+    {"phase": 4, "action": "create-pr"}
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "relatedFiles": [
+    "packages/app/src/pages/session/message-timeline.tsx",
+    "packages/ui/src/components/markdown.tsx",
+    "packages/app/src/pages/session/session-working.ts",
+    "packages/app/src/context/global-sync/event-reducer.ts",
+    "packages/app/src/context/global-sdk.tsx",
+    "packages/opencode/src/server/routes/event.ts",
+    "packages/opencode/src/session/index.ts"
+  ],
+  "notes": "Reproducer session: ses_222c3a1f3ffeKdZxmCyui1E189 (\"04-18-flavored-Schur-index续推至下一阶\"), 149 messages / 2855 parts (2407 tool, 141 reasoning). Console evidence captured in PRD includes prevCan flip pattern, 200+ non-prefix morph warnings, slow measure took=101ms, and mount/cleanup churn for stable historical parts. Sibling task 04-16-04-16-message-jump-blank-page shares the windowing-instability structure but with a different trigger (session switch vs. tool-call boundary); fix patterns can be cross-referenced. User explicitly requested no immediate code changes – this task captures the plan only."
+}

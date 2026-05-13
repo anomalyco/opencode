@@ -1,0 +1,54 @@
+{
+  "id": "desktop-startup-hardening",
+  "name": "desktop-startup-hardening",
+  "title": "Harden desktop startup failure handling",
+  "description": "Fix confirmed desktop startup failure modes across macOS and Windows: avoid first-run hangs when the sidecar dies before SQLite migration completes, stop crashing on sidecar spawn failure, preserve correct startup shell gating and error states, restore correct remote/default-server startup behavior, and repair Windows WSL startup config handling.",
+  "status": "completed",
+  "dev_type": "fullstack",
+  "scope": "desktop+app",
+  "priority": "P2",
+  "creator": "claude-agent",
+  "assignee": "claude-agent",
+  "createdAt": "2026-03-30",
+  "completedAt": "2026-05-01",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    },
+    {
+      "phase": 4,
+      "action": "create-pr"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "relatedFiles": [
+    "packages/desktop/src-tauri/src/lib.rs",
+    "packages/desktop/src-tauri/src/cli.rs",
+    "packages/desktop/src-tauri/src/server.rs",
+    "packages/desktop/src-tauri/src/windows.rs",
+    "packages/desktop/src-tauri/src/main.rs",
+    "packages/desktop/src/index.tsx",
+    "packages/desktop/src/loading.tsx",
+    "packages/app/src/app.tsx",
+    "packages/app/src/pages/home.tsx",
+    "packages/app/src/pages/layout.tsx",
+    "packages/app/src/context/server.tsx",
+    "packages/desktop/src-tauri/src/os/windows.rs"
+  ],
+  "notes": "Confirmed startup review findings: first-run startup can hang forever if sidecar dies before sqlite migration emits done; sidecar spawn failure still crashes startup via expect; startup shell currently relies on a 12s fallback and can hide too early or sit above error UI; desktop can boot against sidecar before persisted defaultServer resolves; Windows WSL startup config is stubbed and never actually enables the WSL path. Fixes should preserve the startup shell UX while adding explicit failure handling, correct readiness semantics, and platform-safe fallbacks."
+}

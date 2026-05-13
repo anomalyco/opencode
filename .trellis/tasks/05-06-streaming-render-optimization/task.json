@@ -1,0 +1,34 @@
+{
+  "id": "05-06-streaming-render-optimization",
+  "name": "05-06-streaming-render-optimization",
+  "title": "流式期间 inactive turn 渲染开销优化：content-visibility + MutationObserver 收窄",
+  "description": "流式生成期间虚拟化被完全禁用（canWindow=!isWorking()），所有 turn 的 markdown/math 组件均在 DOM 中，MutationObserver 以 subtree:true 观察全内容区，导致 morphdom diff 遍历全树 + 每帧强制 reflow。通过 CSS content-visibility:auto 让非活跃 turn 跳过绘制（保留高度）+ MutationObserver 观察范围收窄至仅活跃 turn，在不改变布局高度的前提下大幅降低流式期间的渲染开销。与已有任务 05-01-streaming-flicker-and-perf 互补：该任务解决「内容消失」和「non-prefix morph」；本任务解决「长期流式卡顿」的持续性能问题。",
+  "status": "planning",
+  "dev_type": "frontend",
+  "scope": "perf",
+  "priority": "P1",
+  "creator": "claude-agent",
+  "assignee": "claude-agent",
+  "createdAt": "2026-05-06",
+  "completedAt": null,
+  "branch": "feature/05-06-streaming-render-optimization",
+  "base_branch": "dev",
+  "worktree_path": "/Users/lelouch/apps/worktrees/05-06-streaming-render-optimization",
+  "current_phase": 0,
+  "next_action": [
+    {"phase": 1, "action": "implement"},
+    {"phase": 2, "action": "check"},
+    {"phase": 3, "action": "finish"}
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "relatedFiles": [
+    "packages/app/src/pages/session/message-timeline.tsx",
+    "packages/ui/src/components/markdown.tsx",
+    "packages/ui/src/components/markdown.css",
+    "packages/app/src/pages/session.tsx",
+    "packages/app/src/pages/session/session-working.ts"
+  ],
+  "notes": "本任务与 05-01-streaming-flicker-and-perf 互补。05-01 处理流式闪烁（canWindow hysteresis + stable/tail split），本任务处理流式卡顿（CSS content-visibility + MutationObserver 范围收窄）。方案 A+B 均保留完整布局高度，不影响虚拟化和跳转定位。Sibling task: .trellis/tasks/05-01-streaming-flicker-and-perf/"
+}

@@ -8,7 +8,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
 import { A, useParams } from "@solidjs/router"
-import { type Accessor, createMemo, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js"
+import { type Accessor, createEffect, createMemo, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
@@ -28,11 +28,11 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
   const permission = usePermission()
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
   const loaded = createMemo(() => dirs().some((directory) => globalSync.loaded(directory)))
-  const unseenCount = createMemo(() =>
+  const count = createMemo(() =>
     dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
   )
-  const hasError = createMemo(() => dirs().some((directory) => notification.project.unseenHasError(directory)))
-  const hasPermissions = createMemo(() =>
+  const error = createMemo(() => dirs().some((directory) => notification.project.unseenHasError(directory)))
+  const perms = createMemo(() =>
     dirs().some((directory) => {
       const [store] = globalSync.child(directory, { bootstrap: false })
       return hasProjectPermissions(store.session, store.permission, directory, (item) => {
@@ -40,14 +40,35 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
       })
     }),
   )
-  const notify = createMemo(() => props.notify && (hasPermissions() || unseenCount() > 0))
+  const notify = createMemo(() => props.notify && (perms() || count() > 0))
+  const badge = createMemo(() => {
+    if (perms()) return { kind: "permission", label: "!" }
+    if (error()) return { kind: "error", label: "!" }
+    const value = count()
+    return { kind: "message", label: value > 99 ? "99+" : `${value}` }
+  })
   const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
+  let last = ""
+  createEffect(() => {
+    if (!props.notify) return
+    const next = `${count()}:${error()}:${perms()}`
+    if (next === last) return
+    last = next
+    if (!notify()) return
+    console.debug("[project-icon] badge", {
+      dir: props.project.worktree,
+      count: count(),
+      error: error(),
+      permission: perms(),
+    })
+  })
   return (
     <div
       data-loaded={loaded() ? "true" : "false"}
+      data-slot="project-avatar"
       class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}
     >
-      <div class="size-full rounded overflow-clip">
+      <div data-slot="project-avatar-clip" class="size-full rounded overflow-clip">
         <Avatar
           fallback={name()}
           src={
@@ -64,18 +85,22 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
                 foreground: "var(--color-text-weak)",
               })}
           class="size-full rounded"
-          classList={{ "badge-mask": notify() }}
         />
       </div>
       <Show when={notify()}>
         <div
+          data-component="project-notification-badge"
+          data-kind={badge().kind}
+          aria-hidden="true"
+          class="absolute -top-1 -right-1 z-10 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-background-base px-1 text-[10px] font-bold leading-none text-white"
           classList={{
-            "absolute top-px right-px size-1.5 rounded-full z-10": true,
-            "bg-surface-warning-strong": hasPermissions(),
-            "bg-icon-critical-base": !hasPermissions() && hasError(),
-            "bg-text-interactive-base": !hasPermissions() && !hasError(),
+            "bg-surface-warning-strong": badge().kind === "permission",
+            "bg-text-diff-delete-base": badge().kind === "error",
+            "bg-icon-critical-base": badge().kind === "message",
           }}
-        />
+        >
+          {badge().label}
+        </div>
       </Show>
     </div>
   )

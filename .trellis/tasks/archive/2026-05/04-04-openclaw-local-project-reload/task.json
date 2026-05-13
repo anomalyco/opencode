@@ -1,0 +1,48 @@
+{
+  "id": "openclaw-local-project-reload",
+  "name": "openclaw-local-project-reload",
+  "title": "Trace local project reloads after returning from OpenClaw",
+  "description": "Investigate why desktop returns from OpenClaw to the local sidecar by reloading every cached local project instead of only the active project, and trace the exact restore/load chain across server switch, project rail restore, and session loading.",
+  "status": "completed",
+  "dev_type": "frontend",
+  "scope": "app",
+  "priority": "P2",
+  "creator": "codex",
+  "assignee": "codex",
+  "createdAt": "2026-04-04",
+  "completedAt": "2026-05-05",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "debug"
+    },
+    {
+      "phase": 2,
+      "action": "implement"
+    },
+    {
+      "phase": 3,
+      "action": "check"
+    },
+    {
+      "phase": 4,
+      "action": "finish"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "relatedFiles": [
+    "packages/app/src/context/global-sync.tsx",
+    "packages/app/src/context/server.tsx",
+    "packages/app/src/context/layout.tsx",
+    "packages/app/src/pages/layout.tsx",
+    "packages/app/src/pages/session.tsx",
+    "packages/app/src/context/prompt.tsx"
+  ],
+  "notes": "Repro: open desktop with one local project loaded, switch to OpenClaw, then switch back to local via the rail toggle. Observed behavior: all cached local projects re-enter loaded state. Initial hypothesis: server switch preserves local project buckets and rail cache, then layout.projects.open plus visibleSessionDirs effects reload more projects than intended."
+}

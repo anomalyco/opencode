@@ -1,0 +1,16 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/shared/index.md", "reason": "Shared coding standards"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
+{"file": ".trellis/spec/backend/api-module.md", "reason": "API module conventions"}
+{"file": ".trellis/spec/backend/quality.md", "reason": "Code quality requirements"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development guide"}
+{"file": ".trellis/spec/frontend/components.md", "reason": "Component conventions"}
+{"file": "packages/desktop/src-tauri/src/lib.rs", "reason": "Native startup state machine and sqlite gating"}
+{"file": "packages/desktop/src-tauri/src/cli.rs", "reason": "Sidecar spawn path and shell env probing"}
+{"file": "packages/desktop/src/index.tsx", "reason": "Startup shell gating and readiness coordination"}
+{"file": "packages/app/src/app.tsx", "reason": "ConnectionGate readiness and startup-ready signaling"}
+{"file": "packages/app/src/context/server.tsx", "reason": "Default server resolution and active-server boot semantics"}
+{"file": "packages/desktop/src/loading.tsx", "reason": "Loading route init failure handling"}
+{"file": "packages/desktop/src-tauri/src/server.rs", "reason": "Sidecar health and termination coordination"}
+{"file": "packages/desktop/src-tauri/src/windows.rs", "reason": "Main window presentation and Windows startup-specific behavior"}
+{"file": "packages/desktop/src-tauri/src/os/windows.rs", "reason": "Windows WSL and app resolution behavior touched by startup review"}

@@ -1,0 +1,41 @@
+{
+  "id": "desktop-worktree-switching",
+  "name": "desktop-worktree-switching",
+  "title": "Desktop worktree switching UX",
+  "description": "Investigate desktop worktree switching UX, current architecture support, and product semantics for switching worktree/session context from the composer Git menu.",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "priority": "P2",
+  "creator": "claude-agent",
+  "assignee": "claude-agent",
+  "createdAt": "2026-04-10",
+  "completedAt": "2026-05-05",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    },
+    {
+      "phase": 4,
+      "action": "create-pr"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "relatedFiles": [],
+  "notes": ""
+}

@@ -1,0 +1,22 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/shared/index.md", "reason": "Shared coding standards"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
+{"file": ".trellis/spec/backend/api-module.md", "reason": "API module conventions"}
+{"file": ".trellis/spec/backend/quality.md", "reason": "Code quality requirements"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development guide"}
+{"file": ".trellis/spec/frontend/components.md", "reason": "Component conventions"}
+{"file": "packages/ui/src/components/file.tsx", "reason": "Main file viewer entry point and markdown mode selection"}
+{"file": "packages/ui/src/components/markdown.tsx", "reason": "Markdown render pipeline and patch behavior"}
+{"file": "packages/ui/src/context/marked.tsx", "reason": "Markdown parser setup, shiki path, and native parser hook"}
+{"file": "packages/ui/src/components/file-media.tsx", "reason": "Current media preview architecture and extension point"}
+{"file": "packages/ui/src/pierre/media.ts", "reason": "Media type detection and data URL conversion"}
+{"file": "packages/app/src/pages/session/file-tabs.tsx", "reason": "File-tab integration, comments, annotations, and media wiring"}
+{"file": "packages/ui/src/components/line-comment-annotations.tsx", "reason": "Comment and annotation controller used by file views"}
+{"file": "packages/app/src/app.tsx", "reason": "Current markdown provider setup and native parser removal note"}
+{"file": "packages/desktop/src/index.tsx", "reason": "Desktop platform bridge for parseMarkdown"}
+{"file": "packages/desktop/src-tauri/src/markdown.rs", "reason": "Tauri native markdown parser command"}
+{"file": "packages/desktop-electron/src/main/markdown.ts", "reason": "Electron native markdown parser implementation"}
+{"file": "packages/ui/src/i18n/en.ts", "reason": "Large markdown preview fallback copy"}
+{"file": "packages/ui/src/i18n/zh.ts", "reason": "Large markdown preview fallback copy for desktop locale"}
+{"file": "packages/ui/src/i18n/no.ts", "reason": "Strict locale keys for large markdown preview fallback"}
+{"file": "packages/app/src/app.tsx", "reason": "Reconnect desktop native markdown parser for staged large-preview pipeline"}

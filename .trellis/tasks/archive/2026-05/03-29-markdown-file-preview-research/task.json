@@ -1,0 +1,53 @@
+{
+  "id": "markdown-file-preview-research",
+  "name": "markdown-file-preview-research",
+  "title": "Research markdown and file preview performance",
+  "description": "Investigate why markdown source view and markdown preview are significantly slower than editor baselines, identify the main bottlenecks in the current app and desktop stack, evaluate removing markdown source comments as a possible simplification, and produce an implementation-oriented plan for performance fixes plus broader file preview support such as svg and pdf.",
+  "status": "completed",
+  "dev_type": "research",
+  "scope": "app+desktop+ui",
+  "priority": "P2",
+  "creator": "claude-agent",
+  "assignee": "claude-agent",
+  "createdAt": "2026-03-29",
+  "completedAt": "2026-05-05",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "current_phase": 1,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    },
+    {
+      "phase": 4,
+      "action": "create-pr"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "relatedFiles": [
+    "packages/ui/src/components/file.tsx",
+    "packages/ui/src/components/markdown.tsx",
+    "packages/ui/src/context/marked.tsx",
+    "packages/ui/src/components/file-media.tsx",
+    "packages/ui/src/pierre/media.ts",
+    "packages/app/src/pages/session/file-tabs.tsx",
+    "packages/ui/src/components/line-comment-annotations.tsx",
+    "packages/app/src/app.tsx",
+    "packages/desktop/src/index.tsx",
+    "packages/desktop/src-tauri/src/markdown.rs",
+    "packages/desktop-electron/src/main/markdown.ts"
+  ],
+  "notes": "Current evidence points to two primary bottlenecks: markdown file preview opens on the full parse path with shiki, sanitize, and morphdom, and markdown source mode only virtualizes above 500KB while file tabs also enable line selection, annotations, and comment state by default. Latest runtime instrumentation on a 236KB math-heavy markdown file shows file read completes in about 208ms, while preview first paint is dominated by markdown render itself: the current 'fast' preview path still spends about 1948ms on parse/render, produces about 4.3MB of HTML, and mounts about 2621 KaTeX nodes. Implementation now gates large markdown preview behind a lightweight fallback shell with source-first escape hatch and explicit full-render action, and the large-file full-preview path has been reworked into a staged pipeline: native/light markdown parse first, immediate DOM replace instead of first-pass morphdom, then idle-sliced block upgrades for KaTeX and code highlighting."
+}
