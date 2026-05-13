@@ -23,7 +23,6 @@ import { ToolRegistry } from "@/tool/registry"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { MCP } from "../mcp"
 import { LSP } from "@/lsp/lsp"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { ulid } from "ulid"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -957,7 +956,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               },
             }
             yield* sessions.updatePart(part)
-            if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+            if (flags.experimentalEventSystem) {
               yield* sync.run(SessionEvent.Shell.Started.Sync, {
                 sessionID: input.sessionID,
                 timestamp: DateTime.makeUnsafe(started),
@@ -980,7 +979,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
               }
               const completed = Date.now()
-              if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+              if (flags.experimentalEventSystem) {
                 yield* sync.run(SessionEvent.Shell.Ended.Sync, {
                   sessionID: input.sessionID,
                   timestamp: DateTime.makeUnsafe(completed),
@@ -1571,7 +1570,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
       )
       // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-      if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+      if (flags.experimentalEventSystem) {
         yield* sync.run(SessionEvent.Prompted.Sync, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(info.time.created),
@@ -1585,7 +1584,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
       for (const text of nextPrompt.synthetic) {
         // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-        if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+        if (flags.experimentalEventSystem) {
           yield* sync.run(SessionEvent.Synthetic.Sync, {
             sessionID: input.sessionID,
             timestamp: DateTime.makeUnsafe(info.time.created),

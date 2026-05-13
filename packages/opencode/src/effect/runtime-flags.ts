@@ -22,6 +22,7 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   experimentalScout: enabledByExperimental("OPENCODE_EXPERIMENTAL_SCOUT"),
   experimentalLspTool: enabledByExperimental("OPENCODE_EXPERIMENTAL_LSP_TOOL"),
   experimentalPlanMode: enabledByExperimental("OPENCODE_EXPERIMENTAL_PLAN_MODE"),
+  experimentalEventSystem: enabledByExperimental("OPENCODE_EXPERIMENTAL_EVENT_SYSTEM"),
   client: Config.string("OPENCODE_CLIENT").pipe(Config.withDefault("cli")),
 }) {}
 
