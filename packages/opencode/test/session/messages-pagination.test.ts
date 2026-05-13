@@ -205,6 +205,15 @@ describe("MessageV2.page", () => {
     }),
   )
 
+  it.instance("fails pageEffect with NotFoundError for non-existent session", () =>
+    Effect.gen(function* () {
+      const fake = "non-existent-session" as SessionID
+      const error = yield* Effect.flip(MessageV2.pageEffect({ sessionID: fake, limit: 10 }))
+      expect(error).toBeInstanceOf(NotFoundError)
+      expect(error.message).toBe(`Session not found: ${fake}`)
+    }),
+  )
+
   it.instance("handles exact limit boundary", () =>
     withSession(({ sessionID }) =>
       Effect.gen(function* () {
@@ -488,6 +497,17 @@ describe("MessageV2.get", () => {
       Effect.gen(function* () {
         const messageID = MessageID.ascending()
         expectNotFound(() => MessageV2.get({ sessionID, messageID }), `Message not found: ${messageID}`)
+      }),
+    ),
+  )
+
+  it.instance("fails getEffect with NotFoundError for non-existent message", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const messageID = MessageID.ascending()
+        const error = yield* Effect.flip(MessageV2.getEffect({ sessionID, messageID }))
+        expect(error).toBeInstanceOf(NotFoundError)
+        expect(error.message).toBe(`Message not found: ${messageID}`)
       }),
     ),
   )
