@@ -41,7 +41,7 @@ jobs:
             } >> $GITHUB_OUTPUT
           fi
 
-      - name: Run opencode
+      - name: Run octopus
         if: steps.commits.outputs.has_commits == 'true'
         uses: sst/octopus/github@latest
         env:

@@ -27,7 +27,7 @@ jobs:
             }
 
             // Check if author is a team member or bot
-            if (login === 'opencode-agent[bot]') return;
+            if (login === 'octopus-agent[bot]') return;
             const { data: file } = await github.rest.repos.getContent({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -100,7 +100,7 @@ jobs:
             - \`refactor:\` or \`refactor(scope):\` code refactoring
             - \`test:\` or \`test(scope):\` adding or updating tests
 
-            Where \`scope\` is the package name (e.g., \`app\`, \`desktop\`, \`opencode\`).
+            Where \`scope\` is the package name (e.g., \`app\`, \`desktop\`, \`octopus\`).
 
             See [CONTRIBUTING.md](../blob/dev/CONTRIBUTING.md#pr-titles) for details.`);
               return;
@@ -174,7 +174,7 @@ jobs:
             }
 
             // Check if author is a team member or bot
-            if (login === 'opencode-agent[bot]') return;
+            if (login === 'octopus-agent[bot]') return;
             const { data: file } = await github.rest.repos.getContent({
               owner: context.repo.owner,
               repo: context.repo.repo,
