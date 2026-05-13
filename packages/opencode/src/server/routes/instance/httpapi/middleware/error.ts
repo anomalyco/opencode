@@ -1,5 +1,4 @@
 import { Provider } from "@/provider/provider"
-import { Session } from "@/session/session"
 import { iife } from "@/util/iife"
 import { NamedError } from "@opencode-ai/core/util/error"
 import * as Log from "@opencode-ai/core/util/log"
@@ -33,14 +32,6 @@ export const errorLayer = HttpRouter.middleware<{ handles: unknown }>()((effect)
           }),
         )
       }
-      if (error instanceof Session.BusyError) {
-        return Effect.succeed(
-          HttpServerResponse.jsonUnsafe(new NamedError.Unknown({ message: error.message }).toObject(), {
-            status: 400,
-          }),
-        )
-      }
-
       return Effect.succeed(
         HttpServerResponse.jsonUnsafe(
           new NamedError.Unknown({

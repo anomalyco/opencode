@@ -5,7 +5,6 @@ import { ChildProcess } from "effect/unstable/process"
 import { AppProcess } from "@opencode-ai/core/process"
 import path from "path"
 import { BusEvent } from "@/bus/bus-event"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Log from "@opencode-ai/core/util/log"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import semver from "semver"
@@ -50,7 +49,11 @@ export const Info = Schema.Struct({
 }).annotate({ identifier: "InstallationInfo" })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export const USER_AGENT = `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
+export function userAgent(client = "cli") {
+  return `opencode/${InstallationChannel}/${InstallationVersion}/${client}`
+}
+
+export const USER_AGENT = userAgent()
 
 export function isPreview() {
   return InstallationChannel !== "latest"
