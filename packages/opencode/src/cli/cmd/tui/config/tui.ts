@@ -1,5 +1,6 @@
 export * as TuiConfig from "./tui"
 
+import path from "path"
 import { createBindingLookup } from "@opentui/keymap/extras"
 import { mergeDeep, unique } from "remeda"
 import { Context, Effect, Fiber, Layer, Schema } from "effect"
@@ -7,7 +8,7 @@ import { ConfigParse } from "@/config/parse"
 import { InvalidError } from "@/config/error"
 import * as ConfigPaths from "@/config/paths"
 import { migrateTuiConfig } from "./tui-migrate"
-import { KeymapLeaderTimeoutDefault, TuiInfo } from "./tui-schema"
+import { KeymapLeaderTimeoutDefault, resolveAttentionSoundPaths, TuiInfo } from "./tui-schema"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { isRecord } from "@/util/record"
 import { Global } from "@opencode-ai/core/global"
@@ -22,6 +23,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { ConfigVariable } from "@/config/variable"
 import { Npm } from "@opencode-ai/core/npm"
 import type { DeepMutable } from "@opencode-ai/core/schema"
+import type { TuiAttentionSoundName } from "@opencode-ai/plugin/tui"
 
 const log = Log.create({ service: "tui.config" })
 
@@ -33,7 +35,15 @@ type Acc = {
   plugin_origins: ConfigPlugin.Origin[]
 }
 
-export type Resolved = Omit<Info, "keybinds" | "leader_timeout"> & {
+export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout"> & {
+  attention: {
+    enabled: boolean
+    notifications: boolean
+    sound: boolean
+    volume: number
+    sound_pack: string
+    sounds: Partial<Record<TuiAttentionSoundName, string>>
+  }
   keybinds: TuiKeybind.BindingLookupView
   leader_timeout: number
   // Internal resolved plugin list used by runtime loading.
@@ -101,7 +111,16 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
           })
         }
       }
-      const validated = ConfigParse.schema(Info, normalized, configFilepath)
+      const parsed = ConfigParse.schema(Info, normalized, configFilepath)
+      const validated = parsed.attention?.sounds
+        ? {
+            ...parsed,
+            attention: {
+              ...parsed.attention,
+              sounds: resolveAttentionSoundPaths(path.dirname(configFilepath), parsed.attention.sounds),
+            },
+          }
+        : parsed
       return yield* resolvePlugins(validated, configFilepath)
     }).pipe(
       // catchCause (not tapErrorCause + orElseSucceed) because JSONC parsing and validation
@@ -197,6 +216,14 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
   const parsedKeybinds = TuiKeybind.parse(keybinds)
   const result: Resolved = {
     ...acc.result,
+    attention: {
+      enabled: acc.result.attention?.enabled ?? false,
+      notifications: acc.result.attention?.notifications ?? true,
+      sound: acc.result.attention?.sound ?? true,
+      volume: acc.result.attention?.volume ?? 0.4,
+      sound_pack: acc.result.attention?.sound_pack ?? "opencode.default",
+      sounds: acc.result.attention?.sounds ?? {},
+    },
     keybinds: createBindingLookup(TuiKeybind.toBindingConfig(parsedKeybinds), {
       commandMap: TuiKeybind.CommandMap,
       bindingDefaults: TuiKeybind.bindingDefaults(),
