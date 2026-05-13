@@ -18,7 +18,6 @@ export interface Interface {
   readonly load: (input: LoadInput) => Effect.Effect<InstanceContext>
   readonly reload: (input: LoadInput) => Effect.Effect<InstanceContext>
   readonly dispose: (ctx: InstanceContext) => Effect.Effect<void>
-  readonly disposeDirectory: (directory: string) => Effect.Effect<void>
   readonly disposeAll: () => Effect.Effect<void>
   readonly provide: <A, E, R>(input: LoadInput, effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
 }
@@ -149,16 +148,6 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
       yield* disposeEntry(ctx.directory, entry, ctx).pipe(Effect.asVoid)
     })
 
-    const disposeDirectory = Effect.fn("InstanceStore.disposeDirectory")(function* (directory: string) {
-      const key = AppFileSystem.resolve(directory)
-      const entry = cache.get(key)
-      if (!entry) return
-
-      const exit = yield* Deferred.await(entry.deferred).pipe(Effect.exit)
-      if (Exit.isFailure(exit)) return yield* removeEntry(key, entry).pipe(Effect.asVoid)
-      yield* disposeEntry(key, entry, exit.value).pipe(Effect.asVoid)
-    })
-
     const disposeAllOnce = Effect.fnUntraced(function* () {
       yield* Effect.logInfo("disposing all instances")
       yield* Effect.forEach(
@@ -193,7 +182,6 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
       load,
       reload,
       dispose,
-      disposeDirectory,
       disposeAll,
       provide,
     })
