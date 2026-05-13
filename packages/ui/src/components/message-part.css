@@ -1,6 +1,4 @@
 [data-component="assistant-message"] {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 680px;
   contain: layout style;
   transform: translateZ(0);
   width: 100%;
@@ -351,7 +349,6 @@
 [data-component="text-part"] {
   width: 100%;
   margin-top: 24px;
-  contain-intrinsic-size: auto 240px;
   contain: layout style;
   transform: translateZ(0);
 
