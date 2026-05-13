@@ -1,4 +1,4 @@
-import { Cause, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context, Stream } from "effect"
+import { Cause, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
@@ -84,48 +84,13 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
 
           const args = (cmd: string[]) => ["--git-dir", state.gitdir, "--work-tree", state.worktree, ...cmd]
 
-          const enc = new TextEncoder()
-          const feed = (list: string[]) => Stream.make(enc.encode(list.join("\0") + "\0"))
-
-          const gitWithStdin = Effect.fnUntraced(
-            function* (
-              cmd: string[],
-              opts: { cwd?: string; env?: Record<string, string>; stdin: ChildProcess.CommandInput },
-            ) {
-              // stdin-feed calls still need raw spawn — AppProcess.run does not yet
-              // expose a stdin Stream API. Tracked as future AppProcess helper.
-              const proc = ChildProcess.make("git", cmd, {
-                cwd: opts.cwd,
-                env: opts.env,
-                extendEnv: true,
-                stdin: opts.stdin,
-              })
-              const handle = yield* appProcess.spawn(proc)
-              const [text, stderr] = yield* Effect.all(
-                [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
-                { concurrency: 2 },
-              )
-              const code = yield* handle.exitCode
-              return { code, text, stderr } satisfies GitResult
-            },
-            Effect.scoped,
-            Effect.catch((err) =>
-              Effect.succeed({
-                code: ChildProcessSpawner.ExitCode(1),
-                text: "",
-                stderr: err instanceof Error ? err.message : String(err),
-              }),
-            ),
-          )
+          const feed = (list: string[]) => list.join("\0") + "\0"
 
           const git = Effect.fnUntraced(
-            function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string> }) {
+            function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string>; stdin?: string }) {
               const result = yield* appProcess.run(
-                ChildProcess.make("git", cmd, {
-                  cwd: opts?.cwd,
-                  env: opts?.env,
-                  extendEnv: true,
-                }),
+                ChildProcess.make("git", cmd, { cwd: opts?.cwd, env: opts?.env, extendEnv: true }),
+                { stdin: opts?.stdin },
               )
               return {
                 code: ChildProcessSpawner.ExitCode(result.exitCode),
@@ -144,7 +109,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
 
           const ignore = Effect.fnUntraced(function* (files: string[]) {
             if (!files.length) return new Set<string>()
-            const check = yield* gitWithStdin(
+            const check = yield* git(
               [
                 ...quote,
                 "--git-dir",
@@ -167,7 +132,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
 
           const drop = Effect.fnUntraced(function* (files: string[]) {
             if (!files.length) return
-            yield* gitWithStdin(
+            yield* git(
               [
                 ...cfg,
                 ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
@@ -181,7 +146,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
 
           const stage = Effect.fnUntraced(function* (files: string[]) {
             if (!files.length) return
-            const result = yield* gitWithStdin(
+            const result = yield* git(
               [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
               {
                 cwd: state.directory,
@@ -590,26 +555,21 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
                     })
                     if (!refs.length) return new Map<string, { before: string; after: string }>()
 
-                    // cat-file --batch is a stdin-feed call — kept on raw spawn
-                    // until AppProcess.run exposes a stdin Stream API.
-                    const proc = ChildProcess.make("git", [...cfg, ...args(["cat-file", "--batch"])], {
-                      cwd: state.directory,
-                      extendEnv: true,
-                      stdin: Stream.make(new TextEncoder().encode(refs.map((item) => item.ref).join("\n") + "\n")),
-                    })
-                    const handle = yield* appProcess.spawn(proc)
-                    const [out, err] = yield* Effect.all(
-                      [Stream.mkUint8Array(handle.stdout), Stream.mkString(Stream.decodeText(handle.stderr))],
-                      { concurrency: 2 },
+                    const batch = yield* appProcess.run(
+                      ChildProcess.make("git", [...cfg, ...args(["cat-file", "--batch"])], {
+                        cwd: state.directory,
+                        extendEnv: true,
+                      }),
+                      { stdin: refs.map((item) => item.ref).join("\n") + "\n" },
                     )
-                    const code = yield* handle.exitCode
-                    if (code !== 0) {
+                    if (batch.exitCode !== 0) {
                       log.info("git cat-file --batch failed during snapshot diff, falling back to per-file git show", {
-                        stderr: err,
+                        stderr: batch.stderr.toString("utf8"),
                         refs: refs.length,
                       })
                       return
                     }
+                    const out = batch.stdout
 
                     const fail = (msg: string, extra?: Record<string, string>) => {
                       log.info(msg, { ...extra, refs: refs.length })
