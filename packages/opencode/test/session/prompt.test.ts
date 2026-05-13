@@ -95,18 +95,6 @@ function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
   )
 }
 
-function waitForSessionStatus(sessionID: SessionID, type: "busy" | "idle") {
-  return Effect.gen(function* () {
-    const status = yield* SessionStatus.Service
-    const end = Date.now() + 5_000
-    while (Date.now() < end) {
-      if ((yield* status.get(sessionID)).type === type) return
-      yield* Effect.sleep(20)
-    }
-    throw new Error(`timed out waiting for session ${sessionID} to become ${type}`)
-  })
-}
-
 function toolPart(parts: MessageV2.Part[]) {
   return parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
 }
@@ -774,7 +762,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  10_000,
+  3_000,
 )
 
 // Cancel semantics
@@ -804,7 +792,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  10_000,
+  3_000,
 )
 
 it.live(
@@ -832,7 +820,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  10_000,
+  3_000,
 )
 
 it.live(
@@ -947,7 +935,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  10_000,
+  3_000,
 )
 
 // Queue semantics
@@ -991,7 +979,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  10_000,
+  3_000,
 )
 
 it.live(
@@ -1060,7 +1048,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  10_000,
+  3_000,
 )
 
 it.live(
@@ -1090,7 +1078,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  10_000,
+  3_000,
 )
 
 it.live("assertNotBusy succeeds when idle", () =>
@@ -1135,7 +1123,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  10_000,
+  3_000,
 )
 
 unix("shell captures stdout and stderr in completed tool output", () =>
@@ -1233,7 +1221,7 @@ unix("shell commands can change directory after startup", () =>
         expect(tool.state.metadata.output).toContain(parent)
         yield* run.assertNotBusy(chat.id)
       }),
-    { git: true, config: { ...cfg, shell: "sh" } },
+    { git: true, config: cfg },
   ),
 )
 
@@ -1336,7 +1324,7 @@ it.live(
         const sh = yield* prompt
           .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
           .pipe(Effect.forkChild)
-        yield* waitForSessionStatus(chat.id, "busy")
+        yield* Effect.sleep(50)
 
         const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
         yield* Effect.sleep(50)
@@ -1355,7 +1343,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  10_000,
+  3_000,
 )
 
 it.live(
@@ -1374,7 +1362,7 @@ it.live(
         const sh = yield* prompt
           .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
           .pipe(Effect.forkChild)
-        yield* waitForSessionStatus(chat.id, "busy")
+        yield* Effect.sleep(50)
 
         const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
         const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
@@ -1395,7 +1383,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  10_000,
+  3_000,
 )
 
 unix(
@@ -1449,7 +1437,7 @@ unix(
             const sh = yield* prompt
               .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
               .pipe(Effect.forkChild)
-            yield* waitForSessionStatus(chat.id, "busy")
+            yield* Effect.sleep(50)
 
             yield* prompt.cancel(chat.id)
 
@@ -1486,7 +1474,7 @@ unix(
             const sh = yield* prompt
               .shell({ sessionID: chat.id, agent: "build", command: "trap '' TERM; sleep 30" })
               .pipe(Effect.forkChild)
-            yield* waitForSessionStatus(chat.id, "busy")
+            yield* Effect.sleep(50)
 
             yield* prompt.cancel(chat.id)
 
@@ -1536,17 +1524,7 @@ unix(
 
           const run = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
           yield* llm.wait(1)
-          yield* Effect.promise(async () => {
-            const end = Date.now() + 5_000
-            while (Date.now() < end) {
-              const msgs = await MessageV2.filterCompacted(MessageV2.stream(chat.id))
-              const assistant = msgs.find((item) => item.info.role === "assistant")
-              const tool = assistant ? toolPart(assistant.parts) : undefined
-              if (tool?.state.status === "running" && String(tool.state.metadata?.output ?? "").length > 2_000) return
-              await new Promise((done) => setTimeout(done, 20))
-            }
-            throw new Error("timed out waiting for bash output before cancellation")
-          })
+          yield* Effect.sleep(150)
           yield* prompt.cancel(chat.id)
 
           const exit = yield* Fiber.await(run)
@@ -1562,7 +1540,7 @@ unix(
           expect(tool.state.output).toMatch(/Full output saved to:\s+\S+/)
           expect(tool.state.output).not.toContain("Tool execution aborted")
         }),
-      { git: true, config: (url) => ({ ...providerCfg(url), tool_output: { max_bytes: 1_024 } }) },
+      { git: true, config: providerCfg },
     ),
   30_000,
 )
@@ -1578,7 +1556,7 @@ unix(
           const sh = yield* prompt
             .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
             .pipe(Effect.forkChild)
-          yield* waitForSessionStatus(chat.id, "busy")
+          yield* Effect.sleep(50)
 
           const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
           yield* Effect.sleep(50)
@@ -1611,7 +1589,7 @@ unix(
             const a = yield* prompt
               .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
               .pipe(Effect.forkChild)
-            yield* waitForSessionStatus(chat.id, "busy")
+            yield* Effect.sleep(50)
 
             const exit = yield* prompt
               .shell({ sessionID: chat.id, agent: "build", command: "echo hi" })
@@ -2082,7 +2060,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  10_000,
+  3_000,
 )
 
 // Agent variant

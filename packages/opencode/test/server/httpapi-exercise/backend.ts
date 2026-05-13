@@ -26,7 +26,7 @@ export function callAuthProbe(scenario: ActiveScenario, credentials: "missing" |
           toAuthProbeRequest(scenario, credentials, controller.signal),
         ),
       ).then((response) => capture(response, scenario.capture)),
-      Bun.sleep(5_000).then(() => {
+      Bun.sleep(1_000).then(() => {
         controller.abort("auth probe timed out")
         return {
           status: 0,

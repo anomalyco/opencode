@@ -80,7 +80,6 @@ describe("worktree endpoint reproduction", () => {
             body: JSON.stringify({}),
           }),
           "direct worktree create",
-          15_000,
         )
 
         expect(response.status).toBe(200)
@@ -103,7 +102,7 @@ describe("worktree endpoint reproduction", () => {
             body: JSON.stringify({ type: "worktree", branch: null }),
           }),
           "workspace worktree create",
-          15_000,
+          8_000,
         )
 
         expect(response.status).toBe(200)
