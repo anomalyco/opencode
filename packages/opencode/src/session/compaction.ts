@@ -18,9 +18,9 @@ import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow, usable } from "./overflow"
 import { makeRuntime } from "@/effect/run-service"
 import { serviceUse } from "@/effect/service-use"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { SyncEvent } from "@/sync"
 import { SessionEvent } from "@/v2/session-event"
-import { Flag } from "@opencode-ai/core/flag/flag"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -221,6 +221,7 @@ export const layer: Layer.Layer<
   | SessionProcessor.Service
   | Provider.Service
   | SyncEvent.Service
+  | RuntimeFlags.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -232,6 +233,7 @@ export const layer: Layer.Layer<
     const processors = yield* SessionProcessor.Service
     const provider = yield* Provider.Service
     const sync = yield* SyncEvent.Service
+    const flags = yield* RuntimeFlags.Service
 
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: MessageV2.Assistant["tokens"]
@@ -572,7 +574,7 @@ export const layer: Layer.Layer<
             parts: [],
           },
         )
-        if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+        if (flags.experimentalEventSystem) {
           yield* sync.run(SessionEvent.Compaction.Ended.Sync, {
             sessionID: input.sessionID,
             timestamp: DateTime.makeUnsafe(Date.now()),
@@ -608,7 +610,7 @@ export const layer: Layer.Layer<
         auto: input.auto,
         overflow: input.overflow,
       })
-      if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+      if (flags.experimentalEventSystem) {
         yield* sync.run(SessionEvent.Compaction.Started.Sync, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(Date.now()),
@@ -636,6 +638,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(SyncEvent.defaultLayer),
+    Layer.provide(RuntimeFlags.defaultLayer),
   ),
 )
 

@@ -1,5 +1,6 @@
 import { afterAll, afterEach, describe, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
@@ -17,6 +18,11 @@ import { Plugin } from "../../src/plugin/index"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
 import { Instance } from "../../src/project/instance"
 import { InstanceStore } from "../../src/project/instance-store"
+import { Project } from "../../src/project/project"
+import { Vcs } from "../../src/project/vcs"
+import { Session } from "../../src/session/session"
+import { SessionPrompt } from "../../src/session/prompt"
+import { SyncEvent } from "../../src/sync"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { NpmTest } from "../fake/npm"
@@ -42,8 +48,16 @@ const pluginLayer = Plugin.layer.pipe(
   Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })),
 )
 const noopBootstrapLayer = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
-const workspaceLayer = Workspace.defaultLayer.pipe(
+const workspaceLayer = Workspace.layer.pipe(
+  Layer.provide(Auth.defaultLayer),
+  Layer.provide(Session.defaultLayer),
+  Layer.provide(SyncEvent.defaultLayer),
+  Layer.provide(SessionPrompt.defaultLayer),
+  Layer.provide(Project.defaultLayer),
+  Layer.provide(Vcs.defaultLayer),
+  Layer.provide(FetchHttpClient.layer),
   Layer.provide(InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrapLayer))),
+  Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: true })),
 )
 const it = testEffect(Layer.mergeAll(pluginLayer, workspaceLayer, CrossSpawnSpawner.defaultLayer))
 

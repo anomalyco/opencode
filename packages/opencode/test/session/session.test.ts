@@ -3,16 +3,29 @@ import { Deferred, Effect, Exit, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import * as Log from "@opencode-ai/core/util/log"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { Bus } from "@/bus"
+import { Storage } from "@/storage/storage"
+import { SyncEvent } from "@/sync"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 void Log.init({ print: false })
 
-const it = testEffect(Layer.mergeAll(SessionNs.defaultLayer, CrossSpawnSpawner.defaultLayer))
+const it = testEffect(
+  Layer.mergeAll(
+    SessionNs.layer.pipe(
+      Layer.provide(Bus.layer),
+      Layer.provide(Storage.defaultLayer),
+      Layer.provide(SyncEvent.defaultLayer),
+      Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
+    ),
+    CrossSpawnSpawner.defaultLayer,
+  ),
+)
 
 const awaitDeferred = <T>(deferred: Deferred.Deferred<T>, message: string) =>
   Effect.race(
@@ -56,8 +69,6 @@ describe("session.created event", () => {
 
   it.instance("session.created event should be emitted before session.updated", () =>
     Effect.gen(function* () {
-      if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) return
-
       const session = yield* SessionNs.Service
       const events: string[] = []
       const received = yield* Deferred.make<string[]>()
