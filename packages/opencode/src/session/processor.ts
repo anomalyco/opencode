@@ -124,6 +124,8 @@ export const layer: Layer.Layer<
       }
       let aborted = false
       const slog = log.clone().tag("session.id", input.sessionID).tag("messageID", input.assistantMessage.id)
+      const now = () => Math.max(0, Date.now())
+      const startTime = (start: number | undefined, end: number) => (start === undefined || start < 0 ? end : start)
 
       const parse = (e: unknown) =>
         MessageV2.fromError(e, {
@@ -187,7 +189,10 @@ export const layer: Layer.Layer<
             output: output.output,
             metadata: output.metadata,
             title: output.title,
-            time: { start: match.part.state.time.start, end: Date.now() },
+            time: (() => {
+              const end = now()
+              return { start: startTime(match.part.state.time.start, end), end }
+            })(),
             attachments: output.attachments,
           },
         })
@@ -203,7 +208,10 @@ export const layer: Layer.Layer<
             status: "error",
             input: match.part.state.input,
             error: errorMessage(error),
-            time: { start: match.part.state.time.start, end: Date.now() },
+            time: (() => {
+              const end = now()
+              return { start: startTime(match.part.state.time.start, end), end }
+            })(),
           },
         })
         if (error instanceof Permission.RejectedError || error instanceof Question.RejectedError) {
@@ -227,7 +235,7 @@ export const layer: Layer.Layer<
               sessionID: ctx.assistantMessage.sessionID,
               type: "reasoning",
               text: "",
-              time: { start: Date.now() },
+              time: { start: now() },
               metadata: value.providerMetadata,
             }
             yield* session.updatePart(ctx.reasoningMap[value.id])
@@ -250,7 +258,7 @@ export const layer: Layer.Layer<
             if (!(value.id in ctx.reasoningMap)) return
             // oxlint-disable-next-line no-self-assign -- reactivity trigger
             ctx.reasoningMap[value.id].text = ctx.reasoningMap[value.id].text
-            ctx.reasoningMap[value.id].time = { ...ctx.reasoningMap[value.id].time, end: Date.now() }
+            ctx.reasoningMap[value.id].time = { ...ctx.reasoningMap[value.id].time, end: now() }
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
             yield* session.updatePart(ctx.reasoningMap[value.id])
             delete ctx.reasoningMap[value.id]
@@ -295,7 +303,7 @@ export const layer: Layer.Layer<
                 ...match.state,
                 status: "running",
                 input: value.input,
-                time: { start: Date.now() },
+                time: { start: now() },
               },
               metadata: match.metadata?.providerExecuted
                 ? { ...value.providerMetadata, providerExecuted: true }
@@ -410,7 +418,7 @@ export const layer: Layer.Layer<
               sessionID: ctx.assistantMessage.sessionID,
               type: "text",
               text: "",
-              time: { start: Date.now() },
+              time: { start: now() },
               metadata: value.providerMetadata,
             }
             yield* session.updatePart(ctx.currentText)
@@ -443,8 +451,8 @@ export const layer: Layer.Layer<
               { text: ctx.currentText.text },
             )).text
             {
-              const end = Date.now()
-              ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
+              const end = now()
+              ctx.currentText.time = { start: startTime(ctx.currentText.time?.start, end), end }
             }
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
             yield* session.updatePart(ctx.currentText)
@@ -477,17 +485,17 @@ export const layer: Layer.Layer<
         }
 
         if (ctx.currentText) {
-          const end = Date.now()
-          ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
+          const end = now()
+          ctx.currentText.time = { start: startTime(ctx.currentText.time?.start, end), end }
           yield* session.updatePart(ctx.currentText)
           ctx.currentText = undefined
         }
 
         for (const part of Object.values(ctx.reasoningMap)) {
-          const end = Date.now()
+          const end = now()
           yield* session.updatePart({
             ...part,
-            time: { start: part.time.start ?? end, end },
+            time: { start: startTime(part.time.start, end), end },
           })
         }
         ctx.reasoningMap = {}
@@ -502,7 +510,7 @@ export const layer: Layer.Layer<
           const match = yield* readToolCall(toolCallID)
           if (!match) continue
           const part = match.part
-          const end = Date.now()
+          const end = now()
           const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
           yield* session.updatePart({
             ...part,
@@ -511,12 +519,12 @@ export const layer: Layer.Layer<
               status: "error",
               error: "Tool execution aborted",
               metadata: { ...metadata, interrupted: true },
-              time: { start: "time" in part.state ? part.state.time.start : end, end },
+              time: { start: startTime("time" in part.state ? part.state.time.start : undefined, end), end },
             },
           })
         }
         ctx.toolcalls = {}
-        ctx.assistantMessage.time.completed = Date.now()
+        ctx.assistantMessage.time.completed = now()
         yield* session.updateMessage(ctx.assistantMessage)
       })
 

@@ -541,7 +541,7 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service> =
         yield* Effect.sync(() =>
           SyncEvent.run(MessageV2.Event.PartUpdated, {
             sessionID: part.sessionID,
-            part: structuredClone(part),
+            part: JSON.parse(JSON.stringify(part)) as T,
             time: Date.now(),
           }),
         )
