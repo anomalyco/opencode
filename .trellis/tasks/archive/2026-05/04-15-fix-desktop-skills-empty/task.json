@@ -1,0 +1,50 @@
+{
+  "id": "fix-desktop-skills-empty",
+  "name": "fix-desktop-skills-empty",
+  "title": "Fix desktop skills panel showing empty despite skills existing",
+  "description": "Desktop skills panel (cmd+shift+;) shows '0 loaded' despite skills existing in ~/.claude/skills/. Root cause: QuickAssistant mode check skips ALL skill loading including global skills. Fix applied but needs proper build/deployment.",
+  "status": "completed",
+  "dev_type": "fullstack",
+  "scope": "bug-fix",
+  "priority": "P1",
+  "creator": "claude-agent",
+  "assignee": "claude-agent",
+  "createdAt": "2026-04-15",
+  "completedAt": "2026-05-05",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "current_phase": 1,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    },
+    {
+      "phase": 4,
+      "action": "create-pr"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [
+    "Verify build process compiles latest code changes",
+    "Debug why API endpoint returns no data",
+    "Test that global skills load in all modes",
+    "Add integration tests for skill loading"
+  ],
+  "relatedFiles": [
+    "packages/opencode/src/skill/index.ts",
+    "packages/app/src/components/dialog-select-skill.tsx",
+    "packages/opencode/src/quick-assistant.ts"
+  ],
+  "notes": "Code fix completed (lines 128-163 in skill/index.ts). Global skills now load before QuickAssistant check. Needs proper build/deployment to take effect. CLI /skills works correctly, issue is in desktop build pipeline or API layer."
+}

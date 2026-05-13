@@ -1,0 +1,49 @@
+{
+  "id": "desktop-startup-gating",
+  "name": "desktop-startup-gating",
+  "title": "Desktop startup gating",
+  "description": "Tighten desktop startup gating so the main window appears as soon as the HTML startup shell can safely take over, while first-interaction readiness remains gated by explicit startup signals instead of duplicate waits.",
+  "status": "completed",
+  "dev_type": "fullstack",
+  "scope": "desktop+app",
+  "priority": "P2",
+  "creator": "claude-agent",
+  "assignee": "claude-agent",
+  "createdAt": "2026-03-28",
+  "completedAt": "2026-05-01",
+  "branch": "feat-desktop-startup-gating",
+  "base_branch": "dev",
+  "worktree_path": "/tmp/feat-desktop-startup-gating",
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    },
+    {
+      "phase": 4,
+      "action": "create-pr"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "relatedFiles": [
+    "packages/desktop/src-tauri/src/lib.rs",
+    "packages/desktop/src/index.tsx",
+    "packages/app/src/app.tsx",
+    "packages/app/src/pages/home.tsx",
+    "packages/app/src/pages/layout.tsx",
+    "packages/desktop/index.html",
+    "packages/desktop/src/loading.tsx"
+  ],
+  "notes": "Core rule: show the native loading window only until the hidden main window plus HTML startup shell can take over. Keep SQLite migration gating, remove duplicate desktop-local blocking health waits, and do not let home-page warm prefetch delay startup-interactive."
+}

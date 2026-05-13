@@ -1,0 +1,45 @@
+{
+  "id": "desktop-session-scroll-jitter",
+  "name": "desktop-session-scroll-jitter",
+  "title": "Desktop session scroll jitter and history rendering issues",
+  "description": "Track investigation of desktop session scroll jumps, history loading jitter, virtualized timeline overlap, and markdown lazy-render height changes causing viewport instability.",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "priority": "P2",
+  "creator": "claude-agent",
+  "assignee": "claude-agent",
+  "createdAt": "2026-04-01",
+  "completedAt": "2026-04-15",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    },
+    {
+      "phase": 4,
+      "action": "create-pr"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "relatedFiles": [
+    ".trellis/tasks/04-01-desktop-session-scroll-jitter/cherry-studio-scroll-research.md",
+    ".trellis/tasks/04-01-desktop-session-scroll-jitter/opencode-scroll-simplification-proposal.md",
+    ".trellis/tasks/04-01-desktop-session-scroll-jitter/opencode-scroll-implementation-plan.md"
+  ],
+  "notes": "Cherry Studio scroll research added on 2026-04-02. Main takeaway: stability comes from a narrower scroll model with column-reverse, inverse infinite scroll, shallow per-topic scroll persistence, and fewer competing scroll owners. OpenCode simplification proposal added on 2026-04-02: one page-level scroll owner, remove turn-level auto-scroll from timeline usage, keep history slicing, disable main timeline virtualization for now, and move to event-driven live-follow plus a single anchor-based restore path. Detailed implementation plan added on 2026-04-02 with 7 ordered patches and verification matrix."
+}

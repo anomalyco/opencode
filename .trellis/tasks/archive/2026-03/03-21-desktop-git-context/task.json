@@ -1,0 +1,46 @@
+{
+  "id": "desktop-git-context",
+  "name": "desktop-git-context",
+  "title": "Desktop git context panel",
+  "description": "Add desktop composer Git context chip and popover with branch and worktree details.",
+  "status": "completed",
+  "dev_type": "feature",
+  "scope": "frontend+backend",
+  "priority": "P2",
+  "creator": "lelouch",
+  "assignee": "lelouch",
+  "createdAt": "2026-03-21",
+  "completedAt": "2026-03-28",
+  "branch": "feat/desktop-git-context",
+  "base_branch": "dev",
+  "worktree_path": null,
+  "current_phase": 1,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    },
+    {
+      "phase": 4,
+      "action": "create-pr"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "relatedFiles": [
+    "packages/opencode/src/project/vcs.ts",
+    "packages/opencode/src/server/server.ts",
+    "packages/app/src/components/prompt-input.tsx",
+    "packages/app/src/context/global-sync/bootstrap.ts"
+  ],
+  "notes": "First iteration focuses on read-only Git context visibility in composer."
+}

@@ -1,0 +1,51 @@
+{
+  "id": "ai-tool-performance-architecture",
+  "name": "ai-tool-performance-architecture",
+  "title": "Research AI tool performance architecture",
+  "description": "Study t3code architecture and performance tactics, compare them with opencode, and turn the findings into an implementation plan focused on event ingestion, frontend rendering, and state synchronization.",
+  "status": "completed",
+  "dev_type": "research",
+  "scope": "frontend+backend",
+  "priority": "P2",
+  "creator": "claude-agent",
+  "assignee": "claude-agent",
+  "createdAt": "2026-03-28",
+  "completedAt": "2026-05-05",
+  "branch": null,
+  "base_branch": "feat/aether-theme",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    },
+    {
+      "phase": 4,
+      "action": "create-pr"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "relatedFiles": [
+    "packages/app/src/context/global-sdk.tsx",
+    "packages/app/src/context/global-sync/event-reducer.ts",
+    "packages/app/src/pages/session/message-timeline.tsx",
+    "packages/app/src/pages/session/message-timeline-utils.ts",
+    "packages/ui/src/components/message-part.tsx",
+    "packages/ui/src/components/markdown.tsx",
+    "packages/opencode/src/cli/cmd/tui/context/sdk.tsx",
+    "packages/opencode/src/server/routes/event.ts",
+    "packages/opencode/src/bus/index.ts"
+  ],
+  "notes": "Main hypothesis: opencode already has strong client-side batching and rendering protections, but more event coalescing and finalize logic should move closer to provider/server ingestion so app and TUI consume a more stable read model. Immediate focus is observation, reducer-side delta batching, TUI coalescing parity, and revisiting working-session virtualization strategy."
+}

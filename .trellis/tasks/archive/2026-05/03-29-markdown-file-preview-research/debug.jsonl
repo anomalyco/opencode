@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/shared/index.md", "reason": "Shared coding standards"}
+{"file": ".claude/commands/trellis/check-backend.md", "reason": "Backend check spec"}
+{"file": ".claude/commands/trellis/check-frontend.md", "reason": "Frontend check spec"}
+{"ts": "2026-03-30T10:55:00+08:00", "kind": "runtime", "summary": "Renderer console instrumentation showed large markdown open cost is dominated by preview render rather than file IO.", "details": {"path": "papers/[Bonetti, Meneghelli, Rastelli] VOAs labelled by complex reflection groups and 4d SCFTs.md", "chars": 236105, "read_ms": 208, "render_ms": 1948, "html_bytes": 4335226, "katex_nodes": 2621}}

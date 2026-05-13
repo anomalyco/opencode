@@ -1,0 +1,31 @@
+{
+  "id": "project-plugin-scope-leak",
+  "name": "project-plugin-scope-leak",
+  "title": "Fix project plugin scope leaking into other projects",
+  "description": "Investigate and fix a plugin isolation bug where project-level plugins from one repo can affect sessions opened in unrelated projects. Repro observed with opencode repo local plugin files triggering math-check command attempts inside a pyope session.",
+  "status": "completed",
+  "dev_type": "backend",
+  "scope": "app",
+  "priority": "P1",
+  "creator": "codex",
+  "assignee": "codex",
+  "createdAt": "2026-04-05",
+  "completedAt": "2026-05-09",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "current_phase": 4,
+  "next_action": [],
+  "commit": "d7f3812e6192937160b2241514dc5edb5005c838",
+  "pr_url": null,
+  "subtasks": [],
+  "relatedFiles": [
+    "packages/opencode/src/config/config.ts",
+    "packages/opencode/src/plugin/index.ts",
+    "packages/opencode/src/command/index.ts",
+    "packages/opencode/src/session/prompt.ts",
+    "packages/opencode/src/project/bootstrap.ts",
+    "packages/app/src/context/notification.tsx"
+  ],
+  "notes": "Observed bug: a pyope session titled 'qp函数实现与正规乘积注释' emitted session.error with message 'Command not found: \"math-check\"', even though math-check exists only under opencode repo project plugins. Root suspicion: project-level plugin discovery or plugin cache is not correctly scoped per active project/worktree/session. Confirm whether plugin hooks are loaded globally once and then reused across unrelated directories, or whether Quick Assistant / bootstrap paths merge config from the wrong root."
+}

@@ -1,0 +1,105 @@
+{
+  "id": "05-04-arc-css-coverage-gaps",
+  "name": "05-04-arc-css-coverage-gaps",
+  "title": "CSS 样式体系全量审计：5 个严重 Bug + Aether 主题缺口 + 色彩系统冗余",
+  "description": "2026-05-04 五维并行审计发现 23 个问题。严重 Bug：(1) tailwind/colors.css 第 24 行 surface-raised-base-hover 映射错误（指向 surface-interactive-base）；(2) tailwind/colors.css 第 25 行 surface-raised-base-active 硬编码黄绿色；（3）utilities.css .w-[200px] 实际 150px；（4）utilities.css .pl-2 覆盖 Tailwind 内置且值为 2 倍；（5）--surface-hover/--surface-disabled 未定义。Aether 缺口：暗色 Dock 不匹配、零过渡动画、浮动面板浅。冗余：colors.css 约 30% 死代码（两组 gray、smoke 重复、未使用别名）。改进方案扩展为 A-F，方案 A（修复 Bug）优先级最高。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": "ui-styles",
+  "priority": "P1",
+  "creator": "claude-agent",
+  "assignee": null,
+  "createdAt": "2026-05-04",
+  "completedAt": "2026-05-05",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [
+    {
+      "id": "A-fix-bugs",
+      "title": "方案 A: 修复 5 个严重 Bug",
+      "description": "修复 tailwind/colors.css 两个错误映射（第24行 surface-raised-base-hover→surface-interactive-base，第25行硬编码黄绿色）；删除 utilities.css .w-[200px]（或改为200px）和 .pl-2（让 Tailwind 内置处理）；在 theme.css 中定义 --surface-hover 和 --surface-disabled；定义 --surface-panel 并修正 bg-surface-panel 引用。运行 script/tailwind.ts 重新生成 colors.css。",
+      "priority": "P0",
+      "status": "pending",
+      "estimatedHours": "2-3"
+    },
+    {
+      "id": "C-sidebar-scope",
+      "title": "方案 C: sidebar 作用域 class 替代 data-component 白名单",
+      "description": "在 sidebar-shell.tsx 的 sidebar-rail 和 panel 容器上添加 class='arc-sidebar-scope'（仅 Arc 主题下生效）；将 arc.css 中的多选择器改为 html[data-theme='arc'] .arc-sidebar-scope；防御性添加 getting-started、workspace-item；验证所有 sidebar 内组件覆盖效果不变。可消除约一半 !important。",
+      "priority": "P1",
+      "status": "pending",
+      "estimatedHours": "2-4"
+    },
+    {
+      "id": "E-aether-fix",
+      "title": "方案 E: Aether 主题补全",
+      "description": "为 [data-dock-surface='shell'] 和 [data-dock-surface='tray'] 添加 @media (prefers-color-scheme: dark) 覆盖（深暖色背景替代透明玻璃）；添加基础过渡动画块（button、icon-button、sidebar-session 的 background-color 和 box-shadow，包裹在 prefers-reduced-motion 中）；可选：为浮动面板添加 backdrop-filter + 增强阴影。",
+      "priority": "P1",
+      "status": "pending",
+      "estimatedHours": "2-3"
+    },
+    {
+      "id": "B-dual-override-tool",
+      "title": "方案 B: 双重覆盖自动生成工具",
+      "description": "写 PostCSS 插件或 shell 脚本，自动为每个 --token: value 生成对应的 --color-token: var(--token) 覆盖行。集成到构建流程或作为 lint 规则。清理 arc.css 中已有的手写双重覆盖。依赖方案 A 先完成。",
+      "priority": "P2",
+      "status": "pending",
+      "estimatedHours": "4-6"
+    },
+    {
+      "id": "F-cleanup-deadcode",
+      "title": "方案 F: 清理 colors.css 死代码",
+      "description": "删除第一组 gray 定义（第2-49行，被第二组完全覆盖）；删除 smoke 直接定义（第98-145行，与第二组 gray 完全重复）；删除或保留 Legacy smoke→gray 别名（第689-740行，零引用）；删除未使用的 amber-*alpha-* 别名（保留 --amber-darkalpha-10）；删除 --purple-*/--cyan-* 别名；统一命名 lightalpha→light-alpha。",
+      "priority": "P2",
+      "status": "pending",
+      "estimatedHours": "1-2"
+    },
+    {
+      "id": "D-sidebar-namespace",
+      "title": "方案 D: sidebar token 命名空间",
+      "description": "定义 sidebar 专用 token 前缀（如 --sidebar-text-strong、--sidebar-surface-panel），在 sidebar 容器上设值，sidebar 内组件直接消费这些 token。非主题模式下等于全局 token；Arc 主题下覆盖为专用值。需修改大量组件类名引用。",
+      "priority": "P3",
+      "status": "pending",
+      "estimatedHours": "8-16"
+    }
+  ],
+  "relatedFiles": [
+    "packages/ui/src/styles/arc.css",
+    "packages/ui/src/styles/aether.css",
+    "packages/ui/src/styles/utilities.css",
+    "packages/ui/src/styles/tailwind/colors.css",
+    "packages/ui/src/styles/tailwind/index.css",
+    "packages/ui/src/styles/tailwind/utilities.css",
+    "packages/ui/src/styles/colors.css",
+    "packages/ui/src/styles/theme.css",
+    "packages/ui/src/styles/base.css",
+    "packages/ui/src/styles/index.css",
+    "packages/ui/script/tailwind.ts",
+    "packages/ui/script/colors.txt",
+    "packages/app/src/pages/layout/sidebar-shell.tsx",
+    "packages/app/src/pages/layout/trellis-tasks-panel.tsx",
+    "packages/app/src/index.css",
+    "packages/ui/src/components/switch.css",
+    "packages/ui/src/components/checkbox.css",
+    "packages/ui/src/components/button.css"
+  ],
+  "notes": "2026-05-04 五维并行审计（工具类映射、data-component 白名单、Aether/Arc 对比、色彩系统结构、!important 使用）。发现 5 个严重 Bug（2 个 tailwind 别名映射错误 + 3 个 utilities.css 不匹配）、2 个孤悬变量、3 个 Aether 主题缺口、8 个冗余/死代码问题。优先级从 P2 升级为 P1。新增方案 E（Aether 补全）和 F（死代码清理）。"
+}

@@ -1,0 +1,8 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/shared/index.md", "reason": "Shared coding standards"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development guide"}
+{"file": ".trellis/spec/frontend/components.md", "reason": "Component conventions"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Hook patterns and createAutoScroll example"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "State persistence patterns with sessionStorage"}
+{"file": "packages/app/src/context/layout-scroll.ts", "reason": "Existing createScrollPersistence implementation"}
+{"file": "packages/app/src/pages/session/review-tab.tsx", "reason": "rAF delayed restore pattern"}

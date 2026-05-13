@@ -1,0 +1,27 @@
+{
+  "id": "04-16-message-jump-blank-page",
+  "name": "04-16-message-jump-blank-page",
+  "title": "Fix message list jump and blank page issues in long conversations",
+  "description": "Investigate virtualization blank page after session switch and broken jump-list navigation after switching away and back in long session timelines.",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "priority": "P2",
+  "creator": "claude-agent",
+  "assignee": "claude-agent",
+  "createdAt": "2026-04-16",
+  "completedAt": "2026-05-09",
+  "branch": null,
+  "base_branch": "dev",
+  "worktree_path": null,
+  "current_phase": 4,
+  "next_action": [],
+  "commit": "a8e1749a5",
+  "pr_url": null,
+  "subtasks": [],
+  "relatedFiles": [
+    "packages/app/src/pages/session/message-timeline.tsx",
+    "packages/app/src/pages/session/use-session-hash-scroll.ts"
+  ],
+  "notes": "PRD captures two linked regressions: blank page after long-session switch, and jump popover items becoming non-functional after switching away and back. Current logs show jump failures happen when target nodes are outside the active virtualized window and seek() exhausts retries."
+}
