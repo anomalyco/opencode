@@ -206,6 +206,7 @@ function makeHttp() {
       Layer.provideMerge(trunc),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(SystemPrompt.defaultLayer),
+      Layer.provide(RuntimeFlags.layer()),
       Layer.provideMerge(deps),
     ),
   ).pipe(Layer.provide(summary))
