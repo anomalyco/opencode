@@ -98,6 +98,7 @@ function dropUnknownKeybinds(input: Record<string, unknown>, configFilepath: str
 
 const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: string }) {
   const afs = yield* AppFileSystem.Service
+  let appliedOrder = 0
 
   const resolvePlugins = (config: Info, configFilepath: string): Effect.Effect<Info> =>
     Effect.gen(function* () {
@@ -136,9 +137,10 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       Effect.catchCause((cause) =>
         Effect.sync(() => {
           const error = Cause.squash(cause)
+          const reason = FormatError(error) ?? FormatUnknownError(error)
           log.warn("skipping invalid tui config", {
             path: configFilepath,
-            reason: FormatError(error) ?? FormatUnknownError(error),
+            reason,
           })
           return {} as Info
         }),
@@ -154,21 +156,27 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
         Effect.catchCause((cause) =>
           Effect.sync(() => {
             const error = Cause.squash(cause)
+            const reason = FormatError(error) ?? FormatUnknownError(error)
             log.warn("failed to read tui config", {
               path: filepath,
-              reason: FormatError(error) ?? FormatUnknownError(error),
+              reason,
             })
             return undefined
           }),
         ),
       )
       if (!text) return {} as Info
+      log.info("loading tui config", { path: filepath })
       return yield* load(text, filepath)
     })
 
   const mergeFile = (acc: Acc, file: string) =>
     Effect.gen(function* () {
       const data = yield* loadFile(file)
+      if (Object.keys(data).length) {
+        appliedOrder += 1
+        log.info("applying tui config", { path: file, order: appliedOrder })
+      }
       acc.result = mergeDeep(acc.result, data)
       if (!data.plugin?.length) return
 
