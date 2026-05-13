@@ -10,11 +10,34 @@ import { createTuiResolvedConfig, mockTuiRuntime } from "../../fixture/tui-runti
 import { Global } from "@opencode-ai/core/global"
 import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
 import { Filesystem } from "@/util/filesystem"
+import { PluginLoader } from "../../../src/plugin/loader"
 
 const { allThemes, addTheme } = await import("../../../src/cli/cmd/tui/context/theme")
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
 type Row = Record<string, unknown>
+
+test("does not retry permanent file plugin load errors", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "binary-plugin")
+      await Bun.write(file, new Uint8Array([0xcf, 0xfa, 0xed, 0xfe, 0x0c, 0x00, 0x00, 0x01]))
+      return { spec: pathToFileURL(file).href }
+    },
+  })
+
+  let waited = false
+  const plugins = await PluginLoader.loadExternal({
+    items: [{ spec: tmp.extra.spec, scope: "local", source: path.join(tmp.path, "tui.json") }],
+    kind: "tui",
+    wait: async () => {
+      waited = true
+    },
+  })
+
+  expect(plugins).toEqual([])
+  expect(waited).toBe(false)
+})
 
 type Data = {
   local: Row

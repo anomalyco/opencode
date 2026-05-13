@@ -56,6 +56,19 @@ export namespace PluginLoader {
     ) => void
   }
 
+  type AttemptResult<R> = {
+    value?: R
+    retry: boolean
+  }
+
+  function isRetryableLoadError(error: unknown) {
+    if (!error || typeof error !== "object") return false
+    const name = "name" in error && typeof error.name === "string" ? error.name : ""
+    if (name === "ResolveMessage") return true
+    const message = "message" in error && typeof error.message === "string" ? error.message : ""
+    return /Cannot find (?:package|module)|Could not resolve/.test(message)
+  }
+
   // Normalize a config item into the loader's internal representation.
   function plan(item: ConfigPlugin.Spec): Plan {
     const spec = ConfigPlugin.pluginSpecifier(item)
@@ -136,11 +149,11 @@ export namespace PluginLoader {
     finish: ((load: Loaded, origin: ConfigPlugin.Origin, retry: boolean) => Promise<R | undefined>) | undefined,
     missing: ((value: Missing, origin: ConfigPlugin.Origin, retry: boolean) => Promise<R | undefined>) | undefined,
     report: Report | undefined,
-  ): Promise<R | undefined> {
+  ): Promise<AttemptResult<R>> {
     const plan = candidate.plan
 
     // Deprecated plugin packages are silently ignored because they are now built in.
-    if (plan.deprecated) return
+    if (plan.deprecated) return { retry: false }
 
     report?.start?.(candidate, retry)
 
@@ -151,25 +164,25 @@ export namespace PluginLoader {
         // for example to load theme files from a tui plugin package that has no code entrypoint.
         if (missing) {
           const value = await missing(resolved.value, candidate.origin, retry)
-          if (value !== undefined) return value
+          if (value !== undefined) return { value, retry: false }
         }
         report?.missing?.(candidate, retry, resolved.value.message, resolved.value)
-        return
+        return { retry: false }
       }
       report?.error?.(candidate, retry, resolved.stage, resolved.error)
-      return
+      return { retry: false }
     }
 
     const loaded = await load(resolved.value)
     if (!loaded.ok) {
       report?.error?.(candidate, retry, "load", loaded.error, resolved.value)
-      return
+      return { retry: isRetryableLoadError(loaded.error) }
     }
 
     // The default behavior is to return the successfully loaded plugin as-is, but callers can
     // provide a finisher to adapt the result into a more specific runtime shape.
-    if (!finish) return loaded.value as R
-    return finish(loaded.value, candidate.origin, retry)
+    if (!finish) return { value: loaded.value as R, retry: false }
+    return { value: await finish(loaded.value, candidate.origin, retry), retry: false }
   }
 
   type Input<R> = {
@@ -188,7 +201,7 @@ export namespace PluginLoader {
   // step happening elsewhere before their entrypoint becomes loadable.
   export async function loadExternal<R = Loaded>(input: Input<R>): Promise<R[]> {
     const candidates = input.items.map((origin) => ({ origin, plan: plan(origin.spec) }))
-    const list: Array<Promise<R | undefined>> = []
+    const list: Array<Promise<AttemptResult<R>>> = []
     for (const candidate of candidates) {
       list.push(attempt(candidate, input.kind, false, input.finish, input.missing, input.report))
     }
@@ -196,10 +209,12 @@ export namespace PluginLoader {
     if (input.wait) {
       let deps: Promise<void> | undefined
       for (let i = 0; i < candidates.length; i++) {
-        if (out[i] !== undefined) continue
+        const previous = out[i]
+        if (previous?.value !== undefined) continue
+        if (previous?.retry !== true) continue
 
-        // Only local file plugins are retried. npm plugins already attempted installation during
-        // the first pass, while file plugins may need the caller's dependency preparation to finish.
+        // Only local file plugins with module-resolution failures are retried. Syntax/build errors
+        // cannot be fixed by dependency installation and should not block TUI startup.
         const candidate = candidates[i]
         if (!candidate || pluginSource(candidate.plan.spec) !== "file") continue
         deps ??= input.wait()
@@ -210,7 +225,7 @@ export namespace PluginLoader {
 
     // Drop skipped/failed entries while preserving the successful result order.
     const ready: R[] = []
-    for (const item of out) if (item !== undefined) ready.push(item)
+    for (const item of out) if (item.value !== undefined) ready.push(item.value)
     return ready
   }
 }
