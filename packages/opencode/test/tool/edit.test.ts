@@ -500,7 +500,7 @@ describe("tool.edit", () => {
               asks++
               if (asks !== 1) return
               yield* Deferred.succeed(firstAsk, undefined)
-              yield* Effect.promise(() => Bun.sleep(50))
+              yield* Effect.sleep("50 millis")
             }),
         }
 

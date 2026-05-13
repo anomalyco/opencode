@@ -772,13 +772,12 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         return part.metadata?.anthropic?.signature != null
       })
       for (const part of msg.parts) {
-        if (msg.info.summary && part.type !== "text") continue
         if (part.type === "text") {
           const text = part.text === "" && hasSignedReasoning ? " " : part.text
           assistantMessage.parts.push({
             type: "text",
             text,
-            ...(differentModel || msg.info.summary ? {} : { providerMetadata: part.metadata }),
+            ...(differentModel ? {} : { providerMetadata: part.metadata }),
           })
         }
         if (part.type === "step-start")
@@ -920,7 +919,11 @@ export function toModelMessages(
   return Effect.runPromise(toModelMessagesEffect(input, model, options).pipe(Effect.provide(EffectLogger.layer)))
 }
 
-export function page(input: { sessionID: SessionID; limit: number; before?: string }) {
+export const page = Effect.fn("MessageV2.page")(function* (input: {
+  sessionID: SessionID
+  limit: number
+  before?: string
+}) {
   const before = input.before ? cursor.decode(input.before) : undefined
   const where = before
     ? and(eq(MessageTable.session_id, input.sessionID), older(before))
@@ -938,7 +941,7 @@ export function page(input: { sessionID: SessionID; limit: number; before?: stri
     const row = Database.use((db) =>
       db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.id, input.sessionID)).get(),
     )
-    if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+    if (!row) return yield* new NotFoundError({ message: `Session not found: ${input.sessionID}` })
     return {
       items: [] as WithParts[],
       more: false,
@@ -955,13 +958,19 @@ export function page(input: { sessionID: SessionID; limit: number; before?: stri
     more,
     cursor: more && tail ? cursor.encode({ id: tail.id, time: tail.time_created }) : undefined,
   }
-}
+})
 
 export function* stream(sessionID: SessionID) {
   const size = 50
   let before: string | undefined
   while (true) {
-    const next = page({ sessionID, limit: size, before })
+    const next = Effect.runSync(
+      page({ sessionID, limit: size, before }).pipe(
+        Effect.catchIf(NotFoundError.isInstance, () =>
+          Effect.succeed({ items: [] as WithParts[], more: false, cursor: undefined }),
+        ),
+      ),
+    )
     if (next.items.length === 0) break
     for (let i = next.items.length - 1; i >= 0; i--) {
       yield next.items[i]
@@ -986,7 +995,7 @@ export function parts(message_id: MessageID) {
   )
 }
 
-export function get(input: { sessionID: SessionID; messageID: MessageID }): WithParts {
+export const get = Effect.fn("MessageV2.get")(function* (input: { sessionID: SessionID; messageID: MessageID }) {
   const row = Database.use((db) =>
     db
       .select()
@@ -994,26 +1003,63 @@ export function get(input: { sessionID: SessionID; messageID: MessageID }): With
       .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
       .get(),
   )
-  if (!row) throw new NotFoundError({ message: `Message not found: ${input.messageID}` })
+  if (!row) return yield* new NotFoundError({ message: `Message not found: ${input.messageID}` })
   return {
     info: info(row),
     parts: parts(input.messageID),
   }
-}
+})
 
 export function filterCompacted(msgs: Iterable<WithParts>) {
   const result = [] as WithParts[]
   const completed = new Set<string>()
+  let retain: MessageID | undefined
   for (const msg of msgs) {
     result.push(msg)
-    if (msg.info.role === "user" && completed.has(msg.info.id)) {
-      if (msg.parts.some((item): item is CompactionPart => item.type === "compaction")) break
+    if (retain) {
+      if (msg.info.id === retain) break
       continue
     }
+    if (msg.info.role === "user" && completed.has(msg.info.id)) {
+      const part = msg.parts.find((item): item is CompactionPart => item.type === "compaction")
+      if (!part) continue
+      if (!part.tail_start_id) break
+      retain = part.tail_start_id
+      if (msg.info.id === retain) break
+      continue
+    }
+    if (msg.info.role === "user" && completed.has(msg.info.id) && msg.parts.some((part) => part.type === "compaction"))
+      break
     if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish && !msg.info.error)
       completed.add(msg.info.parentID)
   }
   result.reverse()
+  const compactionIndex = result.findLastIndex(
+    (msg) =>
+      msg.info.role === "user" &&
+      msg.parts.some((item): item is CompactionPart => item.type === "compaction" && item.tail_start_id !== undefined),
+  )
+  const compaction = result[compactionIndex]
+  const part = compaction?.parts.find(
+    (item): item is CompactionPart => item.type === "compaction" && item.tail_start_id !== undefined,
+  )
+  const summaryIndex = compaction
+    ? result.findIndex(
+        (msg, index) =>
+          index > compactionIndex &&
+          msg.info.role === "assistant" &&
+          msg.info.summary &&
+          msg.info.parentID === compaction.info.id,
+      )
+    : -1
+  const tailIndex = part?.tail_start_id ? result.findIndex((msg) => msg.info.id === part.tail_start_id) : -1
+  if (tailIndex >= 0 && tailIndex < compactionIndex && summaryIndex > compactionIndex) {
+    return [
+      ...result.slice(compactionIndex, summaryIndex + 1),
+      ...result.slice(tailIndex, compactionIndex),
+      ...result.slice(summaryIndex + 1),
+    ]
+  }
   return result
 }
 
