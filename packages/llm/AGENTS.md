@@ -8,6 +8,10 @@
 - In `Effect.gen`, yield yieldable errors directly (`return yield* new MyError(...)`) instead of `Effect.fail(new MyError(...))`.
 - Use `Effect.void` instead of `Effect.succeed(undefined)` when the successful value is intentionally void.
 
+## Conventions
+
+Per-type constructors live on the type's namespace, not as top-level re-exports. Use `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for the request-shaped call API: `LLM.request`, `LLM.generate`, `LLM.stream`, `LLM.model`, `LLM.updateRequest`, `LLM.generateObject`. Two ways to construct the same thing is one too many.
+
 ## Tests
 
 - Use `testEffect(...)` from `test/lib/effect.ts` for tests requiring Effect layers.
@@ -166,12 +170,12 @@ If you find yourself copying a 3-to-5-line snippet between two protocols, lift i
 Tool loops are represented in common messages and events:
 
 ```ts
-const call = LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })
-const result = LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } })
+const call = ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })
+const result = Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } })
 
 const followUp = LLM.request({
   model,
-  messages: [LLM.user("Weather?"), LLM.assistant([call]), result],
+  messages: [Message.user("Weather?"), Message.assistant([call]), result],
 })
 ```
 

@@ -7,9 +7,9 @@ export const WorkspaceInfo = Schema.Struct({
   id: WorkspaceID,
   type: Schema.String,
   name: Schema.String,
-  branch: Schema.NullOr(Schema.String),
-  directory: Schema.NullOr(Schema.String),
-  extra: Schema.NullOr(Schema.Unknown),
+  branch: Schema.optional(Schema.NullOr(Schema.String)),
+  directory: Schema.optional(Schema.NullOr(Schema.String)),
+  extra: Schema.optional(Schema.NullOr(Schema.Unknown)),
   projectID: ProjectID,
 }).annotate({ identifier: "Workspace" })
 export type WorkspaceInfo = DeepMutable<Schema.Schema.Type<typeof WorkspaceInfo>>

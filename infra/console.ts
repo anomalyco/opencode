@@ -293,3 +293,13 @@ new sst.cloudflare.x.SolidStart("Console", {
     },
   },
 })
+
+////////////////
+// HELPERS
+////////////////
+
+export const stat = new sst.cloudflare.Worker("Stat", {
+  handler: "packages/console/function/src/stat.ts",
+  link: [database],
+  url: true,
+})

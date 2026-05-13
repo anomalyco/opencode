@@ -21,11 +21,17 @@ describe("ToolStream", () => {
       if (ToolStream.isError(second)) return yield* second
       const finished = yield* ToolStream.finish(ADAPTER, second.tools, 0)
 
-      expect(first.event).toEqual({ type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' })
-      expect(second.event).toEqual({ type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' })
+      expect(first.events).toEqual([
+        { type: "tool-input-start", id: "call_1", name: "lookup" },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
+      ])
+      expect(second.events).toEqual([{ type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' }])
       expect(finished).toEqual({
         tools: {},
-        event: { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+        events: [
+          { type: "tool-input-end", id: "call_1", name: "lookup" },
+          { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+        ],
       })
     }),
   )
@@ -50,7 +56,10 @@ describe("ToolStream", () => {
 
       expect(finished).toEqual({
         tools: {},
-        event: { type: "tool-call", id: "call_1", name: "lookup", input: { query: "final" } },
+        events: [
+          { type: "tool-input-end", id: "call_1", name: "lookup" },
+          { type: "tool-call", id: "call_1", name: "lookup", input: { query: "final" } },
+        ],
       })
     }),
   )
@@ -73,7 +82,9 @@ describe("ToolStream", () => {
       expect(finished).toEqual({
         tools: {},
         events: [
+          { type: "tool-input-end", id: "call_1", name: "lookup" },
           { type: "tool-call", id: "call_1", name: "lookup", input: {} },
+          { type: "tool-input-end", id: "call_2", name: "web_search" },
           {
             type: "tool-call",
             id: "call_2",
