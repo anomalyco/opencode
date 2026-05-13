@@ -448,7 +448,7 @@ export class BusyError extends Error {
   }
 }
 
-export type NotFound = InstanceType<typeof NotFoundError>
+export type NotFound = NotFoundError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
