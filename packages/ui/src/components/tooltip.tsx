@@ -11,6 +11,7 @@ export interface TooltipProps extends ComponentProps<typeof KobalteTooltip> {
   inactive?: boolean
   forceOpen?: boolean
   lazyExpand?: boolean
+  lazyMount?: boolean
 }
 
 export interface TooltipKeybindProps extends Omit<TooltipProps, "value"> {
@@ -39,6 +40,7 @@ export function Tooltip(props: TooltipProps) {
     open: false,
     block: false,
     expand: false,
+    mounted: false,
   })
   const [local, others] = splitProps(props, [
     "children",
@@ -50,10 +52,12 @@ export function Tooltip(props: TooltipProps) {
     "ignoreSafeArea",
     "openDelay",
     "lazyExpand",
+    "lazyMount",
     "value",
   ])
 
   const close = () => setState("open", false)
+  const mount = () => setState("mounted", true)
 
   const inside = () => {
     const active = document.activeElement
@@ -111,6 +115,24 @@ export function Tooltip(props: TooltipProps) {
   return (
     <Switch>
       <Match when={local.inactive}>{local.children}</Match>
+      <Match when={local.lazyMount && !local.forceOpen && !state.mounted}>
+        <div
+          ref={ref}
+          data-component="tooltip-trigger"
+          data-lazy-mount
+          class={local.class}
+          onPointerEnter={mount}
+          onFocusIn={mount}
+          onPointerDown={arm}
+          onKeyDown={(event: KeyboardEvent) => {
+            if (event.key !== "Enter" && event.key !== " ") return
+            mount()
+            arm()
+          }}
+        >
+          {local.children}
+        </div>
+      </Match>
       <Match when={true}>
         <KobalteTooltip
           gutter={4}
@@ -134,6 +156,8 @@ export function Tooltip(props: TooltipProps) {
             as={"div"}
             data-component="tooltip-trigger"
             class={local.class}
+            onPointerEnter={mount}
+            onFocusIn={mount}
             onPointerDownCapture={arm}
             onKeyDownCapture={(event: KeyboardEvent) => {
               if (event.key !== "Enter" && event.key !== " ") return

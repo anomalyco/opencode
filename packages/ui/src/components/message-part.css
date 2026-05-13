@@ -1800,3 +1800,27 @@
     color: var(--icon-weak);
   }
 }
+
+[data-component="lazy-action"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+[data-slot="lazy-action-placeholder"] {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  pointer-events: auto;
+}
+
+[data-slot="lazy-action-placeholder"][data-size="normal"] {
+  width: 24px;
+  height: 24px;
+}
+
+[data-slot="lazy-action-placeholder"][data-size="small"] {
+  width: 20px;
+  height: 20px;
+}

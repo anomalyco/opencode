@@ -36,6 +36,7 @@ export interface BasicToolProps {
   defaultOpen?: boolean
   forceOpen?: boolean
   defer?: boolean
+  mountDetails?: "open" | "always"
   locked?: boolean
   animated?: boolean
   onSubtitleClick?: () => void
@@ -93,6 +94,8 @@ export function BasicTool(props: BasicToolProps) {
   const pending = () => props.status === "pending" || props.status === "running"
   const meta = () => !pending() || !!props.showPendingMeta
   const details = () => !pending() || !!props.showPendingDetails
+  const hasDetails = () => !!props.children && !props.hideDetails && details()
+  const mountDetails = () => hasDetails() && (props.mountDetails === "always" || open() || !!props.forceOpen)
 
   let cancelReady: (() => void) | undefined
 
@@ -177,7 +180,7 @@ export function BasicTool(props: BasicToolProps) {
   }
 
   return (
-    <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
+    <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible" data-detail-mounted={mountDetails() ? "true" : undefined}>
       <Collapsible.Trigger>
         <div data-component="tool-trigger">
           <div data-slot="basic-tool-tool-trigger-content">
@@ -227,12 +230,12 @@ export function BasicTool(props: BasicToolProps) {
               </Switch>
             </div>
           </div>
-          <Show when={props.children && !props.hideDetails && !props.locked && details()}>
+          <Show when={hasDetails() && !props.locked}>
             <Collapsible.Arrow />
           </Show>
         </div>
       </Collapsible.Trigger>
-      <Show when={props.animated && props.children && !props.hideDetails && details()}>
+      <Show when={props.animated && mountDetails()}>
         <div
           ref={contentRef}
           data-slot="collapsible-content"
@@ -245,7 +248,7 @@ export function BasicTool(props: BasicToolProps) {
           <Show when={!props.defer || ready()}>{props.children}</Show>
         </div>
       </Show>
-      <Show when={!props.animated && props.children && !props.hideDetails && details()}>
+      <Show when={!props.animated && mountDetails()}>
         <Collapsible.Content>
           <Show when={!props.defer || ready()}>{props.children}</Show>
         </Collapsible.Content>
