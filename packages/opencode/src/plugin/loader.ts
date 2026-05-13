@@ -151,6 +151,7 @@ export namespace PluginLoader {
     report: Report | undefined,
   ): Promise<AttemptResult<R>> {
     const plan = candidate.plan
+    const filePlugin = pluginSource(plan.spec) === "file"
 
     // Deprecated plugin packages are silently ignored because they are now built in.
     if (plan.deprecated) return { retry: false }
@@ -170,7 +171,7 @@ export namespace PluginLoader {
         return { retry: false }
       }
       report?.error?.(candidate, retry, resolved.stage, resolved.error)
-      return { retry: false }
+      return { retry: filePlugin }
     }
 
     const loaded = await load(resolved.value)
@@ -182,7 +183,8 @@ export namespace PluginLoader {
     // The default behavior is to return the successfully loaded plugin as-is, but callers can
     // provide a finisher to adapt the result into a more specific runtime shape.
     if (!finish) return { value: loaded.value as R, retry: false }
-    return { value: await finish(loaded.value, candidate.origin, retry), retry: false }
+    const value = await finish(loaded.value, candidate.origin, retry)
+    return { value, retry: filePlugin && value === undefined }
   }
 
   type Input<R> = {
