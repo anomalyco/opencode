@@ -23,7 +23,8 @@ import * as Log from "@opencode-ai/core/util/log"
 import { isRecord } from "@/util/record"
 import { SyncEvent } from "@/sync"
 import { SessionEvent } from "@/v2/session-event"
-import { Modelv2 } from "@/v2/model"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
@@ -484,9 +485,9 @@ export const layer: Layer.Layer<
                   sessionID: ctx.sessionID,
                   agent: input.assistantMessage.agent,
                   model: {
-                    id: Modelv2.ID.make(ctx.model.id),
-                    providerID: Modelv2.ProviderID.make(ctx.model.providerID),
-                    variant: Modelv2.VariantID.make(input.assistantMessage.variant ?? "default"),
+                    id: ModelV2.ID.make(ctx.model.id),
+                    providerID: ProviderV2.ID.make(ctx.model.providerID),
+                    variant: ModelV2.VariantID.make(input.assistantMessage.variant ?? "default"),
                   },
                   snapshot: ctx.snapshot,
                   timestamp: DateTime.makeUnsafe(Date.now()),
