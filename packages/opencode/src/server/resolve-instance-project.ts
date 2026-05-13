@@ -73,11 +73,15 @@ export async function resolveInstanceProject(c: Context): Promise<R> {
     return info
   }
 
-  const tenantUserId = isOpencodeWorkosEnabled()
-    ? (await getRequestUser(c))?.id
-    : process.env["OPENCODE_E2E_TENANT_USER_ID"]?.trim() ||
-      process.env["OPENCODE_E2E_USER_ID"]?.trim() ||
-      "e2e_test_user"
+  const e2e = () => {
+    const tenant = pick(process.env["OPENCODE_E2E_TENANT_USER_ID"])
+    if (tenant) return tenant
+    const user = pick(process.env["OPENCODE_E2E_USER_ID"])
+    if (user) return user
+    return "e2e_test_user"
+  }
+  const user = isOpencodeWorkosEnabled() ? (await getRequestUser(c))?.id : undefined
+  const tenantUserId = user ? user : e2e()
 
   if (tenantUserId) {
     const list = await listProjectsSimple(tenantUserId)

@@ -1,0 +1,11 @@
+import { Schema } from "effect";
+declare const sessionIdSchema: Schema.brand<Schema.String, "SessionID">;
+export type SessionID = typeof sessionIdSchema.Type;
+export declare const SessionID: never;
+declare const messageIdSchema: Schema.brand<Schema.String, "MessageID">;
+export type MessageID = typeof messageIdSchema.Type;
+export declare const MessageID: never;
+declare const partIdSchema: Schema.brand<Schema.String, "PartID">;
+export type PartID = typeof partIdSchema.Type;
+export declare const PartID: never;
+export {};

@@ -19,7 +19,8 @@ let _db: ReturnType<typeof drizzle> | undefined
 
 export function getPool() {
   if (!_pool) {
-    const connectionString = process.env.DATABASE_URL ?? "postgresql://veritly:veritly@localhost:5432/veritly"
+    const connectionString = process.env.DATABASE_URL?.trim()
+    if (!connectionString) throw new Error("DATABASE_URL is required")
     log.info("creating pool", { connectionString })
     _pool = new Pool({ connectionString })
   }

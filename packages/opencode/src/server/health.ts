@@ -87,12 +87,11 @@ function relayHttpHealthFromViteUniverSdkWs(): string | undefined {
   }
 }
 
-function univerLicenseProbeUrl() {
+function univerReadyzUrl() {
   const raw = process.env.VERITLY_HEALTH_UNIVER_URL?.trim() || process.env.VITE_UNIVER_BACKEND_URL?.trim()
   if (!raw) return undefined
   const base = normalizeBaseUrl(raw)
-  /** Univer Server has no `/readyz`; license API is the stable probe. */
-  return `${base}/universer-api/license/key`
+  return `${base}/readyz`
 }
 
 async function checkDatabase() {
@@ -156,7 +155,7 @@ export function instructionCheck(): HealthCheckResult {
 }
 
 async function checkOptionalUniver() {
-  const target = univerLicenseProbeUrl()
+  const target = univerReadyzUrl()
   if (!target) {
     return {
       name: "univer",
@@ -168,7 +167,7 @@ async function checkOptionalUniver() {
 
   const result = await checkHttpTarget("univer", target)
   if (!result.ok) {
-    log.warn("univer license probe failed", {
+    log.warn("univer readyz probe failed", {
       target,
       status: result.status,
       detail: result.detail,

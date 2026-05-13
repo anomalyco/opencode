@@ -24,7 +24,9 @@ bun run dev:all
 ```
 
 > **IDE Debugging (IntelliJ / WebStorm / VS Code):**
-> Instead of running `bun run dev:all`, you can create a Run Configuration in your IDE that executes `local-dev.ts` using Bun. Just make sure to pass `--env-file=.env.development` in your run arguments so the environment variables are loaded properly!
+> Instead of running `bun run dev:all`, you can create a Run Configuration in your IDE that executes `local-dev.ts` using Bun. Use **`--env-file=.env.development`** as a Bun CLI flag so variables load the same way as the terminal.
+>
+> **WebStorm / IntelliJ Bun configuration:** set **Working directory** to the **repository root** (the folder that contains both `local-dev.ts` and `.env.development`). If the working directory is e.g. `packages/opencode`, Bun looks for `packages/opencode/.env.development`, finds nothing, and `DEV_BACKEND_HOST` and friends stay unset. **Application parameters:** `--service backend` (or `compat`, `frontend`, `relay`, `all`). **Bun parameters:** `--env-file=.env.development`.
 
 If you need to manage the database independently, the compose file is located at `docker/infra-deps-local-debugging.yml`.
 

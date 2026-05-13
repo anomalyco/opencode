@@ -1,0 +1,33 @@
+export interface Info {
+    name: string;
+    command: string[];
+    environment?: Record<string, string>;
+    extensions: string[];
+    enabled(): Promise<boolean>;
+}
+export declare const gofmt: Info;
+export declare const mix: Info;
+export declare const prettier: Info;
+export declare const oxfmt: Info;
+export declare const biome: Info;
+export declare const zig: Info;
+export declare const clang: Info;
+export declare const ktlint: Info;
+export declare const ruff: Info;
+export declare const rlang: Info;
+export declare const uvformat: Info;
+export declare const rubocop: Info;
+export declare const standardrb: Info;
+export declare const htmlbeautifier: Info;
+export declare const dart: Info;
+export declare const ocamlformat: Info;
+export declare const terraform: Info;
+export declare const latexindent: Info;
+export declare const gleam: Info;
+export declare const shfmt: Info;
+export declare const nixfmt: Info;
+export declare const rustfmt: Info;
+export declare const pint: Info;
+export declare const ormolu: Info;
+export declare const cljfmt: Info;
+export declare const dfmt: Info;

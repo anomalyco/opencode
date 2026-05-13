@@ -511,8 +511,8 @@ export function FileTabContent(props: { tab: string }) {
               when={spreadsheetUnit()}
               fallback={
                 <div class="text-text-weak text-sm">
-                  Spreadsheet has no Univer unit (missing unitId). Open the file from the workspace tree after USIP
-                  sync, or check veritly-usip /v1/files/content for this path.
+                  Spreadsheet has no Univer unit (missing unitId). Import the file via drag-and-drop, then open it from
+                  the tree.
                 </div>
               }
             >
@@ -523,9 +523,9 @@ export function FileTabContent(props: { tab: string }) {
                   officePath={u().officePath}
                   pendingImport={u().pendingImport}
                   projectId={sdk.directory || "default"}
-                  onUnitRegistered={() => {
+                  onUnitResolved={(id) => {
                     const p = path()
-                    if (p) void file.load(p, { force: true })
+                    if (p) file.patchSpreadsheetUnit(p, id)
                   }}
                 />
               )}

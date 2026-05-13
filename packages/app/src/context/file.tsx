@@ -7,9 +7,11 @@ import { base64FromBytes } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
+import type { FileContent, FileNode } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import { isUniverOfficePath, listOfficeFiles, readOfficeFile, uploadOfficeFile } from "@/lib/veritly-univer-files"
+import { isUniverOfficePath, officeMimeType } from "@/lib/office-path"
+import { pullSlot, pushSlot, type SheetUnitSlot } from "@/lib/spreadsheet-unit-persist"
 import { createPathHelpers } from "./file/path"
 import {
   approxBytes,
@@ -45,12 +47,6 @@ export {
   touchFileContent,
 }
 
-function errorMessage(error: unknown) {
-  if (error instanceof Error && error.message) return error.message
-  if (typeof error === "string" && error) return error
-  return "Unknown error"
-}
-
 export const { use: useFile, provider: FileProvider } = createSimpleContext({
   name: "File",
   gate: false,
@@ -62,11 +58,12 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const layout = useLayout()
 
     const scope = createMemo(() => sdk.directory)
-    const univerProjectId = createMemo(() => sdk.directory || "default")
     const path = createPathHelpers(scope)
     const tabs = layout.tabs(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
 
     const inflight = new Map<string, Promise<void>>()
+    /** In-session office files shown in the tree (no `/v1/files` listing server). */
+    const virtualOfficeFiles = new Map<string, FileNode>()
     const [store, setStore] = createStore<{
       file: Record<string, FileState>
     }>({
@@ -77,7 +74,13 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       scope,
       normalizeDir: path.normalizeDir,
       list: async (dir) => {
-        return listOfficeFiles(dir, { projectId: univerProjectId() }).catch(() => [])
+        const d = path.normalizeDir(dir)
+        const out: FileNode[] = []
+        for (const node of virtualOfficeFiles.values()) {
+          if (path.dirname(node.path) === d) out.push(node)
+        }
+        out.sort((a, b) => a.name.localeCompare(b.name))
+        return out
       },
       onError: (message) => {
         showToast({
@@ -106,6 +109,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       scope()
       inflight.clear()
       resetFileContentLru()
+      virtualOfficeFiles.clear()
       batch(() => {
         setStore("file", reconcile({}))
         tree.reset()
@@ -189,17 +193,59 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         return p
       }
 
-      const promise = readOfficeFile(file, { projectId: univerProjectId() })
-        .then((content) => {
-          if (scope() !== directory) return
-          setLoaded(file, content)
+      const cur = store.file[file]
+      if (cur?.content) {
+        const promise = Promise.resolve()
+          .then(() => {
+            if (scope() !== directory) return
+            if (!cur.loaded) setLoaded(file, cur.content as FileState["content"])
+            touchFileContent(file, approxBytes(cur.content as FileContent))
+            evictContent(new Set([file]))
+          })
+          .finally(() => {
+            inflight.delete(key)
+          })
+        inflight.set(key, promise)
+        return promise
+      }
 
-          touchFileContent(file, approxBytes(content))
-          evictContent(new Set([file]))
-        })
-        .catch((e) => {
+      const pinned = pullSlot(directory, file)
+      if (pinned) {
+        const mime = officeMimeType(file)
+        const body = {
+          type: "binary" as const,
+          encoding: "base64" as const,
+          content: "",
+          mimeType: mime,
+          unitId: pinned.id,
+          unitKind: pinned.kind,
+        }
+        const promise = Promise.resolve()
+          .then(() => {
+            if (scope() !== directory) return
+            setLoaded(file, body)
+            touchFileContent(file, approxBytes(body as unknown as FileContent))
+            evictContent(new Set([file]))
+            virtualOfficeFiles.set(file, {
+              path: file,
+              name: getFilename(file),
+              type: "file",
+              absolute: file,
+              ignored: false,
+            })
+            void tree.listDir(path.dirname(file), { force: true })
+          })
+          .finally(() => {
+            inflight.delete(key)
+          })
+        inflight.set(key, promise)
+        return promise
+      }
+
+      const promise = Promise.resolve()
+        .then(() => {
           if (scope() !== directory) return
-          setLoadError(file, errorMessage(e))
+          setLoadError(file, language.t("file.officeImportOnly"))
         })
         .finally(() => {
           inflight.delete(key)
@@ -207,6 +253,24 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       inflight.set(key, promise)
       return promise
+    }
+
+    const patchSpreadsheetUnit = (fp: string, unitId: string) => {
+      const target = path.normalize(fp)
+      let kind: SheetUnitSlot["kind"] = "sheet"
+      setStore(
+        "file",
+        target,
+        produce((draft) => {
+          const c = draft.content
+          if (c && typeof c === "object" && c !== null && "unitId" in c) {
+            ;(c as { unitId: string }).unitId = unitId
+            const k = (c as { unitKind?: string }).unitKind
+            if (k === "doc" || k === "slide" || k === "sheet") kind = k
+          }
+        }),
+      )
+      if (!unitId.startsWith("pending-")) pushSlot(scope(), target, unitId, kind)
     }
 
     const search = (_query: string, _dirs: "true" | "false") => Promise.resolve([] as string[])
@@ -217,9 +281,28 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         throw new Error(language.t("file.hostFilesystemDisabled"))
       }
       const base64 = base64FromBytes(content)
-      const data = await uploadOfficeFile(normalized, base64, undefined, { projectId: univerProjectId() })
+      const unitId = `pending-${crypto.randomUUID()}`
+      ensure(normalized)
+      const mime = officeMimeType(normalized)
+      const body = {
+        type: "binary" as const,
+        encoding: "base64" as const,
+        content: base64,
+        mimeType: mime,
+        unitId,
+        unitKind: "sheet" as const,
+      }
+      setLoaded(normalized, body)
+      touchFileContent(normalized, approxBytes(body as unknown as FileContent))
+      evictContent(new Set([normalized]))
+      virtualOfficeFiles.set(normalized, {
+        path: normalized,
+        name: getFilename(normalized),
+        type: "file",
+        absolute: normalized,
+        ignored: false,
+      })
       void tree.listDir(path.dirname(normalized), { force: true })
-      return data
     }
 
     const mkdir = async (dirpath: string) => {
@@ -311,6 +394,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       upload,
       mkdir,
       remove,
+      patchSpreadsheetUnit,
     }
   },
 })

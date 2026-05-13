@@ -1,0 +1,29 @@
+{
+  "name": "@opencode-ai/univer-compat",
+  "version": "1.2.24",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./app": "./src/app.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit -p .",
+    "test": "bun test ./test",
+    "test:s3-it": "UNIVER_COMPAT_S3_IT=1 bun test ./test/s3-persist.integration.test.ts --timeout 180000",
+    "serve": "bun --env-file=../../.env.development ./script/serve.ts"
+  },
+  "dependencies": {
+    "exceljs": "4.4.0",
+    "hono": "catalog:",
+    "xlsx": "0.18.5"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "testcontainers": "11.14.0",
+    "typescript": "catalog:"
+  }
+}

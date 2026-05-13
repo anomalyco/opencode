@@ -127,6 +127,9 @@ export const AuthRoutes = new Hono()
     }
   })
   .get("/session", async (c) => {
+    const e2e = process.env["OPENCODE_E2E_USER_ID"]?.trim()
+    if (e2e) return c.json({ user: { id: e2e } })
+
     if (!isOpencodeWorkosEnabled()) {
       return c.json({ user: null })
     }

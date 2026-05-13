@@ -66,8 +66,9 @@ export async function runPostgresMigrations() {
   console.log("PostgreSQL migrations completed successfully")
 }
 
-// Initialize pool and run
-import { Database } from "./db.pg"
-await Database.initialize()
-await runPostgresMigrations()
-process.exit(0)
+if (import.meta.main) {
+  const { Database } = await import("./db.pg")
+  await Database.initialize()
+  await runPostgresMigrations()
+  process.exit(0)
+}

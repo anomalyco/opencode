@@ -8,6 +8,9 @@
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "test": "bun test --timeout 120000",
+    "test:debug": "DEBUG=testcontainers* bun test --timeout 120000",
+    "test:ollama-tc": "OPENCODE_OLLAMA_TC_TEST=1 bun test --timeout 1200000 ./test/integration/ollama-testcontainer.test.ts",
+    "test:ollama-tc:debug": "DEBUG=testcontainers* OPENCODE_OLLAMA_TC_TEST=1 bun test --timeout 1200000 ./test/integration/ollama-testcontainer.test.ts",
     "test:full-stack": "OPENCODE_FULL_STACK_TEST=1 bun test --timeout 300000 ./test/integration/fullstack.test.ts",
     "build": "bun run script/build.ts",
     "dev": "bun --env-file=../../.env.development ./script/dev.ts",

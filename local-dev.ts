@@ -4,26 +4,14 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, w
 import { resolve } from "node:path"
 
 const root = import.meta.dir
-const envPath = resolve(root, ".env.development")
 const state = resolve(root, ".local-dev")
 const raw = process.argv.slice(2)
 const idx = raw.indexOf("--service")
 const name = raw[idx + 1]
 const rest = raw.filter((_, i) => i !== idx && i !== idx + 1 && raw[i] !== "--conditions=browser")
 
-const file = await Bun.file(envPath).text().catch(() => "")
-file.split(/\r?\n/).forEach((line) => {
-  const text = line.trim()
-  if (!text || text.startsWith("#")) return
-  const idx = text.indexOf("=")
-  if (idx === -1) return
-  const key = text.slice(0, idx).trim()
-  const value = text.slice(idx + 1).trim().replace(/^['"]|['"]$/g, "")
-  if (!(key in process.env)) process.env[key] = value
-})
-
 if (idx === -1 || !name) {
-  console.error("Usage: bun local-dev.ts --service <backend|frontend|relay|all>")
+  console.error("Usage: bun --env-file=.env.development local-dev.ts --service <backend|frontend|relay|compat|all>")
   process.exit(1)
 }
 
@@ -85,7 +73,7 @@ function clear(port: number, file?: string) {
 }
 
 function ensureInfra() {
-  console.log("Starting infrastructure (Postgres)...")
+  console.log("Starting infrastructure (Postgres + MinIO)...")
   const run = spawnSync("docker", ["compose", "-f", "docker/infra-deps-local-debugging.yml", "up", "-d"], {
     cwd: root,
     stdio: "inherit",
@@ -105,6 +93,30 @@ async function boot(entry: string, args: string[], extra?: Record<string, string
   if (extra) Object.assign(process.env, extra)
   argv(entry, args)
   await import(entry)
+}
+
+function compatListenHost() {
+  const value = process.env.UNIVER_COMPAT_HOST?.trim()
+  if (value) return value
+  return "127.0.0.1"
+}
+
+function compatListenPort() {
+  const raw = process.env.UNIVER_COMPAT_PORT?.trim()
+  if (!raw) return 8787
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n)) {
+    console.error("Invalid UNIVER_COMPAT_PORT (expected integer)")
+    process.exit(1)
+  }
+  return n
+}
+
+/** When `VITE_UNIVER_BACKEND_URL` is unset, point Vite at local `@opencode-ai/univer-compat`. */
+function defaultUniverBackendUrl() {
+  const existing = process.env.VITE_UNIVER_BACKEND_URL?.trim()
+  if (existing) return existing
+  return `http://${compatListenHost()}:${compatListenPort()}`
 }
 
 function startFrontend() {
@@ -129,6 +141,7 @@ function startFrontend() {
       VITE_OPENCODE_SERVER_HOST: backHost,
       VITE_OPENCODE_SERVER_PORT: backPort,
       VITE_OPENCODE_SERVER_URL: process.env.VITE_OPENCODE_SERVER_URL?.trim() || `http://${backHost}:${backPort}`,
+      VITE_UNIVER_BACKEND_URL: defaultUniverBackendUrl(),
     },
   })
 
@@ -163,6 +176,19 @@ const svc = {
       PORT: port,
     })
   },
+  compat: async () => {
+    const port = compatListenPort()
+    const pid = resolve(state, "compat.pid")
+    const host = compatListenHost()
+    clear(port, pid)
+    console.log(
+      `Starting univer-compat on http://${host}:${port} (needs UNIVER_COMPAT_S3_*; local MinIO = docker/infra-deps-local-debugging.yml; prod = S3 e.g. DigitalOcean Spaces)`,
+    )
+    await boot(resolve(root, "packages/univer-compat/script/serve.ts"), [], {
+      PORT: String(port),
+    })
+    writeFileSync(pid, `${process.pid}\n`)
+  },
 } as const
 
 if (name === "all") {
@@ -173,8 +199,10 @@ if (name === "all") {
   ensureInfra()
   const self = import.meta.path
   const bun = process.execPath
-  const order = ["backend", "relay", "frontend"] as const
-  console.log("[dev:all] Starting backend, relay, and frontend (Postgres: docker/infra-deps-local-debugging.yml).")
+  const order = ["backend", "relay", "compat", "frontend"] as const
+  console.log(
+    `[dev:all] Starting backend, relay, univer-compat (http://${compatListenHost()}:${compatListenPort()}), frontend — Postgres + MinIO: docker/infra-deps-local-debugging.yml.`,
+  )
   const childRest = rest.filter((a) => a !== "all")
   const children: ReturnType<typeof spawn>[] = []
   for (const s of order) {

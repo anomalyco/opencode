@@ -7,14 +7,9 @@ import "@univerjs/presets/lib/styles/preset-sheets-core.css"
 import { UniverSheetsDrawingPreset } from "@univerjs/presets/preset-sheets-drawing"
 import sheetsDrawingEnUs from "@univerjs/presets/preset-sheets-drawing/locales/en-US"
 import "@univerjs/presets/lib/styles/preset-sheets-drawing.css"
-import { UniverSheetsAdvancedPreset } from "@univerjs/presets/preset-sheets-advanced"
-import sheetsAdvancedEnUs from "@univerjs/presets/preset-sheets-advanced/locales/en-US"
-import "@univerjs/presets/lib/styles/preset-sheets-advanced.css"
-import { UniverSheetsCollaborationPreset } from "@univerjs/presets/preset-sheets-collaboration"
-import sheetsCollaborationEnUs from "@univerjs/presets/preset-sheets-collaboration/locales/en-US"
-import "@univerjs/presets/lib/styles/preset-sheets-collaboration.css"
-import { createUniverSdk, type AddChartInput, type RangeRect, type SetRangeValuesInput } from "@opencode-ai/univer-sdk"
-import { registerOfficeUnit } from "@/lib/veritly-univer-files"
+import { createUniverSdk, type AddChartInput, type PushSetRangeInput, type RangeRect, type SetRangeValuesInput, type UniverHostApi } from "@opencode-ai/univer-sdk"
+import { VeritlyUniverGluePlugin } from "@/lib/veritly-univer-plugin"
+import { augmentVeritlyHost } from "@/lib/veritly-univer-host-api"
 import { univerBackendOrigin } from "@/lib/univer-backend-origin"
 import { browserUniverSdkWsUrl } from "@/lib/univer-sdk-ws-browser"
 import { browserTracer } from "@/lib/telemetry/browser-otel"
@@ -46,11 +41,19 @@ type Props = {
   officePath?: string
   pendingImport?: PendingImport
   projectId?: string
-  onUnitRegistered?: () => void
+  /** After import, Univer’s real unit id (replaces `pending-*` in file state). */
+  onUnitResolved?: (unitId: string) => void
 }
 
 const UNIVERSER_BASE = univerBackendOrigin()
-const UNIVER_LICENSE = import.meta.env.VITE_UNIVER_LICENSE?.trim() ?? ""
+
+/** `createUniverSdk` only — host HTTP/comb wiring is applied once per runtime in the mount effect (`augmentVeritlyHost`). */
+function veritlySdk(cur: ReturnType<typeof createUniver>) {
+  return createUniverSdk({
+    univerAPI: cur.univerAPI,
+    univer: cur.univer,
+  })
+}
 
 type VeritlyWindow = Window & { __veritlyUniverSdk?: () => ReturnType<typeof createUniverSdk> }
 
@@ -75,19 +78,14 @@ export function SpreadsheetViewer(props: Props) {
     const el = host()
     if (!el || typeof window === "undefined") return
 
-    // `createUniver` only clears core IUndoRedoService (etc.) when `collaboration` is truthy.
-    // If you omit it but keep `UniverSheetsCollaborationPreset`, core + collab both register undo → crash.
+    // No `UniverSheetsCollaborationPreset`: `@univerjs/presets/preset-sheets-collaboration` re-exports Univer Pro
+    // (`@univerjs-pro/collaboration`, edit-history, …). Multiplayer / universer comb must be built as Veritly-owned
+    // primitives against `@opencode-ai/univer-compat` (or similar), not this preset.
     const instance = createUniver({
       locale: LocaleType.EN_US,
       locales: {
-        [LocaleType.EN_US]: mergeLocales(
-          sheetsCoreEnUs,
-          sheetsDrawingEnUs,
-          sheetsAdvancedEnUs,
-          sheetsCollaborationEnUs,
-        ),
+        [LocaleType.EN_US]: mergeLocales(sheetsCoreEnUs, sheetsDrawingEnUs),
       },
-      collaboration: true,
       logLevel: LogLevel.WARN,
       theme: defaultTheme,
       presets: [
@@ -100,22 +98,17 @@ export function SpreadsheetViewer(props: Props) {
           // @ts-expect-error sheets-ui types omit boolean `true`; valid runtime option
           footer: true,
         }),
-        UniverSheetsDrawingPreset({ collaboration: true }),
-        UniverSheetsAdvancedPreset({
-          universerEndpoint: UNIVERSER_BASE,
-          license: UNIVER_LICENSE,
-        }),
-        UniverSheetsCollaborationPreset({
-          universerEndpoint: UNIVERSER_BASE,
-          univerContainerId: "univer",
-        }),
+        UniverSheetsDrawingPreset({ collaboration: false }),
       ],
+      plugins: [VeritlyUniverGluePlugin],
     })
+
+    augmentVeritlyHost(instance.univerAPI, instance.univer, UNIVERSER_BASE)
 
     runtime = instance
     if (import.meta.env.DEV) {
       const w = window as VeritlyWindow
-      w.__veritlyUniverSdk = () => createUniverSdk({ univerAPI: instance.univerAPI, univer: instance.univer })
+      w.__veritlyUniverSdk = () => veritlySdk(instance)
     }
 
     browserTracer().startActiveSpan(
@@ -159,7 +152,7 @@ export function SpreadsheetViewer(props: Props) {
   createEffect(() => {
     const cur = runtime
     if (!cur) return
-    createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer }).toggleDarkMode(theme.mode() === "dark")
+    veritlySdk(cur).toggleDarkMode(theme.mode() === "dark")
   })
 
   createEffect(() => {
@@ -183,7 +176,7 @@ export function SpreadsheetViewer(props: Props) {
     if (import.meta.env.DEV) {
       console.info("[veritly] univer sdk relay connecting", wsUrl)
     }
-    const sdk = createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer })
+    const sdk = veritlySdk(cur)
 
     ws.onopen = () => {
       browserTracer().startActiveSpan(
@@ -406,6 +399,56 @@ export function SpreadsheetViewer(props: Props) {
     })
   })
 
+  /** Local edits → universer HTTP `new_changes` (incremental); no full snapshot `save`. */
+  createEffect(() => {
+    const cur = runtime
+    const uid = props.unitId
+    if (!cur || !uid || uid.startsWith("pending-")) return
+
+    const api = cur.univerAPI as UniverHostApi
+    const handle = (event: unknown) => {
+      const o = event as { id?: string; params?: unknown }
+      if (o.id !== "sheet.mutation.set-range-values") return
+      const p = o.params
+      if (!p || typeof p !== "object") return
+      const unitId = Reflect.get(p, "unitId")
+      if (typeof unitId !== "string" || unitId !== uid) return
+      const sheetId = Reflect.get(p, "subUnitId")
+      if (typeof sheetId !== "string") return
+      const cellValue = Reflect.get(p, "cellValue")
+      if (!cellValue || typeof cellValue !== "object") return
+
+      const raw = Reflect.get(p, "range")
+      const push = api.pushSetRangeToServerDebounced
+      if (!push) return
+      const out: PushSetRangeInput = {
+        unitId,
+        sheetId,
+        cellValue: cellValue as PushSetRangeInput["cellValue"],
+      }
+      if (raw && typeof raw === "object") {
+        const sr = Reflect.get(raw, "startRow")
+        const er = Reflect.get(raw, "endRow")
+        const sc = Reflect.get(raw, "startColumn")
+        const ec = Reflect.get(raw, "endColumn")
+        if (
+          typeof sr === "number" &&
+          typeof er === "number" &&
+          typeof sc === "number" &&
+          typeof ec === "number"
+        ) {
+          out.range = { startRow: sr, endRow: er, startColumn: sc, endColumn: ec }
+        }
+      }
+      push(out)
+    }
+    const sub = api.addEvent(api.Event.CommandExecuted, handle)
+    onCleanup(() => {
+      sub.dispose()
+      void api.flushVeritlyCombForUnit?.(uid)
+    })
+  })
+
   createEffect(
     on(
       () =>
@@ -428,7 +471,7 @@ export function SpreadsheetViewer(props: Props) {
         const id = ++seq
         const stale = () => id !== seq || runtime !== cur
 
-        const sdk = createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer })
+        const sdk = veritlySdk(cur)
 
         await browserTracer().startActiveSpan(
           "spreadsheet.workbook.load",
@@ -463,13 +506,11 @@ export function SpreadsheetViewer(props: Props) {
                   setError("Univer import returned no unit id")
                   return
                 }
-                await registerOfficeUnit(officePath, realId, { projectId })
-                if (stale()) return
-                props.onUnitRegistered?.()
+                props.onUnitResolved?.(realId)
                 return
               }
 
-              sdk.loadServerUnit(unitId, unitType)
+              await sdk.loadServerUnit(unitId, unitType)
             } catch (e) {
               if (stale()) return
               const msg = e instanceof Error ? e.message : "Failed to load sheet"

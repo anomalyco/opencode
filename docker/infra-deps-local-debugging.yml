@@ -1,3 +1,4 @@
+# Local dev dependencies only. Production uses S3-compatible storage (e.g. DigitalOcean Spaces); MinIO here is dev-only.
 services:
   postgres:
     image: postgres:16-alpine
@@ -15,5 +16,33 @@ services:
       timeout: 5s
       retries: 5
 
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: veritlyminio
+      MINIO_ROOT_PASSWORD: veritlyminio_dev
+    volumes:
+      - minio_data:/data
+
+  # Bun's S3 client does not create buckets; match prior behavior for fresh MinIO volumes (`UNIVER_COMPAT_S3_BUCKET`).
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        for i in $$(seq 1 60); do
+          mc alias set local http://minio:9000 veritlyminio veritlyminio_dev && break
+          sleep 1
+        done
+        mc mb local/veritly-exchange --ignore-existing
+
 volumes:
   postgres_data:
+  minio_data:

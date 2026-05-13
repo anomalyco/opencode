@@ -2,6 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { defineConfig, devices } from "@playwright/test"
+import { playwrightWebserverUsesUniver } from "./script/e2e-infra"
 
 const configDir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -24,7 +25,10 @@ const serverHost = process.env.PLAYWRIGHT_SERVER_HOST
 const serverPort = process.env.PLAYWRIGHT_SERVER_PORT
 if (!serverHost) throw new Error("Missing PLAYWRIGHT_SERVER_HOST")
 if (!serverPort) throw new Error("Missing PLAYWRIGHT_SERVER_PORT")
-const command = `bun run dev:e2e -- --host 0.0.0.0 --port ${port}`
+const univerWeb = playwrightWebserverUsesUniver()
+const command = univerWeb
+  ? `bun --env-file=../../.env.development --env-file=.env.e2e ./script/dev-e2e-with-univer.ts -- --host 0.0.0.0 --port ${port}`
+  : `bun run dev:e2e -- --host 0.0.0.0 --port ${port}`
 /** Default false: port 4096 is often a stray OpenCode dev server; reusing it serves API JSON, not Vite. Set `PLAYWRIGHT_REUSE=1` to reuse. */
 const reuse = process.env.PLAYWRIGHT_REUSE === "1"
 const defaultAuth = path.join(configDir, "../../my-auth.json")
@@ -51,7 +55,7 @@ export default defineConfig({
     command,
     url: baseURL,
     reuseExistingServer: reuse,
-    timeout: 120_000,
+    timeout: univerWeb ? 300_000 : 120_000,
     env: {
       VITE_OPENCODE_SERVER_HOST: serverHost,
       VITE_OPENCODE_SERVER_PORT: serverPort,
@@ -59,6 +63,9 @@ export default defineConfig({
       OTEL_LOG_LEVEL: "none",
       VERITLY_OTLP_EXPORT_DEBUG: "0",
       VITE_PUBLIC_OTEL_LOG_LEVEL: "none",
+      ...(process.env.VITE_UNIVER_BACKEND_URL?.trim()
+        ? { VITE_UNIVER_BACKEND_URL: process.env.VITE_UNIVER_BACKEND_URL.trim() }
+        : {}),
     },
   },
   use: {

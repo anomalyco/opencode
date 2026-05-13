@@ -1,57 +1,26 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { parseOpencodeE2eInfra } from "./e2e-infra"
+import { startE2eDockerDeps, startOpencodeE2eContainer } from "./e2e-testcontainers"
 
 /**
- * E2E Test Runner - Docker Compose Edition
+ * E2E Test Runner.
  *
- * PREREQUISITES (run these first):
- *   ./script/setup-e2e.sh
- *
- * This script DOES NOT start containers. It FAILS FAST if services are unavailable.
+ * Infra: `OPENCODE_E2E_INFRA` (default `postgres,ollama`). See `./e2e-infra.ts`.
+ * **Docker-backed:** Postgres, Ollama, MinIO, optional univer-compat + OpenCode **API in Bun Testcontainers**
+ * (migrate → `seed-e2e` → `Server.listen`). Playwright + Vite stay on the host.
  */
 
 const appDir = process.cwd()
 const repoDir = path.resolve(appDir, "../..")
-const opencodeDir = path.join(repoDir, "packages", "opencode")
+const infra = parseOpencodeE2eInfra()
 
 const extraArgs = (() => {
   const args = process.argv.slice(2)
   if (args[0] === "--") return args.slice(1)
   return args
 })()
-
-// Service endpoints - must match docker-compose.e2e.yml
-const services = {
-  postgres: { url: "postgresql://veritly:veritly@localhost:15432/veritly", type: "database" },
-  ollama: { url: "http://localhost:11435", type: "http" },
-}
-
-// Fail-fast health checks
-async function checkServices(): Promise<string[]> {
-  const errors: string[] = []
-
-  for (const [name, config] of Object.entries(services)) {
-    try {
-      if (config.type === "http") {
-        let res: Response
-        if (name === "ollama") {
-          res = await fetch(`${config.url}/api/tags`)
-        } else {
-          res = await fetch(config.url)
-        }
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`)
-        }
-      }
-      console.log(`[E2E] ✓ ${name} is available`)
-    } catch (e) {
-      errors.push(`${name}: ${e instanceof Error ? e.message : String(e)}`)
-    }
-  }
-
-  return errors
-}
 
 async function waitForServer(url: string, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs
@@ -66,49 +35,45 @@ async function waitForServer(url: string, timeoutMs = 30000) {
   throw new Error(`Server not ready at ${probe} after ${timeoutMs}ms`)
 }
 
-// Main
-console.log("[E2E] Checking prerequisites...")
-console.log("[E2E] Run ./script/setup-e2e.sh if services are not available")
-console.log("")
-
-const errors = await checkServices()
-
-if (errors.length > 0) {
-  console.error("[E2E] ✗ Required services are not available:")
-  for (const err of errors) {
-    console.error(`  - ${err}`)
-  }
-  console.error("")
-  console.error("[E2E] Run: ./script/setup-e2e.sh")
-  process.exit(1)
+async function port(): Promise<number> {
+  const server = Bun.serve({
+    port: 0,
+    fetch() {
+      return new Response("ok")
+    },
+  })
+  const raw = server.port
+  await server.stop(true)
+  if (raw === undefined) throw new Error("ephemeral port unavailable")
+  return raw
 }
 
-const ollamaRes = await fetch("http://localhost:11435/api/tags")
-const ollamaData = (await ollamaRes.json()) as { models?: Array<{ name: string }> }
-const modelRows = ollamaData.models
-const models = Array.isArray(modelRows) ? modelRows.map((m) => m.name) : []
-console.log(`[E2E] Available models: ${models.join(", ")}`)
-
-if (!models.includes("llama3.2:1b")) {
-  console.error("[E2E] ✗ Model llama3.2:1b not found in Ollama")
-  console.error("[E2E] Run: docker compose -f docker-compose.e2e.yml exec ollama ollama pull llama3.2:1b")
-  process.exit(1)
+console.log("[E2E] Starting Docker-backed E2E dependencies (see e2e-testcontainers.ts)…")
+const deps = await startE2eDockerDeps(infra, repoDir)
+if (!deps.ollamaInternalBaseUrl) {
+  await deps.stop()
+  throw new Error(
+    "e2e-local runs OpenCode inside Docker; OPENCODE_E2E_INFRA must include `ollama` so opencode.json can use the in-network model base (http://ollama:11434).",
+  )
 }
+const univer = deps.univer
+if (univer) console.log(`[E2E] univer-compat at ${univer.origin}`)
 
 const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-e2e-"))
 const keepSandbox = process.env.OPENCODE_E2E_KEEP_SANDBOX === "1"
 
-// Create static config pointing to Compose services
 const xdgConfigDir = path.join(sandbox, "config")
 const opencodeConfigDir = path.join(xdgConfigDir, "opencode")
 await fs.mkdir(opencodeConfigDir, { recursive: true })
+
+const ollamaOpenaiBase = `${deps.ollamaInternalBaseUrl.replace(/\/+$/, "")}/v1`
 
 const opencodeConfig = {
   model: "openai/llama3.2:1b",
   provider: {
     openai: {
       options: {
-        baseURL: "http://localhost:11435/v1",
+        baseURL: ollamaOpenaiBase,
         apiKey: "dummy-key-for-local-model",
       },
       models: {
@@ -130,11 +95,11 @@ await fs.writeFile(
   JSON.stringify(opencodeConfig, null, 2),
 )
 
-const serverPort = 14096
-const webPort = 4096
+const serverPort = await port()
+const webPort = await port()
 const appOrigin = `http://127.0.0.1:${webPort}`
 
-const serverEnv = {
+const serverEnvBase: Record<string, string | undefined> = {
   ...process.env,
   OPENCODE_DISABLE_SHARE: "true",
   OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
@@ -142,27 +107,33 @@ const serverEnv = {
   OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
   OPENCODE_DISABLE_MODELS_FETCH: "true",
   OPENCODE_WORKOS_ENABLED: "true",
-  /** Quiet OpenTelemetry `diag.*` (e.g. “OTLP traces configured”, per-export lines). OTLP export still runs. */
   OTEL_LOG_LEVEL: "none",
   VERITLY_OTLP_EXPORT_DEBUG: "0",
-  OPENCODE_TEST_HOME: path.join(sandbox, "home"),
-  XDG_DATA_HOME: path.join(sandbox, "share"),
-  XDG_CACHE_HOME: path.join(sandbox, "cache"),
-  XDG_CONFIG_HOME: xdgConfigDir,
-  XDG_STATE_HOME: path.join(sandbox, "state"),
-  OPENCODE_E2E_PROJECT_DIR: repoDir,
   OPENCODE_E2E_USER_ID: "e2e_test_user",
   OPENCODE_E2E_SESSION_TITLE: "E2E Session",
   OPENCODE_E2E_MESSAGE: "Seeded for UI e2e",
   OPENCODE_E2E_MODEL: "openai/llama3.2:1b",
   OPENCODE_CLIENT: "app",
-  DATABASE_URL: "postgresql://veritly:veritly@localhost:15432/veritly",
   PUBLIC_BASE_URL: appOrigin,
   WORKOS_REDIRECT_URI: `${appOrigin}/auth/callback`,
 }
 
-const runnerEnv = {
-  ...serverEnv,
+if (univer) {
+  Object.assign(serverEnvBase, univer.env)
+}
+
+const containerEnv: Record<string, string | undefined> = {
+  ...serverEnvBase,
+  DATABASE_URL: deps.databaseUrlInternal,
+}
+
+if (univer) {
+  containerEnv.VERITLY_HEALTH_UNIVER_URL = univer.clusterUniverHttpOrigin
+}
+
+const runnerEnv: Record<string, string | undefined> = {
+  ...serverEnvBase,
+  DATABASE_URL: deps.databaseUrl,
   PLAYWRIGHT_BASE_URL: appOrigin,
   PLAYWRIGHT_SERVER_HOST: "127.0.0.1",
   PLAYWRIGHT_SERVER_PORT: String(serverPort),
@@ -171,24 +142,24 @@ const runnerEnv = {
   PLAYWRIGHT_PORT: String(webPort),
 }
 
-let seed: ReturnType<typeof Bun.spawn> | undefined
+if (univer) {
+  runnerEnv.PLAYWRIGHT_E2E_INFRA = "univer"
+}
+
 let runner: ReturnType<typeof Bun.spawn> | undefined
-let server: { stop: () => Promise<void> | void } | undefined
-let inst: { Instance: { disposeAll: () => Promise<void> | void } } | undefined
+let opencodeBox: Awaited<ReturnType<typeof startOpencodeE2eContainer>> | undefined
 let cleaned = false
 
 const cleanup = async () => {
   if (cleaned) return
   cleaned = true
 
-  if (seed && seed.exitCode === null) seed.kill("SIGTERM")
   if (runner && runner.exitCode === null) runner.kill("SIGTERM")
 
-  const jobs: Promise<unknown>[] = []
-  if (inst !== undefined) jobs.push(Promise.resolve(inst.Instance.disposeAll()))
-  if (server !== undefined) jobs.push(Promise.resolve(server.stop()))
-  if (!keepSandbox) jobs.push(fs.rm(sandbox, { recursive: true, force: true }))
-  await Promise.allSettled(jobs)
+  if (opencodeBox !== undefined) await opencodeBox.stop()
+  if (!keepSandbox) await fs.rm(sandbox, { recursive: true, force: true })
+
+  await deps.stop()
 }
 
 process.once("SIGINT", () => cleanup().then(() => process.exit(130)))
@@ -197,47 +168,25 @@ process.once("SIGTERM", () => cleanup().then(() => process.exit(143)))
 let code = 1
 
 try {
-  console.log("[E2E] Seeding database...")
-  seed = Bun.spawn(["bun", "script/seed-e2e.ts"], {
-    cwd: opencodeDir,
-    env: serverEnv,
+  console.log("[E2E] Starting OpenCode container (db:migrate → seed-e2e → server)…")
+  opencodeBox = await startOpencodeE2eContainer({
+    repoRoot: repoDir,
+    network: deps.network,
+    hostApiPort: serverPort,
+    configHostDir: xdgConfigDir,
+    env: containerEnv,
+  })
+
+  await waitForServer(`http://127.0.0.1:${serverPort}`)
+  console.log("[E2E] OpenCode server is ready")
+
+  runner = Bun.spawn(["bun", "test:e2e", ...extraArgs], {
+    cwd: appDir,
+    env: runnerEnv,
     stdout: "inherit",
     stderr: "inherit",
   })
-
-  const seedExit = await seed.exited
-  if (seedExit !== 0) {
-    console.error("[E2E] Seed failed!")
-    code = seedExit
-  } else {
-    Object.assign(process.env, serverEnv)
-    process.env.AGENT = "1"
-    process.env.OPENCODE = "1"
-    process.env.OPENCODE_PID = String(process.pid)
-
-    const log = await import("../../opencode/src/util/log")
-    await log.Log.init({
-      print: true,
-      dev: true,
-      level: "WARN",
-    })
-
-    const servermod = await import("../../opencode/src/server/server")
-    inst = await import("../../opencode/src/project/instance")
-    server = servermod.Server.listen({ port: serverPort, hostname: "127.0.0.1" })
-    console.log(`[E2E] OpenCode server listening on http://127.0.0.1:${serverPort}`)
-
-    await waitForServer(`http://127.0.0.1:${serverPort}`)
-    console.log("[E2E] Server is ready")
-
-    runner = Bun.spawn(["bun", "test:e2e", ...extraArgs], {
-      cwd: appDir,
-      env: runnerEnv,
-      stdout: "inherit",
-      stderr: "inherit",
-    })
-    code = await runner.exited
-  }
+  code = await runner.exited
 } catch (error) {
   console.error(error)
   code = 1

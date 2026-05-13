@@ -5,12 +5,30 @@ import { FUniver } from "@univerjs/core/facade"
 import type { FRange, FWorkbook, FWorksheet } from "@univerjs/sheets/facade"
 
 /**
- * `FUniver` from `@univerjs/core` + sheets facade, plus host wiring (import/load) that presets / import plugins add at runtime.
+ * `FUniver` from `@univerjs/core` + sheets facade, plus optional host wiring (`importXLSXToUnitIdAsync`, `loadServerUnit`)
+ * that Univer Pro collaboration presets add via facade extension. Veritly supplies these without Pro packages — see `augmentVeritlyHost` in the app.
  */
-export type UniverHostApi = FUniver & {
-  importXLSXToUnitIdAsync(file: File): Promise<string | undefined>
-  loadServerUnit(unitId: string, unitType: number): void | Promise<unknown>
+export type PushSetRangeInput = {
+  unitId: string
+  sheetId: string
+  baseRev?: number
+  memberId?: string
+  /** Omitted when the host mutation has no `range` (compat applies from `cellValue` only). */
+  range?: { startRow: number; endRow: number; startColumn: number; endColumn: number }
+  cellValue: Record<string, Record<string, { v: unknown; t?: number }>>
 }
+
+export type UniverHostApi = FUniver &
+  Partial<{
+    importXLSXToUnitIdAsync(file: File): Promise<string | undefined>
+    /** Returns latest snapshot revision after universer load (used for comb `baseRev` tracking in the host). */
+    loadServerUnit(unitId: string, unitType: number): void | Promise<number>
+    /** POST `comb/.../new_changes` with one `sheet.mutation.set-range-values` (requires prior `loadServerUnit`). */
+    pushSetRangeToServer(input: PushSetRangeInput): Promise<number>
+    /** Coalesces overlapping cell maps; flush with `flushVeritlyCombForUnit` or wait for debounce timer. */
+    pushSetRangeToServerDebounced(input: PushSetRangeInput): void
+    flushVeritlyCombForUnit(unitId: string): Promise<void>
+  }>
 
 export type RangeRect = {
   startRow: number
@@ -342,10 +360,14 @@ export function createUniverSdk(input: UniverSdkRuntime) {
   const runtime: UniverSdkRuntime = { univerAPI: api, univer: input.univer }
   return {
     importXlsxToUnit(file: File) {
-      return api.importXLSXToUnitIdAsync(file)
+      const fn = api.importXLSXToUnitIdAsync
+      if (!fn) throw new SdkError("Missing importXLSXToUnitIdAsync on host API — use Veritly augmentVeritlyHost()")
+      return fn.call(api, file)
     },
     loadServerUnit(unitId: string, unitType: number) {
-      api.loadServerUnit(unitId, unitType)
+      const fn = api.loadServerUnit
+      if (!fn) throw new SdkError("Missing loadServerUnit on host API — use Veritly augmentVeritlyHost()")
+      return fn.call(api, unitId, unitType)
     },
     toggleDarkMode(on: boolean) {
       api.toggleDarkMode(on)

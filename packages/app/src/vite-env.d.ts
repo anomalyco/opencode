@@ -8,10 +8,7 @@ declare module "*.py?raw" {
 interface ImportMetaEnv {
   /** Hosted API origin for the main OpenCode HTTP API. */
   readonly VITE_OPENCODE_SERVER_URL?: string
-  /**
-   * Single backend origin: `/universer-api/*` + `/v1/files/*`.
-   * Docker: `http://127.0.0.1:8000` — go-compat: `http://127.0.0.1:8099`
-   */
+  /** Univer universer / exchange HTTP (`/universer-api/*`). */
   readonly VITE_UNIVER_BACKEND_URL?: string
   /** Univer Pro `license.txt` body (same string as backend `configs/license.txt`). */
   readonly VITE_UNIVER_LICENSE?: string

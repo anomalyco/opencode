@@ -426,6 +426,8 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Failed to load file",
   "file.hostFilesystemDisabled": "This server has no on-disk project. Only Office files (Univer) can be opened here.",
+  "file.officeImportOnly":
+    "Import spreadsheets via drag-and-drop onto the file tree. There is no separate workspace file server; Univer holds sheet data after import.",
   "toast.file.listFailed.title": "Failed to list files",
 
   "toast.context.noLineSelection.title": "No line selection",

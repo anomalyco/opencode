@@ -1,8 +1,52 @@
 // Shared env + teardown for Bun tests (no bun:test here).
+//
+// Postgres: Testcontainers `postgres:16-alpine` (same creds as local dev) plus migrations, once per
+// `bun test` process — normal Testcontainers usage from the harness. Production code stays unaware.
 import os from "os"
 import path from "path"
 import fs from "fs/promises"
 import { setTimeout as sleep } from "node:timers/promises"
+import { GenericContainer, Wait } from "testcontainers"
+
+async function startDisposablePostgres(): Promise<{ stop: () => Promise<void> }> {
+  const u = "veritly"
+  const p = "veritly"
+  const d = "veritly"
+  const c = await new GenericContainer("postgres:16-alpine")
+    .withEnvironment({
+      POSTGRES_USER: u,
+      POSTGRES_PASSWORD: p,
+      POSTGRES_DB: d,
+    })
+    .withExposedPorts(5432)
+    .withWaitStrategy(Wait.forLogMessage(/database system is ready to accept connections/))
+    .withStartupTimeout(120_000)
+    .start()
+  const mapped = c.getMappedPort(5432)
+  process.env.DATABASE_URL = `postgresql://${u}:${p}@127.0.0.1:${mapped}/${d}`
+
+  const { Pool } = await import("pg")
+  const probe = new Pool({ connectionString: process.env.DATABASE_URL })
+  const deadline = Date.now() + 30_000
+  let ok = false
+  while (Date.now() < deadline) {
+    try {
+      await probe.query("SELECT 1")
+      ok = true
+      break
+    } catch {
+      await sleep(200)
+    }
+  }
+  await probe.end()
+  if (!ok) throw new Error("Postgres Testcontainer did not accept connections in time")
+
+  return {
+    stop: async () => {
+      await c.stop()
+    },
+  }
+}
 
 export async function installTestEnv(): Promise<() => Promise<void>> {
   const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
@@ -47,27 +91,41 @@ export async function installTestEnv(): Promise<() => Promise<void>> {
   delete process.env["OPENCODE_SERVER_PASSWORD"]
   delete process.env["OPENCODE_SERVER_USERNAME"]
 
-  const { Log } = await import("../src/util/log")
-  Log.init({
-    print: false,
-    dev: true,
-    level: "DEBUG",
-  })
+  let pg: { stop: () => Promise<void> } | undefined
+  try {
+    pg = await startDisposablePostgres()
 
-  return async () => {
     const { Database } = await import("../src/storage/db.pg")
-    Database.close()
-    const busy = (error: unknown) =>
-      typeof error === "object" && error !== null && "code" in error && error.code === "EBUSY"
-    const rm = async (left: number): Promise<void> => {
-      Bun.gc(true)
-      await sleep(100)
-      return fs.rm(dir, { recursive: true, force: true }).catch((error) => {
-        if (!busy(error)) throw error
-        if (left <= 1) throw error
-        return rm(left - 1)
-      })
+    const { runPostgresMigrations } = await import("../src/storage/migrate-pg")
+    await Database.initialize()
+    await runPostgresMigrations()
+
+    const { Log } = await import("../src/util/log")
+    Log.init({
+      print: false,
+      dev: true,
+      level: "DEBUG",
+    })
+
+    return async () => {
+      const { Database: Db } = await import("../src/storage/db.pg")
+      await Db.close()
+      if (pg) await pg.stop()
+      const busy = (error: unknown) =>
+        typeof error === "object" && error !== null && "code" in error && error.code === "EBUSY"
+      const rm = async (left: number): Promise<void> => {
+        Bun.gc(true)
+        await sleep(100)
+        return fs.rm(dir, { recursive: true, force: true }).catch((error) => {
+          if (!busy(error)) throw error
+          if (left <= 1) throw error
+          return rm(left - 1)
+        })
+      }
+      await rm(30)
     }
-    await rm(30)
+  } catch (e) {
+    await pg?.stop()
+    throw e
   }
 }

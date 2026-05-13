@@ -40,8 +40,8 @@ export function VeritlyFile(props: FileProps) {
         officePath={p}
         pendingImport={pendingImport}
         projectId={sdk.directory || "default"}
-        onUnitRegistered={() => {
-          if (p) void file.load(p, { force: true })
+        onUnitResolved={(id) => {
+          if (p) file.patchSpreadsheetUnit(p, id)
         }}
       />
     )
