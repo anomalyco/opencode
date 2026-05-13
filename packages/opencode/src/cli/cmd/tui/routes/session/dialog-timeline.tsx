@@ -11,6 +11,7 @@ export function DialogTimeline(props: {
   sessionID: string
   onMove: (messageID: string) => void
   setPrompt?: (prompt: PromptInfo) => void
+  pending?: string
 }) {
   const sync = useSync()
   const dialog = useDialog()
@@ -33,8 +34,9 @@ export function DialogTimeline(props: {
         value: message.id,
         footer: Locale.time(message.time.created),
         onSelect: (dialog) => {
+          const isQueued = props.pending ? message.id > props.pending : false
           dialog.replace(() => (
-            <DialogMessage messageID={message.id} sessionID={props.sessionID} setPrompt={props.setPrompt} />
+            <DialogMessage messageID={message.id} sessionID={props.sessionID} setPrompt={props.setPrompt} queued={isQueued} />
           ))
         },
       })

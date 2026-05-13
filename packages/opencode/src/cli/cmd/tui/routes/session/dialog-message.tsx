@@ -6,11 +6,13 @@ import { useRoute } from "@tui/context/route"
 import * as Clipboard from "@tui/util/clipboard"
 import type { PromptInfo } from "@tui/component/prompt/history"
 import { strip } from "@tui/component/prompt/part"
+import type { DialogContext } from "@tui/ui/dialog"
 
 export function DialogMessage(props: {
   messageID: string
   sessionID: string
   setPrompt?: (prompt: PromptInfo) => void
+  queued?: boolean
 }) {
   const sync = useSync()
   const sdk = useSDK()
@@ -21,6 +23,26 @@ export function DialogMessage(props: {
     <DialogSelect
       title="Message Actions"
       options={[
+        ...(props.queued
+          ? [
+              {
+                title: "Cancel",
+                value: "message.cancel",
+                description: "remove queued message",
+                onSelect: async (dialog: DialogContext) => {
+                  const msg = message()
+                  if (!msg) return
+
+                  await sdk.client.session.deleteMessage({
+                    sessionID: props.sessionID,
+                    messageID: msg.id,
+                  })
+
+                  dialog.clear()
+                },
+              },
+            ]
+          : []),
         {
           title: "Revert",
           value: "session.revert",
