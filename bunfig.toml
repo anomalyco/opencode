@@ -2,6 +2,7 @@
 exact = true
 # Only install newly resolved package versions published at least 3 days ago.
 minimumReleaseAge = 259200
+minimumReleaseAgeExcludes = ["@opentui/core", "@opentui/core-darwin-arm64", "@opentui/core-darwin-x64", "@opentui/core-linux-arm64", "@opentui/core-linux-x64", "@opentui/core-win32-arm64", "@opentui/core-win32-x64", "@opentui/keymap", "@opentui/solid"]
 
 [test]
 root = "./do-not-run-tests-from-root"

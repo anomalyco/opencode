@@ -144,8 +144,7 @@ export const layer = Layer.effect(
       const timed = options?.timeout
         ? Effect.timeoutOrElse(collect, {
             duration: options.timeout,
-            orElse: () =>
-              Effect.fail(new AppProcessError({ command: description, cause: new Error("Timed out") })),
+            orElse: () => Effect.fail(new AppProcessError({ command: description, cause: new Error("Timed out") })),
           })
         : collect
       const aborted = options?.signal
@@ -158,16 +157,17 @@ export const layer = Layer.effect(
       return yield* aborted.pipe(Effect.catch((cause) => Effect.fail(wrapError(description, cause))))
     })
 
-    const runStream = (command: ChildProcess.Command, options?: RunStreamOptions): Stream.Stream<string, AppProcessError> => {
+    const runStream = (
+      command: ChildProcess.Command,
+      options?: RunStreamOptions,
+    ): Stream.Stream<string, AppProcessError> => {
       const description = describeCommand(command)
       const okExitCodes = options?.okExitCodes
       const built: Stream.Stream<string, AppProcessError | PlatformError> = Stream.unwrap(
         Effect.gen(function* () {
           const handle = yield* spawner.spawn(command)
           const stderrFiber = yield* Effect.forkScoped(
-            collectStream(handle.stderr, options?.maxErrorBytes).pipe(
-              Effect.map((x) => x.buffer.toString("utf8")),
-            ),
+            collectStream(handle.stderr, options?.maxErrorBytes).pipe(Effect.map((x) => x.buffer.toString("utf8"))),
           )
           const source = options?.includeStderr === true ? handle.all : handle.stdout
           const lines = source.pipe(

@@ -35,7 +35,9 @@ describe("AppProcess", () => {
       "requireSuccess fails on non-zero exit",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
-        const exit = yield* Effect.exit(svc.run(cmd("-e", "process.exit(1)")).pipe(Effect.flatMap(AppProcess.requireSuccess)))
+        const exit = yield* Effect.exit(
+          svc.run(cmd("-e", "process.exit(1)")).pipe(Effect.flatMap(AppProcess.requireSuccess)),
+        )
         expect(Exit.isFailure(exit)).toBe(true)
         if (Exit.isFailure(exit)) {
           const reason = exit.cause.reasons[0]
@@ -67,9 +69,7 @@ describe("AppProcess", () => {
         expect(okZero.exitCode).toBe(0)
         const okOne = yield* svc.run(cmd("-e", "process.exit(1)")).pipe(Effect.flatMap(requireZeroOrOne))
         expect(okOne.exitCode).toBe(1)
-        const exit = yield* Effect.exit(
-          svc.run(cmd("-e", "process.exit(2)")).pipe(Effect.flatMap(requireZeroOrOne)),
-        )
+        const exit = yield* Effect.exit(svc.run(cmd("-e", "process.exit(2)")).pipe(Effect.flatMap(requireZeroOrOne)))
         expect(Exit.isFailure(exit)).toBe(true)
         if (Exit.isFailure(exit)) {
           const reason = exit.cause.reasons[0]
@@ -140,9 +140,7 @@ describe("AppProcess", () => {
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
         const exit = yield* Effect.exit(
-          svc
-            .runStream(cmd("-e", "console.log('a'); process.exit(2)"), { okExitCodes: [0] })
-            .pipe(Stream.runCollect),
+          svc.runStream(cmd("-e", "console.log('a'); process.exit(2)"), { okExitCodes: [0] }).pipe(Stream.runCollect),
         )
         expect(Exit.isFailure(exit)).toBe(true)
         if (Exit.isFailure(exit)) {
@@ -169,9 +167,7 @@ describe("AppProcess", () => {
       "without okExitCodes, never fails on exit code",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
-        const result = yield* svc
-          .runStream(cmd("-e", "console.log('only'); process.exit(7)"))
-          .pipe(Stream.runCollect)
+        const result = yield* svc.runStream(cmd("-e", "console.log('only'); process.exit(7)")).pipe(Stream.runCollect)
         expect(Array.from(result)).toEqual(["only"])
       }),
     )

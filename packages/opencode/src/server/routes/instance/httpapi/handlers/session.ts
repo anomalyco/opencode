@@ -1,5 +1,3 @@
-import * as InstanceState from "@/effect/instance-state"
-import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { Command } from "@/command"
@@ -275,18 +273,12 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       payload: typeof PromptPayload.Type
     }) {
-      const instance = yield* InstanceState.context
-      const workspace = yield* InstanceState.workspaceID
       const message = yield* promptSvc
         .prompt({
           ...ctx.payload,
           sessionID: ctx.params.sessionID,
         })
-        .pipe(
-          Effect.provideService(InstanceRef, instance),
-          Effect.provideService(WorkspaceRef, workspace),
-          Effect.mapError(() => new HttpApiError.BadRequest({})),
-        )
+        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
       return HttpServerResponse.stream(Stream.make(JSON.stringify(message)).pipe(Stream.encodeText), {
         contentType: "application/json",
       })

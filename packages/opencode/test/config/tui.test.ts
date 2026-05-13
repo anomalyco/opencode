@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
 import path from "path"
+import { pathToFileURL } from "url"
 import { Effect, Layer } from "effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Global } from "@opencode-ai/core/global"
@@ -125,6 +126,54 @@ it.instance("loads tui config with the same precedence order as server config pa
       const config = yield* getTuiConfig(test.directory)
       expect(config.theme).toBe("local")
       expect(config.diff_style).toBe("stacked")
+    }),
+  ),
+)
+
+it.instance("resolves attention config defaults and overrides", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const test = yield* TestInstance
+
+      expect((yield* getTuiConfig(test.directory)).attention).toEqual({
+        enabled: false,
+        notifications: true,
+        sound: true,
+        volume: 0.4,
+        sound_pack: "opencode.default",
+        sounds: {},
+      })
+
+      yield* fs.writeJson(path.join(test.directory, "tui.json"), {
+        attention: {
+          enabled: false,
+          notifications: false,
+          sound: false,
+          volume: 0.7,
+          sound_pack: "acme.soft",
+          sounds: {
+            default: path.join(test.directory, "default.mp3"),
+            question: pathToFileURL(path.join(test.directory, "question.mp3")).href,
+            error: "./error.mp3",
+            subagent_done: "./subagent-done.mp3",
+          },
+        },
+      })
+
+      expect((yield* getTuiConfig(test.directory)).attention).toEqual({
+        enabled: false,
+        notifications: false,
+        sound: false,
+        volume: 0.7,
+        sound_pack: "acme.soft",
+        sounds: {
+          default: path.join(test.directory, "default.mp3"),
+          question: path.join(test.directory, "question.mp3"),
+          error: path.join(test.directory, "error.mp3"),
+          subagent_done: path.join(test.directory, "subagent-done.mp3"),
+        },
+      })
     }),
   ),
 )
