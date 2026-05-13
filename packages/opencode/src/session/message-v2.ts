@@ -956,6 +956,17 @@ export function page(input: { sessionID: SessionID; limit: number; before?: stri
   }
 }
 
+export const pageEffect = Effect.fn("MessageV2.pageEffect")(function* (input: {
+  sessionID: SessionID
+  limit: number
+  before?: string
+}) {
+  return yield* Effect.try({
+    try: () => page(input),
+    catch: (error) => error,
+  }).pipe(Effect.catch((error) => (NotFoundError.isInstance(error) ? Effect.fail(error) : Effect.die(error))))
+})
+
 export function* stream(sessionID: SessionID) {
   const size = 50
   let before: string | undefined
@@ -999,6 +1010,16 @@ export function get(input: { sessionID: SessionID; messageID: MessageID }): With
     parts: parts(input.messageID),
   }
 }
+
+export const getEffect = Effect.fn("MessageV2.getEffect")(function* (input: {
+  sessionID: SessionID
+  messageID: MessageID
+}) {
+  return yield* Effect.try({
+    try: () => get(input),
+    catch: (error) => error,
+  }).pipe(Effect.catch((error) => (NotFoundError.isInstance(error) ? Effect.fail(error) : Effect.die(error))))
+})
 
 export function filterCompacted(msgs: Iterable<WithParts>) {
   const result = [] as WithParts[]
