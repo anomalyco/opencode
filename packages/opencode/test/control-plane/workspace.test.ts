@@ -16,13 +16,14 @@ import { ProjectID } from "@/project/schema"
 import { ProjectTable } from "@/project/project.sql"
 import { Instance } from "@/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
+import { InstanceRef } from "@/effect/instance-ref"
 import { Session as SessionNs } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { SessionTable } from "@/session/session.sql"
 import { SyncEvent } from "@/sync"
 import { EventSequenceTable } from "@/sync/event.sql"
 import { resetDatabase } from "../fixture/db"
-import { disposeAllInstances, provideTmpdirInstance, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, provideTmpdirInstance, TestInstance, tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import { WorkspaceID } from "../../src/control-plane/schema"
@@ -105,7 +106,7 @@ afterEach(async () => {
 
 async function withInstance<T>(fn: (dir: string) => T | Promise<T>) {
   await using tmp = await tmpdir({ git: true })
-  return WithInstance.provide({
+  return await WithInstance.provide({
     directory: tmp.path,
     fn: () => fn(tmp.path),
   })
@@ -994,31 +995,43 @@ describe("workspace sync state", () => {
     })
   })
 
-  test("startWorkspaceSyncing starts all workspaces", async () => {
-    await withInstance(async (dir) => {
-      const firstType = unique("first")
-      const secondType = unique("second")
-      const first = workspaceInfo(Instance.project.id, firstType)
-      const second = workspaceInfo(Instance.project.id, secondType)
-      await fs.mkdir(path.join(dir, "first"), { recursive: true })
-      await fs.mkdir(path.join(dir, "second"), { recursive: true })
-      insertWorkspace(first)
-      insertWorkspace(second)
-      registerAdapter(Instance.project.id, firstType, localAdapter(path.join(dir, "first")).adapter)
-      registerAdapter(Instance.project.id, secondType, localAdapter(path.join(dir, "second")).adapter)
+  it.instance(
+    "startWorkspaceSyncing starts all workspaces",
+    () =>
+      Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
+        const instance = yield* InstanceRef
+        if (!instance) return yield* Effect.die(new Error("missing test instance"))
+        const workspace = yield* Workspace.Service
+        const projectID = instance.project.id
+        const firstType = unique("first")
+        const secondType = unique("second")
+        const first = workspaceInfo(projectID, firstType)
+        const second = workspaceInfo(projectID, secondType)
+        yield* Effect.promise(() => fs.mkdir(path.join(dir, "first"), { recursive: true }))
+        yield* Effect.promise(() => fs.mkdir(path.join(dir, "second"), { recursive: true }))
+        yield* Effect.sync(() => {
+          insertWorkspace(first)
+          insertWorkspace(second)
+          registerAdapter(projectID, firstType, localAdapter(path.join(dir, "first")).adapter)
+          registerAdapter(projectID, secondType, localAdapter(path.join(dir, "second")).adapter)
+        })
+        yield* Effect.addFinalizer(() =>
+          Effect.all([workspace.remove(first.id), workspace.remove(second.id)], { discard: true }).pipe(Effect.ignore),
+        )
 
-      startWorkspaceSyncing(Instance.project.id)
+        yield* workspace.startWorkspaceSyncing(projectID)
 
-      await eventually(() =>
-        workspaceStatus().then((status) => {
-          expect(status.find((item) => item.workspaceID === first.id)?.status).toBe("connected")
-          expect(status.find((item) => item.workspaceID === second.id)?.status).toBe("connected")
-        }),
-      )
-      await removeWorkspace(first.id)
-      await removeWorkspace(second.id)
-    })
-  })
+        yield* eventuallyEffect(
+          Effect.gen(function* () {
+            const status = yield* workspace.status()
+            expect(status.find((item) => item.workspaceID === first.id)?.status).toBe("connected")
+            expect(status.find((item) => item.workspaceID === second.id)?.status).toBe("connected")
+          }),
+        )
+      }),
+    { git: true },
+  )
 
   test("local start reports error when the target directory is missing", async () => {
     await withInstance(async (dir) => {
