@@ -993,6 +993,23 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
   )
 }
 
+
+function LazyAction(props: { children: JSX.Element; size?: "small" | "normal" }) {
+  const [mounted, setMounted] = createSignal(false)
+  const mount = () => setMounted(true)
+
+  return (
+    <span data-component="lazy-action" data-mounted={mounted() ? "true" : undefined} onPointerEnter={mount}>
+      <Show
+        when={mounted()}
+        fallback={<span data-slot="lazy-action-placeholder" data-size={props.size ?? "normal"} aria-hidden="true" />}
+      >
+        {props.children}
+      </Show>
+    </span>
+  )
+}
+
 export function UserMessageDisplay(props: {
   message: UserMessage
   parts: PartType[]
@@ -1191,54 +1208,61 @@ export function UserMessageDisplay(props: {
             </Show>
             <div data-slot="user-message-copy-wrapper" data-interrupted={props.interrupted ? "" : undefined}>
               <Show when={props.actions?.fork}>
-                <Tooltip value={i18n.t("ui.message.forkMessage")} placement="top" gutter={4}>
-                  <IconButton
-                    icon="fork"
-                    size="normal"
-                    variant="ghost"
-                    disabled={!!busy()}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      run("fork")
-                    }}
-                    aria-label={i18n.t("ui.message.forkMessage")}
-                  />
-                </Tooltip>
+                <LazyAction>
+                  <Tooltip value={i18n.t("ui.message.forkMessage")} placement="top" gutter={4} lazyMount>
+                    <IconButton
+                      icon="fork"
+                      size="normal"
+                      variant="ghost"
+                      disabled={!!busy()}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        run("fork")
+                      }}
+                      aria-label={i18n.t("ui.message.forkMessage")}
+                    />
+                  </Tooltip>
+                </LazyAction>
               </Show>
               <Show when={props.actions?.revert}>
-                <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
+                <LazyAction>
+                  <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4} lazyMount>
+                    <IconButton
+                      icon="reset"
+                      size="normal"
+                      variant="ghost"
+                      disabled={!!busy()}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        run("revert")
+                      }}
+                      aria-label={i18n.t("ui.message.revertMessage")}
+                    />
+                  </Tooltip>
+                </LazyAction>
+              </Show>
+              <LazyAction>
+                <Tooltip
+                  value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+                  placement="top"
+                  gutter={4}
+                  lazyMount
+                >
                   <IconButton
-                    icon="reset"
+                    icon={copied() ? "check" : "copy"}
                     size="normal"
                     variant="ghost"
-                    disabled={!!busy()}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={(event) => {
                       event.stopPropagation()
-                      run("revert")
+                      handleCopy()
                     }}
-                    aria-label={i18n.t("ui.message.revertMessage")}
+                    aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
                   />
                 </Tooltip>
-              </Show>
-              <Tooltip
-                value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
-                placement="top"
-                gutter={4}
-              >
-                <IconButton
-                  icon={copied() ? "check" : "copy"}
-                  size="normal"
-                  variant="ghost"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    handleCopy()
-                  }}
-                  aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
-                />
-              </Tooltip>
+              </LazyAction>
             </div>
           </div>
         </>
@@ -1267,16 +1291,16 @@ export function UserMessageDisplay(props: {
         <div data-slot="user-message-hooks">
           <For each={hooks()}>
             {(part) => (
-                <Part
-                  part={part}
-                  message={props.message}
-                  markdownEager={props.markdownEager}
-                  markdownViewport={props.markdownViewport}
-                  markdownHighlight={props.markdownHighlight}
-                  markdownMath={props.markdownMath}
-                  markdownStage={props.markdownStage}
-                  onMarkdownStage={props.onMarkdownStage}
-                />
+              <Part
+                part={part}
+                message={props.message}
+                markdownEager={props.markdownEager}
+                markdownViewport={props.markdownViewport}
+                markdownHighlight={props.markdownHighlight}
+                markdownMath={props.markdownMath}
+                markdownStage={props.markdownStage}
+                onMarkdownStage={props.onMarkdownStage}
+              />
             )}
           </For>
         </div>
@@ -1647,20 +1671,23 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
-            <Tooltip
-              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-              placement="top"
-              gutter={4}
-            >
-              <IconButton
-                icon={copied() ? "check" : "copy"}
-                size="normal"
-                variant="ghost"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={handleCopy}
-                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-              />
-            </Tooltip>
+            <LazyAction>
+              <Tooltip
+                value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+                placement="top"
+                gutter={4}
+                lazyMount
+              >
+                <IconButton
+                  icon={copied() ? "check" : "copy"}
+                  size="normal"
+                  variant="ghost"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={handleCopy}
+                  aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+                />
+              </Tooltip>
+            </LazyAction>
             <Show when={meta()}>
               <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
                 {meta()}
@@ -1717,13 +1744,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
         </Collapsible.Trigger>
         <Show when={streaming() && !open()}>
           <div data-component="reasoning-part" data-mode="preview">
-            <Markdown
-              text={previewText()}
-              cacheKey={`${part.id}:preview`}
-              stage={props.markdownStage}
-              onStage={props.onMarkdownStage}
-              plain={true}
-            />
+            <div data-slot="reasoning-preview">{previewText()}</div>
           </div>
         </Show>
         <Collapsible.Content>
@@ -1823,7 +1844,7 @@ function ShellTool(props: ToolProps & { title: string }) {
       {...props}
       showPendingMeta
       showPendingDetails={!!body()}
-      forceOpen={running() && !!body()}
+      forceOpen={false}
       icon="console"
       trigger={
         <div data-slot="basic-tool-tool-info-structured">
@@ -1852,20 +1873,23 @@ function ShellTool(props: ToolProps & { title: string }) {
       <Show when={body()}>
         <div data-component="bash-output">
           <div data-slot="bash-copy">
-            <Tooltip
-              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-              placement="top"
-              gutter={4}
-            >
-              <IconButton
-                icon={copied() ? "check" : "copy"}
-                size="small"
-                variant="secondary"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={handleCopy}
-                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-              />
-            </Tooltip>
+            <LazyAction size="small">
+              <Tooltip
+                value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                placement="top"
+                gutter={4}
+                lazyMount
+              >
+                <IconButton
+                  icon={copied() ? "check" : "copy"}
+                  size="small"
+                  variant="secondary"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={handleCopy}
+                  aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                />
+              </Tooltip>
+            </LazyAction>
           </div>
           <div data-slot="bash-scroll" data-scrollable>
             <pre data-slot="bash-pre">

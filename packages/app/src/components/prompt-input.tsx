@@ -74,6 +74,7 @@ import { type SessionHistoryEntry } from "@/context/session-history"
 import { working as sessionWorking } from "@/pages/session/session-working"
 import { createInputUndoEntry, createInputUndoState, recordInputUndo, stepInputUndo } from "./prompt-input/input-undo"
 import { workspaceKey } from "@/pages/layout/helpers"
+import { uiPerfTriggerDown, uiPerfOpen } from "@/utils/ui-perf"
 
 interface PromptInputProps {
   class?: string
@@ -118,6 +119,32 @@ const EXAMPLES = [
 ] as const
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
+const promptTooltipDelay = 350
+
+function dbg() {
+  if (typeof window === "undefined") return false
+  try {
+    return window.localStorage.getItem("opencode.ui.debug") === "1"
+  } catch {
+    return false
+  }
+}
+
+function logPromptHover(name: string, phase: string, event?: { timeStamp?: number }) {
+  if (!dbg()) return
+  const now = typeof performance === "undefined" ? undefined : performance.now()
+  console.debug("[prompt:hover]", {
+    name,
+    phase,
+    eventTime: event?.timeStamp,
+    now,
+  })
+}
+
+function logPromptOpen(name: string, fields: Record<string, string | number | boolean | undefined>) {
+  if (!dbg()) return
+  console.debug("[prompt:open]", { name, ...fields })
+}
 
 const GitContext = () => {
   const sdk = useSDK()
@@ -1749,6 +1776,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const variants = createMemo(() => ["default", ...local.model.variant.list()])
+  const trace = dbg()
+  const hover = { skipDelayDuration: 0 }
 
   const variantLabel = createMemo(() => {
     const defaultText = language.t("common.default")
@@ -1776,6 +1805,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         <DockShellForm
           onSubmit={handleSubmit}
           data-slot="prompt-shell"
+          style={glass()}
           classList={{
             "group/prompt-input": true,
             "prompt-shell-shadow": true,
@@ -1893,6 +1923,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   }}
                 >
                   <TooltipKeybind
+                    {...hover}
                     placement="top"
                     title={language.t("prompt.action.attachFile")}
                     keybind={command.keybind("file.attach")}
@@ -1912,7 +1943,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </Button>
                   </TooltipKeybind>
                   <Show when={platform.platform === "desktop"}>
-                    <Tooltip placement="top" value={language.t("prompt.action.expand")}>
+                    <Tooltip {...hover} placement="top" value={language.t("prompt.action.expand")}>
                       <IconButton
                         data-action="prompt-expand"
                         type="button"
@@ -1927,7 +1958,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       />
                     </Tooltip>
                   </Show>
-                  <Tooltip placement="top" inactive={!prompt.dirty() && !working()} value={tip()}>
+                  <Tooltip {...hover} placement="top" inactive={!prompt.dirty() && !working()} value={tip()}>
                     <IconButton
                       data-action="prompt-submit"
                       type="submit"
@@ -1968,12 +1999,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <>
                       <Show when={!hideAgentSelector()}>
                         <TooltipKeybind
+                          {...hover}
                           placement="top"
                           gutter={4}
+                          openDelay={promptTooltipDelay}
+                          lazyExpand={true}
+                          onOpenChange={
+                            trace
+                              ? (open) => {
+                                  logPromptHover("agent-selector", open ? "tooltip-open" : "tooltip-close")
+                                }
+                              : undefined
+                          }
                           title={language.t("command.agent.cycle")}
                           keybind={command.keybind("agent.cycle")}
                         >
                           <Select
+                            debugName={trace ? "agent-selector" : undefined}
                             size="normal"
                             options={agentNames()}
                             current={local.agent.current()?.name ?? ""}
@@ -1982,6 +2024,32 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             valueClass="truncate"
                             triggerStyle={control()}
                             variant="ghost"
+                            triggerProps={
+                              trace
+                                ? {
+                                    onPointerEnter: (e: PointerEvent) =>
+                                      logPromptHover("agent-selector", "pointer-enter", e),
+                                    onPointerLeave: (e: PointerEvent) =>
+                                      logPromptHover("agent-selector", "pointer-leave", e),
+                                    onFocus: () => logPromptHover("agent-selector", "focus"),
+                                    onBlur: () => logPromptHover("agent-selector", "blur"),
+                                    onPointerDown: (e: PointerEvent) => uiPerfTriggerDown("agent-selector", e),
+                                  }
+                                : undefined
+                            }
+                            onOpenChange={
+                              trace
+                                ? (open) => {
+                                    logPromptHover("agent-selector", open ? "select-open" : "select-close")
+                                    logPromptOpen("agent-selector", {
+                                      open,
+                                      count: agentNames().length,
+                                      current: local.agent.current()?.name ?? "none",
+                                    })
+                                    uiPerfOpen("agent-selector", open)
+                                  }
+                                : undefined
+                            }
                           />
                         </TooltipKeybind>
                       </Show>
@@ -1989,8 +2057,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         when={providers.paid().length > 0}
                         fallback={
                           <TooltipKeybind
+                            {...hover}
                             placement="top"
                             gutter={4}
+                            openDelay={promptTooltipDelay}
+                            lazyExpand={true}
+                            onOpenChange={
+                              trace
+                                ? (open) => {
+                                    logPromptHover("model-selector-unpaid", open ? "tooltip-open" : "tooltip-close")
+                                  }
+                                : undefined
+                            }
                             title={language.t("command.model.choose")}
                             keybind={command.keybind("model.choose")}
                           >
@@ -2000,7 +2078,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               size="normal"
                               class="prompt-pick min-w-0 max-w-[320px] group"
                               style={control()}
-                              onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
+                              onPointerEnter={
+                                trace
+                                  ? (e: PointerEvent) => logPromptHover("model-selector-unpaid", "pointer-enter", e)
+                                  : undefined
+                              }
+                              onPointerLeave={
+                                trace
+                                  ? (e: PointerEvent) => logPromptHover("model-selector-unpaid", "pointer-leave", e)
+                                  : undefined
+                              }
+                              onFocus={trace ? () => logPromptHover("model-selector-unpaid", "focus") : undefined}
+                              onBlur={trace ? () => logPromptHover("model-selector-unpaid", "blur") : undefined}
+                              onClick={(e: MouseEvent) => {
+                                logPromptHover("model-selector-unpaid", "click", e)
+                                dialog.show(() => <DialogSelectModelUnpaid />)
+                              }}
                             >
                               <Show when={local.model.current()?.provider?.id}>
                                 <ProviderIcon
@@ -2017,19 +2110,62 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         }
                       >
                         <TooltipKeybind
+                          {...hover}
                           placement="top"
                           gutter={4}
+                          openDelay={promptTooltipDelay}
+                          lazyExpand={true}
+                          onOpenChange={
+                            trace
+                              ? (open) => {
+                                  logPromptHover("model-selector", open ? "tooltip-open" : "tooltip-close")
+                                }
+                              : undefined
+                          }
                           title={language.t("command.model.choose")}
                           keybind={command.keybind("model.choose")}
                         >
                           <ModelSelectorPopover
+                            debugName={trace ? "model-selector" : undefined}
                             triggerAs={Button}
                             triggerProps={{
                               variant: "ghost",
                               size: "normal",
                               style: control(),
                               class: "prompt-pick min-w-0 max-w-[320px] group",
+                              ...(trace
+                                ? {
+                                    onPointerEnter: (e: PointerEvent) =>
+                                      logPromptHover("model-selector", "pointer-enter", e),
+                                    onPointerLeave: (e: PointerEvent) =>
+                                      logPromptHover("model-selector", "pointer-leave", e),
+                                    onFocus: () => logPromptHover("model-selector", "focus"),
+                                    onBlur: () => logPromptHover("model-selector", "blur"),
+                                    onPointerDown: (e: PointerEvent) => uiPerfTriggerDown("model-selector", e),
+                                  }
+                                : {}),
                             }}
+                            onOpenChange={
+                              trace
+                                ? (open) => {
+                                    logPromptHover("model-selector", open ? "popover-open" : "popover-close")
+                                    const list = local.model.list()
+                                    const visible = list.filter((item) =>
+                                      local.model.visible({ modelID: item.id, providerID: item.provider.id }),
+                                    )
+                                    const providers = new Set(visible.map((item) => item.provider.id))
+                                    logPromptOpen("model-selector", {
+                                      open,
+                                      total: list.length,
+                                      visible: visible.length,
+                                      providers: providers.size,
+                                      current: local.model.current()?.id ?? "none",
+                                      current_provider: local.model.current()?.provider?.id ?? "none",
+                                    })
+                                    uiPerfOpen("model-selector", open)
+                                  }
+                                : undefined
+                            }
                           >
                             <Show when={local.model.current()?.provider?.id}>
                               <ProviderIcon
@@ -2046,8 +2182,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       </Show>
                       <Show when={!hideVariantSelector()}>
                         <TooltipKeybind
+                          {...hover}
                           placement="top"
                           gutter={4}
+                          openDelay={promptTooltipDelay}
+                          lazyExpand={true}
+                          onOpenChange={
+                            trace
+                              ? (open) => {
+                                  logPromptHover("variant-selector", open ? "tooltip-open" : "tooltip-close")
+                                }
+                              : undefined
+                          }
                           title={language.t("command.model.variant.cycle")}
                           keybind={command.keybind("model.variant.cycle")}
                         >
@@ -2061,6 +2207,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             valueClass="truncate"
                             triggerStyle={control()}
                             variant="ghost"
+                            triggerProps={
+                              trace
+                                ? {
+                                    onPointerEnter: (e: PointerEvent) =>
+                                      logPromptHover("variant-selector", "pointer-enter", e),
+                                    onPointerLeave: (e: PointerEvent) =>
+                                      logPromptHover("variant-selector", "pointer-leave", e),
+                                    onFocus: () => logPromptHover("variant-selector", "focus"),
+                                    onBlur: () => logPromptHover("variant-selector", "blur"),
+                                  }
+                                : undefined
+                            }
+                            onOpenChange={
+                              trace
+                                ? (open) => {
+                                    logPromptHover("variant-selector", open ? "select-open" : "select-close")
+                                  }
+                                : undefined
+                            }
                           />
                         </TooltipKeybind>
                       </Show>
@@ -2090,6 +2255,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </Show>
                 <GitContext />
                 <TooltipKeybind
+                  {...hover}
                   placement="top"
                   gutter={8}
                   title={acceptLabel()}
@@ -2111,7 +2277,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Icon name="shield" size="small" classList={{ "text-icon-success-base": accepting() }} />
                   </Button>
                 </TooltipKeybind>
-                <Tooltip placement="top" value={language.t("session.read")}>
+                <Tooltip {...hover} placement="top" value={language.t("session.read")}>
                   <IconButton
                     data-action="prompt-read"
                     type="button"
@@ -2126,7 +2292,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   />
                 </Tooltip>
                 <Show when={!!extraAgentIntegration()}>
-                  <Tooltip placement="top" value={language.t("prompt.action.insertSession")}>
+                  <Tooltip {...hover} placement="top" value={language.t("prompt.action.insertSession")}>
                     <SessionPickerPopover
                       onSelect={insertSessionRef}
                       ariaLabel={language.t("prompt.action.insertSession")}

@@ -137,10 +137,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
     if (store.userScrolled) return
 
     setStore("userScrolled", true)
-    console.debug("[auto-scroll] paused", {
-      gap: Math.round(distanceFromBottom(el)),
-      hold,
-    })
     options.onUserInteracted?.()
   }
 

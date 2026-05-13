@@ -22,12 +22,20 @@ type Entry = {
   html: string
 }
 
+type Mark = Record<string, string | number | boolean | undefined>
+
 export type MarkdownStage = "lite" | "structure" | "full"
 
 type MarkedApi = ReturnType<typeof useMarked>
 
 const max = 200
 const cache = new Map<string, Entry>()
+
+function mark(_name: string, _data: Mark = {}) {
+}
+
+function markImpact(_kind: string, _data: Mark = {}) {
+}
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
@@ -602,6 +610,10 @@ function math(el: Element) {
   )
 }
 
+function stable(el: Element) {
+  return math(el) || el.querySelector(".katex,.katex-display,.katex-html,.katex-mathml") !== null
+}
+
 // Debounce delay before upgrading from fast parse to full parse (with shiki)
 const HIGHLIGHT_DEBOUNCE_MS = 600
 const HIGHLIGHT_IDLE_TIMEOUT_MS = 4_000
@@ -645,7 +657,7 @@ export function Markdown(
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const [ready, setReady] = createSignal(true)
-  const eager = createMemo(() => local.stage ? local.stage !== "lite" : !!local.eager)
+  const eager = createMemo(() => (local.stage ? local.stage !== "lite" : !!local.eager))
   const mathMode = createMemo<"full" | "defer">(() => {
     if (local.stage === "full") return "full"
     if (local.stage === "structure") return "defer"
@@ -695,6 +707,18 @@ export function Markdown(
     }
   })
 
+  createEffect(() => {
+    const input = src()
+    if (!input) return
+    markImpact("src", {
+      key: input.cacheKey ?? input.key,
+      mode: input.mode,
+      math: input.math,
+      text: input.markdown.length,
+      streaming: input.streaming,
+    })
+  })
+
   const [html, { mutate: setHtml }] = createResource(
     src,
     async (input) => {
@@ -706,10 +730,17 @@ export function Markdown(
         const hit = cache.get(key)
         if (hit && hit.hash === input.hash) {
           touch(key, hit)
+          mark("cache-hit", {
+            key: input.cacheKey ?? input.key,
+            mode: input.mode,
+            math: input.math,
+            text: input.markdown.length,
+          })
           return hit.html
         }
       }
 
+      const time = performance.now()
       const rendered =
         input.mode === "plain"
           ? fallback(input.normalized)
@@ -727,6 +758,15 @@ export function Markdown(
             })
 
       const safe = input.mode === "plain" ? rendered : sanitize(rendered)
+      mark("parse", {
+        key: input.cacheKey ?? input.key,
+        mode: input.mode,
+        math: input.math,
+        streaming: input.streaming,
+        text: input.markdown.length,
+        html: safe.length,
+        took: Math.round(performance.now() - time),
+      })
       if (!input.streaming && key && input.hash) {
         touch(key, { hash: input.hash, html: safe })
       }
@@ -838,6 +878,10 @@ export function Markdown(
   createEffect(() => {
     const next = stage()
     const id = key()
+    markImpact("stage", {
+      key: id,
+      stage: next,
+    })
     local.onStage?.(id, next)
   })
 
@@ -850,6 +894,13 @@ export function Markdown(
     const content = html()
     if (!container) return
     if (isServer) return
+
+    markImpact("dom-effect", {
+      key: local.cacheKey ?? "",
+      text: local.text.length,
+      html: content?.length ?? 0,
+      stage: stage(),
+    })
 
     if (!content) {
       container.innerHTML = ""
@@ -864,8 +915,8 @@ export function Markdown(
     const isStreaming = local.streaming
     const chunked = local.chunked
     const upgrading = !isStreaming && domMathMode === "defer" && src()?.math === "full"
-    const pane = (isStreaming || upgrading) ? view(container) : null
-    const before = (isStreaming || upgrading) ? snap(pane) : undefined
+    const pane = isStreaming || upgrading ? view(container) : null
+    const before = isStreaming || upgrading ? snap(pane) : undefined
     const upgradeHeight = upgrading && pane ? container.offsetHeight : 0
     const upgradeBox = upgrading && pane ? container.getBoundingClientRect() : undefined
     const paneBox = upgrading && pane ? pane.getBoundingClientRect() : undefined
@@ -897,6 +948,29 @@ export function Markdown(
           took: Math.round(took),
         })
       }
+
+      mark("dom", {
+        key: local.cacheKey ?? "",
+        mode,
+        streaming: isStreaming,
+        upgrading,
+        text: local.text.length,
+        prev: prevHtml.length,
+        next: content.length,
+        nodes: container.childNodes.length,
+        took: Math.round(took),
+      })
+      markImpact("dom-apply", {
+        key: local.cacheKey ?? "",
+        mode,
+        streaming: isStreaming,
+        upgrading,
+        text: local.text.length,
+        prev: prevHtml.length,
+        next: content.length,
+        nodes: container.childNodes.length,
+        took: Math.round(took),
+      })
 
       if (isStreaming && before) {
         const after = snap(pane)
@@ -1015,7 +1089,19 @@ export function Markdown(
       childrenOnly: true,
       onBeforeElUpdated: (fromEl, toEl) => {
         if (fromEl.isEqualNode(toEl)) return false
-        if (math(fromEl) && math(toEl)) return false
+        if (stable(fromEl) && stable(toEl) && fromEl.textContent === toEl.textContent) {
+          console.debug("[markdown] skip stable math subtree", {
+            key: local.cacheKey ?? "",
+            tag: fromEl.tagName,
+            text: local.text.length,
+          })
+          mark("skip-math", {
+            key: local.cacheKey ?? "",
+            tag: fromEl.tagName,
+            text: local.text.length,
+          })
+          return false
+        }
         return true
       },
     })
