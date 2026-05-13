@@ -481,6 +481,64 @@ export const Ty: Info = {
   },
 }
 
+export const Pyrefly: Info = {
+  id: "pyrefly",
+  extensions: [".py", ".pyi"],
+  root: NearestRoot(["pyrefly.toml", "pyproject.toml", "setup.py", "mypy.ini", "pyrightconfig.json"]),
+  async spawn(root) {
+    if (!Flag.OPENCODE_EXPERIMENTAL_LSP_PYREFLY) {
+      return undefined
+    }
+
+    let binary = which("pyrefly")
+    const initialization: Record<string, string> = {}
+
+    const potentialVenvPaths = [process.env["VIRTUAL_ENV"], path.join(root, ".venv"), path.join(root, "venv")].filter(
+      (p): p is string => p !== undefined,
+    )
+    for (const venvPath of potentialVenvPaths) {
+      const isWindows = process.platform === "win32"
+      const potentialPythonPath = isWindows
+        ? path.join(venvPath, "Scripts", "python.exe")
+        : path.join(venvPath, "bin", "python")
+      if (await Filesystem.exists(potentialPythonPath)) {
+        initialization["pythonPath"] = potentialPythonPath
+        break
+      }
+    }
+
+    if (!binary) {
+      for (const venvPath of potentialVenvPaths) {
+        const isWindows = process.platform === "win32"
+        const potentialPyreflyPath = isWindows
+          ? path.join(venvPath, "Scripts", "pyrefly.exe")
+          : path.join(venvPath, "bin", "pyrefly")
+        if (await Filesystem.exists(potentialPyreflyPath)) {
+          binary = potentialPyreflyPath
+          break
+        }
+      }
+    }
+
+    if (!binary) {
+      log.error("pyrefly not found, please install pyrefly first")
+      return undefined
+    }
+
+    const proc = spawn(binary, ["lsp"], {
+      cwd: root,
+      env: {
+        ...process.env,
+      },
+    })
+
+    return {
+      process: proc,
+      initialization,
+    }
+  },
+}
+
 export const Pyright: Info = {
   id: "pyright",
   extensions: [".py", ".pyi"],

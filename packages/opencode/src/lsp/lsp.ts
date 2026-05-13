@@ -99,6 +99,22 @@ const kinds = [
 ]
 
 const filterExperimentalServers = (servers: Record<string, LSPServer.Info>) => {
+  if (Flag.OPENCODE_EXPERIMENTAL_LSP_PYREFLY) {
+    if (servers["pyright"]) {
+      log.info("LSP server pyright is disabled because OPENCODE_EXPERIMENTAL_LSP_PYREFLY is enabled")
+      delete servers["pyright"]
+    }
+    if (servers["ty"]) {
+      log.info("LSP server ty is disabled because OPENCODE_EXPERIMENTAL_LSP_PYREFLY is enabled")
+      delete servers["ty"]
+    }
+    return
+  }
+
+  if (servers["pyrefly"]) {
+    delete servers["pyrefly"]
+  }
+
   if (Flag.OPENCODE_EXPERIMENTAL_LSP_TY) {
     if (servers["pyright"]) {
       log.info("LSP server pyright is disabled because OPENCODE_EXPERIMENTAL_LSP_TY is enabled")
