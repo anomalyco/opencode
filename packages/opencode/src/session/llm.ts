@@ -117,7 +117,7 @@ const live: Layer.Layer<
       const header = system[0]
       yield* plugin.trigger(
         "experimental.chat.system.transform",
-        { sessionID: input.sessionID, model: input.model },
+        { sessionID: input.sessionID, model: input.model, user: input.user },
         { system },
       )
       // rejoin to maintain 2-part structure for caching if header unchanged
