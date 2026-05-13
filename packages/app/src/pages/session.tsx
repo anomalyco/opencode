@@ -1496,10 +1496,7 @@ export default function Page() {
       return out
     })
 
-  const busy = (sessionID: string) => {
-    // This matches how the TUI does it
-    return (sync.data.session_status[sessionID] ?? { type: "idle" as const }).type !== "idle"
-  }
+  const busy = (sessionID: string) => sync.data.session_working(sessionID)
 
   const queuedFollowups = createMemo(() => {
     const id = params.id

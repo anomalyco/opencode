@@ -1,16 +1,17 @@
-import { WorkerEntrypoint } from "cloudflare:workers"
 import { and, Database, inArray } from "@opencode-ai/console-core/drizzle/index.js"
 import { ModelTpsRateLimitTable } from "@opencode-ai/console-core/schema/ip.sql.js"
 
+type Entry = { provider: string; model: string; tps: number }
 type Result = Record<string, { qualify: number; unqualify: number }>
 
-export default class Stat extends WorkerEntrypoint {
-  async fetch() {
-    return new Response("Not Found", { status: 404 })
-  }
+export default {
+  async fetch(request: Request) {
+    if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 })
 
-  async getStats(ids: string[]): Promise<Result> {
-    if (ids.length === 0) return {}
+    const entries = (await request.json()) as Entry[]
+    if (!Array.isArray(entries) || entries.length === 0) return Response.json({} satisfies Result)
+
+    const ids = entries.map((e) => `${e.provider}/${e.model}/${e.tps}`)
 
     const toInterval = (date: Date) =>
       parseInt(
@@ -34,6 +35,6 @@ export default class Stat extends WorkerEntrypoint {
       result[row.id].qualify += row.qualify
       result[row.id].unqualify += row.unqualify
     }
-    return result
-  }
+    return Response.json(result)
+  },
 }

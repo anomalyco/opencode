@@ -26,7 +26,7 @@ export default $config({
     }
 
     return {
-      STAT_WORKER_NAME: stat.nodes.worker.scriptName,
+      StatWorkerUrl: stat.url,
     }
   },
 })

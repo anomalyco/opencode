@@ -6,7 +6,6 @@ import { Effect, Layer, Result, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
@@ -31,46 +30,47 @@ import { Reference } from "@/reference/reference"
 import { ProviderID, ModelID } from "@/provider/schema"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { MessageID, SessionID } from "@/session/schema"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const node = CrossSpawnSpawner.defaultLayer
-const originalExperimentalScout = Flag.OPENCODE_EXPERIMENTAL_SCOUT
 const configLayer = TestConfig.layer({
   directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
 })
 
-const registryLayer = ToolRegistry.layer.pipe(
-  Layer.provide(configLayer),
-  Layer.provide(Plugin.defaultLayer),
-  Layer.provide(Question.defaultLayer),
-  Layer.provide(Todo.defaultLayer),
-  Layer.provide(Skill.defaultLayer),
-  Layer.provide(Agent.defaultLayer),
-  Layer.provide(Session.defaultLayer),
-  Layer.provide(Provider.defaultLayer),
-  Layer.provide(Git.defaultLayer),
-  Layer.provide(Reference.defaultLayer),
-  Layer.provide(LSP.defaultLayer),
-  Layer.provide(Instruction.defaultLayer),
-  Layer.provide(AppFileSystem.defaultLayer),
-  Layer.provide(Bus.layer),
-  Layer.provide(FetchHttpClient.layer),
-  Layer.provide(Format.defaultLayer),
-  Layer.provide(node),
-  Layer.provide(Ripgrep.defaultLayer),
-  Layer.provide(Truncate.defaultLayer),
-)
+const registryLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
+  ToolRegistry.layer.pipe(
+    Layer.provide(configLayer),
+    Layer.provide(Plugin.defaultLayer),
+    Layer.provide(Question.defaultLayer),
+    Layer.provide(Todo.defaultLayer),
+    Layer.provide(Skill.defaultLayer),
+    Layer.provide(Agent.defaultLayer),
+    Layer.provide(Session.defaultLayer),
+    Layer.provide(Provider.defaultLayer),
+    Layer.provide(Git.defaultLayer),
+    Layer.provide(Reference.defaultLayer),
+    Layer.provide(LSP.defaultLayer),
+    Layer.provide(Instruction.defaultLayer),
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Bus.layer),
+    Layer.provide(FetchHttpClient.layer),
+    Layer.provide(Format.defaultLayer),
+    Layer.provide(node),
+    Layer.provide(Ripgrep.defaultLayer),
+    Layer.provide(Truncate.defaultLayer),
+    Layer.provide(RuntimeFlags.layer(flags)),
+  )
 
-const it = testEffect(Layer.mergeAll(registryLayer, node, Agent.defaultLayer))
+const it = testEffect(Layer.mergeAll(registryLayer(), node, Agent.defaultLayer))
+const scout = testEffect(Layer.mergeAll(registryLayer({ experimentalScout: true }), node, Agent.defaultLayer))
 
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_SCOUT = originalExperimentalScout
   await disposeAllInstances()
 })
 
 describe("tool.registry", () => {
   it.instance("hides repo research tools unless experimental", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_SCOUT = false
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
 
@@ -79,9 +79,8 @@ describe("tool.registry", () => {
     }),
   )
 
-  it.instance("shows repo research tools when experimental scout is enabled", () =>
+  scout.instance("shows repo research tools when experimental scout is enabled", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_SCOUT = true
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
 

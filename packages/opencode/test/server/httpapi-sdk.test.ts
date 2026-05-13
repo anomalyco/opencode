@@ -743,7 +743,7 @@ describe("HttpApi SDK", () => {
   )
 
   httpapi(
-    "includes project skills in REST API async prompt context",
+    "includes project skills in REST API prompt context",
     withFakeLlmProject("default", { setup: writeProjectSkill }, ({ sdk, llm }) =>
       Effect.gen(function* () {
         yield* llm.text("skill context ok", { usage: { input: 11, output: 7 } })
@@ -755,18 +755,17 @@ describe("HttpApi SDK", () => {
         )
         const sessionID = String(record(session.data).id)
         const prompt = yield* capture(() =>
-          sdk.session.promptAsync({
+          sdk.session.prompt({
             sessionID,
             agent: "build",
             model: { providerID: "test", modelID: "test-model" },
             parts: [{ type: "text", text: "hello skill context" }],
           }),
         )
-        yield* llm.wait(1)
         const inputs = yield* llm.inputs
 
         expect(session.status).toBe(200)
-        expect(prompt.status).toBe(204)
+        expect(prompt.status).toBe(200)
         expect(JSON.stringify(inputs[0])).toContain("project-rest-skill")
       }),
     ),

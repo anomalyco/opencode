@@ -16,12 +16,26 @@ describe("RuntimeFlags", () => {
           fromConfig({
             OPENCODE_PURE: "true",
             OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
+            OPENCODE_EXPERIMENTAL: "true",
+            OPENCODE_ENABLE_EXA: "true",
+            OPENCODE_ENABLE_PARALLEL: "true",
+            OPENCODE_ENABLE_QUESTION_TOOL: "true",
+            OPENCODE_CLIENT: "desktop",
           }),
         ),
       )
 
       expect(flags.pure).toBe(true)
       expect(flags.disableDefaultPlugins).toBe(true)
+      expect(flags.enableExa).toBe(true)
+      expect(flags.enableParallel).toBe(true)
+      expect(flags.enableQuestionTool).toBe(true)
+      expect(flags.experimentalScout).toBe(true)
+      expect(flags.experimentalLspTool).toBe(true)
+      expect(flags.experimentalPlanMode).toBe(true)
+      expect(flags.experimentalEventSystem).toBe(true)
+      expect(flags.experimentalWorkspaces).toBe(true)
+      expect(flags.client).toBe("desktop")
     }),
   )
 
@@ -31,6 +45,8 @@ describe("RuntimeFlags", () => {
 
       expect(flags.pure).toBe(false)
       expect(flags.disableDefaultPlugins).toBe(true)
+      expect(flags.enableExa).toBe(false)
+      expect(flags.client).toBe("cli")
     }),
   )
 
@@ -43,6 +59,9 @@ describe("RuntimeFlags", () => {
             ConfigProvider.fromUnknown({
               OPENCODE_PURE: "true",
               OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
+              OPENCODE_EXPERIMENTAL: "true",
+              OPENCODE_ENABLE_EXA: "true",
+              OPENCODE_CLIENT: "desktop",
             }),
           ),
         ),
@@ -50,6 +69,8 @@ describe("RuntimeFlags", () => {
 
       expect(flags.pure).toBe(false)
       expect(flags.disableDefaultPlugins).toBe(false)
+      expect(flags.enableExa).toBe(false)
+      expect(flags.client).toBe("cli")
     }),
   )
 })

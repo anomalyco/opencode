@@ -3,9 +3,7 @@ import { Effect, Layer, Option } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
-import { ConfigPermission } from "@/config/permission"
 import { ConfigParse } from "../../src/config/parse"
-import { Permission } from "../../src/permission"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
 import { Instance } from "../../src/project/instance"
@@ -272,40 +270,6 @@ test("updates global config and omits empty shell key in json", async () => {
 
     const writtenConfig = await Filesystem.readJson<{ shell?: string }>(path.join(tmp.path, "opencode.json"))
     expect("shell" in writtenConfig).toBe(false)
-  } finally {
-    ;(Global.Path as { config: string }).config = prev
-    await clear(true)
-  }
-})
-
-test("global config update preserves single-object permission shape on disk", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          shell: "bash",
-          permission: { bash: "ask" },
-        }),
-      )
-    },
-  })
-
-  const prev = Global.Path.config
-  ;(Global.Path as { config: string }).config = tmp.path
-  await clear(true)
-
-  try {
-    // Updating an unrelated key must not rewrite `permission` from object to array form.
-    await saveGlobal({ shell: "zsh" })
-
-    const written = await Filesystem.readJson<{ permission?: unknown; shell?: string }>(
-      path.join(tmp.path, "opencode.json"),
-    )
-    expect(written.shell).toBe("zsh")
-    expect(Array.isArray(written.permission)).toBe(false)
-    expect(written.permission).toEqual({ bash: "ask" })
   } finally {
     ;(Global.Path as { config: string }).config = prev
     await clear(true)
@@ -1749,10 +1713,7 @@ test("permission config preserves user key order", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await load()
-      // load() goes through the merge pipeline, producing the layered array form
-      expect(config.permission).toHaveLength(1)
-      const perm = (config.permission as ConfigPermission.Info[])[0]
-      expect(Object.keys(perm)).toEqual([
+      expect(Object.keys(config.permission!)).toEqual([
         "*",
         "edit",
         "write",
@@ -1764,129 +1725,6 @@ test("permission config preserves user key order", async () => {
         "tools_*",
         "pr_comments_*",
       ])
-    },
-  })
-})
-
-// Global bash "rm *" deny is inherited, but user's top-level "*" ask comes after and overrides it
-test("user top-level catchall overrides inherited bash rules", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          permission: {
-            bash: { "rm *": "deny" },
-          },
-        }),
-      )
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
-      await Filesystem.write(
-        path.join(opencodeDir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          permission: {
-            "*": "ask",
-            bash: { "ls *": "allow" },
-          },
-        }),
-      )
-    },
-  })
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const config = await load()
-      const layers = ConfigPermission.toLayers(config.permission)
-      const ruleset = Permission.merge(...layers.map((p) => Permission.fromConfig(p)))
-
-      expect(Permission.evaluate("bash", "rm -rf /", ruleset).action).toBe("ask")
-      expect(Permission.evaluate("bash", "ls -la", ruleset).action).toBe("allow")
-      expect(Permission.evaluate("bash", "echo hello", ruleset).action).toBe("ask")
-    },
-  })
-})
-
-// No top-level catchall, so global bash "rm *" deny is preserved
-test("inherited bash rules apply when no user top-level catchall", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          permission: {
-            bash: { "rm *": "deny" },
-          },
-        }),
-      )
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
-      await Filesystem.write(
-        path.join(opencodeDir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          permission: {
-            bash: { "ls *": "allow" },
-          },
-        }),
-      )
-    },
-  })
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const config = await load()
-      const layers = ConfigPermission.toLayers(config.permission)
-      const ruleset = Permission.merge(...layers.map((p) => Permission.fromConfig(p)))
-
-      expect(Permission.evaluate("bash", "rm -rf /", ruleset).action).toBe("deny")
-      expect(Permission.evaluate("bash", "ls -la", ruleset).action).toBe("allow")
-    },
-  })
-})
-
-// User's bash "*" catchall overrides global "rm *" deny
-test("user bash catchall overrides inherited bash rules", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          permission: {
-            bash: { "rm *": "deny" },
-          },
-        }),
-      )
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
-      await Filesystem.write(
-        path.join(opencodeDir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          permission: {
-            bash: { "*": "ask", "ls *": "allow" },
-          },
-        }),
-      )
-    },
-  })
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const config = await load()
-      const layers = ConfigPermission.toLayers(config.permission)
-      const ruleset = Permission.merge(...layers.map((p) => Permission.fromConfig(p)))
-
-      expect(Permission.evaluate("bash", "rm -rf /", ruleset).action).toBe("ask")
-      expect(Permission.evaluate("bash", "ls -la", ruleset).action).toBe("allow")
-      expect(Permission.evaluate("bash", "echo hello", ruleset).action).toBe("ask")
-
-      // Non-bash permissions should use the top-level "*" rule
-      expect(Permission.evaluate("read", "foo.txt", ruleset).action).toBe("ask")
     },
   })
 })
@@ -1904,8 +1742,7 @@ test("config parser preserves permission order while rejecting unknown top-level
     "test",
   )
 
-  // ConfigParse.schema preserves the raw shape the user wrote
-  expect(Object.keys(config.permission as ConfigPermission.Info)).toEqual(["bash", "*", "edit"])
+  expect(Object.keys(config.permission!)).toEqual(["bash", "*", "edit"])
   try {
     ConfigParse.schema(Config.Info, { invalid_field: true }, "test")
     throw new Error("expected config parse to fail")
@@ -2742,12 +2579,11 @@ test("parseManagedPlist parses permission rules", async () => {
     ),
     "test:mobileconfig",
   )
-  const perm = config.permission as ConfigPermission.Info
-  expect(perm?.["*"]).toBe("ask")
-  expect(perm?.grep).toBe("allow")
-  expect(perm?.webfetch).toBe("ask")
-  expect(perm?.["~/.ssh/*"]).toBe("deny")
-  const bash = perm?.bash as Record<string, string>
+  expect(config.permission?.["*"]).toBe("ask")
+  expect(config.permission?.grep).toBe("allow")
+  expect(config.permission?.webfetch).toBe("ask")
+  expect(config.permission?.["~/.ssh/*"]).toBe("deny")
+  const bash = config.permission?.bash as Record<string, string>
   expect(bash?.["rm -rf *"]).toBe("deny")
   expect(bash?.["curl *"]).toBe("deny")
 })

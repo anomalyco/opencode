@@ -20,7 +20,8 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { Database } from "@/storage/db"
 import { SessionMessageTable, SessionTable } from "@/session/session.sql"
 import { SessionMessage } from "../../src/v2/session-message"
-import { Modelv2 } from "../../src/v2/model"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
 import * as Log from "@opencode-ai/core/util/log"
 import { eq } from "drizzle-orm"
@@ -110,9 +111,9 @@ const insertLegacyAssistantMessage = (sessionID: SessionIDType) =>
       type: "assistant",
       agent: "build",
       model: {
-        id: Modelv2.ID.make("model"),
-        providerID: Modelv2.ProviderID.make("provider"),
-        variant: Modelv2.VariantID.make("default"),
+        id: ModelV2.ID.make("model"),
+        providerID: ProviderV2.ID.make("provider"),
+        variant: ModelV2.VariantID.make("default"),
       },
       time: { created: DateTime.makeUnsafe(1) },
       content: [],
@@ -212,6 +213,14 @@ describe("session HttpApi", () => {
         expect(get.status).toBe(404)
         expect(yield* responseJson(get)).toEqual(missingSessionBody)
 
+        const children = yield* request(pathFor(SessionPaths.children, { sessionID: missingSession }), { headers })
+        expect(children.status).toBe(404)
+        expect(yield* responseJson(children)).toEqual(missingSessionBody)
+
+        const todo = yield* request(pathFor(SessionPaths.todo, { sessionID: missingSession }), { headers })
+        expect(todo.status).toBe(404)
+        expect(yield* responseJson(todo)).toEqual(missingSessionBody)
+
         const messages = yield* request(pathFor(SessionPaths.messages, { sessionID: missingSession }), { headers })
         expect(messages.status).toBe(404)
         expect(yield* responseJson(messages)).toEqual(missingSessionBody)
@@ -222,6 +231,21 @@ describe("session HttpApi", () => {
         })
         expect(remove.status).toBe(404)
         expect(yield* responseJson(remove)).toEqual(missingSessionBody)
+
+        const prompt = yield* request(pathFor(SessionPaths.prompt, { sessionID: missingSession }), {
+          headers: { ...headers, "content-type": "application/json" },
+          method: "POST",
+          body: JSON.stringify({ agent: "build", noReply: true, parts: [{ type: "text", text: "hello" }] }),
+        })
+        expect(prompt.status).toBe(404)
+        expect(yield* responseJson(prompt)).toEqual(missingSessionBody)
+
+        const abort = yield* request(pathFor(SessionPaths.abort, { sessionID: missingSession }), {
+          headers,
+          method: "POST",
+        })
+        expect(abort.status).toBe(200)
+        expect(yield* responseJson(abort)).toBe(true)
 
         const session = yield* createSession({ title: "missing message" })
         const missingMessage = MessageID.ascending()
@@ -526,6 +550,32 @@ describe("session HttpApi", () => {
             { method: "DELETE", headers },
           ),
         ).toBe(true)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "rejects part updates whose path and body ids disagree",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+        const session = yield* createSession({ title: "part mismatch" })
+        const message = yield* createTextMessage(session.id, "first")
+        const response = yield* request(
+          pathFor(SessionPaths.updatePart, {
+            sessionID: session.id,
+            messageID: message.info.id,
+            partID: message.part.id,
+          }),
+          {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify({ ...message.part, id: PartID.ascending() }),
+          },
+        )
+
+        expect(response.status).toBe(400)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

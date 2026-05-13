@@ -168,9 +168,10 @@ function withContext<A, E>(
               )
               return { info, part }
             }),
-          messages: (sessionID) => run(modules.Session.Service.use((svc) => svc.messages({ sessionID }))),
+          messages: (sessionID) =>
+            run(modules.Session.Service.use((svc) => svc.messages({ sessionID }).pipe(Effect.orDie))),
           todos: (sessionID, todos) => run(modules.Todo.Service.use((svc) => svc.update({ sessionID, todos }))),
-          worktree: (input) => run(modules.Worktree.Service.use((svc) => svc.create(input))),
+          worktree: (input) => run(modules.Worktree.Service.use((svc) => svc.create(input).pipe(Effect.orDie))),
           worktreeRemove: (directory) =>
             run(modules.Worktree.Service.use((svc) => svc.remove({ directory })).pipe(Effect.ignore)),
           llmText: (value) => Effect.suspend(() => llm().text(value)),

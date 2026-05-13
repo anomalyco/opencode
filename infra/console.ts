@@ -301,4 +301,5 @@ new sst.cloudflare.x.SolidStart("Console", {
 export const stat = new sst.cloudflare.Worker("Stat", {
   handler: "packages/console/function/src/stat.ts",
   link: [database],
+  url: true,
 })
