@@ -418,7 +418,7 @@ export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsa
     },
   }
 
-  const contextTokens = tokens.input + tokens.cache.read + tokens.cache.write
+  const contextTokens = inputTokens
   const costInfo =
     input.model.cost?.tiers
       ?.filter((item) => item.tier.type === "context" && contextTokens > item.tier.size)
