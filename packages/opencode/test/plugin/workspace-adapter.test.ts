@@ -1,25 +1,46 @@
 import { afterAll, afterEach, describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Option } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import path from "path"
 import { pathToFileURL } from "url"
+import { Account } from "../../src/account/account"
+import { Auth } from "../../src/auth"
+import { Bus } from "../../src/bus"
+import { Config } from "../../src/config/config"
+import { Env } from "../../src/env"
+import { Workspace } from "../../src/control-plane/workspace"
+import { Plugin } from "../../src/plugin/index"
+import { InstanceBootstrap } from "../../src/project/bootstrap-service"
+import { Instance } from "../../src/project/instance"
+import { InstanceStore } from "../../src/project/instance-store"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { NpmTest } from "../fake/npm"
 
-const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
-process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
-
-const { Flag } = await import("@opencode-ai/core/flag/flag")
-const { Plugin } = await import("../../src/plugin/index")
-const { Workspace } = await import("../../src/control-plane/workspace")
-const { InstanceBootstrap } = await import("../../src/project/bootstrap")
-const { Instance } = await import("../../src/project/instance")
-const { InstanceStore } = await import("../../src/project/instance-store")
-const workspaceLayer = Workspace.defaultLayer.pipe(
-  Layer.provide(InstanceStore.defaultLayer),
-  Layer.provide(InstanceBootstrap.defaultLayer),
+const emptyAccount = Layer.mock(Account.Service)({
+  active: () => Effect.succeed(Option.none()),
+  activeOrg: () => Effect.succeed(Option.none()),
+})
+const emptyAuth = Layer.mock(Auth.Service)({
+  all: () => Effect.succeed({}),
+})
+const configLayer = Config.layer.pipe(
+  Layer.provide(EffectFlock.defaultLayer),
+  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(Env.defaultLayer),
+  Layer.provide(emptyAuth),
+  Layer.provide(emptyAccount),
+  Layer.provide(NpmTest.noop),
 )
-const it = testEffect(Layer.mergeAll(Plugin.defaultLayer, workspaceLayer, CrossSpawnSpawner.defaultLayer))
+const pluginLayer = Plugin.layer.pipe(Layer.provide(Bus.layer), Layer.provide(configLayer))
+const noopBootstrapLayer = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
+const workspaceLayer = Workspace.defaultLayer.pipe(
+  Layer.provide(InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrapLayer))),
+)
+const it = testEffect(Layer.mergeAll(pluginLayer, workspaceLayer, CrossSpawnSpawner.defaultLayer))
 
 const experimental = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 
@@ -30,12 +51,6 @@ afterEach(async () => {
 })
 
 afterAll(() => {
-  if (disableDefault === undefined) {
-    delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
-  } else {
-    process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = disableDefault
-  }
-
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = experimental
 })
 
