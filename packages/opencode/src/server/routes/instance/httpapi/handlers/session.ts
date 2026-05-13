@@ -1,5 +1,3 @@
-import * as InstanceState from "@/effect/instance-state"
-import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { Command } from "@/command"
@@ -16,7 +14,6 @@ import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
-import { NotFoundError } from "@/storage/storage"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Cause, Effect, Option, Schema, Scope } from "effect"
 import * as Stream from "effect/Stream"
@@ -107,11 +104,13 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         return yield* session.messages({ sessionID: ctx.params.sessionID })
       }
 
-      const page = MessageV2.page({
-        sessionID: ctx.params.sessionID,
-        limit: ctx.query.limit,
-        before: ctx.query.before,
-      })
+      const page = yield* SessionError.mapStorageNotFound(
+        MessageV2.pageEffect({
+          sessionID: ctx.params.sessionID,
+          limit: ctx.query.limit,
+          before: ctx.query.before,
+        }),
+      )
       if (!page.cursor) return page.items
 
       const request = yield* HttpServerRequest.HttpServerRequest
@@ -133,10 +132,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID; messageID: MessageID }
     }) {
       return yield* SessionError.mapStorageNotFound(
-        Effect.try({
-          try: () => MessageV2.get({ sessionID: ctx.params.sessionID, messageID: ctx.params.messageID }),
-          catch: (error) => error,
-        }).pipe(Effect.catch((error) => (NotFoundError.isInstance(error) ? Effect.fail(error) : Effect.die(error)))),
+        MessageV2.getEffect({ sessionID: ctx.params.sessionID, messageID: ctx.params.messageID }),
       )
     })
 
@@ -275,18 +271,12 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       payload: typeof PromptPayload.Type
     }) {
-      const instance = yield* InstanceState.context
-      const workspace = yield* InstanceState.workspaceID
       const message = yield* promptSvc
         .prompt({
           ...ctx.payload,
           sessionID: ctx.params.sessionID,
         })
-        .pipe(
-          Effect.provideService(InstanceRef, instance),
-          Effect.provideService(WorkspaceRef, workspace),
-          Effect.mapError(() => new HttpApiError.BadRequest({})),
-        )
+        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
       return HttpServerResponse.stream(Stream.make(JSON.stringify(message)).pipe(Stream.encodeText), {
         contentType: "application/json",
       })
@@ -299,7 +289,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       yield* promptSvc.prompt({ ...ctx.payload, sessionID: ctx.params.sessionID }).pipe(
         Effect.catchCause((cause) =>
           Effect.gen(function* () {
-            yield* Effect.logError("prompt_async failed", { sessionID: ctx.params.sessionID, cause })
+            yield* Effect.logError("prompt_async failed").pipe(
+              Effect.annotateLogs({ sessionID: ctx.params.sessionID, cause }),
+            )
             yield* bus.publish(Session.Event.Error, {
               sessionID: ctx.params.sessionID,
               error: new NamedError.Unknown({ message: Cause.pretty(cause) }).toObject(),

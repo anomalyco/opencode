@@ -35,9 +35,9 @@
       "@types/cross-spawn": "6.0.6",
       "@octokit/rest": "22.0.0",
       "@hono/zod-validator": "0.4.2",
-      "@opentui/core": "0.2.6",
-      "@opentui/keymap": "0.2.6",
-      "@opentui/solid": "0.2.6",
+      "@opentui/core": "0.2.8",
+      "@opentui/keymap": "0.2.8",
+      "@opentui/solid": "0.2.8",
       "ulid": "3.0.1",
       "@kobalte/core": "0.13.11",
       "@types/luxon": "3.7.1",
@@ -128,6 +128,9 @@
     "electron"
   ],
   "overrides": {
+    "@opentui/core": "catalog:",
+    "@opentui/keymap": "catalog:",
+    "@opentui/solid": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:"
   },

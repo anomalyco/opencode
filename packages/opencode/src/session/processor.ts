@@ -402,10 +402,14 @@ export const layer: Layer.Layer<
                 typeof attachment.mime === "string" &&
                 typeof attachment.url === "string",
             )
+            // temporarily disabled
+            // const normalized = yield* Effect.forEach(toolAttachments, (attachment) =>
+            //   attachment.mime.startsWith("image/")
+            //     ? image.normalize(attachment).pipe(Effect.exit)
+            //     : Effect.succeed(Exit.succeed<MessageV2.FilePart>(attachment)),
+            // )
             const normalized = yield* Effect.forEach(toolAttachments, (attachment) =>
-              attachment.mime.startsWith("image/")
-                ? image.normalize(attachment).pipe(Effect.exit)
-                : Effect.succeed(Exit.succeed<MessageV2.FilePart>(attachment)),
+              Effect.succeed(Exit.succeed<MessageV2.FilePart>(attachment)),
             )
             const omitted = normalized.filter(Exit.isFailure).length
             const attachments = normalized.filter(Exit.isSuccess).map((item) => item.value)
@@ -414,7 +418,7 @@ export const layer: Layer.Layer<
               output:
                 omitted === 0
                   ? value.output.output
-                  : `${value.output.output}\n\n[${omitted} image${omitted === 1 ? "" : "s"} omitted: could not be resized below the inline image size limit.]`,
+                  : `${value.output.output}\n\n[${omitted} image${omitted === 1 ? "" : "s"} omitted: could not be resized below the image size limit.]`,
               attachments: attachments?.length ? attachments : undefined,
             }
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
