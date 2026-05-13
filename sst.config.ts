@@ -11,24 +11,22 @@ export default $config({
         stripe: {
           apiKey: process.env.STRIPE_SECRET_KEY!,
         },
+        random: "4.19.2",
         planetscale: "0.4.1",
-        honeycomb: {
-          version: "0.49.0",
-          apiKey: process.env.HONEYCOMB_API_KEY!,
-        },
-        incident: {
-          version: "5.35.0",
-          apiKey: process.env.INCIDENT_API_KEY!,
-        },
+        honeycomb: "0.49.0",
       },
     }
   },
   async run() {
     await import("./infra/app.js")
-    await import("./infra/console.js")
+    const { stat } = await import("./infra/console.js")
     await import("./infra/enterprise.js")
-    if ($app.stage === "production") {
+    if ($app.stage === "production" || $app.stage === "vimtor") {
       await import("./infra/monitoring.js")
+    }
+
+    return {
+      StatWorkerUrl: stat.url,
     }
   },
 })

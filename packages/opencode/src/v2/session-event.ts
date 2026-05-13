@@ -1,12 +1,12 @@
 import { SessionID } from "@/session/schema"
-import { NonNegativeInt } from "@/util/schema"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { EventV2 } from "./event"
-import { FileAttachment, Prompt } from "./session-prompt"
+import { FileAttachment, Prompt } from "@opencode-ai/core/session-prompt"
 import { Schema } from "effect"
 export { FileAttachment }
-import { ToolOutput } from "./tool-output"
-import { V2Schema } from "./schema"
-import { Modelv2 } from "./model"
+import { ToolOutput } from "@opencode-ai/core/tool-output"
+import { V2Schema } from "@opencode-ai/core/v2-schema"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 export const Source = Schema.Struct({
   start: NonNegativeInt,
@@ -47,7 +47,7 @@ export const ModelSwitched = EventV2.define({
   version: 1,
   schema: {
     ...Base,
-    model: Modelv2.Ref,
+    model: ModelV2.Ref,
   },
 })
 export type ModelSwitched = Schema.Schema.Type<typeof ModelSwitched>
@@ -104,7 +104,7 @@ export namespace Step {
     schema: {
       ...Base,
       agent: Schema.String,
-      model: Modelv2.Ref,
+      model: ModelV2.Ref,
       snapshot: Schema.String.pipe(Schema.optional),
     },
   })
@@ -118,12 +118,12 @@ export namespace Step {
       finish: Schema.String,
       cost: Schema.Finite,
       tokens: Schema.Struct({
-        input: NonNegativeInt,
-        output: NonNegativeInt,
-        reasoning: NonNegativeInt,
+        input: Schema.Finite,
+        output: Schema.Finite,
+        reasoning: Schema.Finite,
         cache: Schema.Struct({
-          read: NonNegativeInt,
-          write: NonNegativeInt,
+          read: Schema.Finite,
+          write: Schema.Finite,
         }),
       }),
       snapshot: Schema.String.pipe(Schema.optional),
@@ -305,7 +305,7 @@ export namespace Tool {
 
 export const RetryError = Schema.Struct({
   message: Schema.String,
-  statusCode: NonNegativeInt.pipe(Schema.optional),
+  statusCode: Schema.Finite.pipe(Schema.optional),
   isRetryable: Schema.Boolean,
   responseHeaders: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
   responseBody: Schema.String.pipe(Schema.optional),
@@ -320,7 +320,7 @@ export const Retried = EventV2.define({
   aggregate: "sessionID",
   schema: {
     ...Base,
-    attempt: NonNegativeInt,
+    attempt: Schema.Finite,
     error: RetryError,
   },
 })

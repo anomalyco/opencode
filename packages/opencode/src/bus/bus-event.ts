@@ -1,6 +1,4 @@
-import z from "zod"
 import { Schema } from "effect"
-import { zodObject } from "@/util/effect-zod"
 
 export type Definition<Type extends string = string, Properties extends Schema.Top = Schema.Top> = {
   type: Type
@@ -16,23 +14,6 @@ export function define<Type extends string, Properties extends Schema.Top>(
   const result = { type, properties }
   registry.set(type, result)
   return result
-}
-
-export function payloads() {
-  return registry
-    .entries()
-    .map(([type, def]) => {
-      return z
-        .object({
-          id: z.string(),
-          type: z.literal(type),
-          properties: zodObject(def.properties),
-        })
-        .meta({
-          ref: `Event.${def.type}`,
-        })
-    })
-    .toArray()
 }
 
 export function effectPayloads() {

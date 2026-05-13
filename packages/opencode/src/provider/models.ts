@@ -8,12 +8,26 @@ import { Flock } from "@opencode-ai/core/util/flock"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { withTransientReadRetry } from "@/util/effect-http-client"
+import { CatalogModelStatus } from "./model-status"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+
+const CostTier = Schema.Struct({
+  input: Schema.Finite,
+  output: Schema.Finite,
+  cache_read: Schema.optional(Schema.Finite),
+  cache_write: Schema.optional(Schema.Finite),
+  tier: Schema.Struct({
+    type: Schema.Literal("context"),
+    size: Schema.Finite,
+  }),
+})
 
 const Cost = Schema.Struct({
   input: Schema.Finite,
   output: Schema.Finite,
   cache_read: Schema.optional(Schema.Finite),
   cache_write: Schema.optional(Schema.Finite),
+  tiers: Schema.optional(Schema.Array(CostTier)),
   context_over_200k: Schema.optional(
     Schema.Struct({
       input: Schema.Finite,
@@ -71,7 +85,7 @@ export const Model = Schema.Struct({
       ),
     }),
   ),
-  status: Schema.optional(Schema.Literals(["alpha", "beta", "deprecated"])),
+  status: Schema.optional(CatalogModelStatus),
   provider: Schema.optional(
     Schema.Struct({ npm: Schema.optional(Schema.String), api: Schema.optional(Schema.String) }),
   ),
@@ -96,11 +110,14 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
-export const layer: Layer.Layer<Service, never, AppFileSystem.Service | HttpClient.HttpClient> = Layer.effect(
+type Requirements = AppFileSystem.Service | HttpClient.HttpClient | RuntimeFlags.Service
+
+export const layer: Layer.Layer<Service, never, Requirements> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
     const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
+    const flags = yield* RuntimeFlags.Service
 
     const source = Flag.OPENCODE_MODELS_URL || "https://models.dev"
     const filepath = path.join(
@@ -119,7 +136,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | HttpClie
 
     const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
       return yield* HttpClientRequest.get(`${source}/api.json`).pipe(
-        HttpClientRequest.setHeader("User-Agent", Installation.USER_AGENT),
+        HttpClientRequest.setHeader("User-Agent", Installation.userAgent(flags.client)),
         http.execute,
         Effect.flatMap((res) => res.text),
         Effect.timeout("10 seconds"),
@@ -176,7 +193,9 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | HttpClie
           yield* invalidate
         }),
       ).pipe(
-        Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause })),
+        Effect.tapCause((cause) =>
+          Effect.logError("Failed to fetch models.dev").pipe(Effect.annotateLogs("cause", cause)),
+        ),
         Effect.ignore,
       )
     })
@@ -193,6 +212,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | HttpClie
 export const defaultLayer: Layer.Layer<Service> = layer.pipe(
   Layer.provide(FetchHttpClient.layer),
   Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 export * as ModelsDev from "./models"

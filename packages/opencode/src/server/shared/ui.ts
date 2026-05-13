@@ -10,15 +10,19 @@ const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
   : // @ts-expect-error - generated file at build time
     import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)
 
-export const DEFAULT_CSP =
-  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src *"
 export const UI_UPSTREAM = new URL("https://app.opencode.ai")
 
 export const csp = (hash = "") =>
-  `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src *`
+  `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src * data:`
+export const DEFAULT_CSP = csp()
 
 export function themePreloadHash(body: string) {
   return body.match(/<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i)
+}
+
+export function cspForHtml(body: string) {
+  const match = themePreloadHash(body)
+  return csp(match ? createHash("sha256").update(match[2]).digest("base64") : "")
 }
 
 function requestBody(request: HttpServerRequest.HttpServerRequest) {
@@ -53,7 +57,9 @@ function notFound() {
 function embeddedUIResponse(file: string, body: Uint8Array) {
   const mime = AppFileSystem.mimeType(file)
   const headers = new Headers({ "content-type": mime })
-  if (mime.startsWith("text/html")) headers.set("content-security-policy", DEFAULT_CSP)
+  if (mime.startsWith("text/html")) {
+    headers.set("content-security-policy", cspForHtml(new TextDecoder().decode(body)))
+  }
   return HttpServerResponse.raw(body, { headers })
 }
 
@@ -91,8 +97,7 @@ export function serveUIEffect(
 
     if (response.headers["content-type"]?.includes("text/html")) {
       const body = yield* response.text
-      const match = themePreloadHash(body)
-      headers.set("Content-Security-Policy", csp(match ? createHash("sha256").update(match[2]).digest("base64") : ""))
+      headers.set("Content-Security-Policy", cspForHtml(body))
       return HttpServerResponse.text(body, { status: response.status, headers })
     }
 

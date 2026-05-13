@@ -1,4 +1,3 @@
-import z from "zod"
 import { and } from "drizzle-orm"
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
@@ -18,8 +17,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@/util/schema"
+import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { serviceUse } from "@/effect/service-use"
 
 const log = Log.create({ service: "project" })
@@ -53,9 +51,7 @@ export const Info = Schema.Struct({
   commands: optionalOmitUndefined(ProjectCommands),
   time: ProjectTime,
   sandboxes: Schema.Array(Schema.String),
-})
-  .annotate({ identifier: "Project" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Project" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const Event = {
@@ -89,21 +85,19 @@ export function fromRow(row: Row): Info {
   }
 }
 
-export const UpdateInput = z.object({
-  projectID: ProjectID.zod,
-  name: z.string().optional(),
-  icon: zod(ProjectIcon).optional(),
-  commands: zod(ProjectCommands).optional(),
+export const UpdateInput = Schema.Struct({
+  projectID: ProjectID,
+  name: Schema.optional(Schema.String),
+  icon: Schema.optional(ProjectIcon),
+  commands: Schema.optional(ProjectCommands),
 })
-export type UpdateInput = z.infer<typeof UpdateInput>
+export type UpdateInput = Types.DeepMutable<Schema.Schema.Type<typeof UpdateInput>>
 
 export const UpdatePayload = Schema.Struct({
   name: Schema.optional(Schema.String),
   icon: Schema.optional(ProjectIcon),
   commands: Schema.optional(ProjectCommands),
-})
-  .annotate({ identifier: "ProjectUpdateInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ProjectUpdateInput" })
 export type UpdatePayload = Types.DeepMutable<Schema.Schema.Type<typeof UpdatePayload>>
 
 // ---------------------------------------------------------------------------

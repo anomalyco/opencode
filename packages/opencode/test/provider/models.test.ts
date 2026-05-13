@@ -8,6 +8,7 @@ import { ModelsDev } from "../../src/provider/models"
 import { it } from "../lib/effect"
 import { rm, writeFile, utimes, mkdir } from "fs/promises"
 import path from "path"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 // test/preload.ts pins OPENCODE_MODELS_PATH to a fixture so other tests can
 // resolve providers without network. These tests need to drive the on-disk
@@ -70,13 +71,16 @@ const fixture2: Record<string, ModelsDev.Provider> = {
 interface MockState {
   body: string
   status: number
-  calls: Array<{ url: string }>
+  calls: Array<{ url: string; userAgent: string | null }>
 }
 
 const makeMockClient = (state: Ref.Ref<MockState>) =>
   HttpClient.make((request) =>
     Effect.gen(function* () {
-      yield* Ref.update(state, (s) => ({ ...s, calls: [...s.calls, { url: request.url }] }))
+      yield* Ref.update(state, (s) => ({
+        ...s,
+        calls: [...s.calls, { url: request.url, userAgent: request.headers["user-agent"] ?? null }],
+      }))
       const s = yield* Ref.get(state)
       return HttpClientResponse.fromWeb(request, new Response(s.body, { status: s.status }))
     }),
@@ -89,6 +93,7 @@ const buildLayer = (state: Ref.Ref<MockState>) =>
   Layer.fresh(ModelsDev.layer).pipe(
     Layer.provide(Layer.succeed(HttpClient.HttpClient, makeMockClient(state))),
     Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({ client: "test-client" })),
   )
 
 const writeCache = (data: object, mtimeMs?: number) =>
@@ -202,6 +207,7 @@ describe("ModelsDev Service", () => {
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
       expect(final.calls[0].url).toContain("/api.json")
+      expect(final.calls[0].userAgent).toContain("/test-client")
     }),
   )
 
