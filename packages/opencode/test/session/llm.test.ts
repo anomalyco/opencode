@@ -277,6 +277,28 @@ async function loadFixture(providerID: string, modelID: string) {
   return { provider, model }
 }
 
+function configModel(model: ModelsDev.Model) {
+  return {
+    id: model.id,
+    name: model.name,
+    family: model.family,
+    release_date: model.release_date,
+    attachment: model.attachment,
+    reasoning: model.reasoning,
+    temperature: model.temperature,
+    tool_call: model.tool_call,
+    interleaved: model.interleaved,
+    cost: model.cost ? { ...model.cost, tiers: undefined } : undefined,
+    limit: model.limit,
+    modalities: model.modalities,
+    status: model.status,
+    provider: model.provider,
+    options: model.options,
+    headers: model.headers,
+    variants: model.variants,
+  }
+}
+
 function createEventStream(chunks: unknown[], includeDone = false) {
   const lines = chunks.map((chunk) => `data: ${typeof chunk === "string" ? chunk : JSON.stringify(chunk)}`)
   if (includeDone) {
@@ -617,7 +639,7 @@ describe("session.llm.stream", () => {
                 npm: "@ai-sdk/openai",
                 api: "https://api.openai.com/v1",
                 models: {
-                  [model.id]: model,
+                  [model.id]: configModel(model),
                 },
                 options: {
                   apiKey: "test-openai-key",
@@ -733,7 +755,7 @@ describe("session.llm.stream", () => {
                 npm: "@ai-sdk/openai",
                 api: "https://api.openai.com/v1",
                 models: {
-                  [model.id]: model,
+                  [model.id]: configModel(model),
                 },
                 options: {
                   apiKey: "test-openai-key",
@@ -970,7 +992,7 @@ describe("session.llm.stream", () => {
                 npm: "@ai-sdk/anthropic",
                 api: "https://api.anthropic.com/v1",
                 models: {
-                  [model.id]: model,
+                  [model.id]: configModel(model),
                 },
                 options: {
                   apiKey: "test-anthropic-key",
