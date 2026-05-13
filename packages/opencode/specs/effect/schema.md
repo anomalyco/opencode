@@ -1,19 +1,16 @@
 # Schema migration
 
 Practical reference for migrating data types in `packages/opencode` from
-Zod-first definitions to Effect Schema with Zod compatibility shims.
+Zod-first definitions to Effect Schema.
 
 ## Goal
 
 Use Effect Schema as the source of truth for domain models, IDs, inputs,
-outputs, and typed errors. Keep Zod available at existing HTTP, tool, and
-compatibility boundaries by exposing a `.zod` static derived from the Effect
-schema via `@opencode-ai/core/effect-zod`.
+outputs, and typed errors. Prefer native Effect Schema, Standard Schema, and
+native JSON Schema generation at HTTP, tool, and AI SDK boundaries.
 
-The long-term driver is `specs/effect/http-api.md` — once the HTTP server
-moves to `@effect/platform`, every Schema-first DTO can flow through
-`HttpApi` / `HttpRouter` without a zod translation layer, and the entire
-`effect-zod` walker plus every `.zod` static can be deleted.
+The long-term driver is `specs/effect/http-api.md`: Schema-first DTOs should
+flow through `HttpApi` / `HttpRouter` without a Zod translation layer.
 
 ## Preferred shapes
 
@@ -26,19 +23,16 @@ export class Info extends Schema.Class<Info>("Foo.Info")({
   id: FooID,
   name: Schema.String,
   enabled: Schema.Boolean,
-}) {
-  static readonly zod = zod(Info)
-}
+}) {}
 ```
 
-If the class cannot reference itself cleanly during initialization, use the
-two-step `withStatics` pattern:
+If a schema needs local static helpers, use the two-step `withStatics` pattern:
 
 ```ts
 export const Info = Schema.Struct({
   id: FooID,
   name: Schema.String,
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+}).pipe(withStatics((s) => ({ decode: Schema.decodeUnknownOption(s) })))
 ```
 
 ### Errors
@@ -53,15 +47,13 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Foo
 
 ### IDs and branded leaf types
 
-Keep branded/schema-backed IDs as Effect schemas and expose
-`static readonly zod` for compatibility when callers still expect Zod.
+Keep branded/schema-backed IDs as Effect schemas.
 
 ### Refinements
 
-Reuse named refinements instead of re-spelling `z.number().int().positive()`
-in every schema. The `effect-zod` walker translates the Effect versions into
-the corresponding zod methods, so JSON Schema output (`type: integer`,
-`exclusiveMinimum`, `pattern`, `format: uuid`, …) is preserved.
+Reuse named refinements instead of re-spelling numeric or string constraints in
+every schema. Boundary JSON Schema helpers should normalize native Effect JSON
+Schema output only where a provider requires it.
 
 ```ts
 const PositiveInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0))
@@ -69,18 +61,15 @@ const NonNegativeInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreate
 const HexColor = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/))
 ```
 
-See `test/util/effect-zod.test.ts` for the full set of translated checks.
-
 ## Compatibility rule
 
-During migration, route validators, tool parameters, and any existing
-Zod-based boundary should consume the derived `.zod` schema instead of
+During migration, route validators, tool parameters, and AI SDK schemas should
+consume Effect schemas directly or use a narrow boundary helper. Avoid
 maintaining a second hand-written Zod schema.
 
 The default should be:
 
 - Effect Schema owns the type
-- `.zod` exists only as a compatibility surface
 - new domain models should not start Zod-first unless there is a concrete
   boundary-specific need
 
@@ -89,27 +78,22 @@ The default should be:
 It is fine to keep a Zod-native schema temporarily when:
 
 - the type is only used at an HTTP or tool boundary and is not reused elsewhere
-- the validator depends on Zod-only transforms or behavior not yet covered by `zod()`
+- the validator is part of an existing public API that explicitly accepts Zod
 - the migration would force unrelated churn across a large call graph
 
 When this happens, prefer leaving a short note or TODO rather than silently
 creating a parallel schema source of truth.
 
-## Escape hatches
+## Boundary helpers
 
-The walker in `@opencode-ai/core/effect-zod` exposes two explicit escape hatches for
-cases the pure-Schema path cannot express. Each one stays in the codebase
-only as long as its upstream or local dependency requires it — inline
-comments document when each can be deleted.
+Use narrow helpers at concrete boundaries instead of a generic Schema → Zod bridge.
 
-### `ZodOverride` annotation
+- Tool parameters: `ToolJsonSchema.fromSchema(...)` and `ToolJsonSchema.fromTool(...)`
+- Public config/TUI schemas: `packages/opencode/script/schema.ts`
+- AI SDK object generation: `Schema.toStandardSchemaV1(...)` plus `Schema.toStandardJSONSchemaV1(...)`
 
-Replaces the entire derivation with a hand-crafted zod schema. Used when:
-
-- the target carries external `$ref` metadata (e.g.
-  `config/model-id.ts` points at `https://models.dev/...`)
-- the target is a zod-only schema that cannot yet be expressed as Schema
-  (e.g. `ConfigAgent.Info`, `Log.Level`)
+Plugin tools are the main remaining intentional Zod boundary because the public
+plugin API exposes `tool.schema = z` and `args: z.ZodRawShape`.
 
 ### Local `DeepMutable<T>` in `config/config.ts`
 
@@ -133,7 +117,7 @@ Migrate in this order:
 2. Exported `Info`, `Input`, `Output`, and DTO types
 3. Tagged domain errors
 4. Service-local internal models
-5. Route and tool boundary validators that can switch to `.zod`
+5. Route and tool boundary validators that can switch to native Effect Schema helpers
 
 This keeps shared types canonical first and makes boundary updates mostly
 mechanical.
@@ -142,21 +126,18 @@ mechanical.
 
 ### `src/config/` ✅ complete
 
-All of `packages/opencode/src/config/` has been migrated. Files that still
-import `z` do so only for local `ZodOverride` bridges or for `z.ZodType`
-type annotations — the `export const <Info|Spec>` values are all Effect
-Schema at source.
+All of `packages/opencode/src/config/` has been migrated. The `export const
+<Info|Spec>` values are all Effect Schema at source.
 
 A file is considered "done" when:
 
 - its exported schema values (`Info`, `Input`, `Event`, `Definition`, etc.)
   are authored as Effect Schema
-- any remaining zod is either a derived compat bridge (via `zod()` /
-  `zodObject()`), a `z.ZodType` type annotation, or a documented
-  `ZodOverride` escape hatch — never a hand-written parallel source of truth
+- any remaining Zod is an explicit boundary compatibility choice, not a
+  hand-written parallel source of truth
 
-Files that meet this bar but still carry a compat bridge are checked off
-with an inline note describing the bridge and what unblocks its removal.
+Files that meet this bar but still carry a compatibility boundary are checked
+off with an inline note describing the boundary and what unblocks its removal.
 
 - [x] skills, formatter, console-state, mcp, lsp, permission (leaves), model-id, command, plugin, provider
 - [x] server, layout
@@ -361,15 +342,8 @@ piecewise.
 - [ ] `src/util/update-schema.ts`
 - [ ] `src/worktree/index.ts`
 
-### Do-not-migrate
-
-- `src/util/effect-zod.ts` — the walker itself. Stays zod-importing forever
-  (it's what emits zod from Schema). Goes away only when the `.zod`
-  compatibility layer is no longer needed anywhere.
-
 ## Notes
 
-- Use `@opencode-ai/core/effect-zod` for all Schema → Zod conversion.
 - Prefer one canonical schema definition. Avoid maintaining parallel Zod and
   Effect definitions for the same domain type.
 - Keep the migration incremental. Converting the domain model first is more

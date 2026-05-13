@@ -1,6 +1,7 @@
 import { afterEach, describe, test, expect } from "bun:test"
 import { Permission } from "../src/permission"
 import { Config } from "@/config/config"
+import { ConfigPermission } from "@/config/permission"
 import { Instance } from "../src/project/instance"
 import { WithInstance } from "../src/project/with-instance"
 import { disposeAllInstances, tmpdir } from "./fixture/fixture"
@@ -163,7 +164,9 @@ describe("permission.task with real config files", () => {
       directory: tmp.path,
       fn: async () => {
         const config = await load()
-        const ruleset = Permission.fromConfig(config.permission ?? {})
+        const ruleset = Permission.merge(
+          ...ConfigPermission.toLayers(config.permission).map((p) => Permission.fromConfig(p)),
+        )
         // general and orchestrator-fast should be allowed, code-reviewer denied
         expect(Permission.evaluate("task", "general", ruleset).action).toBe("allow")
         expect(Permission.evaluate("task", "orchestrator-fast", ruleset).action).toBe("allow")
@@ -188,7 +191,9 @@ describe("permission.task with real config files", () => {
       directory: tmp.path,
       fn: async () => {
         const config = await load()
-        const ruleset = Permission.fromConfig(config.permission ?? {})
+        const ruleset = Permission.merge(
+          ...ConfigPermission.toLayers(config.permission).map((p) => Permission.fromConfig(p)),
+        )
         // general and code-reviewer should be ask, orchestrator-* denied
         expect(Permission.evaluate("task", "general", ruleset).action).toBe("ask")
         expect(Permission.evaluate("task", "code-reviewer", ruleset).action).toBe("ask")
@@ -213,7 +218,9 @@ describe("permission.task with real config files", () => {
       directory: tmp.path,
       fn: async () => {
         const config = await load()
-        const ruleset = Permission.fromConfig(config.permission ?? {})
+        const ruleset = Permission.merge(
+          ...ConfigPermission.toLayers(config.permission).map((p) => Permission.fromConfig(p)),
+        )
         expect(Permission.evaluate("task", "general", ruleset).action).toBe("allow")
         expect(Permission.evaluate("task", "code-reviewer", ruleset).action).toBe("deny")
         // Unspecified agents default to "ask"
@@ -240,7 +247,9 @@ describe("permission.task with real config files", () => {
       directory: tmp.path,
       fn: async () => {
         const config = await load()
-        const ruleset = Permission.fromConfig(config.permission ?? {})
+        const ruleset = Permission.merge(
+          ...ConfigPermission.toLayers(config.permission).map((p) => Permission.fromConfig(p)),
+        )
 
         // Verify task permissions
         expect(Permission.evaluate("task", "general", ruleset).action).toBe("allow")
@@ -278,7 +287,9 @@ describe("permission.task with real config files", () => {
       directory: tmp.path,
       fn: async () => {
         const config = await load()
-        const ruleset = Permission.fromConfig(config.permission ?? {})
+        const ruleset = Permission.merge(
+          ...ConfigPermission.toLayers(config.permission).map((p) => Permission.fromConfig(p)),
+        )
 
         // Last matching rule wins - "*" deny is last, so all agents are denied
         expect(Permission.evaluate("task", "general", ruleset).action).toBe("deny")
@@ -309,7 +320,9 @@ describe("permission.task with real config files", () => {
       directory: tmp.path,
       fn: async () => {
         const config = await load()
-        const ruleset = Permission.fromConfig(config.permission ?? {})
+        const ruleset = Permission.merge(
+          ...ConfigPermission.toLayers(config.permission).map((p) => Permission.fromConfig(p)),
+        )
 
         // Evaluate uses findLast - "general" allow comes after "*" deny
         expect(Permission.evaluate("task", "general", ruleset).action).toBe("allow")

@@ -177,7 +177,9 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | HttpClie
           yield* invalidate
         }),
       ).pipe(
-        Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause })),
+        Effect.tapCause((cause) =>
+          Effect.logError("Failed to fetch models.dev").pipe(Effect.annotateLogs("cause", cause)),
+        ),
         Effect.ignore,
       )
     })

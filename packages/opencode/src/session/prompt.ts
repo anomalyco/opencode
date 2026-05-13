@@ -1,6 +1,5 @@
 import path from "path"
 import os from "os"
-import * as EffectZod from "@opencode-ai/core/effect-zod"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import * as Log from "@opencode-ai/core/util/log"
@@ -21,6 +20,7 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { ToolRegistry } from "@/tool/registry"
+import { ToolJsonSchema } from "@/tool/json-schema"
 import { MCP } from "../mcp"
 import { LSP } from "@/lsp/lsp"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -46,8 +46,6 @@ import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { withStatics } from "@opencode-ai/core/schema"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
@@ -567,7 +565,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         providerID: input.model.providerID,
         agent: input.agent,
       })) {
-        const schema = ProviderTransform.schema(input.model, EffectZod.toJsonSchema(item.parameters))
+        const schema = ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))
         tools[item.id] = tool({
           description: item.description,
           inputSchema: jsonSchema(schema),
@@ -1085,8 +1083,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     })
 
     const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
-      const agentName = input.agent || (yield* agents.defaultAgent())
-      const ag = yield* agents.get(agentName)
+      const agentName = input.agent
+      const ag = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!ag) {
         const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
         const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
@@ -1877,7 +1875,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
         throw error
       }
-      const agentName = cmd.agent ?? input.agent ?? (yield* agents.defaultAgent())
+      const agentName = cmd.agent ?? input.agent
 
       const raw = input.arguments.match(argsRegex) ?? []
       const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
@@ -1930,7 +1928,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
 
-      const agent = yield* agents.get(agentName)
+      const agent = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!agent) {
         const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
         const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
@@ -1954,7 +1952,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           ]
         : [...templateParts, ...(input.parts ?? [])]
 
-      const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultAgent())) : agentName
+      const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultInfo()).name) : agent.name
       const userModel = isSubtask
         ? input.model
           ? Provider.parseModel(input.model)
@@ -2054,14 +2052,12 @@ export const PromptInput = Schema.Struct({
       MessageV2.SubtaskPartInput,
     ]).annotate({ discriminator: "type" }),
   ),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type PromptInput = Schema.Schema.Type<typeof PromptInput>
 
 export class LoopInput extends Schema.Class<LoopInput>("SessionPrompt.LoopInput")({
   sessionID: SessionID,
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
 export const ShellInput = Schema.Struct({
   sessionID: SessionID,
@@ -2069,7 +2065,7 @@ export const ShellInput = Schema.Struct({
   agent: Schema.String,
   model: Schema.optional(ModelRef),
   command: Schema.String,
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type ShellInput = Schema.Schema.Type<typeof ShellInput>
 
 export const CommandInput = Schema.Struct({
@@ -2097,7 +2093,7 @@ export const CommandInput = Schema.Struct({
       ]).annotate({ discriminator: "type" }),
     ),
   ),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type CommandInput = Schema.Schema.Type<typeof CommandInput>
 
 /** @internal Exported for testing */
