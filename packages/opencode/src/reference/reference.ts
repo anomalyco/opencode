@@ -1,10 +1,10 @@
 import path from "path"
 import { Effect, Context, Layer, Scope } from "effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Git } from "@/git"
 import { parseRepositoryReference, repositoryCachePath, type Reference as RepositoryReference } from "@/util/repository"
 import { RepositoryCache } from "./repository-cache"
@@ -143,6 +143,7 @@ export const layer = Layer.effect(
     const fs = yield* AppFileSystem.Service
     const git = yield* Git.Service
     const scope = yield* Scope.Scope
+    const flags = yield* RuntimeFlags.Service
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Reference.state")(function* (ctx) {
@@ -181,7 +182,7 @@ export const layer = Layer.effect(
         )
 
         const materializeAll = yield* Effect.cached(
-          Flag.OPENCODE_EXPERIMENTAL_SCOUT
+          flags.experimentalScout
             ? Effect.gen(function* () {
                 yield* Effect.forEach(
                   materializeByPath,
@@ -200,7 +201,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       init: Effect.fn("Reference.init")(function* () {
-        if (!Flag.OPENCODE_EXPERIMENTAL_SCOUT) return
+        if (!flags.experimentalScout) return
         yield* InstanceState.useEffect(state, (s) => s.materializeAll).pipe(Effect.forkIn(scope), Effect.asVoid)
       }),
       list: Effect.fn("Reference.list")(function* () {
@@ -210,7 +211,7 @@ export const layer = Layer.effect(
         return yield* InstanceState.use(state, (s) => s.references.find((reference) => reference.name === name))
       }),
       ensure: Effect.fn("Reference.ensure")(function* (target?: string) {
-        if (!Flag.OPENCODE_EXPERIMENTAL_SCOUT) return
+        if (!flags.experimentalScout) return
         const full = normalizedTarget(target)
         if (!full) return yield* InstanceState.useEffect(state, (s) => s.materializeAll)
         return yield* InstanceState.useEffect(
@@ -219,7 +220,7 @@ export const layer = Layer.effect(
         )
       }),
       contains: Effect.fn("Reference.contains")(function* (target?: string) {
-        if (!Flag.OPENCODE_EXPERIMENTAL_SCOUT) return false
+        if (!flags.experimentalScout) return false
         const full = normalizedTarget(target)
         if (!full) return false
         return yield* InstanceState.use(state, (s) =>
@@ -234,6 +235,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Config.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Git.defaultLayer),
+  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 export * as Reference from "./reference"
