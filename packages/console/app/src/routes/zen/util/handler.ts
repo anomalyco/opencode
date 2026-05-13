@@ -123,7 +123,7 @@ export async function handler(
       ? createIpRateLimiter(modelInfo.id, modelInfo.rateLimit, ip, input.request)
       : createKeyRateLimiter(modelInfo.id, modelInfo.rateLimit, zenApiKey, input.request)
     await rateLimiter?.check()
-    const stickyTracker = createStickyTracker(modelInfo.stickyProvider, sessionId)
+    const stickyTracker = createStickyTracker(modelInfo.id, modelInfo.stickyProvider, sessionId)
     const stickyProvider = await stickyTracker?.get()
     const authInfo = await authenticate(modelInfo, zenApiKey)
     const billingSource = validateBilling(authInfo, modelInfo)
@@ -238,7 +238,7 @@ export async function handler(
     dataDumper?.provideRequest(reqBody)
 
     // Store sticky provider
-    await stickyTracker?.set(providerInfo.id)
+    if (res.status === 200) await stickyTracker?.set(providerInfo.id)
 
     // Temporarily change 404 to 400 status code b/c solid start automatically override 404 response
     const resStatus = res.status === 404 ? 400 : res.status
