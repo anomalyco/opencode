@@ -13,6 +13,7 @@ import { Storage } from "@/storage/storage"
 import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { BackgroundJob } from "@/background/job"
+import { SessionGoal } from "@/session/goal"
 
 void Log.init({ print: false })
 
@@ -21,6 +22,7 @@ const it = testEffect(
     SessionNs.layer.pipe(
       Layer.provide(Bus.layer),
       Layer.provide(Storage.defaultLayer),
+      Layer.provide(SessionGoal.defaultLayer),
       Layer.provide(SyncEvent.defaultLayer),
       Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
       Layer.provide(BackgroundJob.defaultLayer),
