@@ -222,10 +222,8 @@
     align-items: center;
     justify-content: flex-start;
     gap: 10px;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.15s ease;
-    will-change: opacity;
+    opacity: 1;
+    pointer-events: auto;
 
     [data-component="tooltip-trigger"] {
       display: inline-flex;
@@ -241,12 +239,6 @@
     width: 100%;
     justify-content: flex-end;
     gap: 12px;
-  }
-
-  &:hover [data-slot="text-part-copy-wrapper"],
-  &:focus-within [data-slot="text-part-copy-wrapper"] {
-    opacity: 1;
-    pointer-events: auto;
   }
 }
 

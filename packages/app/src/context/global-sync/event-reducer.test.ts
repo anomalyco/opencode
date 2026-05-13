@@ -34,6 +34,17 @@ const textPart = (id: string, sessionID: string, messageID: string) =>
     text: id,
   }) as Part
 
+const pendingToolPart = (id: string, sessionID: string, messageID: string, tool = "write") =>
+  ({
+    id,
+    sessionID,
+    messageID,
+    type: "tool",
+    tool,
+    callID: `call_${id}`,
+    state: { status: "pending", input: {}, raw: "" },
+  }) as Part
+
 const permissionRequest = (id: string, sessionID: string, title = id) =>
   ({
     id,
@@ -513,6 +524,122 @@ describe("applyDirectoryEvent", () => {
 
     expect(store.vcs).toEqual({ branch: "feature/test" })
     expect(cacheStore.value).toEqual({ branch: "feature/test" })
+  })
+
+  test("appends message.part.delta to a top-level string field", () => {
+    const message = userMessage("msg_1", "ses_1")
+    const part = textPart("prt_1", "ses_1", message.id)
+    const [store, setStore] = createStore(
+      baseState({
+        message: { ses_1: [message] },
+        part: { [message.id]: [part] },
+      }),
+    )
+
+    applyDirectoryEvent({
+      event: {
+        type: "message.part.delta",
+        properties: { sessionID: "ses_1", messageID: message.id, partID: part.id, field: "text", delta: " hello" },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    const updated = store.part[message.id]?.[0]
+    expect(updated?.type).toBe("text")
+    if (updated?.type !== "text") return
+    expect(updated.text).toBe("prt_1 hello")
+  })
+
+  test("appends message.part.delta to a nested dot-path field", () => {
+    const message = userMessage("msg_1", "ses_1")
+    const tool = pendingToolPart("prt_1", "ses_1", message.id)
+    const [store, setStore] = createStore(
+      baseState({
+        message: { ses_1: [message] },
+        part: { [message.id]: [tool] },
+      }),
+    )
+
+    applyDirectoryEvent({
+      event: {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "ses_1",
+          messageID: message.id,
+          partID: tool.id,
+          field: "state.raw",
+          delta: '{"filePath":"',
+        },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    applyDirectoryEvent({
+      event: {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "ses_1",
+          messageID: message.id,
+          partID: tool.id,
+          field: "state.raw",
+          delta: 'foo.ts"',
+        },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    const updated = store.part[message.id]?.[0]
+    expect(updated?.type).toBe("tool")
+    if (updated?.type !== "tool") return
+    expect(updated.state.status).toBe("pending")
+    if (updated.state.status !== "pending") return
+    expect(updated.state.raw).toBe('{"filePath":"foo.ts"')
+  })
+
+  test("ignores message.part.delta with missing nested path", () => {
+    const message = userMessage("msg_1", "ses_1")
+    const part = textPart("prt_1", "ses_1", message.id)
+    const [store, setStore] = createStore(
+      baseState({
+        message: { ses_1: [message] },
+        part: { [message.id]: [part] },
+      }),
+    )
+
+    applyDirectoryEvent({
+      event: {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "ses_1",
+          messageID: message.id,
+          partID: part.id,
+          field: "nonexistent.path",
+          delta: "x",
+        },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    const updated = store.part[message.id]?.[0]
+    expect(updated?.type).toBe("text")
+    if (updated?.type !== "text") return
+    expect(updated.text).toBe("prt_1")
   })
 
   test("routes disposal and lsp events to side-effect handlers", () => {

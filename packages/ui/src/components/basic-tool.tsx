@@ -140,38 +140,35 @@ export function BasicTool(props: BasicToolProps) {
                         >
                           <TextShimmer text={trigger().title} active={pending()} />
                         </span>
-                        <Show when={!pending()}>
-                          <Show when={trigger().subtitle}>
-                            <span
-                              data-slot="basic-tool-tool-subtitle"
-                              classList={{
-                                [trigger().subtitleClass ?? ""]: !!trigger().subtitleClass,
-                                clickable: !!props.onSubtitleClick,
-                              }}
-                              onClick={(e) => {
-                                if (props.onSubtitleClick) {
-                                  e.stopPropagation()
-                                  props.onSubtitleClick()
-                                }
-                              }}
-                            >
-                              {trigger().subtitle}
-                            </span>
-                          </Show>
-                          <Show when={trigger().args?.length}>
-                            <For each={trigger().args}>
-                              {(arg) => (
-                                <span
-                                  data-slot="basic-tool-tool-arg"
-                                  classList={{
-                                    [trigger().argsClass ?? ""]: !!trigger().argsClass,
-                                  }}
-                                >
-                                  {arg}
-                                </span>
-                              )}
-                            </For>
-                          </Show>
+                        <Show when={trigger().subtitle}>
+                          <span
+                            data-slot="basic-tool-tool-subtitle"
+                            classList={{
+                              [trigger().subtitleClass ?? ""]: !!trigger().subtitleClass,
+                              clickable: !pending() && !!props.onSubtitleClick,
+                            }}
+                            onClick={(e) => {
+                              if (pending() || !props.onSubtitleClick) return
+                              e.stopPropagation()
+                              props.onSubtitleClick()
+                            }}
+                          >
+                            {trigger().subtitle}
+                          </span>
+                        </Show>
+                        <Show when={trigger().args?.length}>
+                          <For each={trigger().args}>
+                            {(arg) => (
+                              <span
+                                data-slot="basic-tool-tool-arg"
+                                classList={{
+                                  [trigger().argsClass ?? ""]: !!trigger().argsClass,
+                                }}
+                              >
+                                {arg}
+                              </span>
+                            )}
+                          </For>
                         </Show>
                       </div>
                       <Show when={!pending() && trigger().action}>

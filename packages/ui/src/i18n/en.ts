@@ -62,7 +62,10 @@ export const dict: Record<string, string> = {
 
   "ui.messagePart.diagnostic.error": "Error",
   "ui.messagePart.title.edit": "Edit",
+  "ui.messagePart.title.editActive": "Editing",
   "ui.messagePart.title.write": "Write",
+  "ui.messagePart.title.writeActive": "Writing",
+  "ui.messagePart.title.reasoning": "Thinking",
   "ui.messagePart.option.typeOwnAnswer": "Type your own answer",
   "ui.messagePart.review.title": "Review your answers",
   "ui.messagePart.questions.dismissed": "Questions dismissed",
@@ -95,6 +98,11 @@ export const dict: Record<string, string> = {
   "ui.scrollView.ariaLabel": "scrollable content",
 
   "ui.tool.read": "Read",
+  "ui.tool.readActive": "Reading",
+  "ui.tool.shellActive": "Running shell",
+  "ui.tool.lines": "{{count}} lines",
+  "ui.tool.lineRange": "lines {{start}}–{{end}}",
+  "ui.tool.lineFrom": "from line {{start}}",
   "ui.tool.loaded": "Loaded",
   "ui.tool.list": "List",
   "ui.tool.glob": "Glob",
