@@ -293,9 +293,6 @@ function configModel(model: ModelsDev.Model) {
     modalities: model.modalities,
     status: model.status,
     provider: model.provider,
-    options: model.options,
-    headers: model.headers,
-    variants: model.variants,
   }
 }
 
