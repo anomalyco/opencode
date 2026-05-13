@@ -38,6 +38,7 @@ function applyUsage(db: TxOrDb, sessionID: Session.Info["id"], value: Usage, sig
       tokens_reasoning: sql`${SessionTable.tokens_reasoning} + ${value.tokens.reasoning * sign}`,
       tokens_cache_read: sql`${SessionTable.tokens_cache_read} + ${value.tokens.cache.read * sign}`,
       tokens_cache_write: sql`${SessionTable.tokens_cache_write} + ${value.tokens.cache.write * sign}`,
+      time_updated: sql`${SessionTable.time_updated}`,
     })
     .where(eq(SessionTable.id, sessionID))
     .run()
@@ -110,7 +111,7 @@ export default [
     const info = data.info
     const row = db
       .update(SessionTable)
-      .set(toPartialRow(info as Session.Patch))
+      .set({ time_updated: sql`${SessionTable.time_updated}`, ...toPartialRow(info as Session.Patch) })
       .where(eq(SessionTable.id, data.sessionID))
       .returning()
       .get()

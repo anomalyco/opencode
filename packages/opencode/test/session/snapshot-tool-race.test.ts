@@ -59,6 +59,7 @@ import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
 import { Reference } from "../../src/reference/reference"
 import { SyncEvent } from "@/sync"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 void Log.init({ print: false })
 
@@ -137,6 +138,7 @@ function makeHttp() {
     Layer.provide(Reference.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
+    Layer.provide(RuntimeFlags.layer()),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),

@@ -418,10 +418,14 @@ export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsa
     },
   }
 
+  const contextTokens = inputTokens
   const costInfo =
-    input.model.cost?.experimentalOver200K && tokens.input + tokens.cache.read > 200_000
+    input.model.cost?.tiers
+      ?.filter((item) => item.tier.type === "context" && contextTokens > item.tier.size)
+      .sort((a, b) => b.tier.size - a.tier.size)[0] ??
+    (input.model.cost?.experimentalOver200K && contextTokens > 200_000
       ? input.model.cost.experimentalOver200K
-      : input.model.cost
+      : input.model.cost)
   return {
     cost: safe(
       new Decimal(0)

@@ -2,6 +2,7 @@ import { render, TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@op
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import * as Clipboard from "@tui/util/clipboard"
 import * as Selection from "@tui/util/selection"
+import * as TuiAudio from "@tui/util/audio"
 import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import {
@@ -63,6 +64,7 @@ import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { createTuiApi } from "@/cli/cmd/tui/plugin/api"
 import type { RouteMap } from "@/cli/cmd/tui/plugin/api"
+import { createTuiAttention } from "@/cli/cmd/tui/attention"
 import { FormatError, FormatUnknownError } from "@/cli/error"
 import { CommandPaletteProvider, useCommandPalette } from "./context/command-palette"
 import { OpencodeKeymapProvider, registerOpencodeKeymap, useBindings, useOpencodeKeymap } from "./keymap"
@@ -176,10 +178,10 @@ export function tui(input: {
       unguard?.()
       resolve()
     }
-
     const onBeforeExit = async () => {
       offKeymap()
       await TuiPluginRuntime.dispose()
+      TuiAudio.dispose()
     }
 
     const renderer = await createCliRenderer(rendererConfig(input.config))
@@ -283,6 +285,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     routeRev()
     return routes.get(name)?.at(-1)?.render
   }
+  const attention = createTuiAttention({ renderer, config: tuiConfig, kv })
 
   const api = createTuiApi({
     tuiConfig,
@@ -298,11 +301,13 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     theme: themeState,
     toast,
     renderer,
+    attention,
   })
   const [ready, setReady] = createSignal(false)
   TuiPluginRuntime.init({
     api,
     config: tuiConfig,
+    dispose: () => attention.dispose(),
   })
     .catch((error) => {
       console.error("Failed to load TUI plugins", error)
@@ -320,7 +325,10 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     },
     { priority: 1 },
   )
-  onCleanup(offSelectionKeys)
+  onCleanup(() => {
+    offSelectionKeys()
+    attention.dispose()
+  })
 
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {

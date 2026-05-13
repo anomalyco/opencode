@@ -249,7 +249,7 @@ describe("OpenAI Chat route", () => {
         { type: "text-end", id: "text-0" },
         { type: "step-finish", index: 0, reason: "stop", usage, providerMetadata: undefined },
         {
-          type: "request-finish",
+          type: "finish",
           reason: "stop",
           usage,
         },
@@ -288,7 +288,7 @@ describe("OpenAI Chat route", () => {
           providerMetadata: undefined,
         },
         { type: "step-finish", index: 0, reason: "tool-calls", usage: undefined, providerMetadata: undefined },
-        { type: "request-finish", reason: "tool-calls", usage: undefined },
+        { type: "finish", reason: "tool-calls", usage: undefined },
       ])
     }),
   )
