@@ -56,9 +56,13 @@ function createSessionPreview() {
     const url = previewUrl()
     if (!url) return undefined
     const count = reloadCount()
-    // Encode reloadCount as a query param so the iframe's src changes and the
-    // browser re-navigates the existing iframe — no DOM remount on session.idle.
-    return count === 0 ? url : `${url}?reloadCount=${count}`
+    if (count === 0) return url
+    // Use URL to safely merge reloadCount even if `url` already carries a query.
+    // Bumping the param on session.idle changes src so the browser re-navigates
+    // the existing iframe — no DOM remount.
+    const composed = new URL(url)
+    composed.searchParams.set("reloadCount", String(count))
+    return composed.toString()
   })
 
   return { previewSrc }
