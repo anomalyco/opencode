@@ -621,10 +621,8 @@ export const layer: Layer.Layer<
       Effect.gen(function* () {
         const previous =
           msg.role === "assistant"
-            ? yield* Effect.try({
-                try: () => MessageV2.get({ sessionID: msg.sessionID, messageID: msg.id }).info,
-                catch: (error) => error,
-              }).pipe(
+            ? yield* MessageV2.get({ sessionID: msg.sessionID, messageID: msg.id }).pipe(
+                Effect.map((message) => message.info),
                 Effect.catch(() => Effect.succeed(undefined)),
               )
             : undefined
