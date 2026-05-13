@@ -731,7 +731,10 @@ export const RunCommand = effectCmd({
 
         if (!args.interactive) {
           const events = await client.event.subscribe()
-          const completed = loop(client, events)
+          loop(client, events).catch((e) => {
+            console.error(e)
+            process.exit(1)
+          })
 
           if (args.command) {
             await client.session.command({
@@ -742,8 +745,6 @@ export const RunCommand = effectCmd({
               arguments: message,
               variant: args.variant,
             })
-            const error = await completed
-            if (error) process.exitCode = 1
             return
           }
 
@@ -755,8 +756,6 @@ export const RunCommand = effectCmd({
             variant: args.variant,
             parts: [...files, { type: "text", text: message }],
           })
-          const error = await completed
-          if (error) process.exitCode = 1
           return
         }
 
