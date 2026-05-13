@@ -5,7 +5,7 @@ import { ICommandService } from "@univerjs/core"
 import { FUniver } from "@univerjs/core/facade"
 import type { FRange, FWorkbook, FWorksheet } from "@univerjs/sheets/facade"
 
-/** `registerComponent` key for Veritly live ECharts float (see app `veritly-live-chart-float.tsx`). */
+/** `registerComponent` key for Veritly live ECharts float (`@opencode-ai/veritly-univer-chart`). */
 export const VERITLY_LIVE_CHART = "VeritlyLiveChart"
 
 /**
@@ -22,6 +22,15 @@ export type PushSetRangeInput = {
   cellValue: Record<string, Record<string, { v: unknown; t?: number }>>
 }
 
+export type CombMutation = { id: string; params: unknown }
+
+export type PushCombMutationsInput = {
+  unitId: string
+  baseRev?: number
+  memberId?: string
+  mutations: CombMutation[]
+}
+
 export type UniverHostApi = FUniver &
   Partial<{
     importXLSXToUnitIdAsync(file: File): Promise<string | undefined>
@@ -31,6 +40,8 @@ export type UniverHostApi = FUniver &
     pushSetRangeToServer(input: PushSetRangeInput): Promise<number>
     /** Coalesces overlapping cell maps; flush with `flushVeritlyCombForUnit` or wait for debounce timer. */
     pushSetRangeToServerDebounced(input: PushSetRangeInput): void
+    /** POST `comb/.../new_changes` with arbitrary mutation list (e.g. `sheet.mutation.set-drawing-apply`). */
+    pushCombMutationsToServer(input: PushCombMutationsInput): Promise<number>
     flushVeritlyCombForUnit(unitId: string): Promise<void>
   }>
 
@@ -447,7 +458,7 @@ export function createUniverSdk(input: UniverSdkRuntime) {
         const rowMap: Record<string, { v: CellValue }> = {}
         const row = input.values[r] ?? []
         for (let c = 0; c < row.length; c++) {
-          rowMap[String(input.range.startColumn + c)] = { v: row[c] }
+          rowMap[String(input.range.startColumn + c)] = { v: row[c] as CellValue }
         }
         cellValue[String(input.range.startRow + r)] = rowMap
       }

@@ -3,7 +3,7 @@ import "@univerjs/sheets/facade"
 import type { IWorkbookData, Univer } from "@univerjs/core"
 import { UniverInstanceType } from "@univerjs/core"
 import type { FUniver } from "@univerjs/core/facade"
-import type { PushSetRangeInput, UniverHostApi } from "@opencode-ai/univer-sdk"
+import type { PushCombMutationsInput, PushSetRangeInput, UniverHostApi } from "@opencode-ai/univer-sdk"
 
 async function pollImportUnit(base: string, taskID: string) {
   for (let i = 0; i < 200; i++) {
@@ -114,7 +114,7 @@ export function augmentVeritlyHost(
   const pending = new Map<CombKey, PushSetRangeInput>()
   const timers = new Map<CombKey, ReturnType<typeof setTimeout>>()
 
-  const postComb = async (input: PushSetRangeInput, baseRev: number) => {
+  const postCombMutations = async (input: PushCombMutationsInput, baseRev: number) => {
     const member = input.memberId ?? "veritly-browser"
     const res = await fetch(
       `${base}/universer-api/comb/2/unit/${encodeURIComponent(input.unitId)}/new_changes`,
@@ -130,17 +130,7 @@ export function augmentVeritlyHost(
             baseRev,
             unitID: input.unitId,
             memberID: member,
-            mutations: [
-              {
-                id: "sheet.mutation.set-range-values",
-                params: {
-                  unitId: input.unitId,
-                  subUnitId: input.sheetId,
-                  cellValue: input.cellValue,
-                  ...(input.range !== undefined ? { range: input.range } : {}),
-                },
-              },
-            ],
+            mutations: input.mutations,
           },
         }),
       },
@@ -154,6 +144,27 @@ export function augmentVeritlyHost(
     if (typeof r !== "number") throw new Error("comb response missing revision")
     head.set(combKey(base, input.unitId), r)
     return r
+  }
+
+  const postComb = async (input: PushSetRangeInput, baseRev: number) => {
+    return postCombMutations(
+      {
+        unitId: input.unitId,
+        memberId: input.memberId,
+        mutations: [
+          {
+            id: "sheet.mutation.set-range-values",
+            params: {
+              unitId: input.unitId,
+              subUnitId: input.sheetId,
+              cellValue: input.cellValue,
+              ...(input.range !== undefined ? { range: input.range } : {}),
+            },
+          },
+        ],
+      },
+      baseRev,
+    )
   }
 
   const flush = async (k: CombKey) => {
@@ -173,6 +184,17 @@ export function augmentVeritlyHost(
       const r = await primitiveLoadServerUnit(api, univer, base, unitId, unitType)
       head.set(combKey(base, unitId), r)
       return r
+    },
+    pushCombMutationsToServer: async (input: PushCombMutationsInput) => {
+      const k = combKey(base, input.unitId)
+      const t = timers.get(k)
+      if (t) clearTimeout(t)
+      timers.delete(k)
+      if (pending.has(k)) await flush(k)
+      const tracked = head.get(k)
+      if (tracked === undefined) throw new Error("push comb before loadServerUnit for this unit")
+      const baseRev = input.baseRev !== undefined ? input.baseRev : tracked
+      return postCombMutations(input, baseRev)
     },
     pushSetRangeToServer: async (input: PushSetRangeInput) => {
       const k = combKey(base, input.unitId)

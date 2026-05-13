@@ -86,7 +86,7 @@ Full JSON shapes: `packages/univer-sdk/python/INTERFACE.md`.
 
 ## Charts and advanced mutations
 
-`add_chart` inserts a Veritly live chart drawing (`VeritlyLiveChart` float DOM with ECharts). For drawing-level commands, use `execute_command` with the command id and params your app supports (see browser / Univer docs).
+`add_chart` inserts a Veritly live chart drawing (`VeritlyLiveChart` float DOM with ECharts). Drawing mutations (`sheet.mutation.set-drawing-apply`) are pushed through universer comb like cell edits so charts survive reload when collaboration storage is enabled. For other drawing-level commands, use `execute_command` with the command id and params your app supports (see browser / Univer docs).
 
 ## Troubleshooting
 

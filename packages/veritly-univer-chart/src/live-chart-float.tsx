@@ -6,14 +6,14 @@ import { BarChart, LineChart, PieChart } from "echarts/charts"
 import { GridComponent, TooltipComponent, LegendComponent, TitleComponent } from "echarts/components"
 import { CanvasRenderer } from "echarts/renderers"
 import * as React from "react"
-import { parseSheetBangRange, rectsOverlap } from "@/lib/sheet-bang-range"
+import { parseSheetBangRange, rectsOverlap } from "./sheet-bang-range"
 import {
   type ChartKind,
   type ChartPalette,
   type SheetTable,
   tableToEChartsOption,
-} from "@/lib/sheet-matrix-to-echarts"
-import { veritlyUniverHost } from "@/lib/veritly-univer-runtime"
+} from "./sheet-matrix-to-echarts"
+import { veritlyChartHost } from "./runtime-host"
 
 echarts.use([
   BarChart,
@@ -111,7 +111,7 @@ export function VeritlyLiveChartFloat(props: VeritlyLiveChartFloatProps) {
   }, [payload.isRowDirection])
 
   const resolveSheetId = React.useCallback(() => {
-    const slot = veritlyUniverHost()
+    const slot = veritlyChartHost()
     if (!slot || !sheetTitle) return null
     const meta = createUniverSdk({ univerAPI: slot.univerAPI, univer: slot.univer } as unknown as UniverSdkRuntime).listSheets()
     const row = meta.find((x) => x.name === sheetTitle)
@@ -124,7 +124,7 @@ export function VeritlyLiveChartFloat(props: VeritlyLiveChartFloatProps) {
 
   const pull = React.useCallback(() => {
     setErr(null)
-    const slot = veritlyUniverHost()
+    const slot = veritlyChartHost()
     if (!slot || !srcRange || !sheetId) {
       setTable({ rows: [] })
       if (!sheetTitle) setErr("Missing range")
@@ -141,7 +141,7 @@ export function VeritlyLiveChartFloat(props: VeritlyLiveChartFloatProps) {
   }, [pull])
 
   React.useEffect(() => {
-    const slot = veritlyUniverHost()
+    const slot = veritlyChartHost()
     if (!slot) return
     const u = slot.univer as UniverWithInjector
     const cmd = u.__getInjector().get(ICommandService) as {

@@ -428,12 +428,6 @@ export const dict = {
   "file.hostFilesystemDisabled": "This server has no on-disk project. Only Office files (Univer) can be opened here.",
   "file.officeImportOnly":
     "Import spreadsheets via drag-and-drop onto the file tree. There is no separate workspace file server; Univer holds sheet data after import.",
-  "univer.insertChart": "Chart",
-  "univer.insertChart.tooltip":
-    "Insert a live chart on the sheet from the current selection. The chart updates when those cells change (default is a bar chart).",
-  "univer.insertChart.noWorkbook": "No active workbook.",
-  "univer.insertChart.noSheet": "No active sheet.",
-  "univer.insertChart.added": "Live chart added on the sheet.",
   "toast.file.listFailed.title": "Failed to list files",
 
   "toast.context.noLineSelection.title": "No line selection",

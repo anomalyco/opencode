@@ -17,6 +17,7 @@
   "dependencies": {
     "exceljs": "4.4.0",
     "hono": "catalog:",
+    "ot-json1": "1.0.2",
     "xlsx": "0.18.5"
   },
   "devDependencies": {

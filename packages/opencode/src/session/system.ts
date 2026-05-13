@@ -78,7 +78,7 @@ For the **pyodide** tool in the browser: reuse the same \`async def main()\` bod
 
 ## Charts and advanced mutations
 
-The spreadsheet ribbon **Insert → Chart** inserts a chart object then opens **Veritly ECharts** chart settings in the browser; **Save** writes the preview as a **floating image** on the sheet (same drawing id). The Python \`add_chart(...)\` relay still uses Univer's native chart path when the runtime exposes \`sheet.mutation.insert-chart\` (for example with a licensed Pro build). For drawing-level commands, use \`execute_command\` with the command id and params your app supports.
+The spreadsheet ribbon **Insert → Chart** adds a **live ECharts** float on the sheet (no separate Save step). Chart geometry and cell bindings persist with the unit like other edits: the browser forwards \`sheet.mutation.set-drawing-apply\` through the universer **comb** path alongside cell mutations, and the server merges them into the workbook snapshot. The Python \`add_chart(...)\` relay still uses Univer's native chart path when the runtime exposes \`sheet.mutation.insert-chart\` (for example with a licensed Pro build). For drawing-level commands, use \`execute_command\` with the command id and params your app supports.
 
 ## Troubleshooting
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { tableToEChartsOption } from "./sheet-matrix-to-echarts"
+import { tableToEChartsOption } from "../src/sheet-matrix-to-echarts"
 
 const palette = {
   fg: "#111111",

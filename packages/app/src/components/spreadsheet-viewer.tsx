@@ -8,7 +8,7 @@ import { UniverSheetsDrawingPreset } from "@univerjs/presets/preset-sheets-drawi
 import sheetsDrawingEnUs from "@univerjs/presets/preset-sheets-drawing/locales/en-US"
 import "@univerjs/presets/lib/styles/preset-sheets-drawing.css"
 import { createUniverSdk, type AddChartInput, type PushSetRangeInput, type RangeRect, type SetRangeValuesInput, type UniverHostApi, type UniverSdkRuntime } from "@opencode-ai/univer-sdk"
-import { VeritlyUniverGluePlugin } from "@/lib/veritly-univer-plugin"
+import { VeritlyLiveChartPlugin, bindVeritlyChartHost, clearVeritlyChartHost } from "@opencode-ai/veritly-univer-chart"
 import { bindVeritlyUniverHost, clearVeritlyUniverHost, type Host } from "@/lib/veritly-univer-runtime"
 import { augmentVeritlyHost } from "@/lib/veritly-univer-host-api"
 import { univerBackendOrigin } from "@/lib/univer-backend-origin"
@@ -101,7 +101,7 @@ export function SpreadsheetViewer(props: Props) {
         }),
         UniverSheetsDrawingPreset({ collaboration: false }),
       ],
-      plugins: [VeritlyUniverGluePlugin],
+      plugins: [VeritlyLiveChartPlugin],
     })
 
     augmentVeritlyHost(instance.univerAPI, instance.univer, UNIVERSER_BASE)
@@ -109,6 +109,10 @@ export function SpreadsheetViewer(props: Props) {
       univerAPI: instance.univerAPI,
       univer: instance.univer,
     } as Host)
+    bindVeritlyChartHost({
+      univerAPI: instance.univerAPI,
+      univer: instance.univer,
+    })
 
     runtime = instance
     if (import.meta.env.DEV) {
@@ -146,6 +150,7 @@ export function SpreadsheetViewer(props: Props) {
       relaySocket?.close(1000, "viewer disposed")
       relaySocket = null
       clearVeritlyUniverHost()
+      clearVeritlyChartHost()
       runtime = null
       if (import.meta.env.DEV) {
         const w = window as VeritlyWindow
@@ -414,39 +419,52 @@ export function SpreadsheetViewer(props: Props) {
     const api = cur.univerAPI as unknown as UniverHostApi
     const handle = (event: unknown) => {
       const o = event as { id?: string; params?: unknown }
-      if (o.id !== "sheet.mutation.set-range-values") return
       const p = o.params
       if (!p || typeof p !== "object") return
       const unitId = Reflect.get(p, "unitId")
       if (typeof unitId !== "string" || unitId !== uid) return
-      const sheetId = Reflect.get(p, "subUnitId")
-      if (typeof sheetId !== "string") return
-      const cellValue = Reflect.get(p, "cellValue")
-      if (!cellValue || typeof cellValue !== "object") return
 
-      const raw = Reflect.get(p, "range")
-      const push = api.pushSetRangeToServerDebounced
-      if (!push) return
-      const out: PushSetRangeInput = {
-        unitId,
-        sheetId,
-        cellValue: cellValue as PushSetRangeInput["cellValue"],
-      }
-      if (raw && typeof raw === "object") {
-        const sr = Reflect.get(raw, "startRow")
-        const er = Reflect.get(raw, "endRow")
-        const sc = Reflect.get(raw, "startColumn")
-        const ec = Reflect.get(raw, "endColumn")
-        if (
-          typeof sr === "number" &&
-          typeof er === "number" &&
-          typeof sc === "number" &&
-          typeof ec === "number"
-        ) {
-          out.range = { startRow: sr, endRow: er, startColumn: sc, endColumn: ec }
+      if (o.id === "sheet.mutation.set-range-values") {
+        const sheetId = Reflect.get(p, "subUnitId")
+        if (typeof sheetId !== "string") return
+        const cellValue = Reflect.get(p, "cellValue")
+        if (!cellValue || typeof cellValue !== "object") return
+
+        const raw = Reflect.get(p, "range")
+        const push = api.pushSetRangeToServerDebounced
+        if (!push) return
+        const out: PushSetRangeInput = {
+          unitId,
+          sheetId,
+          cellValue: cellValue as PushSetRangeInput["cellValue"],
         }
+        if (raw && typeof raw === "object") {
+          const sr = Reflect.get(raw, "startRow")
+          const er = Reflect.get(raw, "endRow")
+          const sc = Reflect.get(raw, "startColumn")
+          const ec = Reflect.get(raw, "endColumn")
+          if (
+            typeof sr === "number" &&
+            typeof er === "number" &&
+            typeof sc === "number" &&
+            typeof ec === "number"
+          ) {
+            out.range = { startRow: sr, endRow: er, startColumn: sc, endColumn: ec }
+          }
+        }
+        push(out)
+        return
       }
-      push(out)
+
+      if (o.id === "sheet.mutation.set-drawing-apply") {
+        const pushComb = api.pushCombMutationsToServer
+        if (!pushComb) return
+        const cloned = JSON.parse(JSON.stringify(p)) as Record<string, unknown>
+        void pushComb({
+          unitId: uid,
+          mutations: [{ id: o.id, params: cloned }],
+        })
+      }
     }
     const sub = api.addEvent(api.Event.CommandExecuted, handle)
     onCleanup(() => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { parseSheetBangRange, rectsOverlap } from "./sheet-bang-range"
+import { parseSheetBangRange, rectsOverlap } from "../src/sheet-bang-range"
 
 describe("sheet-bang-range", () => {
   test("parseSheetBangRange", () => {

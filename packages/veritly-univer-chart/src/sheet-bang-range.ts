@@ -17,7 +17,7 @@ function parseCell(raw: string): { row: number; col: number } {
   if (!m) throw new Error(`bad cell ref: ${raw}`)
   const row = Number(m[2])
   if (!Number.isFinite(row) || row < 1) throw new Error(`bad row: ${raw}`)
-  return { row: row - 1, col: lettersToCol(m[1]) }
+  return { row: row - 1, col: lettersToCol(m[1]!) }
 }
 
 /** Parses `Sheet1!A1:B2` (sheet name, no `!` in name) into sheet title + inclusive `RangeRect`. */
@@ -28,8 +28,8 @@ export function parseSheetBangRange(raw: string): { sheet: string; range: RangeR
   const ref = raw.slice(idx + 1).trim()
   const parts = ref.split(":")
   if (parts.length !== 2) throw new Error("range string must be A1:B2 form")
-  const a = parseCell(parts[0])
-  const b = parseCell(parts[1])
+  const a = parseCell(parts[0]!)
+  const b = parseCell(parts[1]!)
   return {
     sheet,
     range: {

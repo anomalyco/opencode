@@ -1,0 +1,31 @@
+{
+  "name": "@opencode-ai/veritly-univer-chart",
+  "version": "1.2.24",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit -p .",
+    "test": "bun test ./test"
+  },
+  "dependencies": {
+    "@opencode-ai/univer-sdk": "workspace:*",
+    "@univerjs/core": "0.18.0",
+    "@univerjs/design": "0.18.0",
+    "@univerjs/ui": "0.18.0",
+    "echarts": "5.6.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:"
+  }
+}
