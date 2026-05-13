@@ -29,16 +29,16 @@ opencode [project]
 
 #### 标志
 
-| 标志         | 简写 | 描述                                                      |
-| ------------ | ---- | --------------------------------------------------------- |
-| `--continue` | `-c` | 继续上一个会话                                            |
-| `--session`  | `-s` | 要继续的会话 ID                                           |
-| `--fork`     |      | 继续时分叉会话（与 `--continue` 或 `--session` 配合使用） |
-| `--prompt`   |      | 要使用的提示词                                            |
-| `--model`    | `-m` | 要使用的模型，格式为 provider/model                       |
-| `--agent`    |      | 要使用的代理                                              |
-| `--port`     |      | 监听端口                                                  |
-| `--hostname` |      | 监听主机名                                                |
+| 标志                                     | 简写 | 描述                                                      |
+| ---------------------------------------- | ---- | --------------------------------------------------------- |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | 继续上一个会话                                            |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | 要继续的会话 ID                                           |
+| <nobr><code>{"--fork"}</code></nobr>     |      | 继续时分叉会话（与 `--continue` 或 `--session` 配合使用） |
+| <nobr><code>{"--prompt"}</code></nobr>   |      | 要使用的提示词                                            |
+| <nobr><code>{"--model"}</code></nobr>    | `-m` | 要使用的模型，格式为 provider/model                       |
+| <nobr><code>{"--agent"}</code></nobr>    |      | 要使用的代理                                              |
+| <nobr><code>{"--port"}</code></nobr>     |      | 监听端口                                                  |
+| <nobr><code>{"--hostname"}</code></nobr> |      | 监听主机名                                                |
 
 ---
 
@@ -78,10 +78,14 @@ opencode attach http://10.20.30.40:4096
 
 #### 标志
 
-| 标志        | 简写 | 描述                |
-| ----------- | ---- | ------------------- |
-| `--dir`     |      | 启动 TUI 的工作目录 |
-| `--session` | `-s` | 要继续的会话 ID     |
+| 标志                                     | 简写 | 描述                                                                |
+| ---------------------------------------- | ---- | ------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |      | 启动 TUI 的工作目录                                                 |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | 继续上一个会话                                                      |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | 要继续的会话 ID                                                     |
+| <nobr><code>{"--fork"}</code></nobr>     |      | 继续时派生会话（与 `--continue` 或 `--session` 一起使用）           |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | 基本认证密码（默认使用 `OPENCODE_SERVER_PASSWORD`）                 |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | 基本认证用户名（默认使用 `OPENCODE_SERVER_USERNAME` 或 `opencode`） |
 
 ---
 
@@ -187,10 +191,10 @@ opencode github run
 
 ##### 标志
 
-| 标志      | 描述                           |
-| --------- | ------------------------------ |
-| `--event` | 用于运行代理的 GitHub 模拟事件 |
-| `--token` | GitHub 个人访问令牌            |
+| 标志                                  | 描述                           |
+| ------------------------------------- | ------------------------------ |
+| <nobr><code>{"--event"}</code></nobr> | 用于运行代理的 GitHub 模拟事件 |
+| <nobr><code>{"--token"}</code></nobr> | GitHub 个人访问令牌            |
 
 ---
 
@@ -296,10 +300,10 @@ opencode models anthropic
 
 #### 标志
 
-| 标志        | 描述                                     |
-| ----------- | ---------------------------------------- |
-| `--refresh` | 从 models.dev 刷新模型缓存               |
-| `--verbose` | 使用更详细的模型输出（包含费用等元数据） |
+| 标志                                    | 描述                                     |
+| --------------------------------------- | ---------------------------------------- |
+| <nobr><code>{"--refresh"}</code></nobr> | 从 models.dev 刷新模型缓存               |
+| <nobr><code>{"--verbose"}</code></nobr> | 使用更详细的模型输出（包含费用等元数据） |
 
 使用 `--refresh` 标志可以更新缓存的模型列表。当提供商新增了模型并且您希望在 OpenCode 中看到它们时，此功能非常有用。
 
@@ -335,20 +339,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### 标志
 
-| 标志         | 简写 | 描述                                                           |
-| ------------ | ---- | -------------------------------------------------------------- |
-| `--command`  |      | 要运行的命令，使用 message 作为参数                            |
-| `--continue` | `-c` | 继续上一个会话                                                 |
-| `--session`  | `-s` | 要继续的会话 ID                                                |
-| `--fork`     |      | 继续时分叉会话（与 `--continue` 或 `--session` 配合使用）      |
-| `--share`    |      | 分享会话                                                       |
-| `--model`    | `-m` | 要使用的模型，格式为 provider/model                            |
-| `--agent`    |      | 要使用的代理                                                   |
-| `--file`     | `-f` | 附加到消息的文件                                               |
-| `--format`   |      | 格式：default（格式化输出）或 json（原始 JSON 事件）           |
-| `--title`    |      | 会话标题（未提供值时使用截断的提示词）                         |
-| `--attach`   |      | 连接到正在运行的 opencode 服务器（例如 http://localhost:4096） |
-| `--port`     |      | 本地服务器端口（默认为随机端口）                               |
+| 标志                                     | 简写 | 描述                                                                |
+| ---------------------------------------- | ---- | ------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |      | 要运行的命令，使用 message 作为参数                                 |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | 继续上一个会话                                                      |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | 要继续的会话 ID                                                     |
+| <nobr><code>{"--fork"}</code></nobr>     |      | 继续时分叉会话（与 `--continue` 或 `--session` 配合使用）           |
+| <nobr><code>{"--share"}</code></nobr>    |      | 分享会话                                                            |
+| <nobr><code>{"--model"}</code></nobr>    | `-m` | 要使用的模型，格式为 provider/model                                 |
+| <nobr><code>{"--agent"}</code></nobr>    |      | 要使用的代理                                                        |
+| <nobr><code>{"--file"}</code></nobr>     | `-f` | 附加到消息的文件                                                    |
+| <nobr><code>{"--format"}</code></nobr>   |      | 格式：default（格式化输出）或 json（原始 JSON 事件）                |
+| <nobr><code>{"--title"}</code></nobr>    |      | 会话标题（未提供值时使用截断的提示词）                              |
+| <nobr><code>{"--attach"}</code></nobr>   |      | 连接到正在运行的 opencode 服务器（例如 http://localhost:4096）      |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | 基本认证密码（默认使用 `OPENCODE_SERVER_PASSWORD`）                 |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | 基本认证用户名（默认使用 `OPENCODE_SERVER_USERNAME` 或 `opencode`） |
+| <nobr><code>{"--dir"}</code></nobr>      |      | 运行目录，或附加时远程服务器上的路径                                |
+| <nobr><code>{"--variant"}</code></nobr>  |      | 模型变体（特定于提供商的推理级别）                                  |
+| <nobr><code>{"--thinking"}</code></nobr> |      | 显示思考块                                                          |
+| <nobr><code>{"--port"}</code></nobr>     |      | 本地服务器端口（默认为随机端口）                                    |
 
 ---
 
@@ -364,12 +373,12 @@ opencode serve
 
 #### 标志
 
-| 标志         | 描述                       |
-| ------------ | -------------------------- |
-| `--port`     | 监听端口                   |
-| `--hostname` | 监听主机名                 |
-| `--mdns`     | 启用 mDNS 发现             |
-| `--cors`     | 允许 CORS 的额外浏览器来源 |
+| 标志                                     | 描述                       |
+| ---------------------------------------- | -------------------------- |
+| <nobr><code>{"--port"}</code></nobr>     | 监听端口                   |
+| <nobr><code>{"--hostname"}</code></nobr> | 监听主机名                 |
+| <nobr><code>{"--mdns"}</code></nobr>     | 启用 mDNS 发现             |
+| <nobr><code>{"--cors"}</code></nobr>     | 允许 CORS 的额外浏览器来源 |
 
 ---
 
@@ -393,10 +402,10 @@ opencode session list
 
 ##### 标志
 
-| 标志          | 简写 | 描述                                  |
-| ------------- | ---- | ------------------------------------- |
-| `--max-count` | `-n` | 限制为最近 N 个会话                   |
-| `--format`    |      | 输出格式：table 或 json（默认 table） |
+| 标志                                      | 简写 | 描述                                  |
+| ----------------------------------------- | ---- | ------------------------------------- |
+| <nobr><code>{"--max-count"}</code></nobr> | `-n` | 限制为最近 N 个会话                   |
+| <nobr><code>{"--format"}</code></nobr>    |      | 输出格式：table 或 json（默认 table） |
 
 ---
 
@@ -410,12 +419,12 @@ opencode stats
 
 #### 标志
 
-| 标志        | 描述                                                   |
-| ----------- | ------------------------------------------------------ |
-| `--days`    | 显示最近 N 天的统计信息（默认为所有时间）              |
-| `--tools`   | 显示的工具数量（默认为全部）                           |
-| `--models`  | 显示模型用量明细（默认隐藏）。传入数字可显示前 N 个    |
-| `--project` | 按项目筛选（默认为所有项目，传入空字符串表示当前项目） |
+| 标志                                    | 描述                                                   |
+| --------------------------------------- | ------------------------------------------------------ |
+| <nobr><code>{"--days"}</code></nobr>    | 显示最近 N 天的统计信息（默认为所有时间）              |
+| <nobr><code>{"--tools"}</code></nobr>   | 显示的工具数量（默认为全部）                           |
+| <nobr><code>{"--models"}</code></nobr>  | 显示模型用量明细（默认隐藏）。传入数字可显示前 N 个    |
+| <nobr><code>{"--project"}</code></nobr> | 按项目筛选（默认为所有项目，传入空字符串表示当前项目） |
 
 ---
 
@@ -460,12 +469,12 @@ opencode web
 
 #### 标志
 
-| 标志         | 描述                       |
-| ------------ | -------------------------- |
-| `--port`     | 监听端口                   |
-| `--hostname` | 监听主机名                 |
-| `--mdns`     | 启用 mDNS 发现             |
-| `--cors`     | 允许 CORS 的额外浏览器来源 |
+| 标志                                     | 描述                       |
+| ---------------------------------------- | -------------------------- |
+| <nobr><code>{"--port"}</code></nobr>     | 监听端口                   |
+| <nobr><code>{"--hostname"}</code></nobr> | 监听主机名                 |
+| <nobr><code>{"--mdns"}</code></nobr>     | 启用 mDNS 发现             |
+| <nobr><code>{"--cors"}</code></nobr>     | 允许 CORS 的额外浏览器来源 |
 
 ---
 
@@ -481,11 +490,11 @@ opencode acp
 
 #### 标志
 
-| 标志         | 描述       |
-| ------------ | ---------- |
-| `--cwd`      | 工作目录   |
-| `--port`     | 监听端口   |
-| `--hostname` | 监听主机名 |
+| 标志                                     | 描述       |
+| ---------------------------------------- | ---------- |
+| <nobr><code>{"--cwd"}</code></nobr>      | 工作目录   |
+| <nobr><code>{"--port"}</code></nobr>     | 监听端口   |
+| <nobr><code>{"--hostname"}</code></nobr> | 监听主机名 |
 
 ---
 
@@ -499,12 +508,12 @@ opencode uninstall
 
 #### 标志
 
-| 标志            | 简写 | 描述                           |
-| --------------- | ---- | ------------------------------ |
-| `--keep-config` | `-c` | 保留配置文件                   |
-| `--keep-data`   | `-d` | 保留会话数据和快照             |
-| `--dry-run`     |      | 显示将被删除的内容但不实际删除 |
-| `--force`       | `-f` | 跳过确认提示                   |
+| 标志                                        | 简写 | 描述                           |
+| ------------------------------------------- | ---- | ------------------------------ |
+| <nobr><code>{"--keep-config"}</code></nobr> | `-c` | 保留配置文件                   |
+| <nobr><code>{"--keep-data"}</code></nobr>   | `-d` | 保留会话数据和快照             |
+| <nobr><code>{"--dry-run"}</code></nobr>     |      | 显示将被删除的内容但不实际删除 |
+| <nobr><code>{"--force"}</code></nobr>       | `-f` | 跳过确认提示                   |
 
 ---
 
@@ -530,9 +539,9 @@ opencode upgrade v0.1.48
 
 #### 标志
 
-| 标志       | 简写 | 描述                                       |
-| ---------- | ---- | ------------------------------------------ |
-| `--method` | `-m` | 使用的安装方式：curl、npm、pnpm、bun、brew |
+| 标志                                   | 简写 | 描述                                       |
+| -------------------------------------- | ---- | ------------------------------------------ |
+| <nobr><code>{"--method"}</code></nobr> | `-m` | 使用的安装方式：curl、npm、pnpm、bun、brew |
 
 ---
 
@@ -540,12 +549,12 @@ opencode upgrade v0.1.48
 
 OpenCode CLI 接受以下全局标志。
 
-| 标志           | 简写 | 描述                                 |
-| -------------- | ---- | ------------------------------------ |
-| `--help`       | `-h` | 显示帮助信息                         |
-| `--version`    | `-v` | 打印版本号                           |
-| `--print-logs` |      | 将日志输出到 stderr                  |
-| `--log-level`  |      | 日志级别（DEBUG、INFO、WARN、ERROR） |
+| 标志                                       | 简写 | 描述                                 |
+| ------------------------------------------ | ---- | ------------------------------------ |
+| <nobr><code>{"--help"}</code></nobr>       | `-h` | 显示帮助信息                         |
+| <nobr><code>{"--version"}</code></nobr>    | `-v` | 打印版本号                           |
+| <nobr><code>{"--print-logs"}</code></nobr> |      | 将日志输出到 stderr                  |
+| <nobr><code>{"--log-level"}</code></nobr>  |      | 日志级别（DEBUG、INFO、WARN、ERROR） |
 
 ---
 

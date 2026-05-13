@@ -3,91 +3,102 @@ import os from "node:os"
 import path from "node:path"
 import { onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
-import z from "zod"
+import { Option, Schema, SchemaGetter } from "effect"
 import { isRecord } from "@/util/record"
 import { createSimpleContext } from "./helper"
 import { resolveZedDbPath, resolveZedSelection } from "./editor-zed"
 
 const MCP_PROTOCOL_VERSION = "2025-11-25"
 
-const JsonRpcMessageSchema = z.object({
-  id: z.union([z.number(), z.string(), z.null()]).optional(),
-  method: z.string().optional(),
-  params: z.unknown().optional(),
-  result: z.unknown().optional(),
-  error: z
-    .object({
-      code: z.number().optional(),
-      message: z.string().optional(),
-    })
-    .optional(),
+const JsonRpcMessageSchema = Schema.Struct({
+  id: Schema.optional(Schema.Union([Schema.Number, Schema.String, Schema.Null])),
+  method: Schema.optional(Schema.String),
+  params: Schema.optional(Schema.Unknown),
+  result: Schema.optional(Schema.Unknown),
+  error: Schema.optional(
+    Schema.Struct({
+      code: Schema.optional(Schema.Number),
+      message: Schema.optional(Schema.String),
+    }),
+  ),
 })
 
-const PositionSchema = z.object({
-  line: z.number(),
-  character: z.number(),
+const PositionSchema = Schema.Struct({
+  line: Schema.Number,
+  character: Schema.Number,
 })
 
-const EditorSelectionRangeSchema = z.object({
-  text: z.string(),
-  selection: z.object({
+const EditorSelectionRangeSchema = Schema.Struct({
+  text: Schema.String,
+  selection: Schema.Struct({
     start: PositionSchema,
     end: PositionSchema,
   }),
 })
 
-const EditorSelectionSchema = z
-  .union([
-    z.object({
-      filePath: z.string(),
-      source: z.enum(["websocket", "zed"]).optional(),
-      ranges: z.array(EditorSelectionRangeSchema).min(1),
-    }),
-    z.object({
-      text: z.string(),
-      filePath: z.string(),
-      source: z.enum(["websocket", "zed"]).optional(),
-      selection: z.object({
-        start: PositionSchema,
-        end: PositionSchema,
-      }),
-    }),
-  ])
-  .transform((value) =>
-    "ranges" in value
-      ? value
-      : {
-          filePath: value.filePath,
-          source: value.source,
-          ranges: [
-            {
-              text: value.text,
-              selection: value.selection,
-            },
-          ],
-        },
-  )
-
-const EditorMentionSchema = z.object({
-  filePath: z.string(),
-  lineStart: z.number(),
-  lineEnd: z.number(),
+const EditorSelectionRangesSchema = Schema.Struct({
+  filePath: Schema.String,
+  source: Schema.optional(Schema.Literals(["websocket", "zed"])),
+  ranges: Schema.mutable(Schema.Array(EditorSelectionRangeSchema).check(Schema.isMinLength(1))),
 })
 
-const EditorServerInfoSchema = z.object({
-  protocolVersion: z.string().optional(),
-  serverInfo: z
-    .object({
-      name: z.string().optional(),
-      version: z.string().optional(),
-    })
-    .optional(),
+const EditorSelectionSchema = Schema.Union([
+  EditorSelectionRangesSchema,
+  Schema.Struct({
+    text: Schema.String,
+    filePath: Schema.String,
+    source: Schema.optional(Schema.Literals(["websocket", "zed"])),
+    selection: Schema.Struct({
+      start: PositionSchema,
+      end: PositionSchema,
+    }),
+  }),
+]).pipe(
+  Schema.decodeTo(EditorSelectionRangesSchema, {
+    decode: SchemaGetter.transform((value) =>
+      "ranges" in value
+        ? value
+        : {
+            filePath: value.filePath,
+            source: value.source,
+            ranges: [
+              {
+                text: value.text,
+                selection: value.selection,
+              },
+            ],
+          },
+    ),
+    encode: SchemaGetter.passthrough({ strict: false }),
+  }),
+)
+
+const EditorMentionSchema = Schema.Struct({
+  filePath: Schema.String,
+  lineStart: Schema.Number,
+  lineEnd: Schema.Number,
 })
 
-type JsonRpcMessage = z.infer<typeof JsonRpcMessageSchema>
-export type EditorSelection = z.infer<typeof EditorSelectionSchema>
-export type EditorMention = z.infer<typeof EditorMentionSchema>
-type EditorServerInfo = z.infer<typeof EditorServerInfoSchema>
+const EditorServerInfoSchema = Schema.Struct({
+  protocolVersion: Schema.optional(Schema.String),
+  serverInfo: Schema.optional(
+    Schema.Struct({
+      name: Schema.optional(Schema.String),
+      version: Schema.optional(Schema.String),
+    }),
+  ),
+})
+
+const decodeJsonRpcMessage = Schema.decodeUnknownOption(JsonRpcMessageSchema)
+const decodeEditorSelection = Schema.decodeUnknownOption(EditorSelectionSchema)
+const decodeEditorMention = Schema.decodeUnknownOption(EditorMentionSchema)
+const decodeEditorServerInfo = Schema.decodeUnknownOption(EditorServerInfoSchema)
+
+type JsonRpcMessage = Schema.Schema.Type<typeof JsonRpcMessageSchema>
+export type EditorSelection = Schema.Schema.Type<typeof EditorSelectionSchema>
+export type EditorMention = Schema.Schema.Type<typeof EditorMentionSchema>
+export type EditorLabelState = "pending" | "sent" | "none"
+type EditorServerInfo = Schema.Schema.Type<typeof EditorServerInfoSchema>
 
 type EditorConnection = {
   url: string
@@ -111,10 +122,12 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     const [store, setStore] = createStore<{
       status: "disabled" | "connecting" | "connected"
       selection: EditorSelection | undefined
+      selectionSent: boolean
       server: EditorServerInfo | undefined
     }>({
       status: "disabled",
       selection: undefined,
+      selectionSent: false,
       server: undefined,
     })
 
@@ -126,7 +139,23 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     let zedSelection: Promise<void> | undefined
     let lastZedSelectionKey: string | undefined
     let directory = process.cwd()
+    let preserveSelectionOnReconnect = false
     const pending = new Map<number, string>()
+
+    const setSelection = (selection: EditorSelection | undefined) => {
+      const changed = editorSelectionKey(selection) !== editorSelectionKey(store.selection)
+      setStore("selection", selection)
+      if (changed) setStore("selectionSent", false)
+    }
+
+    const clearSelectionForReconnect = (options?: { resetZedSelectionKey?: boolean }) => {
+      if (preserveSelectionOnReconnect) {
+        preserveSelectionOnReconnect = false
+        return
+      }
+      if (options?.resetZedSelectionKey) lastZedSelectionKey = undefined
+      setSelection(undefined)
+    }
 
     const send = (payload: JsonRpcMessage) => {
       if (!socket || socket.readyState !== 1) return
@@ -158,7 +187,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
             const key = editorSelectionKey(selection)
             if (key !== lastZedSelectionKey) {
               lastZedSelectionKey = key
-              setStore("selection", selection)
+              setSelection(selection)
               setStore("status", selection ? "connected" : "disabled")
             }
           })
@@ -195,16 +224,15 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         const message = parseMessage(event.data)
         if (!message) return
 
-        const selection =
-          message.method === "selection_changed" ? EditorSelectionSchema.safeParse(message.params) : undefined
-        if (selection?.success) {
-          setStore("selection", { ...selection.data, source: "websocket" })
+        const selection = message.method === "selection_changed" ? decodeEditorSelection(message.params) : Option.none()
+        if (Option.isSome(selection)) {
+          setSelection({ ...selection.value, source: "websocket" })
           return
         }
 
-        const mention = message.method === "at_mentioned" ? EditorMentionSchema.safeParse(message.params) : undefined
-        if (mention?.success) {
-          mentionListeners.forEach((listener) => listener(mention.data))
+        const mention = message.method === "at_mentioned" ? decodeEditorMention(message.params) : Option.none()
+        if (Option.isSome(mention)) {
+          mentionListeners.forEach((listener) => listener(mention.value))
           return
         }
 
@@ -216,9 +244,9 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         pending.delete(message.id)
         if (message.error) return
 
-        const initialize = method === "initialize" ? EditorServerInfoSchema.safeParse(message.result) : undefined
-        if (initialize?.success) {
-          setStore("server", initialize.data)
+        const initialize = method === "initialize" ? decodeEditorServerInfo(message.result) : Option.none()
+        if (Option.isSome(initialize)) {
+          setStore("server", initialize.value)
           send({ method: "notifications/initialized" })
           return
         }
@@ -252,12 +280,13 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
     const reconnectWithDirectory = (nextDirectory?: string) => {
       const resolved = nextDirectory || process.cwd()
-      if (directory === resolved) return
+      const sameDirectory = directory === resolved
+      clearSelectionForReconnect({ resetZedSelectionKey: !sameDirectory })
+      if (sameDirectory) return
 
       directory = resolved
       attempt = 0
       pending.clear()
-      lastZedSelectionKey = undefined
       if (reconnect) clearTimeout(reconnect)
       reconnect = undefined
       if (socket) {
@@ -266,7 +295,6 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         current.close()
       }
       setStore("status", "disabled")
-      setStore("selection", undefined)
       setStore("server", undefined)
       connect()
     }
@@ -293,7 +321,19 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
       },
       clearSelection() {
         lastZedSelectionKey = undefined
-        setStore("selection", undefined)
+        zedSelection = undefined
+        setSelection(undefined)
+      },
+      preserveSelectionFromNewSession() {
+        preserveSelectionOnReconnect = true
+      },
+      markSelectionSent() {
+        if (!store.selection) return
+        setStore("selectionSent", true)
+      },
+      labelState(): EditorLabelState {
+        if (!store.selection) return "none"
+        return store.selectionSent ? "sent" : "pending"
       },
       onMention(listener: (mention: EditorMention) => void) {
         mentionListeners.add(listener)
@@ -303,7 +343,6 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         return store.server
       },
       reconnect(directory?: string) {
-        setStore("selection", undefined)
         reconnectWithDirectory(directory)
       },
     }
@@ -417,7 +456,7 @@ function parseMessage(value: unknown) {
   if (typeof value !== "string") return
 
   try {
-    return JsonRpcMessageSchema.parse(JSON.parse(value))
+    return Option.getOrUndefined(decodeJsonRpcMessage(JSON.parse(value)))
   } catch {
     return
   }

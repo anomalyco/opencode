@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { isLocalWorkspaceRoute, getWorkspaceRouteSessionID, workspaceProxyURL } from "../../src/server/workspace"
+import {
+  isLocalWorkspaceRoute,
+  getWorkspaceRouteSessionID,
+  workspaceProxyURL,
+} from "../../src/server/shared/workspace-routing"
 import { SessionID } from "../../src/session/schema"
 
 describe("isLocalWorkspaceRoute", () => {

@@ -5,6 +5,7 @@ import * as Stream from "effect/Stream"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
+import { WorkspaceRoutingQuery } from "./middleware/workspace-routing"
 
 const log = Log.create({ service: "server" })
 
@@ -16,6 +17,7 @@ export const EventApi = HttpApi.make("event").add(
   HttpApiGroup.make("event")
     .add(
       HttpApiEndpoint.get("subscribe", EventPaths.event, {
+        query: WorkspaceRoutingQuery,
         success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/event-stream" })),
       }).annotateMerge(
         OpenApi.annotations({
@@ -41,12 +43,12 @@ function eventResponse(bus: Bus.Interface) {
   const events = bus.subscribeAll().pipe(Stream.takeUntil((event) => event.type === Bus.InstanceDisposed.type))
   const heartbeat = Stream.tick("10 seconds").pipe(
     Stream.drop(1),
-    Stream.map(() => ({ type: "server.heartbeat", properties: {} })),
+    Stream.map(() => ({ id: Bus.createID(), type: "server.heartbeat", properties: {} })),
   )
 
   log.info("event connected")
   return HttpServerResponse.stream(
-    Stream.make({ type: "server.connected", properties: {} }).pipe(
+    Stream.make({ id: Bus.createID(), type: "server.connected", properties: {} }).pipe(
       Stream.concat(events.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }))),
       Stream.map(eventData),
       Stream.pipeThroughChannel(Sse.encode()),
