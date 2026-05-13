@@ -380,6 +380,7 @@ export const layer: Layer.Layer<
         throw new NotGitError({ message: "Worktrees are only supported for git projects" })
       }
 
+      yield* store.disposeDirectory(input.directory).pipe(Effect.ignore)
       const directory = yield* canonical(input.directory)
 
       const list = yield* git(["worktree", "list", "--porcelain"], { cwd: ctx.worktree })
@@ -393,12 +394,14 @@ export const layer: Layer.Layer<
       if (!entry?.path) {
         const directoryExists = yield* fs.exists(directory).pipe(Effect.orDie)
         if (directoryExists) {
+          yield* store.disposeDirectory(directory).pipe(Effect.ignore)
           yield* stopFsmonitor(directory)
           yield* cleanDirectory(directory)
         }
         return true
       }
 
+      yield* store.disposeDirectory(entry.path).pipe(Effect.ignore)
       yield* stopFsmonitor(entry.path)
       const removed = yield* git(["worktree", "remove", "--force", entry.path], { cwd: ctx.worktree })
       if (removed.code !== 0) {
