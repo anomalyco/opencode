@@ -1,5 +1,6 @@
 [data-component="file"] {
   content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
 }
 
 [data-component="file"][data-mode="text"] {

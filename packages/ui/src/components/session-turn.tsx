@@ -458,7 +458,7 @@ export function SessionTurn(
                             <For each={diffs()}>
                               {(diff) => {
                                 const active = createMemo(() => expanded().includes(diff.file))
-                                const [visible, setVisible] = createSignal(active())
+                                const [visible, setVisible] = createSignal(false)
 
                                 createEffect(
                                   on(
