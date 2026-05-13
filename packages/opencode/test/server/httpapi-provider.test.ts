@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
-import { Effect, FileSystem, Layer, Path } from "effect"
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Effect, Layer } from "effect"
+import path from "path"
 import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
@@ -16,7 +17,7 @@ const testStateLayer = Layer.effectDiscard(
   ),
 )
 
-const it = testEffect(Layer.mergeAll(testStateLayer, NodeFileSystem.layer, NodePath.layer))
+const it = testEffect(Layer.mergeAll(testStateLayer, AppFileSystem.defaultLayer))
 const projectOptions = { config: { formatter: false, lsp: false } }
 const providerID = "test-oauth-parity"
 const oauthURL = "https://example.com/oauth"
@@ -95,11 +96,9 @@ function requestAuthorize(input: {
 
 function writeProviderAuthPlugin(dir: string) {
   return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem
-    const path = yield* Path.Path
+    const fs = yield* AppFileSystem.Service
 
-    yield* fs.makeDirectory(path.join(dir, ".opencode", "plugin"), { recursive: true })
-    yield* fs.writeFileString(
+    yield* fs.writeWithDirs(
       path.join(dir, ".opencode", "plugin", "provider-oauth-parity.ts"),
       [
         "export default {",
@@ -131,11 +130,9 @@ function writeProviderAuthPlugin(dir: string) {
 
 function writeFunctionOptionsPlugin(dir: string) {
   return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem
-    const path = yield* Path.Path
+    const fs = yield* AppFileSystem.Service
 
-    yield* fs.makeDirectory(path.join(dir, ".opencode", "plugin"), { recursive: true })
-    yield* fs.writeFileString(
+    yield* fs.writeWithDirs(
       path.join(dir, ".opencode", "plugin", "provider-function-options.ts"),
       [
         "export default {",
@@ -164,11 +161,9 @@ function writeFunctionOptionsPlugin(dir: string) {
 
 function writeProviderModelsMutationPlugin(dir: string) {
   return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem
-    const path = yield* Path.Path
+    const fs = yield* AppFileSystem.Service
 
-    yield* fs.makeDirectory(path.join(dir, ".opencode", "plugin"), { recursive: true })
-    yield* fs.writeFileString(
+    yield* fs.writeWithDirs(
       path.join(dir, ".opencode", "plugin", "provider-models-mutation.ts"),
       [
         "export default {",
