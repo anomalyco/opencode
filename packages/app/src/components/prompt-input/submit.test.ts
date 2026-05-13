@@ -405,6 +405,37 @@ describe("prompt submit worktree selection", () => {
     expect(optimistic).toHaveLength(0)
   })
 
+  test("rejects oversized /goal objectives before posting to the goal API", async () => {
+    params = { id: "session-1" }
+    const text = `/goal ${"x".repeat(4001)}`
+    promptValue = [{ type: "text", content: text, start: 0, end: text.length }]
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await flush()
+
+    expect(goalActions).toEqual([])
+    expect(toasts.at(-1)?.title).toBe("Goal command failed")
+    expect(toasts.at(-1)?.description).toContain("Goal objective is too long (4001/4000 characters)")
+    expect(optimistic).toHaveLength(0)
+  })
+
   test("waits for created worktrees before applying /goal", async () => {
     promptValue = [{ type: "text", content: "/goal ship app parity", start: 0, end: 21 }]
 

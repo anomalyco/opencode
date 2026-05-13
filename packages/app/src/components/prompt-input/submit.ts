@@ -25,6 +25,7 @@ type PendingPrompt = {
 }
 
 const pending = new Map<string, PendingPrompt>()
+const GOAL_OBJECTIVE_MAX_LENGTH = 4000
 
 export type FollowupDraft = {
   sessionID: string
@@ -66,6 +67,12 @@ async function runGoal(input: {
 }) {
   const text = input.text.trim()
   const arg = text.slice("/goal".length).trim()
+  const control = !arg || arg === "pause" || arg === "resume" || arg === "clear" || arg === "edit"
+  if (!control && arg.length > GOAL_OBJECTIVE_MAX_LENGTH) {
+    throw new Error(
+      `Goal objective is too long (${arg.length}/${GOAL_OBJECTIVE_MAX_LENGTH} characters). Shorten the /goal objective and put extra details in a normal follow-up prompt.`,
+    )
+  }
   const current = await input.client.session.goal.get({ sessionID: input.sessionID })
   if (!arg) {
     const goal = current.data

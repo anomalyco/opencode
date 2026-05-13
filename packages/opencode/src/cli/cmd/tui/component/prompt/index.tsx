@@ -63,6 +63,8 @@ import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, u
 import { useTuiConfig } from "../../context/tui-config"
 import { errorMessage } from "@/util/error"
 
+const GOAL_OBJECTIVE_MAX_LENGTH = 4000
+
 export type PromptProps = {
   sessionID?: string
   visible?: boolean
@@ -1148,8 +1150,16 @@ export function Prompt(props: PromptProps) {
       setStore("mode", "normal")
     } else if (goalCommandText === "/goal" || goalCommandText.startsWith("/goal ")) {
       const arg = goalCommandText.slice("/goal".length).trim()
-      const current = await sdk.client.session.goal.get({ sessionID })
       const show = (message: string, variant: "success" | "error" = "success") => toast.show({ message, variant })
+      const control = !arg || arg === "pause" || arg === "resume" || arg === "clear" || arg === "edit"
+      if (!control && arg.length > GOAL_OBJECTIVE_MAX_LENGTH) {
+        show(
+          `Goal objective is too long (${arg.length}/${GOAL_OBJECTIVE_MAX_LENGTH} characters). Shorten the /goal objective and put extra details in a normal follow-up prompt.`,
+          "error",
+        )
+        return true
+      }
+      const current = await sdk.client.session.goal.get({ sessionID })
       const runGoalMutation = async (request: Promise<{ error?: unknown }>, message: string) => {
         const result = await request
         if (result.error) {
