@@ -1,6 +1,5 @@
 name: Question
 description: Ask a question
-labels: ["question"]
 body:
   - type: textarea
     id: question

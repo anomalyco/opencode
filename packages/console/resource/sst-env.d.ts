@@ -35,6 +35,10 @@ declare module "sst" {
       "type": "sst.cloudflare.SolidStart"
       "url": string
     }
+    "DISCORD_INCIDENT_WEBHOOK_URL": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "DISCORD_SUPPORT_BOT_TOKEN": {
       "type": "sst.sst.Secret"
       "value": string
@@ -85,6 +89,10 @@ declare module "sst" {
     }
     "HONEYCOMB_API_KEY": {
       "type": "sst.sst.Secret"
+      "value": string
+    }
+    "HoneycombWebhookSecret": {
+      "type": "random.index/randomPassword.RandomPassword"
       "value": string
     }
     "R2AccessKey": {
@@ -142,16 +150,15 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "ZEN_LITE_COUPON_FIRST_MONTH_100_INVITEES": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
     "ZEN_LITE_PRICE": {
       "firstMonth100Coupon": string
       "firstMonth50Coupon": string
       "price": string
       "priceInr": number
       "product": string
+      "sixMonths100Coupon": string
+      "threeMonths100Coupon": string
+      "twelveMonths100Coupon": string
       "type": "sst.sst.Linkable"
     }
     "ZEN_MODELS1": {
@@ -291,6 +298,7 @@ declare module "sst" {
     "EnterpriseStorage": cloudflare.R2Bucket
     "GatewayKv": cloudflare.KVNamespace
     "LogProcessor": cloudflare.Service
+    "Stat": cloudflare.Service
     "ZenData": cloudflare.R2Bucket
     "ZenDataNew": cloudflare.R2Bucket
   }

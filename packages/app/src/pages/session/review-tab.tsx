@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, type JSX } from "solid-js"
+import { createEffect, onCleanup, type JSX } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { SessionReview } from "@opencode-ai/ui/session-review"
@@ -32,7 +32,7 @@ export interface SessionReviewTabProps {
   focusedComment?: { file: string; id: string } | null
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
   focusedFile?: string
-  onScrollRef?: (el: HTMLDivElement) => void
+  onScrollRef?: (el: HTMLDivElement | undefined) => void
   commentMentions?: {
     items: (query: string) => string[] | Promise<string[]>
   }
@@ -126,6 +126,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
 
   onCleanup(() => {
     if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame)
+    props.onScrollRef?.(undefined)
   })
 
   return (

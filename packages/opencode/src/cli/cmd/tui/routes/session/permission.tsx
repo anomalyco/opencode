@@ -1,42 +1,25 @@
 import { createStore } from "solid-js/store"
-import { createMemo, For, Match, Show, Switch } from "solid-js"
-import { Portal, useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
+import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
+import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
-import { useKeybind } from "../../context/keybind"
 import { useTheme, selectedForeground } from "../../context/theme"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useSync } from "../../context/sync"
-import { useTextareaKeybindings } from "../../component/textarea-keybindings"
+import { useProject } from "../../context/project"
 import path from "path"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
-import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
-import { Global } from "@/global"
+import { ShellID } from "@/tool/shell/id"
+import { webSearchProviderLabel } from "@/tool/websearch"
 import { useDialog } from "../../ui/dialog"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
+import { useBindings, useCommandShortcut } from "../../keymap"
+import { usePathFormatter } from "../../context/path-format"
 
 type PermissionStage = "permission" | "always" | "reject"
-
-function normalizePath(input?: string) {
-  if (!input) return ""
-
-  const cwd = process.cwd()
-  const home = Global.Path.home
-  const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input)
-  const relative = path.relative(cwd, absolute)
-
-  if (!relative) return "."
-  if (!relative.startsWith("..")) return relative
-
-  // outside cwd - use ~ or absolute
-  if (home && (absolute === home || absolute.startsWith(home + path.sep))) {
-    return absolute.replace(home, "~")
-  }
-  return absolute
-}
 
 function filetype(input?: string) {
   if (!input) return "none"
@@ -131,10 +114,12 @@ function TextBody(props: { title: string; description?: string; icon?: string })
 
 export function PermissionPrompt(props: { request: PermissionRequest }) {
   const sdk = useSDK()
+  const project = useProject()
   const sync = useSync()
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
   })
+  const pathFormatter = usePathFormatter()
 
   const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
 
@@ -184,9 +169,10 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
           onSelect={(option) => {
             setStore("stage", "permission")
             if (option === "cancel") return
-            sdk.client.permission.reply({
+            void sdk.client.permission.reply({
               reply: "always",
               requestID: props.request.id,
+              workspace: project.workspace.current(),
             })
           }}
         />
@@ -194,10 +180,11 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
       <Match when={store.stage === "reject"}>
         <RejectPrompt
           onConfirm={(message) => {
-            sdk.client.permission.reply({
+            void sdk.client.permission.reply({
               reply: "reject",
               requestID: props.request.id,
               message: message || undefined,
+              workspace: project.workspace.current(),
             })
           }}
           onCancel={() => {
@@ -216,7 +203,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const filepath = typeof raw === "string" ? raw : ""
               return {
                 icon: "→",
-                title: `Edit ${normalizePath(filepath)}`,
+                title: `Edit ${pathFormatter.format(filepath)}`,
                 body: <EditBody request={props.request} />,
               }
             }
@@ -226,11 +213,11 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const filePath = typeof raw === "string" ? raw : ""
               return {
                 icon: "→",
-                title: `Read ${normalizePath(filePath)}`,
+                title: `Read ${pathFormatter.format(filePath)}`,
                 body: (
                   <Show when={filePath}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Path: " + normalizePath(filePath)}</text>
+                      <text fg={theme.textMuted}>{"Path: " + pathFormatter.format(filePath)}</text>
                     </box>
                   </Show>
                 ),
@@ -272,18 +259,18 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const dir = typeof raw === "string" ? raw : ""
               return {
                 icon: "→",
-                title: `List ${normalizePath(dir)}`,
+                title: `List ${pathFormatter.format(dir)}`,
                 body: (
                   <Show when={dir}>
                     <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Path: " + normalizePath(dir)}</text>
+                      <text fg={theme.textMuted}>{"Path: " + pathFormatter.format(dir)}</text>
                     </box>
                   </Show>
                 ),
               }
             }
 
-            if (permission === "bash") {
+            if (permission === ShellID.ToolID) {
               const title =
                 typeof data.description === "string" && data.description ? data.description : "Shell command"
               const command = typeof data.command === "string" ? data.command : ""
@@ -335,22 +322,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               const query = typeof data.query === "string" ? data.query : ""
               return {
                 icon: "◈",
-                title: `Exa Web Search "${query}"`,
-                body: (
-                  <Show when={query}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.textMuted}>{"Query: " + query}</text>
-                    </box>
-                  </Show>
-                ),
-              }
-            }
-
-            if (permission === "codesearch") {
-              const query = typeof data.query === "string" ? data.query : ""
-              return {
-                icon: "◇",
-                title: `Exa Code Search "${query}"`,
+                title: `${webSearchProviderLabel(data.provider)} "${query}"`,
                 body: (
                   <Show when={query}>
                     <box paddingLeft={1}>
@@ -370,7 +342,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                 typeof pattern === "string" ? (pattern.includes("*") ? path.dirname(pattern) : pattern) : undefined
 
               const raw = parent ?? filepath ?? derived
-              const dir = normalizePath(raw)
+              const dir = pathFormatter.format(raw)
               const patterns = (props.request.patterns ?? []).filter((p): p is string => typeof p === "string")
 
               return {
@@ -447,15 +419,17 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                     setStore("stage", "reject")
                     return
                   }
-                  sdk.client.permission.reply({
+                  void sdk.client.permission.reply({
                     reply: "reject",
                     requestID: props.request.id,
+                    workspace: project.workspace.current(),
                   })
                   return
                 }
-                sdk.client.permission.reply({
+                void sdk.client.permission.reply({
                   reply: "once",
                   requestID: props.request.id,
+                  workspace: project.workspace.current(),
                 })
               }}
             />
@@ -471,25 +445,33 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
 function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: () => void }) {
   let input: TextareaRenderable
   const { theme } = useTheme()
-  const keybind = useKeybind()
-  const textareaKeybindings = useTextareaKeybindings()
+  const tuiConfig = useTuiConfig()
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
   const dialog = useDialog()
-
-  useKeyboard((evt) => {
-    if (dialog.stack.length > 0) return
-
-    if (evt.name === "escape" || keybind.match("app_exit", evt)) {
-      evt.preventDefault()
-      props.onCancel()
-      return
-    }
-    if (evt.name === "return") {
-      evt.preventDefault()
-      props.onConfirm(input.plainText)
-    }
-  })
+  useBindings(() => ({
+    enabled: dialog.stack.length === 0,
+    commands: [
+      {
+        name: "app.exit",
+        title: "Cancel permission rejection",
+        category: "Permission",
+        run() {
+          props.onCancel()
+        },
+      },
+    ],
+    bindings: [
+      { key: "escape", desc: "Cancel permission rejection", group: "Permission", cmd: () => props.onCancel() },
+      ...tuiConfig.keybinds.get("app.exit"),
+      {
+        key: "return",
+        desc: "Confirm permission rejection",
+        group: "Permission",
+        cmd: () => props.onConfirm(input.plainText),
+      },
+    ],
+  }))
 
   return (
     <box
@@ -528,7 +510,6 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
           textColor={theme.text}
           focusedTextColor={theme.text}
           cursorColor={theme.primary}
-          keyBindings={textareaKeybindings()}
         />
         <box flexDirection="row" gap={2} flexShrink={0}>
           <text fg={theme.text}>
@@ -553,53 +534,103 @@ function Prompt<const T extends Record<string, string>>(props: {
   onSelect: (option: keyof T) => void
 }) {
   const { theme } = useTheme()
-  const keybind = useKeybind()
+  const tuiConfig = useTuiConfig()
   const dimensions = useTerminalDimensions()
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
     selected: keys[0],
     expanded: false,
   })
-  const diffKey = Keybind.parse("ctrl+f")[0]
   const narrow = createMemo(() => dimensions().width < 80)
   const dialog = useDialog()
+  const fullscreenHint = useCommandShortcut("permission.prompt.fullscreen")
 
-  useKeyboard((evt) => {
-    if (dialog.stack.length > 0) return
-
-    if (evt.name === "left" || evt.name == "h") {
-      evt.preventDefault()
-      const idx = keys.indexOf(store.selected)
-      const next = keys[(idx - 1 + keys.length) % keys.length]
-      setStore("selected", next)
-    }
-
-    if (evt.name === "right" || evt.name == "l") {
-      evt.preventDefault()
-      const idx = keys.indexOf(store.selected)
-      const next = keys[(idx + 1) % keys.length]
-      setStore("selected", next)
-    }
-
-    if (evt.name === "return") {
-      evt.preventDefault()
-      props.onSelect(store.selected)
-    }
-
-    if (props.escapeKey && (evt.name === "escape" || keybind.match("app_exit", evt))) {
-      evt.preventDefault()
-      props.onSelect(props.escapeKey)
-    }
-
-    if (props.fullscreen && diffKey && Keybind.match(diffKey, keybind.parse(evt))) {
-      evt.preventDefault()
-      evt.stopPropagation()
-      setStore("expanded", (v) => !v)
-    }
-  })
+  useBindings(() => ({
+    enabled: dialog.stack.length === 0,
+    commands: [
+      {
+        name: "app.exit",
+        title: "Reject permission",
+        category: "Permission",
+        run() {
+          if (!props.escapeKey) return
+          props.onSelect(props.escapeKey)
+        },
+      },
+      {
+        name: "permission.prompt.fullscreen",
+        title: "Toggle permission fullscreen",
+        category: "Permission",
+        run() {
+          if (!props.fullscreen) return
+          setStore("expanded", (v) => !v)
+        },
+      },
+    ],
+    bindings: [
+      {
+        key: "left",
+        desc: "Previous permission option",
+        group: "Permission",
+        cmd: () => {
+          const idx = keys.indexOf(store.selected)
+          const next = keys[(idx - 1 + keys.length) % keys.length]
+          setStore("selected", next)
+        },
+      },
+      {
+        key: "h",
+        desc: "Previous permission option",
+        group: "Permission",
+        cmd: () => {
+          const idx = keys.indexOf(store.selected)
+          const next = keys[(idx - 1 + keys.length) % keys.length]
+          setStore("selected", next)
+        },
+      },
+      {
+        key: "right",
+        desc: "Next permission option",
+        group: "Permission",
+        cmd: () => {
+          const idx = keys.indexOf(store.selected)
+          const next = keys[(idx + 1) % keys.length]
+          setStore("selected", next)
+        },
+      },
+      {
+        key: "l",
+        desc: "Next permission option",
+        group: "Permission",
+        cmd: () => {
+          const idx = keys.indexOf(store.selected)
+          const next = keys[(idx + 1) % keys.length]
+          setStore("selected", next)
+        },
+      },
+      {
+        key: "return",
+        desc: "Select permission option",
+        group: "Permission",
+        cmd: () => props.onSelect(store.selected),
+      },
+      ...(props.escapeKey
+        ? [
+            {
+              key: "escape",
+              desc: "Reject permission",
+              group: "Permission",
+              cmd: () => props.onSelect(props.escapeKey!),
+            },
+          ]
+        : []),
+      ...(props.escapeKey ? tuiConfig.keybinds.get("app.exit") : []),
+      ...(props.fullscreen ? tuiConfig.keybinds.get("permission.prompt.fullscreen") : []),
+    ],
+  }))
 
   const hint = createMemo(() => (store.expanded ? "minimize" : "fullscreen"))
-  const renderer = useRenderer()
+  useRenderer()
 
   const content = () => (
     <box
@@ -669,7 +700,7 @@ function Prompt<const T extends Record<string, string>>(props: {
         <box flexDirection="row" gap={2} flexShrink={0}>
           <Show when={props.fullscreen}>
             <text fg={theme.text}>
-              {"ctrl+f"} <span style={{ fg: theme.textMuted }}>{hint()}</span>
+              {fullscreenHint()} <span style={{ fg: theme.textMuted }}>{hint()}</span>
             </text>
           </Show>
           <text fg={theme.text}>

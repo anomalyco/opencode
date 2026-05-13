@@ -43,6 +43,7 @@ type SessionView = {
   reviewOpen?: string[]
   pendingMessage?: string
   pendingMessageAt?: number
+  todoCollapsed?: boolean
 }
 
 type TabHandoff = {
@@ -344,7 +345,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           return
         }
 
-        setStore("sessionView", sessionKey, "scroll", (prev) => ({ ...(prev ?? {}), ...next }))
+        setStore("sessionView", sessionKey, "scroll", (prev) => ({ ...prev, ...next }))
         prune(keep)
       },
     })
@@ -391,37 +392,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         ? globalSync.data.project.find((x) => x.id === projectID)
         : globalSync.data.project.find((x) => x.worktree === project.worktree)
 
-      const local = childStore.projectMeta
-      const localOverride =
-        local?.name !== undefined ||
-        local?.commands?.start !== undefined ||
-        local?.icon?.override !== undefined ||
-        local?.icon?.color !== undefined
-
-      const base = {
-        ...(metadata ?? {}),
-        ...project,
-        icon: {
-          url: metadata?.icon?.url,
-          override: metadata?.icon?.override ?? childStore.icon,
-          color: metadata?.icon?.color,
-        },
+      // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
+      // Without this, different subdirectories of the same git repo would share the same
+      // icon from the database instead of using their individual overrides.
+      const base = { ...metadata, ...project }
+      if (childStore.icon) {
+        return { ...base, icon: { ...base.icon, override: childStore.icon } }
       }
-
-      const isGlobal = projectID === "global" || (metadata?.id === undefined && localOverride)
-      if (!isGlobal) return base
-
-      return {
-        ...base,
-        id: base.id ?? "global",
-        name: local?.name,
-        commands: local?.commands,
-        icon: {
-          url: base.icon?.url,
-          override: local?.icon?.override,
-          color: local?.icon?.color,
-        },
-      }
+      return base
     }
 
     const roots = createMemo(() => {
@@ -516,7 +494,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
 
       for (const project of projects) {
-        if (project.icon?.color) continue
+        if (project.icon?.color || project.icon?.override || project.icon?.url) continue
         const worktree = project.worktree
         const existing = colors[worktree]
         const color = existing ?? pickAvailableColor(used)
@@ -582,7 +560,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         open(directory: string) {
           const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return
-          globalSync.project.loadSessions(root)
+          void globalSync.project.loadSessions(root)
           server.projects.open(root)
         },
         close(directory: string) {
@@ -781,6 +759,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           setScroll(tab: string, pos: SessionScroll) {
             scroll.setScroll(key(), tab, pos)
+          },
+          todoCollapsed: {
+            get: () => s().todoCollapsed ?? false,
+            set(collapsed: boolean) {
+              const session = key()
+              const current = store.sessionView[session]
+              if (!current) {
+                setStore("sessionView", session, { scroll: {}, todoCollapsed: collapsed })
+              } else {
+                setStore("sessionView", session, "todoCollapsed", collapsed)
+              }
+            },
           },
           terminal: {
             opened: terminalOpened,

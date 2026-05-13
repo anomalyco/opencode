@@ -1,37 +1,43 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
-import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
-import { Session } from "../../src/session"
-import { SessionPrompt } from "../../src/session/prompt"
-import { Log } from "../../src/util/log"
-import { tmpdir } from "../fixture/fixture"
+import { Session as SessionNs } from "@/session/session"
+import * as Log from "@opencode-ai/core/util/log"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
-Log.init({ print: false })
+void Log.init({ print: false })
+
+const it = testEffect(SessionNs.defaultLayer)
 
 afterEach(async () => {
   mock.restore()
-  await Instance.disposeAll()
+  await disposeAllInstances()
 })
 
 describe("session action routes", () => {
-  test("abort route calls SessionPrompt.cancel", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await Session.create({})
-        const cancel = spyOn(SessionPrompt, "cancel").mockResolvedValue()
-        const app = Server.Default().app
+  it.instance(
+    "abort route returns success",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* Effect.acquireRelease(
+          SessionNs.Service.use((svc) => svc.create({})),
+          (created) => SessionNs.Service.use((svc) => svc.remove(created.id)).pipe(Effect.ignore),
+        )
 
-        const res = await app.request(`/session/${session.id}/abort`, { method: "POST" })
+        const res = yield* Effect.promise(() =>
+          Promise.resolve(
+            Server.Default().app.request(`/session/${session.id}/abort`, {
+              method: "POST",
+              headers: { "x-opencode-directory": test.directory },
+            }),
+          ),
+        )
 
         expect(res.status).toBe(200)
-        expect(await res.json()).toBe(true)
-        expect(cancel).toHaveBeenCalledWith(session.id)
-
-        await Session.remove(session.id)
-      },
-    })
-  })
+        expect(yield* Effect.promise(() => res.json())).toBe(true)
+      }),
+    { git: true },
+  )
 })

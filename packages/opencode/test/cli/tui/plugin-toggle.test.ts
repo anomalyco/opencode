@@ -4,7 +4,8 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
-import { TuiConfig } from "../../../src/config/tui"
+import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
+import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
 
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
@@ -39,7 +40,7 @@ test("toggles plugin runtime state by exported id", async () => {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const get = spyOn(TuiConfig, "get").mockResolvedValue({
+  const config = createTuiResolvedConfig({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
     plugin_enabled: {
       "demo.toggle": false,
@@ -57,7 +58,7 @@ test("toggles plugin runtime state by exported id", async () => {
   const api = createTuiPluginApi()
 
   try {
-    await TuiPluginRuntime.init(api)
+    await TuiPluginRuntime.init({ api, config })
 
     await expect(fs.readFile(tmp.extra.marker, "utf8")).rejects.toThrow()
     expect(TuiPluginRuntime.list().find((item) => item.id === "demo.toggle")).toEqual({
@@ -85,7 +86,6 @@ test("toggles plugin runtime state by exported id", async () => {
   } finally {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
-    get.mockRestore()
     wait.mockRestore()
     delete process.env.OPENCODE_PLUGIN_META_FILE
   }
@@ -117,7 +117,7 @@ test("kv plugin_enabled overrides tui config on startup", async () => {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const get = spyOn(TuiConfig, "get").mockResolvedValue({
+  const config = createTuiResolvedConfig({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
     plugin_enabled: {
       "demo.startup": false,
@@ -138,7 +138,7 @@ test("kv plugin_enabled overrides tui config on startup", async () => {
   })
 
   try {
-    await TuiPluginRuntime.init(api)
+    await TuiPluginRuntime.init({ api, config })
 
     await expect(fs.readFile(tmp.extra.marker, "utf8")).resolves.toBe("on")
     expect(TuiPluginRuntime.list().find((item) => item.id === "demo.startup")).toEqual({
@@ -152,8 +152,49 @@ test("kv plugin_enabled overrides tui config on startup", async () => {
   } finally {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
-    get.mockRestore()
     wait.mockRestore()
     delete process.env.OPENCODE_PLUGIN_META_FILE
+  }
+})
+
+test("loads disabled-by-default internal plugin inactive and activates on demand", async () => {
+  await using tmp = await tmpdir()
+  const config = createTuiResolvedConfig()
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+  const api = createTuiPluginApi()
+
+  try {
+    await TuiPluginRuntime.init({ api, config })
+
+    expect(TuiPluginRuntime.list().find((item) => item.id === "internal:plugin-manager")).toMatchObject({
+      enabled: true,
+      active: true,
+    })
+    expect(TuiPluginRuntime.list().find((item) => item.id === "which-key")).toEqual({
+      id: "which-key",
+      source: "internal",
+      spec: "which-key",
+      target: "which-key",
+      enabled: false,
+      active: false,
+    })
+
+    await expect(TuiPluginRuntime.activatePlugin("which-key")).resolves.toBe(true)
+    expect(TuiPluginRuntime.list().find((item) => item.id === "which-key")).toEqual({
+      id: "which-key",
+      source: "internal",
+      spec: "which-key",
+      target: "which-key",
+      enabled: true,
+      active: true,
+    })
+    expect(api.kv.get("plugin_enabled", {})).toEqual({
+      "which-key": true,
+    })
+  } finally {
+    await TuiPluginRuntime.dispose()
+    cwd.mockRestore()
+    wait.mockRestore()
   }
 })

@@ -100,7 +100,7 @@ export function BasicTool(props: BasicToolProps) {
         if (isOpen) {
           contentRef.style.overflow = "hidden"
           heightAnim = animate(contentRef, { height: "auto" }, SPRING)
-          heightAnim.finished.then(() => {
+          void heightAnim.finished.then(() => {
             if (!contentRef || !open()) return
             contentRef.style.overflow = "visible"
             contentRef.style.height = "auto"

@@ -1,11 +1,10 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useParams } from "@solidjs/router"
-import { batch, createEffect, createMemo, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useModels } from "@/context/models"
 import { useProviders } from "@/hooks/use-providers"
-import { modelEnabled, modelProbe } from "@/testing/model-selection"
 import { Persist, persisted } from "@/utils/persist"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
 import { useSDK } from "./sdk"
@@ -45,7 +44,7 @@ const migrate = (value: unknown) => {
 }
 
 const clone = (value: State | undefined) => {
-  if (!value) return undefined
+  if (!value) return
   return {
     ...value,
     model: value.model ? { ...value.model } : undefined,
@@ -105,7 +104,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const pickAgent = (name: string | undefined) => {
       const items = list()
-      if (items.length === 0) return undefined
+      if (items.length === 0) return
       return items.find((item) => item.name === name) ?? items[0]
     }
 
@@ -228,14 +227,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         () => agent.current()?.model,
         fallback,
       )
-      if (!item) return undefined
+      if (!item) return
       return models.find(item)
     }
 
     const configured = () => {
       const item = agent.current()
       const model = current()
-      if (!item || !model) return undefined
+      if (!item || !model) return
       return getConfiguredAgentVariant({
         agent: { model: item.model, variant: item.variant },
         model: { providerID: model.provider.id, modelID: model.id, variants: model.variants },
@@ -315,11 +314,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         configured,
         selected,
         current() {
-          return resolveModelVariant({
+          const resolved = resolveModelVariant({
             variants: this.list(),
             selected: this.selected(),
             configured: this.configured(),
           })
+          if (resolved) return resolved
+          const model = current()
+          if (!model) return
+          const saved = models.variant.get({ providerID: model.provider.id, modelID: model.id })
+          if (saved && this.list().includes(saved)) return saved
         },
         list() {
           const item = current()
@@ -336,6 +340,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               variant: value ?? null,
             })
             write({ variant: value ?? null })
+            if (model) {
+              models.variant.set({ providerID: model.provider.id, modelID: model.id }, value ?? undefined)
+            }
           })
         },
         cycle() {
@@ -383,58 +390,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setSaved("session", session, {
             agent: msg.agent,
             model: msg.model,
-            variant: msg.model.variant ?? null,
+            variant: msg.model?.variant ?? null,
           })
         },
       },
     }
-
-    if (modelEnabled()) {
-      const probe = Symbol("model-probe")
-
-      modelProbe.bind(probe, {
-        setAgent: agent.set,
-        setModel: model.set,
-        setVariant: model.variant.set,
-      })
-
-      createEffect(() => {
-        const agent = result.agent.current()
-        const model = result.model.current()
-        modelProbe.set(probe, {
-          dir: sdk.directory,
-          sessionID: id(),
-          last: store.last,
-          agent: agent?.name,
-          model: model
-            ? {
-                providerID: model.provider.id,
-                modelID: model.id,
-                name: model.name,
-              }
-            : undefined,
-          variant: result.model.variant.current() ?? null,
-          selected: result.model.variant.selected(),
-          configured: result.model.variant.configured(),
-          pick: scope(),
-          base: undefined,
-          current: store.current,
-          variants: result.model.variant.list(),
-          models: result.model
-            .list()
-            .filter((item) => result.model.visible({ providerID: item.provider.id, modelID: item.id }))
-            .map((item) => ({
-              providerID: item.provider.id,
-              modelID: item.id,
-              name: item.name,
-            })),
-          agents: result.agent.list().map((item) => ({ name: item.name })),
-        })
-      })
-
-      onCleanup(() => modelProbe.clear(probe))
-    }
-
     return result
   },
 })

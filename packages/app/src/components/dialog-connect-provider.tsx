@@ -327,7 +327,7 @@ export function DialogConnectProvider(props: { provider: string }) {
     if (loading()) return
     if (methods().length === 1) {
       auto = true
-      selectMethod(0)
+      void selectMethod(0)
     }
   })
 
@@ -373,7 +373,7 @@ export function DialogConnectProvider(props: { provider: string }) {
             key={(m) => m?.label}
             onSelect={async (selected, index) => {
               if (!selected) return
-              selectMethod(index)
+              void selectMethod(index)
             }}
           >
             {(i) => (

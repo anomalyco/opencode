@@ -1,5 +1,5 @@
 import { Effect, Layer } from "effect"
-import { Provider } from "../../src/provider/provider"
+import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 
 export namespace ProviderTest {
