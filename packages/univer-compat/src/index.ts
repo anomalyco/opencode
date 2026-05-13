@@ -9,6 +9,13 @@ export { createCompatApp, Store, unitStateKey }
 export { universerRoutes, exchangeMultipartVsJson } from "./exchange-contract"
 export { defaultWorkbook } from "./workbook"
 export { xlsxToWorkbookJson } from "./xlsx-import"
+export {
+  WORKBOOK_SCHEMA_VERSION,
+  migrateWorkbookInSnapshotRoot,
+  migrateWorkbookToLatest,
+  stampWorkbookSchemaVersion,
+} from "./workbook"
+export type { WorkbookMigrationStep } from "./workbook"
 
 export async function createDefaultCompatApp(opts?: { persistEveryRev?: number }) {
   const blob = exchangeFilesFromEnv()

@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { applyMutationsToSnapshotJson, commitDrawingPluginInWorkbook } from "../src/apply-mutations"
-import type { WorkbookWire } from "../src/workbook-wire"
-import { defaultWorkbook, workbookFromSnapshot } from "../src/workbook"
+import { applyMutationsToSnapshotJson } from "../../src/apply-mutations"
+import {
+  commitDrawingPluginInWorkbook,
+  defaultWorkbook,
+  workbookFromSnapshot,
+  type WorkbookWire,
+} from "../../src/workbook"
 
 const DRAW = "SHEET_DRAWING_PLUGIN"
 

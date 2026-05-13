@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs"
+import { WORKBOOK_SCHEMA_VERSION } from "./workbook"
 
 function b64(s: string) {
   return Buffer.from(s, "utf8").toString("base64")
@@ -127,6 +128,7 @@ export async function xlsxToWorkbookJson(unitID: string, buf: Uint8Array) {
   return {
     id: unitID,
     name: "Imported Workbook",
+    schemaVersion: WORKBOOK_SCHEMA_VERSION,
     appVersion: "0.19.0",
     locale: "enUS",
     originalMeta: workbookMeta,

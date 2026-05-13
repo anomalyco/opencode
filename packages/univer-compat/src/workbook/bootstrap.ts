@@ -1,4 +1,11 @@
-import { commitDrawingPluginInWorkbook, parseWorkbookWire } from "./workbook-wire"
+import { commitDrawingPluginInWorkbook } from "./drawing-plugin"
+import { parseWorkbookWire } from "./parse-wire"
+import { WORKBOOK_SCHEMA_VERSION } from "./schema-version/latest"
+import {
+  migrateWorkbookToLatest,
+  stampWorkbookSchemaVersion,
+  workbookBodyFromSnapshotRoot,
+} from "./schema-version/run"
 
 function b64(s: string) {
   return Buffer.from(s, "utf8").toString("base64")
@@ -11,6 +18,7 @@ export function defaultWorkbook(id: string, name: string) {
   return {
     id,
     name,
+    schemaVersion: WORKBOOK_SCHEMA_VERSION,
     appVersion: "0.19.0",
     locale: "enUS",
     originalMeta: workbookMeta,
@@ -101,8 +109,11 @@ export function buildRealSnapshotEnvelope(unitID: string, typ: number, rev: numb
 
 export function bumpSnapshotRevOnly(raw: string, next: number) {
   const root = JSON.parse(raw) as Record<string, unknown>
+  const body = workbookBodyFromSnapshotRoot(root)
+  migrateWorkbookToLatest(body)
+  stampWorkbookSchemaVersion(body)
   const wb = root.workbook as Record<string, unknown> | undefined
   if (wb && typeof wb === "object") wb.rev = next
-  else root.rev = next
+  else body.rev = next
   return JSON.stringify(root)
 }

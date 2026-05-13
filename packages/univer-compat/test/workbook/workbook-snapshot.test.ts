@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { Store } from "../src/store"
-import { defaultWorkbook } from "../src/workbook"
-import { xlsxToWorkbookJson } from "../src/xlsx-import"
+import { Store } from "../../src/store"
+import { defaultWorkbook } from "../../src/workbook"
+import { xlsxToWorkbookJson } from "../../src/xlsx-import"
 import * as XLSX from "xlsx"
 
 describe("IWorkbookData-like snapshots", () => {

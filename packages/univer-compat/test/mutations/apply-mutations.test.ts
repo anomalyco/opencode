@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { applyMutationsToSnapshotJson } from "../src/apply-mutations"
-import { defaultWorkbook } from "../src/workbook"
+import { applyMutationsToSnapshotJson } from "../../src/apply-mutations"
+import { defaultWorkbook } from "../../src/workbook"
 
 describe("applyMutationsToSnapshotJson", () => {
   test("applies sheet.mutation.set-range-values into cellData", () => {

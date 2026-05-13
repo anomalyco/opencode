@@ -1,8 +1,12 @@
 import { BlobMissing, type ExchangeFileBackend } from "./exchange-files"
 import { applyMutationsToSnapshotJson } from "./apply-mutations"
-import { bumpSnapshotRevOnly, defaultWorkbook } from "./workbook"
+import { bumpSnapshotRevOnly, defaultWorkbook, migrateWorkbookInSnapshotRoot } from "./workbook"
 import { isSnapshotSave, mutationsFromChangeset } from "./changeset"
 import { xlsxToWorkbookJson } from "./xlsx-import"
+
+function plain(o: unknown): o is Record<string, unknown> {
+  return o !== null && typeof o === "object" && !Array.isArray(o)
+}
 
 /** Durable unit bundle in S3 — distinct from exchange upload keys (`FileId` UUID blobs). */
 export function unitStateKey(unitID: string) {
@@ -192,6 +196,7 @@ export class Store {
     if (u.revision !== baseRev) throw new Conflict()
     const now = Date.now()
     const next = u.revision + 1
+    if (plain(snap)) migrateWorkbookInSnapshotRoot(snap as Record<string, unknown>)
     const raw = JSON.stringify(snap)
     const cs: ChangesetRow = {
       unitID,
