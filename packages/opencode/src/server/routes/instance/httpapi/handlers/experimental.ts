@@ -5,8 +5,8 @@ import { InstanceState } from "@/effect/instance-state"
 import { MCP } from "@/mcp"
 import { Project } from "@/project/project"
 import { Session } from "@/session/session"
+import { ToolJsonSchema } from "@/tool/json-schema"
 import { ToolRegistry } from "@/tool/registry"
-import * as EffectZod from "@opencode-ai/core/effect-zod"
 import { Worktree } from "@/worktree"
 import { Effect, Option } from "effect"
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse"
@@ -79,12 +79,12 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
       const list = yield* registry.tools({
         providerID: ctx.query.provider,
         modelID: ctx.query.model,
-        agent: yield* agents.get(yield* agents.defaultAgent()),
+        agent: yield* agents.defaultInfo(),
       })
       return list.map((item) => ({
         id: item.id,
         description: item.description,
-        parameters: EffectZod.toJsonSchema(item.parameters),
+        parameters: ToolJsonSchema.fromTool(item),
       }))
     })
 

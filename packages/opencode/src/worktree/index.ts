@@ -1,4 +1,3 @@
-import z from "zod"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Global } from "@opencode-ai/core/global"
 import { InstanceLayer } from "@/project/instance-layer"
@@ -29,7 +28,7 @@ export const Event = {
     "worktree.ready",
     Schema.Struct({
       name: Schema.String,
-      branch: Schema.String,
+      branch: Schema.optional(Schema.String),
     }),
   ),
   Failed: BusEvent.define(
@@ -42,7 +41,7 @@ export const Event = {
 
 export const Info = Schema.Struct({
   name: Schema.String,
-  branch: Schema.String,
+  branch: Schema.optional(Schema.String),
   directory: Schema.String,
 }).annotate({ identifier: "Worktree" })
 export type Info = Schema.Schema.Type<typeof Info>
@@ -65,54 +64,33 @@ export const ResetInput = Schema.Struct({
 }).annotate({ identifier: "WorktreeResetInput" })
 export type ResetInput = Schema.Schema.Type<typeof ResetInput>
 
-export const NotGitError = NamedError.create(
-  "WorktreeNotGitError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const NotGitError = NamedError.create("WorktreeNotGitError", {
+  message: Schema.String,
+})
 
-export const NameGenerationFailedError = NamedError.create(
-  "WorktreeNameGenerationFailedError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const NameGenerationFailedError = NamedError.create("WorktreeNameGenerationFailedError", {
+  message: Schema.String,
+})
 
-export const CreateFailedError = NamedError.create(
-  "WorktreeCreateFailedError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const CreateFailedError = NamedError.create("WorktreeCreateFailedError", {
+  message: Schema.String,
+})
 
-export const StartCommandFailedError = NamedError.create(
-  "WorktreeStartCommandFailedError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const StartCommandFailedError = NamedError.create("WorktreeStartCommandFailedError", {
+  message: Schema.String,
+})
 
-export const RemoveFailedError = NamedError.create(
-  "WorktreeRemoveFailedError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const RemoveFailedError = NamedError.create("WorktreeRemoveFailedError", {
+  message: Schema.String,
+})
 
-export const ResetFailedError = NamedError.create(
-  "WorktreeResetFailedError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const ResetFailedError = NamedError.create("WorktreeResetFailedError", {
+  message: Schema.String,
+})
 
-export const ListFailedError = NamedError.create(
-  "WorktreeListFailedError",
-  z.object({
-    message: z.string(),
-  }),
-)
+export const ListFailedError = NamedError.create("WorktreeListFailedError", {
+  message: Schema.String,
+})
 
 function slugify(input: string) {
   return input
@@ -143,7 +121,7 @@ function failedRemoves(...chunks: string[]) {
 // ---------------------------------------------------------------------------
 
 export interface Interface {
-  readonly makeWorktreeInfo: (name?: string) => Effect.Effect<Info>
+  readonly makeWorktreeInfo: (options?: { name?: string; detached?: boolean }) => Effect.Effect<Info>
   readonly createFromInfo: (info: Info, startCommand?: string) => Effect.Effect<void>
   readonly create: (input?: CreateInput) => Effect.Effect<Info>
   readonly list: () => Effect.Effect<(Omit<Info, "branch"> & { branch?: string })[]>
@@ -194,25 +172,34 @@ export const layer: Layer.Layer<
     )
 
     const MAX_NAME_ATTEMPTS = 26
-    const candidate = Effect.fn("Worktree.candidate")(function* (root: string, base?: string) {
+    const candidate = Effect.fn("Worktree.candidate")(function* (input: {
+      root: string
+      name?: string
+      detached?: boolean
+    }) {
       const ctx = yield* InstanceState.context
       for (const attempt of Array.from({ length: MAX_NAME_ATTEMPTS }, (_, i) => i)) {
-        const name = base ? (attempt === 0 ? base : `${base}-${Slug.create()}`) : Slug.create()
-        const branch = `opencode/${name}`
-        const directory = pathSvc.join(root, name)
+        const name = input.name ? (attempt === 0 ? input.name : `${input.name}-${Slug.create()}`) : Slug.create()
+        const branch = input.detached ? undefined : `opencode/${name}`
+        const directory = pathSvc.join(input.root, name)
 
         if (yield* fs.exists(directory).pipe(Effect.orDie)) continue
 
-        const ref = `refs/heads/${branch}`
-        const branchCheck = yield* git(["show-ref", "--verify", "--quiet", ref], { cwd: ctx.worktree })
-        if (branchCheck.code === 0) continue
+        if (branch) {
+          const ref = `refs/heads/${branch}`
+          const branchCheck = yield* git(["show-ref", "--verify", "--quiet", ref], { cwd: ctx.worktree })
+          if (branchCheck.code === 0) continue
+        }
 
-        return { name, branch, directory }
+        return { name, directory, ...(branch ? { branch } : {}) }
       }
       throw new NameGenerationFailedError({ message: "Failed to generate a unique worktree name" })
     })
 
-    const makeWorktreeInfo = Effect.fn("Worktree.makeWorktreeInfo")(function* (name?: string) {
+    const makeWorktreeInfo = Effect.fn("Worktree.makeWorktreeInfo")(function* (input?: {
+      name?: string
+      detached?: boolean
+    }) {
       const ctx = yield* InstanceState.context
       if (ctx.project.vcs !== "git") {
         throw new NotGitError({ message: "Worktrees are only supported for git projects" })
@@ -221,15 +208,17 @@ export const layer: Layer.Layer<
       const root = pathSvc.join(Global.Path.data, "worktree", ctx.project.id)
       yield* fs.makeDirectory(root, { recursive: true }).pipe(Effect.orDie)
 
-      const base = name ? slugify(name) : ""
-      return yield* candidate(root, base || undefined)
+      return yield* candidate({ root, name: input?.name ? slugify(input.name) : "", detached: input?.detached })
     })
 
     const setup = Effect.fnUntraced(function* (info: Info) {
       const ctx = yield* InstanceState.context
-      const created = yield* git(["worktree", "add", "--no-checkout", "-b", info.branch, info.directory], {
-        cwd: ctx.worktree,
-      })
+      const created = yield* git(
+        info.branch
+          ? ["worktree", "add", "--no-checkout", "-b", info.branch, info.directory]
+          : ["worktree", "add", "--no-checkout", "--detach", info.directory, "HEAD"],
+        { cwd: ctx.worktree },
+      )
       if (created.code !== 0) {
         throw new CreateFailedError({ message: created.stderr || created.text || "Failed to create git worktree" })
       }
@@ -280,7 +269,7 @@ export const layer: Layer.Layer<
         workspace: workspaceID,
         payload: {
           type: Event.Ready.type,
-          properties: { name: info.name, branch: info.branch },
+          properties: { name: info.name, ...(info.branch ? { branch: info.branch } : {}) },
         },
       })
 
@@ -296,7 +285,7 @@ export const layer: Layer.Layer<
     })
 
     const create = Effect.fn("Worktree.create")(function* (input?: CreateInput) {
-      const info = yield* makeWorktreeInfo(input?.name)
+      const info = yield* makeWorktreeInfo({ name: input?.name })
       yield* createFromInfo(info, input?.startCommand)
       return info
     })

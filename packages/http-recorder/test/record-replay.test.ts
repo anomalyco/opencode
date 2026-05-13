@@ -230,19 +230,10 @@ describe("http-recorder", () => {
     )
   })
 
-  test("default matcher dispatches multi-interaction cassettes by request shape", async () => {
-    await run(
-      Effect.gen(function* () {
-        expect(yield* post("https://example.test/echo", { step: 2 })).toBe('{"reply":"second"}')
-        expect(yield* post("https://example.test/echo", { step: 1 })).toBe('{"reply":"first"}')
-      }),
-    )
-  })
-
-  test("sequential dispatch returns recorded responses in order for identical requests", async () => {
+  test("replay returns recorded responses in order for identical requests", async () => {
     await runWith(
       "record-replay/retry",
-      { dispatch: "sequential" },
+      {},
       Effect.gen(function* () {
         expect(yield* post("https://example.test/poll", { id: "job_1" })).toBe('{"status":"pending"}')
         expect(yield* post("https://example.test/poll", { id: "job_1" })).toBe('{"status":"complete"}')
@@ -250,21 +241,8 @@ describe("http-recorder", () => {
     )
   })
 
-  test("default matcher returns the first match for identical requests", async () => {
-    await runWith(
-      "record-replay/retry",
-      {},
-      Effect.gen(function* () {
-        expect(yield* post("https://example.test/poll", { id: "job_1" })).toBe('{"status":"pending"}')
-        expect(yield* post("https://example.test/poll", { id: "job_1" })).toBe('{"status":"pending"}')
-      }),
-    )
-  })
-
-  test("sequential dispatch reports cursor exhaustion when more requests are made than recorded", async () => {
-    await runWith(
-      "record-replay/multi-step",
-      { dispatch: "sequential" },
+  test("replay reports cursor exhaustion when more requests are made than recorded", async () => {
+    await run(
       Effect.gen(function* () {
         yield* post("https://example.test/echo", { step: 1 })
         yield* post("https://example.test/echo", { step: 2 })
@@ -274,10 +252,8 @@ describe("http-recorder", () => {
     )
   })
 
-  test("sequential dispatch still validates each recorded request", async () => {
-    await runWith(
-      "record-replay/multi-step",
-      { dispatch: "sequential" },
+  test("replay validates each recorded request in order", async () => {
+    await run(
       Effect.gen(function* () {
         yield* post("https://example.test/echo", { step: 1 })
         const exit = yield* Effect.exit(post("https://example.test/echo", { step: 3 }))
@@ -331,14 +307,13 @@ describe("http-recorder", () => {
     }
   })
 
-  test("mismatch diagnostics show closest redacted request differences", async () => {
+  test("mismatch diagnostics show redacted request differences against the expected interaction", async () => {
     await run(
       Effect.gen(function* () {
         const exit = yield* Effect.exit(
           post("https://example.test/echo?api_key=secret-value", { step: 3, token: "sk-123456789012345678901234" }),
         )
         const message = failureText(exit)
-        expect(message).toContain("closest interaction: #1")
         expect(message).toContain("url:")
         expect(message).toContain("https://example.test/echo?api_key=%5BREDACTED%5D")
         expect(message).toContain("body:")

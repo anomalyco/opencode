@@ -4,8 +4,6 @@ import { Snapshot } from "../snapshot"
 import { Storage } from "@/storage/storage"
 import { SyncEvent } from "../sync"
 import * as Log from "@opencode-ai/core/util/log"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { withStatics } from "@opencode-ai/core/schema"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID, PartID } from "./schema"
@@ -18,7 +16,7 @@ export const RevertInput = Schema.Struct({
   sessionID: SessionID,
   messageID: MessageID,
   partID: Schema.optional(PartID),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type RevertInput = Schema.Schema.Type<typeof RevertInput>
 
 export interface Interface {
