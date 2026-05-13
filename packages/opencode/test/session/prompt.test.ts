@@ -180,7 +180,7 @@ function makeHttp() {
     Layer.provide(Reference.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
-    Layer.provide(RuntimeFlags.layer()),
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),
@@ -189,9 +189,14 @@ function makeHttp() {
   const proc = SessionProcessor.layer.pipe(
     Layer.provide(summary),
     Layer.provide(Image.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(deps),
   )
-  const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
+  const compact = SessionCompaction.layer.pipe(
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provideMerge(proc),
+    Layer.provideMerge(deps),
+  )
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionPrompt.layer.pipe(
@@ -206,6 +211,7 @@ function makeHttp() {
       Layer.provideMerge(trunc),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(SystemPrompt.defaultLayer),
+      Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
       Layer.provideMerge(deps),
     ),
   ).pipe(Layer.provide(summary))
@@ -1787,7 +1793,7 @@ it.instance(
 
       if (msg.info.role !== "user") throw new Error("expected user message")
 
-      const stored = MessageV2.get({
+      const stored = yield* MessageV2.get({
         sessionID: session.id,
         messageID: msg.info.id,
       })
@@ -1875,7 +1881,7 @@ it.instance(
         parts: yield* prompt.resolvePromptParts("Use @docs for context"),
       })
 
-      const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
       const synthetic = stored.parts.filter(
         (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
       )
@@ -1931,7 +1937,7 @@ it.instance(
         ],
       })
 
-      const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
       const synthetic = stored.parts.filter(
         (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true,
       )
@@ -1991,7 +1997,7 @@ it.instance(
         parts,
         noReply: true,
       })
-      const stored = MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
       const textParts = stored.parts.filter((part) => part.type === "text")
       const hasContent = textParts.some((part) => part.text.includes("special content"))
       expect(hasContent).toBe(true)

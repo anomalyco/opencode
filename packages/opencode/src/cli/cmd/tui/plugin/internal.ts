@@ -11,7 +11,7 @@ import Notifications from "../feature-plugins/system/notifications"
 import SessionV2Debug from "../feature-plugins/system/session-v2"
 import WhichKey from "../feature-plugins/system/which-key"
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import type { RuntimeFlags } from "@/effect/runtime-flags"
 
 export type InternalTuiPlugin = Omit<TuiPluginModule, "id"> & {
   id: string
@@ -19,17 +19,19 @@ export type InternalTuiPlugin = Omit<TuiPluginModule, "id"> & {
   enabled?: boolean
 }
 
-export const INTERNAL_TUI_PLUGINS: InternalTuiPlugin[] = [
-  HomeFooter,
-  HomeTips,
-  SidebarContext,
-  SidebarMcp,
-  SidebarLsp,
-  SidebarTodo,
-  SidebarFiles,
-  SidebarFooter,
-  Notifications,
-  PluginManager,
-  WhichKey,
-  ...(Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM ? [SessionV2Debug] : []),
-]
+export function internalTuiPlugins(flags: Pick<RuntimeFlags.Info, "experimentalEventSystem">): InternalTuiPlugin[] {
+  return [
+    HomeFooter,
+    HomeTips,
+    SidebarContext,
+    SidebarMcp,
+    SidebarLsp,
+    SidebarTodo,
+    SidebarFiles,
+    SidebarFooter,
+    Notifications,
+    PluginManager,
+    WhichKey,
+    ...(flags.experimentalEventSystem ? [SessionV2Debug] : []),
+  ]
+}
