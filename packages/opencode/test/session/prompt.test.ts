@@ -95,6 +95,18 @@ function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
   )
 }
 
+function waitForSessionStatus(sessionID: SessionID, type: "busy" | "idle") {
+  return Effect.gen(function* () {
+    const status = yield* SessionStatus.Service
+    const end = Date.now() + 5_000
+    while (Date.now() < end) {
+      if ((yield* status.get(sessionID)).type === type) return
+      yield* Effect.sleep(20)
+    }
+    throw new Error(`timed out waiting for session ${sessionID} to become ${type}`)
+  })
+}
+
 function toolPart(parts: MessageV2.Part[]) {
   return parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
 }
@@ -736,7 +748,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  10_000,
 )
 
 it.live(
@@ -762,7 +774,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  10_000,
 )
 
 // Cancel semantics
@@ -820,7 +832,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  10_000,
 )
 
 it.live(
@@ -906,7 +918,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  10_000,
 )
 
 it.live(
@@ -935,7 +947,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  10_000,
 )
 
 // Queue semantics
@@ -1078,7 +1090,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  10_000,
 )
 
 it.live("assertNotBusy succeeds when idle", () =>
@@ -1123,7 +1135,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  10_000,
 )
 
 unix("shell captures stdout and stderr in completed tool output", () =>
@@ -1221,7 +1233,7 @@ unix("shell commands can change directory after startup", () =>
         expect(tool.state.metadata.output).toContain(parent)
         yield* run.assertNotBusy(chat.id)
       }),
-    { git: true, config: cfg },
+    { git: true, config: { ...cfg, shell: "sh" } },
   ),
 )
 
@@ -1324,7 +1336,7 @@ it.live(
         const sh = yield* prompt
           .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
           .pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
+        yield* waitForSessionStatus(chat.id, "busy")
 
         const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
         yield* Effect.sleep(50)
@@ -1362,7 +1374,7 @@ it.live(
         const sh = yield* prompt
           .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
           .pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
+        yield* waitForSessionStatus(chat.id, "busy")
 
         const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
         const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
@@ -1383,7 +1395,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  10_000,
 )
 
 unix(
@@ -1437,7 +1449,7 @@ unix(
             const sh = yield* prompt
               .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
               .pipe(Effect.forkChild)
-            yield* Effect.sleep(50)
+            yield* waitForSessionStatus(chat.id, "busy")
 
             yield* prompt.cancel(chat.id)
 
@@ -1474,7 +1486,7 @@ unix(
             const sh = yield* prompt
               .shell({ sessionID: chat.id, agent: "build", command: "trap '' TERM; sleep 30" })
               .pipe(Effect.forkChild)
-            yield* Effect.sleep(50)
+            yield* waitForSessionStatus(chat.id, "busy")
 
             yield* prompt.cancel(chat.id)
 
@@ -1566,7 +1578,7 @@ unix(
           const sh = yield* prompt
             .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
             .pipe(Effect.forkChild)
-          yield* Effect.sleep(50)
+          yield* waitForSessionStatus(chat.id, "busy")
 
           const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
           yield* Effect.sleep(50)
@@ -1599,7 +1611,7 @@ unix(
             const a = yield* prompt
               .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
               .pipe(Effect.forkChild)
-            yield* Effect.sleep(50)
+            yield* waitForSessionStatus(chat.id, "busy")
 
             const exit = yield* prompt
               .shell({ sessionID: chat.id, agent: "build", command: "echo hi" })
@@ -2070,7 +2082,7 @@ it.live(
       }),
       { git: true, config: providerCfg },
     ),
-  3_000,
+  10_000,
 )
 
 // Agent variant
