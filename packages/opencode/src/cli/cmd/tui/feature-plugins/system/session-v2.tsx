@@ -438,9 +438,6 @@ function AssistantTool(props: { part: SessionMessageAssistantTool; sessionID: st
       <Match when={props.part.name === "webfetch"}>
         <WebFetch {...toolprops} />
       </Match>
-      <Match when={props.part.name === "codesearch"}>
-        <CodeSearch {...toolprops} />
-      </Match>
       <Match when={props.part.name === "websearch"}>
         <WebSearch {...toolprops} />
       </Match>
@@ -769,15 +766,6 @@ function WebFetch(props: ToolProps) {
   return (
     <InlineTool icon="%" pending="Fetching from the web..." complete={toolComplete(props.part)} part={props.part}>
       WebFetch {stringValue(props.input.url) ?? pendingInput(props.part)}
-    </InlineTool>
-  )
-}
-
-function CodeSearch(props: ToolProps) {
-  return (
-    <InlineTool icon="◇" pending="Searching code..." complete={toolComplete(props.part)} part={props.part}>
-      Exa Code Search "{stringValue(props.input.query) ?? pendingInput(props.part)}"{" "}
-      <Show when={numberValue(props.metadata.results)}>{(results) => <>({results()} results)</>}</Show>
     </InlineTool>
   )
 }

@@ -4,9 +4,10 @@ import { onMount } from "solid-js"
 import { ArgsProvider } from "../../../../src/cli/cmd/tui/context/args"
 import { ExitProvider } from "../../../../src/cli/cmd/tui/context/exit"
 import { KVProvider, useKV } from "../../../../src/cli/cmd/tui/context/kv"
-import { ProjectProvider } from "../../../../src/cli/cmd/tui/context/project"
+import { ProjectProvider, useProject } from "../../../../src/cli/cmd/tui/context/project"
 import { SDKProvider, type EventSource } from "../../../../src/cli/cmd/tui/context/sdk"
 import { SyncProvider, useSync } from "../../../../src/cli/cmd/tui/context/sync"
+import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 
 export const worktree = "/tmp/opencode"
 export const directory = `${worktree}/packages/opencode`
@@ -28,6 +29,25 @@ export function json(data: unknown, init?: ResponseInit) {
 
 export function eventSource(): EventSource {
   return { subscribe: async () => () => {} }
+}
+
+export function createEventSource() {
+  let fn: ((event: GlobalEvent) => void) | undefined
+
+  return {
+    source: {
+      subscribe: async (handler: (event: GlobalEvent) => void) => {
+        fn = handler
+        return () => {
+          if (fn === handler) fn = undefined
+        }
+      },
+    } satisfies EventSource,
+    emit(event: GlobalEvent) {
+      if (!fn) throw new Error("event source not ready")
+      fn(event)
+    },
+  }
 }
 
 type FetchHandler = (url: URL) => Response | Promise<Response> | undefined
@@ -77,11 +97,13 @@ export function createFetch(override?: FetchHandler) {
   return { fetch, session }
 }
 
-type Ctx = { kv: ReturnType<typeof useKV>; sync: ReturnType<typeof useSync> }
+type Ctx = { kv: ReturnType<typeof useKV>; project: ReturnType<typeof useProject>; sync: ReturnType<typeof useSync> }
 
 export async function mount(override?: FetchHandler) {
   const calls = createFetch(override)
+  const events = createEventSource()
   let sync!: ReturnType<typeof useSync>
+  let project!: ReturnType<typeof useProject>
   let kv!: ReturnType<typeof useKV>
   let done!: () => void
   const ready = new Promise<void>((resolve) => {
@@ -89,9 +111,10 @@ export async function mount(override?: FetchHandler) {
   })
 
   function Probe() {
-    const ctx: Ctx = { kv: useKV(), sync: useSync() }
+    const ctx: Ctx = { kv: useKV(), project: useProject(), sync: useSync() }
     onMount(() => {
       sync = ctx.sync
+      project = ctx.project
       kv = ctx.kv
       done()
     })
@@ -102,7 +125,7 @@ export async function mount(override?: FetchHandler) {
     <ArgsProvider>
       <ExitProvider>
         <KVProvider>
-          <SDKProvider url="http://test" directory={directory} fetch={calls.fetch} events={eventSource()}>
+          <SDKProvider url="http://test" directory={directory} fetch={calls.fetch} events={events.source}>
             <ProjectProvider>
               <SyncProvider>
                 <Probe />
@@ -116,5 +139,5 @@ export async function mount(override?: FetchHandler) {
 
   await ready
   await wait(() => sync.status === "complete")
-  return { app, kv, sync, session: calls.session }
+  return { app, emit: events.emit, kv, project, sync, session: calls.session }
 }

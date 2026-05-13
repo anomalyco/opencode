@@ -27,7 +27,21 @@ type AskInput = {
   metadata: { [key: string]: any }
 }
 
-export type ToolResult = string | { output: string; metadata?: { [key: string]: any } }
+export type ToolAttachment = {
+  type: "file"
+  mime: string
+  url: string
+  filename?: string
+}
+
+export type ToolResult =
+  | string
+  | {
+      title?: string
+      output: string
+      metadata?: { [key: string]: any }
+      attachments?: ToolAttachment[]
+    }
 
 export function tool<Args extends z.ZodRawShape>(input: {
   description: string
