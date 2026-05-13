@@ -35,7 +35,7 @@ jobs:
         if: steps.team-check.outputs.is_team != 'true'
         run: bun install
 
-      - name: Install opencode
+      - name: Install octopus
         if: steps.team-check.outputs.is_team != 'true'
         run: curl -fsSL https://opencode.ai/install | bash
 

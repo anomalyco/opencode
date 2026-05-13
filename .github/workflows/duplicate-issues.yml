@@ -19,7 +19,7 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install opencode
+      - name: Install octopus
         run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Check duplicates and compliance
@@ -131,7 +131,7 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install opencode
+      - name: Install octopus
         run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Recheck compliance

@@ -31,7 +31,7 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install opencode
+      - name: Install octopus
         run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Get PR details
