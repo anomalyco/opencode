@@ -48,8 +48,10 @@ const workspaceLayer = Workspace.defaultLayer.pipe(
 const it = testEffect(Layer.mergeAll(pluginLayer, workspaceLayer, CrossSpawnSpawner.defaultLayer))
 
 const experimental = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+const experimentalEnv = process.env.OPENCODE_EXPERIMENTAL_WORKSPACES
 
 Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+process.env.OPENCODE_EXPERIMENTAL_WORKSPACES = "true"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -57,6 +59,8 @@ afterEach(async () => {
 
 afterAll(() => {
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = experimental
+  if (experimentalEnv === undefined) delete process.env.OPENCODE_EXPERIMENTAL_WORKSPACES
+  else process.env.OPENCODE_EXPERIMENTAL_WORKSPACES = experimentalEnv
 })
 
 describe("plugin.workspace", () => {

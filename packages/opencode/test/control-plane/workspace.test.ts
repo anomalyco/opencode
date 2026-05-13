@@ -6,7 +6,7 @@ import path from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
 import { NodeHttpServer } from "@effect/platform-node"
 import { Effect, Layer, Schema } from "effect"
-import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { eq } from "drizzle-orm"
 import * as Log from "@opencode-ai/core/util/log"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -33,8 +33,24 @@ import * as Workspace from "../../src/control-plane/workspace"
 import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceBootstrap } from "@/project/bootstrap"
+import { Auth } from "@/auth"
+import { SessionPrompt } from "@/session/prompt"
+import { Project } from "@/project/project"
+import { Vcs } from "@/project/vcs"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 void Log.init({ print: false })
+
+const originalWorkspacesFlag = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+const originalEnv = {
+  OPENCODE_AUTH_CONTENT: process.env.OPENCODE_AUTH_CONTENT,
+  OPENCODE_EXPERIMENTAL_WORKSPACES: process.env.OPENCODE_EXPERIMENTAL_WORKSPACES,
+  OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
+  OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
+}
+
+process.env.OPENCODE_EXPERIMENTAL_WORKSPACES = "true"
 
 const testServerLayer = Layer.mergeAll(
   NodeHttpServer.layer(Http.createServer, { host: "127.0.0.1", port: 0 }),
@@ -42,14 +58,6 @@ const testServerLayer = Layer.mergeAll(
   SessionNs.defaultLayer,
 )
 const it = testEffect(testServerLayer)
-
-const originalWorkspacesFlag = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
-const originalEnv = {
-  OPENCODE_AUTH_CONTENT: process.env.OPENCODE_AUTH_CONTENT,
-  OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
-  OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
-  OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
-}
 
 type RecordedCreate = {
   info: WorkspaceInfo
@@ -94,6 +102,7 @@ beforeEach(() => {
   Database.close()
   Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
   restoreEnv()
+  process.env.OPENCODE_EXPERIMENTAL_WORKSPACES = "true"
 })
 
 afterEach(async () => {
@@ -141,6 +150,24 @@ const isWorkspaceSyncing = (id: WorkspaceID) =>
 const startWorkspaceSyncing = (projectID: ProjectID) => {
   void runWorkspace(Workspace.Service.use((workspace) => workspace.startWorkspaceSyncing(projectID)))
 }
+const startWorkspaceSyncingWithFlag = (projectID: ProjectID, experimentalWorkspaces: boolean) =>
+  Effect.runPromise(
+    Workspace.Service.use((workspace) => workspace.startWorkspaceSyncing(projectID)).pipe(
+      Effect.provide(
+        Workspace.layer.pipe(
+          Layer.provide(Auth.defaultLayer),
+          Layer.provide(SessionNs.defaultLayer),
+          Layer.provide(SyncEvent.defaultLayer),
+          Layer.provide(SessionPrompt.defaultLayer),
+          Layer.provide(Project.defaultLayer),
+          Layer.provide(Vcs.defaultLayer),
+          Layer.provide(FetchHttpClient.layer),
+          Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces })),
+          Layer.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))),
+        ),
+      ),
+    ),
+  )
 const waitForWorkspaceSync = (workspaceID: WorkspaceID, state: Record<string, number>, signal?: AbortSignal) =>
   runWorkspace(Workspace.Service.use((workspace) => workspace.waitForSync(workspaceID, state, signal)))
 
@@ -980,7 +1007,6 @@ describe("workspace CRUD", () => {
 describe("workspace sync state", () => {
   test("startWorkspaceSyncing is disabled by the experimental workspace flag", async () => {
     await withInstance(async (dir) => {
-      Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = false
       const type = unique("flag-disabled")
       const info = workspaceInfo(Instance.project.id, type)
       const session = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
@@ -988,7 +1014,7 @@ describe("workspace sync state", () => {
       insertWorkspace(info)
       registerAdapter(Instance.project.id, type, localAdapter(path.join(dir, "flag-disabled")).adapter)
 
-      startWorkspaceSyncing(Instance.project.id)
+      await startWorkspaceSyncingWithFlag(Instance.project.id, false)
       await delay(25)
 
       expect((await workspaceStatus()).find((item) => item.workspaceID === info.id)?.status).toBeUndefined()

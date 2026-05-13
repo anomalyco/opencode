@@ -10,8 +10,8 @@ import { GlobalBus } from "@/bus/global"
 import { Auth } from "@/auth"
 import { SyncEvent } from "@/sync"
 import { EventSequenceTable, EventTable } from "@/sync/event.sql"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Log from "@opencode-ai/core/util/log"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Filesystem } from "@/util/filesystem"
 import { ProjectID } from "@/project/schema"
 import { Slug } from "@opencode-ai/core/util/slug"
@@ -175,6 +175,7 @@ export const layer = Layer.effect(
     const http = yield* HttpClient.HttpClient
     const sync = yield* SyncEvent.Service
     const vcs = yield* Vcs.Service
+    const flags = yield* RuntimeFlags.Service
     const connections = new Map<WorkspaceID, ConnectionStatus>()
     const syncFibers = yield* FiberMap.make<WorkspaceID, void, SyncLoopError>()
 
@@ -482,7 +483,7 @@ export const layer = Layer.effect(
     })
 
     const startSync = Effect.fn("Workspace.startSync")(function* (space: Info) {
-      if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) return
+      if (!flags.experimentalWorkspaces) return
 
       const adapter = getAdapter(space.projectID, space.type)
       const target = yield* EffectBridge.fromPromise(() => adapter.target(space)).pipe(
@@ -1040,6 +1041,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Project.defaultLayer),
   Layer.provide(Vcs.defaultLayer),
   Layer.provide(FetchHttpClient.layer),
+  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 const TIMEOUT = 5000
