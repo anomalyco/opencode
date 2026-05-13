@@ -398,15 +398,6 @@ export const layer = Layer.effect(
             synthetic: true,
           })
         }
-
-        // if (input.agent.name === "ask") {
-        //   userMessage.parts.push({
-        //     info: { role: "system", time: Date.now() },
-        //     content: PROMPT_ASK,
-        //   })
-        //   return input.messages
-        // }
-
         if (input.agent.name === "plan") {
           userMessage.parts.push({
             id: PartID.ascending(),
