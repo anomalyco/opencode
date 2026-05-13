@@ -51,27 +51,28 @@ function createSessionPreview() {
     })
   })
 
-  const previewState = createMemo(() => {
+  const previewSrc = createMemo(() => {
     if (!previewReady()) return undefined
     const url = previewUrl()
     if (!url) return undefined
-    // Track reloadCount so session.idle bump invalidates this memo and <Show keyed> remounts the iframe.
-    void reloadCount()
-    return { url }
+    const count = reloadCount()
+    // Encode reloadCount as a query param so the iframe's src changes and the
+    // browser re-navigates the existing iframe — no DOM remount on session.idle.
+    return count === 0 ? url : `${url}?reloadCount=${count}`
   })
 
-  return { previewState }
+  return { previewSrc }
 }
 
 export function SessionPreviewPanel() {
-  const { previewState } = createSessionPreview()
+  const { previewSrc } = createSessionPreview()
 
   return (
-    <Show when={previewState()} keyed>
-      {(state) => (
+    <Show when={previewSrc()}>
+      {(src) => (
         <div class="flex-1 min-w-0 h-full bg-background-base border-l border-border-weaker-base">
           <iframe
-            src={state.url}
+            src={src()}
             class="w-full h-full border-0"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
           />
