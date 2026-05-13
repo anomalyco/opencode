@@ -4,7 +4,7 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { testEffect } from "../lib/effect"
+import { testEffect } from "./lib/effect"
 
 const it = testEffect(Catalog.layer.pipe(Layer.provideMerge(PluginV2.defaultLayer)))
 

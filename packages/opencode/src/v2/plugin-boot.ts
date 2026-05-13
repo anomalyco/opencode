@@ -8,7 +8,7 @@ import { PluginV2 } from "@opencode-ai/core/plugin"
 import { AuthPlugin } from "@opencode-ai/core/plugin/auth"
 import { EnvPlugin } from "@opencode-ai/core/plugin/env"
 import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
-import { ModelsDevPlugin } from "./plugin/models-dev"
+import { ModelsDevPlugin } from "@opencode-ai/core/plugin/models-dev"
 
 type Plugin = {
   id: PluginV2.ID

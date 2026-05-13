@@ -5,7 +5,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { AuthPlugin } from "@opencode-ai/core/plugin/auth"
 import { CloudflareWorkersAIPlugin } from "@opencode-ai/core/plugin/provider/cloudflare-workers-ai"
-import { testEffect } from "../../lib/effect"
+import { testEffect } from "../lib/effect"
 import { fakeSelectorSdk, it, model, npmLayer, provider, withEnv } from "./provider-helper"
 
 const itWithAuth = testEffect(Layer.mergeAll(PluginV2.defaultLayer, AuthV2.defaultLayer, npmLayer))

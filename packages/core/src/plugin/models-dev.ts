@@ -1,9 +1,9 @@
 import { DateTime, Effect } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelsDev } from "@/provider/models"
-import { PluginV2 } from "@opencode-ai/core/plugin"
+import { Catalog } from "../catalog"
+import { ModelV2 } from "../model"
+import { ModelsDev } from "../models"
+import { PluginV2 } from "../plugin"
+import { ProviderV2 } from "../provider"
 
 function released(date: string) {
   const time = Date.parse(date)

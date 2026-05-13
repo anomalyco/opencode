@@ -4,8 +4,8 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
-import { ModelsDev } from "../../src/provider/models"
-import { it } from "../lib/effect"
+import { ModelsDev } from "@opencode-ai/core/models"
+import { it } from "./lib/effect"
 import { rm, writeFile, utimes, mkdir } from "fs/promises"
 import path from "path"
 
@@ -133,14 +133,14 @@ describe("ModelsDev Service", () => {
     }),
   )
 
-  it.live("get() returns {} when disk empty and fetch disabled", () =>
+  it.live("get() returns bundled snapshot when disk empty and fetch disabled", () =>
     Effect.gen(function* () {
       const state = yield* Ref.make(initialState)
       const result = yield* provided(
         state,
         ModelsDev.Service.use((s) => s.get()),
       )
-      expect(result).toEqual({})
+      expect(Object.keys(result).length).toBeGreaterThan(0)
       const final = yield* Ref.get(state)
       expect(final.calls).toEqual([])
     }),
