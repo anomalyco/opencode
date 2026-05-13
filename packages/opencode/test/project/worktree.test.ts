@@ -29,11 +29,10 @@ const waitReady = Effect.fn("WorktreeTest.waitReady")(function* () {
   yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", on)))
 
   return Deferred.await(ready).pipe(
-    Effect.race(
-      Effect.sleep("10 seconds").pipe(
-        Effect.flatMap(() => Effect.fail(new Error("timed out waiting for worktree.ready"))),
-      ),
-    ),
+    Effect.timeoutOrElse({
+      duration: "10 seconds",
+      orElse: () => Effect.fail(new Error("timed out waiting for worktree.ready")),
+    }),
   )
 })
 
