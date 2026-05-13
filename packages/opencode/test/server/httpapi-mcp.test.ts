@@ -23,13 +23,19 @@ function app() {
   return Server.Default().app
 }
 type TestApp = ReturnType<typeof app>
+type TestHandler = ReturnType<typeof ExperimentalHttpApiServer.webHandler>
 
-const request = Effect.fnUntraced(function* (route: string, directory: string, init?: RequestInit) {
+const handlerScoped = Effect.acquireRelease(
+  Effect.sync(() => ExperimentalHttpApiServer.webHandler()),
+  (handler) => Effect.promise(() => handler.dispose()).pipe(Effect.ignore),
+)
+
+const request = Effect.fnUntraced(function* (handler: TestHandler, route: string, directory: string, init?: RequestInit) {
   const headers = new Headers(init?.headers)
   headers.set("x-opencode-directory", directory)
   return yield* Effect.promise(() =>
     Promise.resolve(
-      ExperimentalHttpApiServer.webHandler().handler(
+      handler.handler(
         new Request(`http://localhost${route}`, {
           ...init,
           headers,
@@ -58,7 +64,8 @@ describe("mcp HttpApi", () => {
     () =>
       Effect.gen(function* () {
         const tmp = yield* TestInstance
-        const response = yield* request(McpPaths.status, tmp.directory)
+        const handler = yield* handlerScoped
+        const response = yield* request(handler, McpPaths.status, tmp.directory)
 
         expect(response.status).toBe(200)
         expect(yield* json(response)).toEqual({ demo: { status: "disabled" } })
@@ -81,7 +88,8 @@ describe("mcp HttpApi", () => {
     () =>
       Effect.gen(function* () {
         const tmp = yield* TestInstance
-        const added = yield* request(McpPaths.status, tmp.directory, {
+        const handler = yield* handlerScoped
+        const added = yield* request(handler, McpPaths.status, tmp.directory, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -96,11 +104,11 @@ describe("mcp HttpApi", () => {
         expect(added.status).toBe(200)
         expect(yield* json(added)).toMatchObject({ added: { status: "disabled" } })
 
-        const connected = yield* request("/mcp/demo/connect", tmp.directory, { method: "POST" })
+        const connected = yield* request(handler, "/mcp/demo/connect", tmp.directory, { method: "POST" })
         expect(connected.status).toBe(200)
         expect(yield* json(connected)).toBe(true)
 
-        const disconnected = yield* request("/mcp/demo/disconnect", tmp.directory, { method: "POST" })
+        const disconnected = yield* request(handler, "/mcp/demo/disconnect", tmp.directory, { method: "POST" })
         expect(disconnected.status).toBe(200)
         expect(yield* json(disconnected)).toBe(true)
       }),
@@ -122,13 +130,14 @@ describe("mcp HttpApi", () => {
     () =>
       Effect.gen(function* () {
         const tmp = yield* TestInstance
-        const start = yield* request("/mcp/demo/auth", tmp.directory, { method: "POST" })
+        const handler = yield* handlerScoped
+        const start = yield* request(handler, "/mcp/demo/auth", tmp.directory, { method: "POST" })
         expect(start.status).toBe(400)
 
-        const authenticate = yield* request("/mcp/demo/auth/authenticate", tmp.directory, { method: "POST" })
+        const authenticate = yield* request(handler, "/mcp/demo/auth/authenticate", tmp.directory, { method: "POST" })
         expect(authenticate.status).toBe(400)
 
-        const removed = yield* request("/mcp/demo/auth", tmp.directory, { method: "DELETE" })
+        const removed = yield* request(handler, "/mcp/demo/auth", tmp.directory, { method: "DELETE" })
         expect(removed.status).toBe(200)
         expect(yield* json(removed)).toEqual({ success: true })
       }),
