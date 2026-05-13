@@ -4,12 +4,27 @@ import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { ModelID, ProviderID } from "../../src/provider/schema"
+import { NotFoundError } from "@/storage/storage"
 import * as Log from "@opencode-ai/core/util/log"
 import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 
 const it = testEffect(SessionNs.defaultLayer)
+
+function expectNotFound(fn: () => unknown, message: string) {
+  let thrown: unknown
+  try {
+    fn()
+  } catch (error) {
+    thrown = error
+  }
+  expect(thrown).toBeInstanceOf(NotFoundError)
+  if (thrown instanceof NotFoundError) {
+    expect(thrown._tag).toBe("NotFoundError")
+    expect(thrown.message).toBe(message)
+  }
+}
 
 const withSession = <A, E, R>(
   fn: (input: { session: SessionNs.Interface; sessionID: SessionID }) => Effect.Effect<A, E, R>,
@@ -186,7 +201,7 @@ describe("MessageV2.page", () => {
   it.instance("throws NotFoundError for non-existent session", () =>
     Effect.gen(function* () {
       const fake = "non-existent-session" as SessionID
-      expect(() => MessageV2.page({ sessionID: fake, limit: 10 })).toThrow("NotFoundError")
+      expectNotFound(() => MessageV2.page({ sessionID: fake, limit: 10 }), `Session not found: ${fake}`)
     }),
   )
 
@@ -471,7 +486,8 @@ describe("MessageV2.get", () => {
   it.instance("throws NotFoundError for non-existent message", () =>
     withSession(({ sessionID }) =>
       Effect.gen(function* () {
-        expect(() => MessageV2.get({ sessionID, messageID: MessageID.ascending() })).toThrow("NotFoundError")
+        const messageID = MessageID.ascending()
+        expectNotFound(() => MessageV2.get({ sessionID, messageID }), `Message not found: ${messageID}`)
       }),
     ),
   )
@@ -483,7 +499,7 @@ describe("MessageV2.get", () => {
       const b = yield* session.create({})
       const [id] = yield* fill(a.id, 1)
 
-      expect(() => MessageV2.get({ sessionID: b.id, messageID: id })).toThrow("NotFoundError")
+      expectNotFound(() => MessageV2.get({ sessionID: b.id, messageID: id }), `Message not found: ${id}`)
       const result = MessageV2.get({ sessionID: a.id, messageID: id })
       expect(result.info.id).toBe(id)
 
