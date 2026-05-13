@@ -1,8 +1,9 @@
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
-import { Show, createEffect, onMount, type JSX } from "solid-js"
+import { Show, createEffect, createSignal, onMount, type JSX } from "solid-js"
 import { Spinner } from "../component/spinner"
+import { useBindings } from "../keymap"
 
 export type DialogPromptProps = {
   title: string
@@ -18,7 +19,27 @@ export type DialogPromptProps = {
 export function DialogPrompt(props: DialogPromptProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const [textareaTarget, setTextareaTarget] = createSignal<TextareaRenderable>()
   let textarea: TextareaRenderable
+
+  function confirm() {
+    if (props.busy) return
+    props.onConfirm?.(textarea.plainText)
+  }
+
+  useBindings(() => ({
+    target: textareaTarget,
+    enabled: textareaTarget() !== undefined && !props.busy,
+    priority: 10,
+    bindings: [
+      {
+        key: "return",
+        desc: "Submit dialog prompt",
+        group: "Dialog",
+        cmd: confirm,
+      },
+    ],
+  }))
 
   onMount(() => {
     dialog.setSize("medium")
@@ -59,13 +80,11 @@ export function DialogPrompt(props: DialogPromptProps) {
       <box gap={1}>
         {props.description}
         <textarea
-          onSubmit={() => {
-            if (props.busy) return
-            props.onConfirm?.(textarea.plainText)
-          }}
+          onSubmit={() => confirm()}
           height={3}
           ref={(val: TextareaRenderable) => {
             textarea = val
+            setTextareaTarget(val)
           }}
           initialValue={props.value}
           placeholder={props.placeholder ?? "Enter text"}
