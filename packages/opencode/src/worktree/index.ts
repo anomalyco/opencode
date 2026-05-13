@@ -1,4 +1,3 @@
-import { NamedError } from "@opencode-ai/core/util/error"
 import { Global } from "@opencode-ai/core/global"
 import { InstanceLayer } from "@/project/instance-layer"
 import { InstanceStore } from "@/project/instance-store"
@@ -64,33 +63,48 @@ export const ResetInput = Schema.Struct({
 }).annotate({ identifier: "WorktreeResetInput" })
 export type ResetInput = Schema.Schema.Type<typeof ResetInput>
 
-export const NotGitError = NamedError.create("WorktreeNotGitError", {
+export class NotGitError extends Schema.TaggedErrorClass<NotGitError>()("WorktreeNotGitError", {
   message: Schema.String,
-})
+}) {}
 
-export const NameGenerationFailedError = NamedError.create("WorktreeNameGenerationFailedError", {
-  message: Schema.String,
-})
+export class NameGenerationFailedError extends Schema.TaggedErrorClass<NameGenerationFailedError>()(
+  "WorktreeNameGenerationFailedError",
+  {
+    message: Schema.String,
+  },
+) {}
 
-export const CreateFailedError = NamedError.create("WorktreeCreateFailedError", {
+export class CreateFailedError extends Schema.TaggedErrorClass<CreateFailedError>()("WorktreeCreateFailedError", {
   message: Schema.String,
-})
+}) {}
 
-export const StartCommandFailedError = NamedError.create("WorktreeStartCommandFailedError", {
-  message: Schema.String,
-})
+export class StartCommandFailedError extends Schema.TaggedErrorClass<StartCommandFailedError>()(
+  "WorktreeStartCommandFailedError",
+  {
+    message: Schema.String,
+  },
+) {}
 
-export const RemoveFailedError = NamedError.create("WorktreeRemoveFailedError", {
+export class RemoveFailedError extends Schema.TaggedErrorClass<RemoveFailedError>()("WorktreeRemoveFailedError", {
   message: Schema.String,
-})
+}) {}
 
-export const ResetFailedError = NamedError.create("WorktreeResetFailedError", {
+export class ResetFailedError extends Schema.TaggedErrorClass<ResetFailedError>()("WorktreeResetFailedError", {
   message: Schema.String,
-})
+}) {}
 
-export const ListFailedError = NamedError.create("WorktreeListFailedError", {
+export class ListFailedError extends Schema.TaggedErrorClass<ListFailedError>()("WorktreeListFailedError", {
   message: Schema.String,
-})
+}) {}
+
+export type Error =
+  | NotGitError
+  | NameGenerationFailedError
+  | CreateFailedError
+  | StartCommandFailedError
+  | RemoveFailedError
+  | ResetFailedError
+  | ListFailedError
 
 function slugify(input: string) {
   return input
@@ -121,12 +135,12 @@ function failedRemoves(...chunks: string[]) {
 // ---------------------------------------------------------------------------
 
 export interface Interface {
-  readonly makeWorktreeInfo: (options?: { name?: string; detached?: boolean }) => Effect.Effect<Info>
-  readonly createFromInfo: (info: Info, startCommand?: string) => Effect.Effect<void>
-  readonly create: (input?: CreateInput) => Effect.Effect<Info>
-  readonly list: () => Effect.Effect<(Omit<Info, "branch"> & { branch?: string })[]>
-  readonly remove: (input: RemoveInput) => Effect.Effect<boolean>
-  readonly reset: (input: ResetInput) => Effect.Effect<boolean>
+  readonly makeWorktreeInfo: (options?: { name?: string; detached?: boolean }) => Effect.Effect<Info, Error>
+  readonly createFromInfo: (info: Info, startCommand?: string) => Effect.Effect<void, Error>
+  readonly create: (input?: CreateInput) => Effect.Effect<Info, Error>
+  readonly list: () => Effect.Effect<(Omit<Info, "branch"> & { branch?: string })[], Error>
+  readonly remove: (input: RemoveInput) => Effect.Effect<boolean, Error>
+  readonly reset: (input: ResetInput) => Effect.Effect<boolean, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Worktree") {}
@@ -193,7 +207,7 @@ export const layer: Layer.Layer<
 
         return { name, directory, ...(branch ? { branch } : {}) }
       }
-      throw new NameGenerationFailedError({ message: "Failed to generate a unique worktree name" })
+      return yield* new NameGenerationFailedError({ message: "Failed to generate a unique worktree name" })
     })
 
     const makeWorktreeInfo = Effect.fn("Worktree.makeWorktreeInfo")(function* (input?: {
@@ -202,7 +216,7 @@ export const layer: Layer.Layer<
     }) {
       const ctx = yield* InstanceState.context
       if (ctx.project.vcs !== "git") {
-        throw new NotGitError({ message: "Worktrees are only supported for git projects" })
+        return yield* new NotGitError({ message: "Worktrees are only supported for git projects" })
       }
 
       const root = pathSvc.join(Global.Path.data, "worktree", ctx.project.id)
@@ -220,7 +234,7 @@ export const layer: Layer.Layer<
         { cwd: ctx.worktree },
       )
       if (created.code !== 0) {
-        throw new CreateFailedError({ message: created.stderr || created.text || "Failed to create git worktree" })
+        return yield* new CreateFailedError({ message: created.stderr || created.text || "Failed to create git worktree" })
       }
 
       yield* project.addSandbox(ctx.project.id, info.directory).pipe(Effect.catch(() => Effect.void))
@@ -336,7 +350,7 @@ export const layer: Layer.Layer<
 
       const result = yield* git(["worktree", "list", "--porcelain"], { cwd: ctx.worktree })
       if (result.code !== 0) {
-        throw new ListFailedError({ message: result.stderr || result.text || "Failed to read git worktrees" })
+        return yield* new ListFailedError({ message: result.stderr || result.text || "Failed to read git worktrees" })
       }
 
       const primary = yield* canonical(ctx.worktree)
@@ -364,27 +378,27 @@ export const layer: Layer.Layer<
     }
 
     function cleanDirectory(target: string) {
-      return Effect.promise(() =>
-        import("fs/promises")
-          .then((fsp) => fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
-          .catch((error) => {
-            const message = errorMessage(error)
-            throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
-          }),
-      )
+      return Effect.tryPromise({
+        try: () =>
+          import("fs/promises").then((fsp) =>
+            fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
+          ),
+        catch: (error) =>
+          new RemoveFailedError({ message: errorMessage(error) || "Failed to remove git worktree directory" }),
+      })
     }
 
     const remove = Effect.fn("Worktree.remove")(function* (input: RemoveInput) {
       const ctx = yield* InstanceState.context
       if (ctx.project.vcs !== "git") {
-        throw new NotGitError({ message: "Worktrees are only supported for git projects" })
+        return yield* new NotGitError({ message: "Worktrees are only supported for git projects" })
       }
 
       const directory = yield* canonical(input.directory)
 
       const list = yield* git(["worktree", "list", "--porcelain"], { cwd: ctx.worktree })
       if (list.code !== 0) {
-        throw new RemoveFailedError({ message: list.stderr || list.text || "Failed to read git worktrees" })
+        return yield* new RemoveFailedError({ message: list.stderr || list.text || "Failed to read git worktrees" })
       }
 
       const entries = parseWorktreeList(list.text)
@@ -404,14 +418,14 @@ export const layer: Layer.Layer<
       if (removed.code !== 0) {
         const next = yield* git(["worktree", "list", "--porcelain"], { cwd: ctx.worktree })
         if (next.code !== 0) {
-          throw new RemoveFailedError({
+          return yield* new RemoveFailedError({
             message: removed.stderr || removed.text || next.stderr || next.text || "Failed to remove git worktree",
           })
         }
 
         const stale = yield* locateWorktree(parseWorktreeList(next.text), directory)
         if (stale?.path) {
-          throw new RemoveFailedError({ message: removed.stderr || removed.text || "Failed to remove git worktree" })
+          return yield* new RemoveFailedError({ message: removed.stderr || removed.text || "Failed to remove git worktree" })
         }
       }
 
@@ -421,7 +435,7 @@ export const layer: Layer.Layer<
       if (branch) {
         const deleted = yield* git(["branch", "-D", branch], { cwd: ctx.worktree })
         if (deleted.code !== 0) {
-          throw new RemoveFailedError({
+          return yield* new RemoveFailedError({
             message: deleted.stderr || deleted.text || "Failed to delete worktree branch",
           })
         }
@@ -436,7 +450,7 @@ export const layer: Layer.Layer<
       error: (r: GitResult) => Error,
     ) {
       const result = yield* git(args, opts)
-      if (result.code !== 0) throw error(result)
+      if (result.code !== 0) return yield* error(result)
       return result
     })
 
@@ -511,30 +525,30 @@ export const layer: Layer.Layer<
     const reset = Effect.fn("Worktree.reset")(function* (input: ResetInput) {
       const ctx = yield* InstanceState.context
       if (ctx.project.vcs !== "git") {
-        throw new NotGitError({ message: "Worktrees are only supported for git projects" })
+        return yield* new NotGitError({ message: "Worktrees are only supported for git projects" })
       }
 
       const directory = yield* canonical(input.directory)
       const primary = yield* canonical(ctx.worktree)
       if (directory === primary) {
-        throw new ResetFailedError({ message: "Cannot reset the primary workspace" })
+        return yield* new ResetFailedError({ message: "Cannot reset the primary workspace" })
       }
 
       const list = yield* git(["worktree", "list", "--porcelain"], { cwd: ctx.worktree })
       if (list.code !== 0) {
-        throw new ResetFailedError({ message: list.stderr || list.text || "Failed to read git worktrees" })
+        return yield* new ResetFailedError({ message: list.stderr || list.text || "Failed to read git worktrees" })
       }
 
       const entry = yield* locateWorktree(parseWorktreeList(list.text), directory)
       if (!entry?.path) {
-        throw new ResetFailedError({ message: "Worktree not found" })
+        return yield* new ResetFailedError({ message: "Worktree not found" })
       }
 
       const worktreePath = entry.path
 
       const base = yield* gitSvc.defaultBranch(ctx.worktree)
       if (!base) {
-        throw new ResetFailedError({ message: "Default branch not found" })
+        return yield* new ResetFailedError({ message: "Default branch not found" })
       }
 
       const sep = base.ref.indexOf("/")
@@ -556,7 +570,7 @@ export const layer: Layer.Layer<
 
       const cleanResult = yield* sweep(worktreePath)
       if (cleanResult.code !== 0) {
-        throw new ResetFailedError({ message: cleanResult.stderr || cleanResult.text || "Failed to clean worktree" })
+        return yield* new ResetFailedError({ message: cleanResult.stderr || cleanResult.text || "Failed to clean worktree" })
       }
 
       yield* gitExpect(
@@ -579,11 +593,11 @@ export const layer: Layer.Layer<
 
       const status = yield* git(["-c", "core.fsmonitor=false", "status", "--porcelain=v1"], { cwd: worktreePath })
       if (status.code !== 0) {
-        throw new ResetFailedError({ message: status.stderr || status.text || "Failed to read git status" })
+        return yield* new ResetFailedError({ message: status.stderr || status.text || "Failed to read git status" })
       }
 
       if (status.text.trim()) {
-        throw new ResetFailedError({ message: `Worktree reset left local changes:\n${status.text.trim()}` })
+        return yield* new ResetFailedError({ message: `Worktree reset left local changes:\n${status.text.trim()}` })
       }
 
       yield* runStartScripts(worktreePath, { projectID: ctx.project.id }).pipe(

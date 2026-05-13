@@ -135,13 +135,17 @@ describe("Worktree", () => {
       { git: true },
     )
 
-    it.instance("throws NotGitError for non-git directories", () =>
+    it.instance("fails with NotGitError for non-git directories", () =>
       Effect.gen(function* () {
         const svc = yield* Worktree.Service
         const exit = yield* Effect.exit(svc.makeWorktreeInfo())
 
         expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Worktree.NotGitError)
+        if (Exit.isFailure(exit)) {
+          const error = Cause.squash(exit.cause)
+          expect(error).toBeInstanceOf(Worktree.NotGitError)
+          if (error instanceof Worktree.NotGitError) expect(error._tag).toBe("WorktreeNotGitError")
+        }
       }),
     )
 
@@ -286,14 +290,18 @@ describe("Worktree", () => {
       { git: true },
     )
 
-    it.instance("throws NotGitError for non-git directories", () =>
+    it.instance("fails with NotGitError for non-git directories", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
         const svc = yield* Worktree.Service
         const exit = yield* Effect.exit(svc.remove({ directory: path.join(test.directory, "fake") }))
 
         expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Worktree.NotGitError)
+        if (Exit.isFailure(exit)) {
+          const error = Cause.squash(exit.cause)
+          expect(error).toBeInstanceOf(Worktree.NotGitError)
+          if (error instanceof Worktree.NotGitError) expect(error._tag).toBe("WorktreeNotGitError")
+        }
       }),
     )
   })

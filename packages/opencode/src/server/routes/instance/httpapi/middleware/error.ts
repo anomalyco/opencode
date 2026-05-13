@@ -29,7 +29,6 @@ export const errorLayer = HttpRouter.middleware<{ handles: unknown }>()((effect)
             status: iife(() => {
               if (error instanceof Provider.ModelNotFoundError) return 400
               if (error.name === "ProviderAuthValidationFailed") return 400
-              if (error.name.startsWith("Worktree")) return 400
               return 500
             }),
           }),
