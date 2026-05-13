@@ -29,6 +29,16 @@ Example:
   "plugin": ["@acme/opencode-plugin@1.2.3", ["./plugins/demo.tsx", { "label": "demo" }]],
   "plugin_enabled": {
     "acme.demo": false
+  },
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "error": "/Users/me/sounds/error.mp3"
+    }
   }
 }
 ```
@@ -45,6 +55,11 @@ Example:
 - Internal plugins can declare `enabled: false` to be registered but inactive by default; `plugin_enabled` and runtime KV can still enable them by id.
 - `plugin_enabled` is merged across config layers.
 - Runtime enable/disable state is also stored in KV under `plugin_enabled`; that KV state overrides config on startup.
+- `attention.enabled` defaults to `false`; when `false`, it disables all `api.attention.notify(...)` delivery.
+- `attention.notifications` and `attention.sound` independently control terminal-mediated desktop notifications and built-in sounds.
+- `attention.volume` sets the default built-in sound volume from `0` to `1`.
+- `attention.sound_pack` selects the initial semantic sound pack. Persisted runtime selection in KV can override it.
+- `attention.sounds` overrides individual semantic sound slots such as `error`, `done`, or `subagent_done`.
 - `leader_timeout` is a top-level TUI setting.
 - `keybinds` is a flat object keyed by command id; values are key binding values (`false`, `"none"`, a key string/object, a binding object, or an array of key strings/objects/binding objects).
 - `keybinds.leader` sets the key used by `<leader>` shortcuts.
@@ -212,6 +227,7 @@ That is what makes local config-scoped plugins able to import `@opencode-ai/plug
 Top-level API groups exposed to `tui(api, options, meta)`:
 
 - `api.app.version`
+- `api.attention.notify(input)`
 - `api.keys.formatSequence(parts)`, `formatBindings(bindings)`
 - `api.keymap`
 - `api.route.register(routes)` / `api.route.navigate(name, params?)` / `api.route.current`
@@ -245,6 +261,24 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 - `formatSequence(parts)` formats parsed key sequence parts using the host's display policy.
 - `formatBindings(bindings)` formats binding lists and returns `undefined` when there is nothing to show.
 - For generic config-to-bindings helpers, import `createBindingLookup` from `@opencode-ai/plugin/tui`.
+
+### Attention
+
+- `api.attention.notify({ title?, message, notification?, sound? })` requests user attention while keeping terminal focus, notifications, and audio owned by the host.
+- `message` is required; `title` defaults to `"opencode"`; `notification` defaults to enabled with `when: "blurred"`; `sound` defaults to enabled with `when: "always"`.
+- `when: "always"` requests delivery regardless of terminal focus state.
+- `when: "focused"` only requests delivery after the terminal is known focused; `when: "blurred"` only requests delivery after the terminal is known blurred.
+- Example: `notification: { when: "blurred" }, sound: { name: "question", when: "always" }` plays sound while focused but only triggers system notifications when blurred.
+- Semantic sound names are `"default"`, `"question"`, `"permission"`, `"error"`, `"done"`, and `"subagent_done"`.
+- `sound: true` plays the `"default"` sound; `sound: { name: "question" }` plays a named semantic sound.
+- `sound: { volume }` overrides volume for that call; `sound: false` disables sound for that call; `notification: false` disables system notification for that call.
+- `api.attention.soundboard.registerPack({ id, name?, sounds })` registers a sound pack and returns a disposer. Relative paths resolve from the plugin root and are cleaned up on plugin deactivation.
+- `api.attention.soundboard.activate(id, { persist })` selects the active pack. `persist: true` writes the selected pack id to TUI KV state, not `tui.json`.
+- `api.attention.soundboard.current()` and `list()` expose the active/registered packs for plugin UX.
+- Config `attention.sounds` overrides active-pack sounds by slot. Failed loads fall back to the active pack and then `opencode.default`.
+- The host strips ANSI/control characters and collapses newlines before sending text to the terminal notification API.
+- Terminal and OS settings decide whether a requested notification is visibly displayed.
+- Prefer privacy-safe messages such as `"A question needs your input"`; avoid full commands, paths, prompts, errors, secrets, or file contents unless the plugin intentionally exposes them.
 
 ### Routes
 
