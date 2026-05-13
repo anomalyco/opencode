@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { createTestKeymap } from "@opentui/keymap/testing"
+import type { TuiAttentionSoundPack } from "@opencode-ai/plugin/tui"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { createTuiResolvedConfig, mockTuiRuntime } from "../../fixture/tui-runtime"
@@ -849,6 +850,85 @@ test("plugin keymap proxy preserves real keymap receiver", async () => {
   } finally {
     await TuiPluginRuntime.dispose()
     harness.cleanup()
+    cwd.mockRestore()
+    wait.mockRestore()
+  }
+})
+
+test("auto-disposes plugin attention sound packs and resolves sound paths", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "attention-soundpack-plugin.ts")
+      const spec = pathToFileURL(file).href
+      const absolute = path.join(dir, "sounds", "default.mp3")
+      const url = pathToFileURL(path.join(dir, "sounds", "error.mp3")).href
+
+      await Bun.write(
+        file,
+        `export default {
+  id: "demo.attention.soundpack",
+  tui: async (api) => {
+    api.attention.soundboard.registerPack({
+      id: "demo.pack",
+      sounds: {
+        default: ${JSON.stringify(absolute)},
+        question: "sounds/question.mp3",
+        done: "  sounds/done.mp3  ",
+        subagent_done: "sounds/subagent-done.mp3",
+        error: ${JSON.stringify(url)},
+        nope: "sounds/nope.mp3",
+        permission: "",
+      },
+    })
+  },
+}
+`,
+      )
+
+      return { spec }
+    },
+  })
+
+  const packs: TuiAttentionSoundPack[] = []
+  let dropped = 0
+  const attention = {
+    soundboard: {
+      registerPack(pack: TuiAttentionSoundPack) {
+        packs.push(pack)
+        return () => {
+          dropped += 1
+        }
+      },
+    },
+  }
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+  try {
+    await TuiPluginRuntime.init({
+      api: createTuiPluginApi({ attention }),
+      config: createTuiResolvedConfig({
+        plugin: [tmp.extra.spec],
+        plugin_origins: [{ spec: tmp.extra.spec, scope: "local", source: path.join(tmp.path, "tui.json") }],
+      }),
+    })
+
+    expect(packs).toEqual([
+      {
+        id: "demo.pack",
+        sounds: {
+          default: path.join(tmp.path, "sounds", "default.mp3"),
+          question: path.join(tmp.path, "sounds", "question.mp3"),
+          done: path.join(tmp.path, "sounds", "done.mp3"),
+          subagent_done: path.join(tmp.path, "sounds", "subagent-done.mp3"),
+          error: path.join(tmp.path, "sounds", "error.mp3"),
+        },
+      },
+    ])
+    expect(dropped).toBe(0)
+  } finally {
+    await TuiPluginRuntime.dispose()
+    expect(dropped).toBe(1)
     cwd.mockRestore()
     wait.mockRestore()
   }

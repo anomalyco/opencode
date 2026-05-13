@@ -1,37 +1,129 @@
-import { afterEach, describe, expect, test } from "bun:test"
-import { Effect } from "effect"
-import { WithInstance } from "../../src/project/with-instance"
+import { afterEach, describe, expect } from "bun:test"
+import { Deferred, Effect, Fiber, Layer } from "effect"
+import { eq } from "drizzle-orm"
+import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Server } from "../../src/server/server"
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
 import { Session } from "@/session/session"
+import { SessionTable } from "@/session/session.sql"
 import { Database } from "@/storage/db"
 import * as Log from "@opencode-ai/core/util/log"
 import { Worktree } from "../../src/worktree"
 import { resetDatabase } from "../fixture/db"
-import { disposeAllInstances, tmpdir } from "../fixture/fixture"
-import { waitGlobalBusEventPromise } from "./global-bus"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 
-const testWorktreeMutations = process.platform === "win32" ? test.skip : test
+const it = testEffect(Layer.mergeAll(Session.defaultLayer))
+const testWorktreeMutations = process.platform === "win32" ? it.instance.skip : it.instance
 
 function app() {
   return Server.Default().app
 }
 
-function runSession<A, E>(fx: Effect.Effect<A, E, Session.Service>) {
-  return Effect.runPromise(fx.pipe(Effect.provide(Session.defaultLayer)))
+function request(path: string, directory: string, init: RequestInit = {}) {
+  return Effect.promise(() => {
+    const headers = new Headers(init.headers)
+    headers.set("x-opencode-directory", directory)
+    return Promise.resolve(app().request(path, { ...init, headers }))
+  })
 }
 
 function createSession(input?: Session.CreateInput) {
-  return runSession(Session.Service.use((svc) => svc.create(input)))
+  return Session.Service.use((svc) => svc.create(input))
 }
 
-async function waitReady(directory: string) {
-  await waitGlobalBusEventPromise({
-    message: "timed out waiting for worktree.ready",
-    predicate: (event) => event.payload.type === Worktree.Event.Ready.type && event.directory === directory,
+function json<T>(response: Response) {
+  return Effect.promise(() => response.json() as Promise<T>)
+}
+
+function waitReady(input: { directory?: string; name?: string }) {
+  return Effect.gen(function* () {
+    const ready = yield* Deferred.make<void>()
+    const on = (event: GlobalEvent) => {
+      if (event.payload.type !== Worktree.Event.Ready.type) return
+      if (input.directory && event.directory !== input.directory) return
+      if (input.name && event.payload.properties.name !== input.name) return
+      Deferred.doneUnsafe(ready, Effect.void)
+    }
+
+    GlobalBus.on("event", on)
+    yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", on)))
+
+    return yield* Deferred.await(ready).pipe(
+      Effect.timeoutOrElse({
+        duration: "10 seconds",
+        orElse: () => Effect.fail(new Error("timed out waiting for worktree.ready")),
+      }),
+    )
   })
+}
+
+function insertAccount() {
+  return Effect.acquireRelease(
+    Effect.sync(() => {
+      Database.Client()
+        .$client.prepare(
+          "INSERT INTO account (id, email, url, access_token, refresh_token, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .run(
+          "account-test",
+          "test@example.com",
+          "https://console.example.com",
+          "access",
+          "refresh",
+          Date.now(),
+          Date.now(),
+        )
+      return "account-test"
+    }),
+    (id) =>
+      Effect.sync(() => {
+        Database.Client().$client.prepare("DELETE FROM account WHERE id = ?").run(id)
+      }),
+  )
+}
+
+function setSessionUpdated(session: Session.Info, updated: number) {
+  return Effect.sync(() => {
+    Database.use((db) =>
+      db.update(SessionTable).set({ time_updated: updated }).where(eq(SessionTable.id, session.id)).run(),
+    )
+  })
+}
+
+function withCreatedWorktree(directory: string, use: (info: Worktree.Info) => Effect.Effect<void, unknown, never>) {
+  const name = "api-test"
+  const headers = { "content-type": "application/json" }
+  return Effect.acquireUseRelease(
+    Effect.gen(function* () {
+      const ready = yield* waitReady({ name }).pipe(Effect.forkScoped)
+      const created = yield* request(ExperimentalPaths.worktree, directory, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ name }),
+      })
+
+      expect(created.status).toBe(200)
+      const info = yield* json<Worktree.Info>(created)
+      expect(info).toMatchObject({ name, branch: "opencode/api-test" })
+      yield* Fiber.join(ready)
+      return info
+    }),
+    use,
+    (info) =>
+      Effect.gen(function* () {
+        const removed = yield* request(ExperimentalPaths.worktree, directory, {
+          method: "DELETE",
+          headers,
+          body: JSON.stringify({ directory: info.directory }),
+        })
+        if (removed.status !== 200) return yield* Effect.fail(new Error(`failed to remove worktree: ${removed.status}`))
+        const ok = yield* json<boolean>(removed)
+        if (!ok) return yield* Effect.fail(new Error(`failed to remove worktree ${info.directory}`))
+      }),
+  )
 }
 
 afterEach(async () => {
@@ -40,8 +132,52 @@ afterEach(async () => {
 })
 
 describe("experimental HttpApi", () => {
-  test("serves read-only experimental endpoints through the default server app", async () => {
-    await using tmp = await tmpdir({
+  it.instance(
+    "serves read-only experimental endpoints through the default server app",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const directory = tmp.directory
+        const [consoleState, consoleOrgs, toolList, toolIDs, worktrees, resources] = yield* Effect.all(
+          [
+            request(ExperimentalPaths.console, directory),
+            request(ExperimentalPaths.consoleOrgs, directory),
+            request(`${ExperimentalPaths.tool}?provider=opencode&model=gpt-5`, directory),
+            request(ExperimentalPaths.toolIDs, directory),
+            request(ExperimentalPaths.worktree, directory),
+            request(ExperimentalPaths.resource, directory),
+          ],
+          { concurrency: "unbounded" },
+        )
+
+        expect(consoleState.status).toBe(200)
+        expect(yield* json(consoleState)).toEqual({
+          consoleManagedProviders: [],
+          switchableOrgCount: 0,
+        })
+
+        expect(consoleOrgs.status).toBe(200)
+        expect(yield* json(consoleOrgs)).toEqual({ orgs: [] })
+
+        expect(toolList.status).toBe(200)
+        expect(yield* json<unknown[]>(toolList)).toContainEqual(
+          expect.objectContaining({
+            id: "bash",
+            description: expect.any(String),
+            parameters: expect.any(Object),
+          }),
+        )
+
+        expect(toolIDs.status).toBe(200)
+        expect(yield* json(toolIDs)).toContain("bash")
+
+        expect(worktrees.status).toBe(200)
+        expect(yield* json(worktrees)).toEqual([])
+
+        expect(resources.status).toBe(200)
+        expect(yield* json(resources)).toEqual({})
+      }),
+    {
       config: {
         formatter: false,
         lsp: false,
@@ -53,150 +189,88 @@ describe("experimental HttpApi", () => {
           },
         },
       },
-    })
+    },
+  )
 
-    const headers = { "x-opencode-directory": tmp.path }
-    const [consoleState, consoleOrgs, toolList, toolIDs, worktrees, resources] = await Promise.all([
-      app().request(ExperimentalPaths.console, { headers }),
-      app().request(ExperimentalPaths.consoleOrgs, { headers }),
-      app().request(`${ExperimentalPaths.tool}?provider=opencode&model=gpt-5`, { headers }),
-      app().request(ExperimentalPaths.toolIDs, { headers }),
-      app().request(ExperimentalPaths.worktree, { headers }),
-      app().request(ExperimentalPaths.resource, { headers }),
-    ])
+  it.instance(
+    "serves Console org switch through the default server app",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const accountID = yield* insertAccount()
+        const switched = yield* request(ExperimentalPaths.consoleSwitch, tmp.directory, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ accountID, orgID: "org-test" }),
+        })
 
-    expect(consoleState.status).toBe(200)
-    expect(await consoleState.json()).toEqual({
-      consoleManagedProviders: [],
-      switchableOrgCount: 0,
-    })
-
-    expect(consoleOrgs.status).toBe(200)
-    expect(await consoleOrgs.json()).toEqual({ orgs: [] })
-
-    expect(toolList.status).toBe(200)
-    expect(await toolList.json()).toContainEqual(
-      expect.objectContaining({
-        id: "bash",
-        description: expect.any(String),
-        parameters: expect.any(Object),
+        expect(switched.status).toBe(200)
+        expect(yield* json(switched)).toBe(true)
       }),
-    )
+    { config: { formatter: false, lsp: false } },
+  )
 
-    expect(toolIDs.status).toBe(200)
-    expect(await toolIDs.json()).toContain("bash")
+  it.instance(
+    "serves global session list through the default server app",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const first = yield* createSession({ title: "page-one" })
+        const second = yield* createSession({ title: "page-two" })
+        yield* setSessionUpdated(first, 1)
+        yield* setSessionUpdated(second, 2)
 
-    expect(worktrees.status).toBe(200)
-    expect(await worktrees.json()).toEqual([])
+        const page = yield* request(
+          `${ExperimentalPaths.session}?${new URLSearchParams({ directory: tmp.directory, limit: "1" })}`,
+          tmp.directory,
+        )
+        expect(page.status).toBe(200)
+        expect(page.headers.get("x-next-cursor")).toBeTruthy()
 
-    expect(resources.status).toBe(200)
-    expect(await resources.json()).toEqual({})
-  })
+        const body = yield* json<Session.GlobalInfo[]>(page)
+        expect(body.map((session) => session.id)).toEqual([second.id])
+        expect(body[0].project?.id).toBe(second.projectID)
 
-  test("serves Console org switch through the default server app", async () => {
-    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
-    Database.Client()
-      .$client.prepare(
-        "INSERT INTO account (id, email, url, access_token, refresh_token, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      )
-      .run(
-        "account-test",
-        "test@example.com",
-        "https://console.example.com",
-        "access",
-        "refresh",
-        Date.now(),
-        Date.now(),
-      )
+        const next = yield* request(
+          `${ExperimentalPaths.session}?${new URLSearchParams({
+            directory: tmp.directory,
+            limit: "10",
+            cursor: body[0].time.updated.toString(),
+          })}`,
+          tmp.directory,
+        )
+        expect(next.status).toBe(200)
+        expect((yield* json<Session.GlobalInfo[]>(next)).map((session) => session.id)).toContain(first.id)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
 
-    const switched = await app().request(ExperimentalPaths.consoleSwitch, {
-      method: "POST",
-      headers: { "x-opencode-directory": tmp.path, "content-type": "application/json" },
-      body: JSON.stringify({ accountID: "account-test", orgID: "org-test" }),
-    })
+  testWorktreeMutations(
+    "serves worktree mutations through the default server app",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        yield* withCreatedWorktree(tmp.directory, (info) =>
+          Effect.gen(function* () {
+            const listed = yield* request(ExperimentalPaths.worktree, tmp.directory)
+            expect(listed.status).toBe(200)
+            expect(yield* json(listed)).toContain(info.directory)
 
-    expect(switched.status).toBe(200)
-    expect(await switched.json()).toBe(true)
-  })
+            const reset = yield* request(ExperimentalPaths.worktreeReset, tmp.directory, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ directory: info.directory }),
+            })
 
-  test("serves global session list through the default server app", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+            expect(reset.status).toBe(200)
+            expect(yield* json(reset)).toBe(true)
+          }),
+        )
 
-    const first = await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => createSession({ title: "page-one" }),
-    })
-    await new Promise((resolve) => setTimeout(resolve, 5))
-    const second = await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => createSession({ title: "page-two" }),
-    })
-
-    const headers = { "x-opencode-directory": tmp.path }
-    const page = await app().request(
-      `${ExperimentalPaths.session}?${new URLSearchParams({ directory: tmp.path, limit: "1" })}`,
-      { headers },
-    )
-    expect(page.status).toBe(200)
-    expect(page.headers.get("x-next-cursor")).toBeTruthy()
-
-    const body = (await page.json()) as Session.GlobalInfo[]
-    expect(body.map((session) => session.id)).toEqual([second.id])
-    expect(body[0].project?.id).toBe(second.projectID)
-
-    const next = await app().request(
-      `${ExperimentalPaths.session}?${new URLSearchParams({
-        directory: tmp.path,
-        limit: "10",
-        cursor: body[0].time.updated.toString(),
-      })}`,
-      { headers },
-    )
-    expect(next.status).toBe(200)
-    expect(((await next.json()) as Session.GlobalInfo[]).map((session) => session.id)).toContain(first.id)
-  })
-
-  testWorktreeMutations("serves worktree mutations through the default server app", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-
-    const headers = { "x-opencode-directory": tmp.path, "content-type": "application/json" }
-    const created = await app().request(ExperimentalPaths.worktree, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ name: "api-test" }),
-    })
-
-    expect(created.status).toBe(200)
-    const info = (await created.json()) as Worktree.Info
-    expect(info).toMatchObject({ name: "api-test", branch: "opencode/api-test" })
-    await waitReady(info.directory)
-
-    const listed = await app().request(ExperimentalPaths.worktree, { headers })
-    expect(listed.status).toBe(200)
-    expect(await listed.json()).toContain(info.directory)
-
-    if (process.platform !== "win32") {
-      const reset = await app().request(ExperimentalPaths.worktreeReset, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ directory: info.directory }),
-      })
-
-      expect(reset.status).toBe(200)
-      expect(await reset.json()).toBe(true)
-    }
-
-    const removed = await app().request(ExperimentalPaths.worktree, {
-      method: "DELETE",
-      headers,
-      body: JSON.stringify({ directory: info.directory }),
-    })
-
-    expect(removed.status).toBe(200)
-    expect(await removed.json()).toBe(true)
-
-    const afterRemove = await app().request(ExperimentalPaths.worktree, { headers })
-    expect(afterRemove.status).toBe(200)
-    expect(await afterRemove.json()).toEqual([])
-  })
+        const afterRemove = yield* request(ExperimentalPaths.worktree, tmp.directory)
+        expect(afterRemove.status).toBe(200)
+        expect(yield* json(afterRemove)).toEqual([])
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
 })

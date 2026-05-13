@@ -244,9 +244,9 @@ jobs:
           - host: "blacksmith-4vcpu-ubuntu-2404"
             target: x86_64-unknown-linux-gnu
             platform_flag: --linux
-          - host: "blacksmith-4vcpu-ubuntu-2404"
+          - host: "blacksmith-4vcpu-ubuntu-2404-arm"
             target: aarch64-unknown-linux-gnu
-            platform_flag: --linux
+            platform_flag: --linux --arm64
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0

@@ -4,7 +4,8 @@ import { GenerationOptions, LLM, LLMEvent, LLMRequest, LLMResponse, ToolChoice }
 import { LLMClient } from "../src/route"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
-import { tool, ToolFailure } from "../src/tool"
+import { tool, ToolFailure, type ToolExecuteContext } from "../src/tool"
+import { ToolRuntime } from "../src/tool-runtime"
 import { it } from "./lib/effect"
 import * as TestToolRuntime from "./lib/tool-runtime"
 import { dynamicResponse, scriptedResponses } from "./lib/http"
@@ -129,7 +130,7 @@ describe("LLMClient tools", () => {
         name: "get_weather",
         result: { type: "json", value: { temperature: 22, condition: "sunny" } },
       })
-      expect(events.at(-1)?.type).toBe("request-finish")
+      expect(events.at(-1)?.type).toBe("finish")
       expect(LLMResponse.text({ events })).toBe("It's sunny in Paris.")
     }),
   )
@@ -148,8 +149,37 @@ describe("LLMClient tools", () => {
         ),
       )
 
-      expect(events.filter(LLMEvent.is.requestFinish)).toHaveLength(1)
+      expect(events.filter(LLMEvent.is.finish)).toHaveLength(1)
       expect(events.find(LLMEvent.is.toolResult)).toMatchObject({ type: "tool-result", id: "call_1" })
+    }),
+  )
+
+  it.effect("passes tool call context to execute", () =>
+    Effect.gen(function* () {
+      let context: ToolExecuteContext | undefined
+      const contextual = tool({
+        description: "Capture tool context.",
+        parameters: Schema.Struct({ value: Schema.String }),
+        success: Schema.Struct({ ok: Schema.Boolean }),
+        execute: (_params, ctx) =>
+          Effect.sync(() => {
+            context = ctx
+            return { ok: true }
+          }),
+      })
+      const events = Array.from(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { contextual } }).pipe(
+          Stream.runCollect,
+          Effect.provide(
+            scriptedResponses([
+              sseEvents(toolCallChunk("call_ctx", "contextual", '{"value":"x"}'), finishChunk("tool_calls")),
+            ]),
+          ),
+        ),
+      )
+
+      expect(events.some(LLMEvent.is.toolResult)).toBe(true)
+      expect(context).toEqual({ id: "call_ctx", name: "contextual" })
     }),
   )
 
@@ -319,7 +349,7 @@ describe("LLMClient tools", () => {
         "text-delta",
         "text-end",
         "step-finish",
-        "request-finish",
+        "finish",
       ])
       expect(LLMResponse.text({ events })).toBe("Done.")
     }),
@@ -343,7 +373,57 @@ describe("LLMClient tools", () => {
         ),
       )
 
-      expect(events.filter(LLMEvent.is.requestFinish)).toHaveLength(2)
+      expect(events.filter(LLMEvent.is.finish)).toHaveLength(1)
+      expect(events.filter(LLMEvent.is.stepStart).map((event) => event.index)).toEqual([0, 1])
+      expect(events.filter(LLMEvent.is.stepFinish).map((event) => event.index)).toEqual([0, 1])
+    }),
+  )
+
+  it.effect("emits one final finish with aggregate usage", () =>
+    Effect.gen(function* () {
+      let calls = 0
+      const events = Array.from(
+        yield* ToolRuntime.stream({
+          request: baseRequest,
+          tools: { get_weather },
+          stopWhen: ToolRuntime.stepCountIs(2),
+          stream: () =>
+            Stream.fromIterable<LLMEvent>(
+              calls++ === 0
+                ? [
+                    LLMEvent.stepStart({ index: 0 }),
+                    LLMEvent.toolCall({ id: "call_1", name: "get_weather", input: { city: "Paris" } }),
+                    LLMEvent.stepFinish({
+                      index: 0,
+                      reason: "tool-calls",
+                      usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+                    }),
+                    LLMEvent.finish({
+                      reason: "tool-calls",
+                      usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+                    }),
+                  ]
+                : [
+                    LLMEvent.stepStart({ index: 0 }),
+                    LLMEvent.textDelta({ id: "text_1", text: "Done." }),
+                    LLMEvent.stepFinish({
+                      index: 0,
+                      reason: "stop",
+                      usage: { inputTokens: 4, outputTokens: 5, totalTokens: 9 },
+                    }),
+                    LLMEvent.finish({ reason: "stop", usage: { inputTokens: 4, outputTokens: 5, totalTokens: 9 } }),
+                  ],
+            ),
+        }).pipe(Stream.runCollect),
+      )
+
+      expect(events.filter(LLMEvent.is.stepFinish).map((event) => event.index)).toEqual([0, 1])
+      expect(events.filter(LLMEvent.is.finish)).toHaveLength(1)
+      expect(events.find(LLMEvent.is.finish)?.usage).toMatchObject({
+        inputTokens: 5,
+        outputTokens: 7,
+        totalTokens: 12,
+      })
     }),
   )
 
@@ -362,7 +442,7 @@ describe("LLMClient tools", () => {
         }).pipe(Stream.runCollect, Effect.provide(layer)),
       )
 
-      expect(events.filter(LLMEvent.is.requestFinish)).toHaveLength(1)
+      expect(events.filter(LLMEvent.is.finish)).toHaveLength(1)
       expect(events.find(LLMEvent.is.toolResult)).toMatchObject({ type: "tool-result", id: "call_1" })
     }),
   )

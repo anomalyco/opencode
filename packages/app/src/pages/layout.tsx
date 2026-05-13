@@ -960,6 +960,15 @@ export default function Layout(props: ParentProps) {
     void openProject(target.worktree)
   }
 
+  function navigateToProjectIndex(index: number) {
+    const projects = layout.projects.list()
+    const target = projects[index]
+    if (!target) return
+
+    globalSync.child(target.worktree)
+    void openProject(target.worktree)
+  }
+
   function navigateSessionByUnseen(offset: number) {
     const sessions = currentSessions()
     if (sessions.length === 0) return
@@ -1040,6 +1049,19 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+alt+arrowdown",
         onSelect: () => navigateProjectByOffset(1),
       },
+      ...Array.from({ length: 9 }, (_, i) => {
+        const index = i
+        const number = index + 1
+        return {
+          id: `project.${number}`,
+          category: language.t("command.category.project"),
+          title: `Open Project {number}`,
+          keybind: `mod+${number}`,
+          disabled: layout.projects.list().length <= index,
+          hidden: true,
+          onSelect: () => navigateToProjectIndex(index),
+        }
+      }),
       {
         id: "provider.connect",
         title: language.t("command.provider.connect"),
