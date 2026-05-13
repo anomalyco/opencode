@@ -418,10 +418,14 @@ export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsa
     },
   }
 
+  const contextTokens = inputTokens
   const costInfo =
-    input.model.cost?.experimentalOver200K && tokens.input + tokens.cache.read > 200_000
+    input.model.cost?.tiers
+      ?.filter((item) => item.tier.type === "context" && contextTokens > item.tier.size)
+      .sort((a, b) => b.tier.size - a.tier.size)[0] ??
+    (input.model.cost?.experimentalOver200K && contextTokens > 200_000
       ? input.model.cost.experimentalOver200K
-      : input.model.cost
+      : input.model.cost)
   return {
     cost: safe(
       new Decimal(0)
@@ -444,7 +448,7 @@ export class BusyError extends Error {
   }
 }
 
-export type NotFound = InstanceType<typeof NotFoundError>
+export type NotFound = NotFoundError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
@@ -470,7 +474,7 @@ export interface Interface {
   readonly clearRevert: (sessionID: SessionID) => Effect.Effect<void>
   readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
-  readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<MessageV2.WithParts[]>
+  readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<MessageV2.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
   readonly updateMessage: <T extends MessageV2.Info>(msg: T) => Effect.Effect<T>
@@ -493,7 +497,7 @@ export interface Interface {
   readonly findMessage: (
     sessionID: SessionID,
     predicate: (msg: MessageV2.WithParts) => boolean,
-  ) => Effect.Effect<Option.Option<MessageV2.WithParts>>
+  ) => Effect.Effect<Option.Option<MessageV2.WithParts>, NotFound>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
@@ -753,11 +757,25 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
         .pipe(Effect.orElseSucceed((): Snapshot.FileDiff[] => []))
     })
 
-    const messages = Effect.fn("Session.messages")(function* (input: { sessionID: SessionID; limit?: number }) {
+    const messages: Interface["messages"] = Effect.fn("Session.messages")(function* (input) {
       if (input.limit) {
-        return MessageV2.page({ sessionID: input.sessionID, limit: input.limit }).items
+        return (yield* MessageV2.page({ sessionID: input.sessionID, limit: input.limit })).items
       }
-      return Array.from(MessageV2.stream(input.sessionID)).reverse()
+
+      const size = 50
+      const result = [] as MessageV2.WithParts[]
+      let before: string | undefined
+      while (true) {
+        const page = yield* MessageV2.page({ sessionID: input.sessionID, limit: size, before })
+        if (page.items.length === 0) break
+        for (let i = page.items.length - 1; i >= 0; i--) {
+          const item = page.items[i]
+          if (item) result.push(item)
+        }
+        if (!page.more || !page.cursor) break
+        before = page.cursor
+      }
+      return result.reverse()
     })
 
     const removeMessage = Effect.fn("Session.removeMessage")(function* (input: {
@@ -795,12 +813,18 @@ export const layer: Layer.Layer<Service, never, Bus.Service | Storage.Service | 
     })
 
     /** Finds the first message matching the predicate, searching newest-first. */
-    const findMessage = Effect.fn("Session.findMessage")(function* (
-      sessionID: SessionID,
-      predicate: (msg: MessageV2.WithParts) => boolean,
-    ) {
-      for (const item of MessageV2.stream(sessionID)) {
-        if (predicate(item)) return Option.some(item)
+    const findMessage: Interface["findMessage"] = Effect.fn("Session.findMessage")(function* (sessionID, predicate) {
+      const size = 50
+      let before: string | undefined
+      while (true) {
+        const page = yield* MessageV2.page({ sessionID, limit: size, before })
+        if (page.items.length === 0) break
+        for (let i = page.items.length - 1; i >= 0; i--) {
+          const item = page.items[i]
+          if (item && predicate(item)) return Option.some(item)
+        }
+        if (!page.more || !page.cursor) break
+        before = page.cursor
       }
       return Option.none<MessageV2.WithParts>()
     })

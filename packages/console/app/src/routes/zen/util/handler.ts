@@ -299,7 +299,6 @@ export async function handler(
         let buffer = ""
         let responseLength = 0
         let timestampFirstByte = 0
-        let timestampLastByte = 0
 
         function pump(): Promise<void> {
           return (
@@ -321,6 +320,7 @@ export async function handler(
                   await modelTpsLimiter?.track(
                     providerInfo.id,
                     providerInfo.model,
+                    providerInfo.tpsGoal,
                     timestampFirstByte,
                     timestampLastByte,
                     usageInfo,
@@ -526,7 +526,7 @@ export async function handler(
           })
           .filter((provider) => {
             if (!provider.tpsGoal) return true
-            const isLowTps = modelTpsLimits?.[`${provider.id}/${provider.model}`] ?? false
+            const isLowTps = modelTpsLimits?.[`${provider.id}/${provider.model}/${provider.tpsGoal}`] ?? false
             return !isLowTps
           })
           .map((provider) => {

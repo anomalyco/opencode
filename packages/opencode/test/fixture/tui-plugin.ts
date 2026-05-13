@@ -12,6 +12,10 @@ type Count = {
   command_drop: number
 }
 
+type AttentionOpts = Partial<Omit<HostPluginApi["attention"], "soundboard">> & {
+  soundboard?: Partial<HostPluginApi["attention"]["soundboard"]>
+}
+
 function themeCurrent(): HostPluginApi["theme"]["current"] {
   const a = RGBA.fromInts(0, 120, 240)
   const b = RGBA.fromInts(120, 120, 120)
@@ -83,6 +87,8 @@ function themeCurrent(): HostPluginApi["theme"]["current"] {
 type Opts = {
   client?: HostPluginApi["client"] | (() => HostPluginApi["client"])
   renderer?: HostPluginApi["renderer"]
+  attention?: AttentionOpts
+  event?: HostPluginApi["event"]
   count?: Count
   keymap?: HostPluginApi["keymap"]
   tuiConfig?: Partial<HostPluginApi["tuiConfig"]>
@@ -183,6 +189,17 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         return opts.app?.version ?? "0.0.0-test"
       },
     },
+    attention: {
+      async notify(input) {
+        return opts.attention?.notify?.(input) ?? { ok: false, notification: false, sound: false }
+      },
+      soundboard: {
+        registerPack: (pack) => opts.attention?.soundboard?.registerPack?.(pack) ?? (() => {}),
+        activate: (id, options) => opts.attention?.soundboard?.activate?.(id, options) ?? false,
+        current: () => opts.attention?.soundboard?.current?.() ?? "opencode.default",
+        list: () => opts.attention?.soundboard?.list?.() ?? [],
+      },
+    },
     keys: {
       formatSequence: () => "",
       formatBindings: () => undefined,
@@ -190,7 +207,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
     get client() {
       return client()
     },
-    event: {
+    event: opts.event ?? {
       on: () => {
         if (count) count.event_add += 1
         return () => {
