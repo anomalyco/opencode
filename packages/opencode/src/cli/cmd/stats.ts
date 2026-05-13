@@ -1,6 +1,7 @@
 import { Effect } from "effect"
 import { effectCmd } from "../effect-cmd"
 import { Session } from "@/session/session"
+import { NotFoundError } from "@/storage/storage"
 import { Database } from "@/storage/db"
 import { SessionTable } from "../../session/session.sql"
 import { Project } from "@/project/project"
@@ -162,7 +163,9 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
     filteredSessions,
     (session) =>
       Effect.gen(function* () {
-        const messages = yield* svc.messages({ sessionID: session.id })
+        const messages = yield* svc.messages({ sessionID: session.id }).pipe(
+          Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed([])),
+        )
 
         const sessionCost = session.cost ?? 0
         const sessionTokens = session.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }

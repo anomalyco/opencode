@@ -101,7 +101,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       }
       yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID))
       if (ctx.query.limit === undefined || ctx.query.limit === 0) {
-        return yield* session.messages({ sessionID: ctx.params.sessionID })
+        return yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID }))
       }
 
       const page = yield* SessionError.mapStorageNotFound(
@@ -250,7 +250,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof SummarizePayload.Type
     }) {
       yield* revertSvc.cleanup(yield* SessionError.mapStorageNotFound(session.get(ctx.params.sessionID)))
-      const messages = yield* session.messages({ sessionID: ctx.params.sessionID })
+      const messages = yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID }))
       const defaultAgent = yield* agentSvc.defaultAgent()
       const currentAgent = messages.findLast((message) => message.info.role === "user")?.info.agent ?? defaultAgent
 
