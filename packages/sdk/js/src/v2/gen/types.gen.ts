@@ -741,6 +741,16 @@ export type Session = {
     files: number
     diffs?: Array<SnapshotFileDiff>
   }
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
   share?: {
     url: string
   }
@@ -945,7 +955,6 @@ export type PermissionConfig =
       question?: PermissionActionConfig
       webfetch?: PermissionActionConfig
       websearch?: PermissionActionConfig
-      codesearch?: PermissionActionConfig
       repo_clone?: PermissionRuleConfig
       repo_overview?: PermissionRuleConfig
       lsp?: PermissionRuleConfig
@@ -1325,6 +1334,18 @@ export type Model = {
       read: number
       write: number
     }
+    tiers?: Array<{
+      input: number
+      output: number
+      cache: {
+        read: number
+        write: number
+      }
+      tier: {
+        type: "context"
+        size: number
+      }
+    }>
     experimentalOver200K?: {
       input: number
       output: number
@@ -1388,6 +1409,20 @@ export type ToolList = Array<ToolListItem>
 
 export type ToolIds = Array<string>
 
+export type WorktreeError = {
+  name:
+    | "WorktreeNotGitError"
+    | "WorktreeNameGenerationFailedError"
+    | "WorktreeCreateFailedError"
+    | "WorktreeStartCommandFailedError"
+    | "WorktreeRemoveFailedError"
+    | "WorktreeResetFailedError"
+    | "WorktreeListFailedError"
+  data: {
+    message: string
+  }
+}
+
 export type WorktreeCreateInput = {
   name?: string
   /**
@@ -1398,7 +1433,7 @@ export type WorktreeCreateInput = {
 
 export type Worktree = {
   name: string
-  branch: string
+  branch?: string
   directory: string
 }
 
@@ -1429,6 +1464,16 @@ export type GlobalSession = {
     deletions: number
     files: number
     diffs?: Array<SnapshotFileDiff>
+  }
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
   }
   share?: {
     url: string
@@ -1676,6 +1721,21 @@ export type ProviderAuthAuthorization = {
   instructions: string
 }
 
+export type ProviderAuthError1 = {
+  name:
+    | "BadRequest"
+    | "ProviderAuthOauthMissing"
+    | "ProviderAuthOauthCodeMissing"
+    | "ProviderAuthOauthCallbackFailed"
+    | "ProviderAuthValidationFailed"
+  data: {
+    providerID?: string
+    field?: string
+    message?: string
+    kind?: string
+  }
+}
+
 export type TextPartInput = {
   id?: string
   type: "text"
@@ -1795,9 +1855,9 @@ export type Workspace = {
   id: string
   type: string
   name: string
-  branch: string | null
-  directory: string | null
-  extra: unknown | null
+  branch?: string | null
+  directory?: string | null
+  extra?: unknown | null
   projectID: string
   timeUsed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
 }
@@ -1892,6 +1952,16 @@ export type SyncEventSessionUpdated = {
         deletions: number
         files: number
         diffs?: Array<SnapshotFileDiff>
+      } | null
+      cost?: number | null
+      tokens?: {
+        input: number
+        output: number
+        reasoning: number
+        cache: {
+          read: number
+          write: number
+        }
       } | null
       share?: {
         url?: string | null
@@ -2566,7 +2636,7 @@ export type EventWorktreeReady = {
   type: "worktree.ready"
   properties: {
     name: string
-    branch: string
+    branch?: string
   }
 }
 
@@ -3084,6 +3154,16 @@ export type SessionInfo = {
     id: string
     providerID: string
     variant: string
+  }
+  cost: number
+  tokens: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
   }
   time: {
     created: number
@@ -3792,9 +3872,9 @@ export type WorktreeRemoveData = {
 
 export type WorktreeRemoveErrors = {
   /**
-   * Bad request
+   * WorktreeError
    */
-  400: BadRequestError
+  400: WorktreeError
 }
 
 export type WorktreeRemoveError = WorktreeRemoveErrors[keyof WorktreeRemoveErrors]
@@ -3818,6 +3898,15 @@ export type WorktreeListData = {
   url: "/experimental/worktree"
 }
 
+export type WorktreeListErrors = {
+  /**
+   * WorktreeError
+   */
+  400: WorktreeError
+}
+
+export type WorktreeListError = WorktreeListErrors[keyof WorktreeListErrors]
+
 export type WorktreeListResponses = {
   /**
    * List of worktree directories
@@ -3839,9 +3928,9 @@ export type WorktreeCreateData = {
 
 export type WorktreeCreateErrors = {
   /**
-   * Bad request
+   * WorktreeError
    */
-  400: BadRequestError
+  400: WorktreeError
 }
 
 export type WorktreeCreateError = WorktreeCreateErrors[keyof WorktreeCreateErrors]
@@ -3867,9 +3956,9 @@ export type WorktreeResetData = {
 
 export type WorktreeResetErrors = {
   /**
-   * Bad request
+   * WorktreeError
    */
-  400: BadRequestError
+  400: WorktreeError
 }
 
 export type WorktreeResetError = WorktreeResetErrors[keyof WorktreeResetErrors]
@@ -5081,9 +5170,9 @@ export type ProviderOauthAuthorizeData = {
 
 export type ProviderOauthAuthorizeErrors = {
   /**
-   * Bad request
+   * ProviderAuthError
    */
-  400: BadRequestError
+  400: ProviderAuthError1
 }
 
 export type ProviderOauthAuthorizeError = ProviderOauthAuthorizeErrors[keyof ProviderOauthAuthorizeErrors]
@@ -5117,9 +5206,9 @@ export type ProviderOauthCallbackData = {
 
 export type ProviderOauthCallbackErrors = {
   /**
-   * Bad request
+   * ProviderAuthError
    */
-  400: BadRequestError
+  400: ProviderAuthError1
 }
 
 export type ProviderOauthCallbackError = ProviderOauthCallbackErrors[keyof ProviderOauthCallbackErrors]
@@ -5353,7 +5442,7 @@ export type SessionChildrenErrors = {
    */
   400: BadRequestError
   /**
-   * Not found
+   * NotFoundError
    */
   404: NotFoundError
 }
@@ -5387,7 +5476,7 @@ export type SessionTodoErrors = {
    */
   400: BadRequestError
   /**
-   * Not found
+   * NotFoundError
    */
   404: NotFoundError
 }
@@ -5497,7 +5586,7 @@ export type SessionPromptErrors = {
    */
   400: BadRequestError
   /**
-   * Not found
+   * NotFoundError
    */
   404: NotFoundError
 }
@@ -5535,7 +5624,7 @@ export type SessionDeleteMessageErrors = {
    */
   400: BadRequestError
   /**
-   * Not found
+   * NotFoundError
    */
   404: NotFoundError
 }
@@ -5642,10 +5731,6 @@ export type SessionAbortErrors = {
    * Bad request
    */
   400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
 }
 
 export type SessionAbortError = SessionAbortErrors[keyof SessionAbortErrors]
@@ -5681,7 +5766,7 @@ export type SessionInitErrors = {
    */
   400: BadRequestError
   /**
-   * Not found
+   * NotFoundError
    */
   404: NotFoundError
 }
@@ -5836,7 +5921,7 @@ export type SessionPromptAsyncErrors = {
    */
   400: BadRequestError
   /**
-   * Not found
+   * NotFoundError
    */
   404: NotFoundError
 }
@@ -5885,7 +5970,7 @@ export type SessionCommandErrors = {
    */
   400: BadRequestError
   /**
-   * Not found
+   * NotFoundError
    */
   404: NotFoundError
 }
@@ -5930,7 +6015,7 @@ export type SessionShellErrors = {
    */
   400: BadRequestError
   /**
-   * Not found
+   * NotFoundError
    */
   404: NotFoundError
 }
@@ -5970,7 +6055,7 @@ export type SessionRevertErrors = {
    */
   400: BadRequestError
   /**
-   * Not found
+   * NotFoundError
    */
   404: NotFoundError
 }
@@ -6004,7 +6089,7 @@ export type SessionUnrevertErrors = {
    */
   400: BadRequestError
   /**
-   * Not found
+   * NotFoundError
    */
   404: NotFoundError
 }
@@ -6041,7 +6126,7 @@ export type PermissionRespondErrors = {
    */
   400: BadRequestError
   /**
-   * Not found
+   * NotFoundError
    */
   404: NotFoundError
 }
@@ -6077,7 +6162,7 @@ export type PartDeleteErrors = {
    */
   400: BadRequestError
   /**
-   * Not found
+   * NotFoundError
    */
   404: NotFoundError
 }
@@ -6113,7 +6198,7 @@ export type PartUpdateErrors = {
    */
   400: BadRequestError
   /**
-   * Not found
+   * NotFoundError
    */
   404: NotFoundError
 }
@@ -6772,7 +6857,7 @@ export type ExperimentalWorkspaceCreateData = {
   body?: {
     id?: string
     type: string
-    branch: string | null
+    branch?: string | null
     extra?: unknown | null
   }
   path?: never

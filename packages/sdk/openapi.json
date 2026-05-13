@@ -1013,6 +1013,16 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "WorktreeError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorktreeError"
+                }
+              }
+            }
           }
         },
         "description": "List all sandbox worktrees for the current project.",
@@ -1057,11 +1067,11 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "WorktreeError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "$ref": "#/components/schemas/WorktreeError"
                 }
               }
             }
@@ -1119,11 +1129,11 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "WorktreeError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "$ref": "#/components/schemas/WorktreeError"
                 }
               }
             }
@@ -1183,11 +1193,11 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "WorktreeError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "$ref": "#/components/schemas/WorktreeError"
                 }
               }
             }
@@ -4207,11 +4217,11 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "ProviderAuthError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "$ref": "#/components/schemas/ProviderAuthError1"
                 }
               }
             }
@@ -4293,11 +4303,11 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "ProviderAuthError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "$ref": "#/components/schemas/ProviderAuthError1"
                 }
               }
             }
@@ -4893,7 +4903,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -4970,7 +4980,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -5227,7 +5237,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -5474,7 +5484,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -5635,16 +5645,6 @@
                 }
               }
             }
-          },
-          "404": {
-            "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
-                }
-              }
-            }
           }
         },
         "description": "Abort an active session and stop any ongoing AI processing or command execution.",
@@ -5711,7 +5711,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -6040,7 +6040,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -6195,7 +6195,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -6344,7 +6344,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -6453,7 +6453,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -6547,7 +6547,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -6630,7 +6630,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -6740,7 +6740,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -6828,7 +6828,7 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "NotFoundError",
             "content": {
               "application/json": {
                 "schema": {
@@ -8540,7 +8540,7 @@
                     ]
                   }
                 },
-                "required": ["type", "branch"],
+                "required": ["type"],
                 "additionalProperties": false
               }
             }
@@ -11018,6 +11018,38 @@
             "required": ["additions", "deletions", "files"],
             "additionalProperties": false
           },
+          "cost": {
+            "type": "number"
+          },
+          "tokens": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "number"
+              },
+              "output": {
+                "type": "number"
+              },
+              "reasoning": {
+                "type": "number"
+              },
+              "cache": {
+                "type": "object",
+                "properties": {
+                  "read": {
+                    "type": "number"
+                  },
+                  "write": {
+                    "type": "number"
+                  }
+                },
+                "required": ["read", "write"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["input", "output", "reasoning", "cache"],
+            "additionalProperties": false
+          },
           "share": {
             "type": "object",
             "properties": {
@@ -11597,9 +11629,6 @@
                 "$ref": "#/components/schemas/PermissionActionConfig"
               },
               "websearch": {
-                "$ref": "#/components/schemas/PermissionActionConfig"
-              },
-              "codesearch": {
                 "$ref": "#/components/schemas/PermissionActionConfig"
               },
               "repo_clone": {
@@ -12601,6 +12630,49 @@
                 "required": ["read", "write"],
                 "additionalProperties": false
               },
+              "tiers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "input": {
+                      "type": "number"
+                    },
+                    "output": {
+                      "type": "number"
+                    },
+                    "cache": {
+                      "type": "object",
+                      "properties": {
+                        "read": {
+                          "type": "number"
+                        },
+                        "write": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["read", "write"],
+                      "additionalProperties": false
+                    },
+                    "tier": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": ["context"]
+                        },
+                        "size": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["type", "size"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["input", "output", "cache", "tier"],
+                  "additionalProperties": false
+                }
+              },
               "experimentalOver200K": {
                 "type": "object",
                 "properties": {
@@ -12777,6 +12849,35 @@
           "type": "string"
         }
       },
+      "WorktreeError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "WorktreeNotGitError",
+              "WorktreeNameGenerationFailedError",
+              "WorktreeCreateFailedError",
+              "WorktreeStartCommandFailedError",
+              "WorktreeRemoveFailedError",
+              "WorktreeResetFailedError",
+              "WorktreeListFailedError"
+            ]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
       "WorktreeCreateInput": {
         "type": "object",
         "properties": {
@@ -12803,7 +12904,7 @@
             "type": "string"
           }
         },
-        "required": ["name", "branch", "directory"],
+        "required": ["name", "directory"],
         "additionalProperties": false
       },
       "WorktreeRemoveInput": {
@@ -12889,6 +12990,38 @@
               }
             },
             "required": ["additions", "deletions", "files"],
+            "additionalProperties": false
+          },
+          "cost": {
+            "type": "number"
+          },
+          "tokens": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "number"
+              },
+              "output": {
+                "type": "number"
+              },
+              "reasoning": {
+                "type": "number"
+              },
+              "cache": {
+                "type": "object",
+                "properties": {
+                  "read": {
+                    "type": "number"
+                  },
+                  "write": {
+                    "type": "number"
+                  }
+                },
+                "required": ["read", "write"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["input", "output", "reasoning", "cache"],
             "additionalProperties": false
           },
           "share": {
@@ -13642,6 +13775,41 @@
         "required": ["url", "method", "instructions"],
         "additionalProperties": false
       },
+      "ProviderAuthError1": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "BadRequest",
+              "ProviderAuthOauthMissing",
+              "ProviderAuthOauthCodeMissing",
+              "ProviderAuthOauthCallbackFailed",
+              "ProviderAuthValidationFailed"
+            ]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "providerID": {
+                "type": "string"
+              },
+              "field": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
       "TextPartInput": {
         "type": "object",
         "properties": {
@@ -14027,7 +14195,7 @@
             ]
           }
         },
-        "required": ["id", "type", "name", "branch", "directory", "extra", "projectID", "timeUsed"],
+        "required": ["id", "type", "name", "projectID", "timeUsed"],
         "additionalProperties": false
       },
       "WorkspaceWarpError": {
@@ -14382,6 +14550,52 @@
                           }
                         },
                         "required": ["additions", "deletions", "files"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "cost": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "tokens": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "input": {
+                            "type": "number"
+                          },
+                          "output": {
+                            "type": "number"
+                          },
+                          "reasoning": {
+                            "type": "number"
+                          },
+                          "cache": {
+                            "type": "object",
+                            "properties": {
+                              "read": {
+                                "type": "number"
+                              },
+                              "write": {
+                                "type": "number"
+                              }
+                            },
+                            "required": ["read", "write"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": ["input", "output", "reasoning", "cache"],
                         "additionalProperties": false
                       },
                       {
@@ -16580,7 +16794,7 @@
                 "type": "string"
               }
             },
-            "required": ["name", "branch"],
+            "required": ["name"],
             "additionalProperties": false
           }
         },
@@ -18138,6 +18352,38 @@
             "required": ["id", "providerID", "variant"],
             "additionalProperties": false
           },
+          "cost": {
+            "type": "number"
+          },
+          "tokens": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "number"
+              },
+              "output": {
+                "type": "number"
+              },
+              "reasoning": {
+                "type": "number"
+              },
+              "cache": {
+                "type": "object",
+                "properties": {
+                  "read": {
+                    "type": "number"
+                  },
+                  "write": {
+                    "type": "number"
+                  }
+                },
+                "required": ["read", "write"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["input", "output", "reasoning", "cache"],
+            "additionalProperties": false
+          },
           "time": {
             "type": "object",
             "properties": {
@@ -18158,7 +18404,7 @@
             "type": "string"
           }
         },
-        "required": ["id", "projectID", "time", "title"],
+        "required": ["id", "projectID", "cost", "tokens", "time", "title"],
         "additionalProperties": false
       },
       "SessionDelivery": {

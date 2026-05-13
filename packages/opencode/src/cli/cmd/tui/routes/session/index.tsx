@@ -10,6 +10,7 @@ import {
   onMount,
   Show,
   Switch,
+  untrack,
   useContext,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
@@ -242,7 +243,7 @@ export function Session() {
   createEffect(() => {
     const sessionID = route.sessionID
     void (async () => {
-      const previousWorkspace = project.workspace.current()
+      const previousWorkspace = untrack(() => project.workspace.current())
       const result = await sdk.client.session.get({ sessionID }, { throwOnError: true })
       if (!result.data) {
         toast.show({
@@ -1984,11 +1985,11 @@ function WebFetch(props: ToolProps<typeof WebFetchTool>) {
 }
 
 function WebSearch(props: ToolProps<typeof WebSearchTool>) {
-  const metadata = props.metadata as { numResults?: number; provider?: unknown }
+  const metadata = () => props.metadata as { numResults?: number; provider?: unknown }
   return (
     <InlineTool icon="◈" pending="Searching web..." complete={props.input.query} part={props.part}>
-      {webSearchProviderLabel(metadata.provider)} "{props.input.query}"{" "}
-      <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
+      {webSearchProviderLabel(metadata().provider)} "{props.input.query}"{" "}
+      <Show when={metadata().numResults}>({metadata().numResults} results)</Show>
     </InlineTool>
   )
 }

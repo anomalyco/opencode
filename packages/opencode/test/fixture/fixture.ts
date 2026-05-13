@@ -135,7 +135,7 @@ export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.
       yield* git("config", "commit.gpgsign", "false")
       yield* git("config", "user.email", "test@opencode.test")
       yield* git("config", "user.name", "Test")
-      yield* git("commit", "--allow-empty", "-m", "root commit")
+      yield* git("commit", "--allow-empty", "-m", `root commit ${dir}`)
     }
 
     if (options?.config) {

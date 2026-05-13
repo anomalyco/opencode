@@ -214,6 +214,7 @@ import type {
   WorktreeCreateErrors,
   WorktreeCreateInput,
   WorktreeCreateResponses,
+  WorktreeListErrors,
   WorktreeListResponses,
   WorktreeRemoveErrors,
   WorktreeRemoveInput,
@@ -1256,7 +1257,7 @@ export class Worktree extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).get<WorktreeListResponses, unknown, ThrowOnError>({
+    return (options?.client ?? this.client).get<WorktreeListResponses, WorktreeListErrors, ThrowOnError>({
       url: "/experimental/worktree",
       ...options,
       ...params,

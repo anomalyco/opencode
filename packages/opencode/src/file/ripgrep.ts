@@ -11,8 +11,7 @@ import { Global } from "@opencode-ai/core/global"
 import * as Log from "@opencode-ai/core/util/log"
 import { sanitizedProcessEnv } from "@opencode-ai/core/util/opencode-process"
 import { which } from "@/util/which"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "ripgrep" })
 const VERSION = "15.1.0"
@@ -69,7 +68,7 @@ export const SearchMatch = Schema.Struct({
       end: NonNegativeInt,
     }),
   ),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 
 export const Match = Schema.Struct({
   type: Schema.Literal("match"),
