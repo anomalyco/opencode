@@ -4,6 +4,41 @@ import { FormatError } from "../../src/cli/error"
 import { UI } from "../../src/cli/ui"
 
 describe("cli.error", () => {
+  test("formats legacy and tagged config errors the same way", () => {
+    const cases = [
+      {
+        tag: "ConfigJsonError",
+        data: { path: "/tmp/opencode.jsonc", message: "Unexpected token" },
+        expected: "Config file at /tmp/opencode.jsonc is not valid JSON(C): Unexpected token",
+      },
+      {
+        tag: "ConfigDirectoryTypoError",
+        data: { path: "/tmp/opencode.jsonc", dir: ".opencode", suggestion: "opencode" },
+        expected:
+          'Directory ".opencode" in /tmp/opencode.jsonc is not valid. Rename the directory to "opencode" or remove it. This is a common typo.',
+      },
+      {
+        tag: "ConfigFrontmatterError",
+        data: { path: "/tmp/AGENTS.md", message: "failed frontmatter" },
+        expected: "failed frontmatter",
+      },
+      {
+        tag: "ConfigInvalidError",
+        data: {
+          path: "/tmp/opencode.jsonc",
+          message: "schema mismatch",
+          issues: [{ message: "Expected string", path: ["provider", "id"] }],
+        },
+        expected: "Configuration is invalid at /tmp/opencode.jsonc: schema mismatch\n↳ Expected string provider.id",
+      },
+    ]
+
+    for (const item of cases) {
+      expect(FormatError({ name: item.tag, data: item.data })).toBe(item.expected)
+      expect(FormatError({ _tag: item.tag, ...item.data })).toBe(item.expected)
+    }
+  })
+
   test("formats account transport errors clearly", () => {
     const error = new AccountTransportError({
       method: "POST",
