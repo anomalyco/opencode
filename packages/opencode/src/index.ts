@@ -1,6 +1,5 @@
 import { SentryReporter } from "./util/sentry"
 
-// Sentry init must run before any other module observes runtime errors.
 SentryReporter.init()
 
 import yargs from "yargs"
@@ -41,8 +40,6 @@ import { Database } from "./storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 
-// Note: Sentry 의 onUncaughtExceptionIntegration/onUnhandledRejectionIntegration 가
-// 기본 활성화되어 있어 process-level 예외는 자동 보고된다. 여기서는 로그만 남긴다.
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
     e: errorMessage(e),
@@ -208,6 +205,9 @@ try {
     })
   }
   Log.Default.error("fatal", data)
+  // yargs 의 명시적 try/catch 가 에러를 이미 잡았으므로 Sentry 의 자동 process 핸들러
+  // (onUncaughtExceptionIntegration / onUnhandledRejectionIntegration) 로는 도달하지 않는다.
+  // 보고가 누락되지 않도록 수동 캡처.
   SentryReporter.captureException(e, { kind: "fatal" })
   const formatted = FormatError(e)
   if (formatted) UI.error(formatted)

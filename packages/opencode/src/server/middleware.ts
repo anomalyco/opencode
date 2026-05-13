@@ -27,7 +27,10 @@ export function errorHandler(log: Log.Logger): ErrorHandler {
     }
     if (err instanceof HTTPException) return err.getResponse()
     const message = err instanceof Error && err.stack ? err.stack : err.toString()
-    // Only the "unknown" branch is unexpected; known error shapes above are user-facing.
+    // Hono 가 route handler 의 throw 를 자체 try/catch 로 잡아 onError 로 위임하므로
+    // 에러는 Bun.serve / process-level 까지 올라오지 않는다. Sentry 의 자동 인스트루멘테이션이
+    // 보지 못하는 경로라 수동 캡처가 필요. 위 분기들은 의도된 사용자 에러(4xx)라 노이즈가 되므로
+    // unknown 5xx 분기에서만 보고한다.
     SentryReporter.captureException(err, { path: c.req.path, method: c.req.method })
     return c.json(new NamedError.Unknown({ message }).toObject(), {
       status: 500,
