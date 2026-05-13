@@ -16,6 +16,7 @@ import { ProviderTransform } from "@/provider/transform"
 import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
+import PROMPT_ASK from "../session/prompt/ask.txt"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
@@ -387,6 +388,14 @@ export const layer = Layer.effect(
       if (!userMessage) return input.messages
 
       if (!flags.experimentalPlanMode) {
+        if (input.agent.name === "ask") {
+          userMessage.parts.push({
+            info: { role: "system", time: Date.now() },
+            content: PROMPT_ASK,
+          })
+          return input.messages
+        }
+
         if (input.agent.name === "plan") {
           userMessage.parts.push({
             id: PartID.ascending(),
