@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
@@ -579,6 +579,50 @@ describe("MessageV2.get", () => {
         expect(result.parts).toEqual([])
       }),
     ),
+  )
+})
+
+describe("Session.messages", () => {
+  it.instance("returns all messages in chronological order across pages", () =>
+    withSession(({ session, sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* fill(sessionID, 55)
+        const result = yield* session.messages({ sessionID })
+        expect(result.map((item) => item.info.id)).toEqual(ids)
+      }),
+    ),
+  )
+
+  it.instance("fails with NotFoundError for non-existent session", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const fake = "non-existent-session" as SessionID
+      const error = yield* Effect.flip(session.messages({ sessionID: fake }))
+      expect(error).toBeInstanceOf(NotFoundError)
+      expect(error.message).toBe(`Session not found: ${fake}`)
+    }),
+  )
+})
+
+describe("Session.findMessage", () => {
+  it.instance("searches newest-first", () =>
+    withSession(({ session, sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* fill(sessionID, 3)
+        const result = yield* session.findMessage(sessionID, () => true)
+        expect(Option.isSome(result) ? result.value.info.id : undefined).toBe(ids.at(-1))
+      }),
+    ),
+  )
+
+  it.instance("fails with NotFoundError for non-existent session", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const fake = "non-existent-session" as SessionID
+      const error = yield* Effect.flip(session.findMessage(fake, () => true))
+      expect(error).toBeInstanceOf(NotFoundError)
+      expect(error.message).toBe(`Session not found: ${fake}`)
+    }),
   )
 })
 
