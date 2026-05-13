@@ -7,4 +7,4 @@ export const DateTimeUtcFromMillis = Schema.Finite.pipe(
   }),
 )
 
-export * as V2Schema from "./schema"
+export * as V2Schema from "./v2-schema"
