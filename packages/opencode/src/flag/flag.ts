@@ -54,6 +54,9 @@ export namespace Flag {
   // Serve proxy (subdomain routing)
   export const OPENCODE_SERVE_DOMAIN = process.env["OPENCODE_SERVE_DOMAIN"]
 
+  // Deployment environment (helm 이 주입: "development" | "production")
+  export const ENVIRONMENT = process.env["ENVIRONMENT"]
+
   export const OPENCODE_ENABLE_QUESTION_TOOL = truthy("OPENCODE_ENABLE_QUESTION_TOOL")
 
   // Experimental

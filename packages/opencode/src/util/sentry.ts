@@ -23,7 +23,7 @@ export namespace SentryReporter {
 
     SentryBun.init({
       dsn: DSN,
-      environment: process.env["ENVIRONMENT"],
+      environment: Flag.ENVIRONMENT,
       sendDefaultPii: false,
       tracesSampleRate: 0,
       initialScope: {
