@@ -1684,6 +1684,11 @@ export default function Page() {
   let initialScrollKey: string | undefined
   let initialScrollFrame: number | undefined
   let until = 0
+  let jumpIntent = false
+  const jumpToBottomIntent = () => jumpIntent
+  const clearJumpIntent = () => {
+    jumpIntent = false
+  }
 
   const hasScrollTarget = () => !!location.hash || !!ui.pendingMessage || !!ui.seekingMessageId || !!store.messageId
   const settling = () => !!initialScrollKey && performance.now() < until && !hasScrollGesture()
@@ -1801,14 +1806,16 @@ export default function Page() {
   }
 
   const resumeScroll = () => {
+    jumpIntent = true
     setStore("messageId", undefined)
     setUi("seekingMessageId", undefined)
-    enterLive()
-    autoScroll.forceScrollToBottom()
     clearMessageHash()
 
     const el = scroller
-    if (el) scheduleScrollState(el)
+    if (el) {
+      el.scrollTop = el.scrollHeight
+      scheduleScrollState(el)
+    }
   }
 
   // When the user returns to the bottom, treat the active message as "latest".
@@ -2434,6 +2441,8 @@ export default function Page() {
                     scroll={ui.scroll}
                     live={live()}
                     onResumeScroll={resumeScroll}
+                    jumpToBottomIntent={jumpToBottomIntent}
+                    onClearJumpIntent={clearJumpIntent}
                     setScrollRef={setScrollRef}
                     onScheduleScrollState={scheduleScrollState}
                     onAutoScrollHandleScroll={handleTimelineAutoScroll}

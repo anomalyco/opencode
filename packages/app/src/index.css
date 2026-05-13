@@ -184,7 +184,9 @@
   }
 
   [data-slot="session-turn-list"][data-virtualized="true"] [data-component="assistant-message"],
-  [data-slot="session-turn-list"][data-virtualized="true"] [data-component="tool-trigger"] {
+  [data-slot="session-turn-list"][data-virtualized="true"] [data-component="tool-trigger"],
+  [data-slot="session-turn-list"][data-virtualized="true"] [data-component="file"],
+  [data-slot="session-turn-list"][data-virtualized="true"] .turn-content-skip {
     content-visibility: visible;
   }
 

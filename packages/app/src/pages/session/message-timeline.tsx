@@ -345,6 +345,8 @@ export function MessageTimeline(props: {
   scroll: { overflow: boolean; bottom: boolean }
   live: boolean
   onResumeScroll: () => void
+  jumpToBottomIntent: () => boolean
+  onClearJumpIntent: () => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
   onScheduleScrollState: (el: HTMLDivElement) => void
   onAutoScrollHandleScroll: () => void
@@ -684,14 +686,25 @@ export function MessageTimeline(props: {
 
   const canWindow = createMemo(() => !isWorking() && !sessionSwitching() && eligible().enabled)
 
+  let prevCanWindow: boolean | undefined
   createEffect(() => {
+    const active = canWindow()
     const id = sessionID()
+    if (prevCanWindow !== undefined && prevCanWindow !== active) {
+      const root = viewport
+      const data = root ? snap(root) : undefined
+      console.warn(
+        `[jump-diag] canWindow toggled: ${prevCanWindow} → ${active} id=${id || "none"} working=${isWorking()} switching=${sessionSwitching()} eligible=${eligible().enabled} scrollTop=${data?.top ?? "none"} gap=${data?.gap ?? "none"} window=[${windowed.start},${windowed.end}]`,
+      )
+    }
+    prevCanWindow = active
+
     if (!vdebug(id) && !mddebug()) return
     const state = eligible()
     const visible = visibleRendered().length
     const ids = rendered().length
     console.debug(
-      `[virtual] id=${id || "none"} active=${canWindow()} eligible=${state.enabled} working=${isWorking()} switching=${sessionSwitching()} turns=${ids} visible=${visible} window=[${windowed.start},${windowed.end}] count=${state.count} total=${state.total} tall=${state.tall} complex=${state.complex} sum=${Math.round(state.sum)} peak=${Math.round(state.peak)} score=${Math.round(state.score)} text=${state.text} math=${state.math} code=${state.code} parts=${state.parts} tools=${state.tools}`,
+      `[virtual] id=${id || "none"} active=${active} eligible=${state.enabled} working=${isWorking()} switching=${sessionSwitching()} turns=${ids} visible=${visible} window=[${windowed.start},${windowed.end}] count=${state.count} total=${state.total} tall=${state.tall} complex=${state.complex} sum=${Math.round(state.sum)} peak=${Math.round(state.peak)} score=${Math.round(state.score)} text=${state.text} math=${state.math} code=${state.code} parts=${state.parts} tools=${state.tools}`,
     )
   })
 
@@ -944,7 +957,18 @@ export function MessageTimeline(props: {
     if (seek) trace("apply-before", seek)
     const streaming = isWorking() && props.live && !props.currentMessageId
     const pinned = streaming && !props.seekingMessageId && !!before && before.gap <= 16
-    const viewportAnchor = pinned ? undefined : captureWindowAnchor()
+    const jumping = props.jumpToBottomIntent()
+
+    // Freeze window during active scroll gesture to prevent oscillation.
+    // Turns that render at different heights when off-screen vs on-screen
+    // cause feedback loops if the window changes mid-gesture.
+    if (!seek && !streaming && !jumping && props.hasScrollGesture()) {
+      // Re-schedule so the window updates once the gesture expires.
+      scheduleWindow()
+      return
+    }
+
+    const viewportAnchor = (pinned || jumping) ? undefined : captureWindowAnchor()
     const targetId = props.currentMessageId ?? activeMessageID() ?? viewportAnchor?.id
     const targetAnchor = captureMessageAnchor(targetId)
     const scrollAnchor =
@@ -954,8 +978,11 @@ export function MessageTimeline(props: {
           ? targetAnchor
           : viewportAnchor
     const base = props.seekingMessageId ? buildTargetWindow(props.seekingMessageId) : buildWindow()
-    const next = syncWindow(base, pinned ? undefined : targetId)
+    const next = syncWindow(base, (pinned || jumping) ? undefined : targetId)
     const same = sameWindow(next)
+    console.debug(
+      `[jump-diag] applyWindow: streaming=${streaming} pinned=${pinned} jumping=${jumping} same=${same} seek=${seek || "none"} anchor=${scrollAnchor?.id || "none"} anchorTop=${scrollAnchor ? Math.round(scrollAnchor.top) : "none"} before=[${windowed.start},${windowed.end}] next=[${next.start},${next.end}] spacerTop=${Math.round(windowed.top)}→${Math.round(next.top)} spacerBottom=${Math.round(windowed.bottom)}→${Math.round(next.bottom)} scrollTop=${before?.top ?? "none"} gap=${before?.gap ?? "none"} gesture=${props.hasScrollGesture()}`,
+    )
     if (seek) {
       trace(
         "apply-window",
@@ -964,26 +991,32 @@ export function MessageTimeline(props: {
       )
     }
     if (same && !seek) {
-      if (pinned && root) {
+      if ((pinned || jumping) && root) {
         root.scrollTop = root.scrollHeight
         props.onScheduleScrollState(root)
       }
+      if (jumping) props.onClearJumpIntent()
       return
     }
 
+    let spacerShift = 0
     if (!same) {
       const prev = { start: windowed.start, end: windowed.end, top: windowed.top, bottom: windowed.bottom }
       const top = Math.round(next.top - prev.top)
       const bottom = Math.round(next.bottom - prev.bottom)
-      const shift = Math.max(Math.abs(top), Math.abs(bottom))
+      spacerShift = Math.max(Math.abs(top), Math.abs(bottom))
       seq += 1
-      if (seek && shift > SPACER_SHIFT_WARN) trace("spacer-shift", seek, `deltaTop=${top} deltaBottom=${bottom}`)
+      if (seek && spacerShift > SPACER_SHIFT_WARN) trace("spacer-shift", seek, `deltaTop=${top} deltaBottom=${bottom}`)
       setWindowed(next)
     }
 
     audit(props.seekingMessageId ? "seek-window" : "apply-window")
     const adjustVersion = ++windowAdjustVersion
-    const preserve = !seek && !pinned && props.hasScrollGesture() && !props.scroll.bottom
+    // Only preserve (skip correction) for small window adjustments during gesture.
+    // Large spacer shifts (e.g. stale height cache) MUST be corrected or the user sees a jump.
+    const preserve = !seek && !pinned && !jumping && props.hasScrollGesture() && !props.scroll.bottom && spacerShift < SPACER_SHIFT_WARN
+
+    // Path A: Streaming follow — continuous pin to bottom while content grows
     if (!seek && (pinned || streaming)) {
       requestAnimationFrame(() => {
         if (adjustVersion !== windowAdjustVersion) return
@@ -1003,10 +1036,32 @@ export function MessageTimeline(props: {
       })
       return
     }
+
+    // Path C: Jump to bottom — one-shot user intent, pin and clear
+    // Do NOT clear jumpIntent here. Clearing it synchronously causes a race:
+    // the window change triggers ResizeObserver measurements which schedule
+    // another applyWindow. If jumpIntent is already false, that call performs
+    // anchor correction that fights the jump and reverts the scroll position.
+    // Instead, jumpIntent stays true until the window stabilizes (same=true)
+    // and is cleared in the steady-state path above (line ~955).
+    if (!seek && jumping) {
+      requestAnimationFrame(() => {
+        if (adjustVersion !== windowAdjustVersion) return
+        const root = viewport
+        if (!root) return
+        if (root.clientHeight <= 0 || root.scrollHeight <= 0) return
+        root.scrollTop = root.scrollHeight
+        props.onScheduleScrollState(root)
+      })
+      return
+    }
+
     if (!scrollAnchor) {
+      console.debug(`[jump-diag] applyWindow: no anchor, skipping correction`)
       return
     }
     if (preserve) {
+      console.debug(`[jump-diag] applyWindow: preserve (gesture active), skipping correction`)
       return
     }
 
@@ -1026,6 +1081,9 @@ export function MessageTimeline(props: {
             const prevTop = root.scrollTop
             root.scrollTop += delta
             const after = snap(root)
+            console.debug(
+              `[jump-diag] anchor-correct: anchor=${scrollAnchor.id} delta=${Math.round(delta)} prevTop=${Math.round(prevTop)} afterTop=${after.top} expectedTop=${Math.round(scrollAnchor.top)} actualTop=${Math.round(top)}`,
+            )
 
             if (seek)
               trace(
@@ -1036,6 +1094,9 @@ export function MessageTimeline(props: {
             props.onScheduleScrollState(root)
           }
         } else {
+          console.warn(
+            `[jump-diag] anchor-MISSING: anchor=${scrollAnchor.id} window=[${windowed.start},${windowed.end}] — scroll jump likely!`,
+          )
           if (seek) trace("anchor-missing", seek, `anchor=${scrollAnchor.id}`)
         }
       }
@@ -2679,7 +2740,13 @@ export function MessageTimeline(props: {
       if (!next) return
       const prev = turnHeights.get(item.messageID)
       const base = prev ?? estimatedTurnHeight
-      if (!visible(node) && next < base - HEIGHT_SHIFT_WARN) {
+      // When virtualization is active, content-visibility is forced to "visible"
+      // so measurements are reliable. Only guard against offscreen shrink when
+      // NOT virtualized (content-visibility: auto may report collapsed height).
+      if (!canWindow() && !visible(node) && next < base - HEIGHT_SHIFT_WARN) {
+        console.debug(
+          `[jump-diag] measure-ignored-shrink: id=${item.messageID} index=${item.index} prev=${Math.round(base)} next=${Math.round(next)} delta=${Math.round(next - base)} window=[${windowed.start},${windowed.end}]`,
+        )
         if (seek()) {
           trace(
             "measure-ignored-shrink",
@@ -2698,6 +2765,9 @@ export function MessageTimeline(props: {
       const delta = prev === undefined ? 0 : Math.round(next - prev)
       seq += 1
       if (prev !== undefined && Math.abs(delta) > HEIGHT_SHIFT_WARN) {
+        console.warn(
+          `[jump-diag] measure-large-shift: id=${item.messageID} index=${item.index} prev=${Math.round(prev)} next=${Math.round(next)} delta=${delta} stage=${bucket} visible=${visible(node)} near=${near()} active=${active()} window=[${windowed.start},${windowed.end}]`,
+        )
         if (seek()) {
           trace("measure-target", item.messageID, `prev=${Math.round(prev)} next=${Math.round(next)} delta=${delta}`)
         }
