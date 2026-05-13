@@ -20,6 +20,7 @@ export const EnvRoutes = () =>
                   .object({
                     serveDomain: z.string().optional(),
                     jupyterhubUser: z.string().optional(),
+                    environment: z.string().optional(),
                   })
                   .meta({
                     ref: "Env",
@@ -34,6 +35,7 @@ export const EnvRoutes = () =>
       return c.json({
         ...(Flag.OPENCODE_SERVE_DOMAIN ? { serveDomain: Flag.OPENCODE_SERVE_DOMAIN } : {}),
         ...(Flag.JUPYTERHUB_USER ? { jupyterhubUser: Flag.JUPYTERHUB_USER } : {}),
+        ...(Flag.ENVIRONMENT ? { environment: Flag.ENVIRONMENT } : {}),
       })
     },
   )

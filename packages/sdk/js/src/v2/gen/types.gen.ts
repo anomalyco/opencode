@@ -1748,6 +1748,7 @@ export type Provider = {
 export type Env = {
   serveDomain?: string
   jupyterhubUser?: string
+  environment?: string
 }
 
 export type ToolIds = Array<string>
