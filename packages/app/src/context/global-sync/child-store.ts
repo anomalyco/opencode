@@ -209,7 +209,7 @@ export function createChildStoreManager(input: {
             sessionTotal: 0,
             session_status: {},
             session_working(id: string) {
-              return this.session_status[id].type !== "idle"
+              return this.session_status[id]?.type !== "idle"
             },
             session_diff: {},
             todo: {},
