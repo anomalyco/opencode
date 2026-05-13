@@ -478,12 +478,16 @@ export function MessageTimeline(props: {
     props.onScheduleScrollState(root)
   }
   const estimateTurnHeight = (id: string) => {
-    if (turnHeights.has(id)) return turnHeights.get(id)!
+    const runtime = turnHeights.get(id)
     const sid = sessionID()
-    if (sid) {
-      const cached = readHeightCache(sid, id, "full") ?? readHeightCache(sid, id, "structure") ?? readHeightCache(sid, id, "lite")
-      if (cached !== undefined) return cached
-    }
+    const cached = sid
+      ? (readHeightCache(sid, id, "full") ?? readHeightCache(sid, id, "structure") ?? readHeightCache(sid, id, "lite"))
+      : undefined
+    // Use the larger of runtime and cache — runtime may hold a partial measurement
+    // (KaTeX not yet rendered) while cache holds the correct full-render height.
+    if (runtime !== undefined && cached !== undefined) return Math.max(runtime, cached)
+    if (runtime !== undefined) return runtime
+    if (cached !== undefined) return cached
     return estimates()?.get(id)?.height ?? estimatedTurnHeight
   }
   const stageOf = (id: string) => {
@@ -634,8 +638,8 @@ export function MessageTimeline(props: {
     }),
   )
 
-  const eligible = createMemo(() => {
-    revision()
+  const eligible = createMemo((prev) => {
+    // Remove revision() dependency to prevent height changes from triggering eligibility recalculation
     const ids = rendered()
     const root = viewport
     const view = root?.clientHeight && root.clientHeight > 0 ? root.clientHeight : 800
@@ -667,8 +671,21 @@ export function MessageTimeline(props: {
     const tall = peak > view * turnViewports
     const complex = score >= scoreLimit || text || math || code || parts || tools
 
+    // Add hysteresis to prevent frequent toggling
+    const wasEnabled = prev?.enabled ?? false
+
+    // Enable threshold: higher bar to activate
+    const shouldEnable =
+      !wasEnabled && (sum > view * 2.0 || peak > view * 1.5 || score >= scoreLimit)
+
+    // Disable threshold: lower bar to deactivate (avoid frequent switching)
+    const shouldDisable =
+      wasEnabled && sum < view * 1.5 && peak < view * 1.2 && score < scoreLimit * 0.8
+
+    const enabled = shouldEnable || (wasEnabled && !shouldDisable)
+
     return {
-      enabled: count || total || tall || complex,
+      enabled,
       count,
       total,
       tall,
@@ -959,14 +976,6 @@ export function MessageTimeline(props: {
     const pinned = streaming && !props.seekingMessageId && !!before && before.gap <= 16
     const jumping = props.jumpToBottomIntent()
 
-    // Freeze window during active scroll gesture to prevent oscillation.
-    // Turns that render at different heights when off-screen vs on-screen
-    // cause feedback loops if the window changes mid-gesture.
-    if (!seek && !streaming && !jumping && props.hasScrollGesture()) {
-      // Re-schedule so the window updates once the gesture expires.
-      scheduleWindow()
-      return
-    }
 
     const viewportAnchor = (pinned || jumping) ? undefined : captureWindowAnchor()
     const targetId = props.currentMessageId ?? activeMessageID() ?? viewportAnchor?.id
@@ -2719,7 +2728,6 @@ export function MessageTimeline(props: {
       if (stage() === "full") return "full"
       return "defer"
     })
-    const skipRender = createMemo(() => isWorking() && !eager() && !near())
     const messages = createMemo<MessageType[]>((prev?: MessageType[]) => {
       if (active()) return turnMessages(sessionMessages(), item.messageID)
       const next = turnMessages(sessionMessages(), item.messageID)
@@ -2739,31 +2747,50 @@ export function MessageTimeline(props: {
       const next = node?.offsetHeight
       if (!next) return
       const prev = turnHeights.get(item.messageID)
-      const base = prev ?? estimatedTurnHeight
-      // When virtualization is active, content-visibility is forced to "visible"
-      // so measurements are reliable. Only guard against offscreen shrink when
-      // NOT virtualized (content-visibility: auto may report collapsed height).
-      if (!canWindow() && !visible(node) && next < base - HEIGHT_SHIFT_WARN) {
+      // Reject significant shrinks for off-screen turns with a known height.
+      // When a turn re-enters the DOM after virtualization, async content
+      // (KaTeX, syntax highlighting) hasn't rendered yet — ResizeObserver
+      // will fire again once rendering completes with the correct height.
+      if (prev !== undefined && !visible(node) && next < prev - HEIGHT_SHIFT_WARN) {
         console.debug(
-          `[jump-diag] measure-ignored-shrink: id=${item.messageID} index=${item.index} prev=${Math.round(base)} next=${Math.round(next)} delta=${Math.round(next - base)} window=[${windowed.start},${windowed.end}]`,
+          `[jump-diag] measure-ignored-shrink: id=${item.messageID} index=${item.index} prev=${Math.round(prev)} next=${Math.round(next)} delta=${Math.round(next - prev)} window=[${windowed.start},${windowed.end}]`,
         )
         if (seek()) {
           trace(
             "measure-ignored-shrink",
             item.messageID,
-            `prev=${Math.round(base)} next=${Math.round(next)} delta=${Math.round(next - base)}`,
+            `prev=${Math.round(prev)} next=${Math.round(next)} delta=${Math.round(next - prev)}`,
           )
         }
         return
       }
       if (prev !== undefined && Math.abs(prev - next) <= 1) return
       turnHeights.set(item.messageID, next)
+      if (rootRef && rootRef.style.minHeight) rootRef.style.minHeight = ""
       const sid = sessionID()
       const bucket = stageOf(item.messageID)
       if (sid) writeHeightCache(sid, item.messageID, bucket, next)
       setRevision((value) => value + 1)
       const delta = prev === undefined ? 0 : Math.round(next - prev)
       seq += 1
+
+      // Compensate scroll when a turn above the viewport grows (e.g. KaTeX
+      // rendering after re-entry). Without this, content below shifts down.
+      if (prev !== undefined && delta > HEIGHT_SHIFT_WARN) {
+        const root = viewport
+        if (root && node) {
+          const box = root.getBoundingClientRect()
+          const rect = node.getBoundingClientRect()
+          // Turn is above or partially above the viewport center
+          if (rect.top < box.top + box.height / 2) {
+            root.scrollTop += delta
+            console.debug(
+              `[jump-diag] measure-scroll-compensate: id=${item.messageID} index=${item.index} delta=${delta} scrollTop+=${delta}`,
+            )
+          }
+        }
+      }
+
       if (prev !== undefined && Math.abs(delta) > HEIGHT_SHIFT_WARN) {
         console.warn(
           `[jump-diag] measure-large-shift: id=${item.messageID} index=${item.index} prev=${Math.round(prev)} next=${Math.round(next)} delta=${delta} stage=${bucket} visible=${visible(node)} near=${near()} active=${active()} window=[${windowed.start},${windowed.end}]`,
@@ -2819,6 +2846,8 @@ export function MessageTimeline(props: {
         ref={(el) => {
           stop?.()
           rootRef = el
+          const cached = turnHeights.get(item.messageID)
+          if (cached) el.style.minHeight = `${cached}px`
           el.addEventListener("mousedown", onLinkDown, { capture: true })
           el.addEventListener("click", onLink, { capture: true })
           stop = () => {
@@ -2828,10 +2857,7 @@ export function MessageTimeline(props: {
         }}
         id={props.anchor(item.messageID)}
         data-message-id={item.messageID}
-        classList={{
-          "min-w-0 w-full max-w-full": true,
-          "turn-content-skip": skipRender(),
-        }}
+        class="min-w-0 w-full max-w-full"
         style={{
           ...itemStyle(props.centered),
           "margin-bottom": item.index < rendered().length - 1 ? `${gap}px` : "0px",
