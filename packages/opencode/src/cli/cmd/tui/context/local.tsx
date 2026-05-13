@@ -188,6 +188,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
+        if (!modelStore.ready) return undefined
+
         const provider = sync.data.provider[0]
         if (!provider) return undefined
         const defaultModel = sync.data.provider_default[provider.id]
