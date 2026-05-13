@@ -1,8 +1,6 @@
 export * as ConfigReference from "./reference"
 
 import { Schema } from "effect"
-import { zod } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
 
 const Git = Schema.Struct({
   repository: Schema.String.annotate({
@@ -21,7 +19,5 @@ const Local = Schema.Struct({
 
 export const Entry = Schema.Union([Schema.String, Git, Local]).annotate({ identifier: "ReferenceConfigEntry" })
 
-export const Info = Schema.Record(Schema.String, Entry)
-  .annotate({ identifier: "ReferenceConfig" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export const Info = Schema.Record(Schema.String, Entry).annotate({ identifier: "ReferenceConfig" })
 export type Info = Schema.Schema.Type<typeof Info>

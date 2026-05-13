@@ -22,11 +22,10 @@ export const WorktreeAdapter: WorkspaceAdapter = {
   description: "Create a git worktree",
   async configure(info) {
     const { AppRuntime, Worktree } = await loadWorktree()
-    const next = await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.makeWorktreeInfo()))
+    const next = await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.makeWorktreeInfo({ detached: true })))
     return {
       ...info,
       name: next.name,
-      branch: next.branch,
       directory: next.directory,
     }
   },
@@ -38,7 +37,7 @@ export const WorktreeAdapter: WorkspaceAdapter = {
         svc.createFromInfo({
           name: config.name,
           directory: config.directory,
-          branch: config.branch ?? config.name,
+          ...(config.branch ? { branch: config.branch } : {}),
         }),
       ),
     )
@@ -48,9 +47,8 @@ export const WorktreeAdapter: WorkspaceAdapter = {
     return (await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.list()))).map((info) => ({
       type: "worktree",
       name: info.name,
-      branch: info.branch ?? null,
+      branch: info.branch,
       directory: info.directory,
-      extra: null,
       projectID: Instance.project.id,
     }))
   },

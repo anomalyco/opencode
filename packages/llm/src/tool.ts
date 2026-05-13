@@ -1,5 +1,5 @@
 import { Effect, JsonSchema, Schema } from "effect"
-import type { ToolDefinition as ToolDefinitionClass } from "./schema"
+import type { ToolCallPart, ToolDefinition as ToolDefinitionClass } from "./schema"
 import { ToolDefinition, ToolFailure } from "./schema"
 
 /**
@@ -8,9 +8,14 @@ import { ToolDefinition, ToolFailure } from "./schema"
  * beyond pure data conversion belongs in the handler closure.
  */
 export type ToolSchema<T> = Schema.Codec<T, any, never, never>
+export interface ToolExecuteContext {
+  readonly id: ToolCallPart["id"]
+  readonly name: ToolCallPart["name"]
+}
 
 export type ToolExecute<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>> = (
   params: Schema.Schema.Type<Parameters>,
+  context?: ToolExecuteContext,
 ) => Effect.Effect<Schema.Schema.Type<Success>, ToolFailure>
 
 /**
@@ -61,7 +66,7 @@ type TypedToolConfig = {
 type DynamicToolConfig = {
   readonly description: string
   readonly jsonSchema: JsonSchema.JsonSchema
-  readonly execute?: (params: unknown) => Effect.Effect<unknown, ToolFailure>
+  readonly execute?: (params: unknown, context?: ToolExecuteContext) => Effect.Effect<unknown, ToolFailure>
 }
 
 /**
@@ -110,7 +115,7 @@ export function make<Parameters extends ToolSchema<any>, Success extends ToolSch
 export function make(config: {
   readonly description: string
   readonly jsonSchema: JsonSchema.JsonSchema
-  readonly execute: (params: unknown) => Effect.Effect<unknown, ToolFailure>
+  readonly execute: (params: unknown, context?: ToolExecuteContext) => Effect.Effect<unknown, ToolFailure>
 }): AnyExecutableTool
 export function make(config: {
   readonly description: string

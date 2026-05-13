@@ -78,8 +78,8 @@ export function FormatError(input: unknown) {
     ].join("\n")
   }
 
-  // UICancelledError: void (no data)
-  if (NamedError.hasName(input, "UICancelledError")) {
+  // UICancelledError: user cancelled an interactive CLI prompt
+  if (isTaggedError(input, "UICancelledError") || NamedError.hasName(input, "UICancelledError")) {
     return ""
   }
 }

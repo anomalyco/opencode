@@ -13,16 +13,13 @@ import { testEffect } from "../lib/effect"
 const stateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
     const original = {
-      OPENCODE_EXPERIMENTAL_HTTPAPI: Flag.OPENCODE_EXPERIMENTAL_HTTPAPI,
       OPENCODE_EXPERIMENTAL_WORKSPACES: Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
     }
 
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
 
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
-        Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original.OPENCODE_EXPERIMENTAL_HTTPAPI
         Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = original.OPENCODE_EXPERIMENTAL_WORKSPACES
         await resetDatabase()
       }),

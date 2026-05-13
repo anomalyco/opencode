@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { ContentPart, LLMEvent, LLMRequest, ModelID, ModelLimits, ModelRef, ProviderID } from "../src/schema"
+import { ContentPart, LLMEvent, LLMRequest, ModelID, ModelLimits, ModelRef, ProviderID, Usage } from "../src/schema"
+import { ProviderShared } from "../src/protocols/shared"
 
 const model = new ModelRef({
   id: ModelID.make("fake-model"),
@@ -43,8 +44,40 @@ describe("llm schema", () => {
     expect(() => Schema.decodeUnknownSync(LLMEvent)({ type: "bogus" })).toThrow()
   })
 
+  test("finish constructors accept usage input", () => {
+    expect(LLMEvent.stepFinish({ index: 0, reason: "stop", usage: { inputTokens: 1 } }).usage).toBeInstanceOf(Usage)
+    expect(LLMEvent.finish({ reason: "stop", usage: { outputTokens: 2 } }).usage).toBeInstanceOf(Usage)
+  })
+
   test("content part tagged union exposes guards", () => {
     expect(ContentPart.guards.text({ type: "text", text: "hi" })).toBe(true)
     expect(ContentPart.guards.media({ type: "text", text: "hi" })).toBe(false)
+  })
+})
+
+describe("LLM.Usage", () => {
+  test("subtractTokens clamps non-sensical breakdowns to zero", () => {
+    // Defense against a provider reporting cached_tokens > prompt_tokens or
+    // reasoning_tokens > completion_tokens — the negative would otherwise
+    // round-trip through the pipeline and crash strict downstream schemas.
+    expect(ProviderShared.subtractTokens(5, 3)).toBe(2)
+    expect(ProviderShared.subtractTokens(5, 10)).toBe(0)
+    expect(ProviderShared.subtractTokens(5, undefined)).toBe(5)
+    expect(ProviderShared.subtractTokens(undefined, 3)).toBeUndefined()
+    expect(ProviderShared.subtractTokens(undefined, undefined)).toBeUndefined()
+  })
+
+  test("sumTokens returns undefined only when every input is undefined", () => {
+    expect(ProviderShared.sumTokens(1, 2, 3)).toBe(6)
+    expect(ProviderShared.sumTokens(1, undefined, 3)).toBe(4)
+    expect(ProviderShared.sumTokens(undefined, undefined, undefined)).toBeUndefined()
+    expect(ProviderShared.sumTokens()).toBeUndefined()
+  })
+
+  test("visibleOutputTokens clamps reasoning > output to zero", () => {
+    expect(new Usage({ outputTokens: 10, reasoningTokens: 4 }).visibleOutputTokens).toBe(6)
+    expect(new Usage({ outputTokens: 10 }).visibleOutputTokens).toBe(10)
+    expect(new Usage({ outputTokens: 4, reasoningTokens: 10 }).visibleOutputTokens).toBe(0)
+    expect(new Usage({}).visibleOutputTokens).toBe(0)
   })
 })

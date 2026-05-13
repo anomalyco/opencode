@@ -10,8 +10,9 @@ import { EventV2 } from "./event"
 import { ProjectID } from "@/project/schema"
 import { SessionEvent } from "./session-event"
 import { V2Schema } from "./schema"
-import { optionalOmitUndefined } from "@/util/schema"
+import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { Modelv2 } from "./model"
+import { SyncEvent } from "@/sync"
 
 export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({
   identifier: "Session.Delivery",
@@ -28,6 +29,16 @@ export class Info extends Schema.Class<Info>("Session.Info")({
   path: optionalOmitUndefined(Schema.String),
   agent: optionalOmitUndefined(Schema.String),
   model: Modelv2.Ref.pipe(optionalOmitUndefined),
+  cost: Schema.Finite,
+  tokens: Schema.Struct({
+    input: Schema.Finite,
+    output: Schema.Finite,
+    reasoning: Schema.Finite,
+    cache: Schema.Struct({
+      read: Schema.Finite,
+      write: Schema.Finite,
+    }),
+  }),
   time: Schema.Struct({
     created: V2Schema.DateTimeUtcFromMillis,
     updated: V2Schema.DateTimeUtcFromMillis,
@@ -113,6 +124,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const sync = yield* SyncEvent.Service
     const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
 
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -134,6 +146,16 @@ export const layer = Layer.effect(
               variant: Modelv2.VariantID.make(row.model.variant ?? "default"),
             }
           : undefined,
+        cost: row.cost,
+        tokens: {
+          input: row.tokens_input,
+          output: row.tokens_output,
+          reasoning: row.tokens_reasoning,
+          cache: {
+            read: row.tokens_cache_read,
+            write: row.tokens_cache_write,
+          },
+        },
         time: {
           created: DateTime.makeUnsafe(row.time_created),
           updated: DateTime.makeUnsafe(row.time_updated),
@@ -269,14 +291,14 @@ export const layer = Layer.effect(
       shell: Effect.fn("V2Session.shell")(function* (_input) {}),
       skill: Effect.fn("V2Session.skill")(function* (_input) {}),
       switchAgent: Effect.fn("V2Session.switchAgent")(function* (input) {
-        EventV2.run(SessionEvent.AgentSwitched.Sync, {
+        yield* sync.run(SessionEvent.AgentSwitched.Sync, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(Date.now()),
           agent: input.agent,
         })
       }),
       switchModel: Effect.fn("V2Session.switchModel")(function* (input) {
-        EventV2.run(SessionEvent.ModelSwitched.Sync, {
+        yield* sync.run(SessionEvent.ModelSwitched.Sync, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(Date.now()),
           model: input.model,
@@ -311,6 +333,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer
+export const defaultLayer = layer.pipe(Layer.provide(SyncEvent.defaultLayer))
 
 export * as SessionV2 from "./session"

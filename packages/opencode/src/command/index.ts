@@ -4,9 +4,6 @@ import { EffectBridge } from "@/effect/bridge"
 import type { InstanceContext } from "@/project/instance"
 import { SessionID, MessageID } from "@/session/schema"
 import { Effect, Layer, Context, Schema } from "effect"
-import z from "zod"
-import { zod, ZodOverride } from "@/util/effect-zod"
-import { withStatics } from "@/util/schema"
 import { Config } from "@/config/config"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
@@ -36,14 +33,11 @@ export const Info = Schema.Struct({
   model: Schema.optional(Schema.String),
   source: Schema.optional(Schema.Literals(["command", "mcp", "skill"])),
   // Some command templates are lazy promises from MCP prompt resolution.
-  template: Schema.Unknown.annotate({ [ZodOverride]: z.promise(z.string()).or(z.string()) }),
+  template: Schema.Unknown,
   subtask: Schema.optional(Schema.Boolean),
   hints: Schema.Array(Schema.String),
-})
-  .annotate({ identifier: "Command" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Command" })
 
-// for some reason zod is inferring `string` for z.promise(z.string()).or(z.string()) so we have to manually override it
 export type Info = Omit<Schema.Schema.Type<typeof Info>, "template"> & { template: Promise<string> | string }
 
 export function hints(template: string) {

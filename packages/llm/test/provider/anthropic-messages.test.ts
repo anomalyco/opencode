@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, LLMError } from "../../src"
+import { CacheHint, LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
 import { LLMClient } from "../../src/route"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { it } from "../lib/effect"
@@ -18,6 +18,9 @@ const request = LLM.request({
   model,
   system: { type: "text", text: "You are concise.", cache: new CacheHint({ type: "ephemeral" }) },
   prompt: "Say hello.",
+  // This fixture predates the `cache: "auto"` default; pin the policy off so
+  // existing wire-shape assertions only see the manual hint on the system part.
+  cache: "none",
   generation: { maxTokens: 20, temperature: 0 },
 })
 
@@ -44,10 +47,11 @@ describe("Anthropic Messages route", () => {
           id: "req_tool_result",
           model,
           messages: [
-            LLM.user("What is the weather?"),
-            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
-            LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
           ],
+          cache: "none",
         }),
       )
 
@@ -73,7 +77,7 @@ describe("Anthropic Messages route", () => {
         LLM.request({
           model,
           messages: [
-            LLM.assistant([
+            Message.assistant([
               { type: "reasoning", text: "thinking", providerMetadata: { anthropic: { signature: "sig_1" } } },
             ]),
           ],
@@ -110,16 +114,17 @@ describe("Anthropic Messages route", () => {
       expect(response.text).toBe("Hello!")
       expect(response.reasoning).toBe("thinking")
       expect(response.usage).toMatchObject({
-        inputTokens: 5,
+        inputTokens: 6,
         outputTokens: 2,
+        nonCachedInputTokens: 5,
         cacheReadInputTokens: 1,
-        totalTokens: 7,
+        totalTokens: 8,
       })
-      expect(response.events.find((event) => event.type === "reasoning-delta" && event.text === "")).toMatchObject({
+      expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
         providerMetadata: { anthropic: { signature: "sig_1" } },
       })
       expect(response.events.at(-1)).toMatchObject({
-        type: "request-finish",
+        type: "finish",
         reason: "stop",
         providerMetadata: { anthropic: { stopSequence: "\n\nHuman:" } },
       })
@@ -141,18 +146,46 @@ describe("Anthropic Messages route", () => {
           tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
+      const usage = new Usage({
+        inputTokens: 5,
+        outputTokens: 1,
+        nonCachedInputTokens: 5,
+        cacheReadInputTokens: undefined,
+        cacheWriteInputTokens: undefined,
+        totalTokens: 6,
+        providerMetadata: { anthropic: { input_tokens: 5, output_tokens: 1 } },
+      })
 
       expect(response.toolCalls).toEqual([
-        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { query: "weather" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
       ])
       expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        { type: "tool-input-start", id: "call_1", name: "lookup" },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
-        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata: undefined },
         {
-          type: "request-finish",
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { query: "weather" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+        { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
+        {
+          type: "finish",
           reason: "tool-calls",
-          usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6, native: { input_tokens: 5, output_tokens: 1 } },
+          providerMetadata: undefined,
+          usage,
         },
       ])
     }),
@@ -242,7 +275,7 @@ describe("Anthropic Messages route", () => {
         providerMetadata: { anthropic: { blockType: "web_search_tool_result" } },
       })
       expect(response.text).toBe("Found it.")
-      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "stop" })
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
     }),
   )
 
@@ -293,8 +326,8 @@ describe("Anthropic Messages route", () => {
           id: "req_round_trip",
           model,
           messages: [
-            LLM.user("Search for something."),
-            LLM.assistant([
+            Message.user("Search for something."),
+            Message.assistant([
               {
                 type: "tool-call",
                 id: "srvtoolu_abc",
@@ -311,7 +344,7 @@ describe("Anthropic Messages route", () => {
               },
               { type: "text", text: "Found it." },
             ]),
-            LLM.user("Thanks."),
+            Message.user("Thanks."),
           ],
         }),
       )
@@ -344,7 +377,7 @@ describe("Anthropic Messages route", () => {
           id: "req_unknown_server_tool",
           model,
           messages: [
-            LLM.assistant([
+            Message.assistant([
               {
                 type: "tool-result",
                 id: "srvtoolu_abc",
@@ -367,11 +400,141 @@ describe("Anthropic Messages route", () => {
         LLM.request({
           id: "req_media",
           model,
-          messages: [LLM.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [Message.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
         }),
       ).pipe(Effect.flip)
 
       expect(error.message).toContain("Anthropic Messages user messages only support text content for now")
+    }),
+  )
+
+  it.effect("maps ttlSeconds >= 3600 to cache_control ttl: '1h'", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          system: { type: "text", text: "system", cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3600 }) },
+          prompt: "hi",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        system: [{ type: "text", text: "system", cache_control: { type: "ephemeral", ttl: "1h" } }],
+      })
+    }),
+  )
+
+  it.effect("emits cache_control on tool definitions and tool-result blocks", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          tools: [
+            {
+              name: "lookup",
+              description: "lookup tool",
+              inputSchema: { type: "object", properties: {} },
+              cache: new CacheHint({ type: "ephemeral" }),
+            },
+          ],
+          messages: [
+            Message.user("What's the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "lookup",
+              result: { temp: 72 },
+              cache: new CacheHint({ type: "ephemeral" }),
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        tools: [{ name: "lookup", cache_control: { type: "ephemeral" } }],
+        messages: [
+          { role: "user", content: [{ type: "text", text: "What's the weather?" }] },
+          { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup" }] },
+          {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: "call_1", cache_control: { type: "ephemeral" } }],
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("drops cache_control breakpoints past the 4-per-request cap", () =>
+    Effect.gen(function* () {
+      const hint = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          system: [
+            { type: "text", text: "a", cache: hint },
+            { type: "text", text: "b", cache: hint },
+            { type: "text", text: "c", cache: hint },
+            { type: "text", text: "d", cache: hint },
+            { type: "text", text: "e", cache: hint },
+            { type: "text", text: "f", cache: hint },
+          ],
+          prompt: "hi",
+        }),
+      )
+
+      const system = (prepared.body as { system: Array<{ cache_control?: unknown }> }).system
+      const marked = system.filter((part) => part.cache_control !== undefined)
+      expect(marked).toHaveLength(4)
+      expect(system[4]?.cache_control).toBeUndefined()
+      expect(system[5]?.cache_control).toBeUndefined()
+    }),
+  )
+
+  it.effect("spends breakpoint budget on tools before system before messages", () =>
+    Effect.gen(function* () {
+      const hint = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          tools: [
+            {
+              name: "t1",
+              description: "t1",
+              inputSchema: { type: "object", properties: {} },
+              cache: hint,
+            },
+            {
+              name: "t2",
+              description: "t2",
+              inputSchema: { type: "object", properties: {} },
+              cache: hint,
+            },
+            {
+              name: "t3",
+              description: "t3",
+              inputSchema: { type: "object", properties: {} },
+              cache: hint,
+            },
+            {
+              name: "t4",
+              description: "t4",
+              inputSchema: { type: "object", properties: {} },
+              cache: hint,
+            },
+          ],
+          system: [{ type: "text", text: "system-tail", cache: hint }],
+          messages: [Message.user([{ type: "text", text: "message-tail", cache: hint }])],
+        }),
+      )
+
+      const body = prepared.body as {
+        tools: Array<{ cache_control?: unknown }>
+        system: Array<{ cache_control?: unknown }>
+        messages: Array<{ content: Array<{ cache_control?: unknown }> }>
+      }
+      expect(body.tools.every((t) => t.cache_control !== undefined)).toBe(true)
+      expect(body.system[0]?.cache_control).toBeUndefined()
+      expect(body.messages[0]?.content[0]?.cache_control).toBeUndefined()
     }),
   )
 })
