@@ -38,6 +38,7 @@ import { Tool } from "@/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
+import { mergeCommandParts } from "./prompt-merge"
 import { Shell } from "@/shell/shell"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Truncate } from "@/tool"
@@ -1628,7 +1629,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
             },
           ]
-        : [...templateParts, ...(input.parts ?? [])]
+        : mergeCommandParts(templateParts, input.parts)
 
       const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultAgent())) : agentName
       const userModel = isSubtask
