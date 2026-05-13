@@ -439,6 +439,25 @@ it.instance("merges keybind overrides across precedence layers", () =>
   ),
 )
 
+it.instance("ignores unknown keybind names without dropping valid overrides from the same file", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const test = yield* TestInstance
+      yield* fs.writeJson(path.join(Global.Path.config, "tui.json"), {
+        keybinds: {
+          session_delete: "ctrl+d",
+          not_a_real_keybind: "ctrl+q",
+        },
+      })
+
+      const config = yield* getTuiConfig(test.directory)
+      expect(config.keybinds.get("session.delete")?.[0]?.key).toBe("ctrl+d")
+      expect(config.keybinds.get("not_a_real_keybind")).toEqual([])
+    }),
+  ),
+)
+
 it.instance("resolves keybind lookup from canonical keybinds", () =>
   withCleanState(
     Effect.gen(function* () {

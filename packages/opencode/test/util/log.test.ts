@@ -47,3 +47,31 @@ it.live("init cleanup keeps the newest timestamped logs", () =>
     expect(next).toContain(list.at(-1)!)
   }),
 )
+
+it.live("local dev log is not truncated twice for the same run", () =>
+  Effect.gen(function* () {
+    const log = Global.Path.log
+    const runID = process.env.OPENCODE_RUN_ID
+    const initialized = process.env.OPENCODE_LOG_INITIALIZED_RUN_ID
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        Global.Path.log = log
+        if (runID === undefined) delete process.env.OPENCODE_RUN_ID
+        else process.env.OPENCODE_RUN_ID = runID
+        if (initialized === undefined) delete process.env.OPENCODE_LOG_INITIALIZED_RUN_ID
+        else process.env.OPENCODE_LOG_INITIALIZED_RUN_ID = initialized
+      }),
+    )
+
+    const dir = yield* tmpdirScoped()
+    Global.Path.log = dir
+    process.env.OPENCODE_RUN_ID = "run-1"
+    delete process.env.OPENCODE_LOG_INITIALIZED_RUN_ID
+
+    yield* Effect.promise(() => Log.init({ print: false, dev: true }))
+    yield* Effect.promise(() => fs.writeFile(path.join(dir, "dev.log"), "main startup\n"))
+    yield* Effect.promise(() => Log.init({ print: false, dev: true }))
+
+    expect(yield* Effect.promise(() => fs.readFile(path.join(dir, "dev.log"), "utf8"))).toContain("main startup")
+  }),
+)
