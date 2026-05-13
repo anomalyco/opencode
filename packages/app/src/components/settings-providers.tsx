@@ -11,6 +11,7 @@ import { useServerSync } from "@/context/server-sync"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
+import { headerRow, modelRow, type FormState } from "./dialog-custom-provider-form"
 import { SettingsList } from "./settings-list"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
@@ -79,6 +80,28 @@ export const SettingsProviders: Component = () => {
     if (provider.npm !== "@ai-sdk/openai-compatible") return false
     if (!provider.models || Object.keys(provider.models).length === 0) return false
     return true
+  }
+
+  const customProviderFormState = (providerID: string): Partial<FormState> => {
+    const config = serverSync.data.config.provider?.[providerID]
+    if (!config) return { providerID }
+    const rawHeaders = config.options?.headers as Record<string, string> | undefined
+    return {
+      providerID,
+      name: config.name ?? "",
+      baseURL: config.options?.baseURL ?? "",
+      apiKey: config.env?.[0] ? `{env:${config.env[0]}}` : "",
+      models: Object.entries(config.models ?? {}).map(([id, m]) => ({
+        ...modelRow(),
+        id,
+        name: (m as { name?: string }).name ?? "",
+      })),
+      headers: Object.entries(rawHeaders ?? {}).map(([key, value]) => ({
+        ...headerRow(),
+        key,
+        value,
+      })),
+    }
   }
 
   const disableProvider = async (providerID: string, name: string) => {
@@ -164,6 +187,26 @@ export const SettingsProviders: Component = () => {
                     >
                       <Button size="large" variant="ghost" onClick={() => void disconnect(item.id, item.name)}>
                         {language.t("common.disconnect")}
+                      </Button>
+                      <Button
+                        size="large"
+                        variant="secondary"
+                        icon="edit"
+                        onClick={() => {
+                          if (isConfigCustom(item.id)) {
+                            dialog.show(() => (
+                              <DialogCustomProvider
+                                back="close"
+                                initialConfig={customProviderFormState(item.id)}
+                                originalProviderID={item.id}
+                              />
+                            ))
+                          } else {
+                            dialog.show(() => <DialogConnectProvider provider={item.id} />)
+                          }
+                        }}
+                      >
+                        {language.t("common.edit")}
                       </Button>
                     </Show>
                   </div>

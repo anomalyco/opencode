@@ -17,6 +17,8 @@ import { DialogSelectProvider } from "./dialog-select-provider"
 
 type Props = {
   back?: "providers" | "close"
+  initialConfig?: Partial<FormState>
+  originalProviderID?: string
 }
 
 export function DialogCustomProvider(props: Props) {
@@ -26,12 +28,12 @@ export function DialogCustomProvider(props: Props) {
   const language = useLanguage()
 
   const [form, setForm] = createStore<FormState>({
-    providerID: "",
-    name: "",
-    baseURL: "",
-    apiKey: "",
-    models: [modelRow()],
-    headers: [headerRow()],
+    providerID: props.initialConfig?.providerID ?? "",
+    name: props.initialConfig?.name ?? "",
+    baseURL: props.initialConfig?.baseURL ?? "",
+    apiKey: props.initialConfig?.apiKey ?? "",
+    models: props.initialConfig?.models ?? [modelRow()],
+    headers: props.initialConfig?.headers ?? [headerRow()],
     err: {},
   })
 
@@ -107,6 +109,7 @@ export function DialogCustomProvider(props: Props) {
       t: language.t,
       disabledProviders: serverSync.data.config.disabled_providers ?? [],
       existingProviderIDs: new Set(serverSync.data.provider.all.keys()),
+      editingProviderID: props.originalProviderID,
     })
     batch(() => {
       setForm("err", output.err)
@@ -199,6 +202,7 @@ export function DialogCustomProvider(props: Props) {
               onChange={(v) => setField("providerID", v)}
               validationState={form.err.providerID ? "invalid" : undefined}
               error={form.err.providerID}
+              disabled={!!props.originalProviderID}
             />
             <TextField
               label={language.t("provider.custom.field.name.label")}

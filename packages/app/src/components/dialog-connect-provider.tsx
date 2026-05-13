@@ -17,7 +17,7 @@ import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 
-export function DialogConnectProvider(props: { provider: string }) {
+export function DialogConnectProvider(props: { provider: string; onComplete?: () => void }) {
   const dialog = useDialog()
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
@@ -332,6 +332,7 @@ export function DialogConnectProvider(props: { provider: string }) {
   async function complete() {
     await serverSDK.client.global.dispose()
     dialog.close()
+    props.onComplete?.()
     showToast({
       variant: "success",
       icon: "circle-check",

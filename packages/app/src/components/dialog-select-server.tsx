@@ -401,6 +401,9 @@ export function DialogSelectServer() {
   const handleEditNameChange = (value: string) => {
     if (editMutation.isPending) return
     setStore("editServer", { name: value, error: "" })
+    void previewStatus(store.editServer.value, value, store.editServer.password, (next) =>
+      setStore("editServer", { status: next }),
+    )
   }
 
   const handleEditUsernameChange = (value: string) => {
