@@ -102,6 +102,7 @@ type NotFound = InstanceType<typeof NotFoundError>
 
 export interface Interface {
   readonly get: (sessionID: SessionID) => Effect.Effect<Info | undefined>
+  readonly listActive: () => Effect.Effect<Info[]>
   readonly create: (input: CreateInput) => Effect.Effect<Info, GoalError>
   readonly update: (input: UpdateInput) => Effect.Effect<Info, GoalError | NotFound>
   readonly clear: (sessionID: SessionID) => Effect.Effect<void>
@@ -182,6 +183,13 @@ export const layer = Layer.effect(
         db.select().from(SessionGoalTable).where(eq(SessionGoalTable.session_id, sessionID)).get(),
       )
       return row ? fromRow(row) : undefined
+    })
+
+    const listActive = Effect.fn("SessionGoal.listActive")(function* () {
+      const rows = Database.use((db) =>
+        db.select().from(SessionGoalTable).where(eq(SessionGoalTable.status, "active")).all(),
+      )
+      return rows.map(fromRow)
     })
 
     const emit = Effect.fn("SessionGoal.emit")(function* (goal: Info) {
@@ -331,7 +339,7 @@ export const layer = Layer.effect(
       return goal
     })
 
-    return Service.of({ get, create, update, clear, account, modelUpdate })
+    return Service.of({ get, listActive, create, update, clear, account, modelUpdate })
   }),
 )
 

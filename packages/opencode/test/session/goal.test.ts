@@ -625,4 +625,35 @@ describe("SessionGoal", () => {
     expect(loaded?.id).toBe(created.id)
     expect(loaded?.objective).toBe("survive process restart")
   })
+
+  test("lists active goals for runtime startup scheduling", async () => {
+    await run(async () => {
+      const result = await effect(
+        Session.Service.use((sessions) =>
+          SessionGoal.Service.use((goals) =>
+            Effect.gen(function* () {
+              const activeSession = yield* sessions.create({ title: "active-goal" })
+              const pausedSession = yield* sessions.create({ title: "paused-goal" })
+              const completeSession = yield* sessions.create({ title: "complete-goal" })
+              yield* goals.create({ sessionID: activeSession.id, objective: "keep going" })
+              yield* goals.create({ sessionID: pausedSession.id, objective: "pause" })
+              yield* goals.update({ sessionID: pausedSession.id, status: "paused" })
+              yield* goals.create({ sessionID: completeSession.id, objective: "done" })
+              yield* goals.modelUpdate({ sessionID: completeSession.id, status: "complete" })
+              return {
+                activeSession,
+                pausedSession,
+                completeSession,
+                active: yield* goals.listActive(),
+              }
+            }),
+          ),
+        ),
+      )
+
+      expect(result.active.some((goal) => goal.sessionID === result.activeSession.id)).toBe(true)
+      expect(result.active.some((goal) => goal.sessionID === result.pausedSession.id)).toBe(false)
+      expect(result.active.some((goal) => goal.sessionID === result.completeSession.id)).toBe(false)
+    })
+  })
 })
