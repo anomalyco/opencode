@@ -50,11 +50,22 @@ const originalEnv = {
   OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
 }
 
-process.env.OPENCODE_EXPERIMENTAL_WORKSPACES = "true"
+const workspaceLayer = (experimentalWorkspaces: boolean) =>
+  Workspace.layer.pipe(
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(SessionNs.defaultLayer),
+    Layer.provide(SyncEvent.defaultLayer),
+    Layer.provide(SessionPrompt.defaultLayer),
+    Layer.provide(Project.defaultLayer),
+    Layer.provide(Vcs.defaultLayer),
+    Layer.provide(FetchHttpClient.layer),
+    Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces })),
+    Layer.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))),
+  )
 
 const testServerLayer = Layer.mergeAll(
   NodeHttpServer.layer(Http.createServer, { host: "127.0.0.1", port: 0 }),
-  Workspace.defaultLayer.pipe(Layer.provide(InstanceStore.defaultLayer), Layer.provide(InstanceBootstrap.defaultLayer)),
+  workspaceLayer(true),
   SessionNs.defaultLayer,
 )
 const it = testEffect(testServerLayer)
@@ -153,19 +164,7 @@ const startWorkspaceSyncing = (projectID: ProjectID) => {
 const startWorkspaceSyncingWithFlag = (projectID: ProjectID, experimentalWorkspaces: boolean) =>
   Effect.runPromise(
     Workspace.Service.use((workspace) => workspace.startWorkspaceSyncing(projectID)).pipe(
-      Effect.provide(
-        Workspace.layer.pipe(
-          Layer.provide(Auth.defaultLayer),
-          Layer.provide(SessionNs.defaultLayer),
-          Layer.provide(SyncEvent.defaultLayer),
-          Layer.provide(SessionPrompt.defaultLayer),
-          Layer.provide(Project.defaultLayer),
-          Layer.provide(Vcs.defaultLayer),
-          Layer.provide(FetchHttpClient.layer),
-          Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces })),
-          Layer.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))),
-        ),
-      ),
+      Effect.provide(workspaceLayer(experimentalWorkspaces)),
     ),
   )
 const waitForWorkspaceSync = (workspaceID: WorkspaceID, state: Record<string, number>, signal?: AbortSignal) =>
