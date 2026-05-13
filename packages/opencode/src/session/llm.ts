@@ -12,7 +12,6 @@ import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { Bus } from "@/bus"
@@ -21,6 +20,7 @@ import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { EffectBridge } from "@/effect/bridge"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 
@@ -62,7 +62,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/LL
 const live: Layer.Layer<
   Service,
   never,
-  Auth.Service | Config.Service | Provider.Service | Plugin.Service | Permission.Service
+  Auth.Service | Config.Service | Provider.Service | Plugin.Service | Permission.Service | RuntimeFlags.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -71,6 +71,7 @@ const live: Layer.Layer<
     const provider = yield* Provider.Service
     const plugin = yield* Plugin.Service
     const perm = yield* Permission.Service
+    const flags = yield* RuntimeFlags.Service
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
       const l = log
@@ -375,7 +376,7 @@ const live: Layer.Layer<
                 "x-opencode-project": opencodeProjectID,
                 "x-opencode-session": input.sessionID,
                 "x-opencode-request": input.user.id,
-                "x-opencode-client": Flag.OPENCODE_CLIENT,
+                "x-opencode-client": flags.client,
                 "User-Agent": `opencode/${InstallationVersion}`,
               }
             : {
@@ -443,6 +444,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Config.defaultLayer),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
+    Layer.provide(RuntimeFlags.defaultLayer),
   ),
 )
 
