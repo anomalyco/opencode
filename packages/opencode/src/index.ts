@@ -1,3 +1,8 @@
+import { SentryReporter } from "./util/sentry"
+
+// Sentry init must run before any other module observes runtime errors.
+SentryReporter.init()
+
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
@@ -40,12 +45,14 @@ process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
     e: errorMessage(e),
   })
+  SentryReporter.captureException(e, { kind: "unhandledRejection" })
 })
 
 process.on("uncaughtException", (e) => {
   Log.Default.error("exception", {
     e: errorMessage(e),
   })
+  SentryReporter.captureException(e, { kind: "uncaughtException" })
 })
 
 const cli = yargs(hideBin(process.argv))
@@ -201,6 +208,7 @@ try {
     })
   }
   Log.Default.error("fatal", data)
+  SentryReporter.captureException(e, { kind: "fatal" })
   const formatted = FormatError(e)
   if (formatted) UI.error(formatted)
   if (formatted === undefined) {

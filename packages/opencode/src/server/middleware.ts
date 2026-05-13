@@ -6,6 +6,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status"
 import type { ErrorHandler } from "hono"
 import { HTTPException } from "hono/http-exception"
 import type { Log } from "../util/log"
+import { SentryReporter } from "../util/sentry"
 
 export function errorHandler(log: Log.Logger): ErrorHandler {
   return (err, c) => {
@@ -26,6 +27,8 @@ export function errorHandler(log: Log.Logger): ErrorHandler {
     }
     if (err instanceof HTTPException) return err.getResponse()
     const message = err instanceof Error && err.stack ? err.stack : err.toString()
+    // Only the "unknown" branch is unexpected; known error shapes above are user-facing.
+    SentryReporter.captureException(err, { path: c.req.path, method: c.req.method })
     return c.json(new NamedError.Unknown({ message }).toObject(), {
       status: 500,
     })
