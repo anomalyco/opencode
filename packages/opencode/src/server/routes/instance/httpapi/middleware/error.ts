@@ -1,6 +1,3 @@
-import { Provider } from "@/provider/provider"
-import { Session } from "@/session/session"
-import { iife } from "@/util/iife"
 import { NamedError } from "@opencode-ai/core/util/error"
 import * as Log from "@opencode-ai/core/util/log"
 import { Cause, Effect } from "effect"
@@ -24,23 +21,8 @@ export const errorLayer = HttpRouter.middleware<{ handles: unknown }>()((effect)
       log.error("failed", { error, cause: Cause.pretty(cause) })
 
       if (error instanceof NamedError) {
-        return Effect.succeed(
-          HttpServerResponse.jsonUnsafe(error.toObject(), {
-            status: iife(() => {
-              if (error instanceof Provider.ModelNotFoundError) return 400
-              return 500
-            }),
-          }),
-        )
+        return Effect.succeed(HttpServerResponse.jsonUnsafe(error.toObject(), { status: 500 }))
       }
-      if (error instanceof Session.BusyError) {
-        return Effect.succeed(
-          HttpServerResponse.jsonUnsafe(new NamedError.Unknown({ message: error.message }).toObject(), {
-            status: 400,
-          }),
-        )
-      }
-
       return Effect.succeed(
         HttpServerResponse.jsonUnsafe(
           new NamedError.Unknown({

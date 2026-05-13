@@ -21,6 +21,7 @@ import { pathToFileURL } from "url"
 import { Effect, Layer, Context, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
+import { EffectPromise } from "@/effect/promise"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined } from "@opencode-ai/core/schema"
@@ -963,11 +964,24 @@ export function defaultModelIDs<T extends { models: Record<string, { id: string 
   return mapValues(providers, (item) => sort(Object.values(item.models))[0].id)
 }
 
+export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundError>()("ProviderModelNotFoundError", {
+  providerID: ProviderID,
+  modelID: ModelID,
+  suggestions: Schema.optional(Schema.Array(Schema.String)),
+  cause: Schema.optional(Schema.Defect),
+}) {
+  static isInstance(input: unknown): input is ModelNotFoundError {
+    return input instanceof ModelNotFoundError
+  }
+}
+
+export type Error = ModelNotFoundError
+
 export interface Interface {
   readonly list: () => Effect.Effect<Record<ProviderID, Info>>
   readonly getProvider: (providerID: ProviderID) => Effect.Effect<Info>
-  readonly getModel: (providerID: ProviderID, modelID: ModelID) => Effect.Effect<Model>
-  readonly getLanguage: (model: Model) => Effect.Effect<LanguageModelV3>
+  readonly getModel: (providerID: ProviderID, modelID: ModelID) => Effect.Effect<Model, ModelNotFoundError>
+  readonly getLanguage: (model: Model) => Effect.Effect<LanguageModelV3, ModelNotFoundError>
   readonly closest: (
     providerID: ProviderID,
     query: string[],
@@ -979,6 +993,7 @@ export interface Interface {
 interface State {
   models: Map<string, LanguageModelV3>
   providers: Record<ProviderID, Info>
+  catalog: Record<ProviderID, Info>
   sdk: Map<string, BundledSDK>
   modelLoaders: Record<string, CustomModelLoader>
   varsLoaders: Record<string, CustomVarsLoader>
@@ -1104,6 +1119,38 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
+function suggestionModelIDs(provider: Info | undefined) {
+  if (!provider) return []
+  return Object.keys(provider.models).filter((id) => {
+    const model = provider.models[id]
+    if (model.status === "deprecated") return false
+    if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) return false
+    return true
+  })
+}
+
+function modelSuggestions(provider: Info | undefined, modelID: ModelID) {
+  const available = suggestionModelIDs(provider)
+  const fuzzy = fuzzysort.go(modelID, available, { limit: 3, threshold: -10000 }).map((m) => m.target)
+  if (fuzzy.length) return fuzzy
+  const query = modelID
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((part) => part.length > 1)
+  return sortBy(
+    available
+      .map((id) => ({
+        id,
+        score: query.filter((part) => id.toLowerCase().includes(part)).length,
+      }))
+      .filter((item) => item.score > 0),
+    [(item) => item.score, "desc"],
+    [(item) => item.id, "asc"],
+  )
+    .slice(0, 3)
+    .map((item) => item.id)
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -1120,7 +1167,8 @@ const layer = Layer.effect(
         const bridge = yield* EffectBridge.make()
         const cfg = yield* config.get()
         const modelsDev = yield* modelsDevSvc.get()
-        const database = mapValues(modelsDev, fromModelsDevProvider)
+        const catalog = mapValues(modelsDev, fromModelsDevProvider)
+        const database = mapValues(catalog, toPublicInfo)
 
         const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
         const languages = new Map<string, LanguageModelV3>()
@@ -1437,6 +1485,7 @@ const layer = Layer.effect(
         return {
           models: languages,
           providers,
+          catalog,
           sdk,
           modelLoaders,
           varsLoaders,
@@ -1597,16 +1646,20 @@ const layer = Layer.effect(
       const s = yield* InstanceState.get(state)
       const provider = s.providers[providerID]
       if (!provider) {
-        const available = Object.keys(s.providers)
-        const matches = fuzzysort.go(providerID, available, { limit: 3, threshold: -10000 })
-        throw new ModelNotFoundError({ providerID, modelID, suggestions: matches.map((m) => m.target) })
+        const catalogProvider = s.catalog[providerID]
+        const suggestions = catalogProvider
+          ? modelSuggestions(catalogProvider, modelID)
+          : fuzzysort
+              .go(providerID, Object.keys({ ...s.catalog, ...s.providers }), { limit: 3, threshold: -10000 })
+              .map((m) => m.target)
+        return yield* new ModelNotFoundError({ providerID, modelID, suggestions })
       }
 
       const info = provider.models[modelID]
       if (!info) {
-        const available = Object.keys(provider.models)
-        const matches = fuzzysort.go(modelID, available, { limit: 3, threshold: -10000 })
-        throw new ModelNotFoundError({ providerID, modelID, suggestions: matches.map((m) => m.target) })
+        const current = modelSuggestions(provider, modelID)
+        const suggestions = current.length ? current : modelSuggestions(s.catalog[providerID], modelID)
+        return yield* new ModelNotFoundError({ providerID, modelID, suggestions })
       }
       return info
     })
@@ -1617,11 +1670,10 @@ const layer = Layer.effect(
       const key = `${model.providerID}/${model.id}`
       if (s.models.has(key)) return s.models.get(key)!
 
-      return yield* Effect.promise(async () => {
-        const provider = s.providers[model.providerID]
-        const sdk = await resolveSDK(model, s, envs)
-
-        try {
+      const provider = s.providers[model.providerID]
+      return yield* EffectPromise.refineRejection(
+        async () => {
+          const sdk = await resolveSDK(model, s, envs)
           const language = s.modelLoaders[model.providerID]
             ? await s.modelLoaders[model.providerID](sdk, model.api.id, {
                 ...provider.options,
@@ -1630,18 +1682,12 @@ const layer = Layer.effect(
             : sdk.languageModel(model.api.id)
           s.models.set(key, language)
           return language
-        } catch (e) {
-          if (e instanceof NoSuchModelError)
-            throw new ModelNotFoundError(
-              {
-                modelID: model.id,
-                providerID: model.providerID,
-              },
-              { cause: e },
-            )
-          throw e
-        }
-      })
+        },
+        (cause) =>
+          cause instanceof NoSuchModelError
+            ? new ModelNotFoundError({ modelID: model.id, providerID: model.providerID, cause })
+            : undefined,
+      )
     })
 
     const closest = Effect.fn("Provider.closest")(function* (providerID: ProviderID, query: string[]) {
@@ -1661,7 +1707,7 @@ const layer = Layer.effect(
 
       if (cfg.small_model) {
         const parsed = parseModel(cfg.small_model)
-        return yield* getModel(parsed.providerID, parsed.modelID)
+        return yield* getModel(parsed.providerID, parsed.modelID).pipe(Effect.orDie)
       }
 
       const s = yield* InstanceState.get(state)
@@ -1689,22 +1735,22 @@ const layer = Layer.effect(
           const candidates = Object.keys(provider.models).filter((m) => m.includes(item))
 
           const globalMatch = candidates.find((m) => m.startsWith("global."))
-          if (globalMatch) return yield* getModel(providerID, ModelID.make(globalMatch))
+          if (globalMatch) return yield* getModel(providerID, ModelID.make(globalMatch)).pipe(Effect.orDie)
 
           const region = provider.options?.region
           if (region) {
             const regionPrefix = region.split("-")[0]
             if (regionPrefix === "us" || regionPrefix === "eu") {
               const regionalMatch = candidates.find((m) => m.startsWith(`${regionPrefix}.`))
-              if (regionalMatch) return yield* getModel(providerID, ModelID.make(regionalMatch))
+              if (regionalMatch) return yield* getModel(providerID, ModelID.make(regionalMatch)).pipe(Effect.orDie)
             }
           }
 
           const unprefixed = candidates.find((m) => !crossRegionPrefixes.some((p) => m.startsWith(p)))
-          if (unprefixed) return yield* getModel(providerID, ModelID.make(unprefixed))
+          if (unprefixed) return yield* getModel(providerID, ModelID.make(unprefixed)).pipe(Effect.orDie)
         } else {
           for (const model of Object.keys(provider.models)) {
-            if (model.includes(item)) return yield* getModel(providerID, ModelID.make(model))
+            if (model.includes(item)) return yield* getModel(providerID, ModelID.make(model)).pipe(Effect.orDie)
           }
         }
       }
@@ -1778,12 +1824,6 @@ export function parseModel(model: string) {
     modelID: ModelID.make(rest.join("/")),
   }
 }
-
-export const ModelNotFoundError = NamedError.create("ProviderModelNotFoundError", {
-  providerID: ProviderID,
-  modelID: ModelID,
-  suggestions: Schema.optional(Schema.Array(Schema.String)),
-})
 
 export const InitError = NamedError.create("ProviderInitError", {
   providerID: ProviderID,

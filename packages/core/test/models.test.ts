@@ -70,13 +70,16 @@ const fixture2: Record<string, ModelsDev.Provider> = {
 interface MockState {
   body: string
   status: number
-  calls: Array<{ url: string }>
+  calls: Array<{ url: string; userAgent: string | null }>
 }
 
 const makeMockClient = (state: Ref.Ref<MockState>) =>
   HttpClient.make((request) =>
     Effect.gen(function* () {
-      yield* Ref.update(state, (s) => ({ ...s, calls: [...s.calls, { url: request.url }] }))
+      yield* Ref.update(state, (s) => ({
+        ...s,
+        calls: [...s.calls, { url: request.url, userAgent: request.headers["user-agent"] ?? null }],
+      }))
       const s = yield* Ref.get(state)
       return HttpClientResponse.fromWeb(request, new Response(s.body, { status: s.status }))
     }),
@@ -202,6 +205,7 @@ describe("ModelsDev Service", () => {
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
       expect(final.calls[0].url).toContain("/api.json")
+      expect(final.calls[0].userAgent).toContain("/cli")
     }),
   )
 
@@ -251,7 +255,7 @@ describe("ModelsDev Service", () => {
         }),
       )
       expect(result).toEqual(fixture)
-      // withTransientReadRetry retries 5xx, so calls may be > 1.
+      // retryTransient retries 5xx, so calls may be > 1.
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBeGreaterThanOrEqual(1)
     }),

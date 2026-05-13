@@ -4,6 +4,7 @@ import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstab
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { Installation } from "../../src/installation"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { AppProcess } from "@opencode-ai/core/process"
 import { testEffect } from "../lib/effect"
 
 const encoder = new TextEncoder()
@@ -47,7 +48,8 @@ function testLayer(
   httpHandler: (request: HttpClientRequest.HttpClientRequest) => Response,
   spawnHandler?: (cmd: string, args: readonly string[]) => string,
 ) {
-  return Installation.layer.pipe(Layer.provide(mockHttpClient(httpHandler)), Layer.provide(mockSpawner(spawnHandler)))
+  const appProcess = AppProcess.layer.pipe(Layer.provide(mockSpawner(spawnHandler)))
+  return Installation.layer.pipe(Layer.provide(mockHttpClient(httpHandler)), Layer.provide(appProcess))
 }
 
 describe("installation", () => {

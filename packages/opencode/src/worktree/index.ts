@@ -12,12 +12,12 @@ import { errorMessage } from "../util/error"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Git } from "@/git"
-import { Effect, Layer, Path, Schema, Scope, Context, Stream } from "effect"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { Effect, Layer, Path, Schema, Scope, Context } from "effect"
+import { ChildProcess } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { BootstrapRuntime } from "@/effect/bootstrap-runtime"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
 
 const log = Log.create({ service: "worktree" })
@@ -150,38 +150,35 @@ type GitResult = { code: number; text: string; stderr: string }
 export const layer: Layer.Layer<
   Service,
   never,
-  | AppFileSystem.Service
-  | Path.Path
-  | ChildProcessSpawner.ChildProcessSpawner
-  | Git.Service
-  | Project.Service
-  | InstanceStore.Service
+  AppFileSystem.Service | Path.Path | AppProcess.Service | Git.Service | Project.Service | InstanceStore.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
     const scope = yield* Scope.Scope
     const fs = yield* AppFileSystem.Service
     const pathSvc = yield* Path.Path
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const appProcess = yield* AppProcess.Service
     const gitSvc = yield* Git.Service
     const project = yield* Project.Service
     const store = yield* InstanceStore.Service
 
     const git = Effect.fnUntraced(
       function* (args: string[], opts?: { cwd?: string }) {
-        const handle = yield* spawner.spawn(
+        const result = yield* appProcess.run(
           ChildProcess.make("git", args, { cwd: opts?.cwd, extendEnv: true, stdin: "ignore" }),
         )
-        const [text, stderr] = yield* Effect.all(
-          [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
-          { concurrency: 2 },
-        )
-        const code = yield* handle.exitCode
-        return { code, text, stderr } satisfies GitResult
+        return {
+          code: result.exitCode,
+          text: result.stdout.toString("utf8"),
+          stderr: result.stderr.toString("utf8"),
+        } satisfies GitResult
       },
-      Effect.scoped,
       Effect.catch((e) =>
-        Effect.succeed({ code: 1, text: "", stderr: e instanceof Error ? e.message : String(e) } satisfies GitResult),
+        Effect.succeed({
+          code: 1,
+          text: "",
+          stderr: e instanceof Error ? e.message : String(e),
+        } satisfies GitResult),
       ),
     )
 
@@ -461,18 +458,11 @@ export const layer: Layer.Layer<
     const runStartCommand = Effect.fnUntraced(
       function* (directory: string, cmd: string) {
         const [shell, args] = process.platform === "win32" ? ["cmd", ["/c", cmd]] : ["bash", ["-lc", cmd]]
-        const handle = yield* spawner.spawn(
-          ChildProcess.make(shell, args, { cwd: directory, extendEnv: true, stdin: "ignore" }),
+        const result = yield* appProcess.run(
+          ChildProcess.make(shell, args as string[], { cwd: directory, extendEnv: true, stdin: "ignore" }),
         )
-        // Drain stdout, capture stderr for error reporting
-        const [, stderr] = yield* Effect.all(
-          [Stream.runDrain(handle.stdout), Stream.mkString(Stream.decodeText(handle.stderr))],
-          { concurrency: 2 },
-        ).pipe(Effect.orDie)
-        const code = yield* handle.exitCode
-        return { code, stderr }
+        return { code: result.exitCode, stderr: result.stderr.toString("utf8") }
       },
-      Effect.scoped,
       Effect.catch(() => Effect.succeed({ code: 1, stderr: "" })),
     )
 
@@ -620,7 +610,7 @@ export const layer: Layer.Layer<
 
 export const appLayer = layer.pipe(
   Layer.provide(Git.defaultLayer),
-  Layer.provide(CrossSpawnSpawner.defaultLayer),
+  Layer.provide(AppProcess.defaultLayer),
   Layer.provide(Project.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(NodePath.layer),
