@@ -20,7 +20,7 @@ import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import * as Log from "@opencode-ai/core/util/log"
 import { isRecord } from "@/util/record"
-import { normalizeQuestionsInput } from "@/tool/question"
+import { normalizeQuestionsInput } from "@/securecode/plugins/qwen-question-normalize"
 
 function normalizeToolInput<T>(toolName: string, input: T): T {
   if (toolName !== "question") return input

@@ -19,6 +19,7 @@ import { PoeAuthPlugin } from "opencode-poe-auth"
 import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
 import { AzureAuthPlugin } from "./azure"
 import { OverflowGuardPlugin } from "@/securecode/plugins/overflow-guard"
+import { QwenQuestionNormalizePlugin } from "@/securecode/plugins/qwen-question-normalize"
 import { QwenThinkingDefaultPlugin } from "@/securecode/plugins/qwen-thinking-default"
 import { Effect, Layer, Context, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
@@ -66,6 +67,7 @@ const INTERNAL_PLUGINS: PluginInstance[] = [
   CloudflareAIGatewayAuthPlugin,
   AzureAuthPlugin,
   OverflowGuardPlugin,
+  QwenQuestionNormalizePlugin,
   QwenThinkingDefaultPlugin,
 ]
 
