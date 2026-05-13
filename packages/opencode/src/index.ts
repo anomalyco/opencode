@@ -1,3 +1,7 @@
+import { SentryReporter } from "./util/sentry"
+
+SentryReporter.init()
+
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
@@ -201,6 +205,10 @@ try {
     })
   }
   Log.Default.error("fatal", data)
+  // yargs 의 명시적 try/catch 가 에러를 이미 잡았으므로 Sentry 의 자동 process 핸들러
+  // (onUncaughtExceptionIntegration / onUnhandledRejectionIntegration) 로는 도달하지 않는다.
+  // 보고가 누락되지 않도록 수동 캡처.
+  SentryReporter.captureException(e, { kind: "fatal" })
   const formatted = FormatError(e)
   if (formatted) UI.error(formatted)
   if (formatted === undefined) {
