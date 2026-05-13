@@ -16,6 +16,7 @@ export interface RunOptions {
   readonly maxErrorBytes?: number
   readonly signal?: AbortSignal
   readonly timeout?: Duration.Input
+  readonly stdin?: string | Uint8Array | Stream.Stream<Uint8Array, PlatformError>
 }
 
 export interface RunStreamOptions {
@@ -96,6 +97,15 @@ const waitForAbort = (signal: AbortSignal) =>
     return Effect.sync(() => signal.removeEventListener("abort", onabort))
   })
 
+const normalizeStdin = (
+  input: string | Uint8Array | Stream.Stream<Uint8Array, PlatformError>,
+): Stream.Stream<Uint8Array, PlatformError> =>
+  typeof input === "string"
+    ? Stream.make(new TextEncoder().encode(input))
+    : input instanceof Uint8Array
+      ? Stream.make(input)
+      : input
+
 const collectStream = (stream: Stream.Stream<Uint8Array, PlatformError>, maxOutputBytes: number | undefined) =>
   Stream.runFold(
     stream,
@@ -119,7 +129,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner
 
-    const run = Effect.fn("AppProcess.run")(function* (command: ChildProcess.Command, options?: RunOptions) {
+    const runCommand = (command: ChildProcess.Command, options?: RunOptions) => {
       const description = describeCommand(command)
       const collect = Effect.scoped(
         Effect.gen(function* () {
@@ -154,7 +164,22 @@ export const layer = Layer.effect(
             ),
           )
         : timed
-      return yield* aborted.pipe(Effect.catch((cause) => Effect.fail(wrapError(description, cause))))
+      return aborted.pipe(Effect.catch((cause) => Effect.fail(wrapError(description, cause))))
+    }
+
+    const run = Effect.fn("AppProcess.run")(function* (command: ChildProcess.Command, options?: RunOptions) {
+      if (options?.stdin === undefined) return yield* runCommand(command, options)
+      if (command._tag !== "StandardCommand") {
+        return yield* new AppProcessError({
+          command: describeCommand(command),
+          cause: new Error("stdin option only supports StandardCommand; received PipedCommand"),
+        })
+      }
+      const next = ChildProcess.make(command.command, command.args, {
+        ...command.options,
+        stdin: normalizeStdin(options.stdin),
+      })
+      return yield* runCommand(next, options)
     })
 
     const runStream = (

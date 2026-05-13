@@ -10,7 +10,7 @@ export const OpencodePlugin = PluginV2.define({
       "provider.update": Effect.fn(function* (evt) {
         if (evt.provider.id !== ProviderV2.ID.opencode) return
         hasKey = Boolean(
-            process.env.OPENCODE_API_KEY ||
+          process.env.OPENCODE_API_KEY ||
             evt.provider.env.some((item) => process.env[item]) ||
             evt.provider.options.aisdk.provider.apiKey ||
             (evt.provider.enabled && evt.provider.enabled.via === "auth"),

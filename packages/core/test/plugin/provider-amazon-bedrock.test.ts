@@ -11,8 +11,9 @@ function bedrockBaseURL(sdk: unknown, modelID = "anthropic.claude-sonnet-4-5") {
 
 function bedrockFetch(sdk: unknown, modelID = "anthropic.claude-sonnet-4-5") {
   const language = (sdk as { languageModel: (id: string) => unknown }).languageModel(modelID)
-  return (language as { config: { fetch: (input: Parameters<typeof fetch>[0], init?: RequestInit) => Promise<Response> } }).config
-    .fetch
+  return (
+    language as { config: { fetch: (input: Parameters<typeof fetch>[0], init?: RequestInit) => Promise<Response> } }
+  ).config.fetch
 }
 
 describe("AmazonBedrockPlugin", () => {

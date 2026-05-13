@@ -55,9 +55,13 @@ const UnknownEndpoint = Schema.Struct({
   type: Schema.Literal("unknown"),
 })
 
-export const Endpoint = Schema.Union([UnknownEndpoint, OpenAIResponses, OpenAICompletions, AnthropicMessages, AISDK]).pipe(
-  Schema.toTaggedUnion("type"),
-)
+export const Endpoint = Schema.Union([
+  UnknownEndpoint,
+  OpenAIResponses,
+  OpenAICompletions,
+  AnthropicMessages,
+  AISDK,
+]).pipe(Schema.toTaggedUnion("type"))
 export type Endpoint = typeof Endpoint.Type
 
 export const Options = Schema.Struct({
@@ -198,7 +202,6 @@ export class Info extends Schema.Class<Info>("ModelV2.Info")({
     })
   }
 }
-
 ```
 
 ## Catalog Interface
@@ -253,23 +256,21 @@ const available = provider.enabled && model.status !== "deprecated"
 ## Plugin Interface
 
 ```ts
-export type Definition<R = never> = Effect.Effect<{
-  readonly order: number
-  readonly hooks: HookFunctions
-}, never, R>
+export type Definition<R = never> = Effect.Effect<
+  {
+    readonly order: number
+    readonly hooks: HookFunctions
+  },
+  never,
+  R
+>
 
 export interface Interface {
-  readonly add: <R = never>(input: {
-    id: ID
-    definition: Definition<R>
-  }) => Effect.Effect<void, never, R>
+  readonly add: <R = never>(input: { id: ID; definition: Definition<R> }) => Effect.Effect<void, never, R>
 
   readonly remove: (id: ID) => Effect.Effect<void>
 
-  readonly trigger: <Name extends keyof Hooks>(
-    name: Name,
-    input: HookInput<Name>,
-  ) => Effect.Effect<HookInput<Name>>
+  readonly trigger: <Name extends keyof Hooks>(name: Name, input: HookInput<Name>) => Effect.Effect<HookInput<Name>>
 }
 ```
 

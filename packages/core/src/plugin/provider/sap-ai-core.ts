@@ -29,7 +29,11 @@ export const SapAICorePlugin = PluginV2.define({
         const match = Object.keys(mod).find((name) => name.startsWith("create"))
         if (!match) throw new Error(`Package ${evt.package} has no provider factory export`)
 
-        evt.sdk = mod[match](serviceKey ? { deploymentId: process.env.AICORE_DEPLOYMENT_ID, resourceGroup: process.env.AICORE_RESOURCE_GROUP } : {})
+        evt.sdk = mod[match](
+          serviceKey
+            ? { deploymentId: process.env.AICORE_DEPLOYMENT_ID, resourceGroup: process.env.AICORE_RESOURCE_GROUP }
+            : {},
+        )
       }),
       "aisdk.language": Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("sap-ai-core")) return
