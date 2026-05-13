@@ -2,8 +2,9 @@
 
 Short roadmap for Effect cleanup in `packages/opencode`.
 
-Current patterns and examples live in [`guide.md`](./guide.md). Test
-migration rules live in
+Current patterns and examples live in [`guide.md`](./guide.md). Error
+boundary migration details live in
+[`error-boundaries-plan.md`](./error-boundaries-plan.md). Test migration rules live in
 [`test/EFFECT_TEST_MIGRATION.md`](../../test/EFFECT_TEST_MIGRATION.md).
 Older deep-dive notes in this directory may still be useful, but treat
 this roadmap and the guide as the current entry points.
