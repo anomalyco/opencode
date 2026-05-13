@@ -26,6 +26,7 @@ import { ContentText } from "./content-text"
 import { ContentBash } from "./content-bash"
 import { ContentError } from "./content-error"
 import { formatCount, formatDuration, formatNumber, normalizeLocale, useShareMessages } from "../share/common"
+import { copyToClipboard } from "./clipboard"
 import { ContentMarkdown } from "./content-markdown"
 import type { MessageV2 } from "opencode/session/message-v2"
 import type { Diagnostic } from "vscode-languageserver-types"
@@ -59,14 +60,12 @@ export function Part(props: PartProps) {
         <div data-slot="anchor" title={messages.link_to_message}>
           <a
             href={`#${id()}`}
-            onClick={(e) => {
+            onClick={async (e) => {
               e.preventDefault()
               const anchor = e.currentTarget
               const hash = anchor.getAttribute("href") || ""
               const { origin, pathname, search } = window.location
-              navigator.clipboard
-                .writeText(`${origin}${pathname}${search}${hash}`)
-                .catch((err) => console.error("Copy failed", err))
+              await copyToClipboard(`${origin}${pathname}${search}${hash}`)
 
               setCopied(true)
               setTimeout(() => setCopied(false), 3000)
