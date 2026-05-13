@@ -5,16 +5,9 @@ import { Question } from "../question"
 import { Session } from "@/session/session"
 import { MessageV2 } from "../session/message-v2"
 import { Provider } from "@/provider/provider"
-import { Instance } from "../project/instance"
-import { type SessionID, MessageID, PartID } from "../session/schema"
+import { InstanceState } from "@/effect/instance-state"
+import { MessageID, PartID } from "../session/schema"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
-
-function getLastModel(sessionID: SessionID) {
-  for (const item of MessageV2.stream(sessionID)) {
-    if (item.info.role === "user" && item.info.model) return item.info.model
-  }
-  return undefined
-}
 
 export const Parameters = Schema.Struct({})
 
@@ -30,8 +23,9 @@ export const PlanExitTool = Tool.define(
       parameters: Parameters,
       execute: (_params: {}, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          const instance = yield* InstanceState.context
           const info = yield* session.get(ctx.sessionID)
-          const plan = path.relative(Instance.worktree, Session.plan(info))
+          const plan = path.relative(instance.worktree, Session.plan(info, instance))
           const answers = yield* question.ask({
             sessionID: ctx.sessionID,
             questions: [
@@ -50,7 +44,10 @@ export const PlanExitTool = Tool.define(
 
           if (answers[0]?.[0] === "No") yield* new Question.RejectedError()
 
-          const model = getLastModel(ctx.sessionID) ?? (yield* provider.defaultModel())
+          const messages = yield* session.messages({ sessionID: ctx.sessionID }).pipe(Effect.orDie)
+          const lastUser = messages.findLast((item) => item.info.role === "user" && item.info.model)
+          const model =
+            lastUser?.info.role === "user" && lastUser.info.model ? lastUser.info.model : yield* provider.defaultModel()
 
           const msg: MessageV2.User = {
             id: MessageID.ascending(),

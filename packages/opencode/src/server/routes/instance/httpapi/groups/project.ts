@@ -2,8 +2,9 @@ import { Project } from "@/project/project"
 import { ProjectID } from "@/project/schema"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { Authorization } from "../auth"
-import { InstanceContextMiddleware } from "../instance-context"
+import { Authorization } from "../middleware/authorization"
+import { InstanceContextMiddleware } from "../middleware/instance-context"
+import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 const root = "/project"
@@ -18,6 +19,7 @@ export const ProjectApi = HttpApi.make("project")
     HttpApiGroup.make("project")
       .add(
         HttpApiEndpoint.get("list", root, {
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Array(Project.Info), "List of projects"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -27,6 +29,7 @@ export const ProjectApi = HttpApi.make("project")
           }),
         ),
         HttpApiEndpoint.get("current", `${root}/current`, {
+          query: WorkspaceRoutingQuery,
           success: described(Project.Info, "Current project information"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -36,6 +39,7 @@ export const ProjectApi = HttpApi.make("project")
           }),
         ),
         HttpApiEndpoint.post("initGit", `${root}/git/init`, {
+          query: WorkspaceRoutingQuery,
           success: described(Project.Info, "Project information after git initialization"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -46,6 +50,7 @@ export const ProjectApi = HttpApi.make("project")
         ),
         HttpApiEndpoint.patch("update", `${root}/:projectID`, {
           params: { projectID: ProjectID },
+          query: WorkspaceRoutingQuery,
           payload: UpdatePayload,
           success: described(Project.Info, "Updated project information"),
           error: [HttpApiError.BadRequest, HttpApiError.NotFound],
@@ -64,6 +69,7 @@ export const ProjectApi = HttpApi.make("project")
         }),
       )
       .middleware(InstanceContextMiddleware)
+      .middleware(WorkspaceRoutingMiddleware)
       .middleware(Authorization),
   )
   .annotateMerge(

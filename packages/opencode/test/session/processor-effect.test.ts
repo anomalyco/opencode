@@ -6,6 +6,7 @@ import type { Agent } from "../../src/agent/agent"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { Config } from "@/config/config"
+import { Image } from "@/image/image"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
 import { Provider } from "@/provider/provider"
@@ -23,6 +24,8 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { raw, reply, TestLLMServer } from "../lib/llm-server"
+import { SyncEvent } from "@/sync"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 void Log.init({ print: false })
 
@@ -165,10 +168,16 @@ const deps = Layer.mergeAll(
   LLM.defaultLayer,
   Provider.defaultLayer,
   status,
+  SyncEvent.defaultLayer,
 ).pipe(Layer.provideMerge(infra))
 const env = Layer.mergeAll(
   TestLLMServer.layer,
-  SessionProcessor.layer.pipe(Layer.provide(summary), Layer.provideMerge(deps)),
+  SessionProcessor.layer.pipe(
+    Layer.provide(summary),
+    Layer.provide(Image.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provideMerge(deps),
+  ),
 )
 
 const it = testEffect(env)
@@ -764,7 +773,7 @@ it.live("session.processor effect tests record aborted errors and idle state", (
 
         const exit = yield* Fiber.await(run)
         yield* Effect.promise(() => seen.promise)
-        const stored = MessageV2.get({ sessionID: chat.id, messageID: msg.id })
+        const stored = yield* MessageV2.get({ sessionID: chat.id, messageID: msg.id })
         const state = yield* sts.get(chat.id)
         off()
 
@@ -826,7 +835,7 @@ it.live("session.processor effect tests mark interruptions aborted without manua
         yield* Fiber.interrupt(run)
 
         const exit = yield* Fiber.await(run)
-        const stored = MessageV2.get({ sessionID: chat.id, messageID: msg.id })
+        const stored = yield* MessageV2.get({ sessionID: chat.id, messageID: msg.id })
         const state = yield* sts.get(chat.id)
 
         expect(Exit.isFailure(exit)).toBe(true)

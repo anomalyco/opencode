@@ -18,10 +18,7 @@ export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
     headers.set("authorization", `Bearer ${apiKey}`)
   },
-  modifyBody: (body: Record<string, any>) => ({
-    ...body,
-    ...(workspaceID ? { safety_identifier: workspaceID } : {}),
-  }),
+  modifyBody: (body: Record<string, any>) => body,
   createBinaryStreamDecoder: () => undefined,
   streamSeparator: "\n\n",
   createUsageParser: () => {
@@ -53,7 +50,7 @@ export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
     const cacheReadTokens = usage.input_tokens_details?.cached_tokens ?? undefined
     return {
       inputTokens: inputTokens - (cacheReadTokens ?? 0),
-      outputTokens: outputTokens - (reasoningTokens ?? 0),
+      outputTokens,
       reasoningTokens,
       cacheReadTokens,
       cacheWrite5mTokens: undefined,

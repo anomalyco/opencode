@@ -1,6 +1,5 @@
 import { Schema } from "effect"
-import { zod } from "@/util/effect-zod"
-import { PositiveInt, withStatics } from "@/util/schema"
+import { PositiveInt } from "@opencode-ai/core/schema"
 
 const AuthMode = Schema.Literals(["disabled", "basic", "oidc"])
 
@@ -66,9 +65,7 @@ export const Server = Schema.Struct({
     description: "Additional domains to allow for CORS",
   }),
   auth: Schema.optional(ServerAuth).annotate({ description: "Server authentication configuration" }),
-})
-  .annotate({ identifier: "ServerConfig" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ServerConfig" })
 export type Server = Schema.Schema.Type<typeof Server>
 
 export * as ConfigServer from "./server"

@@ -1,17 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { exportJWK, generateKeyPair, SignJWT } from "jose"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Server } from "../../src/server/server"
-import { Instance } from "../../src/project/instance"
-import { resetDatabase } from "../fixture/db"
-import { ServerAuthConfig } from "../../src/server/auth/config"
+import { ServerAuth } from "../../src/server/auth"
 import { FilePaths } from "../../src/server/routes/instance/httpapi/groups/file"
 import { tmpdir } from "../fixture/fixture"
 
 let issuer: ReturnType<typeof Bun.serve> | undefined
-const original = {
-  OPENCODE_EXPERIMENTAL_HTTPAPI: Flag.OPENCODE_EXPERIMENTAL_HTTPAPI,
-}
 
 const auth = (issuerUrl: string) => ({
   mode: "oidc" as const,
@@ -31,13 +25,10 @@ beforeEach(() => {
 
 afterEach(async () => {
   issuer?.stop(true)
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original.OPENCODE_EXPERIMENTAL_HTTPAPI
   delete process.env.OPENCODE_AUTH_MODE
   delete process.env.OPENCODE_OIDC_ISSUER
   delete process.env.OPENCODE_OIDC_CLIENT_ID
   delete process.env.OPENCODE_AUTH_SESSION_SECRET
-  await Instance.disposeAll()
-  await resetDatabase()
 })
 
 async function createIssuer(input?: { nonce?: () => string | undefined }) {
@@ -102,32 +93,35 @@ function cookies(response: Response) {
 describe("OIDC server auth", () => {
   test("redirects browser requests to OIDC login", async () => {
     const testIssuer = await createIssuer()
-    const response = await Server.Legacy({ auth: auth(testIssuer.issuer) }).app.request("/", {
-      headers: { accept: "text/html" },
-    })
+    const server = await Server.listen({ hostname: "127.0.0.1", port: 0, auth: auth(testIssuer.issuer) })
+    const response = await fetch(server.url, { headers: { accept: "text/html" }, redirect: "manual" }).finally(() =>
+      server.stop(true),
+    )
 
     expect(response.status).toBe(302)
-    expect(response.headers.get("location")).toStartWith("http://localhost/auth/login")
+    expect(response.headers.get("location")).toContain("/auth/login")
   })
 
   test("rejects invalid auth mode instead of disabling auth", () => {
     process.env.OPENCODE_AUTH_MODE = "oicd"
 
-    expect(() => ServerAuthConfig.resolve()).toThrow("invalid OPENCODE_AUTH_MODE: oicd")
+    expect(() => ServerAuth.fromConfig()).toThrow("invalid OPENCODE_AUTH_MODE: oicd")
   })
 
   test("returns 401 for unauthenticated API requests", async () => {
     const testIssuer = await createIssuer()
-    const response = await Server.Legacy({ auth: auth(testIssuer.issuer) }).app.request("/global/health", {
+    const server = await Server.listen({ hostname: "127.0.0.1", port: 0, auth: auth(testIssuer.issuer) })
+    const response = await fetch(new URL("/global/health", server.url), {
       headers: { accept: "application/json" },
-    })
+    }).finally(() => server.stop(true))
 
     expect(response.status).toBe(401)
   })
 
   test("accepts bearer JWTs from the configured issuer", async () => {
     const testIssuer = await createIssuer()
-    const response = await Server.Legacy({ auth: auth(testIssuer.issuer) }).app.request("/global/health", {
+    const server = await Server.listen({ hostname: "127.0.0.1", port: 0, auth: auth(testIssuer.issuer) })
+    const response = await fetch(new URL("/global/health", server.url), {
       headers: {
         accept: "application/json",
         authorization: `Bearer ${await token({
@@ -138,14 +132,13 @@ describe("OIDC server auth", () => {
           privateKey: testIssuer.privateKey,
         })}`,
       },
-    })
+    }).finally(() => server.stop(true))
 
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({ healthy: true })
   })
 
   test("accepts OIDC bearer JWTs on protected Effect HttpApi routes", async () => {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     await using tmp = await tmpdir({ git: true })
     await Bun.write(`${tmp.path}/hello.txt`, "hello")
     const testIssuer = await createIssuer()
@@ -180,19 +173,23 @@ describe("OIDC server auth", () => {
   test("creates a browser session from the OIDC callback", async () => {
     let nonce: string | undefined
     const testIssuer = await createIssuer({ nonce: () => nonce })
-    const app = Server.Legacy({ auth: auth(testIssuer.issuer) }).app
-    const login = await app.request("/auth/login?return_to=/global/health")
+    const server = await Server.listen({ hostname: "127.0.0.1", port: 0, auth: auth(testIssuer.issuer) })
+    const login = await fetch(new URL("/auth/login?return_to=/global/health", server.url), { redirect: "manual" })
     const location = new URL(login.headers.get("location")!)
     nonce = location.searchParams.get("nonce") ?? undefined
-    const callback = await app.request("/auth/callback?code=test-code&state=" + location.searchParams.get("state"), {
-      headers: { cookie: cookies(login) },
-    })
-    const session = await app.request("/global/health", {
+    const callback = await fetch(
+      new URL("/auth/callback?code=test-code&state=" + location.searchParams.get("state"), server.url),
+      {
+        headers: { cookie: cookies(login) },
+        redirect: "manual",
+      },
+    )
+    const session = await fetch(new URL("/global/health", server.url), {
       headers: {
         accept: "application/json",
         cookie: cookies(callback),
       },
-    })
+    }).finally(() => server.stop(true))
 
     expect(callback.status).toBe(302)
     expect(callback.headers.get("location")).toBe("/global/health")
@@ -201,12 +198,15 @@ describe("OIDC server auth", () => {
 
   test("returns 401 when the OIDC callback token is rejected", async () => {
     const testIssuer = await createIssuer({ nonce: () => "wrong-nonce" })
-    const app = Server.Legacy({ auth: auth(testIssuer.issuer) }).app
-    const login = await app.request("/auth/login?return_to=/global/health")
+    const server = await Server.listen({ hostname: "127.0.0.1", port: 0, auth: auth(testIssuer.issuer) })
+    const login = await fetch(new URL("/auth/login?return_to=/global/health", server.url), { redirect: "manual" })
     const location = new URL(login.headers.get("location")!)
-    const callback = await app.request("/auth/callback?code=test-code&state=" + location.searchParams.get("state"), {
-      headers: { cookie: cookies(login) },
-    })
+    const callback = await fetch(
+      new URL("/auth/callback?code=test-code&state=" + location.searchParams.get("state"), server.url),
+      {
+        headers: { cookie: cookies(login) },
+      },
+    ).finally(() => server.stop(true))
 
     expect(callback.status).toBe(401)
     expect(await callback.json()).toMatchObject({ error: "OIDC authentication failed" })

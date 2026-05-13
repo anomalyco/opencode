@@ -1,21 +1,24 @@
+import { Effect } from "effect"
 import { Server } from "../../server/server"
-import { cmd } from "./cmd"
+import { effectCmd } from "../effect-cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
-import { ServerAuthConfig } from "@/server/auth/config"
+import { ServerAuth } from "@/server/auth"
 
-export const ServeCommand = cmd({
+export const ServeCommand = effectCmd({
   command: "serve",
   builder: (yargs) => withNetworkOptions(yargs),
   describe: "starts a headless opencode server",
-  handler: async (args) => {
-    const opts = await resolveNetworkOptions(args)
-    if (ServerAuthConfig.resolve(opts.auth).mode === "disabled") {
+  // Server loads instances per-request via x-opencode-directory header — no
+  // need for an ambient project InstanceContext at startup.
+  instance: false,
+  handler: Effect.fn("Cli.serve")(function* (args) {
+    const opts = yield* resolveNetworkOptions(args)
+    if (ServerAuth.fromConfig(opts.auth).mode === "disabled") {
       console.log("Warning: server auth is disabled; server is unsecured.")
     }
-    const server = await Server.listen(opts)
+    const server = yield* Effect.promise(() => Server.listen(opts))
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
 
-    await new Promise(() => {})
-    await server.stop()
-  },
+    yield* Effect.never
+  }),
 })

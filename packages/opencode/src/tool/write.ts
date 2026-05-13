@@ -10,7 +10,7 @@ import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Format } from "../format"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Instance } from "../project/instance"
+import { InstanceState } from "@/effect/instance-state"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import * as Bom from "@/util/bom"
@@ -37,9 +37,10 @@ export const WriteTool = Tool.define(
       parameters: Parameters,
       execute: (params: { content: string; filePath: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          const instance = yield* InstanceState.context
           const filepath = path.isAbsolute(params.filePath)
             ? params.filePath
-            : path.join(Instance.directory, params.filePath)
+            : path.join(instance.directory, params.filePath)
           yield* assertExternalDirectoryEffect(ctx, filepath)
 
           const exists = yield* fs.existsSafe(filepath)
@@ -52,7 +53,7 @@ export const WriteTool = Tool.define(
           const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, contentNew))
           yield* ctx.ask({
             permission: "edit",
-            patterns: [path.relative(Instance.worktree, filepath)],
+            patterns: [path.relative(instance.worktree, filepath)],
             always: ["*"],
             metadata: {
               filepath,
@@ -89,7 +90,7 @@ export const WriteTool = Tool.define(
           }
 
           return {
-            title: path.relative(Instance.worktree, filepath),
+            title: path.relative(instance.worktree, filepath),
             metadata: {
               diagnostics,
               filepath,

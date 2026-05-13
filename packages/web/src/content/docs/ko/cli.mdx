@@ -29,16 +29,16 @@ opencode [project]
 
 #### 플래그
 
-| 플래그       | 축약 | 설명                                                                   |
-| ------------ | ---- | ---------------------------------------------------------------------- |
-| `--continue` | `-c` | 마지막 세션 이어서 실행                                                |
-| `--session`  | `-s` | 이어서 실행할 세션 ID                                                  |
-| `--fork`     |      | 세션을 이어갈 때 포크 생성 (`--continue` 또는 `--session`과 함께 사용) |
-| `--prompt`   |      | 사용할 프롬프트                                                        |
-| `--model`    | `-m` | 사용할 모델 (`provider/model` 형식)                                    |
-| `--agent`    |      | 사용할 에이전트                                                        |
-| `--port`     |      | 수신 포트                                                              |
-| `--hostname` |      | 수신 호스트명                                                          |
+| 플래그                                   | 축약 | 설명                                                                   |
+| ---------------------------------------- | ---- | ---------------------------------------------------------------------- |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | 마지막 세션 이어서 실행                                                |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | 이어서 실행할 세션 ID                                                  |
+| <nobr><code>{"--fork"}</code></nobr>     |      | 세션을 이어갈 때 포크 생성 (`--continue` 또는 `--session`과 함께 사용) |
+| <nobr><code>{"--prompt"}</code></nobr>   |      | 사용할 프롬프트                                                        |
+| <nobr><code>{"--model"}</code></nobr>    | `-m` | 사용할 모델 (`provider/model` 형식)                                    |
+| <nobr><code>{"--agent"}</code></nobr>    |      | 사용할 에이전트                                                        |
+| <nobr><code>{"--port"}</code></nobr>     |      | 수신 포트                                                              |
+| <nobr><code>{"--hostname"}</code></nobr> |      | 수신 호스트명                                                          |
 
 ---
 
@@ -78,10 +78,14 @@ opencode attach http://10.20.30.40:4096
 
 #### 플래그
 
-| 플래그      | 축약 | 설명                       |
-| ----------- | ---- | -------------------------- |
-| `--dir`     |      | TUI를 시작할 작업 디렉터리 |
-| `--session` | `-s` | 이어서 실행할 세션 ID      |
+| 플래그                                   | 축약 | 설명                                                                       |
+| ---------------------------------------- | ---- | -------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |      | TUI를 시작할 작업 디렉터리                                                 |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | 마지막 세션 이어서 실행                                                    |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | 이어서 실행할 세션 ID                                                      |
+| <nobr><code>{"--fork"}</code></nobr>     |      | 이어서 실행할 때 세션 포크 (`--continue` 또는 `--session`과 함께 사용)     |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | 기본 인증 비밀번호 (기본값: `OPENCODE_SERVER_PASSWORD`)                    |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | 기본 인증 사용자 이름 (기본값: `OPENCODE_SERVER_USERNAME` 또는 `opencode`) |
 
 ---
 
@@ -187,10 +191,10 @@ opencode github run
 
 ##### 플래그
 
-| 플래그    | 설명                      |
-| --------- | ------------------------- |
-| `--event` | 실행할 GitHub 모의 이벤트 |
-| `--token` | GitHub 개인 액세스 토큰   |
+| 플래그                                | 설명                      |
+| ------------------------------------- | ------------------------- |
+| <nobr><code>{"--event"}</code></nobr> | 실행할 GitHub 모의 이벤트 |
+| <nobr><code>{"--token"}</code></nobr> | GitHub 개인 액세스 토큰   |
 
 ---
 
@@ -296,10 +300,10 @@ opencode models anthropic
 
 #### 플래그
 
-| 플래그      | 설명                                              |
-| ----------- | ------------------------------------------------- |
-| `--refresh` | models.dev에서 모델 캐시 새로고침                 |
-| `--verbose` | 더 자세한 모델 출력 사용(비용 등 메타데이터 포함) |
+| 플래그                                  | 설명                                              |
+| --------------------------------------- | ------------------------------------------------- |
+| <nobr><code>{"--refresh"}</code></nobr> | models.dev에서 모델 캐시 새로고침                 |
+| <nobr><code>{"--verbose"}</code></nobr> | 더 자세한 모델 출력 사용(비용 등 메타데이터 포함) |
 
 `--refresh` 플래그를 사용하면 캐시된 모델 목록을 갱신할 수 있습니다. provider에 새 모델이 추가된 뒤 OpenCode에서 바로 확인하고 싶을 때 유용합니다.
 
@@ -335,20 +339,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### 플래그
 
-| 플래그       | 축약 | 설명                                                                   |
-| ------------ | ---- | ---------------------------------------------------------------------- |
-| `--command`  |      | 실행할 명령(인수는 message로 전달)                                     |
-| `--continue` | `-c` | 마지막 세션 이어서 실행                                                |
-| `--session`  | `-s` | 이어서 실행할 세션 ID                                                  |
-| `--fork`     |      | 세션을 이어갈 때 포크 생성 (`--continue` 또는 `--session`과 함께 사용) |
-| `--share`    |      | 세션 공유                                                              |
-| `--model`    | `-m` | 사용할 모델 (`provider/model` 형식)                                    |
-| `--agent`    |      | 사용할 에이전트                                                        |
-| `--file`     | `-f` | 메시지에 첨부할 파일                                                   |
-| `--format`   |      | 출력 형식: default(포맷됨) 또는 json(원시 JSON 이벤트)                 |
-| `--title`    |      | 세션 제목(값이 없으면 프롬프트를 잘라 자동 생성)                       |
-| `--attach`   |      | 실행 중인 opencode 서버에 연결(예: http://localhost:4096)              |
-| `--port`     |      | 로컬 서버 포트(기본값: 랜덤 포트)                                      |
+| 플래그                                   | 축약 | 설명                                                                       |
+| ---------------------------------------- | ---- | -------------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |      | 실행할 명령(인수는 message로 전달)                                         |
+| <nobr><code>{"--continue"}</code></nobr> | `-c` | 마지막 세션 이어서 실행                                                    |
+| <nobr><code>{"--session"}</code></nobr>  | `-s` | 이어서 실행할 세션 ID                                                      |
+| <nobr><code>{"--fork"}</code></nobr>     |      | 세션을 이어갈 때 포크 생성 (`--continue` 또는 `--session`과 함께 사용)     |
+| <nobr><code>{"--share"}</code></nobr>    |      | 세션 공유                                                                  |
+| <nobr><code>{"--model"}</code></nobr>    | `-m` | 사용할 모델 (`provider/model` 형식)                                        |
+| <nobr><code>{"--agent"}</code></nobr>    |      | 사용할 에이전트                                                            |
+| <nobr><code>{"--file"}</code></nobr>     | `-f` | 메시지에 첨부할 파일                                                       |
+| <nobr><code>{"--format"}</code></nobr>   |      | 출력 형식: default(포맷됨) 또는 json(원시 JSON 이벤트)                     |
+| <nobr><code>{"--title"}</code></nobr>    |      | 세션 제목(값이 없으면 프롬프트를 잘라 자동 생성)                           |
+| <nobr><code>{"--attach"}</code></nobr>   |      | 실행 중인 opencode 서버에 연결(예: http://localhost:4096)                  |
+| <nobr><code>{"--password"}</code></nobr> | `-p` | 기본 인증 비밀번호 (기본값: `OPENCODE_SERVER_PASSWORD`)                    |
+| <nobr><code>{"--username"}</code></nobr> | `-u` | 기본 인증 사용자 이름 (기본값: `OPENCODE_SERVER_USERNAME` 또는 `opencode`) |
+| <nobr><code>{"--dir"}</code></nobr>      |      | 실행할 디렉터리, 또는 연결 시 원격 서버 경로                               |
+| <nobr><code>{"--variant"}</code></nobr>  |      | 모델 변형 (제공자별 추론 수준)                                             |
+| <nobr><code>{"--thinking"}</code></nobr> |      | 사고 블록 표시                                                             |
+| <nobr><code>{"--port"}</code></nobr>     |      | 로컬 서버 포트(기본값: 랜덤 포트)                                          |
 
 ---
 
@@ -364,12 +373,12 @@ opencode serve
 
 #### 플래그
 
-| 플래그       | 설명                              |
-| ------------ | --------------------------------- |
-| `--port`     | 수신 포트                         |
-| `--hostname` | 수신 호스트명                     |
-| `--mdns`     | mDNS 검색 활성화                  |
-| `--cors`     | 허용할 추가 브라우저 origin(CORS) |
+| 플래그                                   | 설명                              |
+| ---------------------------------------- | --------------------------------- |
+| <nobr><code>{"--port"}</code></nobr>     | 수신 포트                         |
+| <nobr><code>{"--hostname"}</code></nobr> | 수신 호스트명                     |
+| <nobr><code>{"--mdns"}</code></nobr>     | mDNS 검색 활성화                  |
+| <nobr><code>{"--cors"}</code></nobr>     | 허용할 추가 브라우저 origin(CORS) |
 
 ---
 
@@ -393,10 +402,10 @@ opencode session list
 
 ##### 플래그
 
-| 플래그        | 축약 | 설명                                   |
-| ------------- | ---- | -------------------------------------- |
-| `--max-count` | `-n` | 최근 N개 세션만 표시                   |
-| `--format`    |      | 출력 형식: table 또는 json(기본 table) |
+| 플래그                                    | 축약 | 설명                                   |
+| ----------------------------------------- | ---- | -------------------------------------- |
+| <nobr><code>{"--max-count"}</code></nobr> | `-n` | 최근 N개 세션만 표시                   |
+| <nobr><code>{"--format"}</code></nobr>    |      | 출력 형식: table 또는 json(기본 table) |
 
 ---
 
@@ -410,12 +419,12 @@ opencode stats
 
 #### 플래그
 
-| 플래그      | 설명                                                         |
-| ----------- | ------------------------------------------------------------ |
-| `--days`    | 최근 N일 통계 표시(기본값: 전체 기간)                        |
-| `--tools`   | 표시할 도구 개수(기본값: 전체)                               |
-| `--models`  | 모델 사용량 상세 표시(기본 숨김). 숫자를 주면 상위 N개 표시  |
-| `--project` | 프로젝트 필터(기본: 전체 프로젝트, 빈 문자열: 현재 프로젝트) |
+| 플래그                                  | 설명                                                         |
+| --------------------------------------- | ------------------------------------------------------------ |
+| <nobr><code>{"--days"}</code></nobr>    | 최근 N일 통계 표시(기본값: 전체 기간)                        |
+| <nobr><code>{"--tools"}</code></nobr>   | 표시할 도구 개수(기본값: 전체)                               |
+| <nobr><code>{"--models"}</code></nobr>  | 모델 사용량 상세 표시(기본 숨김). 숫자를 주면 상위 N개 표시  |
+| <nobr><code>{"--project"}</code></nobr> | 프로젝트 필터(기본: 전체 프로젝트, 빈 문자열: 현재 프로젝트) |
 
 ---
 
@@ -460,12 +469,12 @@ opencode web
 
 #### 플래그
 
-| 플래그       | 설명                              |
-| ------------ | --------------------------------- |
-| `--port`     | 수신 포트                         |
-| `--hostname` | 수신 호스트명                     |
-| `--mdns`     | mDNS 검색 활성화                  |
-| `--cors`     | 허용할 추가 브라우저 origin(CORS) |
+| 플래그                                   | 설명                              |
+| ---------------------------------------- | --------------------------------- |
+| <nobr><code>{"--port"}</code></nobr>     | 수신 포트                         |
+| <nobr><code>{"--hostname"}</code></nobr> | 수신 호스트명                     |
+| <nobr><code>{"--mdns"}</code></nobr>     | mDNS 검색 활성화                  |
+| <nobr><code>{"--cors"}</code></nobr>     | 허용할 추가 브라우저 origin(CORS) |
 
 ---
 
@@ -481,11 +490,11 @@ opencode acp
 
 #### 플래그
 
-| 플래그       | 설명          |
-| ------------ | ------------- |
-| `--cwd`      | 작업 디렉터리 |
-| `--port`     | 수신 포트     |
-| `--hostname` | 수신 호스트명 |
+| 플래그                                   | 설명          |
+| ---------------------------------------- | ------------- |
+| <nobr><code>{"--cwd"}</code></nobr>      | 작업 디렉터리 |
+| <nobr><code>{"--port"}</code></nobr>     | 수신 포트     |
+| <nobr><code>{"--hostname"}</code></nobr> | 수신 호스트명 |
 
 ---
 
@@ -499,12 +508,12 @@ opencode uninstall
 
 #### 플래그
 
-| 플래그          | 축약 | 설명                            |
-| --------------- | ---- | ------------------------------- |
-| `--keep-config` | `-c` | 설정 파일 유지                  |
-| `--keep-data`   | `-d` | 세션 데이터와 스냅샷 유지       |
-| `--dry-run`     |      | 실제 삭제 없이 삭제 대상만 표시 |
-| `--force`       | `-f` | 확인 프롬프트 건너뛰기          |
+| 플래그                                      | 축약 | 설명                            |
+| ------------------------------------------- | ---- | ------------------------------- |
+| <nobr><code>{"--keep-config"}</code></nobr> | `-c` | 설정 파일 유지                  |
+| <nobr><code>{"--keep-data"}</code></nobr>   | `-d` | 세션 데이터와 스냅샷 유지       |
+| <nobr><code>{"--dry-run"}</code></nobr>     |      | 실제 삭제 없이 삭제 대상만 표시 |
+| <nobr><code>{"--force"}</code></nobr>       | `-f` | 확인 프롬프트 건너뛰기          |
 
 ---
 
@@ -530,9 +539,9 @@ opencode upgrade v0.1.48
 
 #### 플래그
 
-| 플래그     | 축약 | 설명                                       |
-| ---------- | ---- | ------------------------------------------ |
-| `--method` | `-m` | 설치 방식 지정: curl, npm, pnpm, bun, brew |
+| 플래그                                 | 축약 | 설명                                       |
+| -------------------------------------- | ---- | ------------------------------------------ |
+| <nobr><code>{"--method"}</code></nobr> | `-m` | 설치 방식 지정: curl, npm, pnpm, bun, brew |
 
 ---
 
@@ -540,12 +549,12 @@ opencode upgrade v0.1.48
 
 opencode CLI는 아래 전역 플래그를 지원합니다.
 
-| 플래그         | 축약 | 설명                                |
-| -------------- | ---- | ----------------------------------- |
-| `--help`       | `-h` | 도움말 표시                         |
-| `--version`    | `-v` | 버전 출력                           |
-| `--print-logs` |      | 로그를 stderr로 출력                |
-| `--log-level`  |      | 로그 레벨(DEBUG, INFO, WARN, ERROR) |
+| 플래그                                     | 축약 | 설명                                |
+| ------------------------------------------ | ---- | ----------------------------------- |
+| <nobr><code>{"--help"}</code></nobr>       | `-h` | 도움말 표시                         |
+| <nobr><code>{"--version"}</code></nobr>    | `-v` | 버전 출력                           |
+| <nobr><code>{"--print-logs"}</code></nobr> |      | 로그를 stderr로 출력                |
+| <nobr><code>{"--log-level"}</code></nobr>  |      | 로그 레벨(DEBUG, INFO, WARN, ERROR) |
 
 ---
 
