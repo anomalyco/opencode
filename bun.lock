@@ -240,6 +240,7 @@
         "semver": "^7.6.3",
         "venice-ai-sdk-provider": "2.0.1",
         "xdg-basedir": "5.1.0",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
