@@ -2,6 +2,7 @@
 import { Script } from "@opencode-ai/script"
 
 await import("./prebuild")
+await import("./download-cli")
 
 const pkg = await Bun.file("./package.json").json()
 pkg.version = Script.version

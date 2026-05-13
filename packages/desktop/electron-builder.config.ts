@@ -39,6 +39,10 @@ const getBase = (): Configuration => ({
       to: "native/",
       filter: ["index.js", "index.d.ts", "build/Release/mac_window.node", "swift-build/**"],
     },
+    {
+      from: `resources/opencode-cli${process.platform === "win32" ? ".exe" : ""}`,
+      to: `opencode-cli${process.platform === "win32" ? ".exe" : ""}`,
+    },
   ],
   mac: {
     category: "public.app-category.developer-tools",
@@ -75,6 +79,10 @@ const getBase = (): Configuration => ({
     icon: `resources/icons`,
     category: "Development",
     target: ["AppImage", "deb", "rpm"],
+  },
+  deb: {
+    afterInstall: "scripts/deb-after-install.sh",
+    afterRemove: "scripts/deb-after-remove.sh",
   },
 })
 
