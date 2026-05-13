@@ -8,12 +8,25 @@ import { Flock } from "@opencode-ai/core/util/flock"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { withTransientReadRetry } from "@/util/effect-http-client"
+import { CatalogModelStatus } from "./model-status"
+
+const CostTier = Schema.Struct({
+  input: Schema.Finite,
+  output: Schema.Finite,
+  cache_read: Schema.optional(Schema.Finite),
+  cache_write: Schema.optional(Schema.Finite),
+  tier: Schema.Struct({
+    type: Schema.Literal("context"),
+    size: Schema.Finite,
+  }),
+})
 
 const Cost = Schema.Struct({
   input: Schema.Finite,
   output: Schema.Finite,
   cache_read: Schema.optional(Schema.Finite),
   cache_write: Schema.optional(Schema.Finite),
+  tiers: Schema.optional(Schema.Array(CostTier)),
   context_over_200k: Schema.optional(
     Schema.Struct({
       input: Schema.Finite,
@@ -71,7 +84,7 @@ export const Model = Schema.Struct({
       ),
     }),
   ),
-  status: Schema.optional(Schema.Literals(["alpha", "beta", "deprecated"])),
+  status: Schema.optional(CatalogModelStatus),
   provider: Schema.optional(
     Schema.Struct({ npm: Schema.optional(Schema.String), api: Schema.optional(Schema.String) }),
   ),
@@ -176,7 +189,9 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | HttpClie
           yield* invalidate
         }),
       ).pipe(
-        Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause })),
+        Effect.tapCause((cause) =>
+          Effect.logError("Failed to fetch models.dev").pipe(Effect.annotateLogs("cause", cause)),
+        ),
         Effect.ignore,
       )
     })

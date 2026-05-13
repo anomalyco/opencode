@@ -15,7 +15,8 @@ import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
-import { mcpQueryKey } from "@/context/global-sync"
+import { useQueryOptions } from "@/context/global-sync"
+import { pathKey } from "@/utils/path-key"
 
 const pollMs = 10_000
 
@@ -139,13 +140,14 @@ const useMcpToggleMutation = () => {
   const sdk = useSDK()
   const language = useLanguage()
   const queryClient = useQueryClient()
+  const queryOptions = useQueryOptions()
 
   return useMutation(() => ({
     mutationFn: async (name: string) => {
       const status = sync.data.mcp[name]
       await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
     },
-    onSuccess: () => queryClient.refetchQueries({ queryKey: mcpQueryKey(sync.directory) }),
+    onSuccess: () => queryClient.refetchQueries(queryOptions.mcp(pathKey(sync.directory))),
     onError: (err) => {
       showToast({
         variant: "error",

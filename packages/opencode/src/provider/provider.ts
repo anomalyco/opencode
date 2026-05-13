@@ -13,8 +13,7 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { namedSchemaError } from "@/util/named-schema-error"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
@@ -24,10 +23,11 @@ import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
-import { optionalOmitUndefined, withStatics } from "@opencode-ai/core/schema"
+import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
+import { ModelStatus } from "./model-status"
 
 const log = Log.create({ service: "provider" })
 
@@ -869,10 +869,21 @@ const ProviderCacheCost = Schema.Struct({
   write: Schema.Finite,
 })
 
+const ProviderCostTier = Schema.Struct({
+  input: Schema.Finite,
+  output: Schema.Finite,
+  cache: ProviderCacheCost,
+  tier: Schema.Struct({
+    type: Schema.Literal("context"),
+    size: Schema.Finite,
+  }),
+})
+
 const ProviderCost = Schema.Struct({
   input: Schema.Finite,
   output: Schema.Finite,
   cache: ProviderCacheCost,
+  tiers: optionalOmitUndefined(Schema.Array(ProviderCostTier)),
   experimentalOver200K: optionalOmitUndefined(
     Schema.Struct({
       input: Schema.Finite,
@@ -897,14 +908,12 @@ export const Model = Schema.Struct({
   capabilities: ProviderCapabilities,
   cost: ProviderCost,
   limit: ProviderLimit,
-  status: Schema.Literals(["alpha", "beta", "deprecated", "active"]),
+  status: ModelStatus,
   options: Schema.Record(Schema.String, Schema.Any),
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,
   variants: optionalOmitUndefined(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
-})
-  .annotate({ identifier: "Model" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Model" })
 export type Model = Types.DeepMutable<Schema.Schema.Type<typeof Model>>
 
 export const Info = Schema.Struct({
@@ -915,9 +924,7 @@ export const Info = Schema.Struct({
   key: optionalOmitUndefined(Schema.String),
   options: Schema.Record(Schema.String, Schema.Any),
   models: Schema.Record(Schema.String, Model),
-})
-  .annotate({ identifier: "Provider" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Provider" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 const DefaultModelIDs = Schema.Record(Schema.String, Schema.String)
@@ -926,13 +933,13 @@ export const ListResult = Schema.Struct({
   all: Schema.Array(Info),
   default: DefaultModelIDs,
   connected: Schema.Array(Schema.String),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type ListResult = Types.DeepMutable<Schema.Schema.Type<typeof ListResult>>
 
 export const ConfigProvidersResult = Schema.Struct({
   providers: Schema.Array(Info),
   default: DefaultModelIDs,
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type ConfigProvidersResult = Types.DeepMutable<Schema.Schema.Type<typeof ConfigProvidersResult>>
 
 export function toPublicInfo(provider: Info): Info {
@@ -980,6 +987,17 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
       read: c?.cache_read ?? 0,
       write: c?.cache_write ?? 0,
     },
+  }
+  if (c?.tiers) {
+    result.tiers = c.tiers.map((item) => ({
+      input: item.input,
+      output: item.output,
+      cache: {
+        read: item.cache_read ?? 0,
+        write: item.cache_write ?? 0,
+      },
+      tier: item.tier,
+    }))
   }
   if (c?.context_over_200k) {
     result.experimentalOver200K = {
@@ -1753,13 +1771,13 @@ export function parseModel(model: string) {
   }
 }
 
-export const ModelNotFoundError = namedSchemaError("ProviderModelNotFoundError", {
+export const ModelNotFoundError = NamedError.create("ProviderModelNotFoundError", {
   providerID: ProviderID,
   modelID: ModelID,
   suggestions: Schema.optional(Schema.Array(Schema.String)),
 })
 
-export const InitError = namedSchemaError("ProviderInitError", {
+export const InitError = NamedError.create("ProviderInitError", {
   providerID: ProviderID,
 })
 

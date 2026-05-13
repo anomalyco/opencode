@@ -1,33 +1,35 @@
 import path from "path"
-import z from "zod"
 import { Global } from "@opencode-ai/core/global"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Option, Schema } from "effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 
-export const Tokens = z.object({
-  accessToken: z.string(),
-  refreshToken: z.string().optional(),
-  expiresAt: z.number().optional(),
-  scope: z.string().optional(),
+export const Tokens = Schema.Struct({
+  accessToken: Schema.mutableKey(Schema.String),
+  refreshToken: Schema.mutableKey(Schema.optional(Schema.String)),
+  expiresAt: Schema.mutableKey(Schema.optional(Schema.Number)),
+  scope: Schema.mutableKey(Schema.optional(Schema.String)),
 })
-export type Tokens = z.infer<typeof Tokens>
+export type Tokens = Schema.Schema.Type<typeof Tokens>
 
-export const ClientInfo = z.object({
-  clientId: z.string(),
-  clientSecret: z.string().optional(),
-  clientIdIssuedAt: z.number().optional(),
-  clientSecretExpiresAt: z.number().optional(),
+export const ClientInfo = Schema.Struct({
+  clientId: Schema.mutableKey(Schema.String),
+  clientSecret: Schema.mutableKey(Schema.optional(Schema.String)),
+  clientIdIssuedAt: Schema.mutableKey(Schema.optional(Schema.Number)),
+  clientSecretExpiresAt: Schema.mutableKey(Schema.optional(Schema.Number)),
 })
-export type ClientInfo = z.infer<typeof ClientInfo>
+export type ClientInfo = Schema.Schema.Type<typeof ClientInfo>
 
-export const Entry = z.object({
-  tokens: Tokens.optional(),
-  clientInfo: ClientInfo.optional(),
-  codeVerifier: z.string().optional(),
-  oauthState: z.string().optional(),
-  serverUrl: z.string().optional(),
+export const Entry = Schema.Struct({
+  tokens: Schema.mutableKey(Schema.optional(Tokens)),
+  clientInfo: Schema.mutableKey(Schema.optional(ClientInfo)),
+  codeVerifier: Schema.mutableKey(Schema.optional(Schema.String)),
+  oauthState: Schema.mutableKey(Schema.optional(Schema.String)),
+  serverUrl: Schema.mutableKey(Schema.optional(Schema.String)),
 })
-export type Entry = z.infer<typeof Entry>
+export type Entry = Schema.Schema.Type<typeof Entry>
+
+const decodeAuthData = Schema.decodeUnknownOption(Schema.Record(Schema.String, Entry))
+type AuthData = Record<string, Entry>
 
 const filepath = path.join(Global.Path.data, "mcp-auth.json")
 
@@ -56,8 +58,8 @@ export const layer = Layer.effect(
 
     const all = Effect.fn("McpAuth.all")(function* () {
       return yield* fs.readJson(filepath).pipe(
-        Effect.map((data) => data as Record<string, Entry>),
-        Effect.catch(() => Effect.succeed({} as Record<string, Entry>)),
+        Effect.map((data): AuthData => Option.getOrElse(decodeAuthData(data), () => ({}) as AuthData) as AuthData),
+        Effect.catch(() => Effect.succeed({} as AuthData)),
       )
     })
 
@@ -93,7 +95,7 @@ export const layer = Layer.effect(
         yield* set(mcpName, entry, serverUrl)
       })
 
-    const clearField = <K extends keyof Entry>(field: K, spanName: string) =>
+    const clearField = (field: keyof Entry, spanName: string) =>
       Effect.fn(`McpAuth.${spanName}`)(function* (mcpName: string) {
         const entry = yield* get(mcpName)
         if (entry) {

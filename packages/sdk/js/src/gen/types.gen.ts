@@ -752,11 +752,11 @@ export type Project = {
 }
 
 export type BadRequestError = {
-  data: unknown
-  errors: Array<{
-    [key: string]: unknown
-  }>
-  success: false
+  name: "BadRequest"
+  data: {
+    message: string
+    kind?: "Params" | "Headers" | "Query" | "Body" | "Payload"
+  }
 }
 
 export type NotFoundError = {
@@ -1065,7 +1065,7 @@ export type ProviderConfig = {
         output: Array<"text" | "audio" | "image" | "video" | "pdf">
       }
       experimental?: boolean
-      status?: "alpha" | "beta" | "deprecated"
+      status?: "alpha" | "beta" | "deprecated" | "active"
       options?: {
         [key: string]: unknown
       }
@@ -1666,6 +1666,9 @@ export type OAuth = {
 export type ApiAuth = {
   type: "api"
   key: string
+  metadata?: {
+    [key: string]: string
+  }
 }
 
 export type WellKnownAuth = {
@@ -3012,7 +3015,7 @@ export type ProviderListResponses = {
             output: Array<"text" | "audio" | "image" | "video" | "pdf">
           }
           experimental?: boolean
-          status?: "alpha" | "beta" | "deprecated"
+          status?: "alpha" | "beta" | "deprecated" | "active"
           options: {
             [key: string]: unknown
           }

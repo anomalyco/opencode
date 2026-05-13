@@ -1,12 +1,10 @@
 export * as ConfigCommand from "./command"
 
 import * as Log from "@opencode-ai/core/util/log"
-import { Schema } from "effect"
+import { Cause, Exit, Schema } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { Bus } from "@/bus"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { withStatics } from "@opencode-ai/core/schema"
 import { configEntryNameFromPath } from "./entry-name"
 import { InvalidError } from "./error"
 import * as ConfigMarkdown from "./markdown"
@@ -20,9 +18,11 @@ export const Info = Schema.Struct({
   agent: Schema.optional(Schema.String),
   model: Schema.optional(ConfigModelID),
   subtask: Schema.optional(Schema.Boolean),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 
 export type Info = Schema.Schema.Type<typeof Info>
+
+const decodeInfo = Schema.decodeUnknownExit(Info)
 
 export async function load(dir: string) {
   const result: Record<string, Info> = {}
@@ -51,12 +51,12 @@ export async function load(dir: string) {
       ...md.data,
       template: md.content.trim(),
     }
-    const parsed = Info.zod.safeParse(config)
-    if (parsed.success) {
-      result[config.name] = parsed.data
+    const parsed = decodeInfo(config, { errors: "all", propertyOrder: "original" })
+    if (Exit.isSuccess(parsed)) {
+      result[config.name] = parsed.value
       continue
     }
-    throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
+    throw new InvalidError({ path: item, message: Cause.pretty(parsed.cause) }, { cause: Cause.squash(parsed.cause) })
   }
   return result
 }

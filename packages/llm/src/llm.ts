@@ -44,31 +44,7 @@ export type RequestInput = Omit<
 
 export const limits = modelLimits
 
-export const text = Message.text
-
-export const system = SystemPart.make
-
-export const message = Message.make
-
-export const user = Message.user
-
-export const assistant = Message.assistant
-
 export const model = modelRef
-
-export const toolDefinition = ToolDefinition.make
-
-export const toolCall = ToolCallPart.make
-
-export const toolResult = ToolResultPart.make
-
-export const toolMessage = Message.tool
-
-export const toolChoiceName = ToolChoice.named
-
-export const toolChoice = ToolChoice.make
-
-export const generation = GenerationOptions.make
 
 export const generate = LLMClient.generate
 
@@ -95,10 +71,10 @@ export const request = (input: RequestInput) => {
   return new LLMRequest({
     ...rest,
     system: SystemPart.content(requestSystem),
-    messages: [...(messages?.map(message) ?? []), ...(prompt === undefined ? [] : [user(prompt)])],
-    tools: tools?.map(toolDefinition) ?? [],
-    toolChoice: requestToolChoice ? toolChoice(requestToolChoice) : undefined,
-    generation: requestGeneration === undefined ? undefined : generation(requestGeneration),
+    messages: [...(messages?.map(Message.make) ?? []), ...(prompt === undefined ? [] : [Message.user(prompt)])],
+    tools: tools?.map(ToolDefinition.make) ?? [],
+    toolChoice: requestToolChoice ? ToolChoice.make(requestToolChoice) : undefined,
+    generation: requestGeneration === undefined ? undefined : GenerationOptions.make(requestGeneration),
     providerOptions: requestProviderOptions,
     http: requestHttp === undefined ? undefined : HttpOptions.make(requestHttp),
   })
