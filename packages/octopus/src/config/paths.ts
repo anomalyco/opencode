@@ -26,7 +26,7 @@ export const directories = Effect.fn("ConfigPaths.directories")(function* (direc
     Global.Path.config,
     ...(!Flag.OCTOPUS_DISABLE_PROJECT_CONFIG
       ? yield* afs.up({
-          targets: [".opencode"],
+          targets: [".octopus", ".opencode"],
           start: directory,
           stop: worktree,
         })
