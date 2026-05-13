@@ -9,6 +9,10 @@ const root = path.resolve(import.meta.dir, "..")
 const dist = path.join(root, "packages", "opencode", "dist")
 const out = path.join(dist, "securecode-release")
 const setupSrc = path.join(root, "setup")
+// One-shot installer (`curl ... | bash`). Uploaded to releases as `install`
+// so the user-facing download URL is `.../releases/latest/download/install`.
+// See https://github.com/acompany-develop/securecode/issues/82.
+const installerSrc = path.join(root, "install-securecode")
 const repo = process.env.GH_REPO ?? process.env.GITHUB_REPOSITORY
 const tag = process.env.SECURECODE_TAG ?? version()
 const skip = process.env.SECURECODE_SKIP_UPLOAD === "1"
@@ -32,10 +36,15 @@ for (const dir of await fs.readdir(dist, { withFileTypes: true })) {
   const src = await bin(path.join(dist, dir.name, "bin"), win)
   if (!src) continue
 
-  const name = dir.name.replace(/^opencode-/, "SecureCode-")
+  // Archive / dir / binary names are kept lowercase to match the CLI's
+  // own `scriptName("securecode")` and the documented user-facing command
+  // `securecode run ...`. The pre-existing capitalised naming led to a
+  // command-not-found on case-sensitive (Linux) filesystems when users
+  // followed the README.txt instructions verbatim.
+  const name = dir.name.replace(/^opencode-/, "securecode-")
   const ext = win || dir.name.includes("darwin") ? "zip" : "tar.gz"
   const tmp = path.join(out, name)
-  const dst = path.join(tmp, `SecureCode${win ? ".exe" : ""}`)
+  const dst = path.join(tmp, `securecode${win ? ".exe" : ""}`)
   const arc = path.join(out, `${name}.${ext}`)
 
   await fs.rm(tmp, { recursive: true, force: true })
@@ -59,11 +68,21 @@ if (sums.length === 0) {
   throw new Error("No CLI binaries found in packages/opencode/dist")
 }
 
-const sumfile = path.join(out, "SecureCode-sha256.txt")
+const sumfile = path.join(out, "securecode-sha256.txt")
 await Bun.write(sumfile, sums.join("\n") + "\n")
 
+// Bundle the one-shot installer alongside the platform archives so users can
+// `curl -fsSL .../releases/latest/download/install | bash`. We rename
+// install-securecode → install for the asset name so the URL matches what is
+// documented in the install guide.
+if (await exists(installerSrc)) {
+  const installerDst = path.join(out, "install")
+  await fs.copyFile(installerSrc, installerDst)
+  await fs.chmod(installerDst, 0o755)
+}
+
 const files = (await fs.readdir(out))
-  .filter((x) => x === "SecureCode-sha256.txt" || x.endsWith(".zip") || x.endsWith(".tar.gz"))
+  .filter((x) => x === "securecode-sha256.txt" || x === "install" || x.endsWith(".zip") || x.endsWith(".tar.gz"))
   .map((x) => path.join(out, x))
   .sort()
 
@@ -108,7 +127,7 @@ function sum(buf: Uint8Array) {
 }
 
 function note(name: string, win: boolean) {
-  const cmd = win ? "SecureCode.exe" : "./SecureCode"
+  const cmd = win ? "securecode.exe" : "./securecode"
   const installer = win ? "see setup\\install.ps1 (or copy setup/* manually)" : "bash setup/install.sh"
   return [
     "Acompany SecureCode CLI",

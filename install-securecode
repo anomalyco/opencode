@@ -1,0 +1,330 @@
+#!/usr/bin/env bash
+# Acompany SecureCode one-shot installer.
+#
+# Recommended invocation:
+#   curl -fsSL https://github.com/acompany-develop/securecode/releases/latest/download/install | bash
+#
+# Or for a pinned version:
+#   curl -fsSL https://github.com/acompany-develop/securecode/releases/latest/download/install | bash -s -- --version 0.1.0
+#
+# Refs https://github.com/acompany-develop/securecode/issues/82.
+set -euo pipefail
+
+APP=securecode
+ARCHIVE_PREFIX=securecode
+GH_REPO=acompany-develop/securecode
+
+MUTED='\033[0;2m'
+RED='\033[0;31m'
+ORANGE='\033[38;5;214m'
+NC='\033[0m'
+
+usage() {
+  cat <<EOF
+Acompany SecureCode installer
+
+Usage: install [options]
+
+Options:
+  -h, --help              Show this help message
+  -v, --version <ver>     Install a specific version (e.g. 0.1.0). Defaults to latest.
+  -b, --binary <path>     Install from a local SecureCode binary instead of downloading.
+      --install-dir <dir> Override install dir (default \$HOME/.local/bin).
+      --no-modify-path    Don't append PATH entries to shell rc files.
+      --no-config         Skip running the bundled setup/install.sh (plugin/config seed).
+
+Examples:
+  curl -fsSL https://github.com/${GH_REPO}/releases/latest/download/install | bash
+  curl -fsSL https://github.com/${GH_REPO}/releases/latest/download/install | bash -s -- --version 0.1.0
+  ./install --binary /path/to/SecureCode
+EOF
+}
+
+requested_version=${VERSION:-}
+binary_path=""
+install_dir="${SECURECODE_INSTALL_DIR:-$HOME/.local/bin}"
+no_modify_path=false
+no_config=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    -v|--version)
+      if [[ -n "${2:-}" ]]; then requested_version="$2"; shift 2
+      else echo -e "${RED}Error: --version requires an argument${NC}" >&2; exit 1
+      fi ;;
+    -b|--binary)
+      if [[ -n "${2:-}" ]]; then binary_path="$2"; shift 2
+      else echo -e "${RED}Error: --binary requires a path${NC}" >&2; exit 1
+      fi ;;
+    --install-dir)
+      if [[ -n "${2:-}" ]]; then install_dir="$2"; shift 2
+      else echo -e "${RED}Error: --install-dir requires a path${NC}" >&2; exit 1
+      fi ;;
+    --no-modify-path) no_modify_path=true; shift ;;
+    --no-config) no_config=true; shift ;;
+    *) echo -e "${ORANGE}Warning: Unknown option '$1'${NC}" >&2; shift ;;
+  esac
+done
+
+info() { echo -e "${MUTED}$*${NC}"; }
+err()  { echo -e "${RED}$*${NC}" >&2; }
+
+detect_target() {
+  local raw_os os arch combo
+  raw_os=$(uname -s)
+  case "$raw_os" in
+    Darwin*) os="darwin" ;;
+    Linux*)  os="linux"  ;;
+    MINGW*|MSYS*|CYGWIN*) os="windows" ;;
+    *) err "Unsupported OS: $raw_os"; exit 1 ;;
+  esac
+
+  arch=$(uname -m)
+  case "$arch" in
+    aarch64|arm64) arch="arm64" ;;
+    x86_64|amd64)  arch="x64"   ;;
+    *) err "Unsupported arch: $arch"; exit 1 ;;
+  esac
+
+  # Mac running under Rosetta: prefer the native arm64 binary.
+  if [ "$os" = "darwin" ] && [ "$arch" = "x64" ]; then
+    if [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = "1" ]; then
+      arch="arm64"
+    fi
+  fi
+
+  combo="$os-$arch"
+  case "$combo" in
+    linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64|windows-arm64) ;;
+    *) err "Unsupported OS/Arch combo: $combo"; exit 1 ;;
+  esac
+
+  echo "$combo"
+}
+
+needs_baseline_x64() {
+  local os="$1" arch="$2"
+  [ "$arch" = "x64" ] || return 1
+  case "$os" in
+    linux)  grep -qwi avx2 /proc/cpuinfo 2>/dev/null || return 0 ;;
+    darwin) [ "$(sysctl -n hw.optional.avx2_0 2>/dev/null || echo 0)" = "1" ] || return 0 ;;
+  esac
+  return 1
+}
+
+is_alpine_or_musl() {
+  [ -f /etc/alpine-release ] && return 0
+  if command -v ldd >/dev/null 2>&1; then
+    ldd --version 2>&1 | grep -qi musl && return 0
+  fi
+  return 1
+}
+
+resolve_target_filename() {
+  local os arch target ext target_full
+  target=$(detect_target)
+  os="${target%-*}"
+  arch="${target#*-}"
+
+  target_full="$target"
+  if needs_baseline_x64 "$os" "$arch"; then
+    target_full="${target_full}-baseline"
+  fi
+  if [ "$os" = "linux" ] && is_alpine_or_musl; then
+    target_full="${target_full}-musl"
+  fi
+
+  ext=".zip"
+  [ "$os" = "linux" ] && ext=".tar.gz"
+
+  echo "${ARCHIVE_PREFIX}-${target_full}${ext}"
+}
+
+require_tool() {
+  for tool in "$@"; do
+    command -v "$tool" >/dev/null 2>&1 || { err "Missing required tool: $tool"; exit 1; }
+  done
+}
+
+download_archive() {
+  local url="$1" output="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL -o "$output" "$url"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO "$output" "$url"
+  else
+    err "Need curl or wget to download release archive"; exit 1
+  fi
+}
+
+resolve_version() {
+  if [ -n "$requested_version" ]; then
+    echo "${requested_version#v}"
+    return
+  fi
+  require_tool curl
+  local resolved=""
+  # Wrap the curl pipeline in an `if ! ...` guard rather than the bare
+  # `resolved=$(curl ... | sed ...)` assignment so that `set -euo pipefail`
+  # does NOT abort the script before the empty-result check fires. Without
+  # this, an HTTP error (e.g. GitHub API rate limit 403/429) silently
+  # terminates with no diagnostic — issue #82 review finding A.
+  if ! resolved=$(curl -fsSL "https://api.github.com/repos/${GH_REPO}/releases/latest" \
+    | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p'); then
+    err "Failed to query GitHub for the latest release (possibly rate limited)."
+    err "Pass --version <ver> explicitly to skip the lookup, e.g. --version 0.1.0"
+    exit 1
+  fi
+  if [ -z "$resolved" ]; then
+    err "Could not parse tag_name from GitHub's response. The API may have returned an unexpected payload."
+    exit 1
+  fi
+  echo "$resolved"
+}
+
+extract_archive() {
+  local file="$1" dest="$2"
+  case "$file" in
+    *.zip)
+      require_tool unzip
+      unzip -q "$file" -d "$dest" ;;
+    *.tar.gz)
+      require_tool tar
+      tar -xzf "$file" -C "$dest" ;;
+    *) err "Unknown archive type: $file"; exit 1 ;;
+  esac
+}
+
+# Find the SecureCode binary within an extracted directory tree. The archive
+# lays it out as `<archive>/SecureCode[.exe]`, so we search for that name.
+find_binary() {
+  local dir="$1"
+  for candidate in \
+      "$dir/${ARCHIVE_PREFIX}" \
+      "$dir/${ARCHIVE_PREFIX}.exe" \
+      "$dir"/*/"${ARCHIVE_PREFIX}" \
+      "$dir"/*/"${ARCHIVE_PREFIX}.exe"; do
+    if [ -f "$candidate" ]; then echo "$candidate"; return 0; fi
+  done
+  return 1
+}
+
+# Locate the bundled setup/install.sh after extraction so we can run plugin /
+# config seeding without forcing the user to navigate the archive manually.
+find_setup_dir() {
+  local dir="$1"
+  for candidate in "$dir/setup" "$dir"/*/setup; do
+    if [ -d "$candidate" ] && [ -f "$candidate/install.sh" ]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+install_binary() {
+  local src="$1" dest="$2"
+  mkdir -p "$(dirname "$dest")"
+  cp "$src" "$dest"
+  chmod 755 "$dest"
+  if [ "$(uname -s)" = "Darwin" ]; then
+    # Strip the macOS quarantine xattr so Gatekeeper allows the unsigned binary
+    # to run without a "developer cannot be verified" pop-up. Drop once
+    # securecode is properly signed.
+    xattr -cr "$dest" 2>/dev/null || true
+  fi
+}
+
+add_to_path_rc() {
+  local rc="$1" line="$2"
+  if [ ! -f "$rc" ]; then return 0; fi
+  if grep -Fxq "$line" "$rc"; then
+    info "PATH entry already present in $rc"
+    return 0
+  fi
+  printf '\n# Acompany SecureCode\n%s\n' "$line" >> "$rc"
+  info "Appended PATH entry to $rc"
+}
+
+modify_path_for_shell() {
+  local dir="$1"
+  case "$(basename "${SHELL:-bash}")" in
+    fish)
+      add_to_path_rc "$HOME/.config/fish/config.fish" "fish_add_path $dir" ;;
+    zsh)
+      add_to_path_rc "${ZDOTDIR:-$HOME}/.zshrc" "export PATH=\"$dir:\$PATH\"" ;;
+    bash)
+      add_to_path_rc "$HOME/.bashrc" "export PATH=\"$dir:\$PATH\""
+      add_to_path_rc "$HOME/.bash_profile" "export PATH=\"$dir:\$PATH\"" ;;
+    *)
+      info "Unknown shell. Manually add: export PATH=\"$dir:\$PATH\"" ;;
+  esac
+}
+
+main() {
+  if [ -n "$binary_path" ]; then
+    [ -f "$binary_path" ] || { err "Binary not found: $binary_path"; exit 1; }
+    install_binary "$binary_path" "$install_dir/$APP"
+    info "Installed $APP from $binary_path"
+    # If the user extracted a release archive and is pointing --binary at the
+    # binary inside it, the setup/ dir lives next to that binary. Honour
+    # --no-config so the behaviour matches the download path (issue #82
+    # review finding E).
+    if [ "$no_config" != "true" ]; then
+      local binary_dir setup_dir
+      binary_dir=$(dirname "$binary_path")
+      if setup_dir=$(find_setup_dir "$binary_dir"); then
+        info "Seeding default config via $(basename "$setup_dir")/install.sh ..."
+        bash "$setup_dir/install.sh" || info "Config setup exited non-zero (you can re-run later)"
+      fi
+    fi
+  else
+    local version filename url
+    version=$(resolve_version)
+    filename=$(resolve_target_filename)
+    url="https://github.com/${GH_REPO}/releases/download/v${version}/${filename}"
+
+    local tmp
+    tmp=$(mktemp -d -t securecode-install-XXXXXX)
+    trap 'rm -rf "$tmp"' EXIT
+
+    info "Downloading ${filename} (v${version})..."
+    download_archive "$url" "$tmp/$filename"
+    info "Extracting ${filename}..."
+    extract_archive "$tmp/$filename" "$tmp/unpacked"
+
+    local bin
+    bin=$(find_binary "$tmp/unpacked") || { err "Could not locate ${ARCHIVE_PREFIX} binary inside ${filename}"; exit 1; }
+    install_binary "$bin" "$install_dir/$APP"
+    info "Installed $APP -> $install_dir/$APP"
+
+    if [ "$no_config" != "true" ]; then
+      local setup_dir
+      if setup_dir=$(find_setup_dir "$tmp/unpacked"); then
+        info "Seeding default config via $(basename "$setup_dir")/install.sh ..."
+        bash "$setup_dir/install.sh" || info "Config setup exited non-zero (you can re-run later)"
+      fi
+    fi
+  fi
+
+  if [ "$no_modify_path" != "true" ]; then
+    case ":$PATH:" in
+      *":$install_dir:"*) : ;;
+      *) modify_path_for_shell "$install_dir" ;;
+    esac
+  fi
+
+  if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" = "true" ]; then
+    echo "$install_dir" >> "$GITHUB_PATH"
+  fi
+
+  echo
+  if "$install_dir/$APP" --version 2>/dev/null; then
+    info "$APP installation complete. Start a new shell or 'export PATH=\"$install_dir:\$PATH\"' to use it now."
+  else
+    info "$APP placed at $install_dir/$APP but '$APP --version' failed. Check execute permissions or shell PATH."
+  fi
+}
+
+main "$@"

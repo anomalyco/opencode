@@ -9,7 +9,7 @@
 # After install, set OPENAI_API_KEY in your shell environment to the LiteLLM
 # API key your Acompany contact issued for you, then run:
 #
-#   SecureCode run "Hello"
+#   securecode run "Hello"
 #
 # Re-running this script is safe: existing files are kept and only the plugin
 # is refreshed.
@@ -37,7 +37,7 @@ if [ ! -e "$dest/securecode.json" ]; then
   echo
   echo "Next steps:"
   echo "  1. export OPENAI_API_KEY=<your LiteLLM API key from Acompany>"
-  echo "  2. SecureCode run \"Hello\""
+  echo "  2. securecode run \"Hello\""
 else
   echo "skipped (already exists): $dest/securecode.json"
 fi
