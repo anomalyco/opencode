@@ -41,6 +41,7 @@ const agentLayer = Agent.layer.pipe(
   Layer.provide(SkillTest.empty),
   Layer.provide(provider.layer),
   Layer.provide(pluginLayer),
+  Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })),
 )
 
 const it = testEffect(Layer.mergeAll(agentLayer, pluginLayer))

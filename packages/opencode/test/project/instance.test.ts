@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Deferred, Effect, Fiber, Layer, Queue } from "effect"
+import { Deferred, Effect, Fiber, Layer } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
@@ -203,20 +203,20 @@ describe("InstanceStore", () => {
       const dir = yield* tmpdirScoped({ git: true })
       const store = yield* InstanceStore.Service
       const disposing = yield* Deferred.make<void>()
-      const releaseDispose = yield* Queue.unbounded<() => void>()
+      const releaseDispose = yield* Deferred.make<() => void>()
       const disposed: Array<string> = []
       yield* registerDisposerScoped((directory) => {
         disposed.push(directory)
         Deferred.doneUnsafe(disposing, Effect.void)
         return new Promise<void>((resolve) => {
-          Queue.offerUnsafe(releaseDispose, resolve)
+          Deferred.doneUnsafe(releaseDispose, Effect.succeed(resolve))
         })
       })
 
       yield* store.load({ directory: dir })
       const first = yield* store.disposeAll().pipe(Effect.forkScoped)
       yield* Deferred.await(disposing)
-      const release = yield* Queue.take(releaseDispose)
+      const release = yield* Deferred.await(releaseDispose)
       const second = yield* store.disposeAll().pipe(Effect.forkScoped)
 
       expect(disposed).toEqual([dir])

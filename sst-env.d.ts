@@ -155,6 +155,7 @@ declare module "sst" {
     }
     "Stat": {
       "type": "sst.cloudflare.Worker"
+      "url": string
     }
     "Teams": {
       "type": "sst.cloudflare.SolidStart"
