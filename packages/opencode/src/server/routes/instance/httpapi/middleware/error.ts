@@ -1,6 +1,5 @@
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session/session"
-import { NotFoundError } from "@/storage/storage"
 import { iife } from "@/util/iife"
 import { NamedError } from "@opencode-ai/core/util/error"
 import * as Log from "@opencode-ai/core/util/log"
@@ -23,10 +22,6 @@ export const errorLayer = HttpRouter.middleware<{ handles: unknown }>()((effect)
 
       const error = defect.defect
       log.error("failed", { error, cause: Cause.pretty(cause) })
-
-      if (error instanceof NotFoundError) {
-        return Effect.succeed(HttpServerResponse.jsonUnsafe(error.toObject(), { status: 404 }))
-      }
 
       if (error instanceof NamedError) {
         return Effect.succeed(
