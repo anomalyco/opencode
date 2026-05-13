@@ -1,14 +1,14 @@
-export * as PluginBoot from "./plugin-boot"
+export * as PluginBoot from "./boot"
 
-import { Npm } from "@opencode-ai/core/npm"
 import { Effect, Layer } from "effect"
-import { AuthV2 } from "@opencode-ai/core/auth"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { AuthPlugin } from "@opencode-ai/core/plugin/auth"
-import { EnvPlugin } from "@opencode-ai/core/plugin/env"
-import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
-import { ModelsDevPlugin } from "@opencode-ai/core/plugin/models-dev"
+import { AuthV2 } from "../auth"
+import { Catalog } from "../catalog"
+import { Npm } from "../npm"
+import { PluginV2 } from "../plugin"
+import { AuthPlugin } from "./auth"
+import { EnvPlugin } from "./env"
+import { ModelsDevPlugin } from "./models-dev"
+import { ProviderPlugins } from "./provider"
 
 type Plugin = {
   id: PluginV2.ID

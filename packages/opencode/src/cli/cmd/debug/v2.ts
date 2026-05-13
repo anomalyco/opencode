@@ -2,7 +2,7 @@ import { EOL } from "os"
 import { Effect, Layer, Option } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { effectCmd } from "../../effect-cmd"
-import { PluginBoot } from "@/v2/plugin-boot"
+import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 
 const layer = Catalog.defaultLayer.pipe(Layer.provide(PluginBoot.defaultLayer))
 
