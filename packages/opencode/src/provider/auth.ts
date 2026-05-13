@@ -1,7 +1,6 @@
 import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
 import { Auth } from "@/auth"
 import { InstanceState } from "@/effect/instance-state"
-import { NamedError } from "@opencode-ai/core/util/error"
 import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { Plugin } from "../plugin"
 import { ProviderID } from "./schema"
@@ -64,23 +63,30 @@ export const CallbackInput = Schema.Struct({
 })
 export type CallbackInput = Schema.Schema.Type<typeof CallbackInput>
 
-export const OauthMissing = NamedError.create("ProviderAuthOauthMissing", { providerID: ProviderID })
+export class OauthMissing extends Schema.TaggedErrorClass<OauthMissing>()("ProviderAuthOauthMissing", {
+  providerID: ProviderID,
+}) {}
 
-export const OauthCodeMissing = NamedError.create("ProviderAuthOauthCodeMissing", { providerID: ProviderID })
+export class OauthCodeMissing extends Schema.TaggedErrorClass<OauthCodeMissing>()("ProviderAuthOauthCodeMissing", {
+  providerID: ProviderID,
+}) {}
 
-export const OauthCallbackFailed = NamedError.create("ProviderAuthOauthCallbackFailed", {})
+export class OauthCallbackFailed extends Schema.TaggedErrorClass<OauthCallbackFailed>()(
+  "ProviderAuthOauthCallbackFailed",
+  {},
+) {}
 
-export const ValidationFailed = NamedError.create("ProviderAuthValidationFailed", {
+export class ValidationFailed extends Schema.TaggedErrorClass<ValidationFailed>()("ProviderAuthValidationFailed", {
   field: Schema.String,
   message: Schema.String,
-})
+}) {}
 
 export type Error =
   | Auth.AuthError
-  | InstanceType<typeof OauthMissing>
-  | InstanceType<typeof OauthCodeMissing>
-  | InstanceType<typeof OauthCallbackFailed>
-  | InstanceType<typeof ValidationFailed>
+  | OauthMissing
+  | OauthCodeMissing
+  | OauthCallbackFailed
+  | ValidationFailed
 
 type Hook = NonNullable<Hooks["auth"]>
 
@@ -166,7 +172,7 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
         for (const prompt of method.prompts) {
           if (prompt.type === "text" && prompt.validate && input.inputs[prompt.key] !== undefined) {
             const error = prompt.validate(input.inputs[prompt.key])
-            if (error) return yield* Effect.fail(new ValidationFailed({ field: prompt.key, message: error }))
+            if (error) return yield* new ValidationFailed({ field: prompt.key, message: error })
           }
         }
       }
@@ -183,15 +189,15 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
     const callback = Effect.fn("ProviderAuth.callback")(function* (input: { providerID: ProviderID } & CallbackInput) {
       const pending = (yield* InstanceState.get(state)).pending
       const match = pending.get(input.providerID)
-      if (!match) return yield* Effect.fail(new OauthMissing({ providerID: input.providerID }))
+      if (!match) return yield* new OauthMissing({ providerID: input.providerID })
       if (match.method === "code" && !input.code) {
-        return yield* Effect.fail(new OauthCodeMissing({ providerID: input.providerID }))
+        return yield* new OauthCodeMissing({ providerID: input.providerID })
       }
 
       const result = yield* Effect.promise(() =>
         match.method === "code" ? match.callback(input.code!) : match.callback(),
       )
-      if (!result || result.type !== "success") return yield* Effect.fail(new OauthCallbackFailed({}))
+      if (!result || result.type !== "success") return yield* new OauthCallbackFailed({})
 
       if ("key" in result) {
         yield* auth.set(input.providerID, {

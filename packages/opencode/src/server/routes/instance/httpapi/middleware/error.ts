@@ -28,7 +28,6 @@ export const errorLayer = HttpRouter.middleware<{ handles: unknown }>()((effect)
           HttpServerResponse.jsonUnsafe(error.toObject(), {
             status: iife(() => {
               if (error instanceof Provider.ModelNotFoundError) return 400
-              if (error.name === "ProviderAuthValidationFailed") return 400
               return 500
             }),
           }),

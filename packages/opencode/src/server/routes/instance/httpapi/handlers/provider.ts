@@ -8,6 +8,27 @@ import { Effect, Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
+import { ProviderAuthApiError } from "../groups/provider"
+
+function mapProviderAuthError<A, R>(self: Effect.Effect<A, ProviderAuth.Error, R>) {
+  return self.pipe(
+    Effect.mapError((error) => {
+      if (error instanceof ProviderAuth.OauthMissing) {
+        return new ProviderAuthApiError({ name: error._tag, data: { providerID: error.providerID } })
+      }
+      if (error instanceof ProviderAuth.OauthCodeMissing) {
+        return new ProviderAuthApiError({ name: error._tag, data: { providerID: error.providerID } })
+      }
+      if (error instanceof ProviderAuth.OauthCallbackFailed) {
+        return new ProviderAuthApiError({ name: error._tag, data: {} })
+      }
+      if (error instanceof ProviderAuth.ValidationFailed) {
+        return new ProviderAuthApiError({ name: error._tag, data: { field: error.field, message: error.message } })
+      }
+      return new HttpApiError.BadRequest({})
+    }),
+  )
+}
 
 export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider", (handlers) =>
   Effect.gen(function* () {
@@ -44,13 +65,13 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       params: { providerID: ProviderID }
       payload: ProviderAuth.AuthorizeInput
     }) {
-      return yield* svc
-        .authorize({
+      return yield* mapProviderAuthError(
+        svc.authorize({
           providerID: ctx.params.providerID,
           method: ctx.payload.method,
           inputs: ctx.payload.inputs,
-        })
-        .pipe(Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))))
+        }),
+      )
     })
 
     const authorizeRaw = Effect.fn("ProviderHttpApi.authorizeRaw")(function* (ctx: {
@@ -72,13 +93,13 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       params: { providerID: ProviderID }
       payload: ProviderAuth.CallbackInput
     }) {
-      yield* svc
-        .callback({
+      yield* mapProviderAuthError(
+        svc.callback({
           providerID: ctx.params.providerID,
           method: ctx.payload.method,
           code: ctx.payload.code,
-        })
-        .pipe(Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))))
+        }),
+      )
       return true
     })
 
