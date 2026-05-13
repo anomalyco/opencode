@@ -106,7 +106,12 @@ export const layer = Layer.effect(Service)(
             workspace: yield* InstanceState.workspaceID,
           }
         : undefined
-      process(def, event, { publish, context, ownerID: options?.ownerID, experimentalWorkspaces: flags.experimentalWorkspaces })
+      process(def, event, {
+        publish,
+        context,
+        ownerID: options?.ownerID,
+        experimentalWorkspaces: flags.experimentalWorkspaces,
+      })
     })
 
     const replayAll: Interface["replayAll"] = Effect.fn("SyncEvent.replayAll")(function* (events, options) {
