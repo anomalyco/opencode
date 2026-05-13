@@ -29,7 +29,6 @@ function createSessionPreview() {
         .catch(() => setPreviewReady(false))
 
     void check()
-    const timer = setInterval(check, 10_000)
     const unsubIdle = sdk.event.on("session.idle", () => {
       void check()
       if (dirty()) {
@@ -45,7 +44,6 @@ function createSessionPreview() {
 
     onCleanup(() => {
       ctrl.abort()
-      clearInterval(timer)
       unsubIdle()
       unsubFile()
     })
