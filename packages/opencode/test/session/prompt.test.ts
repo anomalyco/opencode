@@ -16,6 +16,7 @@ import { Plugin } from "../../src/plugin"
 import { Provider as ProviderSvc } from "@/provider/provider"
 import { Env } from "../../src/env"
 import { ModelID, ProviderID } from "../../src/provider/schema"
+import { Identifier } from "../../src/id/id"
 import { Question } from "../../src/question"
 import { Todo } from "../../src/session/todo"
 import { Session } from "@/session/session"
@@ -337,6 +338,66 @@ it.live("loop exits immediately when last assistant has stop finish", () =>
       const sessions = yield* Session.Service
       const chat = yield* sessions.create({ title: "Pinned" })
       yield* seed(chat.id, { finish: "stop" })
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") expect(result.info.finish).toBe("stop")
+      expect(yield* llm.calls).toBe(0)
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("loop exits when assistant parentID matches user message despite ID ordering", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Clock skew test" })
+      const assistantTime = Date.now() - 1000
+      const userTime = Date.now() + 1000
+      const userID = MessageID.make(Identifier.create("msg", "ascending", userTime))
+      const userMsg: MessageV2.User = {
+        id: userID,
+        role: "user",
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        time: { created: userTime },
+      }
+      yield* sessions.updateMessage(userMsg)
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: userID,
+        sessionID: chat.id,
+        type: "text",
+        text: "hello",
+      })
+
+      const assistantID = MessageID.make(Identifier.create("msg", "ascending", assistantTime))
+      const assistant: MessageV2.Assistant = {
+        id: assistantID,
+        role: "assistant",
+        parentID: userID,
+        sessionID: chat.id,
+        mode: "build",
+        agent: "build",
+        cost: 0,
+        path: { cwd: "/tmp", root: "/tmp" },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: assistantTime },
+        finish: "stop",
+      }
+      yield* sessions.updateMessage(assistant)
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: assistant.id,
+        sessionID: chat.id,
+        type: "text",
+        text: "hi there",
+      })
 
       const result = yield* prompt.loop({ sessionID: chat.id })
       expect(result.info.role).toBe("assistant")
