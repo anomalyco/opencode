@@ -232,7 +232,6 @@ export default function Home() {
     if (workspaceID()) return `/workspace/${workspaceID()}/go${invite}`
     return "/auth"
   })
-  const referralUrl = createMemo(() => (workspaceID() ? `/workspace/${workspaceID()}/go/invite` : "/auth"))
   const i18n = useI18n()
   const language = useLanguage()
   return (
@@ -385,15 +384,6 @@ export default function Home() {
 
           <section data-component="comparison">
             <LimitsGraph href={language.route("/docs/go/#usage-limits")} />
-          </section>
-
-          <section data-component="referral">
-            <div data-slot="section-title">
-              <h3>{i18n.t("go.referral.title")}</h3>
-              <p>
-                {i18n.t("go.referral.note")} <a href={referralUrl()}>{i18n.t("go.referral.link")}</a>
-              </p>
-            </div>
           </section>
 
           <section data-component="problem">

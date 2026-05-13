@@ -807,19 +807,6 @@ body {
     }
   }
 
-  [data-component="referral"] {
-    border-top: 1px solid var(--color-border-weak);
-    padding: var(--vertical-padding) var(--padding);
-    background: var(--color-background);
-
-    a {
-      color: var(--color-text-strong);
-      text-decoration: underline;
-      text-underline-offset: var(--space-1);
-      text-decoration-thickness: 1px;
-    }
-  }
-
   [data-component="problem"] {
     border-top: 1px solid var(--color-border-weak);
     padding: var(--vertical-padding) var(--padding);
