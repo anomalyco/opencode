@@ -1692,6 +1692,36 @@ test("Effect config parser preserves permission order while rejecting unknown to
   }
 })
 
+test("Effect config parser accepts server auth settings", () => {
+  const config = ConfigParse.effectSchema(
+    Config.Info,
+    {
+      server: {
+        auth: {
+          mode: "oidc",
+          oidc: {
+            issuer: "https://issuer.example.com",
+            clientID: "opencode",
+            scopes: ["openid", "profile", "email"],
+            allowedDomains: ["example.com"],
+            allowedGroups: ["developers"],
+            requireEmailVerified: true,
+          },
+          session: {
+            secret: "secret",
+            ttlSeconds: 3600,
+          },
+        },
+      },
+    },
+    "test",
+  )
+
+  expect(config.server?.auth?.mode).toBe("oidc")
+  expect(config.server?.auth?.oidc?.allowedDomains).toEqual(["example.com"])
+  expect(config.server?.auth?.session?.ttlSeconds).toBe(3600)
+})
+
 // MCP config merging tests
 
 test("project config can override MCP server enabled status", async () => {

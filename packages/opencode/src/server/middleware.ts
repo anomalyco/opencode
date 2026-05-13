@@ -6,11 +6,11 @@ import type { ContentfulStatusCode } from "hono/utils/http-status"
 import type { ErrorHandler, MiddlewareHandler } from "hono"
 import { HTTPException } from "hono/http-exception"
 import * as Log from "@opencode-ai/core/util/log"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { basicAuth } from "hono/basic-auth"
 import { cors } from "hono/cors"
 import { compress } from "hono/compress"
 import * as ServerBackend from "./backend"
+import type { ServerAuthConfig } from "./auth/config"
+import { ServerAuthVerify } from "./auth/verify"
 
 const log = Log.create({ service: "server" })
 
@@ -37,17 +37,28 @@ export const ErrorMiddleware: ErrorHandler = (err, c) => {
   })
 }
 
-export const AuthMiddleware: MiddlewareHandler = (c, next) => {
-  // Allow CORS preflight requests to succeed without auth.
-  // Browser clients sending Authorization headers will preflight with OPTIONS.
-  if (c.req.method === "OPTIONS") return next()
-  const password = Flag.OPENCODE_SERVER_PASSWORD
-  if (!password) return next()
-  const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
-
-  if (c.req.query("auth_token")) c.req.raw.headers.set("authorization", `Basic ${c.req.query("auth_token")}`)
-
-  return basicAuth({ username, password })(c, next)
+export function AuthMiddleware(auth: ServerAuthConfig.Info): MiddlewareHandler {
+  return async (c, next) => {
+    // Allow CORS preflight requests to succeed without auth.
+    // Browser clients sending Authorization headers will preflight with OPTIONS.
+    if (c.req.method === "OPTIONS") return next()
+    if (auth.mode === "disabled") return next()
+    if (c.req.path.startsWith("/auth/")) return next()
+    try {
+      await ServerAuthVerify.request(auth, c.req.raw)
+      return next()
+    } catch {
+      const requestUrl = new URL(c.req.url)
+      if (auth.mode === "oidc" && c.req.method === "GET" && c.req.header("accept")?.includes("text/html")) {
+        const url = new URL("/auth/login", new URL(c.req.url).origin)
+        url.searchParams.set("return_to", requestUrl.pathname + requestUrl.search)
+        return c.redirect(url.toString())
+      }
+      return c.json({ error: "Unauthorized" }, 401, {
+        "www-authenticate": auth.mode === "basic" ? "Basic" : "Bearer",
+      })
+    }
+  }
 }
 
 export function LoggerMiddleware(backendAttributes: ServerBackend.Attributes): MiddlewareHandler {

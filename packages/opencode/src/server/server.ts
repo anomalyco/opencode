@@ -7,6 +7,9 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { WorkspaceID } from "@/control-plane/schema"
 import { MDNS } from "./mdns"
 import { AuthMiddleware, CompressionMiddleware, CorsMiddleware, ErrorMiddleware, LoggerMiddleware } from "./middleware"
+import { ServerAuthConfig } from "./auth/config"
+import { ServerAuthRoutes } from "./auth/routes"
+import { ServerAuthVerify } from "./auth/verify"
 import { FenceMiddleware } from "./fence"
 import { initProjectors } from "./projectors"
 import { InstanceRoutes } from "./routes/instance"
@@ -54,19 +57,19 @@ export const Default = () => {
   return selected.backend === "effect-httpapi" ? DefaultHttpApi() : DefaultHono()
 }
 
-function create(opts: { cors?: string[] }) {
+function create(opts: { cors?: string[]; auth?: Parameters<typeof ServerAuthConfig.resolve>[0] }) {
   const selected = select()
   return selected.backend === "effect-httpapi"
-    ? withBackend(selected, createHttpApi())
+    ? withBackend(selected, createHttpApi(opts))
     : withBackend(selected, createHono(opts, selected))
 }
 
-export function Legacy(opts: { cors?: string[] } = {}) {
+export function Legacy(opts: { cors?: string[]; auth?: Parameters<typeof ServerAuthConfig.resolve>[0] } = {}) {
   return withBackend({ backend: "hono", reason: "explicit" }, createHono(opts, { backend: "hono", reason: "explicit" }))
 }
 
 function createDefaultHttpApi() {
-  return withBackend(select(), createHttpApi())
+  return withBackend(select(), createHttpApi({}))
 }
 
 function withBackend<T extends { app: ServerApp; runtime: unknown }>(selection: ServerBackend.Selection, built: T) {
@@ -74,10 +77,27 @@ function withBackend<T extends { app: ServerApp; runtime: unknown }>(selection: 
   return built
 }
 
-function createHttpApi() {
+function createHttpApi(opts: { auth?: Parameters<typeof ServerAuthConfig.resolve>[0] }) {
   const handler = ExperimentalHttpApiServer.webHandler().handler
   const app: ServerApp = {
-    fetch: (request: Request) => handler(request, ExperimentalHttpApiServer.context),
+    fetch: async (request: Request) => {
+      const auth = ServerAuthConfig.resolve(opts.auth)
+      if (auth.mode === "oidc") {
+        try {
+          await ServerAuthVerify.request(auth, request)
+        } catch {
+          return Response.json({ error: "Unauthorized" }, { status: 401, headers: { "www-authenticate": "Bearer" } })
+        }
+      }
+      if (auth.mode === "basic") {
+        try {
+          await ServerAuthVerify.request(auth, request)
+        } catch {
+          return Response.json({ error: "Unauthorized" }, { status: 401, headers: { "www-authenticate": "Basic" } })
+        }
+      }
+      return handler(request, ExperimentalHttpApiServer.context)
+    },
     request(input, init) {
       return app.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
     },
@@ -89,13 +109,15 @@ function createHttpApi() {
 }
 
 function createHono(
-  opts: { cors?: string[] },
+  opts: { cors?: string[]; auth?: Parameters<typeof ServerAuthConfig.resolve>[0] },
   selection: ServerBackend.Selection = ServerBackend.force(select(), "hono"),
 ) {
   const backendAttributes = ServerBackend.attributes(selection)
+  const auth = ServerAuthConfig.resolve(opts.auth)
   const app = new Hono()
     .onError(ErrorMiddleware)
-    .use(AuthMiddleware)
+    .route("/auth", ServerAuthRoutes.routes(auth))
+    .use(AuthMiddleware(auth))
     .use(LoggerMiddleware(backendAttributes))
     .use(CompressionMiddleware)
     .use(CorsMiddleware(opts))
@@ -157,6 +179,7 @@ export async function listen(opts: {
   mdns?: boolean
   mdnsDomain?: string
   cors?: string[]
+  auth?: Parameters<typeof ServerAuthConfig.resolve>[0]
 }): Promise<Listener> {
   const built = create(opts)
   const server = await built.runtime.listen(opts)

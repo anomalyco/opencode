@@ -1196,6 +1196,93 @@ export type ServerConfig = {
    * Additional domains to allow for CORS
    */
   cors?: Array<string>
+  /**
+   * Server authentication configuration
+   */
+  auth?: {
+    /**
+     * Server authentication mode. Defaults to basic when OPENCODE_SERVER_PASSWORD is set, otherwise disabled.
+     */
+    mode?: "disabled" | "basic" | "oidc"
+    basic?: {
+      /**
+       * Basic auth username
+       */
+      username?: string
+      /**
+       * Basic auth password
+       */
+      password?: string
+    }
+    oidc?: {
+      /**
+       * OIDC issuer URL
+       */
+      issuer: string
+      /**
+       * OIDC client ID
+       */
+      clientID: string
+      /**
+       * OIDC client secret
+       */
+      clientSecret?: string
+      /**
+       * OIDC callback redirect URI
+       */
+      redirectURI?: string
+      /**
+       * OIDC scopes. Defaults to openid profile email.
+       */
+      scopes?: Array<string>
+      /**
+       * Accepted JWT audience for API bearer tokens
+       */
+      audience?: string | Array<string>
+      /**
+       * Email addresses allowed to access this server
+       */
+      allowedEmails?: Array<string>
+      /**
+       * Email domains allowed to access this server
+       */
+      allowedDomains?: Array<string>
+      /**
+       * Groups allowed to access this server
+       */
+      allowedGroups?: Array<string>
+      /**
+       * Claim to use as the display username
+       */
+      usernameClaim?: string
+      /**
+       * Claim containing group memberships
+       */
+      groupsClaim?: string
+      /**
+       * Require email_verified=true in OIDC claims
+       */
+      requireEmailVerified?: boolean
+    }
+    session?: {
+      /**
+       * Secret used to sign browser auth sessions
+       */
+      secret?: string
+      /**
+       * OIDC session cookie name
+       */
+      cookieName?: string
+      /**
+       * Force Secure session cookies
+       */
+      cookieSecure?: boolean
+      /**
+       * Session TTL in seconds
+       */
+      ttlSeconds?: number
+    }
+  }
 }
 
 export type PermissionActionConfig = "ask" | "allow" | "deny"

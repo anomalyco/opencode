@@ -1,6 +1,7 @@
-import { Effect, Encoding, Layer, Redacted, Schema } from "effect"
+import { Effect, Layer, Redacted, Schema } from "effect"
 import { HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { ServerAuthBasic } from "@/server/auth/basic"
+import { ServerAuthConfig } from "@/server/auth/config"
 
 class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()(
   "Unauthorized",
@@ -19,44 +20,19 @@ export class Authorization extends HttpApiMiddleware.Service<Authorization>()(
   },
 ) {}
 
-const emptyCredential = {
-  username: "",
-  password: Redacted.make(""),
-}
-
 function validateCredential<A, E, R>(
   effect: Effect.Effect<A, E, R>,
-  credential: { readonly username: string; readonly password: typeof emptyCredential.password },
+  credential: { readonly username: string; readonly password: Redacted.Redacted<string> },
 ) {
   return Effect.gen(function* () {
-    if (!Flag.OPENCODE_SERVER_PASSWORD) return yield* effect
-
-    if (credential.username !== (Flag.OPENCODE_SERVER_USERNAME ?? "opencode")) {
+    const config = ServerAuthConfig.resolve()
+    if (config.mode === "disabled") return yield* effect
+    if (config.mode !== "basic") return yield* effect
+    if (credential.username !== config.basic.username) return yield* new Unauthorized({ message: "Unauthorized" })
+    if (Redacted.value(credential.password) !== config.basic.password)
       return yield* new Unauthorized({ message: "Unauthorized" })
-    }
-    if (Redacted.value(credential.password) !== Flag.OPENCODE_SERVER_PASSWORD) {
-      return yield* new Unauthorized({ message: "Unauthorized" })
-    }
     return yield* effect
   })
-}
-
-function decodeCredential(input: string) {
-  return Encoding.decodeBase64String(input)
-    .asEffect()
-    .pipe(
-      Effect.match({
-        onFailure: () => emptyCredential,
-        onSuccess: (header) => {
-          const parts = header.split(":")
-          if (parts.length !== 2) return emptyCredential
-          return {
-            username: parts[0],
-            password: Redacted.make(parts[1]),
-          }
-        },
-      }),
-    )
 }
 
 export const authorizationLayer = Layer.succeed(
@@ -65,7 +41,14 @@ export const authorizationLayer = Layer.succeed(
     basic: (effect, { credential }) => validateCredential(effect, credential),
     authToken: (effect, { credential }) =>
       Effect.gen(function* () {
-        return yield* validateCredential(effect, yield* decodeCredential(Redacted.value(credential)))
+        const config = ServerAuthConfig.resolve()
+        if (config.mode !== "basic") return yield* effect
+        const decoded = ServerAuthBasic.decode(Redacted.value(credential))
+        if (!decoded) return yield* new Unauthorized({ message: "Unauthorized" })
+        return yield* validateCredential(effect, {
+          username: decoded.username,
+          password: Redacted.make(decoded.password),
+        })
       }),
   }),
 )

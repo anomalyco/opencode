@@ -298,6 +298,35 @@ describe("HttpApi server", () => {
     expect(good.status).toBe(200)
   })
 
+  test("requires config-provided credentials in Effect HttpApi backend", async () => {
+    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
+    await using tmp = await tmpdir({ git: true })
+    await Bun.write(`${tmp.path}/hello.txt`, "hello")
+    const server = await Server.listen({
+      hostname: "127.0.0.1",
+      port: 0,
+      auth: { mode: "basic", basic: { password: "secret" } },
+    })
+    try {
+      const [missing, good] = await Promise.all([
+        fetch(new URL(fileUrl().pathname + fileUrl().search, server.url), {
+          headers: { "x-opencode-directory": tmp.path },
+        }),
+        fetch(new URL(fileUrl().pathname + fileUrl().search, server.url), {
+          headers: {
+            authorization: authorization("opencode", "secret"),
+            "x-opencode-directory": tmp.path,
+          },
+        }),
+      ])
+
+      expect(missing.status).toBe(401)
+      expect(good.status).toBe(200)
+    } finally {
+      await server.stop(true)
+    }
+  })
+
   test("accepts auth_token query credentials", async () => {
     await using tmp = await tmpdir({ git: true })
     await Bun.write(`${tmp.path}/hello.txt`, "hello")
