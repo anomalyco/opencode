@@ -2,11 +2,13 @@ import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Cause, Deferred, Effect, Exit, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { Git } from "../../src/git"
+import { Instance } from "../../src/project/instance"
+import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { Worktree } from "../../src/worktree"
-import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
@@ -28,13 +30,19 @@ const waitReady = Effect.fn("WorktreeTest.waitReady")(function* () {
   GlobalBus.on("event", on)
   yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", on)))
 
-  return Deferred.await(ready).pipe(
+  return yield* Deferred.await(ready).pipe(
     Effect.timeoutOrElse({
       duration: "10 seconds",
       orElse: () => Effect.fail(new Error("timed out waiting for worktree.ready")),
     }),
   )
 })
+
+const disposeWorktreeInstance = (directory: string) =>
+  Effect.gen(function* () {
+    const ctx = yield* Effect.sync(() => Instance.current).pipe(provideInstance(directory))
+    yield* Effect.promise(() => InstanceRuntime.disposeInstance(ctx))
+  })
 
 const git = Effect.fn("WorktreeTest.git")(function* (cwd: string, args: string[]) {
   const service = yield* Git.Service
@@ -125,7 +133,7 @@ describe("Worktree", () => {
           const test = yield* TestInstance
           const svc = yield* Worktree.Service
           const info = yield* svc.makeWorktreeInfo({ name: "detached-test", detached: true })
-          const ready = yield* waitReady()
+          const ready = yield* waitReady().pipe(Effect.forkScoped)
           yield* svc.createFromInfo(info)
 
           const list = yield* git(test.directory, ["worktree", "list", "--porcelain"])
@@ -136,7 +144,7 @@ describe("Worktree", () => {
           const branch = yield* gitResult(info.directory, ["symbolic-ref", "-q", "--short", "HEAD"])
           expect(branch.exitCode).not.toBe(0)
 
-          const props = yield* ready
+          const props = yield* Fiber.join(ready)
           expect(props.name).toBe(info.name)
           expect(props.branch).toBeUndefined()
 
@@ -152,14 +160,15 @@ describe("Worktree", () => {
       () =>
         Effect.gen(function* () {
           const svc = yield* Worktree.Service
-          const ready = yield* waitReady()
+          const ready = yield* waitReady().pipe(Effect.forkScoped)
           const info = yield* svc.create()
 
           expect(info.name).toBeDefined()
           expect(info.branch ?? "").toStartWith("opencode/")
           expect(info.directory).toBeDefined()
 
-          yield* ready
+          yield* Fiber.join(ready)
+          yield* disposeWorktreeInstance(info.directory)
 
           const ok = yield* svc.remove({ directory: info.directory })
           expect(ok).toBe(true)
@@ -174,7 +183,7 @@ describe("Worktree", () => {
           const test = yield* TestInstance
           const fs = yield* AppFileSystem.Service
           const svc = yield* Worktree.Service
-          const ready = yield* waitReady()
+          const ready = yield* waitReady().pipe(Effect.forkScoped)
           const info = yield* svc.create()
 
           expect(info.name).toBeDefined()
@@ -184,10 +193,11 @@ describe("Worktree", () => {
           const next = yield* fs.realPath(info.directory).pipe(Effect.catch(() => Effect.succeed(info.directory)))
           expect(normalize(text)).toContain(normalize(next))
 
-          const props = yield* ready
+          const props = yield* Fiber.join(ready)
           expect(props.name).toBe(info.name)
           expect(props.branch).toBe(info.branch)
 
+          yield* disposeWorktreeInstance(info.directory)
           yield* svc.remove({ directory: info.directory })
         }),
       { git: true },
@@ -198,13 +208,14 @@ describe("Worktree", () => {
       () =>
         Effect.gen(function* () {
           const svc = yield* Worktree.Service
-          const ready = yield* waitReady()
+          const ready = yield* waitReady().pipe(Effect.forkScoped)
           const info = yield* svc.create({ name: "test-workspace" })
 
           expect(info.name).toBe("test-workspace")
           expect(info.branch).toBe("opencode/test-workspace")
 
-          yield* ready
+          yield* Fiber.join(ready)
+          yield* disposeWorktreeInstance(info.directory)
           yield* svc.remove({ directory: info.directory })
         }),
       { git: true },
@@ -219,7 +230,7 @@ describe("Worktree", () => {
           const test = yield* TestInstance
           const svc = yield* Worktree.Service
           const info = yield* svc.makeWorktreeInfo({ name: "from-info-test" })
-          const ready = yield* waitReady()
+          const ready = yield* waitReady().pipe(Effect.forkScoped)
           yield* svc.createFromInfo(info)
 
           const list = yield* git(test.directory, ["worktree", "list", "--porcelain"])
@@ -227,7 +238,8 @@ describe("Worktree", () => {
           const normalizedDir = info.directory.replace(/\\/g, "/")
           expect(normalizedList).toContain(normalizedDir)
 
-          yield* ready
+          yield* Fiber.join(ready)
+          yield* disposeWorktreeInstance(info.directory)
           yield* svc.remove({ directory: info.directory })
         }),
       { git: true },
