@@ -1,0 +1,115 @@
+/*
+ * Lovable 테마 정적 fallback.
+ * context.tsx 에서 themeId 를 "lovable" 로 고정했기 때문에 JS 로드 후에는
+ * <style id="oc-theme"> 가 packages/ui/src/theme/themes/lovable.json 값을 다시 적용한다.
+ */
+:root {
+  --background-base: #f6f3ee;
+  --background-weak: #f2eee8;
+  --background-strong: #f6f3ee;
+  --background-stronger: #fffefa;
+  --surface-base: #f2eee8;
+  --surface-base-hover: #eee9e1;
+  --surface-base-active: #e8e1d8;
+  --surface-inset-base: #f2eee8;
+  --surface-inset-base-hover: #eee9e1;
+  --surface-raised-base: #fffaf4;
+  --surface-raised-base-hover: #f5f0e9;
+  --surface-raised-base-active: #eee9e1;
+  --surface-raised-strong: #fffefa;
+  --surface-raised-strong-hover: #ffffff;
+  --surface-raised-stronger: #ffffff;
+  --surface-raised-stronger-hover: #ffffff;
+  --surface-stronger-non-alpha: var(--surface-raised-stronger-non-alpha);
+  --surface-raised-stronger-non-alpha: #fffefa;
+  --surface-weak: #eee9e1;
+  --surface-weaker: #e8e1d8;
+  --surface-strong: #ffffff;
+  --input-base: #fffefa;
+  --input-hover: #fffaf4;
+  --input-active: #ffffff;
+  --input-selected: #eef3ff;
+  --input-focus: #ffffff;
+  --input-disabled: #e8e1d8;
+  --text-base: #171318;
+  --text-weak: #72675f;
+  --text-weaker: #958a82;
+  --text-strong: #171318;
+  --text-stronger: #171318;
+  --text-interactive-base: #336fd3;
+  --button-primary-base: #171318;
+  --button-secondary-base: #fffefa;
+  --button-secondary-hover: #f5f0e9;
+  --button-ghost-hover: #eee9e1;
+  --button-ghost-hover2: #e8e1d8;
+  --border-base: #d5cec4;
+  --border-weak-base: #e0d8cd;
+  --border-weaker-base: #e9e1d7;
+  --border-strong-base: #c9c0b4;
+  --icon-base: #72675f;
+  --icon-strong-base: #171318;
+  --icon-weak-base: #958a82;
+  --syntax-comment: #8f857d;
+  --syntax-keyword: #cc4f79;
+  --syntax-string: #247f57;
+  --syntax-primitive: #336fd3;
+  --syntax-property: #b36d20;
+  --syntax-type: #247f57;
+  --syntax-constant: #c74747;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background-base: #0d0f14;
+    --background-weak: #15161b;
+    --background-strong: #0d0f14;
+    --background-stronger: #1b1d24;
+    --surface-base: #272830;
+    --surface-base-hover: #2e3038;
+    --surface-base-active: #343641;
+    --surface-inset-base: #17181d;
+    --surface-inset-base-hover: #1e2027;
+    --surface-raised-base: #17181d;
+    --surface-raised-base-hover: #20222a;
+    --surface-raised-base-active: #24262e;
+    --surface-raised-strong: #1e2027;
+    --surface-raised-strong-hover: #24262e;
+    --surface-raised-stronger: #24262e;
+    --surface-raised-stronger-hover: #2a2b33;
+    --surface-raised-stronger-non-alpha: #24262e;
+    --surface-weak: #272830;
+    --surface-weaker: #20222a;
+    --surface-strong: #2a2b33;
+    --input-base: #1e2027;
+    --input-hover: #24262e;
+    --input-active: #2a2b33;
+    --input-selected: #343641;
+    --input-focus: #2a2b33;
+    --input-disabled: #20222a;
+    --text-base: #d8d4cf;
+    --text-weak: #a5a0aa;
+    --text-weaker: #817b88;
+    --text-strong: #f7f2ec;
+    --text-stronger: #f7f2ec;
+    --text-interactive-base: #c9b6ef;
+    --button-primary-base: #4f485f;
+    --button-secondary-base: #24262e;
+    --button-secondary-hover: #2d3039;
+    --button-ghost-hover: #272830;
+    --button-ghost-hover2: #2e3038;
+    --border-base: #49444f;
+    --border-weak-base: #39353f;
+    --border-weaker-base: #292730;
+    --border-strong-base: #585263;
+    --icon-base: #a5a0aa;
+    --icon-strong-base: #f7f2ec;
+    --icon-weak-base: #817b88;
+    --syntax-comment: #817b88;
+    --syntax-keyword: #c9b6ef;
+    --syntax-string: #8ee0aa;
+    --syntax-primitive: #8fb4ff;
+    --syntax-property: #f4bd72;
+    --syntax-type: #8ee0aa;
+    --syntax-constant: #ff8a85;
+  }
+}

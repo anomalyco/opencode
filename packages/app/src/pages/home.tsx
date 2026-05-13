@@ -147,14 +147,6 @@ export default function Home() {
                 >
                   {language.t("home.empty.description")}
                 </button>
-                <div class="mt-2 flex items-center justify-between">
-                  <Button size="normal" variant="ghost" class="size-8 !p-0" onClick={chooseProject}>
-                    <Icon name="plus" class="size-4" />
-                  </Button>
-                  <Button size="normal" variant="primary" class="size-8 !p-0" onClick={chooseProject}>
-                    <Icon name="arrow-up" class="size-4" />
-                  </Button>
-                </div>
               </div>
             </section>
 

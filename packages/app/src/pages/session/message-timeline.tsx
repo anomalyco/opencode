@@ -575,8 +575,10 @@ export function MessageTimeline(props: {
           }}
         >
           <button
+            data-component="lovable-scroll-bottom"
             class="pointer-events-auto size-8 flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
             onClick={props.onResumeScroll}
+            aria-label={language.t("session.messages.jumpToLatest")}
           >
             <Icon name="arrow-down-to-line" />
           </button>
