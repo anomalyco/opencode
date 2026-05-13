@@ -1572,8 +1572,8 @@ test("ModelNotFoundError includes suggestions for typos", async () => {
         await getModel(ProviderID.anthropic, ModelID.make("claude-sonet-4")) // typo: sonet instead of sonnet
         expect(true).toBe(false) // Should not reach here
       } catch (e: any) {
-        expect(e.data.suggestions).toBeDefined()
-        expect(e.data.suggestions.length).toBeGreaterThan(0)
+        expect(e.suggestions).toBeDefined()
+        expect(e.suggestions.length).toBeGreaterThan(0)
       }
     },
   })
@@ -1598,8 +1598,8 @@ test("ModelNotFoundError for provider includes suggestions", async () => {
         await getModel(ProviderID.make("antropic"), ModelID.make("claude-sonnet-4")) // typo: antropic
         expect(true).toBe(false) // Should not reach here
       } catch (e: any) {
-        expect(e.data.suggestions).toBeDefined()
-        expect(e.data.suggestions).toContain("anthropic")
+        expect(e.suggestions).toBeDefined()
+        expect(e.suggestions).toContain("anthropic")
       }
     },
   })
@@ -1625,7 +1625,7 @@ test("ModelNotFoundError suggests catalog models for unloaded providers", async 
         throw new Error("expected model lookup to fail")
       } catch (e) {
         if (!Provider.ModelNotFoundError.isInstance(e)) throw e
-        expect(e.data.suggestions).toContain("claude-haiku-4-5")
+        expect(e.suggestions).toContain("claude-haiku-4-5")
       }
     },
   })
