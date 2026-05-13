@@ -122,11 +122,13 @@ export const layer = Layer.effect(
         const client = createOpencodeClient({
           baseUrl: "http://localhost:4096",
           directory: ctx.directory,
-          headers: Flag.OPENCODE_SERVER_PASSWORD
-            ? {
-                Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
-              }
-            : undefined,
+          headers: process.env.OPENCODE_AUTH_TOKEN
+            ? { Authorization: `Bearer ${process.env.OPENCODE_AUTH_TOKEN}` }
+            : Flag.OPENCODE_SERVER_PASSWORD
+              ? {
+                  Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
+                }
+              : undefined,
           fetch: async (...args) => Server.Default().app.fetch(...args),
         })
         const cfg = yield* config.get()

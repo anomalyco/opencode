@@ -40,6 +40,7 @@ export namespace ServerConnection {
     url: string
     username?: string
     password?: string
+    authToken?: string
   }
 
   // Regular web connections

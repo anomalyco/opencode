@@ -8,6 +8,7 @@ export function createSdkForServer({
   server: ServerConnection.HttpBase
 }) {
   const auth = (() => {
+    if (server.authToken) return { Authorization: `Bearer ${server.authToken}` }
     if (!server.password) return
     return {
       Authorization: `Basic ${btoa(`${server.username ?? "opencode"}:${server.password}`)}`,

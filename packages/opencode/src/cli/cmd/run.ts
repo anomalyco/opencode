@@ -277,6 +277,10 @@ export const RunCommand = cmd({
         type: "string",
         describe: "basic auth password (defaults to OPENCODE_SERVER_PASSWORD)",
       })
+      .option("auth-token", {
+        type: "string",
+        describe: "bearer auth token (defaults to OPENCODE_AUTH_TOKEN)",
+      })
       .option("dir", {
         type: "string",
         describe: "directory to run in, path on remote server if attaching",
@@ -659,6 +663,8 @@ export const RunCommand = cmd({
 
     if (args.attach) {
       const headers = (() => {
+        const token = args.authToken ?? process.env.OPENCODE_AUTH_TOKEN
+        if (token) return { Authorization: `Bearer ${token}` }
         const password = args.password ?? process.env.OPENCODE_SERVER_PASSWORD
         if (!password) return undefined
         const username = process.env.OPENCODE_SERVER_USERNAME ?? "opencode"

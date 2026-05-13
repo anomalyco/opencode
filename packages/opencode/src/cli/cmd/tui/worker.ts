@@ -97,6 +97,7 @@ export const rpc = {
 Rpc.listen(rpc)
 
 function getAuthorizationHeader(): string | undefined {
+  if (process.env.OPENCODE_AUTH_TOKEN) return `Bearer ${process.env.OPENCODE_AUTH_TOKEN}`
   const password = Flag.OPENCODE_SERVER_PASSWORD
   if (!password) return undefined
   const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
