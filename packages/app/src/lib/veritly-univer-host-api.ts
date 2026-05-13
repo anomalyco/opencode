@@ -208,5 +208,5 @@ export function augmentVeritlyHost(
       if (!pending.has(k)) return
       await flush(k)
     },
-  }) as UniverHostApi
+  }) as unknown as UniverHostApi
 }

@@ -86,7 +86,7 @@ Full JSON shapes: `packages/univer-sdk/python/INTERFACE.md`.
 
 ## Charts and advanced mutations
 
-`add_chart` uses Univer’s insert-chart path. For drawing-level commands, use `execute_command` with the command id and params your app supports (see browser / Univer docs).
+`add_chart` inserts a Veritly live chart drawing (`VeritlyLiveChart` float DOM with ECharts). For drawing-level commands, use `execute_command` with the command id and params your app supports (see browser / Univer docs).
 
 ## Troubleshooting
 

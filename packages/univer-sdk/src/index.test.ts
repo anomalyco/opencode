@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import "@univerjs/sheets/facade"
 import type { Nullable, CellValue, Univer } from "@univerjs/core"
 import { ICommandService } from "@univerjs/core"
-import { createUniverSdk, type UniverHostApi } from "./index"
+import { VERITLY_LIVE_CHART, createUniverSdk, type UniverHostApi } from "./index"
 
 function setup() {
   const cell: Nullable<CellValue>[][] = [
@@ -76,14 +76,20 @@ describe("univer-sdk", () => {
 
   test("adds chart via facade chart API", async () => {
     const { sdk, calls } = setup()
-    await sdk.addChart({
+    const out = await sdk.addChart({
       range: { startRow: 0, endRow: 2, startColumn: 0, endColumn: 1 },
     })
+    expect(out.chartId.startsWith("sdk-")).toBe(true)
     expect(calls.map((x) => x.id)).toEqual(["facade.insert-chart", "facade.set-drawing-apply"])
+    const apply = calls.find((x) => x.id === "facade.set-drawing-apply")?.data as {
+      op: [string, string, ["data", string, { i: { componentKey: string } }], unknown]
+    }
+    const drawWrap = apply?.op?.[2]?.[2] as { i: { componentKey: string } } | undefined
+    expect(drawWrap?.i.componentKey).toBe(VERITLY_LIVE_CHART)
   })
 
   test("OSS: when insert-chart is not registered, applies set-drawing-apply only", async () => {
-    const cell: Nullable<CellValue>[][] = [
+    const grid: Nullable<CellValue>[][] = [
       ["h1", "h2"],
       [1, 2],
     ]
@@ -92,7 +98,7 @@ describe("univer-sdk", () => {
       getSheetId: () => "sheet-1",
       getSheetName: () => "Sheet 1",
       getRange: (_r1: number, _c1: number, _numRows: number, _numCols: number) => ({
-        getValues: () => cell,
+        getValues: () => grid,
         setValues: (_v: CellValue[][]) => undefined,
       }),
     }
@@ -132,9 +138,15 @@ describe("univer-sdk", () => {
     }
 
     const sdk = createUniverSdk({ univerAPI: api, univer: univer as Univer })
-    await sdk.addChart({
+    const out = await sdk.addChart({
       range: { startRow: 0, endRow: 1, startColumn: 0, endColumn: 1 },
     })
+    expect(out.chartId.startsWith("sdk-")).toBe(true)
     expect(calls.map((x) => x.id)).toEqual(["facade.set-drawing-apply"])
+    const apply = calls.find((x) => x.id === "facade.set-drawing-apply")?.data as {
+      op: [string, string, ["data", string, { i: { componentKey: string } }], unknown]
+    }
+    const drawWrap = apply?.op?.[2]?.[2] as { i: { componentKey: string } } | undefined
+    expect(drawWrap?.i.componentKey).toBe(VERITLY_LIVE_CHART)
   })
 })

@@ -13,12 +13,12 @@ async def main() -> None:
         print("Active document:", doc)
         data = await sdk.get_range(RangeRect(startRow=0, endRow=4, startColumn=0, endColumn=1), sheet_id=doc.sheetId)
         print("Range A1:B5 values:", data)
-        ok = await sdk.add_chart(
+        out = await sdk.add_chart(
             RangeRect(startRow=0, endRow=4, startColumn=0, endColumn=1),
             sheet_id=doc.sheetId,
             chart_type=4,
         )
-        print("Chart inserted:", ok)
+        print("Chart inserted:", out)
     finally:
         await sdk.close()
 

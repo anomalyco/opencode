@@ -207,7 +207,7 @@ class UniverSDK:
         sheet_id: str | None = None,
         chart_type: int | None = None,
         anchor: dict[str, int] | None = None,
-    ) -> bool:
+    ) -> dict[str, Any]:
         params: dict[str, Any] = {
             "sheetId": sheet_id,
             "range": {
@@ -222,7 +222,9 @@ class UniverSDK:
         if anchor is not None:
             params["anchor"] = anchor
         result = await self._call("add_chart", params)
-        return bool(result)
+        if isinstance(result, dict):
+            return result
+        return {"ok": bool(result)}
 
     async def inspect_facade(self, sheet_id: str | None = None, range_rect: RangeRect | None = None) -> dict[str, Any]:
         params: dict[str, Any] = {}

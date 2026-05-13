@@ -72,13 +72,13 @@ For the **pyodide** tool in the browser: reuse the same \`async def main()\` bod
 | list_sheets() | list_sheets | |
 | get_range(...) | get_range | Inclusive row/column indices |
 | set_range(...) | set_range | 2D values matrix |
-| add_chart(...) | add_chart | Optional chart_type, anchor |
+| add_chart(...) | add_chart | Returns JSON with \`chartId\`; optional chart_type, anchor |
 | inspect_facade(...) | sdk_introspect | Lists facade method names |
 | execute_command(id, params) | execute_command | Raw univerAPI.executeCommand |
 
 ## Charts and advanced mutations
 
-The spreadsheet ribbon **Insert → Chart** opens a **Veritly ECharts** preview panel in the browser (not Univer Pro). The Python \`add_chart(...)\` relay method still calls Univer's native chart path when the runtime exposes \`sheet.mutation.insert-chart\` (for example with a licensed Pro build). For drawing-level commands, use \`execute_command\` with the command id and params your app supports.
+The spreadsheet ribbon **Insert → Chart** inserts a chart object then opens **Veritly ECharts** chart settings in the browser; **Save** writes the preview as a **floating image** on the sheet (same drawing id). The Python \`add_chart(...)\` relay still uses Univer's native chart path when the runtime exposes \`sheet.mutation.insert-chart\` (for example with a licensed Pro build). For drawing-level commands, use \`execute_command\` with the command id and params your app supports.
 
 ## Troubleshooting
 

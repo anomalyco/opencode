@@ -7,18 +7,12 @@ import "@univerjs/presets/lib/styles/preset-sheets-core.css"
 import { UniverSheetsDrawingPreset } from "@univerjs/presets/preset-sheets-drawing"
 import sheetsDrawingEnUs from "@univerjs/presets/preset-sheets-drawing/locales/en-US"
 import "@univerjs/presets/lib/styles/preset-sheets-drawing.css"
-import { createUniverSdk, type AddChartInput, type PushSetRangeInput, type RangeRect, type SetRangeValuesInput, type UniverHostApi } from "@opencode-ai/univer-sdk"
+import { createUniverSdk, type AddChartInput, type PushSetRangeInput, type RangeRect, type SetRangeValuesInput, type UniverHostApi, type UniverSdkRuntime } from "@opencode-ai/univer-sdk"
 import { VeritlyUniverGluePlugin } from "@/lib/veritly-univer-plugin"
-import {
-  bindVeritlyChartUi,
-  bindVeritlyUniverHost,
-  clearVeritlyChartUi,
-  clearVeritlyUniverHost,
-} from "@/lib/veritly-univer-runtime"
+import { bindVeritlyUniverHost, clearVeritlyUniverHost, type Host } from "@/lib/veritly-univer-runtime"
 import { augmentVeritlyHost } from "@/lib/veritly-univer-host-api"
 import { univerBackendOrigin } from "@/lib/univer-backend-origin"
 import { browserUniverSdkWsUrl } from "@/lib/univer-sdk-ws-browser"
-import { SpreadsheetChartDock } from "@/components/spreadsheet-chart-dock"
 import { browserTracer } from "@/lib/telemetry/browser-otel"
 import { context, propagation, SpanStatusCode, type TextMapGetter } from "@opentelemetry/api"
 
@@ -59,7 +53,7 @@ function veritlySdk(cur: ReturnType<typeof createUniver>) {
   return createUniverSdk({
     univerAPI: cur.univerAPI,
     univer: cur.univer,
-  })
+  } as unknown as UniverSdkRuntime)
 }
 
 type VeritlyWindow = Window & { __veritlyUniverSdk?: () => ReturnType<typeof createUniverSdk> }
@@ -74,7 +68,6 @@ function base64ToFile(base64: string, name: string, mimeType?: string): File {
 export function SpreadsheetViewer(props: Props) {
   const theme = useTheme()
   const [host, setHost] = createSignal<HTMLDivElement | undefined>()
-  const [chartOpen, setChartOpen] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
   const [loading, setLoading] = createSignal(false)
 
@@ -112,10 +105,10 @@ export function SpreadsheetViewer(props: Props) {
     })
 
     augmentVeritlyHost(instance.univerAPI, instance.univer, UNIVERSER_BASE)
-    bindVeritlyUniverHost({ univerAPI: instance.univerAPI, univer: instance.univer })
-    bindVeritlyChartUi({
-      open: () => setChartOpen(true),
-    })
+    bindVeritlyUniverHost({
+      univerAPI: instance.univerAPI,
+      univer: instance.univer,
+    } as Host)
 
     runtime = instance
     if (import.meta.env.DEV) {
@@ -138,7 +131,6 @@ export function SpreadsheetViewer(props: Props) {
     )
 
     onCleanup(() => {
-      setChartOpen(false)
       browserTracer().startActiveSpan(
         "spreadsheet.viewer.univer_dispose",
         {
@@ -153,7 +145,6 @@ export function SpreadsheetViewer(props: Props) {
       )
       relaySocket?.close(1000, "viewer disposed")
       relaySocket = null
-      clearVeritlyChartUi()
       clearVeritlyUniverHost()
       runtime = null
       if (import.meta.env.DEV) {
@@ -420,7 +411,7 @@ export function SpreadsheetViewer(props: Props) {
     const uid = props.unitId
     if (!cur || !uid || uid.startsWith("pending-")) return
 
-    const api = cur.univerAPI as UniverHostApi
+    const api = cur.univerAPI as unknown as UniverHostApi
     const handle = (event: unknown) => {
       const o = event as { id?: string; params?: unknown }
       if (o.id !== "sheet.mutation.set-range-values") return
@@ -554,17 +545,6 @@ export function SpreadsheetViewer(props: Props) {
           ref={setHost}
           class="min-h-[min(480px,70dvh)] min-w-0 flex-1"
         />
-        <Show when={chartOpen()}>
-          <SpreadsheetChartDock
-            getSdk={() => {
-              const cur = runtime
-              if (!cur) throw new Error("Spreadsheet runtime is not mounted")
-              return veritlySdk(cur)
-            }}
-            dark={theme.mode() === "dark"}
-            onClose={() => setChartOpen(false)}
-          />
-        </Show>
       </div>
     </div>
   )

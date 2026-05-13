@@ -3,14 +3,16 @@ import { Inject, Injector, Plugin, UniverInstanceType } from "@univerjs/core"
 import { MessageType } from "@univerjs/design"
 import type { IFacadeMenuItem, IFUniverUIMixin } from "@univerjs/ui/facade"
 import { IMessageService, RibbonInsertGroup } from "@univerjs/ui"
+import { VERITLY_LIVE_CHART, createUniverSdk, type UniverSdkRuntime } from "@opencode-ai/univer-sdk"
 import { dict } from "@/i18n/en"
-import { requestVeritlyChartPanel, veritlyUniverHost } from "@/lib/veritly-univer-runtime"
+import { activeSheetSelectionRange } from "@/lib/sheet-chart-range"
+import { VeritlyLiveChartFloat } from "@/lib/veritly-live-chart-float"
+import { veritlyUniverHost } from "@/lib/veritly-univer-runtime"
 
 const MENU_ID = "veritly-insert-chart"
 
 /**
- * Veritly-specific Univer wiring: ribbon Insert → Chart opens the Veritly ECharts dock (see {@link requestVeritlyChartPanel}).
- * Runtime is bound from {@link bindVeritlyUniverHost} in the spreadsheet viewer after `createUniver`.
+ * Veritly-specific Univer wiring: ribbon Insert → Chart inserts a drawing with a live ECharts float (`VERITLY_LIVE_CHART`).
  */
 export class VeritlyUniverGluePlugin extends Plugin {
   static override pluginName = "VERITLY_UNIVER_GLUE"
@@ -34,7 +36,9 @@ export class VeritlyUniverGluePlugin extends Plugin {
     const api = slot.univerAPI as FUniver & IFUniverUIMixin
     const msg = this._injector.get(IMessageService)
 
-    const insert = () => {
+    this.disposeWithMe(api.registerComponent(VERITLY_LIVE_CHART, VeritlyLiveChartFloat))
+
+    const insert = async () => {
       const cur = veritlyUniverHost()
       if (!cur) return
       const wb = cur.univerAPI.getActiveWorkbook?.()
@@ -47,8 +51,15 @@ export class VeritlyUniverGluePlugin extends Plugin {
         msg.show({ content: dict["univer.insertChart.noSheet"], type: MessageType.Warning })
         return
       }
-      if (requestVeritlyChartPanel()) return
-      msg.show({ content: dict["univer.insertChart.panelUnavailable"], type: MessageType.Warning })
+      const sdk = createUniverSdk({ univerAPI: cur.univerAPI, univer: cur.univer } as unknown as UniverSdkRuntime)
+      const range = activeSheetSelectionRange(cur.univerAPI as FUniver)
+      try {
+        await sdk.addChart({ range })
+        msg.show({ content: dict["univer.insertChart.added"], type: MessageType.Success })
+      } catch (e) {
+        const text = e instanceof Error ? e.message : String(e)
+        msg.show({ content: text, type: MessageType.Error })
+      }
     }
 
     const item: IFacadeMenuItem = {
@@ -57,7 +68,7 @@ export class VeritlyUniverGluePlugin extends Plugin {
       tooltip: dict["univer.insertChart.tooltip"],
       order: 50,
       action: () => {
-        insert()
+        void insert()
       },
     }
     api.createMenu(item).appendTo(RibbonInsertGroup.MEDIA)

@@ -5,6 +5,9 @@ import { ICommandService } from "@univerjs/core"
 import { FUniver } from "@univerjs/core/facade"
 import type { FRange, FWorkbook, FWorksheet } from "@univerjs/sheets/facade"
 
+/** `registerComponent` key for Veritly live ECharts float (see app `veritly-live-chart-float.tsx`). */
+export const VERITLY_LIVE_CHART = "VeritlyLiveChart"
+
 /**
  * `FUniver` from `@univerjs/core` + sheets facade, plus optional host wiring (`importXLSXToUnitIdAsync`, `loadServerUnit`)
  * that Univer Pro collaboration presets add via facade extension. Veritly supplies these without Pro packages — see `augmentVeritlyHost` in the app.
@@ -74,6 +77,8 @@ export type AddChartInput = {
   anchor?: { row: number; column: number }
 }
 
+export type AddChartResult = { chartId: string }
+
 /** Mutation payload aligned with `sheet.mutation.insert-chart`. */
 type InsertChartMutationParams = {
   unitId: string
@@ -119,7 +124,7 @@ type ChartDrawing = {
   subUnitId: string
   drawingId: string
   drawingType: number
-  componentKey: "Shape"
+  componentKey: typeof VERITLY_LIVE_CHART
   sheetTransform: {
     from: { column: number; columnOffset: number; row: number; rowOffset: number }
     to: { column: number; columnOffset: number; row: number; rowOffset: number }
@@ -301,7 +306,7 @@ function chartDrawing(input: { chart: InsertChartMutationParams; sheetName: stri
     subUnitId: input.chart.subUnitId,
     drawingId: input.chart.chartId,
     drawingType: 2,
-    componentKey: "Shape",
+    componentKey: VERITLY_LIVE_CHART,
     sheetTransform: { from, to },
     transform: { left: 200, top: 200, width: 468, height: 369 },
     axisAlignSheetTransform: { from, to },
@@ -458,7 +463,7 @@ export function createUniverSdk(input: UniverSdkRuntime) {
         cellValue,
       })
     },
-    async addChart(input: AddChartInput) {
+    async addChart(input: AddChartInput): Promise<AddChartResult> {
       mustRect(input.range)
       const wb = mustWorkbook(runtime)
       const sh = mustSheet(runtime, input.sheetId)
@@ -488,7 +493,7 @@ export function createUniverSdk(input: UniverSdkRuntime) {
       }
       const rangeObj = sh.getRange(input.range.startRow, input.range.startColumn, input.range.endRow, input.range.endColumn)
       const ok = await addChartViaFacade({ runtime, chartParams, sheet: sh, wb, sheetName: sh.getName(), rangeObj })
-      if (ok) return true
+      if (ok) return { chartId: chartParams.chartId }
       throw new SdkError("Facade chart call was rejected by Univer runtime")
     },
     inspectFacadeCapabilities(input?: { sheetId?: string; range?: RangeRect }) {
