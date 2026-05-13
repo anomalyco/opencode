@@ -49,6 +49,7 @@ function paletteFromEl(el: HTMLElement, dark: boolean): ChartPalette {
   const fg = cs.getPropertyValue("--text-base").trim()
   const muted = cs.getPropertyValue("--text-weak").trim()
   const border = cs.getPropertyValue("--border-base").trim()
+  const panel = cs.getPropertyValue("--input-base").trim()
   const series = dark
     ? ["#60a5fa", "#4ade80", "#fb923c", "#c084fc", "#f472b6", "#2dd4bf"]
     : ["#2563eb", "#16a34a", "#ea580c", "#9333ea", "#db2777", "#0d9488"]
@@ -56,6 +57,7 @@ function paletteFromEl(el: HTMLElement, dark: boolean): ChartPalette {
     fg: fg || (dark ? "#ededed" : "#171717"),
     muted: muted || (dark ? "#a0a0a0" : "#6f6f6f"),
     border: border || (dark ? "#505050" : "#c7c7c7"),
+    panel: panel || (dark ? "#1c1c1c" : "#fcfcfc"),
     series,
   }
 }
@@ -90,6 +92,13 @@ export function VeritlyLiveChartFloat(props: VeritlyLiveChartFloatProps) {
   const [table, setTable] = React.useState<SheetTable>({ rows: [] })
   const [dark, setDark] = React.useState(appDark)
   const [err, setErr] = React.useState<string | null>(null)
+  const [palette, setPalette] = React.useState<ChartPalette>(() => ({
+    fg: "#171717",
+    muted: "#6f6f6f",
+    border: "#c7c7c7",
+    panel: "#fcfcfc",
+    series: ["#2563eb", "#16a34a", "#ea580c", "#9333ea", "#db2777", "#0d9488"],
+  }))
 
   const wrapRef = React.useRef<HTMLDivElement>(null)
   const chartRef = React.useRef<HTMLDivElement>(null)
@@ -97,6 +106,12 @@ export function VeritlyLiveChartFloat(props: VeritlyLiveChartFloatProps) {
 
   const srcRange = parsed?.range ?? null
   const sheetTitle = parsed?.sheet ?? null
+
+  React.useLayoutEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    setPalette(paletteFromEl(el, dark))
+  }, [dark])
 
   React.useEffect(() => {
     if (typeof document === "undefined") return
@@ -181,11 +196,13 @@ export function VeritlyLiveChartFloat(props: VeritlyLiveChartFloatProps) {
     const c = chartInst.current
     const panel = wrapRef.current
     if (!c || !panel) return
+    const next = paletteFromEl(panel, dark)
+    setPalette(next)
     const opt = tableToEChartsOption({
       kind,
       seriesInRows,
       table,
-      palette: paletteFromEl(panel, dark),
+      palette: next,
     })
     c.setOption(opt, { notMerge: true })
   }, [dark, kind, seriesInRows, table])
@@ -210,7 +227,7 @@ export function VeritlyLiveChartFloat(props: VeritlyLiveChartFloatProps) {
         width: "100%",
         boxSizing: "border-box",
         overflow: "hidden",
-        background: "transparent",
+        background: palette.panel,
       },
     },
     React.createElement(
@@ -224,6 +241,7 @@ export function VeritlyLiveChartFloat(props: VeritlyLiveChartFloatProps) {
           alignItems: "center",
           padding: "4px 6px",
           borderBottom: "1px solid rgba(128,128,128,0.25)",
+          background: palette.panel,
         },
       },
       React.createElement(

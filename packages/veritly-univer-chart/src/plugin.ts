@@ -3,8 +3,7 @@ import { Inject, Injector, Plugin, UniverInstanceType } from "@univerjs/core"
 import { MessageType } from "@univerjs/design"
 import type { IFacadeMenuItem, IFUniverUIMixin } from "@univerjs/ui/facade"
 import { IMessageService, RibbonInsertGroup } from "@univerjs/ui"
-import { VERITLY_LIVE_CHART, createUniverSdk, type UniverSdkRuntime } from "@opencode-ai/univer-sdk"
-import { VeritlyLiveChartFloat } from "./live-chart-float"
+import { createUniverSdk, type UniverSdkRuntime } from "@opencode-ai/univer-sdk"
 import { activeSheetSelectionRange } from "./sheet-chart-range"
 import { veritlyChartHost } from "./runtime-host"
 
@@ -43,8 +42,6 @@ export class VeritlyLiveChartPlugin extends Plugin {
     if (!slot) return
     const api = slot.univerAPI as FUniver & IFUniverUIMixin
     const msg = this._injector.get(IMessageService)
-
-    this.disposeWithMe(api.registerComponent(VERITLY_LIVE_CHART, VeritlyLiveChartFloat))
 
     const insert = async () => {
       const cur = veritlyChartHost()

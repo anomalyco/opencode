@@ -273,6 +273,7 @@ export function createCompatApp(store: Store) {
     }
     const out = buildRealSnapshotEnvelope(unitID, typ, effective, snap) as Record<string, unknown>
     out.error = okErr()
+    /** Incremental edit log for this unit (not replayed by the app on load; `snapshot.workbook` is already merged). */
     out.changesets = flattenChangesetRecords(trail)
     out.latestRevision = u.revision
     return c.json(out)

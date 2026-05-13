@@ -1,16 +1,14 @@
-import * as json1 from "ot-json1"
+import {
+  applySetDrawingApplyTyped,
+  commitDrawingPluginInWorkbook,
+  parseSnapshotWorkbook,
+  type WorkbookWire,
+} from "./workbook-wire"
 
 const SET_RANGE = "sheet.mutation.set-range-values"
 const SET_DRAWING = "sheet.mutation.set-drawing-apply"
-const DRAWING_RESOURCE = "SHEET_DRAWING_PLUGIN"
 
 type CellPatch = Record<string, unknown>
-
-function workbookSurface(root: Record<string, unknown>): Record<string, unknown> {
-  const w = root.workbook
-  if (w && typeof w === "object") return w as Record<string, unknown>
-  return root
-}
 
 function setRev(root: Record<string, unknown>, nextRev: number) {
   root.rev = nextRev
@@ -34,7 +32,7 @@ function mergeCell(into: CellPatch, patch: CellPatch) {
   }
 }
 
-function applySetRangeValues(wb: Record<string, unknown>, params: Record<string, unknown>) {
+function applySetRangeValues(wb: WorkbookWire, params: Record<string, unknown>) {
   const sub = params.subUnitId
   if (typeof sub !== "string" || !sub.length) return false
   const sheets = wb.sheets
@@ -69,72 +67,36 @@ function applySetRangeValues(wb: Record<string, unknown>, params: Record<string,
   return true
 }
 
-function ensureDrawingScaffold(doc: Record<string, unknown>, unitId: string, subUnitId: string) {
-  let u = doc[unitId]
-  if (!u || typeof u !== "object") {
-    u = {}
-    doc[unitId] = u
-  }
-  const uo = u as Record<string, unknown>
-  let s = uo[subUnitId]
-  if (!s || typeof s !== "object") {
-    s = { data: {}, order: [] }
-    uo[subUnitId] = s
-  }
-  const so = s as Record<string, unknown>
-  if (!so.data || typeof so.data !== "object") so.data = {}
-  if (!Array.isArray(so.order)) so.order = []
-}
-
-function applySetDrawingApply(wb: Record<string, unknown>, params: Record<string, unknown>) {
-  const op = params.op
-  if (op === undefined) return false
-  const unitId = params.unitId
-  const subUnitId = params.subUnitId
-  if (typeof unitId !== "string" || !unitId.length) return false
-  if (typeof subUnitId !== "string" || !subUnitId.length) return false
-  let resources = wb.resources
-  if (!Array.isArray(resources)) {
-    resources = []
-    wb.resources = resources
-  }
-  const list = resources as { name: string; data: string }[]
-  let slot = list.find((r) => r.name === DRAWING_RESOURCE)
-  if (!slot) {
-    slot = { name: DRAWING_RESOURCE, data: "{}" }
-    list.push(slot)
-  }
-  let doc: Record<string, unknown> = {}
-  if (slot.data && slot.data.length > 0) {
-    try {
-      doc = JSON.parse(slot.data) as Record<string, unknown>
-    } catch {
-      return false
-    }
-  }
-  ensureDrawingScaffold(doc, unitId, subUnitId)
-  const applied = json1.type.apply(doc as unknown as json1.Doc, op as json1.JSONOp)
-  slot.data = JSON.stringify(applied !== undefined ? applied : doc)
-  return true
-}
-
 /**
  * Apply Univer-native mutations (subset) to a workbook snapshot JSON string.
- * Supports `sheet.mutation.set-range-values` and `sheet.mutation.set-drawing-apply` (drawings in `resources` / `SHEET_DRAWING_PLUGIN`).
+ * One Zod parse of the workbook surface at entry; drawing blob is typed via the live compat cache.
  */
 export function applyMutationsToSnapshotJson(snap: string, mutations: unknown[], nextRev: number): string {
-  const root = JSON.parse(snap) as Record<string, unknown>
-  const wb = workbookSurface(root)
+  const { root, wb } = parseSnapshotWorkbook(snap)
   let applied = 0
   for (const m of mutations) {
     const row = mutationParams(m)
     if (!row) continue
     if (row.id === SET_RANGE && applySetRangeValues(wb, row.params)) applied += 1
-    if (row.id === SET_DRAWING && applySetDrawingApply(wb, row.params)) applied += 1
+    if (row.id === SET_DRAWING && applySetDrawingApplyTyped(wb, row.params)) applied += 1
   }
   if (mutations.length > 0 && applied === 0) {
     throw new Error("no supported mutations applied")
   }
+  commitDrawingPluginInWorkbook(wb, "compat")
   setRev(root, nextRev)
   return JSON.stringify(root)
 }
+
+export {
+  applySetDrawingApplyTyped,
+  commitDrawingPluginInWorkbook,
+  openCompatDrawingDoc as parseDrawingDocForMerge,
+  parseDrawingResourceBlob,
+  parseSnapshotWorkbook,
+  parseWorkbookWire,
+  serializeCompatDrawingDoc as stringifyCompatDrawingDoc,
+  type CompatDrawingDoc,
+  type DrawingSlot,
+  type WorkbookWire,
+} from "./workbook-wire"

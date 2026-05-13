@@ -323,7 +323,7 @@ function chartDrawing(input: { chart: InsertChartMutationParams; sheetName: stri
     axisAlignSheetTransform: { from, to },
     data: {
       border: "#979DAC",
-      background: "rgba(0,0,0,0)",
+      background: "#fcfcfc",
       range: a1Range({ sheet: input.sheetName, range: input.chart.sourceRange }),
       chartType: input.chart.chartType,
       isRowDirection: input.chart.isRowDirection,

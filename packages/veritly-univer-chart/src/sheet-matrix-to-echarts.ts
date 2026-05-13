@@ -10,6 +10,8 @@ export type ChartPalette = {
   muted: string
   border: string
   series: string[]
+  /** Opaque chart area (matches app surface). */
+  panel: string
 }
 
 function cellScalar(v: unknown): string | number | null {
@@ -55,7 +57,7 @@ function buildPie(table: SheetTable, palette: ChartPalette, textStyle: { color: 
   const data: { name: string; value: number }[] = []
   if (rows.length === 0) {
     return {
-      backgroundColor: "transparent",
+      backgroundColor: palette.panel,
       title: { text: "No data", left: "center", top: "middle", textStyle },
       series: [],
     }
@@ -84,14 +86,14 @@ function buildPie(table: SheetTable, palette: ChartPalette, textStyle: { color: 
 
   if (data.length === 0) {
     return {
-      backgroundColor: "transparent",
+      backgroundColor: palette.panel,
       title: { text: "No numeric data", left: "center", top: "middle", textStyle },
       series: [],
     }
   }
 
   return {
-    backgroundColor: "transparent",
+    backgroundColor: palette.panel,
     color: palette.series,
     tooltip: { trigger: "item" },
     series: [
@@ -122,7 +124,7 @@ function buildCartesianColumns(
 
   if (rows.length === 0) {
     return {
-      backgroundColor: "transparent",
+      backgroundColor: palette.panel,
       title: { text: "No data", left: "center", top: "middle", textStyle },
       xAxis: { type: "category", data: [] },
       yAxis: { type: "value" },
@@ -174,7 +176,7 @@ function buildCartesianColumns(
 
   if (colHeaders.length < 2) {
     return {
-      backgroundColor: "transparent",
+      backgroundColor: palette.panel,
       title: { text: "Need at least two columns", left: "center", top: "middle", textStyle },
       xAxis: { type: "category", data: categories },
       yAxis: { type: "value", axisLabel, splitLine },
@@ -185,7 +187,7 @@ function buildCartesianColumns(
   const legend = series.map((s) => String(s.name))
 
   return {
-    backgroundColor: "transparent",
+    backgroundColor: palette.panel,
     color: palette.series,
     textStyle,
     tooltip: { trigger: "axis" },
@@ -221,7 +223,7 @@ function buildCartesianTranspose(
 
   if (!headers || headers.length < 2) {
     return {
-      backgroundColor: "transparent",
+      backgroundColor: palette.panel,
       title: {
         text: "Series-in-rows needs a header row",
         left: "center",
@@ -264,7 +266,7 @@ function buildCartesianTranspose(
   }
 
   return {
-    backgroundColor: "transparent",
+    backgroundColor: palette.panel,
     color: palette.series,
     textStyle,
     tooltip: { trigger: "axis" },

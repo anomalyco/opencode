@@ -4,6 +4,7 @@ import { Store, unitStateKey } from "./store"
 
 export { BlobMissing, exchangeFilesFromEnv, type ExchangeFileBackend, S3ExchangeFiles } from "./exchange-files"
 export { applyMutationsToSnapshotJson } from "./apply-mutations"
+export { commitDrawingPluginInWorkbook, parseDrawingResourceBlob, parseWorkbookWire } from "./drawing-plugin-normalize"
 export { createCompatApp, Store, unitStateKey }
 export { universerRoutes, exchangeMultipartVsJson } from "./exchange-contract"
 export { defaultWorkbook } from "./workbook"

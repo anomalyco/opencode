@@ -6,7 +6,8 @@
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
-    "./app": "./src/app.ts"
+    "./app": "./src/app.ts",
+    "./drawing-plugin-normalize": "./src/drawing-plugin-normalize.ts"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit -p .",
@@ -18,7 +19,8 @@
     "exceljs": "4.4.0",
     "hono": "catalog:",
     "ot-json1": "1.0.2",
-    "xlsx": "0.18.5"
+    "xlsx": "0.18.5",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",

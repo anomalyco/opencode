@@ -5,6 +5,7 @@ const palette = {
   fg: "#111111",
   muted: "#666666",
   border: "#cccccc",
+  panel: "#fcfcfc",
   series: ["#3366ff", "#33aa66", "#ff6633", "#aa33cc"],
 }
 

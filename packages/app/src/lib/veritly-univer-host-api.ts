@@ -1,6 +1,7 @@
 /** Ensures sheets facade extensions (`getActiveWorkbook`, …) are loaded for `FUniver`. */
 import "@univerjs/sheets/facade"
 import type { IWorkbookData, Univer } from "@univerjs/core"
+import { commitDrawingPluginInWorkbook, parseWorkbookWire } from "@opencode-ai/univer-compat/drawing-plugin-normalize"
 import { UniverInstanceType } from "@univerjs/core"
 import type { FUniver } from "@univerjs/core/facade"
 import type { PushCombMutationsInput, PushSetRangeInput, UniverHostApi } from "@opencode-ai/univer-sdk"
@@ -73,8 +74,9 @@ export async function primitiveLoadServerUnit(api: FUniver, univer: Univer, base
   const existing = active?.getId?.()
   if (existing) api.disposeUnit(existing)
 
-  const data: Partial<IWorkbookData> = { ...wb, id: wb.id ?? unitId }
-  univer.createUnit(UniverInstanceType.UNIVER_SHEET, data)
+  const wire = parseWorkbookWire({ ...wb, id: wb.id !== undefined && wb.id !== null && wb.id !== "" ? wb.id : unitId })
+  commitDrawingPluginInWorkbook(wire, "univer")
+  univer.createUnit(UniverInstanceType.UNIVER_SHEET, wire as Partial<IWorkbookData>)
 
   return typeof body.latestRevision === "number" ? body.latestRevision : 0
 }

@@ -1,6 +1,7 @@
 export { VeritlyLiveChartPlugin } from "./plugin"
 export { VeritlyLiveChartFloat } from "./live-chart-float"
 export type { VeritlyLiveChartFloatProps } from "./live-chart-float"
+export { registerVeritlyLiveChartFloat } from "./register-float"
 export { bindVeritlyChartHost, clearVeritlyChartHost, veritlyChartHost, type ChartHost } from "./runtime-host"
 export { parseSheetBangRange, rectsOverlap } from "./sheet-bang-range"
 export { activeSheetSelectionRange } from "./sheet-chart-range"

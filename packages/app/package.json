@@ -56,6 +56,7 @@
     "@kobalte/core": "catalog:",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
+    "@opencode-ai/univer-compat": "workspace:*",
     "@opencode-ai/univer-sdk": "workspace:*",
     "@opencode-ai/util": "workspace:*",
     "@opencode-ai/veritly-univer-chart": "workspace:*",

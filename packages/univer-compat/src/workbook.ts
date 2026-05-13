@@ -1,3 +1,5 @@
+import { commitDrawingPluginInWorkbook, parseWorkbookWire } from "./workbook-wire"
+
 function b64(s: string) {
   return Buffer.from(s, "utf8").toString("base64")
 }
@@ -51,23 +53,27 @@ export function buildBlockMeta(workbook: Record<string, unknown>) {
 
 export function workbookFromSnapshot(unitID: string, rev: number, snap: string) {
   const root = JSON.parse(snap) as Record<string, unknown>
-  let workbook = root
+  let raw = root
   const nested = root.workbook
-  if (nested && typeof nested === "object") workbook = nested as Record<string, unknown>
+  if (nested && typeof nested === "object") raw = nested as Record<string, unknown>
 
   let unitRev = 0
   const rr = root.rev
   if (typeof rr === "number") unitRev = rr
-  if (unitRev === 0 && typeof workbook.rev === "number") unitRev = workbook.rev
+  if (unitRev === 0 && typeof raw.rev === "number") unitRev = raw.rev
   if (unitRev === 0 && rev > 0) unitRev = rev
 
-  if (!workbook.unitID) workbook.unitID = unitID
-  if (workbook.rev === undefined) workbook.rev = unitRev
-  if (!workbook.creator) workbook.creator = "veritly-mock-user"
-  if (!workbook.resources) workbook.resources = []
+  if (!raw.unitID) raw.unitID = unitID
+  if (raw.rev === undefined) raw.rev = unitRev
+  if (!raw.creator) raw.creator = "veritly-mock-user"
+  if (!raw.resources) raw.resources = []
+
+  const workbook = parseWorkbookWire(raw)
+  commitDrawingPluginInWorkbook(workbook, "univer")
+
   if (!workbook.originalMeta)
     workbook.originalMeta = b64(JSON.stringify({ locale: "enUS", styles: {}, appVersion: "0.19.0" }))
-  if (!workbook.blockMeta) workbook.blockMeta = buildBlockMeta(workbook)
+  if (!workbook.blockMeta) workbook.blockMeta = buildBlockMeta(workbook as Record<string, unknown>)
 
   const sheets = workbook.sheets as Record<string, Record<string, unknown>> | undefined
   if (sheets) {

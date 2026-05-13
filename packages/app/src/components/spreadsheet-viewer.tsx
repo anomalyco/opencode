@@ -7,8 +7,10 @@ import "@univerjs/presets/lib/styles/preset-sheets-core.css"
 import { UniverSheetsDrawingPreset } from "@univerjs/presets/preset-sheets-drawing"
 import sheetsDrawingEnUs from "@univerjs/presets/preset-sheets-drawing/locales/en-US"
 import "@univerjs/presets/lib/styles/preset-sheets-drawing.css"
+import type { FUniver } from "@univerjs/core/facade"
+import type { IFUniverUIMixin } from "@univerjs/ui/facade"
 import { createUniverSdk, type AddChartInput, type PushSetRangeInput, type RangeRect, type SetRangeValuesInput, type UniverHostApi, type UniverSdkRuntime } from "@opencode-ai/univer-sdk"
-import { VeritlyLiveChartPlugin, bindVeritlyChartHost, clearVeritlyChartHost } from "@opencode-ai/veritly-univer-chart"
+import { VeritlyLiveChartPlugin, bindVeritlyChartHost, clearVeritlyChartHost, registerVeritlyLiveChartFloat } from "@opencode-ai/veritly-univer-chart"
 import { bindVeritlyUniverHost, clearVeritlyUniverHost, type Host } from "@/lib/veritly-univer-runtime"
 import { augmentVeritlyHost } from "@/lib/veritly-univer-host-api"
 import { univerBackendOrigin } from "@/lib/univer-backend-origin"
@@ -104,6 +106,8 @@ export function SpreadsheetViewer(props: Props) {
       plugins: [VeritlyLiveChartPlugin],
     })
 
+    const chartReg = registerVeritlyLiveChartFloat(instance.univerAPI as FUniver & IFUniverUIMixin)
+
     augmentVeritlyHost(instance.univerAPI, instance.univer, UNIVERSER_BASE)
     bindVeritlyUniverHost({
       univerAPI: instance.univerAPI,
@@ -151,6 +155,7 @@ export function SpreadsheetViewer(props: Props) {
       relaySocket = null
       clearVeritlyUniverHost()
       clearVeritlyChartHost()
+      chartReg.dispose()
       runtime = null
       if (import.meta.env.DEV) {
         const w = window as VeritlyWindow
