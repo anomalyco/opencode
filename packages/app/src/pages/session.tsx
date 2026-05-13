@@ -1829,9 +1829,12 @@ export default function Page() {
 
   if (MINIMAL_MODE && !devMode) {
     return (
-      <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
-        <div class="flex-1 min-h-0 flex flex-col md:flex-row">
-          <div class="@container relative flex flex-col min-h-0 h-full bg-background-stronger flex-1 min-w-0">
+      <div data-component="lovable-session" class="relative size-full overflow-hidden flex flex-col p-2 md:p-3">
+        <div class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 md:gap-3">
+          <div
+            data-component="lovable-session-frame"
+            class="@container relative flex flex-col min-h-0 h-full flex-1 min-w-0"
+          >
             <SessionPanelContent />
           </div>
           <SessionPreviewPanel />
@@ -1841,9 +1844,9 @@ export default function Page() {
   }
 
   return (
-    <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
+    <div data-component="lovable-session" class="relative size-full overflow-hidden flex flex-col p-2 md:p-3">
       <SessionHeader />
-      <div class="flex-1 min-h-0 flex flex-col md:flex-row">
+      <div class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 md:gap-3">
         <Show when={!isDesktop() && !!params.id}>
           <Tabs value={store.mobileTab} class="h-auto">
             <Tabs.List>
@@ -1871,8 +1874,9 @@ export default function Page() {
 
         {/* Session panel */}
         <div
+          data-component="lovable-session-frame"
           classList={{
-            "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger flex-1 md:flex-none": true,
+            "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none": true,
             "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
           }}
