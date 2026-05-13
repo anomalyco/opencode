@@ -390,11 +390,22 @@ export const layer = Layer.effect(
       if (!flags.experimentalPlanMode) {
         if (input.agent.name === "ask") {
           userMessage.parts.push({
-            info: { role: "system", time: Date.now() },
-            content: PROMPT_ASK,
+            id: PartID.ascending(),
+            messageID: userMessage.info.id,
+            sessionID: userMessage.info.sessionID,
+            type: "text",
+            text: PROMPT_ASK,
+            synthetic: true,
           })
-          return input.messages
         }
+
+        // if (input.agent.name === "ask") {
+        //   userMessage.parts.push({
+        //     info: { role: "system", time: Date.now() },
+        //     content: PROMPT_ASK,
+        //   })
+        //   return input.messages
+        // }
 
         if (input.agent.name === "plan") {
           userMessage.parts.push({
