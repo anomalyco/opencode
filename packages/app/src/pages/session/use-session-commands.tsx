@@ -16,6 +16,7 @@ import { useTerminal } from "@/context/terminal"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { restartCommand } from "@/pages/session/commands/restart"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -419,6 +420,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       slash: "fork",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: fork,
+    }),
+    restartCommand({
+      session: sessionCommand,
+      language,
+      id: params.id,
+      dir: params.dir,
+      directory: sdk.directory,
+      userMessages,
+      parts: (id) => sync.data.part[id] ?? [],
+      set: prompt.set,
+      navigate,
     }),
   ]
 

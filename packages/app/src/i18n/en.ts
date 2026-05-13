@@ -83,6 +83,8 @@ export const dict = {
   "command.session.redo.description": "Redo the last undone message",
   "command.session.compact": "Compact session",
   "command.session.compact.description": "Summarize the session to reduce context size",
+  "command.session.restart": "Restart from first prompt",
+  "command.session.restart.description": "Fork a new session from the user's initial query",
   "command.session.fork": "Fork from message",
   "command.session.fork.description": "Create a new session from a previous message",
   "command.session.share": "Share session",

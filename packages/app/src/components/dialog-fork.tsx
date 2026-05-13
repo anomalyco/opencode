@@ -2,15 +2,15 @@ import { Component, createMemo } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
-import { usePrompt } from "@/context/prompt"
+import { usePrompt, type Prompt } from "@/context/prompt"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { showToast } from "@opencode-ai/ui/toast"
-import { extractPromptFromParts } from "@/utils/prompt"
 import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useLanguage } from "@/context/language"
+import { extractPromptFromParts } from "@/utils/prompt"
 
 interface ForkableMessage {
   id: string
@@ -20,6 +20,37 @@ interface ForkableMessage {
 
 function formatTime(date: Date): string {
   return date.toLocaleTimeString(undefined, { timeStyle: "short" })
+}
+
+async function fork(opts: {
+  fork: (input: { sessionID: string; messageID: string }) => Promise<{ data?: { id: string } }>
+  sessionID: string
+  messageID: string
+  prompt: Prompt
+  directory: string
+  fail: (message?: string) => void
+  navigate: (href: string) => void
+  set: (prompt: Prompt, next: { dir: string; id: string }) => void
+  done?: () => void
+}) {
+  const dir = base64Encode(opts.directory)
+
+  await opts
+    .fork({ sessionID: opts.sessionID, messageID: opts.messageID })
+    .then((res) => {
+      const id = res.data?.id
+      if (!id) {
+        opts.fail()
+        return
+      }
+      opts.done?.()
+      opts.set(opts.prompt, { dir, id })
+      opts.navigate(`/${dir}/session/${id}`)
+    })
+    .catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err)
+      opts.fail(message)
+    })
 }
 
 export const DialogFork: Component = () => {
@@ -60,29 +91,22 @@ export const DialogFork: Component = () => {
 
     const sessionID = params.id
     if (!sessionID) return
-
-    const parts = sync.data.part[item.id] ?? []
-    const restored = extractPromptFromParts(parts, {
+    const value = extractPromptFromParts(sync.data.part[item.id] ?? [], {
       directory: sdk.directory,
       attachmentName: language.t("common.attachment"),
     })
-    const dir = base64Encode(sdk.directory)
 
-    sdk.client.session
-      .fork({ sessionID, messageID: item.id })
-      .then((forked) => {
-        if (!forked.data) {
-          showToast({ title: language.t("common.requestFailed") })
-          return
-        }
-        dialog.close()
-        prompt.set(restored, undefined, { dir, id: forked.data.id })
-        navigate(`/${dir}/session/${forked.data.id}`)
-      })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description: message })
-      })
+    void fork({
+      fork: sdk.client.session.fork,
+      sessionID,
+      messageID: item.id,
+      prompt: value,
+      directory: sdk.directory,
+      fail: (message) => showToast({ title: language.t("common.requestFailed"), description: message }),
+      navigate,
+      set: (value, next) => prompt.set(value, undefined, next),
+      done: dialog.close,
+    })
   }
 
   return (
