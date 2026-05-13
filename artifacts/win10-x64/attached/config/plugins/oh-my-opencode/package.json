@@ -1,0 +1,100 @@
+{
+  "name": "oh-my-opencode",
+  "version": "3.17.4",
+  "description": "The Best AI Agent Harness - Batteries-Included OpenCode Plugin with Multi-Model Orchestration, Parallel Background Agents, and Crafted LSP/AST Tools",
+  "main": "./dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "bin": {
+    "oh-my-opencode": "bin/oh-my-opencode.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "postinstall.mjs"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schema.json": "./dist/oh-my-opencode.schema.json"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target bun --format esm --external @ast-grep/napi && tsc --emitDeclarationOnly && bun build src/cli/index.ts --outdir dist/cli --target bun --format esm --external @ast-grep/napi && bun run build:schema",
+    "build:all": "bun run build && bun run build:binaries",
+    "build:binaries": "bun run script/build-binaries.ts",
+    "build:schema": "bun run script/build-schema.ts",
+    "build:model-capabilities": "bun run script/build-model-capabilities.ts",
+    "clean": "rm -rf dist",
+    "prepare": "bun run build",
+    "postinstall": "node postinstall.mjs",
+    "prepublishOnly": "bun run clean && bun run build",
+    "test:model-capabilities": "bun test src/shared/model-capability-aliases.test.ts src/shared/model-capability-guardrails.test.ts src/shared/model-capabilities.test.ts src/cli/doctor/checks/model-resolution.test.ts --bail",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "oracle",
+    "librarian",
+    "agents",
+    "ai",
+    "llm"
+  ],
+  "author": "YeonGyu-Kim",
+  "license": "SUL-1.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/code-yeongyu/oh-my-openagent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/code-yeongyu/oh-my-openagent/issues"
+  },
+  "homepage": "https://github.com/code-yeongyu/oh-my-openagent#readme",
+  "dependencies": {
+    "@ast-grep/cli": "^0.41.1",
+    "@ast-grep/napi": "^0.41.1",
+    "@clack/prompts": "^0.11.0",
+    "@code-yeongyu/comment-checker": "^0.7.0",
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@opencode-ai/plugin": "^1.4.0",
+    "@opencode-ai/sdk": "^1.4.0",
+    "commander": "^14.0.2",
+    "detect-libc": "^2.0.0",
+    "diff": "^8.0.3",
+    "js-yaml": "^4.1.1",
+    "jsonc-parser": "^3.3.1",
+    "picocolors": "^1.1.1",
+    "picomatch": "^4.0.2",
+    "posthog-node": "^5.29.2",
+    "vscode-jsonrpc": "^8.2.0",
+    "zod": "^4.3.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/picomatch": "^3.0.2",
+    "bun-types": "1.3.11",
+    "typescript": "^5.7.3"
+  },
+  "optionalDependencies": {
+    "oh-my-opencode-darwin-arm64": "3.17.4",
+    "oh-my-opencode-darwin-x64": "3.17.4",
+    "oh-my-opencode-darwin-x64-baseline": "3.17.4",
+    "oh-my-opencode-linux-arm64": "3.17.4",
+    "oh-my-opencode-linux-arm64-musl": "3.17.4",
+    "oh-my-opencode-linux-x64": "3.17.4",
+    "oh-my-opencode-linux-x64-baseline": "3.17.4",
+    "oh-my-opencode-linux-x64-musl": "3.17.4",
+    "oh-my-opencode-linux-x64-musl-baseline": "3.17.4",
+    "oh-my-opencode-windows-x64": "3.17.4",
+    "oh-my-opencode-windows-x64-baseline": "3.17.4"
+  },
+  "overrides": {},
+  "trustedDependencies": [
+    "@ast-grep/cli",
+    "@ast-grep/napi",
+    "@code-yeongyu/comment-checker"
+  ]
+}
