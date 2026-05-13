@@ -1,0 +1,1 @@
+export { createCompactionContextInjector } from "./hook";

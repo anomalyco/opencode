@@ -1,0 +1,25 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "command": "cmd",
+    "args": [
+        "/c"
+    ],
+    "tasks": [
+        {
+            "label": "test",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "test"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "_id": "test",
+                "isDefault": false
+            }
+        }
+    ]
+}

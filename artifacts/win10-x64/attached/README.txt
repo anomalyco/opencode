@@ -16,16 +16,17 @@
   OPENCODE_DISABLE_AUTOUPDATE   - 禁用自动更新（已设为 true）
   OPENCODE_DISABLE_MODELS_FETCH - 禁止从 models.dev 拉取模型数据 (已设为 true)
   OPENCODE_DISABLE_LSP_DOWNLOAD - 禁止 LSP 工具下载 (已设为 true)
+  OPENCODE_DISABLE_TELEMETRY    - 禁止 Telemetry 数据收集 (已设为 true)
   OPENCODE_CONFIG_DIR           - 额外配置目录
+  OMO_DISABLE_POSTHOG           - 禁止 PostHog 追踪 (已设为 1)
   ENTERPRISE_API_KEY            - 内网 LLM 服务 API Key
 
 文件说明
 --------------------
-opencode.exe           - CLI 主程序（含 Bun 运行时 + 内嵌解析器）
+bin/opencode.exe       - CLI 主程序（含 Bun 运行时 + 内嵌解析器）
 parsers/               - tree-sitter 离线解析器（外置备用）
 lingxicode.bat         - 快速启动脚本
-config/                - 配置模板目录
-plugins/               - 插件扩展目录
+config/                - 配置目录（包含配置文件、插件、skills等）
 
 日志
 --------------------

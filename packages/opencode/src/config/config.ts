@@ -272,7 +272,9 @@ async function loadMode(dir: string) {
 
 async function loadPlugin(dir: string) {
   const plugins: PluginSpec[] = []
+  const seen = new Set<string>()
 
+  // scan single-file plugins: plugins/*.{ts,js}
   for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js}", {
     cwd: dir,
     absolute: true,
@@ -281,6 +283,20 @@ async function loadPlugin(dir: string) {
   })) {
     plugins.push(pathToFileURL(item).href)
   }
+
+  // scan directory plugins: plugins/*/package.json
+  for (const item of await Glob.scan("{plugin,plugins}/*/package.json", {
+    cwd: dir,
+    absolute: true,
+    dot: true,
+    symlink: true,
+  })) {
+    const pluginDir = path.dirname(item)
+    if (seen.has(pluginDir)) continue
+    seen.add(pluginDir)
+    plugins.push(pathToFileURL(pluginDir).href)
+  }
+
   return plugins
 }
 
