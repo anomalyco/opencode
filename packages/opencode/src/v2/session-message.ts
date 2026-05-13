@@ -1,10 +1,10 @@
 import { Schema } from "effect"
-import { Prompt } from "./session-prompt"
+import { Prompt } from "@opencode-ai/core/session-prompt"
 import { SessionEvent } from "./session-event"
 import { EventV2 } from "./event"
-import { ToolOutput } from "./tool-output"
-import { V2Schema } from "./schema"
-import { Modelv2 } from "./model"
+import { ToolOutput } from "@opencode-ai/core/tool-output"
+import { V2Schema } from "@opencode-ai/core/v2-schema"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 export const ID = EventV2.ID
 export type ID = Schema.Schema.Type<typeof ID>
@@ -26,7 +26,7 @@ export class AgentSwitched extends Schema.Class<AgentSwitched>("Session.Message.
 export class ModelSwitched extends Schema.Class<ModelSwitched>("Session.Message.ModelSwitched")({
   ...Base,
   type: Schema.Literal("model-switched"),
-  model: Modelv2.Ref,
+  model: ModelV2.Ref,
 }) {}
 
 export class User extends Schema.Class<User>("Session.Message.User")({
@@ -34,6 +34,7 @@ export class User extends Schema.Class<User>("Session.Message.User")({
   text: Prompt.fields.text,
   files: Prompt.fields.files,
   agents: Prompt.fields.agents,
+  references: Prompt.fields.references,
   type: Schema.Literal("user"),
   time: Schema.Struct({
     created: V2Schema.DateTimeUtcFromMillis,

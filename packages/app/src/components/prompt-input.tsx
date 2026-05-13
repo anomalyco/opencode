@@ -16,7 +16,6 @@ import {
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
-import { useGlobalSDK } from "@/context/global-sdk"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
@@ -57,7 +56,8 @@ import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { AutoAcceptButton } from "./auto-accept-button"
 import { useQueries } from "@tanstack/solid-query"
-import { loadAgentsQuery, loadProvidersQuery } from "@/context/global-sync/bootstrap"
+import { useQueryOptions } from "@/context/global-sync"
+import { pathKey } from "@/utils/path-key"
 
 interface PromptInputProps {
   class?: string
@@ -104,7 +104,7 @@ const NON_EMPTY_TEXT = /[^\s\u200B]/
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
-  const globalSDK = useGlobalSDK()
+  const queryOptions = useQueryOptions()
 
   const sync = useSync()
   const local = useLocal()
@@ -241,13 +241,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return paths
   })
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
-  const status = createMemo(
-    () =>
-      sync.data.session_status[params.id ?? ""] ?? {
-        type: "idle",
-      },
-  )
-  const working = createMemo(() => status()?.type !== "idle")
+  const working = createMemo(() => sync.data.session_working(params.id ?? ""))
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
@@ -1257,9 +1251,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const [agentsQuery, globalProvidersQuery, providersQuery] = useQueries(() => ({
     queries: [
-      loadAgentsQuery(sdk.directory, sdk.client),
-      loadProvidersQuery(null, globalSDK.client),
-      loadProvidersQuery(sdk.directory, sdk.client),
+      queryOptions.agents(pathKey(sdk.directory)),
+      queryOptions.providers(null),
+      queryOptions.providers(pathKey(sdk.directory)),
     ],
   }))
 
