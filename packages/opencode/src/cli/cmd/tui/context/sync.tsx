@@ -124,14 +124,29 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
     }
 
-    function listSessions() {
-      return sdk.client.session
-        .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000, ...sessionListQuery() })
-        .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
+    async function listSessions() {
+      return ((await sdk.client.session.list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000, ...sessionListQuery() })).data ?? []).toSorted(
+        (a, b) => a.id.localeCompare(b.id),
+      )
+    }
+
+    function refreshSyncedSessionsAfterReconnect() {
+      const sessionIDs = new Set([...Object.keys(store.message), ...fullSyncedSessions])
+      if (sessionIDs.size === 0) return
+      void Promise.all([...sessionIDs].map((sessionID) => syncSession(sessionID, { force: true }))).catch((e) => {
+        Log.Default.error("tui reconnect session refresh failed", {
+          error: e instanceof Error ? e.message : String(e),
+          name: e instanceof Error ? e.name : undefined,
+          stack: e instanceof Error ? e.stack : undefined,
+        })
+      })
     }
 
     event.subscribe((event, { workspace }) => {
       switch (event.type) {
+        case "server.connected":
+          refreshSyncedSessionsAfterReconnect()
+          break
         case "server.instance.disposed":
           void bootstrap()
           break
@@ -518,33 +533,37 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (last.role === "user") return "working"
           return last.time.completed ? "idle" : "working"
         },
-        async sync(sessionID: string) {
-          if (fullSyncedSessions.has(sessionID)) return
-          const [session, messages, todo, diff] = await Promise.all([
-            sdk.client.session.get({ sessionID }, { throwOnError: true }),
-            sdk.client.session.messages({ sessionID, limit: 100 }),
-            sdk.client.session.todo({ sessionID }),
-            sdk.client.session.diff({ sessionID }),
-          ])
-          setStore(
-            produce((draft) => {
-              const match = Binary.search(draft.session, sessionID, (s) => s.id)
-              if (match.found) draft.session[match.index] = session.data!
-              if (!match.found) draft.session.splice(match.index, 0, session.data!)
-              draft.todo[sessionID] = todo.data ?? []
-              const infos: (typeof draft.message)[string] = []
-              for (const message of messages.data ?? []) {
-                infos.push(message.info)
-                draft.part[message.info.id] = message.parts
-              }
-              draft.message[sessionID] = infos
-              draft.session_diff[sessionID] = diff.data ?? []
-            }),
-          )
-          fullSyncedSessions.add(sessionID)
+        sync(sessionID: string) {
+          return syncSession(sessionID)
         },
       },
       bootstrap,
+    }
+
+    async function syncSession(sessionID: string, input: { force?: boolean } = {}) {
+      if (!input.force && fullSyncedSessions.has(sessionID)) return
+      const [session, messages, todo, diff] = await Promise.all([
+        sdk.client.session.get({ sessionID }, { throwOnError: true }),
+        sdk.client.session.messages({ sessionID, limit: 100 }),
+        sdk.client.session.todo({ sessionID }),
+        sdk.client.session.diff({ sessionID }),
+      ])
+      setStore(
+        produce((draft) => {
+          const match = Binary.search(draft.session, sessionID, (s) => s.id)
+          if (match.found) draft.session[match.index] = session.data!
+          if (!match.found) draft.session.splice(match.index, 0, session.data!)
+          draft.todo[sessionID] = todo.data ?? []
+          const infos: (typeof draft.message)[string] = []
+          for (const message of messages.data ?? []) {
+            infos.push(message.info)
+            draft.part[message.info.id] = message.parts
+          }
+          draft.message[sessionID] = infos
+          draft.session_diff[sessionID] = diff.data ?? []
+        }),
+      )
+      fullSyncedSessions.add(sessionID)
     }
     return result
   },
