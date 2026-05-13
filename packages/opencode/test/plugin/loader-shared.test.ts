@@ -17,6 +17,7 @@ const { readPackageThemes } = await import("../../src/plugin/shared")
 const { Bus } = await import("../../src/bus")
 const { Npm } = await import("@opencode-ai/core/npm")
 const { TestConfig } = await import("../fixture/config")
+const { RuntimeFlags } = await import("../../src/effect/runtime-flags")
 
 afterAll(() => {
   if (disableDefault === undefined) {
@@ -57,6 +58,7 @@ function load(dir: string) {
       Effect.provide(
         Plugin.layer.pipe(
           Layer.provide(Bus.layer),
+          Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })),
           Layer.provide(
             TestConfig.layer({
               get: () =>

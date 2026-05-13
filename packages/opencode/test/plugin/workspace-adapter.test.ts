@@ -11,6 +11,7 @@ import { Auth } from "../../src/auth"
 import { Bus } from "../../src/bus"
 import { Config } from "../../src/config/config"
 import { Env } from "../../src/env"
+import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Workspace } from "../../src/control-plane/workspace"
 import { Plugin } from "../../src/plugin/index"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
@@ -35,7 +36,11 @@ const configLayer = Config.layer.pipe(
   Layer.provide(emptyAccount),
   Layer.provide(NpmTest.noop),
 )
-const pluginLayer = Plugin.layer.pipe(Layer.provide(Bus.layer), Layer.provide(configLayer))
+const pluginLayer = Plugin.layer.pipe(
+  Layer.provide(Bus.layer),
+  Layer.provide(configLayer),
+  Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })),
+)
 const noopBootstrapLayer = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const workspaceLayer = Workspace.defaultLayer.pipe(
   Layer.provide(InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrapLayer))),
