@@ -5,11 +5,6 @@ function truthy(key: string) {
   return value === "true" || value === "1"
 }
 
-function falsy(key: string) {
-  const value = process.env[key]?.toLowerCase()
-  return value === "false" || value === "0"
-}
-
 function number(key: string) {
   const value = process.env[key]
   if (!value) return undefined
@@ -72,7 +67,6 @@ export const Flag = {
   OPENCODE_EXPERIMENTAL_LSP_TOOL: OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_LSP_TOOL"),
   OPENCODE_EXPERIMENTAL_PLAN_MODE: OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_PLAN_MODE"),
   OPENCODE_EXPERIMENTAL_SCOUT: OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_SCOUT"),
-  OPENCODE_EXPERIMENTAL_MARKDOWN: !falsy("OPENCODE_EXPERIMENTAL_MARKDOWN"),
   OPENCODE_ENABLE_PARALLEL: truthy("OPENCODE_ENABLE_PARALLEL") || truthy("OPENCODE_EXPERIMENTAL_PARALLEL"),
   OPENCODE_MODELS_URL: process.env["OPENCODE_MODELS_URL"],
   OPENCODE_MODELS_PATH: process.env["OPENCODE_MODELS_PATH"],
