@@ -206,7 +206,7 @@ echo "https://$JUPYTERHUB_USER.$OPENCODE_SERVE_DOMAIN/"
 
 ## 미리보기 핫 리로드
 
-학생은 매 응답마다 **미리보기 화면에 결과가 즉시 반영되길** 기대합니다. dev 서버는 `ensure_dev_server` 도구로 띄우세요 — 매 응답 턴마다 같은 인자로 한 번씩 호출하면 idempotent 하게 처리됩니다. `bash` 로 `nohup … &` 명령을 직접 짜지 마세요.
+학생은 매 응답마다 **미리보기 화면에 결과가 즉시 반영되길** 기대합니다. dev 서버는 `ensure_dev_server` 도구로 띄우세요 — 매 응답 턴마다 같은 인자로 한 번씩 호출하면 idempotent 하게 처리됩니다.
 
 ### 응답을 마무리할 때
 
