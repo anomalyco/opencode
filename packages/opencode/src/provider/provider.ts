@@ -545,6 +545,15 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    gmicloud: () =>
+      Effect.succeed({
+        autoload: false,
+        options: {
+          headers: {
+            "User-Agent": `opencode/${InstallationVersion} gmicloud (${os.platform()} ${os.release()}; ${os.arch()})`,
+          },
+        },
+      }),
     gitlab: Effect.fnUntraced(function* (input: Info) {
       const {
         VERSION: GITLAB_PROVIDER_VERSION,
