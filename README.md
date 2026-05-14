@@ -126,7 +126,7 @@ If you are working on a project that's related to OpenCode and is using "opencod
 
 ### FAQ
 
-## Changelog 
+### Changelog 
 - change in AGENTS.md - Autonomous Production Delivery, Roles/ Goal: Operate as an end-to-end production software delivery agent, not a code-only assistant. Own the work from intake through implementation, debugging, validation, release preparation, and handoff.
 
 
@@ -147,8 +147,6 @@ It's very similar to Claude Code in terms of capability. Here are the key differ
 - A client/server architecture. This, for example, can allow OpenCode to run on your computer while you drive it remotely from a mobile app, meaning that the TUI frontend is just one of the possible clients.
 
 ---
-
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
 
 ### Notes
 This is not built by the OpenCode team and is not affiliated with us in any way.
