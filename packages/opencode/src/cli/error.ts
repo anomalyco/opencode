@@ -1,17 +1,42 @@
 import { NamedError } from "@opencode-ai/core/util/error"
 import { errorFormat } from "@/util/error"
+import { isRecord } from "@/util/record"
 
 interface ErrorLike {
   name?: string
   _tag?: string
   message?: string
-  data?: Record<string, any>
+  data?: Record<string, unknown>
 }
 
+type ConfigIssue = { message: string; path: string[] }
+
 function isTaggedError(error: unknown, tag: string): boolean {
-  return (
-    typeof error === "object" && error !== null && "_tag" in error && (error as Record<string, unknown>)._tag === tag
-  )
+  return isRecord(error) && error._tag === tag
+}
+
+function configData(input: unknown, tag: string): Record<string, unknown> | undefined {
+  if (!isRecord(input)) return undefined
+  if (input.name === tag && isRecord(input.data)) return input.data
+  if (input._tag === tag) return input
+  return undefined
+}
+
+function stringField(input: Record<string, unknown>, key: string): string | undefined {
+  return typeof input[key] === "string" ? input[key] : undefined
+}
+
+function configIssues(input: Record<string, unknown>): ConfigIssue[] {
+  return Array.isArray(input.issues)
+    ? input.issues.filter((issue): issue is ConfigIssue => {
+        if (!isRecord(issue)) return false
+        return (
+          typeof issue.message === "string" &&
+          Array.isArray(issue.path) &&
+          issue.path.every((x) => typeof x === "string")
+        )
+      })
+    : []
 }
 
 export function FormatError(input: unknown) {
@@ -33,11 +58,13 @@ export function FormatError(input: unknown) {
   }
 
   // ProviderModelNotFoundError: { providerID: string, modelID: string, suggestions?: string[] }
-  if (NamedError.hasName(input, "ProviderModelNotFoundError")) {
-    const data = (input as ErrorLike).data
-    const suggestions: string[] = Array.isArray(data?.suggestions) ? data.suggestions : []
+  const providerModelNotFound = configData(input, "ProviderModelNotFoundError")
+  if (providerModelNotFound) {
+    const suggestions = Array.isArray(providerModelNotFound.suggestions)
+      ? providerModelNotFound.suggestions.filter((x) => typeof x === "string")
+      : []
     return [
-      `Model not found: ${data?.providerID}/${data?.modelID}`,
+      `Model not found: ${providerModelNotFound.providerID}/${providerModelNotFound.modelID}`,
       ...(suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
       `Try: \`opencode models\` to list available models`,
       `Or check your config (opencode.json) provider/model names`,
@@ -45,41 +72,44 @@ export function FormatError(input: unknown) {
   }
 
   // ProviderInitError: { providerID: string }
-  if (NamedError.hasName(input, "ProviderInitError")) {
-    return `Failed to initialize provider "${(input as ErrorLike).data?.providerID}". Check credentials and configuration.`
+  const providerInit = configData(input, "ProviderInitError")
+  if (providerInit) {
+    return `Failed to initialize provider "${stringField(providerInit, "providerID")}". Check credentials and configuration.`
   }
 
   // ConfigJsonError: { path: string, message?: string }
-  if (NamedError.hasName(input, "ConfigJsonError")) {
-    const data = (input as ErrorLike).data
-    return `Config file at ${data?.path} is not valid JSON(C)` + (data?.message ? `: ${data.message}` : "")
+  const configJson = configData(input, "ConfigJsonError")
+  if (configJson) {
+    const message = stringField(configJson, "message")
+    return `Config file at ${stringField(configJson, "path")} is not valid JSON(C)` + (message ? `: ${message}` : "")
   }
 
   // ConfigDirectoryTypoError: { dir: string, path: string, suggestion: string }
-  if (NamedError.hasName(input, "ConfigDirectoryTypoError")) {
-    const data = (input as ErrorLike).data
-    return `Directory "${data?.dir}" in ${data?.path} is not valid. Rename the directory to "${data?.suggestion}" or remove it. This is a common typo.`
+  const configDirectoryTypo = configData(input, "ConfigDirectoryTypoError")
+  if (configDirectoryTypo) {
+    return `Directory "${stringField(configDirectoryTypo, "dir")}" in ${stringField(configDirectoryTypo, "path")} is not valid. Rename the directory to "${stringField(configDirectoryTypo, "suggestion")}" or remove it. This is a common typo.`
   }
 
   // ConfigFrontmatterError: { message: string }
-  if (NamedError.hasName(input, "ConfigFrontmatterError")) {
-    return (input as ErrorLike).data?.message ?? ""
+  const configFrontmatter = configData(input, "ConfigFrontmatterError")
+  if (configFrontmatter) {
+    return stringField(configFrontmatter, "message") ?? ""
   }
 
   // ConfigInvalidError: { path?: string, message?: string, issues?: Array<{ message: string, path: string[] }> }
-  if (NamedError.hasName(input, "ConfigInvalidError")) {
-    const data = (input as ErrorLike).data
-    const path = data?.path
-    const message = data?.message
-    const issues: Array<{ message: string; path: string[] }> = Array.isArray(data?.issues) ? data.issues : []
+  const configInvalid = configData(input, "ConfigInvalidError")
+  if (configInvalid) {
+    const path = stringField(configInvalid, "path")
+    const message = stringField(configInvalid, "message")
+    const issues = configIssues(configInvalid)
     return [
       `Configuration is invalid${path && path !== "config" ? ` at ${path}` : ""}` + (message ? `: ${message}` : ""),
       ...issues.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")),
     ].join("\n")
   }
 
-  // UICancelledError: void (no data)
-  if (NamedError.hasName(input, "UICancelledError")) {
+  // UICancelledError: user cancelled an interactive CLI prompt
+  if (isTaggedError(input, "UICancelledError") || NamedError.hasName(input, "UICancelledError")) {
     return ""
   }
 }

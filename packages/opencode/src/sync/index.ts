@@ -7,11 +7,11 @@ import type { InstanceContext } from "@/project/instance"
 import { EventSequenceTable, EventTable } from "./event.sql"
 import type { WorkspaceID } from "@/control-plane/schema"
 import { EventID } from "./schema"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Effect, Layer, Schema as EffectSchema } from "effect"
 import type { DeepMutable } from "@opencode-ai/core/schema"
 import { serviceUse } from "@/effect/service-use"
 import { InstanceState } from "@/effect/instance-state"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 // Keep `Event["data"]` mutable because projectors mutate the persisted shape
 // when writing to the database. Bus payloads (`Properties`) stay readonly —
@@ -69,6 +69,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Sy
 
 export const layer = Layer.effect(Service)(
   Effect.gen(function* () {
+    const flags = yield* RuntimeFlags.Service
+
     const replay: Interface["replay"] = Effect.fn("SyncEvent.replay")(function* (event, options) {
       const def = registry.get(event.type)
       if (!def) {
@@ -104,7 +106,12 @@ export const layer = Layer.effect(Service)(
             workspace: yield* InstanceState.workspaceID,
           }
         : undefined
-      process(def, event, { publish, context, ownerID: options?.ownerID })
+      process(def, event, {
+        publish,
+        context,
+        ownerID: options?.ownerID,
+        experimentalWorkspaces: flags.experimentalWorkspaces,
+      })
     })
 
     const replayAll: Interface["replayAll"] = Effect.fn("SyncEvent.replayAll")(function* (events, options) {
@@ -160,7 +167,7 @@ export const layer = Layer.effect(Service)(
           const seq = row?.seq != null ? row.seq + 1 : 0
 
           const event = { id, seq, aggregateID: agg, data }
-          process(def, event, { publish, context })
+          process(def, event, { publish, context, experimentalWorkspaces: flags.experimentalWorkspaces })
         },
         {
           behavior: "immediate",
@@ -197,7 +204,7 @@ export const layer = Layer.effect(Service)(
   }),
 )
 
-export const defaultLayer = layer
+export const defaultLayer = layer.pipe(Layer.provide(RuntimeFlags.defaultLayer))
 
 export const use = serviceUse(Service)
 
@@ -279,7 +286,7 @@ export function project<Def extends Definition>(
 function process<Def extends Definition>(
   def: Def,
   event: Event<Def>,
-  options: { publish: boolean; context?: PublishContext; ownerID?: string },
+  options: { publish: boolean; context?: PublishContext; ownerID?: string; experimentalWorkspaces: boolean },
 ) {
   if (projectors == null) {
     throw new Error("No projectors available. Call `SyncEvent.init` to install projectors")
@@ -293,7 +300,7 @@ function process<Def extends Definition>(
   Database.transaction((tx) => {
     projector(tx, event.data, event)
 
-    if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+    if (options.experimentalWorkspaces) {
       tx.insert(EventSequenceTable)
         .values({
           aggregate_id: event.aggregateID,
