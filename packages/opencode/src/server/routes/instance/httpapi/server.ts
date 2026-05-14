@@ -1,4 +1,4 @@
-import { Context, Effect, Layer } from "effect"
+import { Config as EffectConfig, Context, Effect, Layer } from "effect"
 import { HttpApiBuilder, OpenApi } from "effect/unstable/httpapi"
 import {
   FetchHttpClient,
@@ -90,15 +90,6 @@ import { schemaErrorLayer } from "./middleware/schema-error"
 
 export const context = Context.makeUnsafe<unknown>(new Map())
 
-const runtime = HttpRouter.middleware()(
-  Effect.succeed((effect) =>
-    Effect.gen(function* () {
-      yield* Effect.annotateCurrentSpan({ "opencode.server.backend": "effect-httpapi" })
-      return yield* effect
-    }),
-  ),
-).layer
-
 const cors = (corsOptions?: CorsOptions) =>
   HttpRouter.middleware(
     HttpMiddleware.cors({
@@ -180,7 +171,16 @@ const uiRoute = HttpRouter.use((router) =>
   }),
 ).pipe(Layer.provide(authOnlyRouterLayer))
 
-export function createRoutes(corsOptions?: CorsOptions) {
+type RouteRequirements =
+  | HttpRouter.HttpRouter
+  | HttpRouter.Request<"Error", unknown>
+  | HttpRouter.Request<"GlobalError", unknown>
+  | HttpRouter.Request<"Requires", unknown>
+  | HttpRouter.Request<"GlobalRequires", never>
+
+export function createRoutes(
+  corsOptions?: CorsOptions,
+): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
   return Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, docRoute, uiRoute).pipe(
     Layer.provide([
       errorLayer,
@@ -188,7 +188,6 @@ export function createRoutes(corsOptions?: CorsOptions) {
       corsVaryFix,
       fenceLayer,
       cors(corsOptions),
-      runtime,
       Account.defaultLayer,
       Agent.defaultLayer,
       Auth.defaultLayer,
@@ -233,28 +232,19 @@ export function createRoutes(corsOptions?: CorsOptions) {
       FetchHttpClient.layer,
       HttpServer.layerServices,
     ]),
-    Layer.provideMerge(Layer.succeed(CorsConfig)(corsOptions)),
-    Layer.provideMerge(InstanceLayer.layer),
-    Layer.provideMerge(Observability.layer),
+    Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
+    Layer.provide(InstanceLayer.layer),
+    Layer.provide(Observability.layer),
   )
 }
 
 export const routes = createRoutes()
 
-const defaultWebHandler = lazy(() =>
+export const webHandler = lazy(() =>
   HttpRouter.toWebHandler(routes, {
     memoMap,
     middleware: disposeMiddleware,
   }),
 )
 
-export function webHandler(corsOptions?: CorsOptions) {
-  if (!corsOptions?.cors?.length) return defaultWebHandler()
-  return HttpRouter.toWebHandler(createRoutes(corsOptions), {
-    // Server-level CORS options are dynamic; don't reuse the default route layer memoized without them.
-    memoMap: Layer.makeMemoMapUnsafe(),
-    middleware: disposeMiddleware,
-  })
-}
-
-export * as ExperimentalHttpApiServer from "./server"
+export * as HttpApiApp from "./server"

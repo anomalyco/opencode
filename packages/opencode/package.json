@@ -32,11 +32,6 @@
       "bun": "./src/pty/pty.bun.ts",
       "node": "./src/pty/pty.node.ts",
       "default": "./src/pty/pty.bun.ts"
-    },
-    "#httpapi-server": {
-      "bun": "./src/server/httpapi-server.node.ts",
-      "node": "./src/server/httpapi-server.node.ts",
-      "default": "./src/server/httpapi-server.node.ts"
     }
   },
   "devDependencies": {
