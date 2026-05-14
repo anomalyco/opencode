@@ -510,18 +510,24 @@ function DialogLocalScan() {
           title: i.name,
           value: i,
           description: `${i.host}:${i.port}${i.models.length > 0 ? ` · ${i.models.length} model${i.models.length !== 1 ? "s" : ""}` : ""}`,
-          category: i.configuredProviderID ? "Already added" : "Available",
-          disabled: Boolean(i.configuredProviderID),
+          category: i.configuredProviderID ? "Configured" : "Available",
           gutter: i.configuredProviderID ? () => <text fg={theme.success}>✓</text> : undefined,
         }))}
         onSelect={async (opt) => {
           const i = opt.value as LocalInstance
+          if (i.configuredProviderID) {
+            toast.show({ variant: "info", message: `${i.name} is already configured as provider "${i.configuredProviderID}"` })
+            dialog.clear()
+            return
+          }
           const connectResult = await sdk.client.local.connect({
             directory: sdk.directory,
             localConnectPayload: { id: i.id, name: i.name, baseURL: i.baseURL },
           })
           if (connectResult.error) {
-            toast.show({ variant: "error", message: `Failed to add ${i.name}: ${String(connectResult.error)}` })
+            const err = connectResult.error as Record<string, unknown>
+            const msg = typeof err?.message === "string" ? err.message : JSON.stringify(connectResult.error)
+            toast.show({ variant: "error", message: `Failed to add ${i.name}: ${msg}` })
             return
           }
           toast.show({ variant: "info", message: `Added ${i.name}. Restart OpenCode to use it.` })
