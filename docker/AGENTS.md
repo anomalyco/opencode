@@ -228,8 +228,6 @@ echo "https://$JUPYTERHUB_USER.$OPENCODE_SERVE_DOMAIN/"
 - Vite / CRA: `npm run dev -- --host 0.0.0.0 --port 3000`
 - Next.js: `npm run dev -- --hostname 0.0.0.0 --port 3000`
 
-`python3 -m http.server` 는 자동 갱신이 없으니 가능하면 피하고 위 `browser-sync` 를 사용합니다. 매번 빌드해서 `dist` 를 정적으로 서빙하는 패턴도 쓰지 않습니다 (dev 서버에 핫 리로드가 이미 들어있습니다).
-
 도구 반환값은 JSON 문자열이며 `status` 가 `already_running` / `started` / `failed` 중 하나입니다. `failed` 일 때는 `reason` 을 읽고 명령어를 고친 뒤 다시 호출하세요. 성공 시 `url` 을 학생에게 그대로 안내하면 됩니다.
 
 ### 응답을 마무리할 때

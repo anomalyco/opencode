@@ -21,8 +21,6 @@
 - Vite / CRA: `npm run dev -- --host 0.0.0.0 --port 3000`
 - Next.js: `npm run dev -- --hostname 0.0.0.0 --port 3000`
 
-`python3 -m http.server` 는 자동 갱신이 없으니 가능하면 피하고 위 `browser-sync` 를 사용한다. 매번 빌드해서 `dist` 를 정적으로 서빙하는 패턴도 쓰지 않는다 (dev 서버에 핫 리로드가 이미 들어있음).
-
 ## 반환
 
 JSON 문자열. `status` 필드:
