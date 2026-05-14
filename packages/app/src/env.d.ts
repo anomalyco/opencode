@@ -11,6 +11,11 @@ interface ImportMetaEnv {
    * @example VITE_MODEL_PIN_TIER=high
    */
   readonly VITE_MODEL_PIN_TIER: string
+  /**
+   * Sticky session title header. Set to `hidden` at build time to omit the bar.
+   * @example VITE_SESSION_HEADER=hidden
+   */
+  readonly VITE_SESSION_HEADER: string
 }
 
 interface ImportMeta {

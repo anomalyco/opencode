@@ -11,8 +11,8 @@
     --app-line-strong: var(--border-weak-base);
     --app-pill: 999px;
     --app-radius: 22px;
-    --app-card-shadow: 0 22px 80px rgba(34, 18, 10, 0.16), 0 8px 26px rgba(34, 18, 10, 0.08);
-    --app-prompt-shadow: 0 18px 48px rgba(42, 18, 12, 0.16), 0 2px 7px rgba(42, 18, 12, 0.08);
+    --app-card-shadow: 0 22px 80px rgba(0, 0, 0, 0.15), 0 8px 26px rgba(0, 0, 0, 0.08);
+    --app-prompt-shadow: 0 18px 48px rgba(0, 0, 0, 0.15), 0 2px 7px rgba(0, 0, 0, 0.08);
     --app-mix: white;
     --app-frame: var(--surface-raised-stronger-non-alpha);
     --app-neutral-hover: rgba(0, 0, 0, 0.04);
@@ -111,14 +111,14 @@
   [data-component="lovable-home-tab"][data-active="true"] {
     background: var(--app-paper-strong);
     color: var(--app-ink);
-    box-shadow: 0 1px 2px rgba(31, 18, 14, 0.08);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
   }
 
   [data-component="lovable-project-card"] {
     background: color-mix(in srgb, var(--app-paper-strong) 92%, var(--app-mix) 8%);
     border: 1px solid var(--app-line);
     border-radius: 14px;
-    box-shadow: 0 1px 2px rgba(31, 18, 14, 0.05);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     transition:
       transform 140ms ease,
       box-shadow 140ms ease,
@@ -127,15 +127,15 @@
 
   [data-component="lovable-project-card"]:hover {
     border-color: var(--app-line-strong);
-    box-shadow: 0 10px 26px rgba(31, 18, 14, 0.12);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.12);
     transform: translateY(-1px);
   }
 
   [data-component="lovable-project-preview"] {
     background:
-      radial-gradient(circle at 18% 18%, rgba(255, 47, 114, 0.76), transparent 34%),
-      radial-gradient(circle at 78% 70%, rgba(247, 182, 74, 0.7), transparent 30%),
-      linear-gradient(135deg, #4a0c1c, #1f1d22 54%, #81662b);
+      radial-gradient(circle at 18% 18%, rgba(62, 136, 255, 0.72), transparent 34%),
+      radial-gradient(circle at 78% 70%, rgba(67, 228, 249, 0.62), transparent 30%),
+      linear-gradient(135deg, #234e91, #363636 54%, #2c61b5);
   }
 
   [data-component="lovable-session"] {
@@ -150,7 +150,7 @@
     background: var(--app-frame);
     border: 1px solid var(--app-line);
     border-radius: 20px;
-    box-shadow: 0 18px 56px rgba(28, 19, 17, 0.1);
+    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.1);
     overflow: hidden;
   }
 
@@ -166,7 +166,7 @@
       0 0 0 0.5px color-mix(in srgb, var(--app-line-strong) 72%, transparent),
       0 1px 0 color-mix(in srgb, white 88%, transparent) inset,
       0 -1px 0 color-mix(in srgb, var(--app-line-strong) 72%, transparent) inset,
-      0 5px 14px rgba(31, 18, 14, 0.1);
+      0 5px 14px rgba(0, 0, 0, 0.1);
     transition:
       background 140ms ease,
       box-shadow 140ms ease,
@@ -182,7 +182,7 @@
       0 0 0 0.5px color-mix(in srgb, var(--app-line-strong) 82%, transparent),
       0 1px 0 color-mix(in srgb, white 74%, transparent) inset,
       0 -1px 0 color-mix(in srgb, var(--app-line-strong) 78%, transparent) inset,
-      0 7px 16px rgba(31, 18, 14, 0.12);
+      0 7px 16px rgba(0, 0, 0, 0.12);
     transform: translateY(-1px);
   }
 
@@ -275,7 +275,7 @@
     box-shadow:
       0 1px 0 color-mix(in srgb, white 86%, transparent) inset,
       0 -1px 0 color-mix(in srgb, var(--app-line-strong) 70%, transparent) inset,
-      0 1px 2px rgba(31, 18, 14, 0.08);
+      0 1px 2px rgba(0, 0, 0, 0.08);
     color: var(--text-base);
     opacity: 1;
   }
@@ -290,7 +290,7 @@
       0 1px 0 color-mix(in srgb, white 72%, transparent) inset,
       0 -1px 0 color-mix(in srgb, var(--app-line-strong) 86%, transparent) inset,
       0 0 0 0.5px color-mix(in srgb, var(--app-line-strong) 72%, transparent) inset,
-      0 2px 3px rgba(31, 18, 14, 0.08);
+      0 2px 3px rgba(0, 0, 0, 0.08);
   }
 
   [data-component="lovable-session"] [data-action="prompt-attach"]:active {
@@ -441,7 +441,7 @@
     background: color-mix(in srgb, var(--app-paper-strong) 96%, var(--app-mix) 4%);
     border: 1px solid var(--app-line);
     border-radius: 18px;
-    box-shadow: 0 14px 42px rgba(28, 19, 17, 0.08);
+    box-shadow: 0 14px 42px rgba(0, 0, 0, 0.08);
   }
 
   @media (prefers-color-scheme: dark) {

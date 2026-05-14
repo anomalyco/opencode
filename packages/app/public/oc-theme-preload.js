@@ -1,6 +1,6 @@
 ;(function () {
   var key = "opencode-theme-id"
-  var themeId = localStorage.getItem(key) || "oc-2"
+  var themeId = localStorage.getItem(key) || "lovable"
 
   if (themeId === "oc-1") {
     themeId = "oc-2"

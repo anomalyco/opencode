@@ -51,6 +51,7 @@ import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
+import { Spinner } from "./spinner"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { animate } from "motion"
@@ -1483,7 +1484,8 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
         <Show
           when={throttledText()}
           fallback={
-            <span data-component="reasoning-pending">
+            <span data-component="reasoning-pending" class="inline-flex items-center gap-1.5">
+              <Spinner class="size-3.5 shrink-0" style={{ color: "currentColor" }} />
               <TextShimmer text={i18n.t("ui.messagePart.title.reasoning")} active={true} />
             </span>
           }
@@ -1800,7 +1802,12 @@ ToolRegistry.register({
         trigger={
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
+              <span data-slot="basic-tool-tool-title" class="inline-flex items-center gap-1.5">
+                <Show when={pending()}>
+                  <span data-slot="basic-tool-title-spinner">
+                    <Spinner style={{ color: "currentColor" }} />
+                  </span>
+                </Show>
                 <TextShimmer
                   text={pending() ? i18n.t("ui.tool.shellActive") : i18n.t("ui.tool.shell")}
                   active={pending()}
@@ -1872,6 +1879,11 @@ ToolRegistry.register({
               <div data-slot="message-part-title-area">
                 <div data-slot="message-part-title">
                   <span data-slot="message-part-title-text">
+                    <Show when={pending()}>
+                      <span data-slot="message-part-title-spinner">
+                        <Spinner style={{ color: "currentColor" }} />
+                      </span>
+                    </Show>
                     <TextShimmer
                       text={
                         pending() ? i18n.t("ui.messagePart.title.editActive") : i18n.t("ui.messagePart.title.edit")
@@ -1958,6 +1970,11 @@ ToolRegistry.register({
               <div data-slot="message-part-title-area">
                 <div data-slot="message-part-title">
                   <span data-slot="message-part-title-text">
+                    <Show when={pending()}>
+                      <span data-slot="message-part-title-spinner">
+                        <Spinner style={{ color: "currentColor" }} />
+                      </span>
+                    </Show>
                     <TextShimmer
                       text={
                         pending() ? i18n.t("ui.messagePart.title.writeActive") : i18n.t("ui.messagePart.title.write")

@@ -50,16 +50,16 @@ type TerminalColors = {
 
 const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
   light: {
-    background: "#fcfcfc",
-    foreground: "#211e1e",
-    cursor: "#211e1e",
-    selectionBackground: withAlpha("#211e1e", 0.2),
+    background: "#FFFFFF",
+    foreground: "#363636",
+    cursor: "#363636",
+    selectionBackground: withAlpha("#363636", 0.2),
   },
   dark: {
-    background: "#191515",
-    foreground: "#d4d4d4",
-    cursor: "#d4d4d4",
-    selectionBackground: withAlpha("#d4d4d4", 0.25),
+    background: "#363636",
+    foreground: "#F2F2F2",
+    cursor: "#F2F2F2",
+    selectionBackground: withAlpha("#F2F2F2", 0.25),
   },
 }
 

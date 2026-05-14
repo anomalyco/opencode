@@ -97,6 +97,21 @@
     }
   }
 
+  [data-slot="basic-tool-title-spinner"] {
+    width: 14px;
+    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: currentColor;
+
+    [data-component="spinner"] {
+      width: 14px;
+      height: 14px;
+    }
+  }
+
   [data-slot="basic-tool-tool-subtitle"] {
     flex-shrink: 1;
     min-width: 0;

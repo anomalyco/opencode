@@ -438,14 +438,13 @@
   }
 
   [data-slot="message-part-title-spinner"] {
-    margin-left: 4px;
     width: 16px;
     height: 16px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    color: var(--text-weak);
+    color: currentColor;
 
     [data-component="spinner"] {
       width: 16px;
@@ -454,6 +453,9 @@
   }
 
   [data-slot="message-part-title-text"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     flex-shrink: 0;
     text-transform: capitalize;
     color: var(--text-strong);
