@@ -91,6 +91,33 @@ def _boot_agent(ga_dir: str):
 _AGENT_LOCK = threading.Lock()
 _AGENT = None  # type: ignore[var-annotated]
 
+_ACTIVE_DQ_LOCK = threading.Lock()
+_ACTIVE_DQ = None  # type: ignore[var-annotated]
+
+
+def _set_active_dq(dq) -> None:
+    global _ACTIVE_DQ
+    with _ACTIVE_DQ_LOCK:
+        _ACTIVE_DQ = dq
+
+
+def _clear_active_dq(dq) -> None:
+    global _ACTIVE_DQ
+    with _ACTIVE_DQ_LOCK:
+        if _ACTIVE_DQ is dq:
+            _ACTIVE_DQ = None
+
+
+def _notify_active_dq_abort() -> None:
+    with _ACTIVE_DQ_LOCK:
+        dq = _ACTIVE_DQ
+    if dq is None:
+        return
+    try:
+        dq.put({"_abort": True})
+    except Exception as e:
+        _eprint(f"[bridge_shim] failed to notify active dq abort: {e}")
+
 
 def _agent():
     global _AGENT
@@ -199,6 +226,7 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as e:
                     self._write_json(500, {"ok": False, "error": str(e)})
                     return
+            _notify_active_dq_abort()
             self._write_json(200, {"ok": True})
             return
         if self.path == "/reset":
@@ -244,13 +272,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
         full_text = ""
+        dq = None
         try:
             dq = agent.put_task(query, source="bridge")
+            _set_active_dq(dq)
             while True:
                 try:
                     item = dq.get(timeout=600)
                 except queue.Empty:
                     self._write_sse({"type": "error", "message": "timeout"})
+                    return
+                if item.get("_abort"):
+                    self._write_sse({"type": "done", "text": full_text})
                     return
                 if "tool_event" in item:
                     _eprint(f"[DEBUG bridge_shim] Received tool_event: {item['tool_event']}")
@@ -274,6 +307,9 @@ class Handler(BaseHTTPRequestHandler):
                     "trace": traceback.format_exc(),
                 }
             )
+        finally:
+            if dq is not None:
+                _clear_active_dq(dq)
 
 
 def _find_port(host: str, preferred: int) -> int:
