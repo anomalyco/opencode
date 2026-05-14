@@ -1,6 +1,6 @@
 import { NodeHttpServer } from "@effect/platform-node"
 import * as Log from "@opencode-ai/core/util/log"
-import { ConfigProvider, Context, Effect, Exit, Layer, Ref, Scope } from "effect"
+import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
 import { createServer } from "node:http"
@@ -173,17 +173,14 @@ function setupMdns(opts: ListenOptions, port: number, scope: Scope.Scope) {
 
 function makeStop(state: ListenerState, unpublishMdns: Effect.Effect<void>) {
   return Effect.gen(function* () {
-    const forceRequested = yield* Ref.make(false)
     const forceCloseOnce = yield* Effect.cached(forceClose(state).pipe(Effect.ignore))
     const closeScopeOnce = yield* Effect.cached(Scope.close(state.scope, Exit.void).pipe(Effect.ignore))
 
     return (close?: boolean) =>
       Effect.gen(function* () {
-        if (close) yield* Ref.set(forceRequested, true)
         yield* unpublishMdns
         if (close) yield* forceCloseOnce
         yield* closeScopeOnce
-        if (yield* Ref.get(forceRequested)) yield* forceCloseOnce
       })
   })
 }
