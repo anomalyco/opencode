@@ -29,13 +29,21 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
   // 这里强制转正斜杠以对齐 store key 的实际形态(查看器-自动刷新 fix 2026-04-28)。
   const toUnix = (p: string) => p.replace(/\\/g, "/")
 
-  // 主路径:Edit/Write/ApplyPatch tool 直发的 file.edited(单文件刷新,不动目录树)
+  // 主路径:Edit/Write/ApplyPatch tool 直发的 file.edited
+  // FORK: AI 创建新文件场景刷父目录 — 修"AI 生成后文件树不刷新,需 F5 才出现"bug 2026-05-15
+  // file.edited 不带 kind 字段,无法区分 create/modify。但路径既不在 hasFile 又未 open
+  // ⇒ 大概率是新建文件 → 若父目录已加载(无论展开/折叠),refresh 父目录把新文件加进 children
+  // 让用户下次展开时浮现。已存在文件的 edit 走 loadFile 路径(原逻辑保留)。
   if (event.type === "file.edited") {
     const path = toUnix(ops.normalize(rawPath))
     console.debug("[fs.watcher] file.edited", { rawPath, normalized: path })
     if (!path) return
     if (path.startsWith(".git/")) return
-    if (!ops.hasFile(path) && !ops.isOpen?.(path)) return
+    if (!ops.hasFile(path) && !ops.isOpen?.(path)) {
+      const parent = path.split("/").slice(0, -1).join("/")
+      if (ops.isDirLoaded(parent)) ops.refreshDir(parent)
+      return
+    }
     if (ops.isDirty?.(path)) {
       ops.notifyDirtyConflict?.(path)
       return
