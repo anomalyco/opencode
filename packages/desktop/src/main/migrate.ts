@@ -6,7 +6,8 @@ import { join } from "node:path"
 import { CHANNEL } from "./constants"
 import { getStore } from "./store"
 
-const TAURI_MIGRATED_KEY = "tauriMigrated"
+// v2: fixes workspace store name remapping (base64 → pathKey+checksum)
+const TAURI_MIGRATED_KEY = "tauriMigrated2"
 
 // Resolve the directory where Tauri stored its .dat files for the given app identifier.
 // Mirrors Tauri's AppLocalData / AppData resolution per OS.
@@ -31,6 +32,38 @@ function tauriAppId() {
   return app.isPackaged ? TAURI_APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"
 }
 
+// Decode a URL-safe base64 string (Tauri's old workspace filename encoding).
+function base64Decode(value: string) {
+  const binary = atob(value.replace(/-/g, "+").replace(/_/g, "/"))
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
+  return new TextDecoder().decode(bytes)
+}
+
+// Normalize a filesystem path to a canonical key (forward slashes, no trailing slash).
+function pathKey(path: string) {
+  const value = path.replaceAll("\\", "/")
+  const trimmed = value.replace(/\/+$/, "")
+  // Bare drive letter like "C:" → "C:/"
+  if (trimmed.length === 2 && trimmed[1] === ":") return trimmed + "/"
+  return trimmed
+}
+
+// FNV-1a 32-bit checksum (matches packages/core/src/util/encode.ts).
+function checksum(content: string) {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < content.length; i++) {
+    hash ^= content.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+// Derive the electron-store name for a workspace path (matches persist.ts:workspaceStorage).
+function workspaceStoreName(dir: string) {
+  const head = (dir.slice(0, 12) || "workspace").replace(/[^a-zA-Z0-9._-]/g, "-")
+  return `opencode.workspace.${head}.${checksum(dir)}.dat`
+}
+
 // Migrate a single Tauri .dat file into the corresponding electron-store.
 // `opencode.settings.dat` is special: it maps to the `opencode.settings` store
 // (the electron-store name without the `.dat` extension). All other .dat files
@@ -46,9 +79,24 @@ function migrateFile(datPath: string, filename: string) {
   }
 
   // opencode.settings.dat → the electron settings store ("opencode.settings").
-  // All other .dat files keep their full filename as the store name so they match
-  // what the renderer passes via IPC (e.g. "default.dat", "opencode.global.dat").
-  const storeName = filename === "opencode.settings.dat" ? "opencode.settings" : filename
+  // Workspace .dat files from old Tauri builds use base64-encoded paths as the
+  // filename segment (e.g. "Qzpc" = base64("C:\")). Decode and remap to the
+  // current workspaceStorage naming scheme so session data lands in the right store.
+  let storeName = filename === "opencode.settings.dat" ? "opencode.settings" : filename
+  const workspaceMatch = filename.match(/^opencode\.workspace\.([^.]+)\.[^.]+\.dat$/)
+  if (workspaceMatch) {
+    try {
+      const decoded = base64Decode(workspaceMatch[1])
+      const key = pathKey(decoded)
+      const remapped = workspaceStoreName(key)
+      if (remapped !== filename) {
+        log.log("tauri migration: remapping workspace store", filename, "→", remapped)
+        storeName = remapped
+      }
+    } catch {
+      // not a base64-encoded name (already new format), keep original
+    }
+  }
   const target = getStore(storeName)
   const migrated: string[] = []
   const skipped: string[] = []
