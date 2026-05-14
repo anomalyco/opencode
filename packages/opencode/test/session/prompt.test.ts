@@ -1508,7 +1508,7 @@ it.instance(
       const sh = yield* prompt
         .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
         .pipe(Effect.forkChild)
-      yield* Effect.sleep(50)
+      yield* waitForBusy(chat.id)
 
       const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
       yield* Effect.sleep(50)
@@ -1545,7 +1545,7 @@ it.instance(
       const sh = yield* prompt
         .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
         .pipe(Effect.forkChild)
-      yield* Effect.sleep(50)
+      yield* waitForBusy(chat.id)
 
       const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
       const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
