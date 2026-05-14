@@ -1,6 +1,5 @@
 import { Schema } from "effect"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { PositiveInt, withStatics } from "@opencode-ai/core/schema"
+import { PositiveInt } from "@opencode-ai/core/schema"
 import { ModelStatus } from "@/provider/model-status"
 
 export const Model = Schema.Struct({
@@ -67,7 +66,7 @@ export const Model = Schema.Struct({
       ),
     ).annotate({ description: "Variant-specific configuration" }),
   ),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 
 export const Info = Schema.Struct({
   api: Schema.optional(Schema.String),
@@ -106,9 +105,7 @@ export const Info = Schema.Struct({
     ),
   ),
   models: Schema.optional(Schema.Record(Schema.String, Model)),
-})
-  .annotate({ identifier: "ProviderConfig" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ProviderConfig" })
 export type Info = Schema.Schema.Type<typeof Info>
 
 export * as ConfigProvider from "./provider"

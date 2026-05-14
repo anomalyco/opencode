@@ -1,11 +1,16 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, expect } from "bun:test"
 import { existsSync } from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Effect, Layer } from "effect"
 import { bootstrap as cliBootstrap } from "../../src/cli/bootstrap"
-import { WithInstance } from "../../src/project/with-instance"
-import { InstanceRuntime } from "../../src/project/instance-runtime"
-import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { InstanceLayer } from "../../src/project/instance-layer"
+import { InstanceStore } from "../../src/project/instance-store"
+import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
+
+const it = testEffect(Layer.mergeAll(InstanceLayer.layer, CrossSpawnSpawner.defaultLayer))
 
 // InstanceBootstrap must run before any code touches the instance —
 // originally tracked by PRs #25389 and #25449, now a permanent
@@ -19,58 +24,64 @@ afterEach(async () => {
   await disposeAllInstances()
 })
 
-async function bootstrapFixture() {
-  return tmpdir({
-    init: async (dir) => {
-      const marker = path.join(dir, "config-hook-fired")
-      const pluginFile = path.join(dir, "plugin.ts")
-      await Bun.write(
-        pluginFile,
-        [
-          `const MARKER = ${JSON.stringify(marker)}`,
-          "export default async () => ({",
-          "  config: async () => {",
-          '    await Bun.write(MARKER, "ran")',
-          "  },",
-          "})",
-          "",
-        ].join("\n"),
-      )
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          plugin: [pathToFileURL(pluginFile).href],
-        }),
-      )
-      return marker
-    },
-  })
-}
-
-test("WithInstance.provide runs InstanceBootstrap before fn", async () => {
-  await using tmp = await bootstrapFixture()
-
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => "ok",
-  })
-
-  expect(existsSync(tmp.extra)).toBe(true)
+const bootstrapFixture = Effect.gen(function* () {
+  const dir = yield* tmpdirScoped({ git: true })
+  const marker = path.join(dir, "config-hook-fired")
+  const pluginFile = path.join(dir, "plugin.ts")
+  yield* Effect.promise(() =>
+    Bun.write(
+      pluginFile,
+      [
+        `const MARKER = ${JSON.stringify(marker)}`,
+        "export default async () => ({",
+        "  config: async () => {",
+        '    await Bun.write(MARKER, "ran")',
+        "  },",
+        "})",
+        "",
+      ].join("\n"),
+    ),
+  )
+  yield* Effect.promise(() =>
+    Bun.write(
+      path.join(dir, "opencode.json"),
+      JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        plugin: [pathToFileURL(pluginFile).href],
+      }),
+    ),
+  )
+  return { directory: dir, marker }
 })
 
-test("CLI bootstrap runs InstanceBootstrap before callback", async () => {
-  await using tmp = await bootstrapFixture()
+it.live("InstanceStore.provide runs InstanceBootstrap before effect", () =>
+  Effect.gen(function* () {
+    const tmp = yield* bootstrapFixture
+    const store = yield* InstanceStore.Service
 
-  await cliBootstrap(tmp.path, async () => "ok")
+    yield* store.provide({ directory: tmp.directory }, Effect.succeed("ok"))
 
-  expect(existsSync(tmp.extra)).toBe(true)
-})
+    expect(existsSync(tmp.marker)).toBe(true)
+  }),
+)
 
-test("InstanceRuntime.reloadInstance runs InstanceBootstrap", async () => {
-  await using tmp = await bootstrapFixture()
+it.live("CLI bootstrap runs InstanceBootstrap before callback", () =>
+  Effect.gen(function* () {
+    const tmp = yield* bootstrapFixture
 
-  await InstanceRuntime.reloadInstance({ directory: tmp.path })
+    yield* Effect.promise(() => cliBootstrap(tmp.directory, async () => "ok"))
 
-  expect(existsSync(tmp.extra)).toBe(true)
-})
+    expect(existsSync(tmp.marker)).toBe(true)
+  }),
+)
+
+it.live("InstanceStore.reload runs InstanceBootstrap", () =>
+  Effect.gen(function* () {
+    const tmp = yield* bootstrapFixture
+    const store = yield* InstanceStore.Service
+
+    yield* store.reload({ directory: tmp.directory })
+
+    expect(existsSync(tmp.marker)).toBe(true)
+  }),
+)

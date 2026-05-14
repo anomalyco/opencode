@@ -2,7 +2,6 @@ import * as Log from "@opencode-ai/core/util/log"
 import path from "path"
 import { pathToFileURL } from "url"
 import os from "os"
-import z from "zod"
 import { mergeDeep } from "remeda"
 import { Global } from "@opencode-ai/core/global"
 import fsNode from "fs/promises"
@@ -262,10 +261,10 @@ export const Info = Schema.Struct({
       }),
       tail_turns: Schema.optional(NonNegativeInt).annotate({
         description:
-          "Number of recent user turns, including their following assistant/tool responses, to serialize into the compaction summary (default: 2)",
+          "Number of recent user turns, including their following assistant/tool responses, to keep verbatim during compaction (default: 2)",
       }),
       preserve_recent_tokens: Schema.optional(NonNegativeInt).annotate({
-        description: "Maximum number of tokens from recent turns to serialize into the compaction summary",
+        description: "Maximum number of tokens from recent turns to preserve verbatim after compaction",
       }),
       reserved: Schema.optional(NonNegativeInt).annotate({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
@@ -357,14 +356,11 @@ function writableGlobal(info: Info) {
   return next
 }
 
-export const ConfigDirectoryTypoError = NamedError.create(
-  "ConfigDirectoryTypoError",
-  z.object({
-    path: z.string(),
-    dir: z.string(),
-    suggestion: z.string(),
-  }),
-)
+export const ConfigDirectoryTypoError = NamedError.create("ConfigDirectoryTypoError", {
+  path: Schema.String,
+  dir: Schema.String,
+  suggestion: Schema.String,
+})
 
 export const layer = Layer.effect(
   Service,
@@ -388,7 +384,7 @@ export const layer = Layer.effect(
         ),
       )
       const parsed = ConfigParse.jsonc(expanded, source)
-      const data = ConfigParse.effectSchema(Info, normalizeLoadedConfig(parsed, source), source)
+      const data = ConfigParse.schema(Info, normalizeLoadedConfig(parsed, source), source)
       if (!("path" in options)) return data
 
       yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
@@ -409,6 +405,16 @@ export const layer = Layer.effect(
 
     const loadGlobal = Effect.fnUntraced(function* () {
       let result: Info = {}
+      // Seed the default global config with the schema for editor completion, but avoid writing when the user
+      // explicitly routes config through env-provided paths or content.
+      if (!Flag.OPENCODE_CONFIG && !Flag.OPENCODE_CONFIG_DIR && !Flag.OPENCODE_CONFIG_CONTENT) {
+        const file = globalConfigFile()
+        if (!existsSync(file)) {
+          yield* fs
+            .writeWithDirs(file, JSON.stringify({ $schema: "https://opencode.ai/config.json" }, null, 2))
+            .pipe(Effect.catch(() => Effect.void))
+        }
+      }
       result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "config.json")))
       result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.json")))
       result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.jsonc")))
@@ -786,7 +792,7 @@ export const layer = Layer.effect(
       let next: Info
       let changed: boolean
       if (!file.endsWith(".jsonc")) {
-        const existing = ConfigParse.effectSchema(Info, ConfigParse.jsonc(before, file), file)
+        const existing = ConfigParse.schema(Info, ConfigParse.jsonc(before, file), file)
         const merged = mergeDeep(writable(existing), patch)
         const serialized = JSON.stringify(merged, null, 2)
         changed = serialized !== before
@@ -794,7 +800,7 @@ export const layer = Layer.effect(
         next = merged
       } else {
         const updated = patchJsonc(before, patch)
-        next = ConfigParse.effectSchema(Info, ConfigParse.jsonc(updated, file), file)
+        next = ConfigParse.schema(Info, ConfigParse.jsonc(updated, file), file)
         changed = updated !== before
         if (changed) yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
       }
