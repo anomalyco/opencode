@@ -8,35 +8,38 @@
 // Effect.provideService calls there are required, not defensive duplication.
 
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Layer, Scope } from "effect"
 import * as Stream from "effect/Stream"
-import { HttpClient, HttpRouter, HttpServerResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpRouter, HttpServerResponse } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { mkdir } from "node:fs/promises"
+import { Auth } from "../../src/auth"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { InstanceRef, WorkspaceRef } from "../../src/effect/instance-ref"
+import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceLayer } from "../../src/project/instance-layer"
 import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
+import { Vcs } from "../../src/project/vcs"
 import { instanceRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/instance-context"
 import { workspaceRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
+import { Session } from "../../src/session/session"
+import { SessionPrompt } from "../../src/session/prompt"
+import { SyncEvent } from "../../src/sync"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
     yield* Effect.promise(() => resetDatabase())
-    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
-        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
         await disposeAllInstances()
         await resetDatabase()
       }),
@@ -44,7 +47,16 @@ const testStateLayer = Layer.effectDiscard(
   }),
 )
 
-const workspaceLayer = Workspace.defaultLayer.pipe(
+const workspaceLayer = Workspace.layer.pipe(
+  Layer.provide(Auth.defaultLayer),
+  Layer.provide(Session.defaultLayer),
+  Layer.provide(SyncEvent.defaultLayer),
+  Layer.provide(SessionPrompt.defaultLayer),
+  Layer.provide(Project.defaultLayer),
+  Layer.provide(Vcs.defaultLayer),
+  Layer.provide(FetchHttpClient.layer),
+  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: true })),
   Layer.provide(InstanceStore.defaultLayer),
   Layer.provide(InstanceBootstrap.defaultLayer),
 )

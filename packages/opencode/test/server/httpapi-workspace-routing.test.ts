@@ -1,5 +1,5 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { describe, expect } from "bun:test"
 import { Context, Effect, Layer, Queue, Ref } from "effect"
 import {
@@ -15,40 +15,52 @@ import * as Socket from "effect/unstable/socket/Socket"
 import Http from "node:http"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
+import { Auth } from "../../src/auth"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import { WorkspaceID } from "../../src/control-plane/schema"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
+import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
+import { Vcs } from "../../src/project/vcs"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import {
   WorkspaceRouteContext,
   workspaceRouterMiddleware,
 } from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
 import { HEADER as FenceHeader } from "../../src/server/shared/fence"
+import { Session } from "../../src/session/session"
+import { SessionPrompt } from "../../src/session/prompt"
 import { Database } from "../../src/storage/db"
+import { SyncEvent } from "../../src/sync"
 import { resetDatabase } from "../fixture/db"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
     yield* Effect.promise(() => resetDatabase())
-    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
-        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
         await resetDatabase()
       }),
     )
   }),
 )
 
-const workspaceLayer = Workspace.defaultLayer.pipe(
+const workspaceLayer = Workspace.layer.pipe(
+  Layer.provide(Auth.defaultLayer),
+  Layer.provide(Session.defaultLayer),
+  Layer.provide(SyncEvent.defaultLayer),
+  Layer.provide(SessionPrompt.defaultLayer),
+  Layer.provide(Project.defaultLayer),
+  Layer.provide(Vcs.defaultLayer),
+  Layer.provide(FetchHttpClient.layer),
+  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: true })),
   Layer.provide(InstanceStore.defaultLayer),
   Layer.provide(InstanceBootstrap.defaultLayer),
 )
