@@ -12,14 +12,29 @@ import { Provider } from "@/provider/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "@/util/filesystem"
 import { Env } from "../../src/env"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { makeRuntime } from "../../src/effect/run-service"
 import { testEffect } from "../lib/effect"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Config } from "@/config/config"
+import { Auth } from "@/auth"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const env = makeRuntime(Env.Service, Env.defaultLayer)
 const set = (k: string, v: string) => env.runSync((svc) => svc.set(k, v))
 const remove = (k: string) => env.runSync((svc) => svc.remove(k))
+
+const providerLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
+  Provider.layer.pipe(
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Env.defaultLayer),
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(Plugin.defaultLayer),
+    Layer.provide(ModelsDev.defaultLayer),
+    Layer.provide(RuntimeFlags.layer(flags)),
+  )
 
 async function run<A, E>(fn: (provider: Provider.Interface) => Effect.Effect<A, E, never>) {
   return AppRuntime.runPromise(
@@ -73,6 +88,29 @@ function paid(providers: Awaited<ReturnType<typeof list>>) {
 }
 
 const it = testEffect(Provider.defaultLayer)
+const experimentalModels = testEffect(providerLayer({ enableExperimentalModels: true }))
+
+const alphaProviderConfig = {
+  provider: {
+    "custom-provider": {
+      name: "Custom Provider",
+      npm: "@ai-sdk/openai-compatible",
+      api: "https://api.custom.com/v1",
+      models: {
+        "active-model": {
+          name: "Active Model",
+        },
+        "alpha-model": {
+          name: "Alpha Model",
+          status: "alpha" as const,
+        },
+      },
+      options: {
+        apiKey: "custom-key",
+      },
+    },
+  },
+}
 
 test("provider loaded from env variable", async () => {
   await using tmp = await tmpdir({
@@ -304,6 +342,26 @@ test("custom provider with npm package", async () => {
     },
   })
 })
+
+it.instance(
+  "filters alpha provider models by default",
+  Effect.gen(function* () {
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    expect(providers[ProviderID.make("custom-provider")].models["active-model"]).toBeDefined()
+    expect(providers[ProviderID.make("custom-provider")].models["alpha-model"]).toBeUndefined()
+  }),
+  { config: alphaProviderConfig },
+)
+
+experimentalModels.instance(
+  "includes alpha provider models when experimental models are enabled",
+  Effect.gen(function* () {
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    expect(providers[ProviderID.make("custom-provider")].models["active-model"]).toBeDefined()
+    expect(providers[ProviderID.make("custom-provider")].models["alpha-model"]).toBeDefined()
+  }),
+  { config: alphaProviderConfig },
+)
 
 test("custom DeepSeek openai-compatible model defaults interleaved reasoning field", async () => {
   await using tmp = await tmpdir({
