@@ -1,12 +1,14 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Layer, Option } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Instance } from "@opencode-ai/core/instance"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { testEffect } from "../lib/effect"
+import { testEffect } from "./lib/effect"
 
-const it = testEffect(Catalog.layer.pipe(Layer.provideMerge(PluginV2.defaultLayer)))
+const instanceLayer = Layer.succeed(Instance.Service, Instance.Service.of({ directory: "test" }))
+const it = testEffect(Catalog.layer.pipe(Layer.provideMerge(PluginV2.defaultLayer), Layer.provide(instanceLayer)))
 
 describe("CatalogV2", () => {
   it.effect("normalizes provider baseURL into endpoint url", () =>

@@ -15,8 +15,6 @@ export type Event =
   | EventPermissionReplied
   | EventSessionDiff
   | EventSessionError
-  | EventInstallationUpdated
-  | EventInstallationUpdateAvailable
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
@@ -42,6 +40,8 @@ export type Event =
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
+  | EventInstallationUpdated
+  | EventInstallationUpdateAvailable
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
@@ -799,8 +799,6 @@ export type GlobalEvent = {
     | EventPermissionReplied
     | EventSessionDiff
     | EventSessionError
-    | EventInstallationUpdated
-    | EventInstallationUpdateAvailable
     | EventQuestionAsked
     | EventQuestionReplied
     | EventQuestionRejected
@@ -826,6 +824,8 @@ export type GlobalEvent = {
     | EventPtyUpdated
     | EventPtyExited
     | EventPtyDeleted
+    | EventInstallationUpdated
+    | EventInstallationUpdateAvailable
     | EventMessageUpdated
     | EventMessageRemoved
     | EventMessagePartUpdated
@@ -2496,22 +2496,6 @@ export type EventSessionError = {
   }
 }
 
-export type EventInstallationUpdated = {
-  id: string
-  type: "installation.updated"
-  properties: {
-    version: string
-  }
-}
-
-export type EventInstallationUpdateAvailable = {
-  id: string
-  type: "installation.update-available"
-  properties: {
-    version: string
-  }
-}
-
 export type EventQuestionAsked = {
   id: string
   type: "question.asked"
@@ -2678,6 +2662,22 @@ export type EventPtyDeleted = {
   type: "pty.deleted"
   properties: {
     id: string
+  }
+}
+
+export type EventInstallationUpdated = {
+  id: string
+  type: "installation.updated"
+  properties: {
+    version: string
+  }
+}
+
+export type EventInstallationUpdateAvailable = {
+  id: string
+  type: "installation.update-available"
+  properties: {
+    version: string
   }
 }
 
@@ -6673,7 +6673,12 @@ export type V2SessionMessagesResponse2 = V2SessionMessagesResponses[keyof V2Sess
 export type V2ModelListData = {
   body?: never
   path?: never
-  query?: never
+  query?: {
+    instance?: {
+      directory?: string
+      workspace?: string
+    }
+  }
   url: "/api/model"
 }
 
@@ -6689,7 +6694,12 @@ export type V2ModelListResponse = V2ModelListResponses[keyof V2ModelListResponse
 export type V2ProviderListData = {
   body?: never
   path?: never
-  query?: never
+  query?: {
+    instance?: {
+      directory?: string
+      workspace?: string
+    }
+  }
   url: "/api/provider"
 }
 
@@ -6707,7 +6717,12 @@ export type V2ProviderGetData = {
   path: {
     providerID: string
   }
-  query?: never
+  query?: {
+    instance?: {
+      directory?: string
+      workspace?: string
+    }
+  }
   url: "/api/provider/{providerID}"
 }
 

@@ -4,6 +4,9 @@ This note expands the `ERR`, `RENDER`, and `HTTP` tracks from
 [`todo.md`](./todo.md). It is the current reference for expected failures,
 typed service errors, and HTTP error boundaries.
 
+For the migration architecture and queue, see
+[`error-boundaries-plan.md`](./error-boundaries-plan.md).
+
 ## Goal
 
 - Expected service failures live on the Effect error channel.
