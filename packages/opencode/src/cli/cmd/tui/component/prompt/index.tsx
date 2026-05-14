@@ -967,12 +967,11 @@ export function Prompt(props: PromptProps) {
           title: "Next prompt history",
           category: "Prompt",
           run() {
-            if (input.cursorOffset !== input.plainText.length) {
-              if (
-                input.scrollY + input.visualCursor.visualRow ===
-                Math.max(0, input.editorView.getTotalVirtualLineCount() - 1)
-              )
-                input.cursorOffset = input.plainText.length
+            const lastRow =
+              input.scrollY + input.visualCursor.visualRow ===
+              Math.max(0, input.editorView.getTotalVirtualLineCount() - 1)
+            if (!lastRow || input.visualCursor.offset !== input.editorView.getVisualEOL().offset) {
+              if (lastRow) input.gotoBufferEnd()
               return false
             }
 
@@ -982,7 +981,7 @@ export function Prompt(props: PromptProps) {
             setStore("prompt", item)
             setStore("mode", item.mode ?? "normal")
             restoreExtmarksFromParts(item.parts)
-            input.cursorOffset = input.plainText.length
+            input.gotoBufferEnd()
           },
         },
       ],
