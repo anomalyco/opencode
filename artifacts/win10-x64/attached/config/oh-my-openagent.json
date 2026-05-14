@@ -2,63 +2,63 @@
   "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
   "agents": {
     "hephaestus": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "oracle": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "librarian": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "explore": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "multimodal-looker": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "prometheus": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "metis": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "momus": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "atlas": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "sisyphus": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "sisyphus-junior": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     }
   },
   "categories": {
     "visual-engineering": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "ultrabrain": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "deep": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "artistry": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "quick": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "unspecified-low": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "unspecified-high": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     },
     "writing": {
-      "model": "opencode/gpt-5-nano"
+      "model": "enterprise-llm/your-model-name"
     }
   }
 }

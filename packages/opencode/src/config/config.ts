@@ -284,17 +284,19 @@ async function loadPlugin(dir: string) {
     plugins.push(pathToFileURL(item).href)
   }
 
-  // scan directory plugins: plugins/*/package.json
-  for (const item of await Glob.scan("{plugin,plugins}/*/package.json", {
-    cwd: dir,
-    absolute: true,
-    dot: true,
-    symlink: true,
-  })) {
-    const pluginDir = path.dirname(item)
-    if (seen.has(pluginDir)) continue
-    seen.add(pluginDir)
-    plugins.push(pathToFileURL(pluginDir).href)
+  // scan directory plugins: plugins/*/package.json (requires OPENCODE_SCAN_DIR_PLUGINS=1)
+  if (process.env.OPENCODE_SCAN_DIR_PLUGINS === "1") {
+    for (const item of await Glob.scan("{plugin,plugins}/*/package.json", {
+      cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
+    })) {
+      const pluginDir = path.dirname(item)
+      if (seen.has(pluginDir)) continue
+      seen.add(pluginDir)
+      plugins.push(pathToFileURL(pluginDir).href)
+    }
   }
 
   return plugins
