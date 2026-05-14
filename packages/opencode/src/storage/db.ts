@@ -45,7 +45,7 @@ export const getPath = (flags?: ChannelDbFlags) => {
 
 export type Transaction = SQLiteTransaction<"sync", void>
 
-type Client = SQLiteBunDatabase
+type Client = ReturnType<typeof init>
 
 type Journal = { sql: string; timestamp: number; name: string }[]
 
