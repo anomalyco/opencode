@@ -43,7 +43,6 @@ COPY --from=build /app/packages/opencode/dist/opencode-linux-x64/bin/opencode /u
 COPY docker/AGENTS.md /etc/opencode/AGENTS.md
 COPY docker/.gitignore /etc/opencode/.gitignore
 COPY docker/opencode.jsonc /etc/opencode/opencode.jsonc
-COPY docker/tool /etc/opencode/tool
 
 EXPOSE 8888
 
