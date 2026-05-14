@@ -220,8 +220,9 @@ describe("file.edited tool-direct invalidation", () => {
     expect(conflicts).toEqual(["src/draft.ts"])
   })
 
-  test("ignores file.edited for files not open or cached", () => {
+  test("does not loadFile for files not open or cached, and does not refresh dir when parent not loaded", () => {
     const loads: string[] = []
+    const refresh: string[] = []
 
     invalidateFromWatcher(
       {
@@ -235,11 +236,67 @@ describe("file.edited tool-direct invalidation", () => {
         loadFile: (path) => loads.push(path),
         node: () => undefined,
         isDirLoaded: () => false,
-        refreshDir: () => {},
+        refreshDir: (path) => refresh.push(path),
       },
     )
 
     expect(loads).toEqual([])
+    expect(refresh).toEqual([])
+  })
+
+  // FORK: bug-repro AI 创建新文件后右侧文件树不刷新 2026-05-15
+  // 触发路径:user 之前展开过某目录(loaded: true)后折叠(expanded: false 但 loaded 缓存保留)→
+  // AI 写入新文件 → file.edited 老路径 hasFile=false + isOpen=false 直接 return → 目录树没刷 →
+  // user 重新展开看到旧 children 列表 → 唯一破解是 reset 整个 tree(F5 / app 重启)。
+  // 修法:!hasFile && !isOpen 时若 isDirLoaded(parent) → refreshDir(parent),
+  // 让新文件浮现到下次展开的列表里。
+  test("refreshes parent dir on file.edited when path is new but parent loaded (AI create-file scenario)", () => {
+    const loads: string[] = []
+    const refresh: string[] = []
+
+    invalidateFromWatcher(
+      {
+        type: "file.edited",
+        properties: { file: "output/newfile.html" },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: () => false,
+        isOpen: () => false,
+        loadFile: (path) => loads.push(path),
+        node: () => undefined,
+        // 父目录 output 之前展开过(loaded=true),即使现在折叠状态 isDirLoaded 仍 true
+        isDirLoaded: (path) => path === "output",
+        refreshDir: (path) => refresh.push(path),
+      },
+    )
+
+    // 文件没在 cache/open,不应 loadFile
+    expect(loads).toEqual([])
+    // 但父目录已加载,应刷父目录让新文件浮现
+    expect(refresh).toEqual(["output"])
+  })
+
+  test("file.edited new file at root refreshes root when root loaded", () => {
+    const refresh: string[] = []
+
+    invalidateFromWatcher(
+      {
+        type: "file.edited",
+        properties: { file: "newfile.md" },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: () => false,
+        isOpen: () => false,
+        loadFile: () => {},
+        node: () => undefined,
+        isDirLoaded: (path) => path === "",
+        refreshDir: (path) => refresh.push(path),
+      },
+    )
+
+    expect(refresh).toEqual([""])
   })
 
   test("ignores file.edited for .git paths", () => {
