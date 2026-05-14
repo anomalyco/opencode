@@ -1547,3 +1547,107 @@ describe("session.message-v2.fromError", () => {
     expect(result.name).toBe("MessageAbortedError")
   })
 })
+
+describe("session.message-v2.filterCompacted", () => {
+  // Regression for double auto-compaction: after a successful auto-compaction,
+  // the next runLoop iteration walks `msgs` backward to find `lastFinished` and
+  // gates the overflow check on `lastFinished.summary !== true`. The reorder
+  // added in PR #27145 puts the array in the order
+  //   [compaction-user, summary-assistant, ...tail..., continue-user]
+  // so the backward walk hits a finished tail assistant before the summary,
+  // bypasses the `summary !== true` guard, and triggers a second compaction.
+  test("backward walk surfaces summary assistant, not pre-compaction overflow", () => {
+    const TAIL_USER = MessageID.make("msg_001")
+    const OVERFLOW_ASSISTANT = MessageID.make("msg_002")
+    const COMPACTION_USER = MessageID.make("msg_003")
+    const SUMMARY_ASSISTANT = MessageID.make("msg_004")
+    const CONTINUE_USER = MessageID.make("msg_005")
+
+    const tailUser: MessageV2.WithParts = {
+      info: userInfo(TAIL_USER),
+      parts: [
+        {
+          ...basePart(TAIL_USER, "p1"),
+          type: "text",
+          text: "original prompt",
+        },
+      ] as MessageV2.Part[],
+    }
+
+    const overflowAssistant: MessageV2.WithParts = {
+      info: {
+        ...assistantInfo(OVERFLOW_ASSISTANT, TAIL_USER),
+        finish: "tool-calls",
+        tokens: { input: 280_000, output: 200, reasoning: 0, cache: { read: 0, write: 0 }, total: 280_200 },
+      } as MessageV2.Assistant,
+      parts: [],
+    }
+
+    const compactionUser: MessageV2.WithParts = {
+      info: userInfo(COMPACTION_USER),
+      parts: [
+        {
+          ...basePart(COMPACTION_USER, "p1"),
+          type: "compaction",
+          auto: true,
+          tail_start_id: TAIL_USER,
+        },
+      ] as MessageV2.Part[],
+    }
+
+    const summaryAssistant: MessageV2.WithParts = {
+      info: {
+        ...assistantInfo(SUMMARY_ASSISTANT, COMPACTION_USER),
+        summary: true,
+        finish: "stop",
+        tokens: { input: 150_000, output: 1_500, reasoning: 0, cache: { read: 0, write: 0 }, total: 151_500 },
+      } as MessageV2.Assistant,
+      parts: [],
+    }
+
+    const continueUser: MessageV2.WithParts = {
+      info: userInfo(CONTINUE_USER),
+      parts: [
+        {
+          ...basePart(CONTINUE_USER, "p1"),
+          type: "text",
+          text: "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
+          synthetic: true,
+          metadata: { compaction_continue: true },
+        },
+      ] as MessageV2.Part[],
+    }
+
+    // MessageV2.stream yields newest-first, which is what filterCompacted expects.
+    const reverseChronological = [continueUser, summaryAssistant, compactionUser, overflowAssistant, tailUser]
+    const filtered = MessageV2.filterCompacted(reverseChronological)
+
+    // Sanity check: both the summary and the overflow assistant survive the filter
+    // (tail is retained via tail_start_id), so the bug is purely about which one
+    // the backward walk picks up first.
+    const ids = filtered.map((m) => m.info.id)
+    expect(ids).toContain(SUMMARY_ASSISTANT)
+    expect(ids).toContain(OVERFLOW_ASSISTANT)
+
+    // Replicate the backward walk in SessionPrompt.runLoop
+    // (packages/opencode/src/session/prompt.ts ~1660).
+    let lastUser: MessageV2.User | undefined
+    let lastFinished: MessageV2.Assistant | undefined
+    for (let i = filtered.length - 1; i >= 0; i--) {
+      const msg = filtered[i]
+      if (!lastUser && msg.info.role === "user") lastUser = msg.info
+      if (!lastFinished && msg.info.role === "assistant" && msg.info.finish) lastFinished = msg.info
+      if (lastUser && lastFinished) break
+    }
+
+    expect(lastUser?.id).toBe(CONTINUE_USER)
+    // The runLoop guard at prompt.ts:1722 reads:
+    //   lastFinished.summary !== true && isOverflow(lastFinished.tokens)
+    // For that guard to behave correctly post-compaction, `lastFinished` MUST be
+    // the summary assistant. If the backward walk picks the pre-compaction
+    // overflow assistant instead, the guard fails open and a second
+    // compaction.create fires immediately.
+    expect(lastFinished?.id).toBe(SUMMARY_ASSISTANT)
+    expect(lastFinished?.summary).toBe(true)
+  })
+})
