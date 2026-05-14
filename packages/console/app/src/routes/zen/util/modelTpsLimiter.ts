@@ -5,7 +5,7 @@ import { UsageInfo } from "./provider/provider"
 export function createModelTpsLimiter(providers: { id: string; model: string; tpsGoal?: number }[]) {
   const tpsGoals = Object.fromEntries(
     providers.flatMap((p) => {
-      return p.tpsGoal ? [[`${p.id}/${p.model}`, p.tpsGoal]] : []
+      return p.tpsGoal ? [[`${p.id}/${p.model}/${p.tpsGoal}`, p.tpsGoal]] : []
     }),
   )
   const ids = Object.keys(tpsGoals)
@@ -56,11 +56,17 @@ export function createModelTpsLimiter(providers: { id: string; model: string; tp
         }),
       )
     },
-    track: async (provider: string, model: string, tsFirstByte: number, tsLastByte: number, usageInfo: UsageInfo) => {
-      const id = `${provider}/${model}`
-      if (!ids.includes(id)) return
-      const tpsGoal = tpsGoals[id]
+    track: async (
+      provider: string,
+      model: string,
+      tpsGoal: number | undefined,
+      tsFirstByte: number,
+      tsLastByte: number,
+      usageInfo: UsageInfo,
+    ) => {
       if (!tpsGoal) return
+      const id = `${provider}/${model}/${tpsGoal}`
+      if (!ids.includes(id)) return
       if (tsFirstByte <= 0 || tsLastByte <= 0) return
       const tokens = usageInfo.outputTokens
       if (tokens <= 10) return

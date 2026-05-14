@@ -300,6 +300,7 @@ export const dict = {
   "mcp.status.connected": "povezano",
   "mcp.status.failed": "neuspjelo",
   "mcp.status.needs_auth": "potrebna autentifikacija",
+  "mcp.auth.clickToAuthenticate": "Kliknite za autentifikaciju",
   "mcp.status.disabled": "onemogućeno",
 
   "dialog.fork.empty": "Nema poruka za fork",

@@ -5,7 +5,7 @@ import { pathToFileURL } from "url"
 import { Effect, Layer, Result, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Tool } from "@/tool/tool"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
@@ -15,7 +15,9 @@ import { Question } from "@/question"
 import { Todo } from "@/session/todo"
 import { Skill } from "@/skill"
 import { Agent } from "@/agent/agent"
+import { BackgroundJob } from "@/background/job"
 import { Session } from "@/session/session"
+import { SessionStatus } from "@/session/status"
 import { Provider } from "@/provider/provider"
 import { Git } from "@/git"
 import { LSP } from "@/lsp/lsp"
@@ -29,46 +31,53 @@ import { InstanceState } from "@/effect/instance-state"
 import { Reference } from "@/reference/reference"
 import { ProviderID, ModelID } from "@/provider/schema"
 import { ToolJsonSchema } from "@/tool/json-schema"
+import { MessageID, SessionID } from "@/session/schema"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const node = CrossSpawnSpawner.defaultLayer
-const originalExperimentalScout = Flag.OPENCODE_EXPERIMENTAL_SCOUT
 const configLayer = TestConfig.layer({
   directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
 })
 
-const registryLayer = ToolRegistry.layer.pipe(
-  Layer.provide(configLayer),
-  Layer.provide(Plugin.defaultLayer),
-  Layer.provide(Question.defaultLayer),
-  Layer.provide(Todo.defaultLayer),
-  Layer.provide(Skill.defaultLayer),
-  Layer.provide(Agent.defaultLayer),
-  Layer.provide(Session.defaultLayer),
-  Layer.provide(Provider.defaultLayer),
-  Layer.provide(Git.defaultLayer),
-  Layer.provide(Reference.defaultLayer),
-  Layer.provide(LSP.defaultLayer),
-  Layer.provide(Instruction.defaultLayer),
-  Layer.provide(AppFileSystem.defaultLayer),
-  Layer.provide(Bus.layer),
-  Layer.provide(FetchHttpClient.layer),
-  Layer.provide(Format.defaultLayer),
-  Layer.provide(node),
-  Layer.provide(Ripgrep.defaultLayer),
-  Layer.provide(Truncate.defaultLayer),
+const registryLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
+  ToolRegistry.layer
+    .pipe(
+      Layer.provide(configLayer),
+      Layer.provide(Plugin.defaultLayer),
+      Layer.provide(Question.defaultLayer),
+      Layer.provide(Todo.defaultLayer),
+      Layer.provide(Skill.defaultLayer),
+      Layer.provide(Agent.defaultLayer),
+      Layer.provide(Session.defaultLayer),
+      Layer.provide(Layer.mergeAll(SessionStatus.defaultLayer, BackgroundJob.defaultLayer)),
+      Layer.provide(Provider.defaultLayer),
+      Layer.provide(Git.defaultLayer),
+      Layer.provide(Reference.defaultLayer),
+      Layer.provide(LSP.defaultLayer),
+      Layer.provide(Instruction.defaultLayer),
+      Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(Bus.layer),
+      Layer.provide(FetchHttpClient.layer),
+      Layer.provide(Format.defaultLayer),
+      Layer.provide(node),
+      Layer.provide(Ripgrep.defaultLayer),
+      Layer.provide(Truncate.defaultLayer),
+    )
+    .pipe(Layer.provide(RuntimeFlags.layer(flags)))
+
+const it = testEffect(Layer.mergeAll(registryLayer(), node, Agent.defaultLayer))
+const scout = testEffect(Layer.mergeAll(registryLayer({ experimentalScout: true }), node, Agent.defaultLayer))
+const background = testEffect(
+  Layer.mergeAll(registryLayer({ experimentalBackgroundSubagents: true }), node, Agent.defaultLayer),
 )
 
-const it = testEffect(Layer.mergeAll(registryLayer, node, Agent.defaultLayer))
-
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_SCOUT = originalExperimentalScout
   await disposeAllInstances()
 })
 
 describe("tool.registry", () => {
   it.instance("hides repo research tools unless experimental", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_SCOUT = false
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
 
@@ -77,14 +86,48 @@ describe("tool.registry", () => {
     }),
   )
 
-  it.instance("shows repo research tools when experimental scout is enabled", () =>
+  scout.instance("shows repo research tools when experimental scout is enabled", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_SCOUT = true
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
 
       expect(ids).toContain("repo_clone")
       expect(ids).toContain("repo_overview")
+    }),
+  )
+
+  it.instance("hides task_status unless experimental background subagents are enabled", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).not.toContain("task_status")
+    }),
+  )
+
+  it.instance("hides task background parameter unless experimental background subagents are enabled", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agent = yield* Agent.Service
+      const build = yield* agent.get("build")
+      if (!build) throw new Error("build agent not found")
+      const task = (yield* registry.tools({
+        providerID: ProviderID.opencode,
+        modelID: ModelID.make("test"),
+        agent: build,
+      })).find((tool) => tool.id === "task")
+
+      expect(task?.jsonSchema).toBeDefined()
+      expect((task?.jsonSchema?.properties as Record<string, unknown> | undefined)?.background).toBeUndefined()
+    }),
+  )
+
+  background.instance("shows task_status when experimental background subagents are enabled", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).toContain("task_status")
     }),
   )
 
@@ -180,7 +223,7 @@ describe("tool.registry", () => {
       const promptTools = yield* registry.tools({
         providerID: ProviderID.opencode,
         modelID: ModelID.make("test"),
-        agent: yield* agents.get(yield* agents.defaultAgent()),
+        agent: yield* agents.defaultInfo(),
       })
       const promptTool = promptTools.find((tool) => tool.id === "sql")
       if (!promptTool) throw new Error("custom sql tool was not returned for prompts")
@@ -190,6 +233,51 @@ describe("tool.registry", () => {
         },
         required: ["query"],
       })
+    }),
+  )
+
+  it.instance("preserves attachments from structured custom tool results", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const customTools = path.join(test.directory, ".opencode", "tools")
+      const pluginTool = pathToFileURL(path.resolve(import.meta.dir, "../../../plugin/src/tool.ts")).href
+      yield* Effect.promise(() => fs.mkdir(customTools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(customTools, "image.ts"),
+          [
+            `import { tool } from ${JSON.stringify(pluginTool)}`,
+            "export default tool({",
+            "  description: 'image tool',",
+            "  args: {},",
+            "  execute: async () => ({",
+            "    output: 'here is an image',",
+            "    attachments: [{ type: 'file', mime: 'image/png', filename: 'picture.png', url: 'data:image/png;base64,AAAA' }],",
+            "  }),",
+            "})",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((tool) => tool.id === "image")
+      if (!loaded) throw new Error("custom image tool was not loaded")
+      const agents = yield* Agent.Service
+      const result = yield* loaded.execute({}, {
+        sessionID: SessionID.make("ses_test"),
+        messageID: MessageID.make("msg_test"),
+        agent: (yield* agents.defaultInfo()).name,
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      } satisfies Tool.Context)
+
+      expect(result.output).toBe("here is an image")
+      expect(result.attachments).toEqual([
+        { type: "file", mime: "image/png", filename: "picture.png", url: "data:image/png;base64,AAAA" },
+      ])
     }),
   )
 
