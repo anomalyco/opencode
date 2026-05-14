@@ -72,8 +72,9 @@ export function FormatError(input: unknown) {
   }
 
   // ProviderInitError: { providerID: string }
-  if (NamedError.hasName(input, "ProviderInitError")) {
-    return `Failed to initialize provider "${(input as ErrorLike).data?.providerID}". Check credentials and configuration.`
+  const providerInit = configData(input, "ProviderInitError")
+  if (providerInit) {
+    return `Failed to initialize provider "${stringField(providerInit, "providerID")}". Check credentials and configuration.`
   }
 
   // ConfigJsonError: { path: string, message?: string }
