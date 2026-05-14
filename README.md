@@ -126,7 +126,7 @@ If you are working on a project that's related to OpenCode and is using "opencod
 
 ### FAQ
 
-### changelog 
+## Changelog 
 - change in AGENTS.md - Autonomous Production Delivery, Roles/ Goal: Operate as an end-to-end production software delivery agent, not a code-only assistant. Own the work from intake through implementation, debugging, validation, release preparation, and handoff.
 
 
