@@ -5,6 +5,7 @@
 
 | feat-id | 状态 | 简介 |
 |---|---|---|
+| [file-tree-llm-write-refresh](./file-tree-llm-write-refresh/) | done | AI 创建新文件后右侧文件树自动浮现 — `file.edited` watcher 加父目录刷新分支,修"loaded:true + expanded:false 缓存目录里新文件需 F5 才出现"bug;R5 bug-repro 测试先行 |
 | [html-viewer-ux-polish](./html-viewer-ux-polish/) | done | HTML 预览 UX 优化 — 去顶部 toolbar + iframe 内右键桥接(postMessage)弹 DeskFox 菜单 + 左键点 iframe 内菜单消失 + 阈值 2MB→10MB + CodeMirror HTML 编辑高亮;R4 第 6 笔本季(超配,user 授权)|
 | [html-viewer-allow-scripts](./html-viewer-allow-scripts/) | done | HTML 预览 iframe 开 `allow-scripts` — 解决 PPT/Slides 翻页按钮等内嵌 JS 失效问题(反转 md-office-improvements spec A1.9,跨 origin 论证 MDN 警告不适用)|
 | [file-tree-dnd](./file-tree-dnd/) | done | 文件树拖放移动 — 全功能(核心+多选+剪切粘贴+撤销+外部拖入) |
