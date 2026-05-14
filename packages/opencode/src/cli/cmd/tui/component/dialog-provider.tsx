@@ -8,7 +8,7 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
-import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2"
+import type { ProviderAuthAuthorization, ProviderAuthMethod, LocalInstance } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
 import * as Clipboard from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
@@ -26,6 +26,7 @@ const PROVIDER_PRIORITY: Record<string, number> = {
 }
 
 const CUSTOM_PROVIDER_OPTION_VALUE = "__opencode_custom_provider__"
+const LOCAL_PROVIDER_OPTION_VALUE = "__opencode_local_provider__"
 const CUSTOM_PROVIDER_ID = /^[a-z0-9][a-z0-9-_]*$/
 
 type ProviderOptionBase = {
@@ -42,6 +43,9 @@ type ProviderOption =
     })
   | (ProviderOptionBase & {
       type: "custom"
+    })
+  | (ProviderOptionBase & {
+      type: "local"
     })
 
 export function providerOptions(list: { id: string; name: string }[]): ProviderOption[] {
@@ -63,6 +67,13 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Providers",
       })),
     ),
+    {
+      type: "local",
+      title: "Local (LAN)",
+      value: LOCAL_PROVIDER_OPTION_VALUE,
+      description: "Scan for llama-swap on local network",
+      category: "Providers",
+    },
     {
       type: "custom",
       title: "Other",
@@ -113,6 +124,18 @@ export function createDialogProviderOptions() {
     return pipe(
       providerOptions(sync.data.provider_next.all),
       map((provider) => {
+        if (provider.type === "local") {
+          return {
+            title: provider.title,
+            value: provider.value,
+            description: provider.description,
+            category: provider.category,
+            async onSelect() {
+              dialog.replace(() => <DialogLocalScan />)
+            },
+          }
+        }
+
         if (provider.type === "custom") {
           return {
             title: provider.title,
@@ -453,4 +476,61 @@ async function PromptsMethod(props: PromptsMethodProps) {
     inputs[prompt.key] = value
   }
   return inputs
+}
+
+function DialogLocalScan() {
+  const { theme } = useTheme()
+  const sdk = useSDK()
+  const dialog = useDialog()
+  const toast = useToast()
+
+  onMount(async () => {
+    const result = await sdk.client.local.scan({ directory: sdk.directory })
+    if (result.error || !result.data) {
+      toast.show({ variant: "error", message: "Scan failed: " + String(result.error ?? "no data") })
+      dialog.clear()
+      return
+    }
+    const instances = result.data
+    if (instances.length === 0) {
+      toast.show({ variant: "info", message: "No local llama-swap instances found on the network" })
+      dialog.clear()
+      return
+    }
+    dialog.replace(() => (
+      <DialogSelect
+        title="Local providers"
+        options={instances.map((i) => ({
+          title: i.name,
+          value: i,
+          description: `${i.host}:${i.port}${i.models.length > 0 ? ` · ${i.models.length} model${i.models.length !== 1 ? "s" : ""}` : ""}`,
+          category: i.configuredProviderID ? "Already added" : "Available",
+          disabled: Boolean(i.configuredProviderID),
+          gutter: i.configuredProviderID ? () => <text fg={theme.success}>✓</text> : undefined,
+        }))}
+        onSelect={async (opt) => {
+          const i = opt.value as LocalInstance
+          const connectResult = await sdk.client.local.connect({
+            directory: sdk.directory,
+            localConnectPayload: { id: i.id, name: i.name, baseURL: i.baseURL },
+          })
+          if (connectResult.error) {
+            toast.show({ variant: "error", message: `Failed to add ${i.name}: ${String(connectResult.error)}` })
+            return
+          }
+          toast.show({ variant: "info", message: `Added ${i.name}. Restart OpenCode to use it.` })
+          dialog.clear()
+        }}
+      />
+    ))
+  })
+
+  return (
+    <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
+      <text attributes={TextAttributes.BOLD} fg={theme.text}>
+        Local providers
+      </text>
+      <text fg={theme.textMuted}>Scanning local network…</text>
+    </box>
+  )
 }
