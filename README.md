@@ -131,7 +131,7 @@ added /skills auto-debug
 - a standalone skill that codifies the debugging mindset, failure workflow, failure classification, anti-patterns, and evidence/reporting expectations referenced from `AGENTS.md`
 
 ### Thank you
-Thank you for (anomalyco)[https://github.com/anomalyco]
+Thank you for [anomalyco](https://github.com/anomalyco)
 
 #### How is this different from Claude Code?
 
