@@ -13,7 +13,7 @@ const log = Log.create({ service: "ensure-dev-server" })
  * 지정 포트가 LISTEN 중인지 빠르게 확인한다.
  * lsof/ss/netstat 없이 TCP connect 시도만으로 판별 — `(echo > /dev/tcp/...)` 의 Node 버전.
  */
-function probePort(port: number, host = "127.0.0.1", timeoutMs = 250): Promise<boolean> {
+export function probePort(port: number, host = "127.0.0.1", timeoutMs = 250): Promise<boolean> {
   return new Promise((resolve) => {
     const sock = createConnection({ host, port })
     const done = (ok: boolean) => {
@@ -37,7 +37,7 @@ async function waitForPort(port: number, timeoutMs: number, abort: AbortSignal):
   return false
 }
 
-function serveUrl(port: number): string {
+export function serveUrl(port: number): string {
   // 학생에게 안내할 외부 접근 주소. JUPYTERHUB_USER/OPENCODE_SERVE_DOMAIN 환경변수가 있으면 외부 URL,
   // 없으면 로컬 URL 로 폴백.
   const user = process.env["JUPYTERHUB_USER"]
@@ -46,7 +46,7 @@ function serveUrl(port: number): string {
   return `http://localhost:${port}/`
 }
 
-export const EnsureDevServerTool = Tool.define("ensure_dev_server", {
+export const EnsureDevServerTool = Tool.define("ensure_dev_server", async () => ({
   description: DESCRIPTION,
   parameters: z.object({
     cwd: z.string().describe(`서버를 실행할 작업 디렉토리 (기본값 ${Instance.directory})`).optional(),
@@ -136,4 +136,4 @@ export const EnsureDevServerTool = Tool.define("ensure_dev_server", {
       ms,
     })
   },
-})
+}))
