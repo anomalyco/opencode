@@ -32,7 +32,8 @@ async function probeLocalhost(): Promise<LocalLlamaSwapService[]> {
         })
         .then((body) => {
           if (!body?.data) return null
-          return { name: `localhost:${port}`, host: "127.0.0.1", port, baseURL } satisfies LocalLlamaSwapService
+          const hostname = require("os").hostname().replace(/\.local$/, "")
+          return { name: hostname, host: "127.0.0.1", port, baseURL } satisfies LocalLlamaSwapService
         })
         .catch(() => null)
         .finally(() => clearTimeout(timer))
@@ -52,7 +53,8 @@ export async function scanLlamaSwap(timeoutMs = 4000): Promise<Array<LocalLlamaS
         const host = svc.host ?? svc.referer?.address ?? svc.addresses?.[0] ?? ""
         if (!host) return
         const baseURL = `http://${host}:${svc.port}/v1`
-        raw.push({ name: svc.name, host, port: svc.port, baseURL })
+        const name = (svc.txt as Record<string, string> | undefined)?.host ?? svc.name
+        raw.push({ name, host, port: svc.port, baseURL })
       })
       setTimeout(() => {
         browser.stop()
