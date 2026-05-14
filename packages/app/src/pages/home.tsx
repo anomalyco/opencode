@@ -76,10 +76,10 @@ export default function Home() {
   }
 
   return (
-    <div data-component="lovable-home" class="size-full min-h-dvh overflow-hidden">
+    <div data-component="codle-home" class="size-full min-h-dvh overflow-hidden">
       <div class="size-full min-h-0 flex">
         <aside
-          data-component="lovable-home-sidebar"
+          data-component="codle-home-sidebar"
           class="hidden md:flex w-58 shrink-0 flex-col gap-4 px-3 py-4"
           aria-label={language.t("sidebar.nav.projectsAndSessions")}
         >
@@ -139,7 +139,7 @@ export default function Home() {
               <div class="text-[28px] md:text-[36px] font-medium leading-[1.1] tracking-normal text-text-strong">
                 {language.t("home.empty.title")}
               </div>
-              <div data-component="lovable-home-prompt" class="w-full max-w-144 px-4 py-3 text-left">
+              <div data-component="codle-home-prompt" class="w-full max-w-144 px-4 py-3 text-left">
                 <button
                   type="button"
                   class="w-full min-h-13 text-left text-14-regular text-text-weak focus:outline-none"
@@ -150,10 +150,10 @@ export default function Home() {
               </div>
             </section>
 
-            <section data-component="lovable-home-projects" class="min-h-64 w-full p-4 md:p-6">
+            <section data-component="codle-home-projects" class="min-h-64 w-full p-4 md:p-6">
               <div class="flex items-center justify-between gap-4">
-                <div data-component="lovable-home-tabs" class="flex items-center gap-1">
-                  <div data-component="lovable-home-tab" data-active="true" class="px-3 py-1 text-12-medium">
+                <div data-component="codle-home-tabs" class="flex items-center gap-1">
+                  <div data-component="codle-home-tab" data-active="true" class="px-3 py-1 text-12-medium">
                     {language.t("home.recentProjects")}
                   </div>
                 </div>
@@ -171,11 +171,11 @@ export default function Home() {
                         <li>
                           <button
                             type="button"
-                            data-component="lovable-project-card"
+                            data-component="codle-project-card"
                             class="block w-full overflow-hidden p-3 text-left"
                             onClick={() => openProject(project.worktree)}
                           >
-                            <div data-component="lovable-project-preview" class="aspect-[16/9] rounded-xl" />
+                            <div data-component="codle-project-preview" class="aspect-[16/9] rounded-xl" />
                             <div class="mt-3 flex min-w-0 items-center gap-3">
                               <div class="size-8 shrink-0 rounded-full bg-surface-interactive-base flex items-center justify-center text-text-interactive-base">
                                 <Icon name="folder" size="small" />

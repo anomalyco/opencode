@@ -1829,10 +1829,10 @@ export default function Page() {
 
   if (MINIMAL_MODE && !devMode) {
     return (
-      <div data-component="lovable-session" class="relative size-full overflow-hidden flex flex-col p-2 md:p-3">
+      <div data-component="codle-session" class="relative size-full overflow-hidden flex flex-col p-2 md:p-3">
         <div class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 md:gap-3">
           <div
-            data-component="lovable-session-frame"
+            data-component="codle-session-frame"
             class="@container relative flex flex-col min-h-0 h-full flex-1 min-w-0"
           >
             <SessionPanelContent />
@@ -1844,7 +1844,7 @@ export default function Page() {
   }
 
   return (
-    <div data-component="lovable-session" class="relative size-full overflow-hidden flex flex-col p-2 md:p-3">
+    <div data-component="codle-session" class="relative size-full overflow-hidden flex flex-col p-2 md:p-3">
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 md:gap-3">
         <Show when={!isDesktop() && !!params.id}>
@@ -1874,7 +1874,7 @@ export default function Page() {
 
         {/* Session panel */}
         <div
-          data-component="lovable-session-frame"
+          data-component="codle-session-frame"
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none": true,
             "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":

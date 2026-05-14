@@ -134,7 +134,7 @@ export function ModelSelectorPopover(props: {
       </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content
-          data-component="lovable-model-popover"
+          data-component="codle-model-popover"
           class="w-72 h-80 flex flex-col p-2 rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
           onEscapeKeyDown={(event) => {
             setStore("dismiss", "escape")

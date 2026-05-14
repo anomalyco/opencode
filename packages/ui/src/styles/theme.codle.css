@@ -1,8 +1,8 @@
 /*
- * Lovable 테마 정적 fallback.
- * context.tsx 에서 themeId 를 "lovable" 로 고정했기 때문에 JS 로드 후에는
- * <style id="oc-theme"> 가 packages/ui/src/theme/themes/lovable.json 값을 다시 적용한다.
- * 값 출처: resolveThemeVariant(lovable.json) 산출물.
+ * Codle 테마 정적 fallback.
+ * context.tsx 에서 themeId 를 "codle" 로 고정했기 때문에 JS 로드 후에는
+ * <style id="oc-theme"> 가 packages/ui/src/theme/themes/codle.json 값을 다시 적용한다.
+ * 값 출처: resolveThemeVariant(codle.json) 산출물.
  */
 :root {
   --background-base: #FFFFFF;

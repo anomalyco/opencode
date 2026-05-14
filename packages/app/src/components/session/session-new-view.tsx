@@ -48,7 +48,7 @@ export function NewSessionView(props: NewSessionViewProps) {
   }
 
   return (
-    <div class={ROOT_CLASS} data-component="lovable-new-session">
+    <div class={ROOT_CLASS} data-component="codle-new-session">
       <div class="h-12 shrink-0" aria-hidden />
       <div class="flex-1 px-6 pb-30 flex items-center justify-center text-center">
         <div class="w-full max-w-200 flex flex-col items-center text-center gap-5">

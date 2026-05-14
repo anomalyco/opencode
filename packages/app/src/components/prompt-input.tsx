@@ -1473,7 +1473,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       valueClass="truncate text-13-regular text-text-base"
                       triggerStyle={control()}
                       triggerProps={{ "data-action": "prompt-agent" }}
-                      contentProps={{ "data-lovable-menu": "true" }}
+                      contentProps={{ "data-codle-menu": "true" }}
                       variant="ghost"
                     />
                   </TooltipKeybind>
@@ -1567,7 +1567,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         valueClass="truncate text-13-regular text-text-base"
                         triggerStyle={control()}
                         triggerProps={{ "data-action": "prompt-model-variant" }}
-                        contentProps={{ "data-lovable-menu": "true" }}
+                        contentProps={{ "data-codle-menu": "true" }}
                         variant="ghost"
                       />
                     </TooltipKeybind>

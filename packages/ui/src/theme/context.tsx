@@ -57,7 +57,7 @@ const names: Record<string, string> = {
   gruvbox: "Gruvbox",
   kanagawa: "Kanagawa",
   "lucent-orng": "Lucent Orng",
-  lovable: "Lovable",
+  codle: "Codle",
   material: "Material",
   matrix: "Matrix",
   mercury: "Mercury",
@@ -82,7 +82,9 @@ const names: Record<string, string> = {
 const oc2Theme = oc2ThemeJson as DesktopTheme
 
 function normalize(id: string | null | undefined) {
-  return id === "oc-1" ? "oc-2" : id
+  if (id === "oc-1") return "oc-2"
+  if (id === "lovable") return "codle"
+  return id
 }
 
 function read(key: string) {
@@ -163,7 +165,7 @@ function cacheThemeVariants(theme: DesktopTheme, themeId: string) {
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: { defaultTheme?: string; onThemeApplied?: (theme: DesktopTheme, mode: "light" | "dark") => void }) => {
-    const themeId = "lovable"
+    const themeId = "codle"
     const colorScheme: ColorScheme = "system"
     const mode = getSystemMode()
     const [store, setStore] = createStore({
@@ -252,7 +254,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       mediaQuery.addEventListener("change", onMedia)
       onCleanup(() => mediaQuery.removeEventListener("change", onMedia))
 
-      const savedTheme = "lovable"
+      const savedTheme = "codle"
       const savedScheme: ColorScheme = "system"
       if (savedTheme !== store.themeId) setStore("themeId", savedTheme)
       if (savedScheme !== store.colorScheme) setStore("colorScheme", savedScheme)

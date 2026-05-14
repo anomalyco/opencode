@@ -203,7 +203,7 @@ export function SessionSidePanel(props: {
     <Show when={isDesktop()}>
       <aside
         id="review-panel"
-        data-component="lovable-side-panel"
+        data-component="codle-side-panel"
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!open()}
         inert={!open()}
