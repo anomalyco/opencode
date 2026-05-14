@@ -1,4 +1,4 @@
-import { describe, expect, beforeEach, afterEach, afterAll } from "bun:test"
+import { describe, expect, beforeEach, afterAll } from "bun:test"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { Effect, Layer, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -7,21 +7,19 @@ import { SyncEvent } from "../../src/sync"
 import { Database, eq } from "@/storage/db"
 import { EventSequenceTable, EventTable } from "../../src/sync/event.sql"
 import { MessageID } from "../../src/session/schema"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { initProjectors } from "../../src/server/projectors"
 import { testEffect } from "../lib/effect"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
-const original = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
-const it = testEffect(Layer.mergeAll(SyncEvent.defaultLayer, CrossSpawnSpawner.defaultLayer))
+const it = testEffect(
+  Layer.mergeAll(
+    SyncEvent.layer.pipe(Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: true }))),
+    CrossSpawnSpawner.defaultLayer,
+  ),
+)
 
 beforeEach(() => {
   Database.close()
-
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
-})
-
-afterEach(() => {
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = original
 })
 
 describe("SyncEvent", () => {

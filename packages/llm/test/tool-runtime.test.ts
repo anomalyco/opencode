@@ -25,6 +25,7 @@ const baseRequest = LLM.request({
   model,
   prompt: "Use the tool.",
 })
+const weatherFailureCause = new Error("weather lookup denied")
 
 const get_weather = tool({
   description: "Get current weather for a city.",
@@ -32,7 +33,8 @@ const get_weather = tool({
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
   execute: ({ city }) =>
     Effect.gen(function* () {
-      if (city === "FAIL") return yield* new ToolFailure({ message: `Weather lookup failed for ${city}` })
+      if (city === "FAIL")
+        return yield* new ToolFailure({ message: `Weather lookup failed for ${city}`, error: weatherFailureCause })
       return { temperature: 22, condition: "sunny" }
     }),
 })
@@ -85,23 +87,27 @@ describe("LLMClient tools", () => {
         tools: { get_weather },
       }).pipe(Stream.runCollect, Effect.provide(layer))
 
-      const second = bodies[1] as {
-        readonly messages?: ReadonlyArray<Record<string, unknown>>
-        readonly tools?: ReadonlyArray<unknown>
-        readonly tool_choice?: unknown
-        readonly max_tokens?: unknown
-      }
+      const second = bodies[1]
+      if (!second || typeof second !== "object") throw new Error("Expected second request body")
+      const messages = Reflect.get(second, "messages")
+      const tools = Reflect.get(second, "tools")
 
-      expect(second.max_tokens).toBe(50)
-      expect(second.tool_choice).toBe("auto")
-      expect(second.tools).toHaveLength(1)
-      expect(second.messages?.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
-      expect(second.messages?.[1]).toMatchObject({
+      expect(Reflect.get(second, "max_tokens")).toBe(50)
+      expect(Reflect.get(second, "tool_choice")).toBe("auto")
+      expect(tools).toHaveLength(1)
+      expect(
+        Array.isArray(messages)
+          ? messages.map((message) =>
+              message && typeof message === "object" ? Reflect.get(message, "role") : undefined,
+            )
+          : undefined,
+      ).toEqual(["user", "assistant", "tool"])
+      expect(Array.isArray(messages) ? messages[1] : undefined).toMatchObject({
         role: "assistant",
         content: null,
         tool_calls: [{ id: "call_1", type: "function", function: { name: "get_weather" } }],
       })
-      expect(second.messages?.[2]).toMatchObject({
+      expect(Array.isArray(messages) ? messages[2] : undefined).toMatchObject({
         role: "tool",
         tool_call_id: "call_1",
         content: '{"temperature":22,"condition":"sunny"}',
@@ -327,6 +333,7 @@ describe("LLMClient tools", () => {
       const toolError = events.find(LLMEvent.is.toolError)
       expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "get_weather" })
       expect(toolError?.message).toBe("Weather lookup failed for FAIL")
+      expect(toolError?.error).toBe(weatherFailureCause)
     }),
   )
 

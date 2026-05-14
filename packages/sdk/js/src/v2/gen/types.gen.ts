@@ -15,8 +15,6 @@ export type Event =
   | EventPermissionReplied
   | EventSessionDiff
   | EventSessionError
-  | EventInstallationUpdated
-  | EventInstallationUpdateAvailable
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
@@ -42,6 +40,8 @@ export type Event =
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
+  | EventInstallationUpdated
+  | EventInstallationUpdateAvailable
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
@@ -799,8 +799,6 @@ export type GlobalEvent = {
     | EventPermissionReplied
     | EventSessionDiff
     | EventSessionError
-    | EventInstallationUpdated
-    | EventInstallationUpdateAvailable
     | EventQuestionAsked
     | EventQuestionReplied
     | EventQuestionRejected
@@ -826,6 +824,8 @@ export type GlobalEvent = {
     | EventPtyUpdated
     | EventPtyExited
     | EventPtyDeleted
+    | EventInstallationUpdated
+    | EventInstallationUpdateAvailable
     | EventMessageUpdated
     | EventMessageRemoved
     | EventMessagePartUpdated
@@ -2496,22 +2496,6 @@ export type EventSessionError = {
   }
 }
 
-export type EventInstallationUpdated = {
-  id: string
-  type: "installation.updated"
-  properties: {
-    version: string
-  }
-}
-
-export type EventInstallationUpdateAvailable = {
-  id: string
-  type: "installation.update-available"
-  properties: {
-    version: string
-  }
-}
-
 export type EventQuestionAsked = {
   id: string
   type: "question.asked"
@@ -2678,6 +2662,22 @@ export type EventPtyDeleted = {
   type: "pty.deleted"
   properties: {
     id: string
+  }
+}
+
+export type EventInstallationUpdated = {
+  id: string
+  type: "installation.updated"
+  properties: {
+    version: string
+  }
+}
+
+export type EventInstallationUpdateAvailable = {
+  id: string
+  type: "installation.update-available"
+  properties: {
+    version: string
   }
 }
 
@@ -3377,6 +3377,171 @@ export type SessionMessage =
   | SessionMessageShell
   | SessionMessageAssistant
   | SessionMessageCompaction
+
+export type ModelV2Info = {
+  id: string
+  apiID: string
+  providerID: string
+  family?: string
+  name: string
+  endpoint:
+    | {
+        type: "unknown"
+      }
+    | {
+        type: "openai/responses"
+        url: string
+        websocket?: boolean
+      }
+    | {
+        type: "openai/completions"
+        url: string
+        reasoning?:
+          | {
+              type: "reasoning_content"
+            }
+          | {
+              type: "reasoning_details"
+            }
+      }
+    | {
+        type: "anthropic/messages"
+        url: string
+      }
+    | {
+        type: "aisdk"
+        package: string
+        url?: string
+      }
+  capabilities: {
+    tools: boolean
+    input: Array<string>
+    output: Array<string>
+  }
+  options: {
+    headers: {
+      [key: string]: string
+    }
+    body: {
+      [key: string]: unknown
+    }
+    aisdk: {
+      provider: {
+        [key: string]: unknown
+      }
+      request: {
+        [key: string]: unknown
+      }
+    }
+    variant?: string
+  }
+  variants: Array<{
+    id: string
+    headers: {
+      [key: string]: string
+    }
+    body: {
+      [key: string]: unknown
+    }
+    aisdk: {
+      provider: {
+        [key: string]: unknown
+      }
+      request: {
+        [key: string]: unknown
+      }
+    }
+  }>
+  time: {
+    released: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  cost: Array<{
+    tier?: {
+      type: "context"
+      size: number
+    }
+    input: number
+    output: number
+    cache: {
+      read: number
+      write: number
+    }
+  }>
+  status: "alpha" | "beta" | "deprecated" | "active"
+  enabled: boolean
+  limit: {
+    context: number
+    input?: number
+    output: number
+  }
+}
+
+export type ProviderV2Info = {
+  id: string
+  name: string
+  enabled:
+    | false
+    | {
+        via: "env"
+        name: string
+      }
+    | {
+        via: "auth"
+        service: string
+      }
+    | {
+        via: "custom"
+        data: {
+          [key: string]: unknown
+        }
+      }
+  env: Array<string>
+  endpoint:
+    | {
+        type: "unknown"
+      }
+    | {
+        type: "openai/responses"
+        url: string
+        websocket?: boolean
+      }
+    | {
+        type: "openai/completions"
+        url: string
+        reasoning?:
+          | {
+              type: "reasoning_content"
+            }
+          | {
+              type: "reasoning_details"
+            }
+      }
+    | {
+        type: "anthropic/messages"
+        url: string
+      }
+    | {
+        type: "aisdk"
+        package: string
+        url?: string
+      }
+  options: {
+    headers: {
+      [key: string]: string
+    }
+    body: {
+      [key: string]: unknown
+    }
+    aisdk: {
+      provider: {
+        [key: string]: unknown
+      }
+      request: {
+        [key: string]: unknown
+      }
+    }
+  }
+}
 
 export type EventTuiToastShow1 = {
   id: string
@@ -6504,6 +6669,80 @@ export type V2SessionMessagesResponses = {
 }
 
 export type V2SessionMessagesResponse2 = V2SessionMessagesResponses[keyof V2SessionMessagesResponses]
+
+export type V2ModelListData = {
+  body?: never
+  path?: never
+  query?: {
+    instance?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/model"
+}
+
+export type V2ModelListResponses = {
+  /**
+   * Success
+   */
+  200: Array<ModelV2Info>
+}
+
+export type V2ModelListResponse = V2ModelListResponses[keyof V2ModelListResponses]
+
+export type V2ProviderListData = {
+  body?: never
+  path?: never
+  query?: {
+    instance?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/provider"
+}
+
+export type V2ProviderListResponses = {
+  /**
+   * Success
+   */
+  200: Array<ProviderV2Info>
+}
+
+export type V2ProviderListResponse = V2ProviderListResponses[keyof V2ProviderListResponses]
+
+export type V2ProviderGetData = {
+  body?: never
+  path: {
+    providerID: string
+  }
+  query?: {
+    instance?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/provider/{providerID}"
+}
+
+export type V2ProviderGetErrors = {
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type V2ProviderGetError = V2ProviderGetErrors[keyof V2ProviderGetErrors]
+
+export type V2ProviderGetResponses = {
+  /**
+   * ProviderV2.Info
+   */
+  200: ProviderV2Info
+}
+
+export type V2ProviderGetResponse = V2ProviderGetResponses[keyof V2ProviderGetResponses]
 
 export type TuiAppendPromptData = {
   body?: {
