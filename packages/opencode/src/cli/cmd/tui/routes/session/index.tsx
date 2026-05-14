@@ -1531,6 +1531,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
         <markdown
           syntaxStyle={syntax()}
           streaming={true}
+          internalBlockMode="top-level"
           content={props.part.text.trim()}
           conceal={ctx.conceal()}
           fg={theme.markdownText}
