@@ -54,7 +54,7 @@ bun run dev:web
 bun run dev:desktop
 ```
 
-upstream 追従方針は [specs/upstream-sync.md](./specs/upstream-sync.md) を参照してください。
+upstream 追従の mechanical workflow は [specs/upstream-sync.md](./specs/upstream-sync.md)、機能をどこに実装するかの判断基準は [specs/upstream-policy.md](./specs/upstream-policy.md) を参照してください。
 
 ## Benchmark Assets
 

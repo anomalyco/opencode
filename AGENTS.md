@@ -8,6 +8,7 @@
 - 思考は英語でもよいが、外に出す文章は特段の理由がない限り日本語に統一すること。
 - コード、外部 API、OSS 由来の識別子、既存の英語 UI 文言、標準的な技術用語は無理に翻訳しない。
 - 英語を使うのは、ユーザーが明示的に要求した場合、外部プロジェクトの規約が英語必須な場合、または翻訳すると正確さが落ちる場合に限る。
+- securecode は `anomalyco/opencode` の fork として運用しており、新規機能 / 修正は upstream owned のソース (`packages/opencode/**`, `packages/core/**` 等) を直接触らない方針を優先する。実装場所の判断基準は [specs/upstream-policy.md](./specs/upstream-policy.md)、tag 単位の取り込み手順は [specs/upstream-sync.md](./specs/upstream-sync.md) を参照。
 
 ## Style Guide
 
