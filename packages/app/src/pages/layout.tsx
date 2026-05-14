@@ -2261,7 +2261,6 @@ export default function Layout(props: ParentProps) {
                         icon="plus-small"
                         class="w-full"
                         onClick={() => {
-                          console.log(project)
                           void createWorkspace(project)
                         }}
                       >
