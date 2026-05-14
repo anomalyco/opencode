@@ -9,6 +9,7 @@ const OVERFLOW_PATTERNS = [
   /prompt is too long/i, // Anthropic
   /input is too long for requested model/i, // Amazon Bedrock
   /exceeds the context window/i, // OpenAI (Completions + Responses API message text)
+  /(?:tokens? in (?:request|input|prompt|context)|(?:request|input|prompt|context) tokens?|input token count).*?(?:more than|greater than|exceeds?|exceeded).*?(?:max(?:imum)?(?: number of)? tokens?(?: allowed)?|token limit)/i, // Conservative request-token overflow variants
   /input token count.*exceeds the maximum/i, // Google (Gemini)
   /maximum prompt length is \d+/i, // xAI (Grok)
   /reduce the length of the messages/i, // Groq
@@ -27,6 +28,10 @@ const OVERFLOW_PATTERNS = [
   /model_context_window_exceeded/i, // z.ai non-standard finish_reason surfaced as error text
 ]
 
+function normalizeOverflowText(message: string) {
+  return message.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim()
+}
+
 function isOpenAiErrorRetryable(e: APICallError) {
   const status = e.statusCode
   if (!status) return e.isRetryable
@@ -37,7 +42,8 @@ function isOpenAiErrorRetryable(e: APICallError) {
 // Providers not reliably handled in this function:
 // - z.ai: can accept overflow silently (needs token-count/context-window checks)
 function isOverflow(message: string) {
-  if (OVERFLOW_PATTERNS.some((p) => p.test(message))) return true
+  const normalized = normalizeOverflowText(message)
+  if (OVERFLOW_PATTERNS.some((p) => p.test(message) || p.test(normalized))) return true
 
   // Providers/status patterns handled outside of regex list:
   // - Cerebras: often returns "400 (no body)" / "413 (no body)"
@@ -181,7 +187,12 @@ export type ParsedAPICallError =
 export function parseAPICallError(input: { providerID: ProviderID; error: APICallError }): ParsedAPICallError {
   const m = message(input.providerID, input.error)
   const body = json(input.error.responseBody)
-  if (isOverflow(m) || input.error.statusCode === 413 || body?.error?.code === "context_length_exceeded") {
+  if (
+    isOverflow(m) ||
+    (input.error.responseBody ? isOverflow(input.error.responseBody) : false) ||
+    input.error.statusCode === 413 ||
+    body?.error?.code === "context_length_exceeded"
+  ) {
     return {
       type: "context_overflow",
       message: m,
