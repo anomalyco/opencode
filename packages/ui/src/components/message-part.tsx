@@ -1174,61 +1174,55 @@ export function UserMessageDisplay(props: {
             </Show>
             <div data-slot="user-message-copy-wrapper" data-interrupted={props.interrupted ? "" : undefined}>
               <Show when={props.actions?.fork}>
-                <LazyAction>
-                  <Tooltip value={i18n.t("ui.message.forkMessage")} placement="top" gutter={4} lazyMount>
-                    <IconButton
-                      icon="fork"
-                      size="normal"
-                      variant="ghost"
-                      disabled={!!busy()}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        run("fork")
-                      }}
-                      aria-label={i18n.t("ui.message.forkMessage")}
-                    />
-                  </Tooltip>
-                </LazyAction>
-              </Show>
-              <Show when={props.actions?.revert}>
-                <LazyAction>
-                  <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4} lazyMount>
-                    <IconButton
-                      icon="reset"
-                      size="normal"
-                      variant="ghost"
-                      disabled={!!busy()}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        run("revert")
-                      }}
-                      aria-label={i18n.t("ui.message.revertMessage")}
-                    />
-                  </Tooltip>
-                </LazyAction>
-              </Show>
-              <LazyAction>
-                <Tooltip
-                  value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
-                  placement="top"
-                  gutter={4}
-                  lazyMount
-                >
+                <Tooltip value={i18n.t("ui.message.forkMessage")} placement="top" gutter={4} lazyMount>
                   <IconButton
-                    icon={copied() ? "check" : "copy"}
+                    icon="fork"
                     size="normal"
                     variant="ghost"
+                    disabled={!!busy()}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={(event) => {
                       event.stopPropagation()
-                      handleCopy()
+                      run("fork")
                     }}
-                    aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+                    aria-label={i18n.t("ui.message.forkMessage")}
                   />
                 </Tooltip>
-              </LazyAction>
+              </Show>
+              <Show when={props.actions?.revert}>
+                <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4} lazyMount>
+                  <IconButton
+                    icon="reset"
+                    size="normal"
+                    variant="ghost"
+                    disabled={!!busy()}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      run("revert")
+                    }}
+                    aria-label={i18n.t("ui.message.revertMessage")}
+                  />
+                </Tooltip>
+              </Show>
+              <Tooltip
+                value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+                placement="top"
+                gutter={4}
+                lazyMount
+              >
+                <IconButton
+                  icon={copied() ? "check" : "copy"}
+                  size="normal"
+                  variant="ghost"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleCopy()
+                  }}
+                  aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+                />
+              </Tooltip>
             </div>
           </div>
         </>
