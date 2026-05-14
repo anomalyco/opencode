@@ -1452,8 +1452,9 @@ export function FileTabContent(props: {
     </div>
   )
 
-  // FORK: HTML 预览 — 默认渲染后样子,iframe + sandbox(allow-same-origin,绝不开 allow-scripts)
+  // FORK: HTML 预览 — 默认渲染后样子,iframe + sandbox(allow-same-origin + allow-scripts)
   // 大文件(>2MB)自动退源码;预览/源码 切换;iframe 内的相对资源(./img.png 等)走 localasset:// 自然解析 2026-05-05
+  // FORK: 2026-05-14 开 allow-scripts — 用户 PPT/Slides 翻页等内嵌 JS 失效问题;parent 与 iframe 跨 origin(app webview vs localasset://),MDN "scripts+same-origin" 警告不适用
   const renderHtml = (source: string) => {
     const root = sdk.directory
     const p = path()
@@ -1490,7 +1491,7 @@ export function FileTabContent(props: {
         <Show when={effectiveMode === "preview" && previewUrl} fallback={renderDefault(source)}>
           <iframe
             src={previewUrl}
-            sandbox="allow-same-origin"
+            sandbox="allow-same-origin allow-scripts"
             referrerpolicy="no-referrer"
             class="w-full flex-1 bg-white border-0"
             style={{ "min-height": "60vh" }}
