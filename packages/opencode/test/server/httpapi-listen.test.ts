@@ -284,6 +284,24 @@ describe("HttpApi Server.listen", () => {
     ).rejects.toThrow()
   })
 
+  test("default in-process handler does not emit Effect HTTP response logs", async () => {
+    let output = ""
+    // oxlint-disable-next-line typescript-eslint/unbound-method -- restored in finally after temporarily capturing stderr.
+    const original = process.stderr.write
+    process.stderr.write = ((chunk) => {
+      output += String(chunk)
+      return true
+    }) as typeof process.stderr.write
+    try {
+      const response = await Server.Default().app.request("/status")
+      expect(response.status).toBe(200)
+    } finally {
+      process.stderr.write = original
+    }
+
+    expect(output).not.toContain("Sent HTTP response")
+  })
+
   testPty("rejects unsafe PTY ticket mint and connect requests", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const listener = await startListener()

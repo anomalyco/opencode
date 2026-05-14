@@ -103,6 +103,20 @@ describe("HttpApi CORS", () => {
       expect(response.status).toBe(204)
       expect(response.headers.get("access-control-allow-origin")).toBe("https://custom.example")
       expect(response.headers.get("access-control-allow-headers")).toBe("authorization")
+
+      const rejected = yield* Effect.promise(() =>
+        fetch(new URL(InstancePaths.path, listener.url), {
+          method: "OPTIONS",
+          headers: {
+            origin: "https://evil.example",
+            "access-control-request-method": "GET",
+            "access-control-request-headers": "authorization",
+          },
+        }),
+      )
+
+      expect(rejected.status).toBe(204)
+      expect(rejected.headers.get("access-control-allow-origin")).not.toBe("https://evil.example")
     }),
   )
 })
