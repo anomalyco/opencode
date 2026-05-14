@@ -46,13 +46,19 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       const { id, name, baseURL } = ctx.payload
       const global = yield* configSvc.getGlobal()
       const providers = { ...(global.provider ?? {}) }
-      providers[id] = {
+      // Reuse existing key if same baseURL already configured (e.g. written by sync-opencode)
+      const normalised = normalizeBaseURL(baseURL)
+      const existingKey = Object.entries(providers).find(
+        ([, p]) => normalizeBaseURL(String((p as { options?: { baseURL?: string } }).options?.baseURL ?? "")) === normalised,
+      )?.[0]
+      const key = existingKey ?? id
+      providers[key] = {
         npm: "@ai-sdk/openai-compatible",
         name,
         options: { baseURL },
       }
       yield* configSvc.updateGlobal({ ...global, provider: providers })
-      return id
+      return key
     })
 
     const disconnect = Effect.fn("LocalHttpApi.disconnect")(function* (ctx) {
