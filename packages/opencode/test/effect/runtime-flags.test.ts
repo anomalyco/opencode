@@ -19,6 +19,7 @@ describe("RuntimeFlags", () => {
             OPENCODE_EXPERIMENTAL: "true",
             OPENCODE_ENABLE_EXA: "true",
             OPENCODE_ENABLE_PARALLEL: "true",
+            OPENCODE_ENABLE_EXPERIMENTAL_MODELS: "true",
             OPENCODE_ENABLE_QUESTION_TOOL: "true",
             OPENCODE_CLIENT: "desktop",
           }),
@@ -29,6 +30,7 @@ describe("RuntimeFlags", () => {
       expect(flags.disableDefaultPlugins).toBe(true)
       expect(flags.enableExa).toBe(true)
       expect(flags.enableParallel).toBe(true)
+      expect(flags.enableExperimentalModels).toBe(true)
       expect(flags.enableQuestionTool).toBe(true)
       expect(flags.experimentalScout).toBe(true)
       expect(flags.experimentalBackgroundSubagents).toBe(true)
@@ -47,6 +49,7 @@ describe("RuntimeFlags", () => {
       expect(flags.pure).toBe(false)
       expect(flags.disableDefaultPlugins).toBe(true)
       expect(flags.enableExa).toBe(false)
+      expect(flags.enableExperimentalModels).toBe(false)
       expect(flags.client).toBe("cli")
     }),
   )

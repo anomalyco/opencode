@@ -18,6 +18,7 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
     enabled: bool("OPENCODE_ENABLE_PARALLEL"),
     legacy: bool("OPENCODE_EXPERIMENTAL_PARALLEL"),
   }).pipe(Config.map((flags) => flags.enabled || flags.legacy)),
+  enableExperimentalModels: bool("OPENCODE_ENABLE_EXPERIMENTAL_MODELS"),
   enableQuestionTool: bool("OPENCODE_ENABLE_QUESTION_TOOL"),
   experimentalScout: enabledByExperimental("OPENCODE_EXPERIMENTAL_SCOUT"),
   experimentalBackgroundSubagents: enabledByExperimental("OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS"),
