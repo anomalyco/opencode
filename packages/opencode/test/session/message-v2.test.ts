@@ -1548,93 +1548,109 @@ describe("session.message-v2.fromError", () => {
   })
 })
 
-describe("session.message-v2.filterCompacted", () => {
-  // Regression for double auto-compaction: after a successful auto-compaction,
-  // the next runLoop iteration walks `msgs` backward to find `lastFinished` and
-  // gates the overflow check on `lastFinished.summary !== true`. The reorder
-  // added in PR #27145 puts the array in the order
-  //   [compaction-user, summary-assistant, ...tail..., continue-user]
-  // so the backward walk hits a finished tail assistant before the summary,
-  // bypasses the `summary !== true` guard, and triggers a second compaction.
-  test("backward walk surfaces summary assistant, not pre-compaction overflow", () => {
-    const TAIL_USER = MessageID.make("msg_001")
-    const OVERFLOW_ASSISTANT = MessageID.make("msg_002")
-    const COMPACTION_USER = MessageID.make("msg_003")
-    const SUMMARY_ASSISTANT = MessageID.make("msg_004")
-    const CONTINUE_USER = MessageID.make("msg_005")
+describe("session.message-v2.latest", () => {
+  const TAIL_USER = MessageID.make("msg_001")
+  const OVERFLOW_ASSISTANT = MessageID.make("msg_002")
+  const COMPACTION_USER = MessageID.make("msg_003")
+  const SUMMARY_ASSISTANT = MessageID.make("msg_004")
+  const CONTINUE_USER = MessageID.make("msg_005")
+  const NEW_COMPACTION_USER = MessageID.make("msg_006")
 
-    const tailUser: MessageV2.WithParts = {
-      info: userInfo(TAIL_USER),
+  const tailUser: MessageV2.WithParts = {
+    info: userInfo(TAIL_USER),
+    parts: [{ ...basePart(TAIL_USER, "p1"), type: "text", text: "original prompt" }] as MessageV2.Part[],
+  }
+
+  const overflowAssistant: MessageV2.WithParts = {
+    info: {
+      ...assistantInfo(OVERFLOW_ASSISTANT, TAIL_USER),
+      finish: "tool-calls",
+      tokens: { input: 280_000, output: 200, reasoning: 0, cache: { read: 0, write: 0 }, total: 280_200 },
+    } as MessageV2.Assistant,
+    parts: [],
+  }
+
+  const compactionUser: MessageV2.WithParts = {
+    info: userInfo(COMPACTION_USER),
+    parts: [
+      {
+        ...basePart(COMPACTION_USER, "p1"),
+        type: "compaction",
+        auto: true,
+        tail_start_id: TAIL_USER,
+      },
+    ] as MessageV2.Part[],
+  }
+
+  const summaryAssistant: MessageV2.WithParts = {
+    info: {
+      ...assistantInfo(SUMMARY_ASSISTANT, COMPACTION_USER),
+      summary: true,
+      finish: "stop",
+      tokens: { input: 150_000, output: 1_500, reasoning: 0, cache: { read: 0, write: 0 }, total: 151_500 },
+    } as MessageV2.Assistant,
+    parts: [],
+  }
+
+  const continueUser: MessageV2.WithParts = {
+    info: userInfo(CONTINUE_USER),
+    parts: [
+      {
+        ...basePart(CONTINUE_USER, "p1"),
+        type: "text",
+        text: "Continue if you have next steps...",
+        synthetic: true,
+        metadata: { compaction_continue: true },
+      },
+    ] as MessageV2.Part[],
+  }
+
+  // Regression for double auto-compaction. The reorder in filterCompacted
+  // (#27145) returns [compaction-user, summary, ...tail..., continue-user],
+  // so picking lastFinished by array position landed on the pre-compaction
+  // overflow assistant and bypassed the `summary !== true` overflow guard
+  // in SessionPrompt.runLoop, firing a second compaction.create immediately.
+  test("finished is the chronologically-latest finished assistant, not the array-latest", () => {
+    const filtered = MessageV2.filterCompacted([
+      continueUser,
+      summaryAssistant,
+      compactionUser,
+      overflowAssistant,
+      tailUser,
+    ])
+
+    const state = MessageV2.latest(filtered)
+
+    expect(state.finished?.id).toBe(SUMMARY_ASSISTANT)
+    expect(state.finished?.summary).toBe(true)
+    expect(state.user?.id).toBe(CONTINUE_USER)
+    expect(state.tasks).toEqual([])
+  })
+
+  test("a fresh compaction-user newer than the latest summary surfaces in tasks", () => {
+    const newCompactionUser: MessageV2.WithParts = {
+      info: userInfo(NEW_COMPACTION_USER),
       parts: [
         {
-          ...basePart(TAIL_USER, "p1"),
-          type: "text",
-          text: "original prompt",
-        },
-      ] as MessageV2.Part[],
-    }
-
-    const overflowAssistant: MessageV2.WithParts = {
-      info: {
-        ...assistantInfo(OVERFLOW_ASSISTANT, TAIL_USER),
-        finish: "tool-calls",
-        tokens: { input: 280_000, output: 200, reasoning: 0, cache: { read: 0, write: 0 }, total: 280_200 },
-      } as MessageV2.Assistant,
-      parts: [],
-    }
-
-    const compactionUser: MessageV2.WithParts = {
-      info: userInfo(COMPACTION_USER),
-      parts: [
-        {
-          ...basePart(COMPACTION_USER, "p1"),
+          ...basePart(NEW_COMPACTION_USER, "p1"),
           type: "compaction",
           auto: true,
-          tail_start_id: TAIL_USER,
         },
       ] as MessageV2.Part[],
     }
 
-    const summaryAssistant: MessageV2.WithParts = {
-      info: {
-        ...assistantInfo(SUMMARY_ASSISTANT, COMPACTION_USER),
-        summary: true,
-        finish: "stop",
-        tokens: { input: 150_000, output: 1_500, reasoning: 0, cache: { read: 0, write: 0 }, total: 151_500 },
-      } as MessageV2.Assistant,
-      parts: [],
-    }
+    const state = MessageV2.latest([
+      tailUser,
+      overflowAssistant,
+      compactionUser,
+      summaryAssistant,
+      continueUser,
+      newCompactionUser,
+    ])
 
-    const continueUser: MessageV2.WithParts = {
-      info: userInfo(CONTINUE_USER),
-      parts: [
-        {
-          ...basePart(CONTINUE_USER, "p1"),
-          type: "text",
-          text: "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
-          synthetic: true,
-          metadata: { compaction_continue: true },
-        },
-      ] as MessageV2.Part[],
-    }
-
-    // MessageV2.stream yields newest-first, which is what filterCompacted expects.
-    const reverseChronological = [continueUser, summaryAssistant, compactionUser, overflowAssistant, tailUser]
-    const filtered = MessageV2.filterCompacted(reverseChronological)
-
-    // Mirror SessionPrompt.runLoop: pick lastFinished as the chronologically
-    // latest finished assistant by id (MessageID is monotonic). Picking by
-    // array position would land on the pre-compaction overflow assistant
-    // because filterCompacted reorders for model consumption.
-    const lastFinished = filtered.reduce<MessageV2.Assistant | undefined>((acc, m) => {
-      if (m.info.role !== "assistant" || !m.info.finish) return acc
-      return !acc || m.info.id > acc.id ? m.info : acc
-    }, undefined)
-
-    // If lastFinished ever resolves to the pre-compaction overflow assistant
-    // (msg_002), the runLoop overflow guard at prompt.ts (`summary !== true &&
-    // isOverflow(tokens)`) fails open and fires a second compaction.
-    expect(lastFinished?.id).toBe(SUMMARY_ASSISTANT)
-    expect(lastFinished?.summary).toBe(true)
+    expect(state.finished?.id).toBe(SUMMARY_ASSISTANT)
+    expect(state.user?.id).toBe(NEW_COMPACTION_USER)
+    expect(state.tasks).toHaveLength(1)
+    expect(state.tasks[0]).toMatchObject({ type: "compaction", auto: true })
   })
 })

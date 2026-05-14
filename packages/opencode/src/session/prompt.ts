@@ -1653,29 +1653,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
           let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
 
-          // filterCompacted returns messages in model-consumption order
-          // ([compaction-user, summary, ...tail..., continue-user]), not
-          // chronological. Pick by max id (MessageID.ascending is monotonic)
-          // so a pre-compaction overflowing tail assistant doesn't get
-          // mistaken for the most recent turn and re-trigger auto-compaction.
-          let lastUser: MessageV2.User | undefined
-          let lastAssistant: MessageV2.Assistant | undefined
-          let lastFinished: MessageV2.Assistant | undefined
-          for (const msg of msgs) {
-            const info = msg.info
-            if (info.role === "user" && (!lastUser || info.id > lastUser.id)) lastUser = info
-            if (info.role === "assistant" && (!lastAssistant || info.id > lastAssistant.id)) lastAssistant = info
-            if (info.role === "assistant" && info.finish && (!lastFinished || info.id > lastFinished.id))
-              lastFinished = info
-          }
-          const tasks = msgs.flatMap((m) =>
-            lastFinished && m.info.id <= lastFinished.id
-              ? []
-              : m.parts.filter(
-                  (p): p is MessageV2.CompactionPart | MessageV2.SubtaskPart =>
-                    p.type === "compaction" || p.type === "subtask",
-                ),
-          )
+          const { user: lastUser, assistant: lastAssistant, finished: lastFinished, tasks } = MessageV2.latest(msgs)
 
           if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
 
