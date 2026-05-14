@@ -1653,27 +1653,29 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
           let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
 
+          // filterCompacted returns messages in model-consumption order
+          // ([compaction-user, summary, ...tail..., continue-user]), not
+          // chronological. Pick by max id (MessageID.ascending is monotonic)
+          // so a pre-compaction overflowing tail assistant doesn't get
+          // mistaken for the most recent turn and re-trigger auto-compaction.
           let lastUser: MessageV2.User | undefined
           let lastAssistant: MessageV2.Assistant | undefined
           let lastFinished: MessageV2.Assistant | undefined
-          let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
-          // filterCompacted returns messages in model-consumption order
-          // ([compaction-user, summary, ...tail..., continue-user]) so a plain
-          // backward array walk would pick a pre-compaction overflowing
-          // assistant from the retained tail as lastFinished and re-trigger
-          // auto-compaction. Walk in chronological id order instead.
-          const chronological = msgs
-            .slice()
-            .sort((a, b) => (a.info.id < b.info.id ? -1 : a.info.id > b.info.id ? 1 : 0))
-          for (let i = chronological.length - 1; i >= 0; i--) {
-            const msg = chronological[i]
-            if (!lastUser && msg.info.role === "user") lastUser = msg.info
-            if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info
-            if (!lastFinished && msg.info.role === "assistant" && msg.info.finish) lastFinished = msg.info
-            if (lastUser && lastFinished) break
-            const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
-            if (task && !lastFinished) tasks.push(...task)
+          for (const msg of msgs) {
+            const info = msg.info
+            if (info.role === "user" && (!lastUser || info.id > lastUser.id)) lastUser = info
+            if (info.role === "assistant" && (!lastAssistant || info.id > lastAssistant.id)) lastAssistant = info
+            if (info.role === "assistant" && info.finish && (!lastFinished || info.id > lastFinished.id))
+              lastFinished = info
           }
+          const tasks = msgs.flatMap((m) =>
+            lastFinished && m.info.id <= lastFinished.id
+              ? []
+              : m.parts.filter(
+                  (p): p is MessageV2.CompactionPart | MessageV2.SubtaskPart =>
+                    p.type === "compaction" || p.type === "subtask",
+                ),
+          )
 
           if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
 
