@@ -7,7 +7,7 @@ import { Global } from "@opencode-ai/core/global"
 import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Plugin } from "../../src/plugin/index"
-import { ModelsDev } from "@/provider/models"
+import { ModelsDev } from "@opencode-ai/core/models"
 import { Provider } from "@/provider/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "@/util/filesystem"
@@ -1021,6 +1021,27 @@ test("getSmallModel respects config small_model override", async () => {
       expect(model).toBeDefined()
       expect(String(model?.providerID)).toBe("anthropic")
       expect(String(model?.id)).toBe("claude-sonnet-4-20250514")
+    },
+  })
+})
+
+test("getSmallModel ignores invalid config small_model", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          small_model: "anthropic/not-a-real-model",
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      set("ANTHROPIC_API_KEY", "test-api-key")
+      expect(await getSmallModel(ProviderID.anthropic)).toBeUndefined()
     },
   })
 })

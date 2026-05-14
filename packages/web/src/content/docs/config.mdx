@@ -273,11 +273,19 @@ Use a dedicated `tui.json` (or `tui.jsonc`) file for TUI-specific settings.
     "enabled": true
   },
   "diff_style": "auto",
-  "mouse": true
+  "mouse": true,
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4
+  }
 }
 ```
 
 Use `OPENCODE_TUI_CONFIG` to point to a custom TUI config file.
+
+Set `attention.enabled` to turn on TUI desktop notifications and sounds. See [TUI attention](/docs/tui#attention).
 
 Legacy `theme`, `keybinds`, and `tui` keys in `opencode.json` are deprecated and automatically migrated when possible.
 

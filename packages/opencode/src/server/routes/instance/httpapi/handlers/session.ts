@@ -36,6 +36,12 @@ import {
 } from "../groups/session"
 import * as SessionError from "./session-errors"
 
+const tryParseJson = (text: string) =>
+  Effect.try({
+    try: () => JSON.parse(text) as unknown,
+    catch: () => new HttpApiError.BadRequest({}),
+  })
+
 export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* Session.Service
@@ -160,10 +166,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       const body = yield* Effect.orDie(ctx.request.text)
       if (body.trim().length === 0) return yield* create({})
 
-      const json = yield* Effect.try({
-        try: () => JSON.parse(body) as unknown,
-        catch: () => new HttpApiError.BadRequest({}),
-      })
+      const json = yield* tryParseJson(body)
       const payload = yield* Schema.decodeUnknownEffect(Session.CreateInput)(json).pipe(
         Effect.mapError(() => new HttpApiError.BadRequest({})),
       )
@@ -211,10 +214,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       const body = yield* Effect.orDie(ctx.request.text)
       if (body.trim().length === 0) return yield* fork({ params: ctx.params })
 
-      const json = yield* Effect.try({
-        try: () => JSON.parse(body) as unknown,
-        catch: () => new HttpApiError.BadRequest({}),
-      })
+      const json = yield* tryParseJson(body)
       const payload = yield* Schema.decodeUnknownEffect(ForkPayload)(json).pipe(
         Effect.mapError(() => new HttpApiError.BadRequest({})),
       )
