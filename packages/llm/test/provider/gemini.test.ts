@@ -232,7 +232,7 @@ describe("Gemini route", () => {
         { type: "text-end", id: "text-0" },
         { type: "step-finish", index: 0, reason: "stop", usage, providerMetadata: undefined },
         {
-          type: "request-finish",
+          type: "finish",
           reason: "stop",
           usage,
         },
@@ -291,7 +291,7 @@ describe("Gemini route", () => {
         },
         { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
         {
-          type: "request-finish",
+          type: "finish",
           reason: "tool-calls",
           usage,
         },
@@ -325,7 +325,7 @@ describe("Gemini route", () => {
         { type: "tool-call", id: "tool_0", name: "lookup", input: { query: "weather" } },
         { type: "tool-call", id: "tool_1", name: "lookup", input: { query: "news" } },
       ])
-      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "tool-calls" })
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "tool-calls" })
     }),
   )
 
@@ -344,10 +344,10 @@ describe("Gemini route", () => {
         ),
       )
 
-      expect(length.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "request-finish"])
-      expect(length.events.at(-1)).toMatchObject({ type: "request-finish", reason: "length" })
-      expect(filtered.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "request-finish"])
-      expect(filtered.events.at(-1)).toMatchObject({ type: "request-finish", reason: "content-filter" })
+      expect(length.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
+      expect(length.events.at(-1)).toMatchObject({ type: "finish", reason: "length" })
+      expect(filtered.events.map((event) => event.type)).toEqual(["step-start", "step-finish", "finish"])
+      expect(filtered.events.at(-1)).toMatchObject({ type: "finish", reason: "content-filter" })
     }),
   )
 

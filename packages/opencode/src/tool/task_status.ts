@@ -74,7 +74,7 @@ export const TaskStatusTool = Tool.define(
         }
       }
 
-      const latestAssistant = yield* sessions.findMessage(taskID, (item) => item.info.role === "assistant")
+      const latestAssistant = yield* sessions.findMessage(taskID, (item) => item.info.role === "assistant").pipe(Effect.orDie)
       if (Option.isSome(latestAssistant)) {
         const latest = inspectMessage(latestAssistant.value)
         if (!latest) return { state: "error", text: "Task is not running in this process." }

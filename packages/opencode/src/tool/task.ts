@@ -152,7 +152,7 @@ export const TaskTool = Tool.define(
           ],
         }))
 
-      const msg = yield* Effect.sync(() => MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }))
+      const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(Effect.orDie)
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
 
       const model = next.model ?? {
@@ -198,7 +198,7 @@ export const TaskTool = Tool.define(
       const resumeWhenIdle: (input: { userID: MessageID; state: "completed" | "error" }) => Effect.Effect<void> = Effect.fn(
         "TaskTool.resumeWhenIdle",
       )(function* (input: { userID: MessageID; state: "completed" | "error" }) {
-        const latest = yield* sessions.findMessage(ctx.sessionID, (item) => item.info.role === "user")
+        const latest = yield* sessions.findMessage(ctx.sessionID, (item) => item.info.role === "user").pipe(Effect.orDie)
         if (Option.isNone(latest)) return
         if (latest.value.info.id !== input.userID) return
         if ((yield* status.get(ctx.sessionID)).type !== "idle") {

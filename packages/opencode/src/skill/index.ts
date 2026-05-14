@@ -1,6 +1,5 @@
 import path from "path"
 import { pathToFileURL } from "url"
-import z from "zod"
 import { Effect, Layer, Context, Schema } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
 import type { Agent } from "@/agent/agent"
@@ -16,6 +15,7 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import * as Log from "@opencode-ai/core/util/log"
 import { Discovery } from "./discovery"
 import CUSTOMIZE_OPENCODE_SKILL_BODY from "./prompt/customize-opencode.md" with { type: "text" }
+import { isRecord } from "@/util/record"
 
 const log = Log.create({ service: "skill" })
 const CLAUDE_EXTERNAL_DIR = ".claude"
@@ -41,23 +41,33 @@ export const Info = Schema.Struct({
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export const InvalidError = NamedError.create(
-  "SkillInvalidError",
-  z.object({
-    path: z.string(),
-    message: z.string().optional(),
-    issues: z.custom<z.core.$ZodIssue[]>().optional(),
+const Issue = Schema.StructWithRest(
+  Schema.Struct({
+    message: Schema.String,
+    path: Schema.Array(Schema.String),
   }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
 )
 
-export const NameMismatchError = NamedError.create(
-  "SkillNameMismatchError",
-  z.object({
-    path: z.string(),
-    expected: z.string(),
-    actual: z.string(),
-  }),
-)
+function isSkillFrontmatter(data: unknown): data is { name: string; description?: string } {
+  return (
+    isRecord(data) &&
+    typeof data.name === "string" &&
+    (data.description === undefined || typeof data.description === "string")
+  )
+}
+
+export const InvalidError = NamedError.create("SkillInvalidError", {
+  path: Schema.String,
+  message: Schema.optional(Schema.String),
+  issues: Schema.optional(Schema.Array(Issue)),
+})
+
+export const NameMismatchError = NamedError.create("SkillNameMismatchError", {
+  path: Schema.String,
+  expected: Schema.String,
+  actual: Schema.String,
+})
 
 type State = {
   skills: Record<string, Info>
@@ -101,21 +111,20 @@ const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.I
 
   if (!md) return
 
-  const parsed = z.object({ name: z.string(), description: z.string().optional() }).safeParse(md.data)
-  if (!parsed.success) return
+  if (!isSkillFrontmatter(md.data)) return
 
-  if (state.skills[parsed.data.name]) {
+  if (state.skills[md.data.name]) {
     log.warn("duplicate skill name", {
-      name: parsed.data.name,
-      existing: state.skills[parsed.data.name].location,
+      name: md.data.name,
+      existing: state.skills[md.data.name].location,
       duplicate: match,
     })
   }
 
   state.dirs.add(path.dirname(match))
-  state.skills[parsed.data.name] = {
-    name: parsed.data.name,
-    description: parsed.data.description,
+  state.skills[md.data.name] = {
+    name: md.data.name,
+    description: md.data.description,
     location: match,
     content: md.content,
   }
