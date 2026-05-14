@@ -22,9 +22,6 @@ export default function WorkspaceLayout(props: RouteSectionProps) {
               <A href={`/workspace/${params.id}/go`} activeClass="active" data-nav-button>
                 {i18n.t("workspace.nav.go")}
               </A>
-              <A href={`/workspace/${params.id}/go/invite`} activeClass="active" data-nav-button data-nav-child>
-                {i18n.t("workspace.nav.invite")}
-              </A>
               <A href={`/workspace/${params.id}/usage`} activeClass="active" data-nav-button>
                 {i18n.t("workspace.nav.usage")}
               </A>
@@ -52,9 +49,6 @@ export default function WorkspaceLayout(props: RouteSectionProps) {
               </A>
               <A href={`/workspace/${params.id}/go`} activeClass="active" data-nav-button>
                 {i18n.t("workspace.nav.go")}
-              </A>
-              <A href={`/workspace/${params.id}/go/invite`} activeClass="active" data-nav-button data-nav-child>
-                {i18n.t("workspace.nav.invite")}
               </A>
               <A href={`/workspace/${params.id}/usage`} activeClass="active" data-nav-button>
                 {i18n.t("workspace.nav.usage")}

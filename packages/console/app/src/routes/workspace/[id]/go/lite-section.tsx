@@ -14,13 +14,12 @@ import styles from "./lite-section.module.css"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { formError } from "~/lib/form-error"
-import { GoReferralBanner } from "~/component/go-referral"
 
 import { IconAlipay, IconUpi } from "~/component/icon"
 
 const INVITE_STORAGE_KEY = "opencode.go.invite"
 
-const queryLiteSubscription = query(async (workspaceID: string) => {
+export const queryLiteSubscription = query(async (workspaceID: string) => {
   "use server"
   return withActor(async () => {
     const row = await Database.use((tx) =>
@@ -219,7 +218,6 @@ export function LiteSection() {
               </a>
               .
             </div>
-            <GoReferralBanner href={`/workspace/${params.id}/go/invite`} />
             <div data-slot="usage">
               <div data-slot="usage-item">
                 <div data-slot="usage-header">

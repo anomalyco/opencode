@@ -1,35 +1,3 @@
-[data-component="go-referral-banner"] {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  background-color: var(--color-bg-surface);
-
-  @media (max-width: 40rem) {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  strong {
-    display: block;
-    margin-bottom: var(--space-1);
-    color: var(--color-text);
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-  }
-
-  p {
-    margin: 0;
-    color: var(--color-text-muted);
-    font-size: var(--font-size-sm);
-    line-height: 1.5;
-  }
-}
-
-[data-component="go-referral-banner"],
 [data-component="go-credit-confirm"],
 [data-component="go-referral-section"] {
   a[data-color],
@@ -96,15 +64,7 @@
 [data-slot="invite-link-box"] {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-
-  label {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
+  gap: var(--space-3);
 
   > div {
     display: flex;
@@ -155,27 +115,19 @@
 }
 
 [data-slot="instructions"] {
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  background-color: var(--color-bg);
-
-  strong {
-    display: block;
-    margin-bottom: var(--space-3);
-    color: var(--color-text);
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-  }
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 
   ol {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
     margin: 0;
-    padding: 0 0 0 1.35rem;
-    color: var(--color-text-muted);
-    font-size: var(--font-size-sm);
+    padding-left: 0;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-md);
+    list-style-position: inside;
     line-height: 1.5;
   }
 
@@ -186,13 +138,52 @@
 }
 
 [data-component="go-referral-section"] {
+  [data-component="go-referral-overview"] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    padding: var(--space-6);
+    border: 1px dashed var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background-color: var(--color-bg-surface);
+
+    @media (max-width: 30rem) {
+      gap: var(--space-8);
+      padding: var(--space-4);
+    }
+  }
+
+  [data-slot="rewards-title"] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding-top: var(--space-2);
+
+    h2 {
+      margin: 0;
+      color: var(--color-text);
+      font-size: var(--font-size-md);
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: -0.03125rem;
+    }
+
+    p {
+      margin: 0;
+      color: var(--color-text-muted);
+      font-size: var(--font-size-sm);
+      line-height: 1.5;
+    }
+  }
+
   [data-slot="referral-stats"] {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--space-3);
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-6);
 
-    @media (max-width: 40rem) {
+    @media (max-width: 30rem) {
       grid-template-columns: 1fr;
+      gap: var(--space-4);
     }
 
     > div {
@@ -202,17 +193,19 @@
       padding: var(--space-4);
       border: 1px solid var(--color-border);
       border-radius: var(--border-radius-sm);
-      background-color: var(--color-bg-surface);
     }
 
     span {
       color: var(--color-text-muted);
       font-size: var(--font-size-sm);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: -0.025rem;
     }
 
     strong {
       color: var(--color-text);
-      font-size: var(--font-size-lg);
+      font-size: var(--font-size-md);
       font-weight: 600;
     }
   }
@@ -221,6 +214,15 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+  }
+
+  [data-component="empty-state"] {
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background-color: var(--color-bg-surface);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
   }
 
   [data-slot="reward-row"] {

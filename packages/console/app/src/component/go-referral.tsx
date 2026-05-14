@@ -1,4 +1,4 @@
-import { A, action, json, query, useAction, useSubmission } from "@solidjs/router"
+import { action, json, query, useAction, useSubmission } from "@solidjs/router"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import { Referral } from "@opencode-ai/console-core/referral.js"
@@ -7,6 +7,7 @@ import { Modal } from "~/component/modal"
 import { IconCheck, IconCopy } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
+import { queryLiteSubscription } from "~/routes/workspace/[id]/go/lite-section"
 import "./go-referral.css"
 
 export type GoReferralReward = {
@@ -49,7 +50,7 @@ export const applyGoReferralReward = action(async (workspaceID: string, rewardID
           .catch((e) => ({ error: e.message as string, data: undefined })),
       workspaceID,
     ),
-    { revalidate: [queryGoReferral.key] },
+    { revalidate: [queryGoReferral.key, queryLiteSubscription.key] },
   )
 }, "go.referral.reward.apply")
 
@@ -80,7 +81,6 @@ function CopyInviteLink(props: { summary: GoReferralSummary }) {
 
   return (
     <div data-slot="invite-link-box">
-      <label>{i18n.t("workspace.referral.inviteLink")}</label>
       <div>
         <code title={props.summary.inviteUrl}>{props.summary.inviteUrl}</code>
         <button type="button" data-color="primary" onClick={copy}>
@@ -100,56 +100,7 @@ function CopyInviteLink(props: { summary: GoReferralSummary }) {
   )
 }
 
-export function GoReferralBanner(props: { href: string }) {
-  const i18n = useI18n()
-
-  return (
-    <div data-component="go-referral-banner">
-      <div>
-        <strong>{i18n.t("workspace.referral.banner.title")}</strong>
-        <p>{i18n.t("workspace.referral.banner.body")}</p>
-      </div>
-      <A href={props.href} data-color="primary">
-        {i18n.t("workspace.referral.banner.action")}
-      </A>
-    </div>
-  )
-}
-
-export function GoReferralOverview(props: { summary: GoReferralSummary }) {
-  const i18n = useI18n()
-
-  return (
-    <section data-component="go-referral-section">
-      <div data-slot="section-title">
-        <h2>{i18n.t("workspace.referral.overview.title")}</h2>
-        <p>
-          {i18n.t("workspace.referral.overview.subtitle", {
-            reward: formatCurrency(props.summary.rewardAmount),
-          })}
-        </p>
-      </div>
-      <div data-slot="referral-stats">
-        <div>
-          <span>{i18n.t("workspace.referral.stats.validInvites")}</span>
-          <strong>{props.summary.validInviteCount}</strong>
-        </div>
-        <div>
-          <span>{i18n.t("workspace.referral.stats.earned")}</span>
-          <strong>{formatCurrency(props.summary.totalEarned)}</strong>
-        </div>
-        <div>
-          <span>{i18n.t("workspace.referral.stats.applied")}</span>
-          <strong>{formatCurrency(props.summary.totalApplied)}</strong>
-        </div>
-      </div>
-      <InvitationInstructions rewardAmount={props.summary.rewardAmount} />
-      <CopyInviteLink summary={props.summary} />
-    </section>
-  )
-}
-
-export function GoReferralRewards(props: { workspaceID: string; summary: GoReferralSummary }) {
+export function GoReferralSection(props: { workspaceID: string; summary: GoReferralSummary }) {
   const i18n = useI18n()
   const language = useLanguage()
   const apply = useAction(applyGoReferralReward)
@@ -167,6 +118,32 @@ export function GoReferralRewards(props: { workspaceID: string; summary: GoRefer
   return (
     <section data-component="go-referral-section">
       <div data-slot="section-title">
+        <h2>{i18n.t("workspace.referral.overview.title")}</h2>
+        <p>
+          {i18n.t("workspace.referral.overview.subtitle", {
+            reward: formatCurrency(props.summary.rewardAmount),
+          })}
+        </p>
+      </div>
+      <div data-component="go-referral-overview">
+        <div data-slot="referral-stats">
+          <div>
+            <span>{i18n.t("workspace.referral.stats.validInvites")}</span>
+            <strong>{props.summary.validInviteCount}</strong>
+          </div>
+          <div>
+            <span>{i18n.t("workspace.referral.stats.earned")}</span>
+            <strong>{formatCurrency(props.summary.totalEarned)}</strong>
+          </div>
+          <div>
+            <span>{i18n.t("workspace.referral.stats.applied")}</span>
+            <strong>{formatCurrency(props.summary.totalApplied)}</strong>
+          </div>
+        </div>
+        <CopyInviteLink summary={props.summary} />
+        <InvitationInstructions rewardAmount={props.summary.rewardAmount} />
+      </div>
+      <div data-slot="rewards-title">
         <h2>{i18n.t("workspace.referral.rewards.title")}</h2>
         <p>
           {i18n.t("workspace.referral.rewards.subtitle", {
@@ -246,15 +223,15 @@ export function GoReferralRewards(props: { workspaceID: string; summary: GoRefer
   )
 }
 
-export function InvitationInstructions(props: { rewardAmount: number }) {
+function InvitationInstructions(props: { rewardAmount: number }) {
   const i18n = useI18n()
 
   return (
     <div data-slot="instructions">
-      <strong>{i18n.t("workspace.referral.instructions.title")}</strong>
       <ol>
         <li>{i18n.t("workspace.referral.instructions.share")}</li>
         <li>{i18n.t("workspace.referral.instructions.subscribe")}</li>
+        <li>{i18n.t("workspace.referral.instructions.claim")}</li>
         <li>{i18n.t("workspace.referral.instructions.apply", { amount: formatCurrency(props.rewardAmount) })}</li>
       </ol>
     </div>
