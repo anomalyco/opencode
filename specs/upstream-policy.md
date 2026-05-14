@@ -36,8 +36,10 @@ securecode は `anomalyco/opencode` の fork として運用しており、追�
 
 新規機能 / 修正を入れるとき、以下の順で検討する。
 
-1. **既存の opencode plugin hook（`tool.execute.before` / `tool.execute.after` / `chat.params` / `chat.headers` / `experimental.chat.messages.transform` / `experimental.chat.system.transform` / `command.execute.before` / `permission.ask` / `tool.definition` / `shell.env` 等）で実装できるか。** 出来るなら `packages/opencode/src/securecode/plugins/` 配下に plugin として書く。upstream への diff は `packages/opencode/src/plugin/index.ts` の `INTERNAL_PLUGINS` に 1 行追加するだけで済む。
-2. **plugin hook で到達できない領域でも、securecode 固有ファイル（`packages/opencode/src/securecode/**` 配下、`setup/`、`install-securecode`、`script/release-securecode.ts` 等）の追加で達成できないか。** 出来るなら upstream owned のコードを触らずに済む。
+1. **既存の opencode plugin 機構で実装できるか。** opencode には用途別に 2 系統の plugin loader がある:
+   - **server-side plugin** — `tool.execute.before` / `tool.execute.after` / `chat.params` / `chat.headers` / `experimental.chat.messages.transform` / `experimental.chat.system.transform` / `command.execute.before` / `permission.ask` / `tool.definition` / `shell.env` 等の `Hooks` 系 API。出来るなら `packages/opencode/src/securecode/plugins/` 配下に plugin として書き、`packages/opencode/src/plugin/index.ts` の `INTERNAL_PLUGINS` に 1 行追加する。
+   - **TUI plugin** — slot 差し替え (`home_logo` / `sidebar_footer` / `home_footer` 等)、TUI 内 command / keybind 追加、theme 提供 など Solid component / runtime API 系 (`@opencode-ai/plugin/tui`)。出来るなら `packages/opencode/src/securecode/tui-plugins/` 配下に plugin として書き、`packages/opencode/src/cli/cmd/tui/plugin/internal.ts` の `INTERNAL_TUI_PLUGINS` に 1 行追加する。
+2. **plugin 機構で到達できない領域でも、securecode 固有ファイル（`packages/opencode/src/securecode/**` 配下、`setup/`、`install-securecode`、`script/release-securecode.ts` 等）の追加で達成できないか。** 出来るなら upstream owned のコードを触らずに済む。
 3. **どうしても upstream owned のソースに手を入れる必要がある場合は、以下のいずれかが満たされるか確認する。**
    - 該当変更が upstream にも有益で、upstream にも PR を出せる
    - 機能上の価値が大きく、upstream merge 時の conflict 解消コストを継続的に払う覚悟がある
@@ -56,14 +58,16 @@ securecode は `anomalyco/opencode` の fork として運用しており、追�
 |---|---|---|---|
 | [#102](https://github.com/acompany-develop/securecode/pull/102) | feature | merged | 4 ファイル touch（`plugin/index.ts` への 1 行 import + 登録のみ）で本体は plugin。`tool.execute.after` / `chat.params` / `experimental.chat.messages.transform` hook で完結。core 変更は最小化したが避けられない 1 行。 |
 | [PR #123](https://github.com/acompany-develop/securecode/pull/123) / [#82](https://github.com/acompany-develop/securecode/issues/82) | feature | merged | upstream owned ファイル変更ゼロ。`install-securecode`（新規）と `script/release-securecode.ts`（securecode 固有）の追加のみ。 |
+| [PR #126](https://github.com/acompany-develop/securecode/pull/126) / [#125](https://github.com/acompany-develop/securecode/issues/125) | feature | merged | acompany-branding を `tui.json` 経由 opt-in から `INTERNAL_TUI_PLUGINS` 経由の強制ロードに切り替え。upstream への diff は `cli/cmd/tui/plugin/internal.ts` の import 1 行 + 配列 entry 1 行のみ。TUI 系 plugin の append 先（`INTERNAL_TUI_PLUGINS`）が server 系 (`INTERNAL_PLUGINS`) と並ぶ手段であることの先例。 |
 | [#122](https://github.com/acompany-develop/securecode/pull/122) / [#81](https://github.com/acompany-develop/securecode/issues/81) | feature | closed | `--no-project-plugins` CLI フラグ + MODULE_NOT_FOUND hint の追加。実装上 plugin hook で到達できない領域（yargs option 宣言 + plugin loader の filter）で、upstream 4 ファイルを触る。本来の致命バグは upstream loader 改修で既解消、残るのは純粋な UX 改善であり追従コストに見合わず **見送り**。 |
 | [#83](https://github.com/acompany-develop/securecode/issues/83) | feature | closed | `securecode auth status` 診断 subcommand + 401/502 エラーメッセージ装飾。subcommand 宣言と provider error path への手入れが必要で plugin 化不能。既存ユーザー手順書セクション 6 でカバーできるため **見送り**。 |
 
 ### 補助 rules
 
-`packages/opencode/src/plugin/index.ts` の `INTERNAL_PLUGINS` 配列など、構造上 1 行追加が避けられない箇所はあります。次の点を守る限り許容します。
+`packages/opencode/src/plugin/index.ts` の `INTERNAL_PLUGINS` 配列、`packages/opencode/src/cli/cmd/tui/plugin/internal.ts` の `INTERNAL_TUI_PLUGINS` 配列など、構造上 1 行追加が避けられない箇所はあります。次の点を守る限り許容します。
 
-- 追加行が 1〜数行で、ロジックは別ファイル（securecode owned）に切り出されている
+- 追加行が 1〜数行で、ロジックは別ファイル（securecode owned: `packages/opencode/src/securecode/plugins/` または `packages/opencode/src/securecode/tui-plugins/`）に切り出されている
+- 配列の **末尾に append のみ** で、既存 entry の削除や挿入位置の変更は行わない（upstream merge 時の conflict 面積を最小化するため）
 - upstream の同名配列 / 同構造への merge conflict が想定しやすい場所であり、解消 cost が低い
 - 該当ファイルに securecode 固有 import / 登録が増えるたびに本ドキュメントの「過去の判断例」表を更新する
 
