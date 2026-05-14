@@ -1119,7 +1119,7 @@ it.instance(
 )
 
 it.instance(
-  "assertNotBusy throws BusyError when loop running",
+  "assertNotBusy fails with BusyError when loop running",
   () =>
     Effect.gen(function* () {
       const { llm } = yield* useServerConfig(providerCfg)
@@ -1138,6 +1138,7 @@ it.instance(
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
         expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "SessionBusyError", sessionID: chat.id })
       }
 
       yield* prompt.cancel(chat.id)
@@ -1181,6 +1182,7 @@ it.instance(
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
         expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "SessionBusyError", sessionID: chat.id })
       }
 
       yield* prompt.cancel(chat.id)

@@ -3,7 +3,7 @@ import { Deferred, Effect, Exit, Fiber, Latch, Ref, Scope } from "effect"
 import { Runner } from "@/effect/runner"
 import { it } from "../lib/effect"
 
-const waitForState = <A, E>(runner: Runner.Runner<A, E>, tag: Runner.State<A, E>["_tag"]) =>
+const waitForState = <A, E, B>(runner: Runner.Runner<A, E, B>, tag: Runner.State<A, E>["_tag"]) =>
   Effect.gen(function* () {
     while (runner.state._tag !== tag) yield* Effect.yieldNow
   }).pipe(Effect.timeout("1 second"))
@@ -312,10 +312,8 @@ describe("Runner", () => {
     "shell rejects via busy callback and cancel still stops the first shell",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = Runner.make<string>(s, {
-        busy: () => {
-          throw new Error("busy")
-        },
+      const runner = Runner.make<string, never, string>(s, {
+        busy: Effect.fail("busy"),
       })
 
       const sh = yield* runner.startShell(Effect.never.pipe(Effect.as("aborted"))).pipe(Effect.forkChild)

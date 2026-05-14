@@ -442,9 +442,12 @@ export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsa
   }
 }
 
-export class BusyError extends Error {
-  constructor(public readonly sessionID: string) {
-    super(`Session ${sessionID} is busy`)
+export class BusyError extends Schema.TaggedErrorClass<BusyError>()("SessionBusyError", {
+  sessionID: SessionID,
+  message: Schema.String,
+}) {
+  static isInstance(input: unknown): input is BusyError {
+    return input instanceof BusyError
   }
 }
 
