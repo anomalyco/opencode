@@ -5,6 +5,7 @@
 
 | feat-id | 状态 | 简介 |
 |---|---|---|
+| [html-viewer-ux-polish](./html-viewer-ux-polish/) | done | HTML 预览 UX 优化 — 去顶部 toolbar + iframe 内右键桥接(postMessage)弹 DeskFox 菜单 + 左键点 iframe 内菜单消失 + 阈值 2MB→10MB + CodeMirror HTML 编辑高亮;R4 第 6 笔本季(超配,user 授权)|
 | [html-viewer-allow-scripts](./html-viewer-allow-scripts/) | done | HTML 预览 iframe 开 `allow-scripts` — 解决 PPT/Slides 翻页按钮等内嵌 JS 失效问题(反转 md-office-improvements spec A1.9,跨 origin 论证 MDN 警告不适用)|
 | [file-tree-dnd](./file-tree-dnd/) | done | 文件树拖放移动 — 全功能(核心+多选+剪切粘贴+撤销+外部拖入) |
 | [getbot-接入](./getbot-接入/) | done | GetBot 模型聚合 Provider 接入(热门首位 + 推荐标 + 内置 apiKey 流程) |

@@ -1,5 +1,6 @@
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown"
 import { javascript } from "@codemirror/lang-javascript"
+import { html } from "@codemirror/lang-html"
 import { LanguageDescription, type LanguageSupport } from "@codemirror/language"
 
 const codeLanguages: LanguageDescription[] = [
@@ -34,6 +35,9 @@ export function langFromExt(path: string): LanguageSupport | undefined {
       jsx: lower.endsWith(".jsx") || lower.endsWith(".tsx"),
       typescript: lower.endsWith(".ts") || lower.endsWith(".tsx"),
     })
+  }
+  if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+    return html()
   }
   return undefined
 }

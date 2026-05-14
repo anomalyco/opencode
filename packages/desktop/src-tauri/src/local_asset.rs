@@ -18,8 +18,47 @@ use tauri::{Runtime, UriSchemeContext};
 
 pub const SCHEME: &str = "localasset";
 
-// 单文件 500MB 硬上限(对齐 read_binary_file_base64);HTML 预览侧另设 2MB 渲染阈值
+// 单文件 500MB 硬上限(对齐 read_binary_file_base64);HTML 预览侧另设 10MB 渲染阈值(前端)
 const MAX_FILE_SIZE: u64 = 500 * 1024 * 1024;
+
+// FORK: html-viewer-ux-polish 2026-05-14 — HTML 响应注入 iframe 事件桥接 JS。
+// iframe 内事件不冒泡到 parent + WebView2 接管 contextmenu 显原生菜单(返回/刷新/打印),与 .md
+// 文件查看器自定义右键菜单 UX 不一致。注入捕获相位 listener:
+//   - contextmenu: preventDefault native 菜单 + postMessage(x, y, 选区文本)→ 父弹 mdMenu
+//   - mousedown:   postMessage 通知父 → 父收到时若 mdMenu 开着就关掉(对齐 light DOM "点别处关菜单"行为)
+// 脚本极小、命名空间 `__deskfox`,与用户页脚本冲突风险低;non-UTF-8 / 无 head 锚点时有兜底,不阻断渲染。
+const CONTEXTMENU_BRIDGE_SCRIPT: &str = "<script>(function(){document.addEventListener('contextmenu',function(e){e.preventDefault();var s=window.getSelection();var t=s?s.toString():'';try{window.parent.postMessage({__deskfox:true,type:'contextmenu',x:e.clientX,y:e.clientY,text:t},'*');}catch(err){}},true);document.addEventListener('mousedown',function(e){try{window.parent.postMessage({__deskfox:true,type:'mousedown'},'*');}catch(err){}},true);})();</script>";
+
+fn inject_contextmenu_bridge(html_bytes: &[u8]) -> Vec<u8> {
+    // Best-effort UTF-8 decode;非 UTF-8 文件(罕见,HTML5 推 UTF-8 + 我们 Content-Type 也强 charset=utf-8)
+    // 原样返回,user 右键回退到 native 菜单(可接受降级)
+    let html = match std::str::from_utf8(html_bytes) {
+        Ok(s) => s,
+        Err(_) => return html_bytes.to_vec(),
+    };
+
+    // 锚点优先级:</head> > <body > <BODY (case-insensitive 简化版仅查常见大小写) > 前置
+    let pos_opt = html
+        .find("</head>")
+        .or_else(|| html.find("</HEAD>"))
+        .or_else(|| html.find("<body").map(|p| p)) // 在 <body 标签前注,确保 DOM ready 前注册 listener
+        .or_else(|| html.find("<BODY"));
+
+    let mut out = String::with_capacity(html.len() + CONTEXTMENU_BRIDGE_SCRIPT.len());
+    match pos_opt {
+        Some(pos) => {
+            out.push_str(&html[..pos]);
+            out.push_str(CONTEXTMENU_BRIDGE_SCRIPT);
+            out.push_str(&html[pos..]);
+        }
+        None => {
+            // 兜底:html 不含标准 head/body 锚点(片段 / 异常文件),前置注入
+            out.push_str(CONTEXTMENU_BRIDGE_SCRIPT);
+            out.push_str(html);
+        }
+    }
+    out.into_bytes()
+}
 
 fn percent_decode(input: &str) -> String {
     let bytes = input.as_bytes();
@@ -221,9 +260,16 @@ fn handle_inner(uri_path: &str, range_header: Option<&str>) -> Response<Cow<'sta
         // 解析失败的 Range header 走 200 全文(浏览器自己再发 Range)
     }
 
-    let bytes: Cow<'static, [u8]> = match std::fs::read(&abs_canon) {
-        Ok(b) => Cow::Owned(b),
+    let raw_bytes = match std::fs::read(&abs_canon) {
+        Ok(b) => b,
         Err(_) => return err_response(500, "read failed"),
+    };
+
+    // FORK: html-viewer-ux-polish 2026-05-14 — text/html 响应注入 contextmenu 桥接 JS
+    let bytes: Cow<'static, [u8]> = if mime.starts_with("text/html") {
+        Cow::Owned(inject_contextmenu_bridge(&raw_bytes))
+    } else {
+        Cow::Owned(raw_bytes)
     };
 
     match Response::builder()
@@ -312,5 +358,61 @@ mod tests {
     fn handle_invalid_root_400() {
         let r = handle_inner("/!!!notbase64!!!/file.png", None);
         assert_eq!(r.status(), 400);
+    }
+
+    // FORK: html-viewer-ux-polish 2026-05-14 — contextmenu 桥接注入测试
+    #[test]
+    fn inject_before_close_head() {
+        let html = b"<html><head><title>x</title></head><body>hi</body></html>";
+        let out = inject_contextmenu_bridge(html);
+        let s = String::from_utf8(out).unwrap();
+        assert!(s.contains(CONTEXTMENU_BRIDGE_SCRIPT));
+        // script 必须在 </head> 之前
+        let script_pos = s.find(CONTEXTMENU_BRIDGE_SCRIPT).unwrap();
+        let head_close_pos = s.find("</head>").unwrap();
+        assert!(script_pos < head_close_pos);
+        // 原内容完整保留
+        assert!(s.contains("<title>x</title>"));
+        assert!(s.contains("<body>hi</body>"));
+    }
+
+    #[test]
+    fn inject_before_body_when_no_head_close() {
+        // 无 </head>(自闭合或异常),回退到 <body 前
+        let html = b"<html><body>hi</body></html>";
+        let out = inject_contextmenu_bridge(html);
+        let s = String::from_utf8(out).unwrap();
+        let script_pos = s.find(CONTEXTMENU_BRIDGE_SCRIPT).unwrap();
+        let body_pos = s.find("<body").unwrap();
+        assert!(script_pos < body_pos);
+    }
+
+    #[test]
+    fn inject_prepend_fallback_when_no_anchors() {
+        // 既无 head 也无 body,前置兜底
+        let html = b"<p>just a fragment</p>";
+        let out = inject_contextmenu_bridge(html);
+        let s = String::from_utf8(out).unwrap();
+        assert!(s.starts_with(CONTEXTMENU_BRIDGE_SCRIPT));
+        assert!(s.contains("<p>just a fragment</p>"));
+    }
+
+    #[test]
+    fn inject_passthrough_non_utf8() {
+        // 非 UTF-8 字节(罕见,user 用 GBK 等)— 原样返回,不注入,user 右键回退原生菜单
+        let html = vec![0xFF, 0xFE, 0xFD, 0xFC];
+        let out = inject_contextmenu_bridge(&html);
+        assert_eq!(out, html);
+    }
+
+    #[test]
+    fn inject_uppercase_anchors() {
+        let html = b"<HTML><HEAD></HEAD><BODY></BODY></HTML>";
+        let out = inject_contextmenu_bridge(html);
+        let s = String::from_utf8(out).unwrap();
+        assert!(s.contains(CONTEXTMENU_BRIDGE_SCRIPT));
+        let script_pos = s.find(CONTEXTMENU_BRIDGE_SCRIPT).unwrap();
+        let head_close_pos = s.find("</HEAD>").unwrap();
+        assert!(script_pos < head_close_pos);
     }
 }
