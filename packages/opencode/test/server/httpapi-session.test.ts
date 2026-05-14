@@ -454,6 +454,31 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "clears archived timestamp when null is passed",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+        const session = yield* createSession({ title: "to-unarchive" })
+
+        yield* request(pathFor(SessionPaths.update, { sessionID: session.id }), {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ time: { archived: Date.now() } }),
+        })
+
+        const response = yield* request(pathFor(SessionPaths.update, { sessionID: session.id }), {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ time: { archived: null } }),
+        })
+        expect(response.status).toBe(200)
+        expect((yield* json<Session.Info>(response)).time.archived).toBeUndefined()
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "uses project-scoped path and directory precedence",
     () =>
       Effect.gen(function* () {

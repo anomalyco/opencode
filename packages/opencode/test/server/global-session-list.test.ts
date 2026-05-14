@@ -71,6 +71,25 @@ describe("session.listGlobal", () => {
   )
 
   it.instance(
+    "includes sessions after unarchiving",
+    () =>
+      Effect.gen(function* () {
+        const session = yield* withSession({ title: "unarchive-me" })
+
+        yield* SessionNs.Service.use((svc) => svc.setArchived({ sessionID: session.id, time: Date.now() }))
+
+        const archived = yield* Effect.sync(() => [...SessionNs.listGlobal({ limit: 200 })])
+        expect(archived.map((s) => s.id)).not.toContain(session.id)
+
+        yield* SessionNs.Service.use((svc) => svc.setArchived({ sessionID: session.id }))
+
+        const active = yield* Effect.sync(() => [...SessionNs.listGlobal({ limit: 200 })])
+        expect(active.map((s) => s.id)).toContain(session.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
     "supports cursor pagination",
     () =>
       Effect.gen(function* () {
