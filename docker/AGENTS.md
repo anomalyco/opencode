@@ -206,29 +206,7 @@ echo "https://$JUPYTERHUB_USER.$OPENCODE_SERVE_DOMAIN/"
 
 ## 미리보기 핫 리로드
 
-학생은 대화가 끝날 때마다 **미리보기 화면에서 결과의 변화를 즉시** 확인하길 기대합니다. 파일을 저장하면 새로고침 없이도 미리보기에 반영되도록 환경을 구성하세요.
-
-### dev 서버는 항상 `ensure_dev_server` 도구로 띄우세요
-
-`bash` 로 직접 `nohup … &` 명령을 짜지 마세요. `ensure_dev_server` 도구가 idempotent 하게 처리합니다:
-
-- 이미 LISTEN 중이면 즉시 종료 (재시작·중단 없음). 매 응답 턴마다 같은 인자로 한 번씩 호출만 하면 됩니다.
-- LISTEN 중이 아니면 detached 백그라운드로 띄우고, 포트가 LISTEN 될 때까지만 폴링해서 반환합니다. `sleep 8` 같은 고정 대기 없음.
-- 응답 hang 의 원인이 되는 stdout 파이프 처리도 도구 내부에서 끝냅니다. 학생이 "서버 로그 보여줘" 라고 명시적으로 요청할 때만 별도로 로그 파일에 띄워 `tail` 로 확인해 보세요.
-
-호출 인자:
-
-- `cwd`: 프로젝트 디렉토리 (예: `/home/jovyan/project`)
-- `cmd`: 실제 dev 서버 명령. 아래 예시 참고. `nohup`·`&`·`>` 같은 백그라운드 처리는 도구가 알아서 합니다.
-- `port`: 생략하면 3000. OpenCode 환경에서는 3000 고정.
-
-명령 예시 (`cmd` 인자 값):
-
-- 정적 HTML/CSS/JS: `npx --yes browser-sync start --server --port 3000 --files "**/*.html,**/*.css,**/*.js" --no-open --no-ui`
-- Vite / CRA: `npm run dev -- --host 0.0.0.0 --port 3000`
-- Next.js: `npm run dev -- --hostname 0.0.0.0 --port 3000`
-
-도구 반환값은 JSON 문자열이며 `status` 가 `already_running` / `started` / `failed` 중 하나입니다. `failed` 일 때는 `reason` 을 읽고 명령어를 고친 뒤 다시 호출하세요. 성공 시 `url` 을 학생에게 그대로 안내하면 됩니다.
+학생은 매 응답마다 **미리보기 화면에 결과가 즉시 반영되길** 기대합니다. dev 서버는 `ensure_dev_server` 도구로 띄우세요 — 매 응답 턴마다 같은 인자로 한 번씩 호출하면 idempotent 하게 처리됩니다. `bash` 로 `nohup … &` 명령을 직접 짜지 마세요.
 
 ### 응답을 마무리할 때
 
