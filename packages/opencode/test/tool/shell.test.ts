@@ -1195,7 +1195,7 @@ describe("tool.shell truncation", () => {
         const filepath = (result.metadata as { outputPath?: string }).outputPath
         expect(filepath).toBeTruthy()
 
-        const saved = yield* Effect.promise(() => Filesystem.readText(filepath!))
+        const saved = yield* (yield* AppFileSystem.Service).readFileString(filepath!)
         const lines = saved.trim().split(/\r?\n/)
         expect(lines.length).toBe(lineCount)
         expect(lines[0]).toBe("1")

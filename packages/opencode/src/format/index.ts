@@ -5,6 +5,7 @@ import { InstanceState } from "@/effect/instance-state"
 import path from "path"
 import { mergeDeep } from "remeda"
 import { Config } from "@/config/config"
+import { errorMessage } from "@/util/error"
 import * as Log from "@opencode-ai/core/util/log"
 import * as Formatter from "./formatter"
 
@@ -100,7 +101,7 @@ export const layer = Layer.effect(
                         command: cmd,
                         ...item.environment,
                         file: filepath,
-                        cause: error.message,
+                        cause: errorMessage(error.cause ?? error),
                       })
                       return undefined
                     }),

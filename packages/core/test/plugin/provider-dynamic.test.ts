@@ -9,7 +9,7 @@ import { AISDK } from "@opencode-ai/core/aisdk"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { DynamicProviderPlugin } from "@opencode-ai/core/plugin/provider/dynamic"
-import { testEffect } from "../../lib/effect"
+import { testEffect } from "../lib/effect"
 import { fixtureProvider, it, model, npmLayer } from "./provider-helper"
 
 const fixtureProviderPath = fileURLToPath(fixtureProvider)

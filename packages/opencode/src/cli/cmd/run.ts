@@ -24,6 +24,7 @@ import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
+import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
 const runtimeTask = import("./run/runtime")
@@ -80,6 +81,10 @@ function block(info: Inline, output?: string) {
   if (!output?.trim()) return
   UI.println(output)
   UI.empty()
+}
+
+function formatRunError(error: unknown) {
+  return FormatError(error) ?? FormatUnknownError(error)
 }
 
 async function tool(part: ToolPart) {
@@ -731,10 +736,13 @@ export const RunCommand = effectCmd({
 
         if (!args.interactive) {
           const events = await client.event.subscribe()
-          const completed = loop(client, events)
+          loop(client, events).catch((e) => {
+            console.error(e)
+            process.exit(1)
+          })
 
           if (args.command) {
-            await client.session.command({
+            const result = await client.session.command({
               sessionID,
               agent,
               model: args.model,
@@ -742,21 +750,25 @@ export const RunCommand = effectCmd({
               arguments: message,
               variant: args.variant,
             })
-            const error = await completed
-            if (error) process.exitCode = 1
+            if (result.error) {
+              if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
+              process.exitCode = 1
+            }
             return
           }
 
           const model = pick(args.model)
-          await client.session.prompt({
+          const result = await client.session.prompt({
             sessionID,
             agent,
             model,
             variant: args.variant,
             parts: [...files, { type: "text", text: message }],
           })
-          const error = await completed
-          if (error) process.exitCode = 1
+          if (result.error) {
+            if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
+            process.exitCode = 1
+          }
           return
         }
 
