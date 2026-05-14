@@ -437,20 +437,33 @@ export function Session() {
     if (!scroll || scroll.isDestroyed) return
     if (!sync.data.messageOlderCursor[route.sessionID]) return
     if (sync.data.messageOlderLoading[route.sessionID]) return
-    if (scroll.y > NEAR_TOP_THRESHOLD) return
-    const prevScrollHeight = scroll.scrollHeight
-    const prevY = scroll.y
+    if (scroll.scrollTop > NEAR_TOP_THRESHOLD) return
+    // Anchor-based scroll restoration: identify the first visible child
+    // so we can restore its position after content changes at either end.
+    // Note: child.y includes the scroll offset, so child.y - scroll.y
+    // gives the offset from the viewport top regardless of scroll position.
+    const anchor = scroll.getChildren().find((c) => c.id && c.y >= scroll.y)
+    const anchorId = anchor?.id
+    const anchorOffset = anchor ? anchor.y - scroll.y : undefined
     await sync.session.loadOlderMessages(route.sessionID)
     // Trim from the bottom if the user is well above it - only safe when
     // there's room above the live tail and no message there is still
     // streaming. trimNewerMessages itself enforces the streaming guard.
     const messages = sync.data.message[route.sessionID] ?? []
-    if (messages.length > WINDOW_CAP && scroll.scrollHeight - prevY > scroll.height * 4) {
+    if (messages.length > WINDOW_CAP && scroll.scrollHeight - scroll.scrollTop > scroll.height * 4) {
       sync.session.trimNewerMessages(route.sessionID, WINDOW_CAP)
     }
     setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
-      scroll.scrollTo(prevY + (scroll.scrollHeight - prevScrollHeight))
+      if (anchorId === undefined || anchorOffset === undefined) return
+      const anchorChild = scroll.getChildren().find((c) => c.id === anchorId)
+      if (anchorChild) {
+        // Use scrollBy with the delta (anchorChild.y - scroll.y - anchorOffset)
+        // rather than scrollTo with an absolute position. The child.y values
+        // include the scroll offset, so child.y - scroll.y cancels it out,
+        // giving a correct delta regardless of scroll.y vs scrollTop.
+        scroll.scrollBy(anchorChild.y - scroll.y - anchorOffset)
+      }
     }, 0)
   }
 
@@ -458,23 +471,33 @@ export function Session() {
     if (!scroll || scroll.isDestroyed) return
     if (!sync.data.messageNewerCursor[route.sessionID]) return
     if (sync.data.messageNewerLoading[route.sessionID]) return
-    const distanceFromBottom = scroll.scrollHeight - scroll.height - scroll.y
+    const distanceFromBottom = scroll.scrollHeight - scroll.height - scroll.scrollTop
     if (distanceFromBottom > NEAR_BOTTOM_THRESHOLD) return
-    const prevScrollHeight = scroll.scrollHeight
-    const prevY = scroll.y
+    // Anchor-based scroll restoration: identify the first visible child
+    // so we can restore its position after content changes at either end.
+    // Note: child.y includes the scroll offset, so child.y - scroll.y
+    // gives the offset from the viewport top regardless of scroll position.
+    const anchor = scroll.getChildren().find((c) => c.id && c.y >= scroll.y)
+    const anchorId = anchor?.id
+    const anchorOffset = anchor ? anchor.y - scroll.y : undefined
     await sync.session.loadNewerMessages(route.sessionID)
     // Trim from the top - older messages can always be re-fetched via the
     // older cursor, no streaming concern.
     const messages = sync.data.message[route.sessionID] ?? []
-    if (messages.length > WINDOW_CAP && prevY > scroll.height * 4) {
+    if (messages.length > WINDOW_CAP && scroll.scrollTop > scroll.height * 4) {
       sync.session.trimOlderMessages(route.sessionID, WINDOW_CAP)
     }
     setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
-      // After append, scroll position relative to top is unchanged. After
-      // top-trim, content above shrinks - keep the same logical position.
-      const heightDelta = scroll.scrollHeight - prevScrollHeight
-      if (heightDelta < 0) scroll.scrollTo(Math.max(0, prevY + heightDelta))
+      if (anchorId === undefined || anchorOffset === undefined) return
+      const anchorChild = scroll.getChildren().find((c) => c.id === anchorId)
+      if (anchorChild) {
+        // Use scrollBy with the delta (anchorChild.y - scroll.y - anchorOffset)
+        // rather than scrollTo with an absolute position. The child.y values
+        // include the scroll offset, so child.y - scroll.y cancels it out,
+        // giving a correct delta regardless of scroll.y vs scrollTop.
+        scroll.scrollBy(anchorChild.y - scroll.y - anchorOffset)
+      }
     }, 0)
   }
 
