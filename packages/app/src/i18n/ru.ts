@@ -299,6 +299,7 @@ export const dict = {
   "mcp.status.connected": "подключено",
   "mcp.status.failed": "ошибка",
   "mcp.status.needs_auth": "требуется авторизация",
+  "mcp.auth.clickToAuthenticate": "Нажмите, чтобы авторизоваться",
   "mcp.status.disabled": "отключено",
 
   "dialog.fork.empty": "Нет сообщений для ответвления",

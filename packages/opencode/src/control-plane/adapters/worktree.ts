@@ -3,14 +3,18 @@ import { type WorkspaceAdapter, WorkspaceInfo } from "../types"
 
 const WorktreeConfig = Schema.Struct({
   name: WorkspaceInfo.fields.name,
-  branch: Schema.String,
+  branch: Schema.optional(Schema.NullOr(Schema.String)),
   directory: Schema.String,
 })
 const decodeWorktreeConfig = Schema.decodeUnknownSync(WorktreeConfig)
 
 async function loadWorktree() {
-  const [{ AppRuntime }, { Worktree }] = await Promise.all([import("@/effect/app-runtime"), import("@/worktree")])
-  return { AppRuntime, Worktree }
+  const [{ AppRuntime }, { Instance }, { Worktree }] = await Promise.all([
+    import("@/effect/app-runtime"),
+    import("@/project/instance"),
+    import("@/worktree"),
+  ])
+  return { AppRuntime, Instance, Worktree }
 }
 
 export const WorktreeAdapter: WorkspaceAdapter = {
@@ -18,11 +22,10 @@ export const WorktreeAdapter: WorkspaceAdapter = {
   description: "Create a git worktree",
   async configure(info) {
     const { AppRuntime, Worktree } = await loadWorktree()
-    const next = await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.makeWorktreeInfo()))
+    const next = await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.makeWorktreeInfo({ detached: true })))
     return {
       ...info,
       name: next.name,
-      branch: next.branch,
       directory: next.directory,
     }
   },
@@ -34,10 +37,20 @@ export const WorktreeAdapter: WorkspaceAdapter = {
         svc.createFromInfo({
           name: config.name,
           directory: config.directory,
-          branch: config.branch,
+          ...(config.branch ? { branch: config.branch } : {}),
         }),
       ),
     )
+  },
+  async list() {
+    const { AppRuntime, Instance, Worktree } = await loadWorktree()
+    return (await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.list()))).map((info) => ({
+      type: "worktree",
+      name: info.name,
+      branch: info.branch,
+      directory: info.directory,
+      projectID: Instance.project.id,
+    }))
   },
   async remove(info) {
     const { AppRuntime, Worktree } = await loadWorktree()
