@@ -36,6 +36,12 @@ import {
 } from "../groups/session"
 import * as SessionError from "./session-errors"
 
+const tryParseJson = (text: string) =>
+  Effect.try({
+    try: () => JSON.parse(text) as unknown,
+    catch: () => new HttpApiError.BadRequest({}),
+  })
+
 export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* Session.Service
@@ -52,13 +58,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const bus = yield* Bus.Service
     const scope = yield* Scope.Scope
 
-    const mapBusy = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E | HttpApiError.BadRequest, R> =>
-      effect.pipe(
-        Effect.catchCause((cause): Effect.Effect<never, E | HttpApiError.BadRequest> => {
-          if (Cause.squash(cause) instanceof Session.BusyError) return Effect.fail(new HttpApiError.BadRequest({}))
-          return Effect.failCause(cause)
-        }),
-      )
+    const mapBusy = <A, R>(
+      effect: Effect.Effect<A, Session.BusyError, R>,
+    ): Effect.Effect<A, HttpApiError.BadRequest, R> =>
+      effect.pipe(Effect.catchTag("SessionBusyError", () => Effect.fail(new HttpApiError.BadRequest({}))))
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
       return yield* session.list({
@@ -160,10 +163,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       const body = yield* Effect.orDie(ctx.request.text)
       if (body.trim().length === 0) return yield* create({})
 
-      const json = yield* Effect.try({
-        try: () => JSON.parse(body) as unknown,
-        catch: () => new HttpApiError.BadRequest({}),
-      })
+      const json = yield* tryParseJson(body)
       const payload = yield* Schema.decodeUnknownEffect(Session.CreateInput)(json).pipe(
         Effect.mapError(() => new HttpApiError.BadRequest({})),
       )
@@ -211,10 +211,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       const body = yield* Effect.orDie(ctx.request.text)
       if (body.trim().length === 0) return yield* fork({ params: ctx.params })
 
-      const json = yield* Effect.try({
-        try: () => JSON.parse(body) as unknown,
-        catch: () => new HttpApiError.BadRequest({}),
-      })
+      const json = yield* tryParseJson(body)
       const payload = yield* Schema.decodeUnknownEffect(ForkPayload)(json).pipe(
         Effect.mapError(() => new HttpApiError.BadRequest({})),
       )

@@ -7,7 +7,7 @@ import { SessionID } from "./schema"
 import { SessionStatus } from "./status"
 
 export interface Interface {
-  readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void>
+  readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError>
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly ensureRunning: (
     sessionID: SessionID,
@@ -19,7 +19,7 @@ export interface Interface {
     onInterrupt: Effect.Effect<MessageV2.WithParts>,
     work: Effect.Effect<MessageV2.WithParts>,
     ready?: Latch.Latch,
-  ) => Effect.Effect<MessageV2.WithParts>
+  ) => Effect.Effect<MessageV2.WithParts, Session.BusyError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRunState") {}
@@ -60,9 +60,6 @@ export const layer = Layer.effect(
         }),
         onBusy: status.set(sessionID, { type: "busy" }),
         onInterrupt,
-        busy: () => {
-          throw new Session.BusyError(sessionID)
-        },
       })
       data.runners.set(sessionID, next)
       return next
@@ -71,7 +68,7 @@ export const layer = Layer.effect(
     const assertNotBusy = Effect.fn("SessionRunState.assertNotBusy")(function* (sessionID: SessionID) {
       const data = yield* InstanceState.get(state)
       const existing = data.runners.get(sessionID)
-      if (existing?.busy) throw new Session.BusyError(sessionID)
+      if (existing?.busy) yield* busyError(sessionID)
     })
 
     const cancel = Effect.fn("SessionRunState.cancel")(function* (sessionID: SessionID) {
@@ -98,7 +95,9 @@ export const layer = Layer.effect(
       work: Effect.Effect<MessageV2.WithParts>,
       ready?: Latch.Latch,
     ) {
-      return yield* (yield* runner(sessionID, onInterrupt)).startShell(work, ready)
+      return yield* (yield* runner(sessionID, onInterrupt))
+        .startShell(work, ready)
+        .pipe(Effect.catchTag("RunnerBusy", () => Effect.fail(busyError(sessionID))))
     })
 
     return Service.of({ assertNotBusy, cancel, ensureRunning, startShell })
@@ -106,5 +105,9 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(SessionStatus.defaultLayer))
+
+function busyError(sessionID: SessionID) {
+  return new Session.BusyError({ sessionID })
+}
 
 export * as SessionRunState from "./run-state"

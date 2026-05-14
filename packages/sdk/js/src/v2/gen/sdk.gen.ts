@@ -4385,10 +4385,20 @@ export class Model extends HeyApiClient {
    *
    * Retrieve available v2 models ordered by release date.
    */
-  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      instance?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "instance" }] }])
     return (options?.client ?? this.client).get<V2ModelListResponses, unknown, ThrowOnError>({
       url: "/api/model",
       ...options,
+      ...params,
     })
   }
 }
@@ -4399,10 +4409,20 @@ export class Provider2 extends HeyApiClient {
    *
    * Retrieve active v2 AI providers so clients can show provider availability and configuration.
    */
-  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      instance?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "instance" }] }])
     return (options?.client ?? this.client).get<V2ProviderListResponses, unknown, ThrowOnError>({
       url: "/api/provider",
       ...options,
+      ...params,
     })
   }
 
@@ -4414,10 +4434,24 @@ export class Provider2 extends HeyApiClient {
   public get<ThrowOnError extends boolean = false>(
     parameters: {
       providerID: string
+      instance?: {
+        directory?: string
+        workspace?: string
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "providerID" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "instance" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).get<V2ProviderGetResponses, V2ProviderGetErrors, ThrowOnError>({
       url: "/api/provider/{providerID}",
       ...options,

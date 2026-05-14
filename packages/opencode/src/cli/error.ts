@@ -1,5 +1,6 @@
 import { NamedError } from "@opencode-ai/core/util/error"
 import { errorFormat } from "@/util/error"
+import { isRecord } from "@/util/record"
 
 interface ErrorLike {
   name?: string
@@ -9,10 +10,6 @@ interface ErrorLike {
 }
 
 type ConfigIssue = { message: string; path: string[] }
-
-function isRecord(input: unknown): input is Record<string, unknown> {
-  return typeof input === "object" && input !== null
-}
 
 function isTaggedError(error: unknown, tag: string): boolean {
   return isRecord(error) && error._tag === tag
@@ -61,11 +58,13 @@ export function FormatError(input: unknown) {
   }
 
   // ProviderModelNotFoundError: { providerID: string, modelID: string, suggestions?: string[] }
-  if (NamedError.hasName(input, "ProviderModelNotFoundError")) {
-    const data = (input as ErrorLike).data
-    const suggestions = Array.isArray(data?.suggestions) ? data.suggestions.filter((x) => typeof x === "string") : []
+  const providerModelNotFound = configData(input, "ProviderModelNotFoundError")
+  if (providerModelNotFound) {
+    const suggestions = Array.isArray(providerModelNotFound.suggestions)
+      ? providerModelNotFound.suggestions.filter((x) => typeof x === "string")
+      : []
     return [
-      `Model not found: ${data?.providerID}/${data?.modelID}`,
+      `Model not found: ${providerModelNotFound.providerID}/${providerModelNotFound.modelID}`,
       ...(suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
       `Try: \`opencode models\` to list available models`,
       `Or check your config (opencode.json) provider/model names`,

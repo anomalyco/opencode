@@ -4,7 +4,7 @@ import { AISDK } from "@opencode-ai/core/aisdk"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { GooglePlugin } from "@opencode-ai/core/plugin/provider/google"
-import { testEffect } from "../../lib/effect"
+import { testEffect } from "../lib/effect"
 import { it, model } from "./provider-helper"
 
 const itWithAISDK = testEffect(AISDK.layer.pipe(Layer.provideMerge(PluginV2.defaultLayer)))

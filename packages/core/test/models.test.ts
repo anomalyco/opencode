@@ -4,11 +4,10 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
-import { ModelsDev } from "../../src/provider/models"
-import { it } from "../lib/effect"
+import { ModelsDev } from "@opencode-ai/core/models"
+import { it } from "./lib/effect"
 import { rm, writeFile, utimes, mkdir } from "fs/promises"
 import path from "path"
-import { RuntimeFlags } from "@/effect/runtime-flags"
 
 // test/preload.ts pins OPENCODE_MODELS_PATH to a fixture so other tests can
 // resolve providers without network. These tests need to drive the on-disk
@@ -93,7 +92,6 @@ const buildLayer = (state: Ref.Ref<MockState>) =>
   Layer.fresh(ModelsDev.layer).pipe(
     Layer.provide(Layer.succeed(HttpClient.HttpClient, makeMockClient(state))),
     Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(RuntimeFlags.layer({ client: "test-client" })),
   )
 
 const writeCache = (data: object, mtimeMs?: number) =>
@@ -138,14 +136,14 @@ describe("ModelsDev Service", () => {
     }),
   )
 
-  it.live("get() returns {} when disk empty and fetch disabled", () =>
+  it.live("get() returns bundled snapshot when disk empty and fetch disabled", () =>
     Effect.gen(function* () {
       const state = yield* Ref.make(initialState)
       const result = yield* provided(
         state,
         ModelsDev.Service.use((s) => s.get()),
       )
-      expect(result).toEqual({})
+      expect(Object.keys(result).length).toBeGreaterThan(0)
       const final = yield* Ref.get(state)
       expect(final.calls).toEqual([])
     }),
@@ -207,7 +205,7 @@ describe("ModelsDev Service", () => {
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
       expect(final.calls[0].url).toContain("/api.json")
-      expect(final.calls[0].userAgent).toContain("/test-client")
+      expect(final.calls[0].userAgent).toContain("/cli")
     }),
   )
 
@@ -257,7 +255,7 @@ describe("ModelsDev Service", () => {
         }),
       )
       expect(result).toEqual(fixture)
-      // withTransientReadRetry retries 5xx, so calls may be > 1.
+      // retryTransient retries 5xx, so calls may be > 1.
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBeGreaterThanOrEqual(1)
     }),
