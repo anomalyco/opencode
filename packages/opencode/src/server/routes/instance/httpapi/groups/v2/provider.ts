@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ApiNotFoundError } from "../../errors"
 import { Authorization } from "../../middleware/authorization"
+import { V2InstanceMiddleware } from "./instance"
 
 export const ProviderGroup = HttpApiGroup.make("v2.provider")
   .add(
@@ -35,4 +36,5 @@ export const ProviderGroup = HttpApiGroup.make("v2.provider")
       description: "Experimental v2 provider routes.",
     }),
   )
+  .middleware(V2InstanceMiddleware)
   .middleware(Authorization)

@@ -2,6 +2,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../../middleware/authorization"
+import { V2InstanceMiddleware } from "./instance"
 
 export const ModelGroup = HttpApiGroup.make("v2.model")
   .add(
@@ -21,4 +22,5 @@ export const ModelGroup = HttpApiGroup.make("v2.model")
       description: "Experimental v2 model routes.",
     }),
   )
+  .middleware(V2InstanceMiddleware)
   .middleware(Authorization)
