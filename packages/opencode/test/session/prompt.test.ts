@@ -1512,11 +1512,26 @@ unix(
     withSh(() =>
       Effect.gen(function* () {
         const { prompt, chat } = yield* boot()
+        const { directory: dir } = yield* TestInstance
+        const afs = yield* AppFileSystem.Service
+        const ready = path.join(dir, ".trap-ready")
 
         const sh = yield* prompt
-          .shell({ sessionID: chat.id, agent: "build", command: "trap '' TERM; sleep 30" })
+          .shell({
+            sessionID: chat.id,
+            agent: "build",
+            // Touch marker AFTER trap installs so the test waits for the actual
+            // ignore-TERM state before cancelling; otherwise SIGTERM can arrive
+            // before `trap` runs and the escalation path is never exercised.
+            command: `trap '' TERM; touch "${ready}"; sleep 30`,
+          })
           .pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
+
+        yield* Effect.gen(function* () {
+          while (!(yield* afs.existsSafe(ready))) {
+            yield* Effect.sleep(Duration.millis(10))
+          }
+        }).pipe(Effect.timeout(Duration.seconds(5)))
 
         yield* prompt.cancel(chat.id)
 
