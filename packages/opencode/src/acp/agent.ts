@@ -1492,6 +1492,28 @@ export class Agent implements ACPAgent {
           { throwOnError: true },
         )
         break
+      default:
+        // Unrecognized slash command - treat as regular text input
+        const response = await this.sdk.session.prompt({
+          sessionID,
+          model: {
+            providerID: model.providerID,
+            modelID: model.modelID,
+          },
+          variant: this.sessionManager.getVariant(sessionID),
+          parts,
+          agent,
+          directory,
+        })
+        const msg = response.data?.info
+
+        await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
+
+        return {
+          stopReason: "end_turn" as const,
+          usage: msg ? buildUsage(msg) : undefined,
+          _meta: {},
+        }
     }
 
     await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)
