@@ -1021,6 +1021,7 @@ export type ProviderConfig = {
   npm?: string
   whitelist?: Array<string>
   blacklist?: Array<string>
+  discoverModels?: boolean
   options?: {
     apiKey?: string
     baseURL?: string
@@ -1636,6 +1637,22 @@ export type FormatterStatus = {
   name: string
   extensions: Array<string>
   enabled: boolean
+}
+
+export type LocalInstance = {
+  id: string
+  name: string
+  host: string
+  port: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  baseURL: string
+  models: Array<string>
+  configuredProviderID?: string
+}
+
+export type LocalConnectPayload = {
+  id: string
+  name: string
+  baseURL: string
 }
 
 export type McpStatusConnected = {
@@ -4568,6 +4585,65 @@ export type FormatterStatusResponses = {
 }
 
 export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses]
+
+export type LocalScanData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/local/scan"
+}
+
+export type LocalScanResponses = {
+  /**
+   * Discovered local llama-swap instances
+   */
+  200: Array<LocalInstance>
+}
+
+export type LocalScanResponse = LocalScanResponses[keyof LocalScanResponses]
+
+export type LocalConnectData = {
+  body?: LocalConnectPayload
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/local/connect"
+}
+
+export type LocalConnectResponses = {
+  /**
+   * Provider ID written to global config
+   */
+  200: string
+}
+
+export type LocalConnectResponse = LocalConnectResponses[keyof LocalConnectResponses]
+
+export type LocalDisconnectData = {
+  body?: never
+  path: {
+    providerID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/local/connect/{providerID}"
+}
+
+export type LocalDisconnectResponses = {
+  /**
+   * Removed provider ID
+   */
+  200: string
+}
+
+export type LocalDisconnectResponse = LocalDisconnectResponses[keyof LocalDisconnectResponses]
 
 export type McpStatusData = {
   body?: never

@@ -2410,6 +2410,161 @@
         ]
       }
     },
+    "/local/scan": {
+      "get": {
+        "tags": ["local"],
+        "operationId": "local.scan",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Discovered local llama-swap instances",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocalInstance"
+                  },
+                  "description": "Discovered local llama-swap instances"
+                }
+              }
+            }
+          }
+        },
+        "description": "Browse the local network via mDNS for llama-swap instances and probe each for its model list.",
+        "summary": "Scan for local providers",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.local.scan({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/local/connect": {
+      "post": {
+        "tags": ["local"],
+        "operationId": "local.connect",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider ID written to global config",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "description": "Provider ID written to global config"
+                }
+              }
+            }
+          }
+        },
+        "description": "Write an openai-compatible provider entry for a local llama-swap instance to the global config.",
+        "summary": "Add local provider to config",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocalConnectPayload"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.local.connect({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/local/connect/{providerID}": {
+      "delete": {
+        "tags": ["local"],
+        "operationId": "local.disconnect",
+        "parameters": [
+          {
+            "name": "providerID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removed provider ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "description": "Removed provider ID"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete a local llama-swap provider entry from the global config.",
+        "summary": "Remove local provider from config",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.local.disconnect({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/mcp": {
       "get": {
         "tags": ["mcp"],
@@ -11918,6 +12073,9 @@
               "type": "string"
             }
           },
+          "discoverModels": {
+            "type": "boolean"
+          },
           "options": {
             "type": "object",
             "properties": {
@@ -13690,6 +13848,73 @@
           }
         },
         "required": ["name", "extensions", "enabled"],
+        "additionalProperties": false
+      },
+      "LocalInstance": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["NaN"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["-Infinity"]
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          },
+          "baseURL": {
+            "type": "string"
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "configuredProviderID": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "name", "host", "port", "baseURL", "models"],
+        "additionalProperties": false
+      },
+      "LocalConnectPayload": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "baseURL": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "name", "baseURL"],
         "additionalProperties": false
       },
       "MCPStatusConnected": {
@@ -19770,6 +19995,9 @@
     {
       "name": "instance",
       "description": "Experimental HttpApi instance read routes."
+    },
+    {
+      "name": "local"
     },
     {
       "name": "mcp",

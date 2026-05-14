@@ -2,6 +2,7 @@ import { Component, Show } from "solid-js"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { Dialog } from "@opencode-ai/ui/dialog"
+import { Icon } from "@opencode-ai/ui/icon"
 import { List } from "@opencode-ai/ui/list"
 import { Tag } from "@opencode-ai/ui/tag"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
@@ -10,6 +11,7 @@ import { useLanguage } from "@/context/language"
 import { DialogCustomProvider } from "./dialog-custom-provider"
 
 const CUSTOM_ID = "_custom"
+const LOCAL_ID = "_local"
 
 export const DialogSelectProvider: Component = () => {
   const dialog = useDialog()
@@ -35,13 +37,15 @@ export const DialogSelectProvider: Component = () => {
         key={(x) => x?.id}
         items={() => {
           language.locale()
-          return [{ id: CUSTOM_ID, name: customLabel() }, ...providers.all()]
+          return [{ id: CUSTOM_ID, name: customLabel() }, { id: LOCAL_ID, name: "Local providers" }, ...providers.all()]
         }}
         filterKeys={["id", "name"]}
         groupBy={(x) => (popularProviders.includes(x.id) ? popularGroup() : otherGroup())}
         sortBy={(a, b) => {
           if (a.id === CUSTOM_ID) return -1
           if (b.id === CUSTOM_ID) return 1
+          if (a.id === LOCAL_ID) return -1
+          if (b.id === LOCAL_ID) return 1
           if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
             return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
           return a.name.localeCompare(b.name)
@@ -58,12 +62,20 @@ export const DialogSelectProvider: Component = () => {
             dialog.show(() => <DialogCustomProvider back="providers" />)
             return
           }
+          if (x.id === LOCAL_ID) {
+            void import("./dialog-local-discovery").then((m) => {
+              dialog.show(() => <m.DialogLocalDiscovery />)
+            })
+            return
+          }
           dialog.show(() => <DialogConnectProvider provider={x.id} />)
         }}
       >
         {(i) => (
           <div class="px-1.25 w-full flex items-center gap-x-3">
-            <ProviderIcon data-slot="list-item-extra-icon" id={i.id} />
+            <Show when={i.id === LOCAL_ID} fallback={<ProviderIcon data-slot="list-item-extra-icon" id={i.id} />}>
+              <Icon name="server" data-slot="list-item-extra-icon" class="size-4 text-icon-base" />
+            </Show>
             <span>{i.name}</span>
             <Show when={i.id === "opencode"}>
               <div class="text-14-regular text-text-weak">{language.t("dialog.provider.opencode.tagline")}</div>

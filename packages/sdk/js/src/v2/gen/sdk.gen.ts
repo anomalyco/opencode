@@ -59,6 +59,10 @@ import type {
   GlobalUpgradeErrors,
   GlobalUpgradeResponses,
   InstanceDisposeResponses,
+  LocalConnectPayload,
+  LocalConnectResponses,
+  LocalDisconnectResponses,
+  LocalScanResponses,
   LspStatusResponses,
   McpAddErrors,
   McpAddResponses,
@@ -1865,6 +1869,107 @@ export class Formatter extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<FormatterStatusResponses, unknown, ThrowOnError>({
       url: "/formatter",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Local extends HeyApiClient {
+  /**
+   * Scan for local providers
+   *
+   * Browse the local network via mDNS for llama-swap instances and probe each for its model list.
+   */
+  public scan<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<LocalScanResponses, unknown, ThrowOnError>({
+      url: "/local/scan",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Add local provider to config
+   *
+   * Write an openai-compatible provider entry for a local llama-swap instance to the global config.
+   */
+  public connect<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      localConnectPayload?: LocalConnectPayload
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "localConnectPayload", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LocalConnectResponses, unknown, ThrowOnError>({
+      url: "/local/connect",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Remove local provider from config
+   *
+   * Delete a local llama-swap provider entry from the global config.
+   */
+  public disconnect<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<LocalDisconnectResponses, unknown, ThrowOnError>({
+      url: "/local/connect/{providerID}",
       ...options,
       ...params,
     })
@@ -5010,6 +5115,11 @@ export class OpencodeClient extends HeyApiClient {
   private _formatter?: Formatter
   get formatter(): Formatter {
     return (this._formatter ??= new Formatter({ client: this.client }))
+  }
+
+  private _local?: Local
+  get local(): Local {
+    return (this._local ??= new Local({ client: this.client }))
   }
 
   private _mcp?: Mcp
