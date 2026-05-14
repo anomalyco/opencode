@@ -141,6 +141,54 @@ test("loads config with defaults when no files exist", async () => {
   })
 })
 
+test("creates global jsonc config with schema when no global configs exist", async () => {
+  await using tmp = await tmpdir()
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = tmp.path
+  await clear(true)
+
+  try {
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await load()
+      },
+    })
+
+    const content = await Filesystem.readText(path.join(tmp.path, "opencode.jsonc"))
+    expect(content).toContain('"$schema": "https://opencode.ai/config.json"')
+  } finally {
+    ;(Global.Path as { config: string }).config = prev
+    await clear(true)
+  }
+})
+
+test("does not create global config when OPENCODE_CONFIG_DIR is set", async () => {
+  await using tmp = await tmpdir()
+  await using custom = await tmpdir()
+  const prevConfig = Global.Path.config
+  const prevEnv = process.env.OPENCODE_CONFIG_DIR
+  ;(Global.Path as { config: string }).config = tmp.path
+  process.env.OPENCODE_CONFIG_DIR = custom.path
+  await clear(true)
+
+  try {
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await load()
+      },
+    })
+
+    expect(await Filesystem.exists(path.join(tmp.path, "opencode.jsonc"))).toBe(false)
+  } finally {
+    ;(Global.Path as { config: string }).config = prevConfig
+    if (prevEnv === undefined) delete process.env.OPENCODE_CONFIG_DIR
+    else process.env.OPENCODE_CONFIG_DIR = prevEnv
+    await clear(true)
+  }
+})
+
 test("loads JSON config file", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

@@ -1,27 +1,14 @@
-import { afterEach, describe, expect, mock, test } from "bun:test"
+import { afterEach, describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
-import { WithInstance } from "../../src/project/with-instance"
 import { Server } from "../../src/server/server"
 import { Session as SessionNs } from "@/session/session"
-import type { SessionID } from "../../src/session/schema"
 import * as Log from "@opencode-ai/core/util/log"
-import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 
-function run<A, E>(fx: Effect.Effect<A, E, SessionNs.Service>) {
-  return Effect.runPromise(fx.pipe(Effect.provide(SessionNs.defaultLayer)))
-}
-
-const svc = {
-  ...SessionNs,
-  create(input?: SessionNs.CreateInput) {
-    return run(SessionNs.Service.use((svc) => svc.create(input)))
-  },
-  remove(id: SessionID) {
-    return run(SessionNs.Service.use((svc) => svc.remove(id)))
-  },
-}
+const it = testEffect(SessionNs.defaultLayer)
 
 afterEach(async () => {
   mock.restore()
@@ -29,89 +16,119 @@ afterEach(async () => {
 })
 
 describe("session action routes", () => {
-  test("session routes expose metadata on create, update, get, and fork", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
+  it.instance(
+    "session routes expose metadata on create, update, get, and fork",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
         const app = Server.Default().app
+        const headers = { "Content-Type": "application/json", "x-opencode-directory": test.directory }
 
-        const created = await app.request("/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: "meta-session",
-            metadata: { source: "sdk", trace: { id: "abc" } },
-          }),
-        })
+        const created = yield* Effect.promise(() =>
+          Promise.resolve(
+            app.request("/session", {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                title: "meta-session",
+                metadata: { source: "sdk", trace: { id: "abc" } },
+              }),
+            }),
+          ),
+        )
         expect(created.status).toBe(200)
 
-        const session = (await created.json()) as SessionNs.Info
+        const session = (yield* Effect.promise(() => created.json())) as SessionNs.Info
         expect(session.metadata).toEqual({ source: "sdk", trace: { id: "abc" } })
 
-        const updated = await app.request(`/session/${session.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ metadata: { source: "sdk", trace: { id: "def" }, tags: ["one"] } }),
-        })
+        const updated = yield* Effect.promise(() =>
+          Promise.resolve(
+            app.request(`/session/${session.id}`, {
+              method: "PATCH",
+              headers,
+              body: JSON.stringify({ metadata: { source: "sdk", trace: { id: "def" }, tags: ["one"] } }),
+            }),
+          ),
+        )
         expect(updated.status).toBe(200)
 
-        const next = (await updated.json()) as SessionNs.Info
+        const next = (yield* Effect.promise(() => updated.json())) as SessionNs.Info
         expect(next.metadata).toEqual({ source: "sdk", trace: { id: "def" }, tags: ["one"] })
 
-        const fetched = await app.request(`/session/${session.id}`)
+        const fetched = yield* Effect.promise(() =>
+          Promise.resolve(app.request(`/session/${session.id}`, { headers: { "x-opencode-directory": test.directory } })),
+        )
         expect(fetched.status).toBe(200)
-        expect(((await fetched.json()) as SessionNs.Info).metadata).toEqual(next.metadata)
+        expect(((yield* Effect.promise(() => fetched.json())) as SessionNs.Info).metadata).toEqual(next.metadata)
 
-        const forked = await app.request(`/session/${session.id}/fork`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        })
+        const forked = yield* Effect.promise(() =>
+          Promise.resolve(
+            app.request(`/session/${session.id}/fork`, {
+              method: "POST",
+              headers,
+              body: JSON.stringify({}),
+            }),
+          ),
+        )
         expect(forked.status).toBe(200)
 
-        const fork = (await forked.json()) as SessionNs.Info
+        const fork = (yield* Effect.promise(() => forked.json())) as SessionNs.Info
         expect(fork.metadata).toEqual(next.metadata)
 
-        const blanked = await app.request(`/session/${session.id}/fork`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ copyMetadata: false }),
-        })
+        const blanked = yield* Effect.promise(() =>
+          Promise.resolve(
+            app.request(`/session/${session.id}/fork`, {
+              method: "POST",
+              headers,
+              body: JSON.stringify({ copyMetadata: false }),
+            }),
+          ),
+        )
         expect(blanked.status).toBe(200)
-        const empty = (await blanked.json()) as SessionNs.Info
+        const empty = (yield* Effect.promise(() => blanked.json())) as SessionNs.Info
         expect(empty.metadata).toEqual({})
 
-        const cleared = await app.request(`/session/${session.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ metadata: null }),
-        })
+        const cleared = yield* Effect.promise(() =>
+          Promise.resolve(
+            app.request(`/session/${session.id}`, {
+              method: "PATCH",
+              headers,
+              body: JSON.stringify({ metadata: null }),
+            }),
+          ),
+        )
         expect(cleared.status).toBe(200)
-        expect(((await cleared.json()) as SessionNs.Info).metadata).toEqual({})
+        expect(((yield* Effect.promise(() => cleared.json())) as SessionNs.Info).metadata).toEqual({})
 
-        await svc.remove(fork.id)
-        await svc.remove(empty.id)
-        await svc.remove(session.id)
-      },
-    })
-  })
+        yield* SessionNs.Service.use((svc) => svc.remove(fork.id).pipe(Effect.ignore))
+        yield* SessionNs.Service.use((svc) => svc.remove(empty.id).pipe(Effect.ignore))
+        yield* SessionNs.Service.use((svc) => svc.remove(session.id).pipe(Effect.ignore))
+      }),
+    { git: true },
+  )
 
-  test("abort route returns success", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await WithInstance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await svc.create({})
-        const app = Server.Default().app
+  it.instance(
+    "abort route returns success",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* Effect.acquireRelease(
+          SessionNs.Service.use((svc) => svc.create({})),
+          (created) => SessionNs.Service.use((svc) => svc.remove(created.id)).pipe(Effect.ignore),
+        )
 
-        const res = await app.request(`/session/${session.id}/abort`, { method: "POST" })
+        const res = yield* Effect.promise(() =>
+          Promise.resolve(
+            Server.Default().app.request(`/session/${session.id}/abort`, {
+              method: "POST",
+              headers: { "x-opencode-directory": test.directory },
+            }),
+          ),
+        )
 
         expect(res.status).toBe(200)
-        expect(await res.json()).toBe(true)
-
-        await svc.remove(session.id)
-      },
-    })
-  })
+        expect(yield* Effect.promise(() => res.json())).toBe(true)
+      }),
+    { git: true },
+  )
 })

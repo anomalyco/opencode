@@ -366,7 +366,7 @@ describe("OpenAI Responses route", () => {
           usage,
         },
         {
-          type: "request-finish",
+          type: "finish",
           reason: "stop",
           providerMetadata: { openai: { responseId: "resp_1", serviceTier: "default" } },
           usage,
@@ -447,7 +447,7 @@ describe("OpenAI Responses route", () => {
         },
         { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
         {
-          type: "request-finish",
+          type: "finish",
           reason: "tool-calls",
           providerMetadata: undefined,
           usage,

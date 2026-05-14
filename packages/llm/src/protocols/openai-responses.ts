@@ -380,7 +380,7 @@ type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 const NO_EVENTS: StepResult["1"] = []
 
 // `response.completed` / `response.incomplete` are clean finishes that emit a
-// `request-finish` event; `response.failed` is a hard failure that emits a
+// `finish` event; `response.failed` is a hard failure that emits a
 // `provider-error`. All three end the stream — kept in one set so `step` and
 // the protocol's `terminal` predicate stay in sync.
 const TERMINAL_TYPES = new Set(["response.completed", "response.incomplete", "response.failed"])

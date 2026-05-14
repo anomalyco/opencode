@@ -23,7 +23,6 @@ import { ToolRegistry } from "@/tool/registry"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { MCP } from "../mcp"
 import { LSP } from "@/lsp/lsp"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { ulid } from "ulid"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -51,10 +50,12 @@ import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { EffectBridge } from "@/effect/bridge"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { SyncEvent } from "@/sync"
 import { SessionEvent } from "@/v2/session-event"
-import { Modelv2 } from "@/v2/model"
-import { AgentAttachment, FileAttachment, ReferenceAttachment, Source } from "@/v2/session-prompt"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { AgentAttachment, FileAttachment, ReferenceAttachment, Source } from "@opencode-ai/core/session-prompt"
 import { Reference } from "@/reference/reference"
 import * as DateTime from "effect/DateTime"
 import { eq } from "@/storage/db"
@@ -166,7 +167,7 @@ export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
   readonly loop: (input: LoopInput) => Effect.Effect<MessageV2.WithParts>
-  readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
+  readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts, Session.BusyError>
   readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
 }
@@ -202,6 +203,7 @@ export const layer = Layer.effect(
     const llm = yield* LLM.Service
     const references = yield* Reference.Service
     const sync = yield* SyncEvent.Service
+    const flags = yield* RuntimeFlags.Service
     const runner = Effect.fn("SessionPrompt.runner")(function* () {
       return yield* EffectBridge.make()
     })
@@ -384,7 +386,7 @@ export const layer = Layer.effect(
       const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
       if (!userMessage) return input.messages
 
-      if (!Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE) {
+      if (!flags.experimentalPlanMode) {
         if (input.agent.name === "plan") {
           userMessage.parts.push({
             id: PartID.ascending(),
@@ -955,7 +957,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               },
             }
             yield* sessions.updatePart(part)
-            if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+            if (flags.experimentalEventSystem) {
               yield* sync.run(SessionEvent.Shell.Started.Sync, {
                 sessionID: input.sessionID,
                 timestamp: DateTime.makeUnsafe(started),
@@ -978,7 +980,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
               }
               const completed = Date.now()
-              if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+              if (flags.experimentalEventSystem) {
                 yield* sync.run(SessionEvent.Shell.Ended.Sync, {
                   sessionID: input.sessionID,
                   timestamp: DateTime.makeUnsafe(completed),
@@ -1055,15 +1057,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       if (Exit.isSuccess(exit)) return exit.value
       const err = Cause.squash(exit.cause)
       if (Provider.ModelNotFoundError.isInstance(err)) {
-        const hint = err.data.suggestions?.length ? ` Did you mean: ${err.data.suggestions.join(", ")}?` : ""
+        const hint = err.suggestions?.length ? ` Did you mean: ${err.suggestions.join(", ")}?` : ""
         yield* bus.publish(Session.Event.Error, {
           sessionID,
           error: new NamedError.Unknown({
-            message: `Model not found: ${err.data.providerID}/${err.data.modelID}.${hint}`,
+            message: `Model not found: ${err.providerID}/${err.modelID}.${hint}`,
           }).toObject(),
         })
       }
-      return yield* Effect.failCause(exit.cause)
+      return yield* Effect.die(err)
     })
 
     const currentModel = Effect.fnUntraced(function* (sessionID: SessionID) {
@@ -1077,14 +1079,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           ...(current.model.variant && current.model.variant !== "default" ? { variant: current.model.variant } : {}),
         }
       }
-      const match = yield* sessions.findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model)
+      const match = yield* sessions
+        .findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model)
+        .pipe(Effect.orDie)
       if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
       return yield* provider.defaultModel()
     })
 
     const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
-      const agentName = input.agent || (yield* agents.defaultAgent())
-      const ag = yield* agents.get(agentName)
+      const agentName = input.agent
+      const ag = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!ag) {
         const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
         const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
@@ -1104,7 +1108,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
       const full =
         !input.variant && ag.variant && same
-          ? yield* provider.getModel(model.providerID, model.modelID).pipe(Effect.catchDefect(() => Effect.void))
+          ? yield* provider
+              .getModel(model.providerID, model.modelID)
+              .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
           : undefined
       const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
 
@@ -1140,9 +1146,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(info.time.created),
           model: {
-            id: Modelv2.ID.make(info.model.modelID),
-            providerID: Modelv2.ProviderID.make(info.model.providerID),
-            variant: Modelv2.VariantID.make(info.model.variant ?? "default"),
+            id: ModelV2.ID.make(info.model.modelID),
+            providerID: ProviderV2.ID.make(info.model.providerID),
+            variant: ModelV2.VariantID.make(info.model.variant ?? "default"),
           },
         })
       }
@@ -1567,7 +1573,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
       )
       // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-      if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+      if (flags.experimentalEventSystem) {
         yield* sync.run(SessionEvent.Prompted.Sync, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(info.time.created),
@@ -1581,7 +1587,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
       for (const text of nextPrompt.synthetic) {
         // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-        if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+        if (flags.experimentalEventSystem) {
           yield* sync.run(SessionEvent.Synthetic.Sync, {
             sessionID: input.sessionID,
             timestamp: DateTime.makeUnsafe(info.time.created),
@@ -1615,9 +1621,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     )
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
-      const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user")
+      const match = yield* sessions.findMessage(sessionID, (m) => m.info.role !== "user").pipe(Effect.orDie)
       if (Option.isSome(match)) return match.value
-      const msgs = yield* sessions.messages({ sessionID, limit: 1 })
+      const msgs = yield* sessions.messages({ sessionID, limit: 1 }).pipe(Effect.orDie)
       if (msgs.length > 0) return msgs[0]
       throw new Error("Impossible")
     })
@@ -1858,12 +1864,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
     })
 
-    const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.shell")(
-      function* (input: ShellInput) {
-        const ready = yield* Latch.make()
-        return yield* state.startShell(input.sessionID, lastAssistant(input.sessionID), shellImpl(input, ready), ready)
-      },
-    )
+    const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts, Session.BusyError> = Effect.fn(
+      "SessionPrompt.shell",
+    )(function* (input: ShellInput) {
+      const ready = yield* Latch.make()
+      return yield* state.startShell(input.sessionID, lastAssistant(input.sessionID), shellImpl(input, ready), ready)
+    })
 
     const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
       yield* elog.info("command", { sessionID: input.sessionID, command: input.command, agent: input.agent })
@@ -1875,7 +1881,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
         throw error
       }
-      const agentName = cmd.agent ?? input.agent ?? (yield* agents.defaultAgent())
+      const agentName = cmd.agent ?? input.agent
 
       const raw = input.arguments.match(argsRegex) ?? []
       const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
@@ -1928,7 +1934,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
 
-      const agent = yield* agents.get(agentName)
+      const agent = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!agent) {
         const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
         const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
@@ -1952,7 +1958,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           ]
         : [...templateParts, ...(input.parts ?? [])]
 
-      const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultAgent())) : agentName
+      const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultInfo()).name) : agent.name
       const userModel = isSubtask
         ? input.model
           ? Provider.parseModel(input.model)
@@ -2022,6 +2028,7 @@ export const defaultLayer = Layer.suspend(() =>
         Bus.layer,
         CrossSpawnSpawner.defaultLayer,
         SyncEvent.defaultLayer,
+        RuntimeFlags.defaultLayer,
       ),
     ),
   ),

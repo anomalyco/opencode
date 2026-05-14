@@ -7,7 +7,7 @@ import { Global } from "@opencode-ai/core/global"
 import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Plugin } from "../../src/plugin/index"
-import { ModelsDev } from "@/provider/models"
+import { ModelsDev } from "@opencode-ai/core/models"
 import { Provider } from "@/provider/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "@/util/filesystem"
@@ -19,6 +19,7 @@ import { testEffect } from "../lib/effect"
 
 const env = makeRuntime(Env.Service, Env.defaultLayer)
 const set = (k: string, v: string) => env.runSync((svc) => svc.set(k, v))
+const remove = (k: string) => env.runSync((svc) => svc.remove(k))
 
 async function run<A, E>(fn: (provider: Provider.Interface) => Effect.Effect<A, E, never>) {
   return AppRuntime.runPromise(
@@ -582,64 +583,52 @@ it.instance(
   },
 )
 
-test("model options are merged from existing model", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            anthropic: {
-              models: {
-                "claude-sonnet-4-20250514": {
-                  options: {
-                    customOption: "custom-value",
-                  },
-                },
+it.instance(
+  "model options are merged from existing model",
+  Effect.gen(function* () {
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    const model = providers[ProviderID.anthropic].models["claude-sonnet-4-20250514"]
+    expect(model.options.customOption).toBe("custom-value")
+  }),
+  {
+    config: {
+      provider: {
+        anthropic: {
+          options: {
+            apiKey: "test-api-key",
+          },
+          models: {
+            "claude-sonnet-4-20250514": {
+              options: {
+                customOption: "custom-value",
               },
             },
           },
-        }),
-      )
+        },
+      },
     },
-  })
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      set("ANTHROPIC_API_KEY", "test-api-key")
-      const providers = await list()
-      const model = providers[ProviderID.anthropic].models["claude-sonnet-4-20250514"]
-      expect(model.options.customOption).toBe("custom-value")
-    },
-  })
-})
+  },
+)
 
-test("provider removed when all models filtered out", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            anthropic: {
-              whitelist: ["nonexistent-model"],
-            },
+it.instance(
+  "provider removed when all models filtered out",
+  Effect.gen(function* () {
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    expect(providers[ProviderID.anthropic]).toBeUndefined()
+  }),
+  {
+    config: {
+      provider: {
+        anthropic: {
+          options: {
+            apiKey: "test-api-key",
           },
-        }),
-      )
+          whitelist: ["nonexistent-model"],
+        },
+      },
     },
-  })
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      set("ANTHROPIC_API_KEY", "test-api-key")
-      const providers = await list()
-      expect(providers[ProviderID.anthropic]).toBeUndefined()
-    },
-  })
-})
+  },
+)
 
 test("closest finds model by partial match", async () => {
   await using tmp = await tmpdir({
@@ -1032,6 +1021,27 @@ test("getSmallModel respects config small_model override", async () => {
       expect(model).toBeDefined()
       expect(String(model?.providerID)).toBe("anthropic")
       expect(String(model?.id)).toBe("claude-sonnet-4-20250514")
+    },
+  })
+})
+
+test("getSmallModel ignores invalid config small_model", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          small_model: "anthropic/not-a-real-model",
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      set("ANTHROPIC_API_KEY", "test-api-key")
+      expect(await getSmallModel(ProviderID.anthropic)).toBeUndefined()
     },
   })
 })
@@ -1583,8 +1593,8 @@ test("ModelNotFoundError includes suggestions for typos", async () => {
         await getModel(ProviderID.anthropic, ModelID.make("claude-sonet-4")) // typo: sonet instead of sonnet
         expect(true).toBe(false) // Should not reach here
       } catch (e: any) {
-        expect(e.data.suggestions).toBeDefined()
-        expect(e.data.suggestions.length).toBeGreaterThan(0)
+        expect(e.suggestions).toBeDefined()
+        expect(e.suggestions.length).toBeGreaterThan(0)
       }
     },
   })
@@ -1609,8 +1619,34 @@ test("ModelNotFoundError for provider includes suggestions", async () => {
         await getModel(ProviderID.make("antropic"), ModelID.make("claude-sonnet-4")) // typo: antropic
         expect(true).toBe(false) // Should not reach here
       } catch (e: any) {
-        expect(e.data.suggestions).toBeDefined()
-        expect(e.data.suggestions).toContain("anthropic")
+        expect(e.suggestions).toBeDefined()
+        expect(e.suggestions).toContain("anthropic")
+      }
+    },
+  })
+})
+
+test("ModelNotFoundError suggests catalog models for unloaded providers", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      remove("OPENCODE_API_KEY")
+      try {
+        await getModel(ProviderID.opencode, ModelID.make("claude-haiku-fake-model"))
+        throw new Error("expected model lookup to fail")
+      } catch (e) {
+        if (!Provider.ModelNotFoundError.isInstance(e)) throw e
+        expect(e.suggestions).toContain("claude-haiku-4-5")
       }
     },
   })
