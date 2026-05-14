@@ -1774,6 +1774,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     // Note: Shift+Enter is handled earlier, before IME check
     if (event.key === "Enter" && !event.shiftKey) {
+      performance.mark("submit:keydown")
+      console.debug("[perf:submit] Enter keydown", { timeStamp: event.timeStamp, now: performance.now(), delta: `${Math.round(performance.now() - event.timeStamp)}ms since event created` })
       event.preventDefault()
       if (event.repeat) return
       if (

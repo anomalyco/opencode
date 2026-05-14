@@ -701,7 +701,25 @@ export function MessageTimeline(props: {
     }
   })
 
-  const canWindow = createMemo(() => !isWorking() && !sessionSwitching() && eligible().enabled)
+  // Defer virtualization disable when streaming starts so the new message can
+  // paint before all history turns get mounted into the DOM.
+  const [deferredWorking, setDeferredWorking] = createSignal(isWorking())
+  createEffect(
+    on(isWorking, (working) => {
+      if (!working) {
+        setDeferredWorking(false)
+        return
+      }
+      // Let the optimistic message paint first, then disable windowing
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setDeferredWorking(true)
+        })
+      })
+    }),
+  )
+
+  const canWindow = createMemo(() => !deferredWorking() && !sessionSwitching() && eligible().enabled)
 
   let prevCanWindow: boolean | undefined
   createEffect(() => {
@@ -2853,6 +2871,12 @@ export function MessageTimeline(props: {
           stop = () => {
             el.removeEventListener("mousedown", onLinkDown, { capture: true })
             el.removeEventListener("click", onLink, { capture: true })
+          }
+          if (performance.getEntriesByName("submit:start", "mark").length > 0) {
+            performance.mark("submit:dom-mount")
+            performance.measure("submit:to-dom-mount", "submit:start", "submit:dom-mount")
+            const m = performance.getEntriesByName("submit:to-dom-mount", "measure").at(-1)
+            console.debug(`[perf:submit] message DOM mounted: ${Math.round(m?.duration ?? 0)}ms after submit`, { messageID: item.messageID })
           }
         }}
         id={props.anchor(item.messageID)}

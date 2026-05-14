@@ -169,10 +169,11 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       messageID,
     })
 
-  batch(() => {
-    setBusy()
-    add()
-  })
+  setBusy()
+  performance.mark("submit:optimistic-add:start")
+  add()
+  performance.mark("submit:optimistic-add:end")
+  performance.measure("submit:optimistic-add", "submit:optimistic-add:start", "submit:optimistic-add:end")
 
   try {
     if (!(await wait())) {
@@ -183,6 +184,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       return false
     }
 
+    performance.mark("submit:http-send:start")
     await input.client.session.promptAsync({
       sessionID: input.draft.sessionID,
       agent: input.draft.agent,
@@ -191,6 +193,14 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       parts: requestParts,
       variant: input.draft.variant,
     })
+    performance.mark("submit:http-send:end")
+    performance.measure("submit:http-send", "submit:http-send:start", "submit:http-send:end")
+    performance.measure("submit:total", "submit:start", "submit:http-send:end")
+    console.debug("[perf:submit] breakdown", Object.fromEntries(
+      performance.getEntriesByType("measure")
+        .filter((e) => e.name.startsWith("submit:"))
+        .map((e) => [e.name, `${Math.round(e.duration)}ms`])
+    ))
     return true
   } catch (err) {
     if (await delivered(input.client, input.draft.sessionID, messageID)) return true
@@ -259,25 +269,51 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const sessionID = params.id
     if (!sessionID) return Promise.resolve()
 
+    const t0 = performance.now()
+    console.debug("[abort] start", { sessionID, directory: sdk.directory, t: t0 })
+
     globalSync.todo.set(sessionID, [])
     const [, setStore] = globalSync.child(sdk.directory)
     setStore("todo", sessionID, [])
+
+    setStore("session_status", sessionID, { type: "idle" })
+    let optimisticTarget: string | undefined
+    setStore("message", sessionID, (list) => {
+      if (!list?.length) return list
+      const lastIdx = list.length - 1
+      const last = list[lastIdx]
+      if (!last || last.role !== "assistant" || typeof last.time.completed === "number") return list
+      optimisticTarget = last.id
+      const next = list.slice()
+      next[lastIdx] = { ...last, time: { ...last.time, completed: Date.now() } }
+      return next
+    })
+    console.debug("[abort] optimistic local state", {
+      sessionID,
+      msgCompleted: optimisticTarget,
+      dt: performance.now() - t0,
+    })
 
     input.onAbort?.()
 
     const queued = pending.get(sessionID)
     if (queued) {
-      console.debug("[prompt-submit] abort local pending", { sessionID, directory: sdk.directory })
+      console.debug("[abort] cancel local pending", { sessionID, directory: sdk.directory })
       queued.abort.abort()
       queued.cleanup()
       pending.delete(sessionID)
     }
-    console.debug("[prompt-submit] abort session", { sessionID, directory: sdk.directory, queued: !!queued })
+    console.debug("[abort] POST /session/:id/abort", { sessionID, directory: sdk.directory, queued: !!queued })
     return sdk.client.session
       .abort({
         sessionID,
       })
-      .catch(() => {})
+      .then(() => {
+        console.debug("[abort] POST done", { sessionID, totalMs: performance.now() - t0 })
+      })
+      .catch((err) => {
+        console.debug("[abort] POST failed", { sessionID, err: String(err) })
+      })
   }
 
   const restoreCommentItems = (items: CommentItem[]) => {
@@ -322,6 +358,23 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault()
+
+    // Clear stale marks from previous submit
+    performance.clearMarks("submit:start")
+    performance.clearMarks("submit:session-create:start")
+    performance.clearMarks("submit:session-create:end")
+    performance.clearMarks("submit:navigate:start")
+    performance.clearMarks("submit:navigate:end")
+    performance.clearMarks("submit:clear-input:start")
+    performance.clearMarks("submit:clear-input:end")
+    performance.clearMarks("submit:first-raf")
+    performance.clearMarks("submit:optimistic-add:start")
+    performance.clearMarks("submit:optimistic-add:end")
+    performance.clearMarks("submit:http-send:start")
+    performance.clearMarks("submit:http-send:end")
+    performance.clearMarks("submit:dom-mount")
+
+    performance.mark("submit:start")
 
     const currentPrompt = prompt.current()
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
@@ -444,6 +497,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     let session = input.info()
     if (!session && isNewSession) {
+      performance.mark("submit:session-create:start")
       const created = await client.session
         .create()
         .then((x) => x.data ?? undefined)
@@ -454,13 +508,18 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           })
           return undefined
         })
+      performance.mark("submit:session-create:end")
+      performance.measure("submit:session-create", "submit:session-create:start", "submit:session-create:end")
       if (created) {
         seed(sessionDirectory, created)
         session = created
         if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
         local.session.promote(sessionDirectory, session.id)
         layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
+        performance.mark("submit:navigate:start")
         navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+        performance.mark("submit:navigate:end")
+        performance.measure("submit:navigate", "submit:navigate:start", "submit:navigate:end")
       }
     }
     if (!session) {
@@ -584,9 +643,19 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     removeCommentItems(commentItems)
+    performance.mark("submit:clear-input:start")
     clearInput()
-    addOptimisticMessage()
+    performance.mark("submit:clear-input:end")
+    performance.measure("submit:clear-input", "submit:clear-input:start", "submit:clear-input:end")
+    performance.measure("submit:sync-path", "submit:start", "submit:clear-input:end")
+
     requestAnimationFrame(() => {
+      performance.mark("submit:first-raf")
+      performance.measure("submit:to-first-raf", "submit:start", "submit:first-raf")
+      const entries = performance.getEntriesByType("measure")
+        .filter((e) => e.name.startsWith("submit:"))
+        .map((e) => [e.name.replace("submit:", ""), `${Math.round(e.duration)}ms`])
+      console.debug("[perf:submit] first-raf breakdown", Object.fromEntries(entries))
       input.onSubmitted?.()
     })
 
