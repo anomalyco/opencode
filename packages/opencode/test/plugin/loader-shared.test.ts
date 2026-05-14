@@ -1,15 +1,12 @@
-import { afterAll, afterEach, describe, expect, spyOn } from "bun:test"
+import { afterEach, describe, expect, spyOn } from "bun:test"
 import { Effect, Layer } from "effect"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { Filesystem } from "@/util/filesystem"
-
-const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
-process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
 
 const { Plugin } = await import("../../src/plugin/index")
 const { PluginLoader } = await import("../../src/plugin/loader")
@@ -17,20 +14,13 @@ const { readPackageThemes } = await import("../../src/plugin/shared")
 const { Bus } = await import("../../src/bus")
 const { Npm } = await import("@opencode-ai/core/npm")
 const { TestConfig } = await import("../fixture/config")
-
-afterAll(() => {
-  if (disableDefault === undefined) {
-    delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
-    return
-  }
-  process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = disableDefault
-})
+const { RuntimeFlags } = await import("../../src/effect/runtime-flags")
 
 afterEach(async () => {
   await disposeAllInstances()
 })
 
-const it = testEffect(CrossSpawnSpawner.defaultLayer)
+const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, AppFileSystem.defaultLayer))
 
 function withTmp<T, A, E, R>(
   init: (dir: string) => Promise<T>,
@@ -43,7 +33,7 @@ function withTmp<T, A, E, R>(
   })
 }
 
-function load(dir: string) {
+function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0]) {
   const source = path.join(dir, "opencode.json")
   return Effect.gen(function* () {
     const config = yield* Effect.promise(
@@ -57,6 +47,7 @@ function load(dir: string) {
       Effect.provide(
         Plugin.layer.pipe(
           Layer.provide(Bus.layer),
+          Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true, ...flags })),
           Layer.provide(
             TestConfig.layer({
               get: () =>
@@ -846,7 +837,7 @@ describe("plugin.loader.shared", () => {
         Effect.gen(function* () {
           yield* load(tmp.path)
           expect(
-            yield* Effect.promise(() => Filesystem.readJson<{ source: string; enabled: boolean }>(tmp.extra.mark)),
+            (yield* (yield* AppFileSystem.Service).readJson(tmp.extra.mark)) as { source: string; enabled: boolean },
           ).toEqual({
             source: "tuple",
             enabled: true,
@@ -934,25 +925,14 @@ export default {
       },
       (tmp) =>
         Effect.gen(function* () {
-          const pure = process.env.OPENCODE_PURE
-          process.env.OPENCODE_PURE = "1"
-
-          try {
-            yield* load(tmp.path)
-            const called = yield* Effect.promise(() =>
-              fs
-                .readFile(tmp.extra.mark, "utf8")
-                .then(() => true)
-                .catch(() => false),
-            )
-            expect(called).toBe(false)
-          } finally {
-            if (pure === undefined) {
-              delete process.env.OPENCODE_PURE
-            } else {
-              process.env.OPENCODE_PURE = pure
-            }
-          }
+          yield* load(tmp.path, { pure: true })
+          const called = yield* Effect.promise(() =>
+            fs
+              .readFile(tmp.extra.mark, "utf8")
+              .then(() => true)
+              .catch(() => false),
+          )
+          expect(called).toBe(false)
         }),
     ),
   )
@@ -980,7 +960,8 @@ export default {
       (tmp) =>
         Effect.gen(function* () {
           const file = path.join(tmp.extra.mod, "package.json")
-          const json = yield* Effect.promise(() => Filesystem.readJson<Record<string, unknown>>(file))
+          const fsys = yield* AppFileSystem.Service
+          const json = (yield* fsys.readJson(file)) as Record<string, unknown>
           const list = readPackageThemes("acme-plugin", {
             dir: tmp.extra.mod,
             pkg: file,
@@ -988,8 +969,8 @@ export default {
           })
 
           expect(list).toEqual([
-            Filesystem.resolve(path.join(tmp.extra.mod, "themes", "one.json")),
-            Filesystem.resolve(path.join(tmp.extra.mod, "themes", "two.json")),
+            AppFileSystem.resolve(path.join(tmp.extra.mod, "themes", "one.json")),
+            AppFileSystem.resolve(path.join(tmp.extra.mod, "themes", "two.json")),
           ])
         }),
     ),
@@ -1053,7 +1034,7 @@ export default {
               {
                 spec: "acme-plugin@1.0.0",
                 target: tmp.extra.mod,
-                themes: [Filesystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
+                themes: [AppFileSystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
               },
             ])
             expect(missing).toHaveLength(0)
@@ -1116,7 +1097,7 @@ export default {
             expect(loaded).toEqual([
               {
                 spec: "acme-plugin@1.0.0",
-                themes: [Filesystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
+                themes: [AppFileSystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
               },
             ])
           } finally {
@@ -1137,7 +1118,8 @@ export default {
       },
       (tmp) =>
         Effect.gen(function* () {
-          const json = yield* Effect.promise(() => Filesystem.readJson<Record<string, unknown>>(tmp.extra.file))
+          const fsys = yield* AppFileSystem.Service
+          const json = (yield* fsys.readJson(tmp.extra.file)) as Record<string, unknown>
           expect(() =>
             readPackageThemes("acme", {
               dir: tmp.extra.mod,

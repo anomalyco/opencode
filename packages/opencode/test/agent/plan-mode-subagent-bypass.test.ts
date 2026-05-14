@@ -27,6 +27,19 @@ import { testEffect } from "../lib/effect"
 
 const it = testEffect(Agent.defaultLayer)
 
+function testAgent(input: {
+  name: string
+  mode: Agent.Info["mode"]
+  permission: Parameters<typeof Permission.fromConfig>[0]
+}) {
+  return {
+    name: input.name,
+    mode: input.mode,
+    permission: Permission.fromConfig(input.permission),
+    options: {},
+  } satisfies Agent.Info
+}
+
 // `deriveSubagentSessionPermission` is imported from production. The test
 // exercises the actual helper that task.ts uses to build the subagent's
 // session permission, so any regression in that helper trips this test.
@@ -122,4 +135,78 @@ it.instance(
       },
     },
   },
+)
+
+it.effect("[#26700] controller self-restrictions do not erase executor permissions", () =>
+  Effect.sync(() => {
+    const controller = testAgent({
+      name: "controller",
+      mode: "primary",
+      permission: {
+        "*": "deny",
+        read: "deny",
+        bash: "deny",
+        task: {
+          "*": "deny",
+          executor: "allow",
+        },
+        edit: "deny",
+        write: "deny",
+      },
+    })
+    const executor = testAgent({
+      name: "executor",
+      mode: "subagent",
+      permission: {
+        "*": "deny",
+        read: "allow",
+        bash: "allow",
+        task: {
+          "*": "deny",
+          worker: "allow",
+        },
+        edit: "deny",
+        write: "deny",
+      },
+    })
+
+    const effective = Permission.merge(
+      executor.permission,
+      deriveSubagentSessionPermission({
+        parentSessionPermission: [],
+        parentAgent: controller,
+        subagent: executor,
+      }),
+    )
+
+    expect(Permission.evaluate("read", "README.md", effective).action).toBe("allow")
+    expect(Permission.evaluate("bash", "git status", effective).action).toBe("allow")
+    expect(Permission.evaluate("task", "worker", effective).action).toBe("allow")
+    expect(Permission.evaluate("task", "other", effective).action).toBe("deny")
+    expect(Permission.disabled(["edit", "write", "apply_patch"], effective)).toEqual(
+      new Set(["edit", "write", "apply_patch"]),
+    )
+  }),
+)
+
+it.effect("subagent inherits parent session deny rules as hard runtime ceilings", () =>
+  Effect.sync(() => {
+    const executor = testAgent({
+      name: "executor",
+      mode: "subagent",
+      permission: {
+        bash: "allow",
+      },
+    })
+    const effective = Permission.merge(
+      executor.permission,
+      deriveSubagentSessionPermission({
+        parentSessionPermission: Permission.fromConfig({ bash: "deny" }),
+        parentAgent: undefined,
+        subagent: executor,
+      }),
+    )
+
+    expect(Permission.evaluate("bash", "git status", effective).action).toBe("deny")
+  }),
 )

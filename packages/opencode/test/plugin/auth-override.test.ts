@@ -7,6 +7,7 @@ import { provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { ProviderAuth } from "@/provider/auth"
 import { ProviderID } from "../../src/provider/schema"
 import { Plugin } from "@/plugin"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Auth } from "@/auth"
 import { Bus } from "@/bus"
 import { TestConfig } from "../fixture/config"
@@ -21,6 +22,7 @@ function layer(directory: string, plugins: string[]) {
     Layer.provide(
       Plugin.layer.pipe(
         Layer.provide(Bus.layer),
+        Layer.provide(RuntimeFlags.layer()),
         Layer.provide(
           TestConfig.layer({
             get: () =>

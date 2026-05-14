@@ -18,9 +18,9 @@ import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow, usable } from "./overflow"
 import { makeRuntime } from "@/effect/run-service"
 import { serviceUse } from "@/effect/service-use"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { SyncEvent } from "@/sync"
 import { SessionEvent } from "@/v2/session-event"
-import { Flag } from "@opencode-ai/core/flag/flag"
 
 const log = Log.create({ service: "session.compaction" })
 
@@ -221,6 +221,7 @@ export const layer: Layer.Layer<
   | SessionProcessor.Service
   | Provider.Service
   | SyncEvent.Service
+  | RuntimeFlags.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -232,6 +233,7 @@ export const layer: Layer.Layer<
     const processors = yield* SessionProcessor.Service
     const provider = yield* Provider.Service
     const sync = yield* SyncEvent.Service
+    const flags = yield* RuntimeFlags.Service
 
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: MessageV2.Assistant["tokens"]
@@ -388,8 +390,8 @@ export const layer: Layer.Layer<
 
       const agent = yield* agents.get("compaction")
       const model = agent.model
-        ? yield* provider.getModel(agent.model.providerID, agent.model.modelID)
-        : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
+        ? yield* provider.getModel(agent.model.providerID, agent.model.modelID).pipe(Effect.orDie)
+        : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
       const cfg = yield* config.get()
       const history = compactionPart && messages.at(-1)?.info.id === input.parentID ? messages.slice(0, -1) : messages
       const prior = completedCompactions(history)
@@ -517,7 +519,9 @@ export const layer: Layer.Layer<
               {
                 sessionID: input.sessionID,
                 agent: userMessage.agent,
-                model: yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID),
+                model: yield* provider
+                  .getModel(userMessage.model.providerID, userMessage.model.modelID)
+                  .pipe(Effect.orDie),
                 provider: {
                   source: info.source,
                   info,
@@ -565,12 +569,14 @@ export const layer: Layer.Layer<
       if (processor.message.error) return "stop"
       if (result === "continue") {
         const summary = summaryText(
-          (yield* session.messages({ sessionID: input.sessionID })).find((item) => item.info.id === msg.id) ?? {
+          (yield* session.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(
+            (item) => item.info.id === msg.id,
+          ) ?? {
             info: msg,
             parts: [],
           },
         )
-        if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+        if (flags.experimentalEventSystem) {
           yield* sync.run(SessionEvent.Compaction.Ended.Sync, {
             sessionID: input.sessionID,
             timestamp: DateTime.makeUnsafe(Date.now()),
@@ -606,7 +612,7 @@ export const layer: Layer.Layer<
         auto: input.auto,
         overflow: input.overflow,
       })
-      if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
+      if (flags.experimentalEventSystem) {
         yield* sync.run(SessionEvent.Compaction.Started.Sync, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(Date.now()),
@@ -634,6 +640,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(SyncEvent.defaultLayer),
+    Layer.provide(RuntimeFlags.defaultLayer),
   ),
 )
 

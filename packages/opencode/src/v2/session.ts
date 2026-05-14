@@ -6,14 +6,15 @@ import * as Database from "@/storage/db"
 import { realpathSync } from "fs"
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect"
 import { SessionMessage } from "./session-message"
-import type { Prompt } from "./session-prompt"
+import type { Prompt } from "@opencode-ai/core/session-prompt"
 import { EventV2 } from "./event"
 import { ProjectID } from "@/project/schema"
 import { SessionEvent } from "./session-event"
-import { V2Schema } from "./schema"
+import { V2Schema } from "@opencode-ai/core/v2-schema"
 import { optionalOmitUndefined } from "@opencode-ai/core/schema"
-import { Modelv2 } from "./model"
 import { SyncEvent } from "@/sync"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
 export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({
   identifier: "Session.Delivery",
@@ -40,7 +41,7 @@ export class Info extends Schema.Class<Info>("Session.Info")({
   workspaceID: optionalOmitUndefined(WorkspaceID),
   path: optionalOmitUndefined(Schema.String),
   agent: optionalOmitUndefined(Schema.String),
-  model: Modelv2.Ref.pipe(optionalOmitUndefined),
+  model: ModelV2.Ref.pipe(optionalOmitUndefined),
   cost: Schema.Finite,
   tokens: Schema.Struct({
     input: Schema.Finite,
@@ -79,7 +80,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ses
 export interface Interface {
   readonly create: (input?: {
     agent?: string
-    model?: Modelv2.Ref
+    model?: ModelV2.Ref
     parentID?: SessionID
     workspaceID?: WorkspaceID
   }) => Effect.Effect<Info>
@@ -123,10 +124,10 @@ export interface Interface {
     parentID: SessionID
     prompt: Prompt
     agent: string
-    model?: Modelv2.Ref
+    model?: ModelV2.Ref
   }) => Effect.Effect<void, NotFoundError>
   readonly switchAgent: (input: { sessionID: SessionID; agent: string }) => Effect.Effect<void, never>
-  readonly switchModel: (input: { sessionID: SessionID; model: Modelv2.Ref }) => Effect.Effect<void, never>
+  readonly switchModel: (input: { sessionID: SessionID; model: ModelV2.Ref }) => Effect.Effect<void, never>
   readonly compact: (sessionID: SessionID) => Effect.Effect<void, never>
   readonly wait: (sessionID: SessionID) => Effect.Effect<void, never>
 }
@@ -153,9 +154,9 @@ export const layer = Layer.effect(
         agent: row.agent ?? undefined,
         model: row.model
           ? {
-              id: Modelv2.ID.make(row.model.id),
-              providerID: Modelv2.ProviderID.make(row.model.providerID),
-              variant: Modelv2.VariantID.make(row.model.variant ?? "default"),
+              id: ModelV2.ID.make(row.model.id),
+              providerID: ProviderV2.ID.make(row.model.providerID),
+              variant: ModelV2.VariantID.make(row.model.variant ?? "default"),
             }
           : undefined,
         cost: row.cost,
@@ -176,7 +177,7 @@ export const layer = Layer.effect(
       })
     }
 
-    const result: Interface = {
+    const result = Service.of({
       create: Effect.fn("V2Session.create")(function* (_input) {
         return {} as any
       }),
@@ -318,7 +319,7 @@ export const layer = Layer.effect(
       }),
       subagent: Effect.fn("V2Session.subagent")(function* (input) {
         const parent = yield* result.get(input.parentID)
-        const session = yield* result.create({
+        const child = yield* result.create({
           agent: input.agent,
           model: input.model,
           parentID: input.parentID,
@@ -326,11 +327,11 @@ export const layer = Layer.effect(
         })
         yield* result.prompt({
           prompt: input.prompt,
-          sessionID: session.id,
+          sessionID: child.id,
         })
         yield* Effect.gen(function* () {
-          yield* result.wait(session.id)
-          const messages = yield* result.messages({ sessionID: session.id, order: "desc" })
+          yield* result.wait(child.id)
+          const messages = yield* result.messages({ sessionID: child.id, order: "desc" })
           const assistant = messages.find((msg) => msg.type === "assistant")
           if (!assistant) return
           const text = assistant.content.findLast((part) => part.type === "text")
@@ -339,9 +340,9 @@ export const layer = Layer.effect(
       }),
       compact: Effect.fn("V2Session.compact")(function* (_sessionID) {}),
       wait: Effect.fn("V2Session.wait")(function* (_sessionID) {}),
-    }
+    })
 
-    return Service.of(result)
+    return result
   }),
 )
 

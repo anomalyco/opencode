@@ -1,15 +1,31 @@
 import { afterEach, expect } from "bun:test"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { Agent } from "../../src/agent/agent"
+import { Auth } from "../../src/auth"
+import { Config } from "../../src/config/config"
+import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Global } from "@opencode-ai/core/global"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Permission } from "../../src/permission"
+import { Plugin } from "../../src/plugin"
+import { Provider } from "../../src/provider/provider"
+import { Skill } from "../../src/skill"
 import { Truncate } from "../../src/tool/truncate"
 
-const it = testEffect(Agent.defaultLayer)
+const agentLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
+  Agent.layer.pipe(
+    Layer.provide(Plugin.defaultLayer),
+    Layer.provide(Provider.defaultLayer),
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(Skill.defaultLayer),
+    Layer.provide(RuntimeFlags.layer(flags)),
+  )
+
+const it = testEffect(agentLayer())
+const scout = testEffect(agentLayer({ experimentalScout: true }))
 
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): Permission.Action | undefined {
@@ -19,21 +35,6 @@ function evalPerm(agent: Agent.Info | undefined, permission: string): Permission
 
 function load<A>(fn: (svc: Agent.Interface) => Effect.Effect<A>) {
   return Agent.Service.use(fn)
-}
-
-function withExperimentalScout<A, E, R>(enabled: boolean, self: Effect.Effect<A, E, R>) {
-  return Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const original = Flag.OPENCODE_EXPERIMENTAL_SCOUT
-      Flag.OPENCODE_EXPERIMENTAL_SCOUT = enabled
-      return original
-    }),
-    () => self,
-    (original) =>
-      Effect.sync(() => {
-        Flag.OPENCODE_EXPERIMENTAL_SCOUT = original
-      }),
-  )
 }
 
 const expectDefaultAgentError = Effect.fn("AgentTest.expectDefaultAgentError")(function* (message: string) {
@@ -47,21 +48,18 @@ afterEach(async () => {
 })
 
 it.instance("returns default native agents when no config", () =>
-  withExperimentalScout(
-    false,
-    Effect.gen(function* () {
-      const agents = yield* load((svc) => svc.list())
-      const names = agents.map((a) => a.name)
-      expect(names).toContain("build")
-      expect(names).toContain("plan")
-      expect(names).toContain("general")
-      expect(names).toContain("explore")
-      expect(names).not.toContain("scout")
-      expect(names).toContain("compaction")
-      expect(names).toContain("title")
-      expect(names).toContain("summary")
-    }),
-  ),
+  Effect.gen(function* () {
+    const agents = yield* load((svc) => svc.list())
+    const names = agents.map((a) => a.name)
+    expect(names).toContain("build")
+    expect(names).toContain("plan")
+    expect(names).toContain("general")
+    expect(names).toContain("explore")
+    expect(names).not.toContain("scout")
+    expect(names).toContain("compaction")
+    expect(names).toContain("title")
+    expect(names).toContain("summary")
+  }),
 )
 
 it.instance("build agent has correct default properties", () =>
@@ -111,42 +109,36 @@ it.instance("explore agent asks for external directories and allows whitelisted 
   }),
 )
 
-it.instance("scout agent allows repo cloning and repo cache reads", () =>
-  withExperimentalScout(
-    true,
-    Effect.gen(function* () {
-      const scout = yield* load((svc) => svc.get("scout"))
-      expect(scout).toBeDefined()
-      expect(scout?.mode).toBe("subagent")
-      expect(evalPerm(scout, "repo_clone")).toBe("allow")
-      expect(evalPerm(scout, "repo_overview")).toBe("allow")
-      expect(evalPerm(scout, "edit")).toBe("deny")
-      expect(
-        Permission.evaluate(
-          "external_directory",
-          path.join(Global.Path.repos, "github.com", "owner", "repo", "README.md"),
-          scout!.permission,
-        ).action,
-      ).toBe("allow")
-    }),
-  ),
+scout.instance("scout agent allows repo cloning and repo cache reads", () =>
+  Effect.gen(function* () {
+    const scout = yield* load((svc) => svc.get("scout"))
+    expect(scout).toBeDefined()
+    expect(scout?.mode).toBe("subagent")
+    expect(evalPerm(scout, "repo_clone")).toBe("allow")
+    expect(evalPerm(scout, "repo_overview")).toBe("allow")
+    expect(evalPerm(scout, "edit")).toBe("deny")
+    expect(
+      Permission.evaluate(
+        "external_directory",
+        path.join(Global.Path.repos, "github.com", "owner", "repo", "README.md"),
+        scout!.permission,
+      ).action,
+    ).toBe("allow")
+  }),
 )
 
-it.instance(
+scout.instance(
   "reference config does not create subagents",
   () =>
-    withExperimentalScout(
-      true,
-      Effect.gen(function* () {
-        const agents = yield* load((svc) => svc.list())
-        const names = agents.map((agent) => agent.name)
-        expect(names).toContain("scout")
-        expect(names).not.toContain("effect")
-        expect(names).not.toContain("effectFull")
-        expect(names).not.toContain("localdocs")
-        expect(names).not.toContain("localdocsFull")
-      }),
-    ),
+    Effect.gen(function* () {
+      const agents = yield* load((svc) => svc.list())
+      const names = agents.map((agent) => agent.name)
+      expect(names).toContain("scout")
+      expect(names).not.toContain("effect")
+      expect(names).not.toContain("effectFull")
+      expect(names).not.toContain("localdocs")
+      expect(names).not.toContain("localdocsFull")
+    }),
   {
     config: {
       reference: {
