@@ -32,6 +32,7 @@ export {
 export { resolveThemeVariant, resolveTheme, themeToCss } from "./resolve"
 export { applyTheme, loadThemeFromUrl, getActiveTheme, removeTheme, setColorScheme } from "./loader"
 export { ThemeProvider, useTheme, type ColorScheme } from "./context"
+export { COLOR_SCHEME, THEME_ID } from "./pin"
 
 export {
   DEFAULT_THEMES,

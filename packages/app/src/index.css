@@ -2,6 +2,7 @@
 
 @layer base {
   :root {
+    /* App shell aliases over Codle theme tokens. */
     --app-canvas: var(--background-base);
     --app-paper: var(--surface-raised-base);
     --app-paper-strong: var(--surface-raised-stronger-non-alpha);
@@ -155,13 +156,14 @@
   }
 
   [data-component="codle-session"] [data-component="codle-scroll-bottom"] {
-    width: 32px !important;
-    height: 32px !important;
-    border: 0 !important;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 999px;
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--app-paper-strong) 98%, white 2%), var(--app-paper) 62%, color-mix(in srgb, var(--app-paper) 88%, var(--app-mix) 12%)),
-      var(--app-paper) !important;
-    color: var(--app-ink) !important;
+      var(--app-paper);
+    color: var(--app-ink);
     box-shadow:
       0 0 0 0.5px color-mix(in srgb, var(--app-line-strong) 72%, transparent),
       0 1px 0 color-mix(in srgb, white 88%, transparent) inset,
@@ -177,7 +179,7 @@
     background:
       linear-gradient(var(--app-neutral-hover), var(--app-neutral-hover)),
       linear-gradient(180deg, color-mix(in srgb, var(--app-paper-strong) 90%, var(--app-button-hover) 10%), var(--app-button-hover) 62%, color-mix(in srgb, var(--app-button-hover) 88%, var(--app-mix) 12%)),
-      var(--app-button-hover) !important;
+      var(--app-button-hover);
     box-shadow:
       0 0 0 0.5px color-mix(in srgb, var(--app-line-strong) 82%, transparent),
       0 1px 0 color-mix(in srgb, white 74%, transparent) inset,
@@ -189,7 +191,7 @@
   [data-component="codle-session"] [data-component="codle-scroll-bottom"]:active {
     background:
       linear-gradient(var(--app-neutral-pressed), var(--app-neutral-pressed)),
-      var(--app-button-pressed) !important;
+      var(--app-button-pressed);
     box-shadow:
       0 0 0 0.5px color-mix(in srgb, var(--app-line-strong) 76%, transparent),
       0 1px 2px color-mix(in srgb, var(--app-line-strong) 70%, transparent) inset;
@@ -197,8 +199,8 @@
   }
 
   [data-component="codle-session"] [data-component="codle-scroll-bottom"] [data-component="icon"] {
-    width: 18px !important;
-    height: 18px !important;
+    width: 18px;
+    height: 18px;
   }
 
   [data-component="codle-session"] [data-component="user-message"] {
@@ -320,13 +322,20 @@
     background: color-mix(in srgb, var(--app-paper-strong) 94%, var(--app-mix) 6%);
   }
 
-  [data-codle-menu="true"],
-  [data-component="codle-model-popover"] {
-    background: var(--app-menu) !important;
-    border: 0 !important;
-    border-radius: 12px !important;
-    box-shadow: var(--app-menu-shadow) !important;
-    padding: 4px !important;
+  [data-codle-menu="true"] {
+    --surface-raised-stronger-non-alpha: var(--app-menu);
+    --surface-raised-base-hover: var(--app-neutral-hover);
+    --surface-raised-base-active: var(--app-neutral-pressed);
+    --text-strong: var(--app-ink);
+    --text-base: var(--app-ink);
+    --text-weak: var(--app-muted);
+    --icon-base: var(--app-muted);
+    --icon-strong-base: var(--app-ink);
+    background: var(--app-menu);
+    border: 0;
+    border-radius: 12px;
+    box-shadow: var(--app-menu-shadow);
+    padding: 4px;
     background-clip: padding-box;
   }
 
@@ -337,21 +346,6 @@
   [data-codle-menu="true"] [data-slot="select-select-item"] {
     min-height: 32px;
     border-radius: 8px;
-    color: var(--app-ink) !important;
-  }
-
-  [data-codle-menu="true"] [data-slot="select-select-item"]:hover,
-  [data-codle-menu="true"] [data-slot="select-select-item"][data-highlighted] {
-    background: var(--app-neutral-hover) !important;
-  }
-
-  [data-codle-menu="true"] [data-slot="select-select-item-indicator"] {
-    color: var(--app-muted) !important;
-  }
-
-  [data-codle-menu="true"] [data-slot="select-select-trigger-value"],
-  [data-codle-menu="true"] [data-slot="select-select-item-label"] {
-    color: var(--app-ink) !important;
   }
 
   [data-component="codle-model-popover"] {
@@ -364,7 +358,13 @@
     --text-weak: var(--app-muted);
     --icon-base: var(--app-muted);
     --icon-strong-base: var(--app-ink);
-    color: var(--app-ink) !important;
+    background: var(--app-menu);
+    border: 0;
+    border-radius: 12px;
+    box-shadow: var(--app-menu-shadow);
+    padding: 4px;
+    background-clip: padding-box;
+    color: var(--app-ink);
   }
 
   [data-component="codle-model-popover"] [data-component="list"] {
@@ -375,13 +375,13 @@
   [data-component="codle-model-popover"] [data-slot="list-search"] {
     background: color-mix(in srgb, var(--app-menu) 92%, var(--app-mix) 8%);
     border-radius: 10px;
-    color: var(--app-ink) !important;
+    color: var(--app-ink);
   }
 
   [data-component="codle-model-popover"] [data-slot="input-input"],
   [data-component="codle-model-popover"] [data-slot="list-search-input"],
   [data-component="codle-model-popover"] [data-slot="list-search-input"]::placeholder {
-    color: var(--app-muted) !important;
+    color: var(--app-muted);
   }
 
   [data-component="codle-model-popover"] [data-slot="list-scroll"] {
@@ -404,17 +404,17 @@
 
   [data-component="codle-model-popover"] [data-slot="list-item"] {
     min-height: 32px;
-    border-radius: 8px !important;
-    color: var(--app-ink) !important;
+    border-radius: 8px;
+    color: var(--app-ink);
   }
 
   [data-component="codle-model-popover"] [data-slot="list-item"][data-active="true"],
   [data-component="codle-model-popover"] [data-slot="list-item"]:hover {
-    background: var(--app-neutral-hover) !important;
+    background: var(--app-neutral-hover);
   }
 
   [data-component="codle-model-popover"] [data-slot="list-item"]:active {
-    background: var(--app-neutral-pressed) !important;
+    background: var(--app-neutral-pressed);
   }
 
   [data-component="codle-model-popover"] [data-slot="list-item-selected-icon"] [data-component="icon"],
@@ -470,8 +470,8 @@
     [data-component="codle-session"] [data-component="codle-scroll-bottom"] {
       background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03) 58%, rgba(0, 0, 0, 0.08)),
-        var(--button-secondary-base) !important;
-      color: var(--text-strong) !important;
+        var(--button-secondary-base);
+      color: var(--text-strong);
       box-shadow:
         0 0 0 0.5px rgba(255, 255, 255, 0.12),
         0 1px 0 rgba(255, 255, 255, 0.1) inset,
