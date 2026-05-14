@@ -2638,3 +2638,347 @@ test("opencode loader keeps paid models when auth exists", async () => {
     }
   }
 })
+
+// ── OpenAI-compatible model discovery ────────────────────────────────────────
+
+test("openai-compatible: discovers models from /v1/models", async () => {
+  const server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      if (new URL(req.url).pathname === "/v1/models") {
+        return Response.json({
+          object: "list",
+          data: [
+            {
+              id: "llama-3.2-8b",
+              object: "model",
+              name: "Llama 3.2 8B",
+              context_length: 131072,
+              max_output_tokens: 4096,
+            },
+            { id: "phi-4", object: "model" },
+            { id: "bad-limits", object: "model", context_length: -1, max_output_tokens: "-2" },
+          ],
+        })
+      }
+      return new Response("not found", { status: 404 })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-llm": {
+                name: "Local LLM",
+                npm: "@ai-sdk/openai-compatible",
+                options: { apiKey: "test", baseURL },
+              },
+            },
+          }),
+        )
+      },
+    })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await list()
+        const provider = providers[ProviderID.make("local-llm")]
+        expect(provider).toBeDefined()
+        expect(provider.models["llama-3.2-8b"]).toBeDefined()
+        expect(provider.models["llama-3.2-8b"].name).toBe("Llama 3.2 8B")
+        expect(provider.models["llama-3.2-8b"].limit.context).toBe(131072)
+        expect(provider.models["llama-3.2-8b"].limit.output).toBe(4096)
+        expect(provider.models["phi-4"]).toBeDefined()
+        expect(provider.models["phi-4"].name).toBe("phi-4") // falls back to model ID
+        expect(provider.models["phi-4"].limit.context).toBe(0) // unknown → overflow check disabled
+        expect(provider.models["phi-4"].limit.output).toBe(0) // unknown → runtime fallback applies
+        expect(provider.models["bad-limits"].limit.context).toBe(0)
+        expect(provider.models["bad-limits"].limit.output).toBe(0)
+      },
+    })
+  } finally {
+    await server.stop()
+  }
+})
+
+test("openai-compatible: discoverModels:true merges discovered models without overriding manual models", async () => {
+  let called = false
+  const server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      called = true
+      if (new URL(req.url).pathname === "/v1/models") {
+        return Response.json({
+          object: "list",
+          data: [
+            { id: "my-model", name: "Discovered Name", context_length: 8192 },
+            { id: "new-model", name: "New Model", context_length: 32768 },
+          ],
+        })
+      }
+      return new Response("not found", { status: 404 })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-llm": {
+                npm: "@ai-sdk/openai-compatible",
+                discoverModels: true,
+                options: { baseURL },
+                models: {
+                  "my-model": { name: "Manual Name", limit: { context: 4096, output: 1024 } },
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await list()
+        const provider = providers[ProviderID.make("local-llm")]
+        const manual = provider?.models["my-model"]
+        const discovered = provider?.models["new-model"]
+        expect(called).toBe(true)
+        expect(manual?.name).toBe("Manual Name")
+        expect(manual?.limit.context).toBe(4096)
+        expect(discovered?.name).toBe("New Model")
+        expect(discovered?.limit.context).toBe(32768)
+      },
+    })
+  } finally {
+    await server.stop()
+  }
+})
+
+test("openai-compatible: discoverModels:false disables discovery", async () => {
+  let called = false
+  const server = Bun.serve({
+    port: 0,
+    fetch() {
+      called = true
+      return Response.json({ object: "list", data: [{ id: "model-a" }] })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-llm": {
+                npm: "@ai-sdk/openai-compatible",
+                discoverModels: false,
+                options: { baseURL },
+              },
+            },
+          }),
+        )
+      },
+    })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await list()
+        expect(called).toBe(false)
+      },
+    })
+  } finally {
+    await server.stop()
+  }
+})
+
+test("openai-compatible: discovery silently fails when server unreachable", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "offline-llm": {
+              npm: "@ai-sdk/openai-compatible",
+              // port 19999 has nothing listening
+              options: { baseURL: "http://127.0.0.1:19999/v1" },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      // should not throw; provider has no models so it's dropped from the list
+      const providers = await list()
+      expect(providers[ProviderID.make("offline-llm")]).toBeUndefined()
+    },
+  })
+})
+
+test("openai-compatible: discovery skipped for non-openai-compatible npm", async () => {
+  let called = false
+  const server = Bun.serve({
+    port: 0,
+    fetch() {
+      called = true
+      return Response.json({ object: "list", data: [{ id: "model-a" }] })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "custom-provider": {
+                npm: "@ai-sdk/anthropic",
+                options: { baseURL, apiKey: "test" },
+                models: { "claude-3": { name: "Claude 3", limit: { context: 200000, output: 4096 } } },
+              },
+            },
+          }),
+        )
+      },
+    })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await list()
+        expect(called).toBe(false)
+      },
+    })
+  } finally {
+    await server.stop()
+  }
+})
+
+test("openai-compatible: discovery URL is baseURL + /models (no /v1 forced)", async () => {
+  let requestPath = ""
+  const server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      requestPath = new URL(req.url).pathname
+      return Response.json({ object: "list", data: [{ id: "model-a" }] })
+    },
+  })
+  try {
+    // baseURL without /v1 — the request should go to /models, not /v1/models
+    const baseURL = `http://localhost:${server.port}`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-llm": { npm: "@ai-sdk/openai-compatible", options: { baseURL } },
+            },
+          }),
+        )
+      },
+    })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await list()
+        expect(requestPath).toBe("/models")
+        expect(providers[ProviderID.make("local-llm")]?.models["model-a"]).toBeDefined()
+      },
+    })
+  } finally {
+    await server.stop()
+  }
+})
+
+test("openai-compatible: discovery handles non-200 response silently", async () => {
+  const server = Bun.serve({
+    port: 0,
+    fetch() {
+      return new Response("Unauthorized", { status: 401 })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-llm": { npm: "@ai-sdk/openai-compatible", options: { baseURL } },
+            },
+          }),
+        )
+      },
+    })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await list()
+        expect(providers[ProviderID.make("local-llm")]).toBeUndefined()
+      },
+    })
+  } finally {
+    await server.stop()
+  }
+})
+
+test("openai-compatible: discovery handles missing data field silently", async () => {
+  const server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      if (new URL(req.url).pathname.endsWith("/models")) {
+        return Response.json({ object: "list" }) // no data field
+      }
+      return new Response("not found", { status: 404 })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-llm": { npm: "@ai-sdk/openai-compatible", options: { baseURL } },
+            },
+          }),
+        )
+      },
+    })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        // should not throw; provider has no models so it's dropped
+        const providers = await list()
+        expect(providers[ProviderID.make("local-llm")]).toBeUndefined()
+      },
+    })
+  } finally {
+    await server.stop()
+  }
+})

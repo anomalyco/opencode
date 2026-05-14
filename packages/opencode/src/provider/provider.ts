@@ -1127,6 +1127,108 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
+function openAICompatibleDiscoveryEnabled(provider: NonNullable<Config.Info["provider"]>[string]) {
+  if (provider.npm && provider.npm !== "@ai-sdk/openai-compatible") return false
+  if (!provider.options?.baseURL) return false
+  return provider.discoverModels ?? provider.models === undefined
+}
+
+async function discoverOpenAICompatibleModels(input: {
+  providerID: ProviderID
+  provider: NonNullable<Config.Info["provider"]>[string]
+  existing: Info | undefined
+}): Promise<Record<string, Model>> {
+  const base = String(input.provider.options?.baseURL ?? "").replace(/\/+$/, "")
+  if (!base) return {}
+  const url = `${base}/models`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 2000)
+  const apiKey = typeof input.provider.options?.apiKey === "string" ? input.provider.options.apiKey : undefined
+  return fetch(url, {
+    signal: controller.signal,
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
+  })
+    .then((response) => {
+      if (!response.ok) return null
+      return response.json() as Promise<{ data?: Array<Record<string, unknown>> }>
+    })
+    .then((body) => {
+      if (!body) return {}
+      const discovered: Record<string, Model> = {}
+      for (const item of body.data ?? []) {
+        const rawID = item.id
+        if (typeof rawID !== "string" || !rawID.trim()) continue
+        const modelID = rawID.trim()
+        const existingModel = input.existing?.models[modelID]
+        const name =
+          typeof item.name === "string" && item.name.trim() ? item.name.trim() : (existingModel?.name ?? modelID)
+        const context =
+          numberFrom(item.context_length) ?? numberFrom(item.max_context_length) ?? existingModel?.limit.context ?? 0
+        const output = numberFrom(item.max_output_tokens) ?? existingModel?.limit.output ?? 0
+        discovered[modelID] = {
+          id: ModelID.make(modelID),
+          providerID: input.providerID,
+          name,
+          api: {
+            id: existingModel?.api.id ?? modelID,
+            url: input.provider.api ?? existingModel?.api.url ?? "",
+            npm: input.provider.npm ?? existingModel?.api.npm ?? "@ai-sdk/openai-compatible",
+          },
+          status: existingModel?.status ?? "active",
+          headers: existingModel?.headers ?? {},
+          options: existingModel?.options ?? {},
+          cost: existingModel?.cost ?? { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          limit: {
+            context,
+            input: existingModel?.limit.input,
+            output,
+          },
+          capabilities: {
+            temperature: existingModel?.capabilities.temperature ?? true,
+            reasoning: existingModel?.capabilities.reasoning ?? false,
+            attachment: existingModel?.capabilities.attachment ?? false,
+            toolcall: existingModel?.capabilities.toolcall ?? true,
+            input: existingModel?.capabilities.input ?? {
+              text: true,
+              audio: false,
+              image: false,
+              video: false,
+              pdf: false,
+            },
+            output: existingModel?.capabilities.output ?? {
+              text: true,
+              audio: false,
+              image: false,
+              video: false,
+              pdf: false,
+            },
+            interleaved: existingModel?.capabilities.interleaved ?? false,
+          },
+          family: existingModel?.family ?? "",
+          release_date: existingModel?.release_date ?? "",
+          variants: existingModel?.variants ?? {},
+        }
+      }
+      return discovered
+    })
+    .catch((e: unknown) => {
+      log.warn("openai-compatible model discovery failed", { providerID: input.providerID, url, error: e })
+      return {}
+    })
+    .finally(() => {
+      clearTimeout(timer)
+    })
+}
+
+function numberFrom(input: unknown) {
+  if (typeof input === "number" && Number.isFinite(input) && input >= 0) return input
+  if (typeof input === "string") {
+    const parsed = Number(input)
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed
+  }
+  return undefined
+}
+
 function suggestionModelIDs(provider: Info | undefined) {
   if (!provider) return []
   return Object.keys(provider.models).filter((id) => {
@@ -1421,6 +1523,29 @@ const layer = Layer.effect(
           if (provider.name) partial.name = provider.name
           if (provider.options) partial.options = provider.options
           mergeProvider(providerID, partial)
+        }
+
+        const toDiscover = configProviders.flatMap(([id, provider]) => {
+          const providerID = ProviderID.make(id)
+          if (!isProviderAllowed(providerID)) return []
+          if (!openAICompatibleDiscoveryEnabled(provider)) return []
+          const target = providers[providerID]
+          if (!target) return []
+          return [{ providerID, provider, target }]
+        })
+        if (toDiscover.length > 0) {
+          const results = yield* Effect.promise(() =>
+            Promise.all(
+              toDiscover.map(({ providerID, provider, target }) =>
+                discoverOpenAICompatibleModels({ providerID, provider, existing: target }),
+              ),
+            ),
+          )
+          toDiscover.forEach(({ target }, i) => {
+            for (const [modelID, model] of Object.entries(results[i])) {
+              if (!target.models[modelID]) target.models[modelID] = model
+            }
+          })
         }
 
         const gitlab = ProviderID.make("gitlab")
