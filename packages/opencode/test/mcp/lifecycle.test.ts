@@ -774,9 +774,10 @@ it.instance(
         const tools = yield* mcp.tools()
         const keys = Object.keys(tools)
 
-        // Server name dots should be replaced with underscores
-        expect(keys.some((k) => k.startsWith("my_special-server_"))).toBe(true)
-        // Tool name dots should be replaced with underscores
+        // Server name dots and dashes should be replaced with underscores
+        expect(keys.some((k) => k.startsWith("my_special_server_"))).toBe(true)
+        // Tool name dots and dashes should be replaced with underscores
+        expect(keys.some((k) => k.endsWith("tool_a"))).toBe(true)
         expect(keys.some((k) => k.endsWith("tool_b"))).toBe(true)
         expect(keys.length).toBe(2)
       }),
