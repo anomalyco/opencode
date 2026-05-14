@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Layer, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMError, Usage } from "../../src"
+import { LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
 import { Auth, LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
@@ -251,9 +251,9 @@ describe("OpenAI Responses route", () => {
           id: "req_tool_result",
           model,
           messages: [
-            LLM.user("What is the weather?"),
-            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
-            LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
           ],
         }),
       )
@@ -333,32 +333,43 @@ describe("OpenAI Responses route", () => {
         },
       )
       const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+      const usage = new Usage({
+        inputTokens: 5,
+        outputTokens: 2,
+        nonCachedInputTokens: 4,
+        cacheReadInputTokens: 1,
+        reasoningTokens: 0,
+        totalTokens: 7,
+        providerMetadata: {
+          openai: {
+            input_tokens: 5,
+            output_tokens: 2,
+            total_tokens: 7,
+            input_tokens_details: { cached_tokens: 1 },
+            output_tokens_details: { reasoning_tokens: 0 },
+          },
+        },
+      })
 
       expect(response.text).toBe("Hello!")
       expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        { type: "text-start", id: "msg_1" },
         { type: "text-delta", id: "msg_1", text: "Hello" },
         { type: "text-delta", id: "msg_1", text: "!" },
+        { type: "text-end", id: "msg_1" },
         {
-          type: "request-finish",
+          type: "step-finish",
+          index: 0,
           reason: "stop",
           providerMetadata: { openai: { responseId: "resp_1", serviceTier: "default" } },
-          usage: new Usage({
-            inputTokens: 5,
-            outputTokens: 2,
-            nonCachedInputTokens: 4,
-            cacheReadInputTokens: 1,
-            reasoningTokens: 0,
-            totalTokens: 7,
-            providerMetadata: {
-              openai: {
-                input_tokens: 5,
-                output_tokens: 2,
-                total_tokens: 7,
-                input_tokens_details: { cached_tokens: 1 },
-                output_tokens_details: { reasoning_tokens: 0 },
-              },
-            },
-          }),
+          usage,
+        },
+        {
+          type: "finish",
+          reason: "stop",
+          providerMetadata: { openai: { responseId: "resp_1", serviceTier: "default" } },
+          usage,
         },
       ])
     }),
@@ -390,8 +401,24 @@ describe("OpenAI Responses route", () => {
           tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
+      const usage = new Usage({
+        inputTokens: 5,
+        outputTokens: 1,
+        nonCachedInputTokens: 5,
+        cacheReadInputTokens: undefined,
+        reasoningTokens: undefined,
+        totalTokens: 6,
+        providerMetadata: { openai: { input_tokens: 5, output_tokens: 1 } },
+      })
 
       expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        {
+          type: "tool-input-start",
+          id: "call_1",
+          name: "lookup",
+          providerMetadata: { openai: { itemId: "item_1" } },
+        },
         {
           type: "tool-input-delta",
           id: "call_1",
@@ -405,22 +432,25 @@ describe("OpenAI Responses route", () => {
           text: ':"weather"}',
         },
         {
+          type: "tool-input-end",
+          id: "call_1",
+          name: "lookup",
+          providerMetadata: { openai: { itemId: "item_1" } },
+        },
+        {
           type: "tool-call",
           id: "call_1",
           name: "lookup",
           input: { query: "weather" },
+          providerExecuted: undefined,
           providerMetadata: { openai: { itemId: "item_1" } },
         },
+        { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
         {
-          type: "request-finish",
+          type: "finish",
           reason: "tool-calls",
-          usage: new Usage({
-            inputTokens: 5,
-            outputTokens: 1,
-            nonCachedInputTokens: 5,
-            totalTokens: 6,
-            providerMetadata: { openai: { input_tokens: 5, output_tokens: 1 } },
-          }),
+          providerMetadata: undefined,
+          usage,
         },
       ])
     }),
@@ -508,7 +538,7 @@ describe("OpenAI Responses route", () => {
         LLM.request({
           id: "req_media",
           model,
-          messages: [LLM.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [Message.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
         }),
       ).pipe(Effect.flip)
 

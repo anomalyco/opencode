@@ -17,6 +17,7 @@ export type {
   ExecutableTools,
   Tool as ToolShape,
   ToolExecute,
+  ToolExecuteContext,
   Tools,
   ToolSchema,
 } from "./tool"

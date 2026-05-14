@@ -51,7 +51,7 @@ const request = LLM.request({
 
 const raiseEvent = (event: FakeEvent): import("../src/schema").LLMEvent =>
   event.type === "finish"
-    ? { type: "request-finish", reason: event.reason }
+    ? { type: "finish", reason: event.reason }
     : { type: "text-delta", id: "text-0", text: event.text }
 
 const fakeProtocol = Protocol.make<FakeBody, FakeEvent, FakeEvent, void>({
@@ -112,8 +112,8 @@ describe("llm route", () => {
       const events = Array.from(yield* llm.stream(request).pipe(Stream.runCollect))
       const response = yield* llm.generate(request)
 
-      expect(events.map((event) => event.type)).toEqual(["text-delta", "request-finish"])
-      expect(response.events.map((event) => event.type)).toEqual(["text-delta", "request-finish"])
+      expect(events.map((event) => event.type)).toEqual(["text-delta", "finish"])
+      expect(response.events.map((event) => event.type)).toEqual(["text-delta", "finish"])
     }),
   )
 

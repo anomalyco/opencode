@@ -25,6 +25,7 @@ export const dict = {
   "command.project.open": "Open project",
   "command.project.previous": "Previous project",
   "command.project.next": "Next project",
+  "command.project.index": "Switch to project {{index}}",
   "command.provider.connect": "Connect provider",
   "command.server.switch": "Switch server",
   "command.settings.open": "Open settings",
@@ -305,6 +306,7 @@ export const dict = {
   "mcp.status.failed": "failed",
   "mcp.status.needs_auth": "needs auth",
   "mcp.status.disabled": "disabled",
+  "mcp.auth.clickToAuthenticate": "Click to authenticate",
 
   "dialog.fork.empty": "No messages to fork from",
 

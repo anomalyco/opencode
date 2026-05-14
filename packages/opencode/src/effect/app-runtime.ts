@@ -14,7 +14,7 @@ import { FileWatcher } from "@/file/watcher"
 import { Storage } from "@/storage/storage"
 import { Snapshot } from "@/snapshot"
 import { Plugin } from "@/plugin"
-import { ModelsDev } from "@/provider/models"
+import { ModelsDev } from "@opencode-ai/core/models"
 import { Provider } from "@/provider/provider"
 import { ProviderAuth } from "@/provider/auth"
 import { Agent } from "@/agent/agent"
@@ -55,6 +55,7 @@ import { SyncEvent } from "@/sync"
 import { Npm } from "@opencode-ai/core/npm"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { DataMigration } from "@/data-migration"
+import { BackgroundJob } from "@/background/job"
 
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
@@ -81,6 +82,7 @@ export const AppLayer = Layer.mergeAll(
   Todo.defaultLayer,
   Session.defaultLayer,
   SessionStatus.defaultLayer,
+  BackgroundJob.defaultLayer,
   SessionRunState.defaultLayer,
   SessionProcessor.defaultLayer,
   SessionCompaction.defaultLayer,
