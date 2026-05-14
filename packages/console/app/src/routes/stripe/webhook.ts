@@ -155,11 +155,11 @@ export async function POST(input: APIEvent) {
               })
               .where(eq(BillingTable.workspaceID, workspaceID))
 
-            // await tx.insert(LiteTable).values({
-            //   workspaceID,
-            //   id: Identifier.create("lite"),
-            //   userID: userID,
-            // })
+            await tx.insert(LiteTable).values({
+              workspaceID,
+              id: Identifier.create("lite"),
+              userID: userID,
+            })
 
             if (userEmail) {
               if (coupon === LiteData.firstMonth100Coupon) {
@@ -173,8 +173,6 @@ export async function POST(input: APIEvent) {
               }
             }
           })
-
-          console.log("creating referral tasks")
 
           await Referral.createFromLiteSubscription({
             workspaceID,

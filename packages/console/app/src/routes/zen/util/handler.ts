@@ -382,8 +382,6 @@ export async function handler(
       headers: resHeaders,
     })
   } catch (error: any) {
-    console.log('error')
-    console.log(error)
     logger.metric({
       "error.type": error.constructor.name,
       "error.message": error.message,
@@ -702,7 +700,6 @@ export async function handler(
   }
 
   function validateBilling(authInfo: AuthInfo, modelInfo: ModelInfo): BillingSource {
-    return 'lite'
     if (!authInfo) return "anonymous"
     if (authInfo.provider?.credentials) return "byok"
     if (authInfo.isFree) return "free"
