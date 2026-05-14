@@ -195,7 +195,11 @@ export const layer: Layer.Layer<
           // `match` is an absolute filesystem path from `Glob.scanSync(..., { absolute: true })`.
           // Import it as `file://` so Node on Windows accepts the dynamic import.
           const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
+          // Guard against null/undefined or non-object modules (e.g., re-export barrels)
+          if (!mod || typeof mod !== "object") continue
           for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
+            // Skip non-tool exports (e.g., helper functions, types, re-exports)
+            if (!def || typeof def !== "object" || typeof def.execute !== "function") continue
             custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
           }
         }
