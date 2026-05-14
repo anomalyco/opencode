@@ -1,5 +1,5 @@
 import { Config } from "@/config/config"
-import { scanLlamaSwap } from "@/local/mdns"
+import { probeModelIDs, scanLlamaSwap } from "@/local/mdns"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
@@ -25,20 +25,75 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       // Build a lookup: normalized baseURL → config provider ID
       const configuredByURL = new Map<string, string>()
       for (const [id, p] of Object.entries(global.provider ?? {})) {
-        const base = normalizeBaseURL(String(p.options?.baseURL ?? ""))
+        const base = normalizeBaseURL(String((p as { options?: { baseURL?: string } }).options?.baseURL ?? ""))
         if (base) configuredByURL.set(base, id)
       }
 
-      const discovered = yield* Effect.promise(() => scanLlamaSwap(4000))
+      // Collect all openai-compatible providers already in the global config so we
+      // can include them in scan results even when mDNS / localhost probing misses them
+      // (e.g. remote hosts on a different subnet).
+      const configuredEntries: Array<{ id: string; name: string; baseURL: string }> = []
+      for (const [id, p] of Object.entries(global.provider ?? {})) {
+        const baseURL = normalizeBaseURL(String((p as { options?: { baseURL?: string } }).options?.baseURL ?? ""))
+        if (baseURL && (p as { npm?: string }).npm === "@ai-sdk/openai-compatible") {
+          configuredEntries.push({ id, name: (p as { name?: string }).name ?? id, baseURL })
+        }
+      }
 
-      return discovered.map((svc) => ({
-        id: providerIDFromName(svc.name),
-        name: svc.name,
-        host: svc.host,
-        port: svc.port,
+      const discovered = yield* Effect.promise<Awaited<ReturnType<typeof scanLlamaSwap>>>(() => scanLlamaSwap(4000))
+
+      // Index mDNS/localhost results by normalised baseURL.
+      const byURL = new Map<
+        string,
+        { id: string; name: string; host: string; port: number; baseURL: string; models: string[]; configuredProviderID?: string }
+      >()
+      for (const svc of discovered) {
+        const norm = normalizeBaseURL(svc.baseURL)
+        byURL.set(norm, {
+          id: providerIDFromName(svc.name),
+          name: svc.name,
+          host: svc.host,
+          port: svc.port,
+          baseURL: svc.baseURL,
+          models: [...svc.models],
+          configuredProviderID: configuredByURL.get(norm),
+        })
+      }
+
+      // Probe configured providers not already found by scan (parallel, 3 s timeout each).
+      const missing = configuredEntries.filter((e) => !byURL.has(e.baseURL))
+      const probeResults = yield* Effect.promise(() =>
+        Promise.all(
+          missing.map(async (e) => {
+            const models = await probeModelIDs(e.baseURL)
+            let host = ""
+            let port = 0
+            try {
+              const u = new URL(e.baseURL)
+              host = u.hostname
+              port = Number(u.port) || (u.protocol === "https:" ? 443 : 80)
+            } catch {
+              host = e.baseURL
+            }
+            return { entry: e, host, port, models }
+          }),
+        ),
+      )
+      for (const { entry, host, port, models } of probeResults) {
+        byURL.set(entry.baseURL, {
+          id: entry.id,
+          name: entry.name,
+          host,
+          port,
+          baseURL: entry.baseURL,
+          models,
+          configuredProviderID: entry.id,
+        })
+      }
+
+      return [...byURL.values()].map((svc) => ({
+        ...svc,
         baseURL: svc.baseURL,
-        models: [...svc.models],
-        configuredProviderID: configuredByURL.get(normalizeBaseURL(svc.baseURL)),
       }))
     })
 

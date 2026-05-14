@@ -7,7 +7,7 @@ export interface LocalLlamaSwapService {
   baseURL: string
 }
 
-async function probeModelIDs(baseURL: string): Promise<string[]> {
+export async function probeModelIDs(baseURL: string): Promise<string[]> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 2000)
   return fetch(`${baseURL}/models`, { signal: controller.signal })

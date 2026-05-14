@@ -506,13 +506,25 @@ function DialogLocalScan() {
     dialog.replace(() => (
       <DialogSelect
         title="Local providers"
-        options={instances.map((i) => ({
-          title: i.name,
-          value: i,
-          description: `${i.host}:${i.port}${i.models.length > 0 ? ` · ${i.models.length} model${i.models.length !== 1 ? "s" : ""}` : ""}`,
-          category: i.configuredProviderID ? "Configured" : "Available",
-          gutter: i.configuredProviderID ? () => <text fg={theme.success}>✓</text> : undefined,
-        }))}
+        options={instances.map((i) => {
+          const running = i.models.length > 0
+          const category = i.configuredProviderID
+            ? running
+              ? "Configured · Online"
+              : "Configured · Offline"
+            : "Available"
+          return {
+            title: i.name,
+            value: i,
+            description: running
+              ? `${i.host}:${i.port} · ${i.models.length} model${i.models.length !== 1 ? "s" : ""}`
+              : `${i.host}:${i.port} · offline`,
+            category,
+            gutter: i.configuredProviderID
+              ? () => <text fg={running ? theme.success : theme.textMuted}>✓</text>
+              : undefined,
+          }
+        })}
         onSelect={async (opt) => {
           const i = opt.value as LocalInstance
           if (i.configuredProviderID) {
