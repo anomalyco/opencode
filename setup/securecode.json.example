@@ -1,13 +1,27 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
-    "openai": {
+    "qwen": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Acompany NCC Qwen3.6-35B-A3B-FP8",
       "options": {
-        "apiKey": "{env:OPENAI_API_KEY}",
-        "baseURL": "https://litellm.acompany.tech/v1"
+        "baseURL": "https://conf-ai.acompany-az.com/v1",
+        "apiKey": "{env:SECURECODE_QWEN3_API_KEY}"
+      },
+      "models": {
+        "qwen3.6-35b-a3b-fp8": {
+          "name": "Qwen3.6-35B-A3B-FP8",
+          "limit": {
+            "context": 262144,
+            "output": 16384
+          },
+          "options": {
+            "chat_template_kwargs": { "enable_thinking": false }
+          }
+        }
       }
     }
   },
-  "model": "openai/qwen3.5",
-  "small_model": "openai/qwen3.5"
+  "model": "qwen/qwen3.6-35b-a3b-fp8",
+  "small_model": "qwen/qwen3.6-35b-a3b-fp8"
 }

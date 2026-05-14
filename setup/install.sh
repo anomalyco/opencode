@@ -8,8 +8,8 @@
 # Branding (SecureCode wordmark / sidebar badge) is shipped inside the binary
 # and does not need a separate plugin file.
 #
-# After install, set OPENAI_API_KEY in your shell environment to the LiteLLM
-# API key your Acompany contact issued for you, then run:
+# After install, set SECURECODE_QWEN3_API_KEY in your shell environment to the
+# Qwen3.6-35B-A3B-FP8 API key your Acompany contact issued for you, then run:
 #
 #   securecode run "Hello"
 #
@@ -34,7 +34,7 @@ if [ ! -e "$dest/securecode.json" ]; then
   echo "installed: $dest/securecode.json"
   echo
   echo "Next steps:"
-  echo "  1. export OPENAI_API_KEY=<your LiteLLM API key from Acompany>"
+  echo "  1. export SECURECODE_QWEN3_API_KEY=<your Qwen3.6 API key from Acompany>"
   echo "  2. securecode run \"Hello\""
 else
   echo "skipped (already exists): $dest/securecode.json"
