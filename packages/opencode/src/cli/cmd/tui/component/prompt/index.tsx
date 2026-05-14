@@ -2,6 +2,7 @@ import {
   BoxRenderable,
   RGBA,
   TextareaRenderable,
+  type KeyBinding as TextareaKeyBinding,
   MouseEvent,
   PasteEvent,
   decodePasteBytes,
@@ -13,6 +14,7 @@ import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, S
 import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
+import { appendFileSync, writeFileSync } from "fs"
 import { Filesystem } from "@/util/filesystem"
 import { useLocal } from "@tui/context/local"
 import { tint, useTheme } from "@tui/context/theme"
@@ -29,6 +31,7 @@ import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { computePromptTraits } from "./traits"
 import { assign } from "./part"
+import { createVimTextareaBindings, handleVimPromptKeyDown, type VimLastFind, type VimMode, type VimPendingFind, type VimPendingOperator } from "./vim"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -88,6 +91,8 @@ export type PromptRef = {
   focus(): void
   submit(): void
 }
+
+const VIM_MARKER_PATH = process.env.OPENCODE_VIM_PROMPT_MARKER
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -160,6 +165,12 @@ export function Prompt(props: PromptProps) {
   const dimensions = useTerminalDimensions()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const vimEnabled = createMemo(() => kv.get("vim_mode_enabled", true))
+  const [vimMode, setVimMode] = createSignal<VimMode>("insert")
+  const [pendingG, setPendingG] = createSignal(false)
+  const [pendingVimOperator, setPendingVimOperator] = createSignal<VimPendingOperator>()
+  const [pendingVimFind, setPendingVimFind] = createSignal<VimPendingFind>()
+  const [lastVimFind, setLastVimFind] = createSignal<VimLastFind>()
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
@@ -337,7 +348,6 @@ export function Prompt(props: PromptProps) {
 
   const usage = createMemo(() => {
     if (!props.sessionID) return
-    const session = sync.session.get(props.sessionID)
     const msg = sync.data.message[props.sessionID] ?? []
     const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
     if (!last) return
@@ -348,7 +358,7 @@ export function Prompt(props: PromptProps) {
 
     const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
     const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
-    const cost = session?.cost ?? 0
+    const cost = msg.reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0)
     return {
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
@@ -371,6 +381,85 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: new Map(),
     interrupt: 0,
   })
+
+  function writeVimMarker(phase: string) {
+    if (!VIM_MARKER_PATH || !input || input.isDestroyed) return
+    try {
+      const payload = {
+        phase,
+        enabled: vimEnabled(),
+        mode: vimMode(),
+        cursor: input.cursorOffset,
+        input: input.plainText,
+      }
+      writeFileSync(VIM_MARKER_PATH, JSON.stringify(payload, null, 2))
+      appendFileSync(`${VIM_MARKER_PATH}.events`, `${JSON.stringify(payload)}\n`)
+    } catch (error) {
+      if (process.env.OPENCODE_VIM_PROMPT_MARKER_DEBUG === "1") process.stderr.write(`${String(error)}\n`)
+    }
+  }
+
+  function syncPromptInput() {
+    if (!input || input.isDestroyed) return
+    setStore("prompt", "input", input.plainText)
+    syncExtmarksWithPromptParts()
+    setCursorVersion((value) => value + 1)
+    writeVimMarker("sync")
+  }
+
+  function moveCursor(offset: number) {
+    if (!input || input.isDestroyed) return
+    input.cursorOffset = Math.max(0, Math.min(offset, input.plainText.length))
+    setCursorVersion((value) => value + 1)
+    writeVimMarker("move")
+  }
+
+  function createVimRuntime() {
+    const text = input?.plainText ?? ""
+    const cursor = input?.cursorOffset ?? 0
+    return {
+      text,
+      cursor,
+      enabled: store.mode === "normal" && vimEnabled(),
+      mode: vimMode(),
+      pendingG: pendingG(),
+      pendingOperator: pendingVimOperator(),
+      pendingFind: pendingVimFind(),
+      lastFind: lastVimFind(),
+      setMode(mode: VimMode) {
+        setVimMode(mode)
+        setCursorVersion((value) => value + 1)
+      },
+      setPendingG(value: boolean) {
+        setPendingG(value)
+      },
+      setPendingOperator(value: VimPendingOperator | undefined) {
+        setPendingVimOperator(value)
+      },
+      setPendingFind(value: VimPendingFind | undefined) {
+        setPendingVimFind(value)
+      },
+      setLastFind(value: VimLastFind | undefined) {
+        setLastVimFind(value)
+      },
+      moveCursor,
+      replaceText(text: string) {
+        if (!input || input.isDestroyed) return
+        input.setText(text)
+      },
+      syncPromptInput,
+      writeMarker: writeVimMarker,
+    }
+  }
+
+  function handlePromptKeyDown(event: KeyEvent) {
+    if (props.disabled) {
+      event.preventDefault()
+      return
+    }
+    if (!input || input.isDestroyed) return
+    handleVimPromptKeyDown(event, createVimRuntime())
+  }
 
   createEffect(
     on(
@@ -713,6 +802,7 @@ export function Prompt(props: PromptProps) {
       ...input.traits,
       ...computePromptTraits({
         mode: store.mode,
+        disabled: !!props.disabled,
         autocompleteVisible: !!auto()?.visible,
       }),
     }
@@ -927,7 +1017,13 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
+        return (
+          inputTarget() !== undefined &&
+          !props.disabled &&
+          !auto()?.visible &&
+          input !== undefined &&
+          (input.cursorOffset === 0 || input.visualCursor.visualRow === 0)
+        )
       })(),
       commands: [
         {
@@ -936,12 +1032,12 @@ export function Prompt(props: PromptProps) {
           category: "Prompt",
           run() {
             if (input.cursorOffset !== 0) {
-              if (input.scrollY + input.visualCursor.visualRow === 0) input.cursorOffset = 0
-              return false
+              input.cursorOffset = 0
+              return
             }
 
             const item = history.move(-1, input.plainText)
-            if (!item) return false
+            if (!item) return
             input.setText(item.input)
             setStore("prompt", item)
             setStore("mode", item.mode ?? "normal")
@@ -959,7 +1055,13 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: (() => {
         cursorVersion()
-        return inputTarget() !== undefined && !props.disabled && !auto()?.visible && input !== undefined
+        return (
+          inputTarget() !== undefined &&
+          !props.disabled &&
+          !auto()?.visible &&
+          input !== undefined &&
+          (input.cursorOffset === input.plainText.length || input.visualCursor.visualRow === input.height - 1)
+        )
       })(),
       commands: [
         {
@@ -968,16 +1070,12 @@ export function Prompt(props: PromptProps) {
           category: "Prompt",
           run() {
             if (input.cursorOffset !== input.plainText.length) {
-              if (
-                input.scrollY + input.visualCursor.visualRow ===
-                Math.max(0, input.editorView.getTotalVirtualLineCount() - 1)
-              )
-                input.cursorOffset = input.plainText.length
-              return false
+              input.cursorOffset = input.plainText.length
+              return
             }
 
             const item = history.move(1, input.plainText)
-            if (!item) return false
+            if (!item) return
             input.setText(item.input)
             setStore("prompt", item)
             setStore("mode", item.mode ?? "normal")
@@ -990,24 +1088,7 @@ export function Prompt(props: PromptProps) {
     }
   })
 
-  let submitting = false
   async function submit() {
-    // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
-    // input's native onSubmit racing another dispatch). Without this guard,
-    // a second call slips past the empty-input check before the first call
-    // clears `store.prompt.input`, then awaits its own `session.create` and
-    // ultimately reads the now-empty store — sending a phantom empty prompt
-    // to a freshly created session.
-    if (submitting) return false
-    submitting = true
-    try {
-      return await submitInner()
-    } finally {
-      submitting = false
-    }
-  }
-
-  async function submitInner() {
     setWarpNotice(undefined)
 
     // IME: double-defer may fire before onContentChange flushes the last
@@ -1268,7 +1349,9 @@ export function Prompt(props: PromptProps) {
       if (raw.startsWith("file://")) {
         try {
           return fileURLToPath(raw)
-        } catch {}
+        } catch {
+          return raw
+        }
       }
       if (process.platform === "win32") return raw
       return raw.replace(/\\(.)/g, "$1")
@@ -1279,7 +1362,7 @@ export function Prompt(props: PromptProps) {
         const mime = await Filesystem.mimeType(filepath)
         const filename = path.basename(filepath)
         if (mime === "image/svg+xml") {
-          const content = await Filesystem.readText(filepath).catch(() => {})
+          const content = await Filesystem.readText(filepath).catch(() => undefined)
           if (content) {
             pasteText(content, `[SVG: ${filename ?? "image"}]`)
             return
@@ -1288,7 +1371,7 @@ export function Prompt(props: PromptProps) {
         if (mime.startsWith("image/") || mime === "application/pdf") {
           const content = await Filesystem.readArrayBuffer(filepath)
             .then((buffer) => Buffer.from(buffer).toString("base64"))
-            .catch(() => {})
+            .catch(() => undefined)
           if (content) {
             await pasteAttachment({
               filename,
@@ -1299,7 +1382,9 @@ export function Prompt(props: PromptProps) {
             return
           }
         }
-      } catch {}
+      } catch {
+        // Treat unresolved local paths as plain pasted text.
+      }
     }
 
     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
@@ -1406,6 +1491,9 @@ export function Prompt(props: PromptProps) {
     animationsEnabled,
   )
   const borderHighlight = createMemo(() => tint(theme.border, highlight(), agentMetaAlpha()))
+  const vimTextareaBindings = createMemo<TextareaKeyBinding[]>(() =>
+    createVimTextareaBindings(store.mode === "normal" && vimEnabled(), vimMode()),
+  )
 
   const placeholderText = createMemo(() => {
     if (props.showPlaceholder === false) return undefined
@@ -1504,14 +1592,10 @@ export function Prompt(props: PromptProps) {
                 auto()?.onInput(value)
                 syncExtmarksWithPromptParts()
                 setCursorVersion((value) => value + 1)
+                writeVimMarker("content")
               }}
               onCursorChange={() => setCursorVersion((value) => value + 1)}
-              onKeyDown={(e: { preventDefault(): void }) => {
-                if (props.disabled) {
-                  e.preventDefault()
-                  return
-                }
-              }}
+              onKeyDown={(event) => handlePromptKeyDown(event)}
               onSubmit={() => {
                 // IME: double-defer so the last composed character (e.g. Korean
                 // hangul) is flushed to plainText before we read it for submission.
@@ -1548,6 +1632,7 @@ export function Prompt(props: PromptProps) {
                 if (promptPartTypeId === 0) {
                   promptPartTypeId = input.extmarks.registerType("prompt-part")
                 }
+                writeVimMarker("mount")
                 props.ref?.(ref)
                 setTimeout(() => {
                   // setTimeout is a workaround and needs to be addressed properly
@@ -1558,6 +1643,7 @@ export function Prompt(props: PromptProps) {
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={props.disabled ? theme.backgroundElement : theme.text}
+              keyBindings={vimTextareaBindings()}
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
@@ -1568,6 +1654,12 @@ export function Prompt(props: PromptProps) {
                       <text fg={fadeColor(highlight(), agentMetaAlpha())}>
                         {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
                       </text>
+                      <Show when={store.mode === "normal" && vimEnabled()}>
+                        <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                        <text fg={fadeColor(vimMode() === "normal" ? theme.warning : theme.success, modelMetaAlpha())}>
+                          {vimMode() === "normal" ? "NORMAL" : "INSERT"}
+                        </text>
+                      </Show>
                       <Show when={store.mode === "normal"}>
                         <box flexDirection="row" gap={1}>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>

@@ -14,7 +14,8 @@
     "fix-node-pty": "bun run script/fix-node-pty.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
     "dev:temporary": "bun run --conditions=browser ./src/temporary.ts",
-    "db": "bun drizzle-kit"
+    "db": "bun drizzle-kit",
+    "test:e2e:vim": "python3 ../script/e2e_vim_pty.py"
   },
   "bin": {
     "opencode": "./bin/opencode"
