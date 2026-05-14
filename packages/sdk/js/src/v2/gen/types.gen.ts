@@ -5566,7 +5566,7 @@ export type SessionUpdateData = {
     title?: string
     metadata?: {
       [key: string]: unknown
-    }
+    } | null
     permission?: PermissionRuleset
     time?: {
       archived?: number
@@ -5861,7 +5861,6 @@ export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessag
 export type SessionForkData = {
   body?: {
     messageID?: string
-    copyMetadata?: boolean
   }
   path: {
     sessionID: string

@@ -205,22 +205,6 @@ describe("Session", () => {
     }),
   )
 
-  it.instance("can fork without copying metadata", () =>
-    Effect.gen(function* () {
-      const session = yield* SessionNs.Service
-      const created = yield* Effect.acquireRelease(
-        session.create({ metadata: { source: "sdk" } }),
-        (info) => session.remove(info.id).pipe(Effect.ignore),
-      )
-      const fork = yield* Effect.acquireRelease(
-        session.fork({ sessionID: created.id, copyMetadata: false }),
-        (info) => session.remove(info.id).pipe(Effect.ignore),
-      )
-
-      expect(fork.metadata).toEqual({})
-    }),
-  )
-
   it.instance("defaults metadata to an empty object", () =>
     Effect.gen(function* () {
       const session = yield* SessionNs.Service

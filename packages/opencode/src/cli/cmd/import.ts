@@ -168,6 +168,7 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, projectI
 
   const info = Schema.decodeUnknownSync(Session.Info)({
     ...exportData.info,
+    metadata: exportData.info.metadata ?? {},
     projectID,
   }) as Session.Info
   const row = Session.toRow(info)

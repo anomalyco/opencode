@@ -171,7 +171,7 @@ describe("Session input schemas", () => {
 
   test("ForkInput round-trips", () => {
     const decode = decodeUnknown(Session.ForkInput)
-    const input = { sessionID, messageID, copyMetadata: false }
+    const input = { sessionID, messageID }
     expect(decode(input)).toEqual(input)
     // messageID is optional
     const bare = { sessionID }

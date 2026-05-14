@@ -75,19 +75,6 @@ describe("session action routes", () => {
         const fork = (yield* Effect.promise(() => forked.json())) as SessionNs.Info
         expect(fork.metadata).toEqual(next.metadata)
 
-        const blanked = yield* Effect.promise(() =>
-          Promise.resolve(
-            app.request(`/session/${session.id}/fork`, {
-              method: "POST",
-              headers,
-              body: JSON.stringify({ copyMetadata: false }),
-            }),
-          ),
-        )
-        expect(blanked.status).toBe(200)
-        const empty = (yield* Effect.promise(() => blanked.json())) as SessionNs.Info
-        expect(empty.metadata).toEqual({})
-
         const cleared = yield* Effect.promise(() =>
           Promise.resolve(
             app.request(`/session/${session.id}`, {
@@ -101,7 +88,6 @@ describe("session action routes", () => {
         expect(((yield* Effect.promise(() => cleared.json())) as SessionNs.Info).metadata).toEqual({})
 
         yield* SessionNs.Service.use((svc) => svc.remove(fork.id).pipe(Effect.ignore))
-        yield* SessionNs.Service.use((svc) => svc.remove(empty.id).pipe(Effect.ignore))
         yield* SessionNs.Service.use((svc) => svc.remove(session.id).pipe(Effect.ignore))
       }),
     { git: true },
