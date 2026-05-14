@@ -276,7 +276,7 @@ interface State {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Vcs") {}
 
-export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const git = yield* Git.Service

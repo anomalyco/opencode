@@ -211,18 +211,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 
 export const use = serviceUse(Service)
 
-export const layer: Layer.Layer<
-  Service,
-  never,
-  | Bus.Service
-  | Config.Service
-  | Session.Service
-  | Agent.Service
-  | Plugin.Service
-  | SessionProcessor.Service
-  | Provider.Service
-  | RuntimeFlags.Service
-> = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service

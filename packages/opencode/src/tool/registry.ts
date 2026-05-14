@@ -79,32 +79,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
-export const layer: Layer.Layer<
-  Service,
-  never,
-  | Config.Service
-  | Plugin.Service
-  | Question.Service
-  | Todo.Service
-  | Agent.Service
-  | Skill.Service
-  | Session.Service
-  | SessionStatus.Service
-  | BackgroundJob.Service
-  | Provider.Service
-  | Git.Service
-  | Reference.Service
-  | LSP.Service
-  | Instruction.Service
-  | AppFileSystem.Service
-  | Bus.Service
-  | HttpClient.HttpClient
-  | ChildProcessSpawner
-  | Ripgrep.Service
-  | Format.Service
-  | Truncate.Service
-  | RuntimeFlags.Service
-> = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service

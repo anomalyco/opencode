@@ -59,11 +59,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
 
-const live: Layer.Layer<
-  Service,
-  never,
-  Auth.Service | Config.Service | Provider.Service | Plugin.Service | Permission.Service | RuntimeFlags.Service
-> = Layer.effect(
+const live = Layer.effect(
   Service,
   Effect.gen(function* () {
     const auth = yield* Auth.Service

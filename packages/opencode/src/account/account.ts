@@ -181,7 +181,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Account") {}
 
-export const layer: Layer.Layer<Service, never, AccountRepo.Service | HttpClient.HttpClient> = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const repo = yield* AccountRepo.Service

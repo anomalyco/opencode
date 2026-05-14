@@ -60,7 +60,7 @@ const transportError = (request: HttpClientRequest.HttpClientRequest, descriptio
 export const recordingLayer = (
   name: string,
   options: Omit<RecordReplayOptions, "directory"> = {},
-): Layer.Layer<HttpClient.HttpClient, never, HttpClient.HttpClient | CassetteService.Service> =>
+) =>
   Layer.effect(
     HttpClient.HttpClient,
     Effect.gen(function* () {
@@ -134,7 +134,7 @@ export const recordingLayer = (
     }),
   )
 
-export const cassetteLayer = (name: string, options: RecordReplayOptions = {}): Layer.Layer<HttpClient.HttpClient> =>
+export const cassetteLayer = (name: string, options: RecordReplayOptions = {}) =>
   recordingLayer(name, options).pipe(
     Layer.provide(CassetteService.fileSystem({ directory: options.directory })),
     Layer.provide(FetchHttpClient.layer),

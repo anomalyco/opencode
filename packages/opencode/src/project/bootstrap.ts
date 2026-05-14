@@ -55,7 +55,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer: Layer.Layer<Service> = layer.pipe(
+export const defaultLayer = layer.pipe(
   Layer.provide([
     Bus.layer,
     Config.defaultLayer,

@@ -8,7 +8,7 @@ const liveWebSocket = WebSocketExecutor.open
 export const webSocketCassetteLayer = (
   cassette: string,
   input: { readonly metadata?: Record<string, unknown>; readonly mode: RecordReplayMode },
-): Layer.Layer<WebSocketExecutorService, never, Cassette.Service> =>
+) =>
   Layer.effect(
     WebSocketExecutor.Service,
     Effect.gen(function* () {

@@ -93,7 +93,7 @@ export namespace EffectFlock {
 
   const isPathGone = (e: PlatformError) => e.reason._tag === "NotFound" || e.reason._tag === "Unknown"
 
-  export const layer: Layer.Layer<Service, never, Global.Service | AppFileSystem.Service> = Layer.effect(
+  export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const global = yield* Global.Service

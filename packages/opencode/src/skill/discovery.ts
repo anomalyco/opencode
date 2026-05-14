@@ -24,8 +24,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SkillDiscovery") {}
 
-export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Path.Path | HttpClient.HttpClient> =
-  Layer.effect(
+export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const log = Log.create({ service: "skill-discovery" })
@@ -107,7 +106,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Path.Pat
     }),
   )
 
-export const defaultLayer: Layer.Layer<Service> = layer.pipe(
+export const defaultLayer = layer.pipe(
   Layer.provide(FetchHttpClient.layer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(NodePath.layer),

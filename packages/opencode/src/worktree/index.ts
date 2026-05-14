@@ -147,11 +147,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Wo
 
 type GitResult = { code: number; text: string; stderr: string }
 
-export const layer: Layer.Layer<
-  Service,
-  never,
-  AppFileSystem.Service | Path.Path | AppProcess.Service | Git.Service | Project.Service | InstanceStore.Service
-> = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const scope = yield* Scope.Scope

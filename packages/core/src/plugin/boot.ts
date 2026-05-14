@@ -21,8 +21,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/PluginBoot") {}
 
-export const layer: Layer.Layer<Service, never, Catalog.Service | PluginV2.Service | AuthV2.Service | Npm.Service> =
-  Layer.effect(
+export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service

@@ -352,7 +352,7 @@ const retryStatusFailures = <A, R>(
     )
   })
 
-export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient

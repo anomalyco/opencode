@@ -492,7 +492,7 @@ export const streamRequest = (request: LLMRequest) =>
     }),
   )
 
-export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const stream = streamWith(streamRequestWith({ http: yield* RequestExecutor.Service }))
@@ -500,8 +500,7 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
   }),
 )
 
-export const layerWithWebSocket: Layer.Layer<Service, never, RequestExecutor.Service | WebSocketExecutorService> =
-  Layer.effect(
+export const layerWithWebSocket = Layer.effect(
     Service,
     Effect.gen(function* () {
       const stream = streamWith(

@@ -221,8 +221,7 @@ function raceAbort<A, E, R>(effect: Effect.Effect<A, E, R>, signal?: AbortSignal
   return signal ? effect.pipe(Effect.raceFirst(waitForAbort(signal))) : effect
 }
 
-export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildProcessSpawner | HttpClient.HttpClient> =
-  Layer.effect(
+export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service

@@ -85,22 +85,7 @@ type StreamEvent = Event
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
-export const layer: Layer.Layer<
-  Service,
-  never,
-  | Session.Service
-  | Config.Service
-  | Bus.Service
-  | Snapshot.Service
-  | Agent.Service
-  | LLM.Service
-  | Permission.Service
-  | Plugin.Service
-  | Image.Service
-  | SessionSummary.Service
-  | SessionStatus.Service
-  | RuntimeFlags.Service
-> = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const session = yield* Session.Service
