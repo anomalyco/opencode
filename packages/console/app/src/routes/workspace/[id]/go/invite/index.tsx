@@ -1,7 +1,7 @@
 import { createAsync, useParams } from "@solidjs/router"
 import { Show } from "solid-js"
 import { IconGo } from "~/component/icon"
-import { GoReferralCredits, GoReferralOverview, queryGoReferral } from "~/component/go-referral"
+import { GoReferralOverview, GoReferralRewards, queryGoReferral } from "~/component/go-referral"
 import { useI18n } from "~/context/i18n"
 
 export default function () {
@@ -21,7 +21,7 @@ export default function () {
           {(summary) => (
             <>
               <GoReferralOverview summary={summary()} />
-              <GoReferralCredits workspaceID={params.id!} summary={summary()} />
+              <GoReferralRewards workspaceID={params.id!} summary={summary()} />
             </>
           )}
         </Show>

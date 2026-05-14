@@ -1,6 +1,6 @@
 import { action, useParams, useAction, useSubmission, json, query, createAsync, useLocation } from "@solidjs/router"
 import { createStore } from "solid-js/store"
-import { createMemo, For, Show } from "solid-js"
+import { createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { Modal } from "~/component/modal"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Database, eq, and, isNull } from "@opencode-ai/console-core/drizzle/index.js"
@@ -14,9 +14,11 @@ import styles from "./lite-section.module.css"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { formError } from "~/lib/form-error"
-import { GoCreditApplyCard, GoReferralBanner, queryGoReferral } from "~/component/go-referral"
+import { GoReferralBanner } from "~/component/go-referral"
 
 import { IconAlipay, IconUpi } from "~/component/icon"
+
+const INVITE_STORAGE_KEY = "opencode.go.invite"
 
 const queryLiteSubscription = query(async (workspaceID: string) => {
   "use server"
@@ -85,11 +87,10 @@ function formatResetTime(seconds: number, i18n: ReturnType<typeof useI18n>) {
 const createLiteCheckoutUrl = action(
   async (workspaceID: string, successUrl: string, cancelUrl: string, method?: "alipay" | "upi", inviteCode?: string) => {
     "use server"
-    void inviteCode
     return json(
       await withActor(
         () =>
-          Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl, method })
+          Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl, method, inviteCode })
             .then((data) => ({ error: undefined, data }))
             .catch((e) => ({
               error: e.message as string,
@@ -150,8 +151,8 @@ export function LiteSection() {
   const billingInfo = createAsync(() => queryBillingInfo(params.id!))
   const isBlack = createMemo(() => billingInfo()?.subscriptionID || billingInfo()?.timeSubscriptionBooked)
   const lite = createAsync(() => queryLiteSubscription(params.id!))
-  const referral = createAsync(() => queryGoReferral(params.id!))
-  const inviteCode = createMemo(() => new URLSearchParams(location.search).get("invite") ?? undefined)
+  const [storedInviteCode, setStoredInviteCode] = createSignal<string>()
+  const inviteCode = createMemo(() => new URLSearchParams(location.search).get("invite") ?? storedInviteCode())
   const sessionAction = useAction(createSessionUrl)
   const sessionSubmission = useSubmission(createSessionUrl)
   const checkoutAction = useAction(createLiteCheckoutUrl)
@@ -163,6 +164,13 @@ export function LiteSection() {
   })
 
   const busy = createMemo(() => !!store.loading)
+
+  onMount(() => {
+    const code = inviteCode() ?? window.localStorage.getItem(INVITE_STORAGE_KEY) ?? undefined
+    if (!code) return
+    window.localStorage.setItem(INVITE_STORAGE_KEY, code)
+    setStoredInviteCode(code)
+  })
 
   async function onClickSession() {
     setStore("loading", "session")
@@ -252,7 +260,6 @@ export function LiteSection() {
                 </span>
               </div>
             </div>
-            <GoCreditApplyCard workspaceID={params.id!} summary={referral()} />
             <form action={setLiteUseBalance} method="post" data-slot="setting-row">
               <p>{i18n.t("workspace.lite.subscription.useBalance")}</p>
               <input type="hidden" name="workspaceID" value={params.id} />

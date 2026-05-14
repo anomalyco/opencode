@@ -9,7 +9,7 @@ import { Actor } from "@opencode-ai/console-core/actor.js"
 import { Resource } from "@opencode-ai/console-resource"
 import { LiteData } from "@opencode-ai/console-core/lite.js"
 import { BlackData } from "@opencode-ai/console-core/black.js"
-import { User } from "@opencode-ai/console-core/user.js"
+import { Referral } from "@opencode-ai/console-core/referral.js"
 
 export async function POST(input: APIEvent) {
   const body = await Billing.stripe().webhooks.constructEventAsync(
@@ -112,6 +112,7 @@ export async function POST(input: APIEvent) {
         const userID = body.data.object.metadata?.userID
         const userEmail = body.data.object.metadata?.userEmail
         const coupon = body.data.object.metadata?.coupon
+        const inviteCode = body.data.object.metadata?.inviteCode
         const customerID = body.data.object.customer as string
         const invoiceID = body.data.object.latest_invoice as string
         const subscriptionID = body.data.object.id as string
@@ -154,11 +155,11 @@ export async function POST(input: APIEvent) {
               })
               .where(eq(BillingTable.workspaceID, workspaceID))
 
-            await tx.insert(LiteTable).values({
-              workspaceID,
-              id: Identifier.create("lite"),
-              userID: userID,
-            })
+            // await tx.insert(LiteTable).values({
+            //   workspaceID,
+            //   id: Identifier.create("lite"),
+            //   userID: userID,
+            // })
 
             if (userEmail) {
               if (coupon === LiteData.firstMonth100Coupon) {
@@ -171,6 +172,18 @@ export async function POST(input: APIEvent) {
                 await Billing.redeemCoupon(userEmail, "GO12MONTHS100")
               }
             }
+          })
+
+          console.log("creating referral tasks")
+
+          await Referral.createFromLiteSubscription({
+            workspaceID,
+            userID,
+            customerID,
+            subscriptionID,
+            inviteCode,
+          }).catch((error) => {
+            console.error("Referral sync failed", error)
           })
         })
       }

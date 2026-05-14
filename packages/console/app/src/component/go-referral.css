@@ -1,5 +1,4 @@
-[data-component="go-referral-banner"],
-[data-component="go-credit-apply-card"] {
+[data-component="go-referral-banner"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -31,8 +30,6 @@
 }
 
 [data-component="go-referral-banner"],
-[data-component="go-credit-apply-card"],
-[data-component="go-referral-modal"],
 [data-component="go-credit-confirm"],
 [data-component="go-referral-section"] {
   a[data-color],
@@ -76,19 +73,17 @@
   }
 }
 
-[data-component="go-referral-modal"],
 [data-component="go-credit-confirm"] {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
   min-width: min(34rem, calc(100vw - var(--space-8)));
 
-  [data-slot="loading"] {
+  p {
     margin: 0;
-    color: var(--color-text-muted);
+    color: var(--color-text-secondary);
     font-size: var(--font-size-sm);
-    line-height: 1.5;
-    text-align: center;
+    line-height: 1.6;
   }
 
   [data-slot="modal-actions"] {
@@ -114,7 +109,10 @@
   > div {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border: 2px solid var(--color-accent);
+    border-radius: var(--border-radius-sm);
 
     @media (max-width: 40rem) {
       align-items: stretch;
@@ -129,84 +127,31 @@
     border: 1px solid var(--color-border);
     border-radius: var(--border-radius-sm);
     background-color: var(--color-bg);
-    color: var(--color-text-secondary);
+    color: var(--color-text);
+    font-family: var(--font-mono);
     font-size: var(--font-size-sm);
     line-height: 1.4;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-}
 
-[data-slot="referral-progress"] {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-[data-slot="progress-header"] {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  color: var(--color-text);
-  font-size: var(--font-size-sm);
-
-  span {
-    color: var(--color-text-muted);
-  }
-}
-
-[data-slot="progress-track"] {
-  height: 8px;
-  overflow: hidden;
-  border-radius: var(--border-radius-sm);
-  background-color: var(--color-bg-surface);
-}
-
-[data-slot="progress-fill"] {
-  height: 100%;
-  border-radius: var(--border-radius-sm);
-  background-color: var(--color-accent);
-  transition: width 0.3s ease;
-}
-
-[data-slot="milestones"] {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
-
-  @media (max-width: 40rem) {
-    grid-template-columns: 1fr;
-  }
-}
-
-[data-slot="milestone"] {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-
-  &[data-status="unlocked"] {
-    border-color: var(--color-accent);
-    color: var(--color-text);
-    background-color: var(--color-bg);
+    @media (max-width: 40rem) {
+      padding: var(--space-2-5);
+      font-size: var(--font-size-xs);
+    }
   }
 
-  strong {
-    color: var(--color-text);
-    font-weight: 600;
-  }
-}
+  button {
+    gap: var(--space-2);
+    min-width: 130px;
+    white-space: nowrap;
 
-[data-slot="next-reward"] {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
+    @media (max-width: 40rem) {
+      min-width: 96px;
+      padding: var(--space-2-5) var(--space-3);
+      font-size: var(--font-size-xs);
+    }
+  }
 }
 
 [data-slot="instructions"] {
@@ -241,7 +186,7 @@
 }
 
 [data-component="go-referral-section"] {
-  [data-slot="credit-summary"] {
+  [data-slot="referral-stats"] {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--space-3);
@@ -272,13 +217,13 @@
     }
   }
 
-  [data-slot="credit-list"] {
+  [data-slot="reward-list"] {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
   }
 
-  [data-slot="credit-row"] {
+  [data-slot="reward-row"] {
     display: grid;
     grid-template-columns: minmax(9rem, 1fr) minmax(14rem, 2fr) auto;
     align-items: center;
@@ -287,20 +232,24 @@
     border: 1px solid var(--color-border);
     border-radius: var(--border-radius-sm);
 
+    &[data-status="available"] {
+      background-color: var(--color-bg-surface);
+    }
+
     @media (max-width: 48rem) {
       grid-template-columns: 1fr;
       align-items: stretch;
     }
   }
 
-  [data-slot="credit-main"],
-  [data-slot="credit-meta"] {
+  [data-slot="reward-main"],
+  [data-slot="reward-meta"] {
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
   }
 
-  [data-slot="credit-main"] {
+  [data-slot="reward-main"] {
     strong {
       color: var(--color-text);
       font-size: var(--font-size-md);
@@ -313,18 +262,9 @@
     }
   }
 
-  [data-slot="credit-meta"] {
+  [data-slot="reward-meta"] {
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
     line-height: 1.5;
-  }
-}
-
-[data-component="go-credit-confirm"] {
-  p {
-    margin: 0;
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-    line-height: 1.6;
   }
 }
