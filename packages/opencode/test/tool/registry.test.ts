@@ -6,7 +6,6 @@ import { Effect, Layer, Result, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
@@ -36,7 +35,6 @@ import { MessageID, SessionID } from "@/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const node = CrossSpawnSpawner.defaultLayer
-const originalBackgroundAgents = Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS
 const configLayer = TestConfig.layer({
   directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
 })
@@ -69,9 +67,11 @@ const registryLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 
 const it = testEffect(Layer.mergeAll(registryLayer(), node, Agent.defaultLayer))
 const scout = testEffect(Layer.mergeAll(registryLayer({ experimentalScout: true }), node, Agent.defaultLayer))
+const background = testEffect(
+  Layer.mergeAll(registryLayer({ experimentalBackgroundSubagents: true }), node, Agent.defaultLayer),
+)
 
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = originalBackgroundAgents
   await disposeAllInstances()
 })
 
@@ -96,9 +96,8 @@ describe("tool.registry", () => {
     }),
   )
 
-  it.instance("hides task_status unless experimental background agents are enabled", () =>
+  it.instance("hides task_status unless experimental background subagents are enabled", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = false
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
 
@@ -106,9 +105,8 @@ describe("tool.registry", () => {
     }),
   )
 
-  it.instance("hides task background parameter unless experimental background agents are enabled", () =>
+  it.instance("hides task background parameter unless experimental background subagents are enabled", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = false
       const registry = yield* ToolRegistry.Service
       const agent = yield* Agent.Service
       const build = yield* agent.get("build")
@@ -122,9 +120,8 @@ describe("tool.registry", () => {
     }),
   )
 
-  it.instance("shows task_status when experimental background agents are enabled", () =>
+  background.instance("shows task_status when experimental background subagents are enabled", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = true
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
 

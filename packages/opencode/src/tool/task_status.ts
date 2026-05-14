@@ -6,7 +6,7 @@ import { MessageV2 } from "@/session/message-v2"
 import { SessionID } from "@/session/schema"
 import { SessionStatus } from "@/session/status"
 import { PositiveInt } from "@opencode-ai/core/schema"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Effect, Option, Schema } from "effect"
 
 const DEFAULT_TIMEOUT = 60_000
@@ -49,6 +49,7 @@ export const TaskStatusTool = Tool.define(
     const jobs = yield* BackgroundJob.Service
     const sessions = yield* Session.Service
     const status = yield* SessionStatus.Service
+    const flags = yield* RuntimeFlags.Service
 
     const inspect: (taskID: SessionID) => Effect.Effect<InspectResult> = Effect.fn("TaskStatusTool.inspect")(function* (taskID: SessionID) {
       const job = yield* jobs.get(taskID)
@@ -99,8 +100,8 @@ export const TaskStatusTool = Tool.define(
       params: Schema.Schema.Type<typeof Parameters>,
       _ctx: Tool.Context,
     ) {
-      if (!Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS) {
-        return yield* Effect.fail(new Error("task_status requires OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS=true"))
+      if (!flags.experimentalBackgroundSubagents) {
+        return yield* Effect.fail(new Error("task_status requires OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"))
       }
 
       const session = yield* sessions.get(params.task_id).pipe(Effect.catchCause(() => Effect.succeed(undefined)))

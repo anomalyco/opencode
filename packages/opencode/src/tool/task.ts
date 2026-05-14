@@ -14,7 +14,7 @@ import { Config } from "@/config/config"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Cause, Effect, Exit, Option, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -97,6 +97,7 @@ export const TaskTool = Tool.define(
     const sessions = yield* Session.Service
     const scope = yield* Scope.Scope
     const status = yield* SessionStatus.Service
+    const flags = yield* RuntimeFlags.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -104,8 +105,8 @@ export const TaskTool = Tool.define(
     ) {
       const cfg = yield* config.get()
       const runInBackground = params.background === true
-      if (runInBackground && !Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS) {
-        return yield* Effect.fail(new Error("Background agents require OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS=true"))
+      if (runInBackground && !flags.experimentalBackgroundSubagents) {
+        return yield* Effect.fail(new Error("Background subagents require OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"))
       }
 
       if (!ctx.extra?.bypassAgentCheck) {
@@ -313,7 +314,7 @@ export const TaskTool = Tool.define(
     return {
       description: DESCRIPTION,
       parameters: Parameters,
-      jsonSchema: Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
+      jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         run(params, ctx).pipe(Effect.orDie),
     }

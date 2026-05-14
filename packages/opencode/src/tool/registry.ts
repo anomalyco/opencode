@@ -50,7 +50,6 @@ import { Git } from "@/git"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
 import { Reference } from "@/reference/reference"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { BackgroundJob } from "@/background/job"
 import { SessionStatus } from "@/session/status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -251,7 +250,7 @@ export const layer: Layer.Layer<
             tool.edit,
             tool.write,
             tool.task,
-            ...(Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS ? [tool.task_status] : []),
+            ...(flags.experimentalBackgroundSubagents ? [tool.task_status] : []),
             tool.fetch,
             tool.todo,
             tool.search,

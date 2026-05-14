@@ -15,14 +15,11 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const originalBackgroundAgents = Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS
-
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = originalBackgroundAgents
   await disposeAllInstances()
 })
 
@@ -31,7 +28,7 @@ const ref = {
   modelID: ModelID.make("test-model"),
 }
 
-const it = testEffect(
+const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     Agent.defaultLayer,
     BackgroundJob.defaultLayer,
@@ -43,8 +40,11 @@ const it = testEffect(
     SessionStatus.defaultLayer,
     Truncate.defaultLayer,
     ToolRegistry.defaultLayer,
-  ),
-)
+    RuntimeFlags.layer(flags),
+  )
+
+const it = testEffect(layer())
+const background = testEffect(layer({ experimentalBackgroundSubagents: true }))
 
 function defer<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -449,7 +449,6 @@ describe("tool.task", () => {
 
   it.instance("rejects background execution when the experiment is disabled", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = false
       const { chat, assistant } = yield* seed()
       const tool = yield* TaskTool
       const def = yield* tool.init()
@@ -479,9 +478,8 @@ describe("tool.task", () => {
     }),
   )
 
-  it.instance("execute launches background tasks without waiting for completion", () =>
+  background.instance("execute launches background tasks without waiting for completion", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = true
       const jobs = yield* BackgroundJob.Service
       const { chat, assistant } = yield* seed()
       const tool = yield* TaskTool
@@ -518,9 +516,8 @@ describe("tool.task", () => {
     }),
   )
 
-  it.instance("background tasks complete through the background job service", () =>
+  background.instance("background tasks complete through the background job service", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = true
       const jobs = yield* BackgroundJob.Service
       const { chat, assistant } = yield* seed()
       const tool = yield* TaskTool
@@ -552,9 +549,8 @@ describe("tool.task", () => {
     }),
   )
 
-  it.instance("background task completion does not wait for the parent resume loop", () =>
+  background.instance("background task completion does not wait for the parent resume loop", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = true
       const jobs = yield* BackgroundJob.Service
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
@@ -612,9 +608,8 @@ describe("tool.task", () => {
     }),
   )
 
-  it.instance("removing the parent session cancels running background tasks", () =>
+  background.instance("removing the parent session cancels running background tasks", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = true
       const jobs = yield* BackgroundJob.Service
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
@@ -652,9 +647,8 @@ describe("tool.task", () => {
     }),
   )
 
-  it.instance("removing the child task session cancels its running background task", () =>
+  background.instance("removing the child task session cancels its running background task", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = true
       const jobs = yield* BackgroundJob.Service
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
@@ -692,9 +686,8 @@ describe("tool.task", () => {
     }),
   )
 
-  it.instance("cancelling the parent run cancels running background tasks", () =>
+  background.instance("cancelling the parent run cancels running background tasks", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = true
       const jobs = yield* BackgroundJob.Service
       const runState = yield* SessionRunState.Service
       const { chat, assistant } = yield* seed()

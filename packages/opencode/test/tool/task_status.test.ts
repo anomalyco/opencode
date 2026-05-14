@@ -9,18 +9,15 @@ import { MessageID } from "@/session/schema"
 import { SessionStatus } from "@/session/status"
 import { TaskStatusTool } from "@/tool/task_status"
 import { Truncate } from "@/tool/truncate"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const originalBackgroundAgents = Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS
-
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = originalBackgroundAgents
   await disposeAllInstances()
 })
 
-const it = testEffect(
+const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     Agent.defaultLayer,
     BackgroundJob.defaultLayer,
@@ -29,13 +26,14 @@ const it = testEffect(
     Session.defaultLayer,
     SessionStatus.defaultLayer,
     Truncate.defaultLayer,
-  ),
-)
+    RuntimeFlags.layer(flags),
+  )
+
+const it = testEffect(layer({ experimentalBackgroundSubagents: true }))
 
 describe("tool.task_status", () => {
   it.instance("returns completed background job output", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = true
       const jobs = yield* BackgroundJob.Service
       const sessions = yield* Session.Service
       const tool = yield* TaskStatusTool
@@ -65,7 +63,6 @@ describe("tool.task_status", () => {
 
   it.instance("wait=true times out while the background job is running", () =>
     Effect.gen(function* () {
-      Flag.OPENCODE_EXPERIMENTAL_BACKGROUND_AGENTS = true
       const jobs = yield* BackgroundJob.Service
       const sessions = yield* Session.Service
       const tool = yield* TaskStatusTool
