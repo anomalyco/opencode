@@ -1261,7 +1261,9 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
 }
 
 export function maxOutputTokens(model: Provider.Model): number {
-  return Math.min(model.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+  if (model.limit.output > 0) return Math.min(model.limit.output, OUTPUT_TOKEN_MAX)
+  if (model.limit.context > 0) return Math.min(OUTPUT_TOKEN_MAX, Math.max(1_024, Math.floor(model.limit.context / 4)))
+  return OUTPUT_TOKEN_MAX
 }
 
 export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 {

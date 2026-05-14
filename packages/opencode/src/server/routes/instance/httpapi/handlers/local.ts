@@ -8,6 +8,24 @@ function normalizeBaseURL(url: string) {
   return url.replace(/\/+$/, "").toLowerCase()
 }
 
+function isPrivateBaseURL(baseURL: string): boolean {
+  try {
+    const host = new URL(baseURL).hostname
+    if (host === "localhost") return true
+    const parts = host.split(".").map(Number)
+    if (parts.length === 4 && parts.every((n) => !isNaN(n))) {
+      const [a, b] = parts
+      if (a === 127) return true
+      if (a === 10) return true
+      if (a === 172 && b >= 16 && b <= 31) return true
+      if (a === 192 && b === 168) return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
 function providerIDFromName(name: string): string {
   return name
     .toLowerCase()
@@ -20,43 +38,59 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
     const configSvc = yield* Config.Service
 
     const scan = Effect.fn("LocalHttpApi.scan")(function* () {
-      const global = yield* configSvc.getGlobal()
+      const config = yield* configSvc.get()
 
-      // Build a lookup: normalized baseURL → config provider ID
+      // Build lookups: normalized baseURL → config provider ID / name
       const configuredByURL = new Map<string, string>()
-      for (const [id, p] of Object.entries(global.provider ?? {})) {
+      const configuredNameByURL = new Map<string, string>()
+      for (const [id, p] of Object.entries(config.provider ?? {})) {
         const base = normalizeBaseURL(String((p as { options?: { baseURL?: string } }).options?.baseURL ?? ""))
-        if (base) configuredByURL.set(base, id)
+        if (base) {
+          configuredByURL.set(base, id)
+          const name = (p as { name?: string }).name
+          if (name) configuredNameByURL.set(base, name)
+        }
       }
 
       // Collect all openai-compatible providers already in the global config so we
-      // can include them in scan results even when mDNS / localhost probing misses them
-      // (e.g. remote hosts on a different subnet).
+      // can include them in scan results even when mDNS / localhost probing misses
+      // them. Use the effective config for this directory so project-level local
+      // providers appear in /connect without requiring a global duplicate.
       const configuredEntries: Array<{ id: string; name: string; baseURL: string }> = []
-      for (const [id, p] of Object.entries(global.provider ?? {})) {
+      for (const [id, p] of Object.entries(config.provider ?? {})) {
         const baseURL = normalizeBaseURL(String((p as { options?: { baseURL?: string } }).options?.baseURL ?? ""))
-        if (baseURL && (p as { npm?: string }).npm === "@ai-sdk/openai-compatible") {
+        if (baseURL && isPrivateBaseURL(baseURL) && (p as { npm?: string }).npm === "@ai-sdk/openai-compatible") {
           configuredEntries.push({ id, name: (p as { name?: string }).name ?? id, baseURL })
         }
       }
 
-      const discovered = yield* Effect.promise<Awaited<ReturnType<typeof scanLlamaSwap>>>(() => scanLlamaSwap(4000))
+      const discovered = yield* Effect.promise<Awaited<ReturnType<typeof scanLlamaSwap>>>(() => scanLlamaSwap(3500))
 
       // Index mDNS/localhost results by normalised baseURL.
       const byURL = new Map<
         string,
-        { id: string; name: string; host: string; port: number; baseURL: string; models: string[]; configuredProviderID?: string }
+        {
+          id: string
+          name: string
+          host: string
+          port: number
+          baseURL: string
+          models: string[]
+          configuredProviderID?: string
+        }
       >()
       for (const svc of discovered) {
         const norm = normalizeBaseURL(svc.baseURL)
+        const configuredProviderID = configuredByURL.get(norm)
+        const name = configuredNameByURL.get(norm) ?? svc.name
         byURL.set(norm, {
-          id: providerIDFromName(svc.name),
-          name: svc.name,
+          id: configuredProviderID ?? providerIDFromName(svc.name),
+          name,
           host: svc.host,
           port: svc.port,
           baseURL: svc.baseURL,
           models: [...svc.models],
-          configuredProviderID: configuredByURL.get(norm),
+          configuredProviderID,
         })
       }
 
@@ -104,13 +138,16 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       // Reuse existing key if same baseURL already configured (e.g. written by sync-opencode)
       const normalised = normalizeBaseURL(baseURL)
       const existingKey = Object.entries(providers).find(
-        ([, p]) => normalizeBaseURL(String((p as { options?: { baseURL?: string } }).options?.baseURL ?? "")) === normalised,
+        ([, p]) =>
+          normalizeBaseURL(String((p as { options?: { baseURL?: string } }).options?.baseURL ?? "")) === normalised,
       )?.[0]
       const key = existingKey ?? id
+
       providers[key] = {
         npm: "@ai-sdk/openai-compatible",
         name,
-        options: { baseURL },
+        options: { baseURL, apiKey: "ollama" },
+        discoverModels: true,
       }
       yield* configSvc.updateGlobal({ ...global, provider: providers })
       return key

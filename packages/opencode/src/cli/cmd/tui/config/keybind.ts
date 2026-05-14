@@ -192,6 +192,8 @@ export const Definitions = {
   "dialog.select.end": keybind("end", "Move to last dialog item"),
   "dialog.select.submit": keybind("return", "Submit selected dialog item"),
   "dialog.mcp.toggle": keybind("space", "Toggle MCP in MCP dialog"),
+  "dialog.local.toggle": keybind("space", "Toggle local provider selection"),
+  "dialog.local.connect": keybind("ctrl+return", "Add selected local providers"),
   "prompt.autocomplete.prev": keybind("up,ctrl+p", "Move to previous autocomplete item"),
   "prompt.autocomplete.next": keybind("down,ctrl+n", "Move to next autocomplete item"),
   "prompt.autocomplete.hide": keybind("escape", "Hide autocomplete"),
