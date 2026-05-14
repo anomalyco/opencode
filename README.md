@@ -126,6 +126,9 @@ If you are working on a project that's related to OpenCode and is using "opencod
 
 ### FAQ
 
+###
+Thank you for (anomalyco)[https://github.com/anomalyco]
+
 #### How is this different from Claude Code?
 
 It's very similar to Claude Code in terms of capability. Here are the key differences:
