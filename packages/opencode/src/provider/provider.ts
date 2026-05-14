@@ -1707,7 +1707,9 @@ const layer = Layer.effect(
 
       if (cfg.small_model) {
         const parsed = parseModel(cfg.small_model)
-        return yield* getModel(parsed.providerID, parsed.modelID).pipe(Effect.orDie)
+        return yield* getModel(parsed.providerID, parsed.modelID).pipe(
+          Effect.catchTag("ProviderModelNotFoundError", () => Effect.succeed(undefined)),
+        )
       }
 
       const s = yield* InstanceState.get(state)
@@ -1735,22 +1737,22 @@ const layer = Layer.effect(
           const candidates = Object.keys(provider.models).filter((m) => m.includes(item))
 
           const globalMatch = candidates.find((m) => m.startsWith("global."))
-          if (globalMatch) return yield* getModel(providerID, ModelID.make(globalMatch)).pipe(Effect.orDie)
+          if (globalMatch) return provider.models[globalMatch]
 
           const region = provider.options?.region
           if (region) {
             const regionPrefix = region.split("-")[0]
             if (regionPrefix === "us" || regionPrefix === "eu") {
               const regionalMatch = candidates.find((m) => m.startsWith(`${regionPrefix}.`))
-              if (regionalMatch) return yield* getModel(providerID, ModelID.make(regionalMatch)).pipe(Effect.orDie)
+              if (regionalMatch) return provider.models[regionalMatch]
             }
           }
 
           const unprefixed = candidates.find((m) => !crossRegionPrefixes.some((p) => m.startsWith(p)))
-          if (unprefixed) return yield* getModel(providerID, ModelID.make(unprefixed)).pipe(Effect.orDie)
+          if (unprefixed) return provider.models[unprefixed]
         } else {
           for (const model of Object.keys(provider.models)) {
-            if (model.includes(item)) return yield* getModel(providerID, ModelID.make(model)).pipe(Effect.orDie)
+            if (model.includes(item)) return provider.models[model]
           }
         }
       }
