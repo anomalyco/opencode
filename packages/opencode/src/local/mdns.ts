@@ -43,11 +43,12 @@ async function probeLocalhost(): Promise<LocalLlamaSwapService[]> {
 }
 
 export async function scanLlamaSwap(timeoutMs = 4000): Promise<Array<LocalLlamaSwapService & { models: string[] }>> {
-  const bonjour = new Bonjour()
   const raw: LocalLlamaSwapService[] = []
 
-  const [, localHits] = await Promise.all([
-    new Promise<void>((resolve) => {
+  const mdnsScan = new Promise<void>((resolve) => {
+    let bonjour: InstanceType<typeof Bonjour> | undefined
+    try {
+      bonjour = new Bonjour()
       const browser = bonjour.find({ type: "llamaswap", protocol: "tcp" })
       browser.on("up", (svc) => {
         const host = svc.host ?? svc.referer?.address ?? svc.addresses?.[0] ?? ""
@@ -57,13 +58,21 @@ export async function scanLlamaSwap(timeoutMs = 4000): Promise<Array<LocalLlamaS
         raw.push({ name, host, port: svc.port, baseURL })
       })
       setTimeout(() => {
-        browser.stop()
-        bonjour.destroy()
+        try {
+          browser.stop()
+          bonjour?.destroy()
+        } catch {
+          // ignore cleanup errors
+        }
         resolve()
       }, timeoutMs)
-    }),
-    probeLocalhost(),
-  ])
+    } catch {
+      // mDNS not available (socket permissions, sandbox, etc.) — skip silently
+      resolve()
+    }
+  })
+
+  const [, localHits] = await Promise.all([mdnsScan, probeLocalhost()])
 
   // Merge localhost hits, deduplicating by port against mDNS results
   const mdnsPorts = new Set(raw.map((s) => s.port))

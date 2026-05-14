@@ -487,7 +487,13 @@ function DialogLocalScan() {
   onMount(async () => {
     const result = await sdk.client.local.scan({ directory: sdk.directory })
     if (result.error || !result.data) {
-      toast.show({ variant: "error", message: "Scan failed: " + String(result.error ?? "no data") })
+      const msg =
+        result.error instanceof Error
+          ? result.error.message
+          : typeof result.error === "string"
+            ? result.error
+            : JSON.stringify(result.error) ?? "no data"
+      toast.show({ variant: "error", message: "Scan failed: " + msg })
       dialog.clear()
       return
     }
