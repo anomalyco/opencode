@@ -121,6 +121,7 @@
 
   [data-slot="usage-preview-after"] {
     background-color: var(--color-accent);
+    transition: width 0.35s ease;
   }
 
   [data-slot="usage-preview-reset"] {

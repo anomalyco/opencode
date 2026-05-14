@@ -1,4 +1,4 @@
-import { action, json, query, useAction, useSubmission } from "@solidjs/router"
+import { action, createAsync, json, query, useAction, useSubmission } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import { Referral } from "@opencode-ai/console-core/referral.js"
@@ -51,6 +51,12 @@ type GoReferralUsagePreviewItem = {
   afterPercent: number
   resetInSec: number
 }
+
+const emptyUsagePreview = {
+  rollingUsage: { beforePercent: 0, afterPercent: 0, resetInSec: 0 },
+  weeklyUsage: { beforePercent: 0, afterPercent: 0, resetInSec: 0 },
+  monthlyUsage: { beforePercent: 0, afterPercent: 0, resetInSec: 0 },
+} satisfies GoReferralUsagePreview
 
 export const queryGoReferral = query(async (workspaceID: string) => {
   "use server"
@@ -160,6 +166,10 @@ function usagePreview(before: AnalyzedUsage, after: AnalyzedUsage) {
   }
 }
 
+function currentUsagePreview(usage: AnalyzedUsage) {
+  return usagePreview(usage, usage)
+}
+
 function formatCurrency(amount: number) {
   if (amount % 100 === 0) return `$${amount / 100}`
   return `$${(amount / 100).toFixed(2)}`
@@ -213,6 +223,18 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
   const submission = useSubmission(applyGoReferralReward)
   const [selected, setSelected] = createSignal<GoReferralReward>()
   const [preview, setPreview] = createSignal<GoReferralUsagePreview | null>()
+  const lite = createAsync(() => queryLiteSubscription(props.workspaceID))
+  const displayPreview = createMemo(() => {
+    const loaded = preview()
+    if (loaded) return loaded
+    const current = lite()
+    if (!current) return emptyUsagePreview
+    return {
+      rollingUsage: currentUsagePreview(current.rollingUsage),
+      weeklyUsage: currentUsagePreview(current.weeklyUsage),
+      monthlyUsage: currentUsagePreview(current.monthlyUsage),
+    } satisfies GoReferralUsagePreview
+  })
   const appliedCount = createMemo(() => props.summary.rewards.filter((reward) => reward.timeApplied).length)
 
   createEffect(() => {
@@ -331,9 +353,7 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
               amount: formatCurrency(selected()?.amount ?? 0),
             })}
           </p>
-          <Show when={preview()} fallback={<p>{i18n.t("workspace.lite.loading")}</p>}>
-            {(usage) => <GoReferralUsagePreview preview={usage()} />}
-          </Show>
+          <GoReferralUsagePreview preview={displayPreview()} />
           <div data-slot="modal-actions">
             <button type="button" onClick={() => setSelected(undefined)}>
               {i18n.t("common.cancel")}
@@ -353,33 +373,42 @@ function GoReferralUsagePreview(props: { preview: GoReferralUsagePreview }) {
 
   return (
     <div data-slot="usage-preview">
-      <For
-        each={[
-          { label: i18n.t("workspace.lite.subscription.rollingUsage"), usage: props.preview.rollingUsage },
-          { label: i18n.t("workspace.lite.subscription.weeklyUsage"), usage: props.preview.weeklyUsage },
-          { label: i18n.t("workspace.lite.subscription.monthlyUsage"), usage: props.preview.monthlyUsage },
-        ]}
-      >
-        {(item) => (
-          <div data-slot="usage-preview-item">
-            <div data-slot="usage-preview-header">
-              <span data-slot="usage-preview-label">{item.label}</span>
-              <span data-slot="usage-preview-value">
-                <span>{item.usage.beforePercent}%</span>
-                <span aria-hidden="true">-&gt;</span>
-                <span data-slot="usage-preview-after-value">{item.usage.afterPercent}%</span>
-              </span>
-            </div>
-            <div data-slot="usage-preview-progress">
-              <div data-slot="usage-preview-before" style={{ width: `${item.usage.beforePercent}%` }} />
-              <div data-slot="usage-preview-after" style={{ width: `${item.usage.afterPercent}%` }} />
-            </div>
-            <span data-slot="usage-preview-reset">
-              {i18n.t("workspace.lite.subscription.resetsIn")} {formatResetTime(item.usage.resetInSec, i18n)}
-            </span>
-          </div>
-        )}
-      </For>
+      <GoReferralUsagePreviewRow
+        label={i18n.t("workspace.lite.subscription.rollingUsage")}
+        usage={props.preview.rollingUsage}
+      />
+      <GoReferralUsagePreviewRow
+        label={i18n.t("workspace.lite.subscription.weeklyUsage")}
+        usage={props.preview.weeklyUsage}
+      />
+      <GoReferralUsagePreviewRow
+        label={i18n.t("workspace.lite.subscription.monthlyUsage")}
+        usage={props.preview.monthlyUsage}
+      />
+    </div>
+  )
+}
+
+function GoReferralUsagePreviewRow(props: { label: string; usage: GoReferralUsagePreviewItem }) {
+  const i18n = useI18n()
+
+  return (
+    <div data-slot="usage-preview-item">
+      <div data-slot="usage-preview-header">
+        <span data-slot="usage-preview-label">{props.label}</span>
+        <span data-slot="usage-preview-value">
+          <span>{props.usage.beforePercent}%</span>
+          <span aria-hidden="true">-&gt;</span>
+          <span data-slot="usage-preview-after-value">{props.usage.afterPercent}%</span>
+        </span>
+      </div>
+      <div data-slot="usage-preview-progress">
+        <div data-slot="usage-preview-before" style={{ width: `${props.usage.beforePercent}%` }} />
+        <div data-slot="usage-preview-after" style={{ width: `${props.usage.afterPercent}%` }} />
+      </div>
+      <span data-slot="usage-preview-reset">
+        {i18n.t("workspace.lite.subscription.resetsIn")} {formatResetTime(props.usage.resetInSec, i18n)}
+      </span>
     </div>
   )
 }
