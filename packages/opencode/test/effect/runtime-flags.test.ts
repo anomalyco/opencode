@@ -42,14 +42,46 @@ describe("RuntimeFlags", () => {
 
   it.effect("layer accepts partial test overrides and fills defaults from Config definitions", () =>
     Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })))
+      const flags = yield* readFlags.pipe(
+        Effect.provide(RuntimeFlags.layer({ disableDefaultPlugins: true, bashDefaultTimeoutMs: 1_000 })),
+      )
 
       expect(flags.pure).toBe(false)
       expect(flags.disableDefaultPlugins).toBe(true)
       expect(flags.enableExa).toBe(false)
+      expect(flags.bashDefaultTimeoutMs).toBe(1_000)
       expect(flags.client).toBe("cli")
     }),
   )
+
+  for (const input of [
+    { name: "absent", config: {}, expected: undefined },
+    {
+      name: "valid positive integer",
+      config: { OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "1234" },
+      expected: 1234,
+    },
+    {
+      name: "invalid string",
+      config: { OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "nope" },
+      expected: undefined,
+    },
+    { name: "zero", config: { OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "0" }, expected: undefined },
+    { name: "negative", config: { OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "-1" }, expected: undefined },
+    {
+      name: "non-integer",
+      config: { OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "1.5" },
+      expected: undefined,
+    },
+  ]) {
+    it.effect(`parses bashDefaultTimeoutMs from config: ${input.name}`, () =>
+      Effect.gen(function* () {
+        const flags = yield* readFlags.pipe(Effect.provide(fromConfig(input.config)))
+
+        expect(flags.bashDefaultTimeoutMs).toBe(input.expected)
+      }),
+    )
+  }
 
   it.effect("layer ignores the active ConfigProvider for omitted test overrides", () =>
     Effect.gen(function* () {
@@ -62,6 +94,7 @@ describe("RuntimeFlags", () => {
               OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
               OPENCODE_EXPERIMENTAL: "true",
               OPENCODE_ENABLE_EXA: "true",
+              OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "1234",
               OPENCODE_CLIENT: "desktop",
             }),
           ),
@@ -71,6 +104,7 @@ describe("RuntimeFlags", () => {
       expect(flags.pure).toBe(false)
       expect(flags.disableDefaultPlugins).toBe(false)
       expect(flags.enableExa).toBe(false)
+      expect(flags.bashDefaultTimeoutMs).toBeUndefined()
       expect(flags.client).toBe("cli")
     }),
   )
