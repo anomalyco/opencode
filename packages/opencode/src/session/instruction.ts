@@ -47,7 +47,11 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Instruction") {}
 
-export const layer = Layer.effect(
+export const layer: Layer.Layer<
+  Service,
+  never,
+  AppFileSystem.Service | Config.Service | Global.Service | HttpClient.HttpClient
+> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const cfg = yield* Config.Service

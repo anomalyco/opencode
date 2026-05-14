@@ -28,7 +28,7 @@ interface Entry {
   readonly deferred: Deferred.Deferred<InstanceContext>
 }
 
-export const layer = Layer.effect(
+export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const project = yield* Project.Service

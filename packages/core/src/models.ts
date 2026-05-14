@@ -114,7 +114,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Mo
 
 type Requirements = AppFileSystem.Service | HttpClient.HttpClient
 
-export const layer = Layer.effect(
+export const layer: Layer.Layer<Service, never, Requirements> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
@@ -218,7 +218,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(
+export const defaultLayer: Layer.Layer<Service> = layer.pipe(
   Layer.provide(FetchHttpClient.layer),
   Layer.provide(AppFileSystem.defaultLayer),
 )

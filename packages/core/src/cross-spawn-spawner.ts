@@ -495,7 +495,7 @@ export const make = Effect.gen(function* () {
   return makeSpawner(spawnCommand)
 })
 
-export const layer = Layer.effect(
+export const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSystem | Path.Path> = Layer.effect(
   ChildProcessSpawner,
   make,
 )

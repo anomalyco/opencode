@@ -38,7 +38,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/AccountRepo") {}
 
-export const layer = Layer.effect(
+export const layer: Layer.Layer<Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const decode = Schema.decodeUnknownSync(Info)

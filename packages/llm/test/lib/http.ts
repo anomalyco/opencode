@@ -15,7 +15,7 @@ export type HandlerInput = {
 
 export type Handler = (input: HandlerInput) => Effect.Effect<HttpClientResponse.HttpClientResponse>
 
-const handlerLayer = (handler: Handler) =>
+const handlerLayer = (handler: Handler): Layer.Layer<HttpClient.HttpClient> =>
   Layer.succeed(
     HttpClient.HttpClient,
     HttpClient.make((request) =>
@@ -33,7 +33,7 @@ const handlerLayer = (handler: Handler) =>
 
 export type RuntimeEnv = RequestExecutorService | LLMClientService
 
-export const runtimeLayer = (layer: Layer.Layer<HttpClient.HttpClient>) => {
+export const runtimeLayer = (layer: Layer.Layer<HttpClient.HttpClient>): Layer.Layer<RuntimeEnv> => {
   const requestExecutorLayer = RequestExecutor.layer.pipe(Layer.provide(layer))
   const llmClientLayer = LLMClient.layer.pipe(Layer.provide(requestExecutorLayer))
   return Layer.mergeAll(requestExecutorLayer, llmClientLayer)

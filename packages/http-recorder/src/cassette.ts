@@ -60,7 +60,7 @@ const failIfUnsafe = (name: string, findings: ReadonlyArray<SecretFinding>) =>
 
 export const fileSystem = (
   options: { readonly directory?: string } = {},
-) =>
+): Layer.Layer<Service, never, FileSystem.FileSystem> =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -133,7 +133,7 @@ export const fileSystem = (
     }),
   )
 
-export const memory = (initial: Record<string, ReadonlyArray<Interaction>> = {}) =>
+export const memory = (initial: Record<string, ReadonlyArray<Interaction>> = {}): Layer.Layer<Service> =>
   Layer.sync(Service, () => {
     const stored = new Map<string, Interaction[]>(
       Object.entries(initial).map(([name, interactions]) => [name, [...interactions]]),
