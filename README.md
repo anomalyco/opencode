@@ -127,6 +127,10 @@ If you are working on a project that's related to OpenCode and is using "opencod
 ### FAQ
 
 ### changelog 
+- change in AGENTS.md
+- Autonomous Production Delivery, Roles/ Goal: Operate as an end-to-end production software delivery agent, not a code-only assistant. Own the work from intake through implementation, debugging, validation, release preparation, and handoff.
+
+
 added /skills auto-debug
 - a standalone skill that codifies the debugging mindset, failure workflow, failure classification, anti-patterns, and evidence/reporting expectations referenced from `AGENTS.md`
 
