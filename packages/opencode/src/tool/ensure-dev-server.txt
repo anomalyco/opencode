@@ -1,0 +1,32 @@
+결과물 미리보기용 dev 서버가 지정 포트에서 LISTEN 중인지 확인하고, 없으면 백그라운드로 띄운다.
+
+매 응답 턴마다 이 도구를 한 번 호출하면 idempotent 하게 미리보기 환경이 보장된다. 직접 `nohup ... &` / `sleep N` / `/dev/tcp` 로 launch 명령을 짜지 말고 항상 이 도구를 쓴다.
+
+## 동작
+
+- 이미 LISTEN 중이면 서버를 재시작하지 않고 `already_running` 으로 즉시 반환.
+- LISTEN 중이 아니면 detached 백그라운드 프로세스로 launch 한 뒤 포트가 LISTEN 될 때까지만 폴링. `sleep 8` 같은 고정 대기 없음.
+- stdio 는 도구가 내부에서 ignore 처리하므로 학생 응답이 hang 되지 않는다. 학생이 "서버 로그 보여줘" 라고 명시적으로 요청할 때만 별도로 로그 파일에 띄워 `tail` 로 확인한다.
+
+## 인자
+
+- `cmd`: 실제 dev 서버 명령. 아래 예시 참고. `nohup` · `&` · `>` 같은 백그라운드 처리는 도구가 알아서 한다.
+- `cwd`: 프로젝트 디렉토리. 생략하면 현재 instance 디렉토리.
+- `port`: 생략하면 3000. OpenCode 환경에서는 3000 고정.
+- `ready_timeout_ms`: LISTEN 시작까지의 최대 대기 시간. 생략하면 15000.
+
+## 명령 예시 (`cmd` 인자 값)
+
+- 정적 HTML/CSS/JS: `npx --yes browser-sync start --server --port 3000 --files "**/*.html,**/*.css,**/*.js" --no-open --no-ui`
+- Vite / CRA: `npm run dev -- --host 0.0.0.0 --port 3000`
+- Next.js: `npm run dev -- --hostname 0.0.0.0 --port 3000`
+
+## 반환
+
+JSON 문자열. `status` 필드:
+
+- `already_running`: 호출 시점에 이미 LISTEN 중이었음. `url` · `port` · `ms` 가 함께 온다.
+- `started`: 새로 띄워 LISTEN 까지 확인됨. `url` · `port` · `ms` 가 함께 온다.
+- `failed`: 띄우는 데 실패. `reason` 을 읽고 명령어를 고친 뒤 다시 호출한다.
+
+성공 시 `url` 을 학생에게 그대로 안내한다.
