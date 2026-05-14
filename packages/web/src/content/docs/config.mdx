@@ -387,7 +387,7 @@ You can also configure [local models](/docs/models#local). [Learn more](/docs/mo
 
 ### Image attachments
 
-OpenCode normalizes image attachments before sending them to the model. By default, images are resized when they exceed `2000x2000` pixels or `4718592` base64 bytes.
+OpenCode normalizes image attachments before sending them to the model. By default, images are resized when they exceed `2000x2000` pixels or `5242880` base64 bytes.
 
 Configure image attachment limits with the `attachment.image` option:
 
@@ -399,7 +399,7 @@ Configure image attachment limits with the `attachment.image` option:
       "auto_resize": true,
       "max_width": 2000,
       "max_height": 2000,
-      "max_base64_bytes": 4718592
+      "max_base64_bytes": 5242880
     }
   }
 }
