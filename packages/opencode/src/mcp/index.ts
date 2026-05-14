@@ -150,17 +150,38 @@ function listTools(key: string, client: MCPClient, timeout: number) {
   )
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+export function normalizeMcpInputSchema(schema: JSONSchema7): JSONSchema7 {
+  const normalize = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(normalize)
+    if (!isRecord(value)) return value
+
+    const result = Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalize(item)]))
+
+    if (result.type === "object" && result.additionalProperties === true && result.properties === undefined) {
+      result.properties = {}
+    }
+
+    return result
+  }
+
+  return normalize(schema) as JSONSchema7
+}
+
 // Convert MCP tool definition to AI SDK Tool type
 function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Tool {
   const inputSchema = mcpTool.inputSchema
 
   // Spread first, then override type to ensure it's always "object"
-  const schema: JSONSchema7 = {
+  const schema = normalizeMcpInputSchema({
     ...(inputSchema as JSONSchema7),
     type: "object",
     properties: (inputSchema.properties ?? {}) as JSONSchema7["properties"],
     additionalProperties: false,
-  }
+  })
 
   return dynamicTool({
     description: mcpTool.description ?? "",
