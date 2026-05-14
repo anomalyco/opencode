@@ -22,6 +22,7 @@ import { OpenAIPlugin } from "./provider/openai"
 import { OpenAICompatiblePlugin } from "./provider/openai-compatible"
 import { OpencodePlugin } from "./provider/opencode"
 import { OpenRouterPlugin } from "./provider/openrouter"
+import { OrcaRouterPlugin } from "./provider/orcarouter"
 import { PerplexityPlugin } from "./provider/perplexity"
 import { SapAICorePlugin } from "./provider/sap-ai-core"
 import { TogetherAIPlugin } from "./provider/togetherai"
@@ -56,6 +57,7 @@ export const ProviderPlugins = [
   OpenAICompatiblePlugin,
   OpenAIPlugin,
   OpenRouterPlugin,
+  OrcaRouterPlugin,
   PerplexityPlugin,
   SapAICorePlugin,
   TogetherAIPlugin,

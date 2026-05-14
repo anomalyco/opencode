@@ -439,6 +439,16 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    orcarouter: () =>
+      Effect.succeed({
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
+        },
+      }),
     nvidia: (provider) =>
       Effect.succeed({
         autoload: provider.source === "config",

@@ -1728,6 +1728,76 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### OrcaRouter
+
+[OrcaRouter](https://www.orcarouter.ai) is an OpenAI-compatible router that aggregates 150+ models from OpenAI, Anthropic, Google, xAI, DeepSeek and others behind a single API key, and exposes a virtual `orcarouter/auto` router that picks an upstream per request based on a configurable strategy (`cheapest` / `balanced` / `quality` / `adaptive` / `gated_adaptive`). The adaptive strategy is a LinUCB contextual bandit that learns from your own traffic — same endpoint, but a 50-token summary may be routed to a cheap model while a 30K-token refactor goes to a premium one, without any client-side dispatch logic. Routing strategies, model pools, and reward weights are admin-tunable from [the routing console](https://www.orcarouter.ai/console/routing).
+
+1. Head over to the [OrcaRouter dashboard](https://www.orcarouter.ai/console), click **Create API Key**, and copy the key.
+
+2. Run the `/connect` command and search for OrcaRouter.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter the API key for the provider.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Many OrcaRouter models are preloaded by default, run the `/models` command to select the one you want. The smart-routing entry is `orcarouter/auto`.
+
+   ```txt
+   /models
+   ```
+
+   You can also add additional models through your opencode config.
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "orcarouter": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+5. You can also pass OrcaRouter's `extra_body` routing preferences (fallback model list, route mode) per-model. See the [routing docs](https://docs.orcarouter.ai) for the full schema.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "orcarouter": {
+         "models": {
+           "openai/gpt-5": {
+             "options": {
+               "extra_body": {
+                 "models": ["openai/gpt-4o-mini", "openai/gpt-4o"],
+                 "route": "fallback"
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+   :::note
+   A few OrcaRouter models (e.g. `anthropic/claude-opus-4.7` and other reasoning-only models) reject `temperature` upstream. If you see a 400 from those models, drop `temperature` from your config.
+   :::
+
+---
+
 ### LLM Gateway
 
 1. Head over to the [LLM Gateway dashboard](https://llmgateway.io/dashboard), click **Create API Key**, and copy the key.
