@@ -12,7 +12,6 @@ import * as ModelsDev from "@opencode-ai/core/models"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
@@ -27,6 +26,7 @@ import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
 import { ModelStatus } from "./model-status"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "provider" })
 
@@ -1127,18 +1127,18 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
-function suggestionModelIDs(provider: Info | undefined) {
+function suggestionModelIDs(provider: Info | undefined, enableExperimentalModels: boolean) {
   if (!provider) return []
   return Object.keys(provider.models).filter((id) => {
     const model = provider.models[id]
     if (model.status === "deprecated") return false
-    if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) return false
+    if (model.status === "alpha" && !enableExperimentalModels) return false
     return true
   })
 }
 
-function modelSuggestions(provider: Info | undefined, modelID: ModelID) {
-  const available = suggestionModelIDs(provider)
+function modelSuggestions(provider: Info | undefined, modelID: ModelID, enableExperimentalModels: boolean) {
+  const available = suggestionModelIDs(provider, enableExperimentalModels)
   const fuzzy = fuzzysort.go(modelID, available, { limit: 3, threshold: -10000 }).map((m) => m.target)
   if (fuzzy.length) return fuzzy
   const query = modelID
@@ -1159,7 +1159,7 @@ function modelSuggestions(provider: Info | undefined, modelID: ModelID) {
     .map((item) => item.id)
 }
 
-const layer = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
@@ -1168,6 +1168,7 @@ const layer = Layer.effect(
     const env = yield* Env.Service
     const plugin = yield* Plugin.Service
     const modelsDevSvc = yield* ModelsDev.Service
+    const runtimeFlags = yield* RuntimeFlags.Service
 
     const state = yield* InstanceState.make<State>(() =>
       Effect.gen(function* () {
@@ -1460,7 +1461,7 @@ const layer = Layer.effect(
               (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
             )
               delete provider.models[modelID]
-            if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
+            if (model.status === "alpha" && !runtimeFlags.enableExperimentalModels) delete provider.models[modelID]
             if (model.status === "deprecated") delete provider.models[modelID]
             if (
               (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
@@ -1656,7 +1657,7 @@ const layer = Layer.effect(
       if (!provider) {
         const catalogProvider = s.catalog[providerID]
         const suggestions = catalogProvider
-          ? modelSuggestions(catalogProvider, modelID)
+          ? modelSuggestions(catalogProvider, modelID, runtimeFlags.enableExperimentalModels)
           : fuzzysort
               .go(providerID, Object.keys({ ...s.catalog, ...s.providers }), { limit: 3, threshold: -10000 })
               .map((m) => m.target)
@@ -1665,8 +1666,10 @@ const layer = Layer.effect(
 
       const info = provider.models[modelID]
       if (!info) {
-        const current = modelSuggestions(provider, modelID)
-        const suggestions = current.length ? current : modelSuggestions(s.catalog[providerID], modelID)
+        const current = modelSuggestions(provider, modelID, runtimeFlags.enableExperimentalModels)
+        const suggestions = current.length
+          ? current
+          : modelSuggestions(s.catalog[providerID], modelID, runtimeFlags.enableExperimentalModels)
         return yield* new ModelNotFoundError({ providerID, modelID, suggestions })
       }
       return info
@@ -1814,6 +1817,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Auth.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(ModelsDev.defaultLayer),
+    Layer.provide(RuntimeFlags.defaultLayer),
   ),
 )
 

@@ -19,6 +19,7 @@ describe("RuntimeFlags", () => {
             OPENCODE_EXPERIMENTAL: "true",
             OPENCODE_ENABLE_EXA: "true",
             OPENCODE_ENABLE_PARALLEL: "true",
+            OPENCODE_ENABLE_EXPERIMENTAL_MODELS: "true",
             OPENCODE_ENABLE_QUESTION_TOOL: "true",
             OPENCODE_CLIENT: "desktop",
           }),
@@ -29,6 +30,7 @@ describe("RuntimeFlags", () => {
       expect(flags.disableDefaultPlugins).toBe(true)
       expect(flags.enableExa).toBe(true)
       expect(flags.enableParallel).toBe(true)
+      expect(flags.enableExperimentalModels).toBe(true)
       expect(flags.enableQuestionTool).toBe(true)
       expect(flags.experimentalScout).toBe(true)
       expect(flags.experimentalBackgroundSubagents).toBe(true)
@@ -43,12 +45,17 @@ describe("RuntimeFlags", () => {
 
   it.effect("layer accepts partial test overrides and fills defaults from Config definitions", () =>
     Effect.gen(function* () {
-      const flags = yield* readFlags.pipe(Effect.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })))
+      const flags = yield* readFlags.pipe(
+        Effect.provide(RuntimeFlags.layer({ disableDefaultPlugins: true, bashDefaultTimeoutMs: 1_000 })),
+      )
 
       expect(flags.pure).toBe(false)
       expect(flags.disableDefaultPlugins).toBe(true)
+      expect(flags.disableClaudeCodeSkills).toBe(false)
       expect(flags.enableExa).toBe(false)
       expect(flags.experimentalOxfmt).toBe(false)
+      expect(flags.bashDefaultTimeoutMs).toBe(1_000)
+      expect(flags.enableExperimentalModels).toBe(false)
       expect(flags.client).toBe("cli")
     }),
   )
@@ -89,6 +96,35 @@ describe("RuntimeFlags", () => {
     }),
   )
 
+  for (const input of [
+    { name: "absent", config: {}, expected: undefined },
+    {
+      name: "valid positive integer",
+      config: { OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "1234" },
+      expected: 1234,
+    },
+    {
+      name: "invalid string",
+      config: { OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "nope" },
+      expected: undefined,
+    },
+    { name: "zero", config: { OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "0" }, expected: undefined },
+    { name: "negative", config: { OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "-1" }, expected: undefined },
+    {
+      name: "non-integer",
+      config: { OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "1.5" },
+      expected: undefined,
+    },
+  ]) {
+    it.effect(`parses bashDefaultTimeoutMs from config: ${input.name}`, () =>
+      Effect.gen(function* () {
+        const flags = yield* readFlags.pipe(Effect.provide(fromConfig(input.config)))
+
+        expect(flags.bashDefaultTimeoutMs).toBe(input.expected)
+      }),
+    )
+  }
+
   it.effect("layer ignores the active ConfigProvider for omitted test overrides", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(
@@ -100,6 +136,7 @@ describe("RuntimeFlags", () => {
               OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
               OPENCODE_EXPERIMENTAL: "true",
               OPENCODE_ENABLE_EXA: "true",
+              OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "1234",
               OPENCODE_CLIENT: "desktop",
             }),
           ),
@@ -108,9 +145,37 @@ describe("RuntimeFlags", () => {
 
       expect(flags.pure).toBe(false)
       expect(flags.disableDefaultPlugins).toBe(false)
+      expect(flags.disableClaudeCodeSkills).toBe(false)
       expect(flags.enableExa).toBe(false)
       expect(flags.experimentalOxfmt).toBe(false)
+      expect(flags.bashDefaultTimeoutMs).toBeUndefined()
       expect(flags.client).toBe("cli")
+    }),
+  )
+
+  it.effect("disableClaudeCodeSkills defaults to false", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
+
+      expect(flags.disableClaudeCodeSkills).toBe(false)
+    }),
+  )
+
+  it.effect("disableClaudeCodeSkills reads OPENCODE_DISABLE_CLAUDE_CODE_SKILLS", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(
+        Effect.provide(fromConfig({ OPENCODE_DISABLE_CLAUDE_CODE_SKILLS: "true" })),
+      )
+
+      expect(flags.disableClaudeCodeSkills).toBe(true)
+    }),
+  )
+
+  it.effect("disableClaudeCodeSkills inherits OPENCODE_DISABLE_CLAUDE_CODE", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_DISABLE_CLAUDE_CODE: "true" })))
+
+      expect(flags.disableClaudeCodeSkills).toBe(true)
     }),
   )
 })
