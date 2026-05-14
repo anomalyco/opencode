@@ -966,8 +966,6 @@ export const dict = {
   "settings.models.title": "Models",
   "settings.models.description": "Model settings will be configurable here.",
   "settings.models.section.defaults": "Defaults",
-  "settings.models.defaultRunner.title": "Default runner",
-  "settings.models.defaultRunner.description": "Choose the runtime used for new prompts by default.",
   "settings.models.defaultModel.title": "Default model",
   "settings.models.defaultModel.description": "Choose the model written to your OpenCode config.",
   "settings.models.defaultModel.empty": "Select model",

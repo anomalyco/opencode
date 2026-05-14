@@ -30,7 +30,7 @@ import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import * as Stream from "effect/Stream"
 import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
-import { Config, ConfigMarkdown } from "../config"
+import { ConfigMarkdown } from "../config"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/shared/util/error"
 import { SessionProcessor } from "./processor"
@@ -49,7 +49,6 @@ import { InstanceState } from "@/effect"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { EffectBridge } from "@/effect"
-import { SessionCodexCli } from "./codex-cli"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -104,12 +103,8 @@ export const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
-    const cfg = yield* Config.Service
     const runner = Effect.fn("SessionPrompt.runner")(function* () {
       return yield* EffectBridge.make()
-    })
-    const defaultRuntime = Effect.fnUntraced(function* () {
-      return (yield* cfg.get()).runtime ?? "codex"
     })
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       const run = yield* runner()
@@ -954,7 +949,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           modelID: model.modelID,
           variant,
         },
-        runtime: input.runtime ?? (yield* defaultRuntime()),
         system: input.system,
         format: input.format,
       }
@@ -1424,108 +1418,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             sessionID,
           }
           yield* sessions.updateMessage(msg)
-          const runtime = lastUser.runtime ?? "codex"
-          if (runtime === "codex") {
-            const [skills, env, instructions] = yield* Effect.all([
-              sys.skills(agent),
-              Effect.sync(() => sys.environment(model)),
-              instruction.system().pipe(Effect.orDie),
-            ])
-            const system = [
-              ...(agent.prompt ? [agent.prompt] : SystemPrompt.provider(model)),
-              ...env,
-              ...(skills ? [skills] : []),
-              ...instructions,
-              ...(lastUser.system ? [lastUser.system] : []),
-            ]
-            if (lastUser.format?.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
-            yield* plugin.trigger("experimental.chat.system.transform", { sessionID, model }, { system })
-            const bridge = yield* runner()
-            const outputSchema = lastUser.format?.type === "json_schema" ? lastUser.format.schema : undefined
-            const variantOptions = lastUser.model.variant ? model.variants?.[lastUser.model.variant] : undefined
-            const codexModel = variantOptions
-              ? {
-                  ...model,
-                  options: {
-                    ...model.options,
-                    ...variantOptions,
-                  },
-                }
-              : model
-            yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-            const lastUserIndex = msgs.findIndex((m) => m.info.role === "user" && m.info.id === lastUser.id)
-            const lastUserMsg = msgs[lastUserIndex]
-            if (lastUserIndex === -1 || !lastUserMsg || lastUserMsg.info.role !== "user") {
-              const error = new NamedError.Unknown({ message: `User message not found: ${lastUser.id}` })
-              yield* bus.publish(Session.Event.Error, { sessionID, error: error.toObject() })
-              throw error
-            }
-            const controller = new AbortController()
-            const exit = yield* Effect.callback<void, Error>((resume) => {
-              SessionCodexCli.run({
-                assistant: msg,
-                abort: controller.signal,
-                cwd: ctx.directory,
-                root: ctx.worktree,
-                historyItems: SessionCodexCli.responseItemsFromMessages(msgs.slice(0, lastUserIndex)),
-                userInput: SessionCodexCli.inputFromMessage(lastUserMsg),
-                model: codexModel,
-                outputSchema,
-                system,
-                updateMessage: (message) => bridge.promise(sessions.updateMessage(message)).then(() => undefined),
-                updatePart: (part) => bridge.promise(sessions.updatePart(part)).then(() => undefined),
-                updatePartDelta: (part, field, delta) =>
-                  bridge
-                    .promise(
-                      sessions.updatePartDelta({
-                        sessionID: part.sessionID,
-                        messageID: part.messageID,
-                        partID: part.id,
-                        field,
-                        delta,
-                      }),
-                    )
-                    .then(() => undefined),
-              }).then(
-                () => resume(Effect.void),
-                (error) => resume(Effect.fail(error instanceof Error ? error : new Error(String(error)))),
-              )
-              return Effect.sync(() => controller.abort())
-            }).pipe(Effect.exit)
-
-            if (Exit.isFailure(exit)) {
-              const error = Cause.squash(exit.cause)
-              const message = error instanceof Error ? error.message : String(error)
-              if (SessionCodexCli.isContextOverflowError(error)) {
-                msg.error = new MessageV2.ContextOverflowError({ message }).toObject()
-                msg.finish = "error"
-                msg.time.completed = Date.now()
-                yield* sessions.updateMessage(msg)
-                yield* bus.publish(Session.Event.Error, { sessionID, error: msg.error })
-                yield* compaction.create({
-                  sessionID,
-                  agent: lastUser.agent,
-                  model: lastUser.model,
-                  auto: true,
-                  overflow: true,
-                })
-                continue
-              }
-              msg.error = new NamedError.Unknown({ message }).toObject()
-              msg.finish = "error"
-              msg.time.completed = Date.now()
-              yield* sessions.updateMessage(msg)
-              yield* bus.publish(Session.Event.Error, { sessionID, error: msg.error })
-            }
-            break
-          }
-          if (model.providerID === ProviderID.make("codex-cli")) {
-            const error = new NamedError.Unknown({
-              message: "The codex-cli models can only run with the Codex runtime. Switch runtime to Codex or choose another model.",
-            })
-            yield* bus.publish(Session.Event.Error, { sessionID, error: error.toObject() })
-            throw error
-          }
           const handle = yield* processor.create({
             assistantMessage: msg,
             sessionID,
@@ -1757,7 +1649,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         model: userModel,
         agent: userAgent,
         parts,
-        runtime: input.runtime,
         variant: input.variant,
       })
       yield* bus.publish(Command.Event.Executed, {
@@ -1793,7 +1684,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(ToolRegistry.defaultLayer),
     Layer.provide(Truncate.defaultLayer),
     Layer.provide(Provider.defaultLayer),
-    Layer.provide(Config.defaultLayer),
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
@@ -1828,7 +1718,6 @@ export const PromptInput = z.object({
     .describe("@deprecated tools and permissions have been merged, you can set permissions on the session itself now"),
   format: MessageV2.Format.zod.optional(),
   system: z.string().optional(),
-  runtime: z.enum(["codex", "opencode"]).optional(),
   variant: z.string().optional(),
   parts: z.array(
     z.discriminatedUnion("type", [
@@ -1877,7 +1766,6 @@ export const CommandInput = z.object({
   model: z.string().optional(),
   arguments: z.string(),
   command: z.string(),
-  runtime: z.enum(["codex", "opencode"]).optional(),
   variant: z.string().optional(),
   // Inlined (no `.meta({ ref })`) to keep the original SDK output — the
   // PromptInput call site below references FilePartInput by ref via the

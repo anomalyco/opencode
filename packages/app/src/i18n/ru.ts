@@ -775,8 +775,6 @@ export const dict = {
   "settings.models.title": "Модели",
   "settings.models.description": "Настройки моделей будут доступны здесь.",
   "settings.models.section.defaults": "По умолчанию",
-  "settings.models.defaultRunner.title": "Runner по умолчанию",
-  "settings.models.defaultRunner.description": "Выберите runtime, который будет использоваться для новых запросов по умолчанию.",
   "settings.models.defaultModel.title": "Модель по умолчанию",
   "settings.models.defaultModel.description": "Выберите модель, которая будет записана в конфиг OpenCode.",
   "settings.models.defaultModel.empty": "Выбрать модель",

@@ -33,7 +33,6 @@ export type FollowupDraft = {
   context: (ContextItem & { key: string })[]
   agent: string
   model: { providerID: string; modelID: string }
-  runtime: "codex" | "opencode"
   variant?: string
 }
 
@@ -88,7 +87,6 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
         arguments: tail.join(" "),
         agent: input.draft.agent,
         model: `${input.draft.model.providerID}/${input.draft.model.modelID}`,
-        runtime: input.draft.runtime,
         variant: input.draft.variant,
         parts: images.map((attachment) => ({
           id: Identifier.ascending("part"),
@@ -123,7 +121,6 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     time: { created: Date.now() },
     agent: input.draft.agent,
     model: { ...input.draft.model, variant: input.draft.variant },
-    runtime: input.draft.runtime,
   }
 
   const add = () =>
@@ -161,7 +158,6 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       model: input.draft.model,
       messageID,
       parts: requestParts,
-      runtime: input.draft.runtime,
       variant: input.draft.variant,
     })
     return true
@@ -305,7 +301,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     const currentModel = local.model.current()
     const currentAgent = local.agent.current()
-    const runtime = local.runtime.current()
     const variant = local.model.variant.current()
     if (!currentModel || !currentAgent) {
       showToast({
@@ -407,7 +402,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       context,
       agent,
       model,
-      runtime,
       variant,
     }
 
@@ -471,7 +465,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             arguments: args.join(" "),
             agent,
             model: `${model.providerID}/${model.modelID}`,
-            runtime,
             variant,
             parts: images.map((attachment) => ({
               id: Identifier.ascending("part"),

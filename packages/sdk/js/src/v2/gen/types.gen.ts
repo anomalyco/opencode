@@ -573,7 +573,6 @@ export type UserMessage = {
     modelID: string
     variant?: string
   }
-  runtime?: "codex" | "opencode"
   system?: string
   tools?: {
     [key: string]: boolean
@@ -1575,10 +1574,6 @@ export type Config = {
    * Model to use in the format of provider/model, eg anthropic/claude-2
    */
   model?: string
-  /**
-   * Default runtime to use for new prompts when none is specified
-   */
-  runtime?: "codex" | "opencode"
   /**
    * Small model to use for tasks like title generation in the format of provider/model
    */
@@ -3987,7 +3982,6 @@ export type SessionPromptData = {
     }
     format?: OutputFormat
     system?: string
-    runtime?: "codex" | "opencode"
     variant?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
@@ -4188,7 +4182,6 @@ export type SessionPromptAsyncData = {
     }
     format?: OutputFormat
     system?: string
-    runtime?: "codex" | "opencode"
     variant?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
@@ -4231,7 +4224,6 @@ export type SessionCommandData = {
     model?: string
     arguments: string
     command: string
-    runtime?: "codex" | "opencode"
     variant?: string
     parts?: Array<{
       id?: string

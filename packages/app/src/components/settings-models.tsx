@@ -2,7 +2,6 @@ import type { Config } from "@opencode-ai/sdk/v2/client"
 import { Button } from "@opencode-ai/ui/button"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -18,9 +17,6 @@ import { SettingsList } from "./settings-list"
 
 type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
 type ModelKey = { providerID: string; modelID: string }
-
-type Runtime = "codex" | "opencode"
-const runtimeOptions: Runtime[] = ["codex", "opencode"]
 
 function parseConfigModel(value: string | undefined) {
   if (!value) return
@@ -67,18 +63,6 @@ export const SettingsModels: Component = () => {
     void globalSync.updateConfig(config).catch((err: unknown) => handleConfigError(err, rollback))
   }
 
-  const currentRuntime = createMemo<Runtime>(() => {
-    const value = globalSync.data.config.runtime
-    if (value === "codex" || value === "opencode") return value
-    return "codex"
-  })
-
-  const setRuntime = (runtime: Runtime) => {
-    const before = globalSync.data.config.runtime
-    globalSync.set("config", "runtime", runtime)
-    updateConfig({ runtime }, () => globalSync.set("config", "runtime", before))
-  }
-
   const configuredDefaultModel = createMemo(() => {
     const model = parseConfigModel(globalSync.data.config.model)
     if (!model) return
@@ -118,8 +102,6 @@ export const SettingsModels: Component = () => {
     set: setDefaultModel,
     visible: models.visible,
   }
-
-  const runtimeLabel = (runtime: Runtime) => (runtime === "codex" ? "Codex" : "OpenCode")
 
   const list = useFilteredList<ModelItem>({
     items: (_filter) => models.list(),
@@ -173,27 +155,6 @@ export const SettingsModels: Component = () => {
         <div class="flex flex-col gap-1">
           <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.models.section.defaults")}</h3>
           <SettingsList>
-            <SettingsRow
-              title={language.t("settings.models.defaultRunner.title")}
-              description={language.t("settings.models.defaultRunner.description")}
-            >
-              <Select
-                data-action="settings-default-runtime"
-                options={runtimeOptions}
-                current={currentRuntime()}
-                value={(runtime) => runtime}
-                label={runtimeLabel}
-                onSelect={(runtime) => {
-                  if (!runtime) return
-                  setRuntime(runtime)
-                }}
-                variant="secondary"
-                size="small"
-                triggerVariant="settings"
-                triggerStyle={{ "min-width": "160px" }}
-              />
-            </SettingsRow>
-
             <SettingsRow
               title={language.t("settings.models.defaultModel.title")}
               description={language.t("settings.models.defaultModel.description")}

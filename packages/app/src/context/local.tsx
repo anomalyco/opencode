@@ -11,12 +11,10 @@ import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 
 export type ModelKey = { providerID: string; modelID: string; variant?: string }
-export type Runtime = "codex" | "opencode"
 
 type State = {
   agent?: string
   model?: ModelKey
-  runtime?: Runtime
   variant?: string | null
 }
 
@@ -142,31 +140,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       handoff.delete(key)
     })
 
-    const configuredRuntime = () => {
-      const value = sync.data.config.runtime
-      if (value === "codex" || value === "opencode") return value
-      return undefined
-    }
-
-    const runtimeValue = () => scope()?.runtime ?? configuredRuntime() ?? "codex"
-
     const configuredModel = () => {
       if (!sync.data.config.model) return
       const [providerID, modelID] = sync.data.config.model.split("/")
       const model = { providerID, modelID }
-      if (validModel(model)) return model
-    }
-
-    const codexModel = () => {
-      const provider = providers.connected().find((item) => item.id === "codex-cli")
-      if (!provider) return
-      const preferred = ["gpt-5.5", "gpt-5-codex"]
-        .map((modelID) => ({ providerID: provider.id, modelID }))
-        .find(validModel)
-      if (preferred) return preferred
-      const first = Object.values(provider.models)[0]
-      if (!first) return
-      const model = { providerID: provider.id, modelID: first.id }
       if (validModel(model)) return model
     }
 
@@ -192,12 +169,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     }
 
-    const fallback = createMemo<ModelKey | undefined>(() => {
-      const configured = configuredModel()
-      if (configured) return configured
-      if (runtimeValue() === "codex") return codexModel() ?? recentModel() ?? defaultModel()
-      return recentModel() ?? defaultModel()
-    })
+    const fallback = createMemo<ModelKey | undefined>(() => configuredModel() ?? recentModel() ?? defaultModel())
 
     const agent = {
       list,
@@ -223,7 +195,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const next = {
             agent: item.name,
             model: item.model ?? prev?.model,
-            runtime: prev?.runtime,
             variant: item.variant ?? prev?.variant,
           } satisfies State
           const session = id()
@@ -277,7 +248,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       return {
         agent: agent.current()?.name,
         model: model ? { providerID: model.provider.id, modelID: model.id } : undefined,
-        runtime: runtime.current(),
         variant: selected(),
       } satisfies State
     }
@@ -381,23 +351,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
-    const runtime = {
-      list() {
-        return ["codex", "opencode"] as Runtime[]
-      },
-      current() {
-        return runtimeValue()
-      },
-      set(value: Runtime) {
-        write({ runtime: value })
-      },
-    }
-
     const result = {
       slug: createMemo(() => base64Encode(sdk.directory)),
       model,
       agent,
-      runtime,
       session: {
         reset() {
           setStore("draft", undefined)
@@ -415,7 +372,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           handoff.set(handoffKey(dir, session), next)
           setStore("draft", undefined)
         },
-        restore(msg: { sessionID: string; agent: string; model: ModelKey; runtime?: Runtime }) {
+        restore(msg: { sessionID: string; agent: string; model: ModelKey }) {
           const session = id()
           if (!session) return
           if (msg.sessionID !== session) return
@@ -425,7 +382,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setSaved("session", session, {
             agent: msg.agent,
             model: msg.model,
-            runtime: msg.runtime ?? configuredRuntime() ?? "codex",
             variant: msg.model.variant ?? null,
           })
         },
