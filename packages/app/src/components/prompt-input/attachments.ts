@@ -3,9 +3,12 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { showToast } from "@opencode-ai/ui/toast"
 import { usePrompt, type ContentPart, type ImageAttachmentPart } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
+import { useSDK } from "@/context/sdk"
 import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
 import { attachmentMime } from "./files"
+// FORK: 多选拖动 abs→rel 转换 helper(无 context 依赖,可单测) 2026-05-15
+import { parseMultiPathDropPaths } from "./multi-path-drop"
 import { normalizePaste, pasteMode } from "./paste"
 
 function dataUrl(file: File, mime: string) {
@@ -37,6 +40,7 @@ type PromptAttachmentsInput = {
 export function createPromptAttachments(input: PromptAttachmentsInput) {
   const prompt = usePrompt()
   const language = useLanguage()
+  const sdk = useSDK()
 
   const warn = () => {
     showToast({
@@ -146,9 +150,12 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     event.preventDefault()
     const hasFiles = event.dataTransfer?.types.includes("Files")
     const hasText = event.dataTransfer?.types.includes("text/plain")
+    // FORK: 多选拖动从 file-tree 来时 types 含 `application/x-deskfox-paths` 而非 text/plain
+    // (file-tree-dnd 的多源拖动协议)— 把它也当 @mention 提示 2026-05-15
+    const hasMultiPath = event.dataTransfer?.types.includes("application/x-deskfox-paths")
     if (hasFiles) {
       input.setDraggingType("image")
-    } else if (hasText) {
+    } else if (hasText || hasMultiPath) {
       input.setDraggingType("@mention")
     }
   }
@@ -165,6 +172,20 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
     event.preventDefault()
     input.setDraggingType(null)
+
+    // FORK: 多选拖动优先级最高 — file-tree 多选时只写 `application/x-deskfox-paths`(无 text/plain)
+    // 单选时走下面 text/plain 路径(原行为)。 2026-05-15
+    const multiJson = event.dataTransfer?.getData("application/x-deskfox-paths")
+    if (multiJson) {
+      const paths = parseMultiPathDropPaths(multiJson, sdk.directory)
+      if (paths.length > 0) {
+        input.focusEditor()
+        for (const p of paths) {
+          input.addPart({ type: "file", path: p, content: "@" + p, start: 0, end: 0 })
+        }
+        return
+      }
+    }
 
     const plainText = event.dataTransfer?.getData("text/plain")
     const filePrefix = "file:"
