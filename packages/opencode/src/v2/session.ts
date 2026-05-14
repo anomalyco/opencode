@@ -332,8 +332,8 @@ export const layer = Layer.effect(
 
     return result
   }),
-).pipe(Layer.provide(EventV2Bridge.defaultLayer))
+)
 
-export const defaultLayer = layer
+export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer))
 
 export * as SessionV2 from "./session"

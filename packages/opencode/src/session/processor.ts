@@ -815,10 +815,11 @@ export const layer: Layer.Layer<
 
     return Service.of({ create })
   }),
-).pipe(Layer.provide(EventV2Bridge.defaultLayer))
+)
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(
+    Layer.provide(EventV2.defaultLayer),
     Layer.provide(Session.defaultLayer),
     Layer.provide(Snapshot.defaultLayer),
     Layer.provide(Agent.defaultLayer),

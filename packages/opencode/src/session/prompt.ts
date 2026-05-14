@@ -2013,7 +2013,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       resolvePromptParts,
     })
   }),
-).pipe(Layer.provide(EventV2Bridge.defaultLayer))
+)
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(
@@ -2038,6 +2038,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Image.defaultLayer),
     Layer.provide(
       Layer.mergeAll(
+        EventV2.defaultLayer,
         Agent.defaultLayer,
         SystemPrompt.defaultLayer,
         LLM.defaultLayer,
