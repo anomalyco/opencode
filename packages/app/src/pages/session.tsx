@@ -1828,6 +1828,13 @@ export default function Page() {
         if (initialScrollKey === key) return
         initialScrollKey = key
         if (initialScrollFrame !== undefined) cancelAnimationFrame(initialScrollFrame)
+
+        // Synchronously scroll to bottom before the browser paints to prevent
+        // the visible flash of the conversation top on session entry.
+        if (!hasScrollTarget() && scroller) {
+          lockBottom(scroller, "initial-scroll:immediate")
+        }
+
         initialScrollFrame = requestAnimationFrame(() => {
           initialScrollFrame = requestAnimationFrame(() => {
             initialScrollFrame = undefined
