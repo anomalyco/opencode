@@ -78,10 +78,6 @@ function free(model: { cost: { input: number; output: number; cache: { read: num
   )
 }
 
-function listed(id: string) {
-  return id === "big-pickle" || id.endsWith("-free")
-}
-
 afterEach(() => {
   mock.restore()
 })
@@ -551,7 +547,7 @@ test("parseModel handles model IDs with slashes", () => {
   expect(String(result.modelID)).toBe("anthropic/claude-3-opus")
 })
 
-test("resolveSelection picks only valid opencode free listings", async () => {
+test("resolveSelection picks only zero-cost opencode models, not other providers", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -564,11 +560,24 @@ test("resolveSelection picks only valid opencode free listings", async () => {
                 apiKey: "test-api-key",
               },
               models: {
-                plainfree: {
-                  name: "Plainfree Custom",
+                "my-zero-cost": {
+                  name: "My Zero Cost",
                   cost: {
                     input: 0,
                     output: 0,
+                    cache_read: 0,
+                    cache_write: 0,
+                  },
+                  limit: {
+                    context: 128000,
+                    output: 4096,
+                  },
+                },
+                "my-paid": {
+                  name: "My Paid",
+                  cost: {
+                    input: 1,
+                    output: 2,
                     cache_read: 0,
                     cache_write: 0,
                   },
@@ -609,28 +618,22 @@ test("resolveSelection picks only valid opencode free listings", async () => {
     directory: tmp.path,
     fn: async () => {
       const providers = await list()
-      const opencode = providers[ProviderID.opencode]
-      const openrouter = providers[ProviderID.openrouter]
-      expect(opencode).toBeDefined()
-      expect(openrouter).toBeDefined()
-      expect(openrouter.models["free-router"]).toBeDefined()
-
-      const freeModels = Provider.sort(Object.values(opencode.models).filter(free)).map((model) => String(model.id))
-      const listedModels = freeModels.filter(listed)
-      const rest = freeModels.filter((id) => !listed(id))
-
-      expect(listedModels.length).toBeGreaterThan(0)
-      expect(rest.length).toBeGreaterThan(0)
-      expect(rest).toContain("plainfree")
+      expect(providers[ProviderID.opencode]).toBeDefined()
+      expect(providers[ProviderID.openrouter]).toBeDefined()
 
       spyOn(Math, "random").mockReturnValue(0)
 
       const result = await Provider.resolveSelection("free")
       const parsed = Provider.parseModel(result.model!)
 
+      // Must pick from opencode only, not openrouter
       expect(String(parsed.providerID)).toBe("opencode")
-      expect(listedModels).toContain(String(parsed.modelID))
-      expect(rest).not.toContain(String(parsed.modelID))
+      // Must be a zero-cost model (not the paid one)
+      const model = providers[ProviderID.opencode].models[String(parsed.modelID)]
+      expect(model).toBeDefined()
+      expect(model.cost.input).toBe(0)
+      expect(model.cost.output).toBe(0)
+      // Must not have selected the openrouter model
       expect(String(parsed.modelID)).not.toBe("free-router")
     },
   })
@@ -639,11 +642,7 @@ test("resolveSelection picks only valid opencode free listings", async () => {
 test("resolveSelection picks a variant from the chosen free model", async () => {
   await freecase(async () => {
     const provider = (await list())[ProviderID.opencode]
-    const models = Provider.sort(
-      Object.values(provider.models)
-        .filter(free)
-        .filter((item) => listed(String(item.id))),
-    )
+    const models = Provider.sort(Object.values(provider.models).filter(free))
     const index = models.findIndex((item) => String(item.id) === "alpha-free")
     const choices = Object.keys(provider.models["alpha-free"].variants ?? {}).toSorted()
 
@@ -667,11 +666,7 @@ test("resolveSelection picks a variant from the chosen free model", async () => 
 test("resolveSelection keeps explicit variants unchanged", async () => {
   await freecase(async () => {
     const provider = (await list())[ProviderID.opencode]
-    const models = Provider.sort(
-      Object.values(provider.models)
-        .filter(free)
-        .filter((item) => listed(String(item.id))),
-    )
+    const models = Provider.sort(Object.values(provider.models).filter(free))
     const index = models.findIndex((item) => String(item.id) === "alpha-free")
 
     expect(index).toBeGreaterThanOrEqual(0)
@@ -688,11 +683,7 @@ test("resolveSelection keeps explicit variants unchanged", async () => {
 test("resolveSelection falls back to no variant when the chosen free model has none", async () => {
   await freecase(async () => {
     const provider = (await list())[ProviderID.opencode]
-    const models = Provider.sort(
-      Object.values(provider.models)
-        .filter(free)
-        .filter((item) => listed(String(item.id))),
-    )
+    const models = Provider.sort(Object.values(provider.models).filter(free))
     const index = models.findIndex((item) => String(item.id) === "plain-free")
 
     expect(index).toBeGreaterThanOrEqual(0)
@@ -754,24 +745,8 @@ test("resolveSelection throws with actionable message when no free models are av
       }
       expect(caught).toBeDefined()
       expect(caught!.message).toContain("OPENCODE_API_KEY")
-      expect(caught!.message).toContain("-free")
     },
   })
-})
-
-test("isListed accepts big-pickle and -free suffix, rejects everything else", () => {
-  const make = (id: string) =>
-    ({
-      id,
-      providerID: "opencode",
-      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-    }) as any
-  expect(Provider.isListed(make("big-pickle"))).toBe(true)
-  expect(Provider.isListed(make("foo-free"))).toBe(true)
-  expect(Provider.isListed(make("nemotron-3-super-free"))).toBe(true)
-  expect(Provider.isListed(make("foo"))).toBe(false)
-  expect(Provider.isListed(make("gpt-5-nano"))).toBe(false)
-  expect(Provider.isListed(make("free"))).toBe(false)
 })
 
 test("defaultModel returns first available model when no config set", async () => {

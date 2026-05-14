@@ -1821,9 +1821,6 @@ export function sort<T extends { id: string }>(models: T[]) {
 const FREE = "free"
 export const ANY = "any"
 
-// "big-pickle" predates the "-free" suffix convention.
-const FREE_LEGACY_IDS = new Set(["big-pickle"])
-
 export function isFree(model: Model) {
   const extra = model.cost.experimentalOver200K
   return (
@@ -1834,10 +1831,6 @@ export function isFree(model: Model) {
     model.cost.cache.write === 0 &&
     (!extra || (extra.input === 0 && extra.output === 0 && extra.cache.read === 0 && extra.cache.write === 0))
   )
-}
-
-export function isListed(model: Model) {
-  return FREE_LEGACY_IDS.has(model.id) || model.id.endsWith("-free")
 }
 
 function freeVariants(model: Model) {
@@ -1853,13 +1846,13 @@ export async function resolveSelection(model?: string, variant?: string) {
   if (model !== FREE) return { model, variant }
   const providers = await runPromise((svc) => svc.list())
   const provider = providers[ProviderID.opencode]
-  const models = sort(Object.values(provider?.models ?? {}).filter((item) => isFree(item) && isListed(item)))
+  const models = sort(Object.values(provider?.models ?? {}).filter(isFree))
   // Unseeded by design: the same `--model free` in two terminals picks
   // different models.
   const pick = models[Math.floor(Math.random() * models.length)]
   if (!pick)
     throw new Error(
-      `No free opencode models found. The opencode provider must be configured (set OPENCODE_API_KEY) and at least one model in its catalog must satisfy: cost = 0, id is "big-pickle" or ends with "-free".`,
+      `No free opencode models found. The opencode provider must be configured (set OPENCODE_API_KEY) and at least one model in its catalog must have all costs set to 0.`,
     )
   const value =
     variant === ANY
