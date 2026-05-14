@@ -1,6 +1,8 @@
 import { Resource } from "sst"
 import { defineConfig } from "drizzle-kit"
 
+console.log(Resource.Database)
+
 export default defineConfig({
   out: "./migrations/",
   strict: true,

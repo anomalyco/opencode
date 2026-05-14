@@ -1,13 +1,18 @@
-import { action, json, query, useAction, useSubmission } from "@solidjs/router"
+import { action, createAsync, json, query, useAction, useSubmission } from "@solidjs/router"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import { Referral } from "@opencode-ai/console-core/referral.js"
+import { Database, and, eq, isNull } from "@opencode-ai/console-core/drizzle/index.js"
+import { LiteData } from "@opencode-ai/console-core/lite.js"
+import { LiteTable } from "@opencode-ai/console-core/schema/billing.sql.js"
+import { ReferralRewardTable } from "@opencode-ai/console-core/schema/referral.sql.js"
+import { Subscription } from "@opencode-ai/console-core/subscription.js"
 import { withActor } from "~/context/auth.withActor"
 import { Modal } from "~/component/modal"
 import { IconCheck, IconCopy } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-import { queryLiteSubscription } from "~/routes/workspace/[id]/go/lite-section"
+import { formatResetTime, queryLiteSubscription } from "~/routes/workspace/[id]/go/lite-section"
 import "./go-referral.css"
 
 export type GoReferralReward = {
@@ -29,6 +34,24 @@ export type GoReferralSummary = {
   rewards: GoReferralReward[]
 }
 
+type AnalyzedUsage = {
+  status: "ok" | "rate-limited"
+  resetInSec: number
+  usagePercent: number
+}
+
+type GoReferralUsagePreview = {
+  rollingUsage: GoReferralUsagePreviewItem
+  weeklyUsage: GoReferralUsagePreviewItem
+  monthlyUsage: GoReferralUsagePreviewItem
+}
+
+type GoReferralUsagePreviewItem = {
+  beforePercent: number
+  afterPercent: number
+  resetInSec: number
+}
+
 export const queryGoReferral = query(async (workspaceID: string) => {
   "use server"
   return withActor(async () => {
@@ -40,6 +63,81 @@ export const queryGoReferral = query(async (workspaceID: string) => {
   }, workspaceID)
 }, "go.referral.get")
 
+export const queryGoReferralUsagePreview = query(async (workspaceID: string, rewardID?: string) => {
+  "use server"
+  if (!rewardID) return null
+  return withActor(async () => {
+    const row = await Database.use((tx) =>
+      tx
+        .select({
+          rewardAmount: ReferralRewardTable.amount,
+          rollingUsage: LiteTable.rollingUsage,
+          weeklyUsage: LiteTable.weeklyUsage,
+          monthlyUsage: LiteTable.monthlyUsage,
+          timeRollingUpdated: LiteTable.timeRollingUpdated,
+          timeWeeklyUpdated: LiteTable.timeWeeklyUpdated,
+          timeMonthlyUpdated: LiteTable.timeMonthlyUpdated,
+          timeCreated: LiteTable.timeCreated,
+        })
+        .from(ReferralRewardTable)
+        .innerJoin(LiteTable, eq(LiteTable.workspaceID, ReferralRewardTable.workspaceID))
+        .where(
+          and(
+            eq(ReferralRewardTable.workspaceID, workspaceID),
+            eq(ReferralRewardTable.id, rewardID),
+            isNull(ReferralRewardTable.timeApplied),
+            isNull(ReferralRewardTable.timeDeleted),
+            isNull(LiteTable.timeDeleted),
+          ),
+        )
+        .then((rows) => rows[0]),
+    )
+    if (!row) return null
+
+    const limits = LiteData.getLimits()
+    const rollingBefore = Subscription.analyzeRollingUsage({
+      limit: limits.rollingLimit,
+      window: limits.rollingWindow,
+      usage: row.rollingUsage ?? 0,
+      timeUpdated: row.timeRollingUpdated ?? new Date(),
+    })
+    const rollingAfter = Subscription.analyzeRollingUsage({
+      limit: limits.rollingLimit,
+      window: limits.rollingWindow,
+      usage: Math.max(0, (row.rollingUsage ?? 0) - row.rewardAmount),
+      timeUpdated: row.timeRollingUpdated ?? new Date(),
+    })
+    const weeklyBefore = Subscription.analyzeWeeklyUsage({
+      limit: limits.weeklyLimit,
+      usage: row.weeklyUsage ?? 0,
+      timeUpdated: row.timeWeeklyUpdated ?? new Date(),
+    })
+    const weeklyAfter = Subscription.analyzeWeeklyUsage({
+      limit: limits.weeklyLimit,
+      usage: Math.max(0, (row.weeklyUsage ?? 0) - row.rewardAmount),
+      timeUpdated: row.timeWeeklyUpdated ?? new Date(),
+    })
+    const monthlyBefore = Subscription.analyzeMonthlyUsage({
+      limit: limits.monthlyLimit,
+      usage: row.monthlyUsage ?? 0,
+      timeUpdated: row.timeMonthlyUpdated ?? new Date(),
+      timeSubscribed: row.timeCreated,
+    })
+    const monthlyAfter = Subscription.analyzeMonthlyUsage({
+      limit: limits.monthlyLimit,
+      usage: Math.max(0, (row.monthlyUsage ?? 0) - row.rewardAmount),
+      timeUpdated: row.timeMonthlyUpdated ?? new Date(),
+      timeSubscribed: row.timeCreated,
+    })
+
+    return {
+      rollingUsage: usagePreview(rollingBefore, rollingAfter),
+      weeklyUsage: usagePreview(weeklyBefore, weeklyAfter),
+      monthlyUsage: usagePreview(monthlyBefore, monthlyAfter),
+    } satisfies GoReferralUsagePreview
+  }, workspaceID)
+}, "go.referral.usagePreview")
+
 export const applyGoReferralReward = action(async (workspaceID: string, rewardID: string) => {
   "use server"
   return json(
@@ -50,9 +148,17 @@ export const applyGoReferralReward = action(async (workspaceID: string, rewardID
           .catch((e) => ({ error: e.message as string, data: undefined })),
       workspaceID,
     ),
-    { revalidate: [queryGoReferral.key, queryLiteSubscription.key] },
+    { revalidate: [queryGoReferral.key, queryGoReferralUsagePreview.key, queryLiteSubscription.key] },
   )
 }, "go.referral.reward.apply")
+
+function usagePreview(before: AnalyzedUsage, after: AnalyzedUsage) {
+  return {
+    beforePercent: before.usagePercent,
+    afterPercent: after.usagePercent,
+    resetInSec: after.resetInSec,
+  }
+}
 
 function formatCurrency(amount: number) {
   if (amount % 100 === 0) return `$${amount / 100}`
@@ -106,6 +212,7 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
   const apply = useAction(applyGoReferralReward)
   const submission = useSubmission(applyGoReferralReward)
   const [selected, setSelected] = createSignal<GoReferralReward>()
+  const preview = createAsync(() => queryGoReferralUsagePreview(props.workspaceID, selected()?.id))
   const appliedCount = createMemo(() => props.summary.rewards.filter((reward) => reward.timeApplied).length)
 
   async function onApply() {
@@ -128,7 +235,7 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
       <div data-component="go-referral-overview">
         <div data-slot="referral-stats">
           <div>
-            <span>{i18n.t("workspace.referral.stats.validInvites")}</span>
+            <span>{i18n.t("workspace.referral.stats.invites")}</span>
             <strong>{props.summary.validInviteCount}</strong>
           </div>
           <div>
@@ -156,50 +263,47 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
         when={props.summary.rewards.length > 0}
         fallback={<div data-component="empty-state">{i18n.t("workspace.referral.rewards.empty")}</div>}
       >
-        <div data-slot="reward-list">
-          <For each={props.summary.rewards}>
-            {(reward) => {
-              const applied = createMemo(() => !!reward.timeApplied)
-              return (
-                <div data-slot="reward-row" data-status={applied() ? "applied" : "available"}>
-                  <div data-slot="reward-main">
-                    <strong>{formatCurrency(reward.amount)}</strong>
-                    <span>{i18n.t(rewardSourceKey(reward.source))}</span>
-                  </div>
-                  <div data-slot="reward-meta">
-                    <span>
-                      {applied()
-                        ? i18n.t("workspace.referral.reward.status.applied")
-                        : i18n.t("workspace.referral.reward.status.available")}
-                    </span>
-                    <span>
-                      {applied() && reward.timeApplied
-                        ? i18n.t("workspace.referral.reward.appliedOn", {
-                            date: formatDate(reward.timeApplied, language.tag(language.locale())),
-                          })
-                        : i18n.t("workspace.referral.reward.earnedOn", {
-                            date: formatDate(reward.timeCreated, language.tag(language.locale())),
-                          })}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={applied() || !props.summary.hasActiveGo || submission.pending}
-                    onClick={() => setSelected(reward)}
-                  >
-                    <Show
-                      when={!applied()}
-                      fallback={i18n.t("workspace.referral.reward.status.applied")}
-                    >
-                      {props.summary.hasActiveGo
-                        ? i18n.t("workspace.referral.apply.action")
-                        : i18n.t("workspace.referral.apply.noGo")}
-                    </Show>
-                  </button>
-                </div>
-              )
-            }}
-          </For>
+        <div data-slot="referrals-table">
+          <table data-slot="referrals-table-element">
+            <thead>
+              <tr>
+                <th>{i18n.t("workspace.referral.table.reward")}</th>
+                <th>{i18n.t("workspace.referral.table.referral")}</th>
+                <th>{i18n.t("workspace.referral.table.earned")}</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <For each={props.summary.rewards}>
+                {(reward) => {
+                  const applied = createMemo(() => !!reward.timeApplied)
+                  const earnedAt = createMemo(() => formatDate(reward.timeCreated, language.tag(language.locale())))
+                  return (
+                    <tr data-status={applied() ? "applied" : "available"}>
+                      <td data-slot="referral-amount">{formatCurrency(reward.amount)}</td>
+                      <td data-slot="referral-source">{i18n.t(rewardSourceKey(reward.source))}</td>
+                      <td data-slot="referral-date" title={earnedAt()}>
+                        {earnedAt()}
+                      </td>
+                      <td data-slot="referral-action">
+                        <button
+                          type="button"
+                          disabled={applied() || !props.summary.hasActiveGo || submission.pending}
+                          onClick={() => setSelected(reward)}
+                        >
+                          <Show when={!applied()} fallback={i18n.t("workspace.referral.reward.status.applied")}>
+                            {props.summary.hasActiveGo
+                              ? i18n.t("workspace.referral.apply.action")
+                              : i18n.t("workspace.referral.apply.noGo")}
+                          </Show>
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                }}
+              </For>
+            </tbody>
+          </table>
         </div>
       </Show>
       <Modal open={!!selected()} onClose={() => setSelected(undefined)} title={i18n.t("workspace.referral.apply.confirmTitle")}>
@@ -209,6 +313,9 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
               amount: formatCurrency(selected()?.amount ?? 0),
             })}
           </p>
+          <Show when={preview()} fallback={<p>{i18n.t("workspace.lite.loading")}</p>}>
+            {(usage) => <GoReferralUsagePreview preview={usage()} />}
+          </Show>
           <div data-slot="modal-actions">
             <button type="button" onClick={() => setSelected(undefined)}>
               {i18n.t("common.cancel")}
@@ -220,6 +327,42 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
         </div>
       </Modal>
     </section>
+  )
+}
+
+function GoReferralUsagePreview(props: { preview: GoReferralUsagePreview }) {
+  const i18n = useI18n()
+
+  return (
+    <div data-slot="usage-preview">
+      <For
+        each={[
+          { label: i18n.t("workspace.lite.subscription.rollingUsage"), usage: props.preview.rollingUsage },
+          { label: i18n.t("workspace.lite.subscription.weeklyUsage"), usage: props.preview.weeklyUsage },
+          { label: i18n.t("workspace.lite.subscription.monthlyUsage"), usage: props.preview.monthlyUsage },
+        ]}
+      >
+        {(item) => (
+          <div data-slot="usage-preview-item">
+            <div data-slot="usage-preview-header">
+              <span data-slot="usage-preview-label">{item.label}</span>
+              <span data-slot="usage-preview-value">
+                <span>{item.usage.beforePercent}%</span>
+                <span aria-hidden="true">-&gt;</span>
+                <span data-slot="usage-preview-after-value">{item.usage.afterPercent}%</span>
+              </span>
+            </div>
+            <div data-slot="usage-preview-progress">
+              <div data-slot="usage-preview-before" style={{ width: `${item.usage.beforePercent}%` }} />
+              <div data-slot="usage-preview-after" style={{ width: `${item.usage.afterPercent}%` }} />
+            </div>
+            <span data-slot="usage-preview-reset">
+              {i18n.t("workspace.lite.subscription.resetsIn")} {formatResetTime(item.usage.resetInSec, i18n)}
+            </span>
+          </div>
+        )}
+      </For>
+    </div>
   )
 }
 

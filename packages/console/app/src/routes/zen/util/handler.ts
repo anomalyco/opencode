@@ -382,6 +382,8 @@ export async function handler(
       headers: resHeaders,
     })
   } catch (error: any) {
+    console.log('error')
+    console.log(error)
     logger.metric({
       "error.type": error.constructor.name,
       "error.message": error.message,
@@ -700,6 +702,7 @@ export async function handler(
   }
 
   function validateBilling(authInfo: AuthInfo, modelInfo: ModelInfo): BillingSource {
+    return 'lite'
     if (!authInfo) return "anonymous"
     if (authInfo.provider?.credentials) return "byok"
     if (authInfo.isFree) return "free"
@@ -949,6 +952,7 @@ export async function handler(
     usageInfo: UsageInfo,
     costInfo: CostInfo,
   ) {
+    console.log('tracking usage')
     const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
       usageInfo
     const { totalCostInCent, inputCost, outputCost, cacheReadCost, cacheWrite5mCost, cacheWrite1hCost } = costInfo

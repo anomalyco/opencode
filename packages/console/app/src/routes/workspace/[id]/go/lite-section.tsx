@@ -69,7 +69,7 @@ export const queryLiteSubscription = query(async (workspaceID: string) => {
   }, workspaceID)
 }, "lite.subscription.get")
 
-function formatResetTime(seconds: number, i18n: ReturnType<typeof useI18n>) {
+export function formatResetTime(seconds: number, i18n: ReturnType<typeof useI18n>) {
   const days = Math.floor(seconds / 86400)
   if (days >= 1) {
     const hours = Math.floor((seconds % 86400) / 3600)
