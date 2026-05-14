@@ -209,6 +209,19 @@ describe("experimental HttpApi", () => {
     }),
   )
 
+  it.instance("accepts worktree create requests without a body", () =>
+    Effect.gen(function* () {
+      const tmp = yield* TestInstance
+      const response = yield* request(ExperimentalPaths.worktree, tmp.directory, { method: "POST" })
+
+      expect(response.status).toBe(400)
+      expect(yield* json(response)).toEqual({
+        name: "WorktreeNotGitError",
+        data: { message: "Worktrees are only supported for git projects" },
+      })
+    }),
+  )
+
   it.instance(
     "serves Console org switch through the default server app",
     () =>
