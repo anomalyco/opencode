@@ -13,7 +13,6 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { NamedError } from "@opencode-ai/core/util/error"
 import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
@@ -975,7 +974,16 @@ export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundErr
   }
 }
 
-export type Error = ModelNotFoundError
+export class InitError extends Schema.TaggedErrorClass<InitError>()("ProviderInitError", {
+  providerID: ProviderID,
+  cause: Schema.optional(Schema.Defect),
+}) {
+  static isInstance(input: unknown): input is InitError {
+    return input instanceof InitError
+  }
+}
+
+export type Error = ModelNotFoundError | InitError
 
 export interface Interface {
   readonly list: () => Effect.Effect<Record<ProviderID, Info>>
@@ -1634,7 +1642,7 @@ const layer = Layer.effect(
         s.sdk.set(key, loaded)
         return loaded as SDK
       } catch (e) {
-        throw new InitError({ providerID: model.providerID }, { cause: e })
+        throw new InitError({ providerID: model.providerID, cause: e })
       }
     }
 
@@ -1826,9 +1834,5 @@ export function parseModel(model: string) {
     modelID: ModelID.make(rest.join("/")),
   }
 }
-
-export const InitError = NamedError.create("ProviderInitError", {
-  providerID: ProviderID,
-})
 
 export * as Provider from "./provider"

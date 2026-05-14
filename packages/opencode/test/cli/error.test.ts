@@ -81,6 +81,14 @@ describe("cli.error", () => {
     expect(FormatError({ _tag: "ProviderModelNotFoundError", ...data })).toBe(expected)
   })
 
+  test("formats legacy and tagged provider init errors the same way", () => {
+    const data = { providerID: "anthropic" }
+    const expected = 'Failed to initialize provider "anthropic". Check credentials and configuration.'
+
+    expect(FormatError({ name: "ProviderInitError", data })).toBe(expected)
+    expect(FormatError({ _tag: "ProviderInitError", ...data })).toBe(expected)
+  })
+
   test("formats cancelled UI errors as empty output", () => {
     expect(FormatError(new UI.CancelledError())).toBe("")
   })
