@@ -6,6 +6,7 @@ import {
   createSignal,
   For,
   Match,
+  onCleanup,
   on,
   onMount,
   Show,
@@ -90,6 +91,16 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { useCommandPalette } from "../../context/command-palette"
 import { useBindings, useCommandShortcut } from "../../keymap"
 import { PathFormatterProvider, usePathFormatter } from "../../context/path-format"
+import {
+  hasTerminalImageOutput,
+  supportsTerminalImageOutput,
+  terminalImageSector,
+  terminalImageSectorFromOutput,
+  terminalImagePath,
+  terminalImageSizeFromFile,
+  writeTerminalImageFileOutput,
+  writeTerminalImageOutput,
+} from "../../util/terminal-image"
 
 addDefaultParsers(parsers.parsers)
 
@@ -153,8 +164,11 @@ const sessionBindingCommands = [
   "session.child.previous",
 ] as const
 
+const fallbackTerminalImageRows = 12
+
 const context = createContext<{
   width: number
+  height: number
   sessionID: string
   conceal: () => boolean
   showThinking: () => boolean
@@ -1084,6 +1098,9 @@ export function Session() {
           get width() {
             return contentWidth()
           },
+          get height() {
+            return dimensions().height
+          },
           sessionID: route.sessionID,
           conceal,
           showThinking,
@@ -1639,8 +1656,26 @@ type ToolProps<T> = {
 function GenericTool(props: ToolProps<any>) {
   const { theme } = useTheme()
   const ctx = use()
+  const renderer = useRenderer()
+  const [imageBox, setImageBox] = createSignal<BoxRenderable>()
+  const [fileImageSector, setFileImageSector] = createSignal<{ columns: number; rows: number }>()
   const output = createMemo(() => props.output?.trim() ?? "")
+  const hasTerminalOutput = createMemo(() => hasTerminalImageOutput(output()))
+  const imagePath = createMemo(() => (props.tool === "show_image" ? terminalImagePath(props.input) : undefined))
   const configuredOutput = createMemo(() => ctx.tui.show_tool_output?.includes(props.tool) ?? false)
+  const shouldRenderOutput = createMemo(
+    () => props.output && (ctx.showGenericToolOutput() || configuredOutput() || imagePath()),
+  )
+  const terminalOutputSupported = createMemo(() => supportsTerminalImageOutput())
+  const shouldRenderImageArea = createMemo(() => Boolean((hasTerminalOutput() || imagePath()) && terminalOutputSupported()))
+  const inlineImageMaxRows = createMemo(() => Math.max(1, Math.floor(ctx.height * 0.45)))
+  const inlineImageSector = createMemo(() => {
+    const width = Math.max(1, Math.floor(ctx.width))
+    return terminalImageSectorFromOutput(output(), { maxWidth: width, maxHeight: inlineImageMaxRows() }) ?? fileImageSector() ?? {
+      columns: width,
+      rows: Math.min(fallbackTerminalImageRows, inlineImageMaxRows()),
+    }
+  })
   const [expanded, setExpanded] = createSignal<boolean | undefined>()
   const isExpanded = createMemo(() => expanded() ?? configuredOutput())
   const title = createMemo(() => {
@@ -1654,10 +1689,106 @@ function GenericTool(props: ToolProps<any>) {
     if (isExpanded() || !overflow()) return output()
     return [...lines().slice(0, maxLines), "…"].join("\n")
   })
+  const visible = createMemo(() => {
+    if (!hasTerminalOutput() && !imagePath()) return limited()
+    if (!terminalOutputSupported()) return "Inline image output requires an iTerm2-compatible terminal"
+    return stripAnsi(limited()).trim() || "Displayed inline image"
+  })
+  let pendingInlineImageWrite: Promise<void> | undefined
+  let renderedInlineImageKey: string | undefined
+  let lastInlineImageWriteAt = 0
+
+  const inlineImageKey = () => {
+    const box = imageBox()
+    if (!box) return
+    if (!props.output) return
+    if (!shouldRenderImageArea()) return
+    return [
+      props.part.callID,
+      props.output.length,
+      imagePath() ?? "",
+      Math.floor(box.screenX),
+      Math.floor(box.screenY),
+      inlineImageSector().columns,
+      Math.min(inlineImageSector().rows, Math.max(1, Math.floor(ctx.height - box.screenY - 2))),
+    ].join(":")
+  }
+
+  const writeInlineImage = async () => {
+    if (!props.output) return
+    if (!hasTerminalOutput() && !imagePath()) return
+    if (!terminalOutputSupported()) return
+    if (!ctx.showGenericToolOutput() && !configuredOutput() && !imagePath()) return
+    const box = imageBox()
+    if (!box) return
+    const width = Math.min(Math.max(1, Math.floor(box.width)), inlineImageSector().columns)
+    const height = Math.min(inlineImageSector().rows, Math.max(1, Math.floor(ctx.height - box.screenY - 2)))
+    const raw = props.output
+    const filePath = imagePath()
+    if (hasTerminalImageOutput(raw)) {
+      await writeTerminalImageOutput(raw, { placement: { x: box.screenX, y: box.screenY, width, height } })
+      return
+    }
+    if (filePath) {
+      await writeTerminalImageFileOutput(filePath, {
+        display: { width, height, preserveAspectRatio: true },
+        placement: { x: box.screenX, y: box.screenY, width, height },
+      })
+    }
+  }
+
+  const scheduleInlineImageWrite = (force = false) => {
+    if (pendingInlineImageWrite) return
+    const delay = force ? Math.max(0, 250 - (Date.now() - lastInlineImageWriteAt)) : 25
+    pendingInlineImageWrite = new Promise<void>((resolve) => setTimeout(resolve, delay))
+      .then(async () => {
+        const key = inlineImageKey()
+        if (!key) return
+        if (!force && key === renderedInlineImageKey) return
+        renderedInlineImageKey = key
+        await writeInlineImage()
+        lastInlineImageWriteAt = Date.now()
+      })
+      .finally(() => {
+        pendingInlineImageWrite = undefined
+      })
+  }
+
+  createEffect(() => {
+    const filePath = imagePath()
+    const maxWidth = Math.max(1, Math.floor(ctx.width))
+    const maxHeight = inlineImageMaxRows()
+    if (!filePath) {
+      setFileImageSector(undefined)
+      return
+    }
+    void terminalImageSizeFromFile(filePath).then((size) => {
+      if (imagePath() !== filePath) return
+      if (Math.max(1, Math.floor(ctx.width)) !== maxWidth) return
+      if (inlineImageMaxRows() !== maxHeight) return
+      setFileImageSector(size ? terminalImageSector(size, { maxWidth, maxHeight }) : undefined)
+    })
+  })
+
+  createEffect(() => {
+    if (!shouldRenderImageArea()) return
+    if (!imageBox()) return
+    output()
+    inlineImageSector()
+    renderer.requestRender()
+    void renderer.idle().then(() => scheduleInlineImageWrite())
+  })
+
+  const frameCallback = async () => {
+    if (!shouldRenderImageArea()) return
+    void renderer.idle().then(() => scheduleInlineImageWrite(true))
+  }
+  renderer.setFrameCallback(frameCallback)
+  onCleanup(() => renderer.removeFrameCallback(frameCallback))
 
   return (
     <Show
-      when={props.output && (ctx.showGenericToolOutput() || configuredOutput())}
+      when={shouldRenderOutput()}
       fallback={
         <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
           {title()}
@@ -1670,7 +1801,10 @@ function GenericTool(props: ToolProps<any>) {
         onClick={overflow() ? () => setExpanded((prev) => !(prev ?? configuredOutput())) : undefined}
       >
         <box gap={1}>
-          <text fg={theme.text}>{limited()}</text>
+          <text fg={theme.text}>{visible()}</text>
+          <Show when={shouldRenderImageArea()}>
+            <box ref={(box: BoxRenderable) => setImageBox(box)} height={inlineImageSector().rows} flexShrink={0} />
+          </Show>
           <Show when={overflow()}>
             <text fg={theme.textMuted}>{isExpanded() ? "Click to collapse" : "Click to expand"}</text>
           </Show>
