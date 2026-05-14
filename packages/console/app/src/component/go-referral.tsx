@@ -1,5 +1,5 @@
-import { action, createAsync, json, query, useAction, useSubmission } from "@solidjs/router"
-import { createMemo, createSignal, For, Show } from "solid-js"
+import { action, json, query, useAction, useSubmission } from "@solidjs/router"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import { Referral } from "@opencode-ai/console-core/referral.js"
 import { Database, and, eq, isNull } from "@opencode-ai/console-core/drizzle/index.js"
@@ -212,8 +212,26 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
   const apply = useAction(applyGoReferralReward)
   const submission = useSubmission(applyGoReferralReward)
   const [selected, setSelected] = createSignal<GoReferralReward>()
-  const preview = createAsync(() => queryGoReferralUsagePreview(props.workspaceID, selected()?.id))
+  const [preview, setPreview] = createSignal<GoReferralUsagePreview | null>()
   const appliedCount = createMemo(() => props.summary.rewards.filter((reward) => reward.timeApplied).length)
+
+  createEffect(() => {
+    const reward = selected()
+    if (!reward) {
+      setPreview(undefined)
+      return
+    }
+
+    const request = { cancelled: false }
+    setPreview(undefined)
+    queryGoReferralUsagePreview(props.workspaceID, reward.id).then((result) => {
+      if (request.cancelled) return
+      setPreview(result)
+    })
+    onCleanup(() => {
+      request.cancelled = true
+    })
+  })
 
   async function onApply() {
     const reward = selected()
