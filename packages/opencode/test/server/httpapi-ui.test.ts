@@ -127,6 +127,48 @@ function uiApp(input?: {
   }
 }
 
+function routeOrderingApp() {
+  let proxiedUrl: string | undefined
+  const handler = HttpRouter.toWebHandler(
+    HttpRouter.use((router) =>
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        const client = yield* HttpClient.HttpClient
+        const flags = yield* RuntimeFlags.Service
+        yield* router.add("GET", "/session/:sessionID", () =>
+          Effect.succeed(HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })),
+        )
+        yield* router.add("*", "/*", (request) =>
+          serveUIEffect(request, { fs, client, disableEmbeddedWebUi: flags.disableEmbeddedWebUi }),
+        )
+      }),
+    ).pipe(
+      Layer.provide([
+        AppFileSystem.defaultLayer,
+        RuntimeFlags.layer({ disableEmbeddedWebUi: true }),
+        httpClient(new Response("ui"), (request) => {
+          proxiedUrl = request.url
+        }),
+        HttpServer.layerServices,
+      ]),
+    ),
+    { disableLogger: true },
+  ).handler
+  return {
+    proxiedUrl: () => proxiedUrl,
+    request(input: string | URL | Request, init?: RequestInit) {
+      return Effect.promise(() =>
+        Promise.resolve(
+          handler(
+            input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init),
+            ExperimentalHttpApiServer.context,
+          ),
+        ),
+      )
+    },
+  }
+}
+
 function httpClient(response: Response, onRequest?: (request: HttpClientRequest.HttpClientRequest) => void) {
   return Layer.succeed(
     HttpClient.HttpClient,
@@ -315,9 +357,11 @@ describe("HttpApi UI fallback", () => {
 
   it.live("keeps matched API routes ahead of the UI fallback", () =>
     Effect.gen(function* () {
-      const response = yield* app().request("/session/ses_nope")
+      const server = routeOrderingApp()
+      const response = yield* server.request("/session/ses_nope")
 
       expect(response.status).toBe(404)
+      expect(server.proxiedUrl()).toBeUndefined()
     }),
   )
 
