@@ -61,12 +61,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const mapBusy = <A, R>(
       effect: Effect.Effect<A, Session.BusyError, R>,
     ): Effect.Effect<A, HttpApiError.BadRequest, R> =>
-      effect.pipe(
-        Effect.catchIf(
-          (error) => Session.BusyError.isInstance(error),
-          () => Effect.fail(new HttpApiError.BadRequest({})),
-        ),
-      )
+      effect.pipe(Effect.catchTag("SessionBusyError", () => Effect.fail(new HttpApiError.BadRequest({}))))
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
       return yield* session.list({

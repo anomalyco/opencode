@@ -32,7 +32,7 @@ export const layer = Layer.effect(
     const state = yield* InstanceState.make(
       Effect.fn("SessionRunState.state")(function* () {
         const scope = yield* Scope.Scope
-        const runners = new Map<SessionID, Runner.Runner<MessageV2.WithParts, never, Session.BusyError>>()
+        const runners = new Map<SessionID, Runner.Runner<MessageV2.WithParts>>()
         yield* Effect.addFinalizer(
           Effect.fnUntraced(function* () {
             yield* Effect.forEach(runners.values(), (runner) => runner.cancel, {
@@ -53,14 +53,13 @@ export const layer = Layer.effect(
       const data = yield* InstanceState.get(state)
       const existing = data.runners.get(sessionID)
       if (existing) return existing
-      const next = Runner.make<MessageV2.WithParts, never, Session.BusyError>(data.scope, {
+      const next = Runner.make<MessageV2.WithParts>(data.scope, {
         onIdle: Effect.gen(function* () {
           data.runners.delete(sessionID)
           yield* status.set(sessionID, { type: "idle" })
         }),
         onBusy: status.set(sessionID, { type: "busy" }),
         onInterrupt,
-        busy: Effect.fail(busyError(sessionID)),
       })
       data.runners.set(sessionID, next)
       return next
@@ -96,7 +95,9 @@ export const layer = Layer.effect(
       work: Effect.Effect<MessageV2.WithParts>,
       ready?: Latch.Latch,
     ) {
-      return yield* (yield* runner(sessionID, onInterrupt)).startShell(work, ready)
+      return yield* (yield* runner(sessionID, onInterrupt))
+        .startShell(work, ready)
+        .pipe(Effect.catchTag("RunnerBusy", () => Effect.fail(busyError(sessionID))))
     })
 
     return Service.of({ assertNotBusy, cancel, ensureRunning, startShell })
@@ -106,7 +107,7 @@ export const layer = Layer.effect(
 export const defaultLayer = layer.pipe(Layer.provide(SessionStatus.defaultLayer))
 
 function busyError(sessionID: SessionID) {
-  return new Session.BusyError({ sessionID, message: `Session ${sessionID} is busy` })
+  return new Session.BusyError({ sessionID })
 }
 
 export * as SessionRunState from "./run-state"

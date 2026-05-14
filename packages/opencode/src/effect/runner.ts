@@ -1,14 +1,15 @@
 import { Cause, Deferred, Effect, Exit, Fiber, Latch, Schema, Scope, SynchronizedRef } from "effect"
 
-export interface Runner<A, E = never, B = never> {
+export interface Runner<A, E = never> {
   readonly state: State<A, E>
   readonly busy: boolean
   readonly ensureRunning: (work: Effect.Effect<A, E>) => Effect.Effect<A, E>
-  readonly startShell: (work: Effect.Effect<A, E>, ready?: Latch.Latch) => Effect.Effect<A, E | B>
+  readonly startShell: (work: Effect.Effect<A, E>, ready?: Latch.Latch) => Effect.Effect<A, E | Busy>
   readonly cancel: Effect.Effect<void>
 }
 
 export class Cancelled extends Schema.TaggedErrorClass<Cancelled>()("RunnerCancelled", {}) {}
+export class Busy extends Schema.TaggedErrorClass<Busy>()("RunnerBusy", {}) {}
 
 interface RunHandle<A, E> {
   id: number
@@ -35,15 +36,14 @@ export type State<A, E> =
   | { readonly _tag: "Shell"; readonly shell: ShellHandle<A, E> }
   | { readonly _tag: "ShellThenRun"; readonly shell: ShellHandle<A, E>; readonly run: PendingHandle<A, E> }
 
-export const make = <A, E = never, B = never>(
+export const make = <A, E = never>(
   scope: Scope.Scope,
   opts?: {
     onIdle?: Effect.Effect<void>
     onBusy?: Effect.Effect<void>
     onInterrupt?: Effect.Effect<A, E>
-    busy?: Effect.Effect<never, B>
   },
-): Runner<A, E, B> => {
+): Runner<A, E> => {
   const ref = SynchronizedRef.makeUnsafe<State<A, E>>({ _tag: "Idle" })
   const idle = opts?.onIdle ?? Effect.void
   const onBusy = opts?.onBusy ?? Effect.void
@@ -137,12 +137,12 @@ export const make = <A, E = never, B = never>(
       }),
     ).pipe(Effect.flatten)
 
-  const startShell = (work: Effect.Effect<A, E>, ready?: Latch.Latch): Effect.Effect<A, E | B> =>
+  const startShell = (work: Effect.Effect<A, E>, ready?: Latch.Latch): Effect.Effect<A, E | Busy> =>
     SynchronizedRef.modifyEffect(
       ref,
       Effect.fnUntraced(function* (st) {
         if (st._tag !== "Idle") {
-          const reject: Effect.Effect<A, E | B> = opts?.busy ?? Effect.die(new Error("Runner is busy"))
+          const reject: Effect.Effect<A, E | Busy> = Effect.fail(new Busy())
           return [reject, st] as const
         }
         yield* onBusy
