@@ -13,14 +13,10 @@ export class V2InstanceMiddleware extends HttpApiMiddleware.Service<
   }
 >()("@opencode/ExperimentalHttpApiV2Instance") {}
 
-function header(request: HttpServerRequest.HttpServerRequest, names: string[]) {
-  return names.map((name) => request.headers[name]).find((value) => value && value.length > 0)
-}
-
 function ref(request: HttpServerRequest.HttpServerRequest): Instance.Ref {
   return {
-    directory: header(request, ["x-opencode-instance-directory", "x-opencode-directory"]) ?? process.cwd(),
-    workspaceID: header(request, ["x-opencode-instance-workspace", "x-opencode-workspace", "x-opencode-workspace-id"]),
+    directory: request.headers["x-opencode-directory"] ?? process.cwd(),
+    workspaceID: request.headers["x-opencode-workspace"],
   }
 }
 
