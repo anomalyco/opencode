@@ -41,6 +41,8 @@
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
+# Autoopencode-cli
+
 ---
 
 ### Installation
