@@ -76,7 +76,19 @@ After rebasing on `upstream/dev`, verify each feature still works:
 
 **How to verify:** Open the recent sessions sidebar → sessions from different projects should show the project/workspace name as a small label under the session title.
 
-### 3. Collapsible Parent/Child Session Tree
+### 3. Hide Orphan Child Sessions from Recent Roots
+
+**Files:** `packages/app/src/utils/recent-session.ts` (line ~84)
+
+- The `organizeRecentSessions()` roots filter MUST be `.filter((session) => !session.parentID)`
+- Sessions with a `parentID` should NEVER appear as top-level roots, even if their parent is missing/archived
+- This fix has been lost **3 times** during rebases — the incorrect version adds `|| !lookup.has(session.parentID)` which promotes orphans to roots
+
+**How to verify:** If a child session's parent is archived or outside the fetch limit, it should NOT appear in the Recent tab at all.
+
+**⚠️ REBASE DANGER:** Upstream or conflict resolution may re-introduce `|| !lookup.has(session.parentID)` — this is WRONG for our use case. Always check this line after rebase.
+
+### 4. Collapsible Parent/Child Session Tree
 
 **Files:**
 - `packages/app/src/pages/layout/sidebar-items.tsx` — `SessionItem` renders child sessions recursively with depth-based indentation and collapse/expand chevron toggle
@@ -235,6 +247,7 @@ These files are frequently modified by both upstream and this fork. Pay extra at
 
 | File | Risk | What to watch for |
 |------|------|-------------------|
+| `recent-session.ts` | **HIGH** | Roots filter MUST be `!session.parentID` only — NO `\|\| !lookup.has(...)` |
 | `sidebar-items.tsx` | **HIGH** | `SessionItemProps` type, `SessionRow`, `SessionItem`, `SessionHoverPreview` |
 | `sidebar-recent.tsx` | **HIGH** | Props passed to `SessionItem` (children, lookup, prefixes, popover) |
 | `layout.tsx` | **HIGH** | `RecentSidebarPanel` wiring, `/recent` navigation, and `recentSessionProps.collapsible = true` |
