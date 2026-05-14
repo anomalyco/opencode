@@ -7,7 +7,7 @@ import { SyncEvent } from "@/sync"
 import { EventV2 } from "@opencode-ai/core/event"
 import "@opencode-ai/core/catalog"
 import "@opencode-ai/core/session-event"
-import { Effect, Layer } from "effect"
+import { Context, Effect, Layer } from "effect"
 
 const syncDefinitions = new WeakMap<EventV2.Definition, SyncEvent.Definition>()
 
@@ -30,7 +30,10 @@ export function toSyncDefinition<D extends EventV2.Definition>(
   return result
 }
 
-export const layer = Layer.effectDiscard(
+export class Service extends Context.Service<Service, EventV2.Interface>()("@opencode/EventV2Bridge") {}
+
+export const layer = Layer.effect(
+  Service,
   Effect.gen(function* () {
     const events = yield* EventV2.Service
     const bus = yield* ProjectBus.Service
@@ -64,6 +67,7 @@ export const layer = Layer.effectDiscard(
       )
     })
     yield* Effect.addFinalizer(() => unsubscribe)
+    return Service.of(events)
   }),
 )
 

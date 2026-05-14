@@ -205,7 +205,7 @@ export const layer = Layer.effect(
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
     const references = yield* Reference.Service
-    const events = yield* EventV2.Service
+    const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const runner = Effect.fn("SessionPrompt.runner")(function* () {
       return yield* EffectBridge.make()
@@ -2038,7 +2038,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Image.defaultLayer),
     Layer.provide(
       Layer.mergeAll(
-        EventV2.defaultLayer,
+        EventV2Bridge.defaultLayer,
         Agent.defaultLayer,
         SystemPrompt.defaultLayer,
         LLM.defaultLayer,

@@ -85,22 +85,7 @@ type StreamEvent = Event
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
-export const layer: Layer.Layer<
-  Service,
-  never,
-  | Session.Service
-  | Config.Service
-  | Bus.Service
-  | Snapshot.Service
-  | Agent.Service
-  | LLM.Service
-  | Permission.Service
-  | Plugin.Service
-  | Image.Service
-  | SessionSummary.Service
-  | SessionStatus.Service
-  | RuntimeFlags.Service
-> = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const session = yield* Session.Service
@@ -115,7 +100,7 @@ export const layer: Layer.Layer<
     const scope = yield* Scope.Scope
     const status = yield* SessionStatus.Service
     const image = yield* Image.Service
-    const events = yield* EventV2.Service
+    const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
@@ -819,7 +804,6 @@ export const layer: Layer.Layer<
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(
-    Layer.provide(EventV2.defaultLayer),
     Layer.provide(Session.defaultLayer),
     Layer.provide(Snapshot.defaultLayer),
     Layer.provide(Agent.defaultLayer),
@@ -832,6 +816,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
+    Layer.provide(EventV2Bridge.defaultLayer),
   ),
 )
 
