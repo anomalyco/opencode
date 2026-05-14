@@ -345,31 +345,33 @@ export function LiteSection() {
             onClose={() => setStore("showModal", false)}
             title={i18n.t("workspace.lite.promo.selectMethod")}
           >
-            <div data-slot="modal-actions">
-              <button
-                type="button"
-                data-slot="method-button"
-                data-color="ghost"
-                disabled={checkoutSubmission.pending || busy()}
-                onClick={() => onClickSubscribe("alipay")}
-              >
-                <Show when={store.loading !== "alipay"}>
-                  <IconAlipay style={{ width: "24px", height: "24px" }} />
-                </Show>
-                {store.loading === "alipay" ? i18n.t("workspace.lite.promo.subscribing") : "Alipay"}
-              </button>
-              <button
-                type="button"
-                data-slot="method-button"
-                data-color="ghost"
-                disabled={checkoutSubmission.pending || busy()}
-                onClick={() => onClickSubscribe("upi")}
-              >
-                <Show when={store.loading !== "upi"}>
-                  <IconUpi style={{ width: "auto", height: "16px" }} />
-                </Show>
-                {store.loading === "upi" ? i18n.t("workspace.lite.promo.subscribing") : "UPI"}
-              </button>
+            <div class={styles.paymentMethodModal} data-component="lite-payment-method-modal">
+              <div data-slot="modal-actions">
+                <button
+                  type="button"
+                  data-slot="method-button"
+                  data-color="ghost"
+                  disabled={checkoutSubmission.pending || busy()}
+                  onClick={() => onClickSubscribe("alipay")}
+                >
+                  <Show when={store.loading !== "alipay"}>
+                    <IconAlipay style={{ width: "24px", height: "24px" }} />
+                  </Show>
+                  {store.loading === "alipay" ? i18n.t("workspace.lite.promo.subscribing") : "Alipay"}
+                </button>
+                <button
+                  type="button"
+                  data-slot="method-button"
+                  data-color="ghost"
+                  disabled={checkoutSubmission.pending || busy()}
+                  onClick={() => onClickSubscribe("upi")}
+                >
+                  <Show when={store.loading !== "upi"}>
+                    <IconUpi style={{ width: "auto", height: "16px" }} />
+                  </Show>
+                  {store.loading === "upi" ? i18n.t("workspace.lite.promo.subscribing") : "UPI"}
+                </button>
+              </div>
             </div>
           </Modal>
         </section>

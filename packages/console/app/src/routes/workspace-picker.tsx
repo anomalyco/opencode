@@ -98,26 +98,28 @@ export function WorkspacePicker() {
       </Dropdown>
 
       <Modal open={store.showForm} onClose={() => setStore("showForm", false)} title={i18n.t("workspace.modal.title")}>
-        <form data-slot="create-form" action={createWorkspace} method="post">
-          <div data-slot="create-input-group">
-            <input
-              ref={inputRef}
-              data-slot="create-input"
-              type="text"
-              name="workspaceName"
-              placeholder={i18n.t("workspace.modal.placeholder")}
-              required
-            />
-            <div data-slot="button-group">
-              <button type="button" data-color="ghost" onClick={() => setStore("showForm", false)}>
-                {i18n.t("common.cancel")}
-              </button>
-              <button type="submit" data-color="primary" disabled={submission.pending}>
-                {submission.pending ? i18n.t("common.creating") : i18n.t("common.create")}
-              </button>
+        <div data-component="workspace-create-modal">
+          <form data-slot="create-form" action={createWorkspace} method="post">
+            <div data-slot="create-input-group">
+              <input
+                ref={inputRef}
+                data-slot="create-input"
+                type="text"
+                name="workspaceName"
+                placeholder={i18n.t("workspace.modal.placeholder")}
+                required
+              />
+              <div data-slot="button-group">
+                <button type="button" data-color="ghost" onClick={() => setStore("showForm", false)}>
+                  {i18n.t("common.cancel")}
+                </button>
+                <button type="submit" data-color="primary" disabled={submission.pending}>
+                  {submission.pending ? i18n.t("common.creating") : i18n.t("common.create")}
+                </button>
+              </div>
             </div>
-          </div>
-        </form>
+          </form>
+        </div>
       </Modal>
     </div>
   )

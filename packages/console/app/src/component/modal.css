@@ -64,4 +64,16 @@
     color: var(--color-text);
     text-align: center;
   }
+
+  [data-slot="content"][data-variant="black"] {
+    background-color: #000;
+    border-color: rgba(255, 255, 255, 0.17);
+    color: rgba(255, 255, 255, 0.92);
+    font-family: var(--font-mono);
+
+    [data-slot="title"] {
+      color: rgba(255, 255, 255, 0.92);
+      font-family: var(--font-mono);
+    }
+  }
 }

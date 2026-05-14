@@ -701,64 +701,6 @@
         }
       }
 
-      [data-slot="workspace-picker"] {
-        [data-slot="workspace-list"] {
-          width: 100%;
-          padding: 0;
-          margin: 0;
-          list-style: none;
-          display: flex;
-          flex-direction: column;
-          align-items: flex-start;
-          gap: 8px;
-          align-self: stretch;
-          outline: none;
-          overflow-y: auto;
-          max-height: 240px;
-          scrollbar-width: none;
-
-          &::-webkit-scrollbar {
-            display: none;
-          }
-
-          [data-slot="workspace-item"] {
-            width: 100%;
-            display: flex;
-            padding: 8px 12px;
-            align-items: center;
-            gap: 8px;
-            align-self: stretch;
-            cursor: pointer;
-
-            [data-slot="selected-icon"] {
-              visibility: hidden;
-              color: rgba(255, 255, 255, 0.39);
-              font-family: "IBM Plex Mono", monospace;
-              font-size: 16px;
-              font-style: normal;
-              font-weight: 400;
-              line-height: 160%;
-            }
-
-            span:last-child {
-              color: rgba(255, 255, 255, 0.92);
-              font-size: 16px;
-              font-style: normal;
-              font-weight: 400;
-              line-height: 160%;
-            }
-
-            &:hover,
-            &[data-active="true"] {
-              background: #161616;
-
-              [data-slot="selected-icon"] {
-                visibility: visible;
-              }
-            }
-          }
-        }
-      }
     }
   }
 
@@ -835,6 +777,67 @@
 
       @media (min-width: 768px) {
         display: none;
+      }
+    }
+  }
+}
+
+[data-component="black-workspace-picker-modal"] {
+  font-family: var(--font-mono);
+
+  [data-slot="workspace-list"] {
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    align-self: stretch;
+    outline: none;
+    overflow-y: auto;
+    max-height: 240px;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  [data-slot="workspace-item"] {
+    width: 100%;
+    display: flex;
+    padding: 8px 12px;
+    align-items: center;
+    gap: 8px;
+    align-self: stretch;
+    cursor: pointer;
+
+    [data-slot="selected-icon"] {
+      visibility: hidden;
+      color: rgba(255, 255, 255, 0.39);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 16px;
+      font-style: normal;
+      font-weight: 400;
+      line-height: 160%;
+    }
+
+    span:last-child {
+      color: rgba(255, 255, 255, 0.92);
+      font-size: 16px;
+      font-style: normal;
+      font-weight: 400;
+      line-height: 160%;
+    }
+
+    &:hover,
+    &[data-active="true"] {
+      background: #161616;
+
+      [data-slot="selected-icon"] {
+        visibility: visible;
       }
     }
   }
