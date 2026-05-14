@@ -219,6 +219,7 @@ class ShimClient {
   private readyPromise: Promise<void>
   private stdoutTail = ""
   private stderrTail = ""
+  private aborts = new Map<string, AbortController>()
 
   constructor(
     private readonly pythonExecutable: string,
@@ -397,7 +398,19 @@ class ShimClient {
     }
   }
 
-  async abort(): Promise<void> {
+  async abort(sessionID: string): Promise<void> {
+    const ctrl = this.aborts.get(sessionID)
+    if (ctrl) {
+      log.info("genericagent abort: cancel local fetch", { sessionID })
+      this.aborts.delete(sessionID)
+      try {
+        ctrl.abort()
+      } catch (e) {
+        log.warn("genericagent abort: ctrl.abort failed", { error: e instanceof Error ? e.message : String(e) })
+      }
+    } else {
+      log.debug("genericagent abort: no active fetch for session", { sessionID })
+    }
     await this.readyPromise
     if (this.state.kind !== "ready") return
     try {
@@ -443,6 +456,7 @@ class ShimClient {
   }
 
   async prompt(
+    sessionID: string,
     query: string,
     onEvent: (event:
       | { type: "delta"; text: string }
@@ -453,50 +467,67 @@ class ShimClient {
   ): Promise<void> {
     await this.readyPromise
     const port = this.requireReady()
-    const res = await fetch(`http://127.0.0.1:${port}/prompt`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
-    })
-    if (!res.ok || !res.body) {
-      const text = await res.text().catch(() => "")
-      throw new Error(`shim /prompt failed (${res.status}): ${text.slice(0, 200)}`)
+    const prev = this.aborts.get(sessionID)
+    if (prev) {
+      log.warn("genericagent prompt: stale abort controller, replacing", { sessionID })
+      try {
+        prev.abort()
+      } catch {
+        // ignore
+      }
     }
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ""
-    while (true) {
-      const { value, done } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
+    const ctrl = new AbortController()
+    this.aborts.set(sessionID, ctrl)
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/prompt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+        signal: ctrl.signal,
+      })
+      if (!res.ok || !res.body) {
+        const text = await res.text().catch(() => "")
+        throw new Error(`shim /prompt failed (${res.status}): ${text.slice(0, 200)}`)
+      }
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
       while (true) {
-        const separator = buffer.indexOf("\n\n")
-        if (separator < 0) break
-        const rawEvent = buffer.slice(0, separator)
-        buffer = buffer.slice(separator + 2)
-        const dataLine = rawEvent.split("\n").find((line) => line.startsWith("data:"))
-        if (!dataLine) continue
-        const payload = dataLine.slice("data:".length).trim()
-        if (!payload) continue
-        try {
-          const parsed = JSON.parse(payload) as
-            | { type: "delta"; text: string }
-            | { type: "done"; text: string }
-            | { type: "error"; message: string }
-            | { type: "tool_use"; data: any }
-          onEvent(parsed as any)
-          if (parsed.type === "done" || parsed.type === "error") {
-            try {
-              reader.releaseLock()
-            } catch {
-              // ignore
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        while (true) {
+          const separator = buffer.indexOf("\n\n")
+          if (separator < 0) break
+          const rawEvent = buffer.slice(0, separator)
+          buffer = buffer.slice(separator + 2)
+          const dataLine = rawEvent.split("\n").find((line) => line.startsWith("data:"))
+          if (!dataLine) continue
+          const payload = dataLine.slice("data:".length).trim()
+          if (!payload) continue
+          try {
+            const parsed = JSON.parse(payload) as
+              | { type: "delta"; text: string }
+              | { type: "done"; text: string }
+              | { type: "error"; message: string }
+              | { type: "tool_use"; data: any }
+            onEvent(parsed as any)
+            if (parsed.type === "done" || parsed.type === "error") {
+              try {
+                reader.releaseLock()
+              } catch {
+                // ignore
+              }
+              return
             }
-            return
+          } catch (e) {
+            log.warn("shim event parse failed", { error: e instanceof Error ? e.message : String(e), payload })
           }
-        } catch (e) {
-          log.warn("shim event parse failed", { error: e instanceof Error ? e.message : String(e), payload })
         }
       }
+    } finally {
+      // Only clear the slot if it still points at our controller (abort() may have removed it already).
+      if (this.aborts.get(sessionID) === ctrl) this.aborts.delete(sessionID)
     }
   }
 
@@ -831,8 +862,15 @@ export namespace GenericAgentBridge {
         return c.json(messages.get(sessionID) ?? [])
       })
       .post("/session/:sessionID/abort", async (c) => {
-        await shim.abort()
-        emitStatus(c.req.param("sessionID"), "idle")
+        const sessionID = c.req.param("sessionID")
+        const bucket = messages.get(sessionID)
+        const last = bucket?.at(-1)
+        if (last && last.info.role === "assistant" && typeof last.info.time.completed !== "number") {
+          last.info.time.completed = Date.now()
+          emit({ type: "message.updated", properties: { info: last.info } })
+        }
+        emitStatus(sessionID, "idle")
+        await shim.abort(sessionID)
         return c.json(true)
       })
       .post("/session/:sessionID/prompt_async", async (c) => {
@@ -884,6 +922,18 @@ export namespace GenericAgentBridge {
           let accumulated = ""
           const toolParts = new Map<string, any>()
           let reply: TextPart | undefined
+          const TOOL_CALL_RE = /🛠️\s+(?:Tool:\s*`[^`]+`\s*📥\s*args:|[\w_]+\()/
+          const TOOL_CALL_BLOCK_RE = /🛠️\s+(?:Tool:\s*`[^`]+`[\s\S]*?````\n|[\w_]+\([^\n]*\)\n*)/g
+          const isToolCallDelta = (text: string) => {
+            const trimmed = text.trim()
+            if (!trimmed) return false
+            return TOOL_CALL_RE.test(trimmed)
+          }
+          const stripToolCallText = (text: string) =>
+            text
+              .replace(TOOL_CALL_BLOCK_RE, "")
+              .replace(/\n{3,}/g, "\n\n")
+              .trim()
           const makeText = (value = "") => {
             if (reply) return reply
             reply = {
@@ -902,11 +952,12 @@ export namespace GenericAgentBridge {
             return reply
           }
           try {
-            await shim.prompt(query, (event) => {
+            await shim.prompt(sessionID, query, (event) => {
               if (event.type === "tool_use") {
                 log.info("Received tool_use event", { data: event.data })
                 const toolData = event.data
                 if (toolData.type === "tool_start") {
+                  reply = undefined
                   const toolPart = {
                     id: Identifier.ascending("part"),
                     messageID: assistant.info.id,
@@ -951,19 +1002,22 @@ export namespace GenericAgentBridge {
                 }
               } else if (event.type === "delta") {
                 accumulated += event.text
-                const part = makeText()
-                emit({
-                  type: "message.part.delta",
-                  properties: {
-                    sessionID,
-                    messageID: assistant.info.id,
-                    partID: part.id,
-                    field: "text",
-                    delta: event.text,
-                  },
-                })
+                if (!isToolCallDelta(event.text)) {
+                  const part = makeText()
+                  emit({
+                    type: "message.part.delta",
+                    properties: {
+                      sessionID,
+                      messageID: assistant.info.id,
+                      partID: part.id,
+                      field: "text",
+                      delta: event.text,
+                    },
+                  })
+                }
               } else if (event.type === "done") {
-                const finalText = event.text || accumulated
+                const rawFinal = event.text || accumulated
+                const finalText = toolParts.size > 0 ? stripToolCallText(rawFinal) : rawFinal
                 if (finalText) {
                   const part = makeText(finalText)
                   part.text = finalText
@@ -991,15 +1045,24 @@ export namespace GenericAgentBridge {
               }
             })
           } catch (e) {
-            const message = e instanceof Error ? e.message : String(e)
-            log.error("genericagent prompt failed", { sessionID, error: message })
-            emit({
-              type: "session.error",
-              properties: {
-                sessionID,
-                error: { name: "UnknownError", data: { message } },
-              },
-            })
+            const aborted = e instanceof Error && (e.name === "AbortError" || /aborted/i.test(e.message))
+            if (aborted) {
+              log.info("genericagent prompt aborted", { sessionID })
+              if (typeof assistant.info.time.completed !== "number") {
+                assistant.info.time.completed = Date.now()
+                emit({ type: "message.updated", properties: { info: assistant.info } })
+              }
+            } else {
+              const message = e instanceof Error ? e.message : String(e)
+              log.error("genericagent prompt failed", { sessionID, error: message })
+              emit({
+                type: "session.error",
+                properties: {
+                  sessionID,
+                  error: { name: "UnknownError", data: { message } },
+                },
+              })
+            }
           } finally {
             emitStatus(sessionID, "idle")
           }
