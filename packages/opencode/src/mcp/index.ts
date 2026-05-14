@@ -110,6 +110,25 @@ function isMcpConfigured(entry: McpEntry): entry is ConfigMCP.Info {
 
 const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "_")
 
+/**
+ * Detect errors that indicate the MCP session/transport is no longer valid.
+ * These are transient failures where a reconnect can recover the session.
+ */
+function isSessionLostError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const msg = error.message.toLowerCase()
+  return (
+    msg.includes("server not initialized") ||
+    msg.includes("not connected") ||
+    msg.includes("connection closed") ||
+    msg.includes("fetch failed") ||
+    msg.includes("econnrefused") ||
+    msg.includes("econnreset") ||
+    msg.includes("socket hang up") ||
+    msg.includes("network error")
+  )
+}
+
 function remoteURL(key: string, value: string) {
   if (URL.canParse(value)) return new URL(value)
   log.warn("invalid remote mcp url", { key })
@@ -150,8 +169,16 @@ function listTools(key: string, client: MCPClient, timeout: number) {
   )
 }
 
-// Convert MCP tool definition to AI SDK Tool type
-function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Tool {
+// Convert MCP tool definition to AI SDK Tool type.
+// Accepts a lazy client getter and a reconnect callback so that if the
+// session drops mid-conversation the tool can transparently reconnect
+// and retry the call once before surfacing the error.
+function convertMcpTool(
+  mcpTool: MCPToolDef,
+  getClient: () => MCPClient | undefined,
+  onSessionLost: () => Promise<MCPClient | undefined>,
+  timeout?: number,
+): Tool {
   const inputSchema = mcpTool.inputSchema
 
   // Spread first, then override type to ensure it's always "object"
@@ -166,17 +193,31 @@ function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(schema),
     execute: async (args: unknown) => {
-      return client.callTool(
-        {
-          name: mcpTool.name,
-          arguments: (args || {}) as Record<string, unknown>,
-        },
-        CallToolResultSchema,
-        {
-          resetTimeoutOnProgress: true,
-          timeout,
-        },
-      )
+      const callWith = (client: MCPClient) =>
+        client.callTool(
+          {
+            name: mcpTool.name,
+            arguments: (args || {}) as Record<string, unknown>,
+          },
+          CallToolResultSchema,
+          {
+            resetTimeoutOnProgress: true,
+            timeout,
+          },
+        )
+
+      const client = getClient()
+      if (!client) throw new Error(`MCP client not available for tool ${mcpTool.name}`)
+
+      try {
+        return await callWith(client)
+      } catch (error) {
+        if (!isSessionLostError(error)) throw error
+        log.warn("MCP session lost, attempting reconnect", { tool: mcpTool.name })
+        const fresh = await onSessionLost()
+        if (!fresh) throw error
+        return await callWith(fresh)
+      }
     },
   })
 }
@@ -508,6 +549,16 @@ export const layer = Layer.effect(
         s.defs[name] = listed
         await bridge.promise(bus.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
       })
+
+      // Proactively detect transport closure so the next tool call triggers
+      // a reconnect instead of failing silently with a stale client reference.
+      client.onclose = () => {
+        // Only update if this client is still the current one (avoid races
+        // with a reconnect that already replaced it).
+        if (s.clients[name] !== client) return
+        log.warn("MCP transport closed unexpectedly", { server: name })
+        s.status[name] = { status: "failed", error: "Transport closed" }
+      }
     }
 
     const state = yield* InstanceState.make<State>(
@@ -654,9 +705,14 @@ export const layer = Layer.effect(
       s.status[name] = { status: "disabled" }
     })
 
+    // Tracks in-flight reconnection attempts per server to prevent thundering-herd
+    // when multiple tool calls fail simultaneously on the same dead session.
+    const reconnecting = new Map<string, Promise<MCPClient | undefined>>()
+
     const tools = Effect.fn("MCP.tools")(function* () {
       const result: Record<string, Tool> = {}
       const s = yield* InstanceState.get(state)
+      const bridge = yield* EffectBridge.make()
 
       const cfg = yield* cfgSvc.get()
       const config = cfg.mcp ?? {}
@@ -668,7 +724,7 @@ export const layer = Layer.effect(
 
       yield* Effect.forEach(
         connectedClients,
-        ([clientName, client]) =>
+        ([clientName, _client]) =>
           Effect.gen(function* () {
             const mcpConfig = config[clientName]
             const entry = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig : undefined
@@ -680,8 +736,47 @@ export const layer = Layer.effect(
             }
 
             const timeout = entry?.timeout ?? defaultTimeout
+
+            // Lazy getter: always reads the current client from state so that
+            // if a reconnect replaces the client reference the next call wins.
+            const getClient = () => s.clients[clientName]
+
+            // Reconnect callback: triggers createAndStore via Effect bridge.
+            // Deduplicates concurrent reconnection attempts per server.
+            const onSessionLost = async (): Promise<MCPClient | undefined> => {
+              if (!entry) return undefined
+
+              const existing = reconnecting.get(clientName)
+              if (existing) return existing
+
+              const attempt = (async () => {
+                try {
+                  log.info("reconnecting MCP server", { clientName })
+                  await bridge.promise(createAndStore(clientName, entry))
+                  log.info("MCP server reconnected", { clientName })
+                  return s.clients[clientName]
+                } catch (e) {
+                  log.error("MCP reconnection failed", {
+                    clientName,
+                    error: e instanceof Error ? e.message : String(e),
+                  })
+                  return undefined
+                } finally {
+                  reconnecting.delete(clientName)
+                }
+              })()
+
+              reconnecting.set(clientName, attempt)
+              return attempt
+            }
+
             for (const mcpTool of listed) {
-              result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
+              result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(
+                mcpTool,
+                getClient,
+                onSessionLost,
+                timeout,
+              )
             }
           }),
         { concurrency: "unbounded" },
