@@ -14,7 +14,9 @@ import {
   errorMessage,
   hasProjectPermissions,
   latestRootSession,
+  projectIndexKeybind,
 } from "./helpers"
+import { matchKeybind, parseKeybind } from "@/context/command"
 import { pathKey } from "@/utils/path-key"
 
 const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
@@ -221,5 +223,23 @@ describe("layout workspace helpers", () => {
     expect(errorMessage({ data: { message: "boom" } }, "fallback")).toBe("boom")
     expect(errorMessage(new Error("broken"), "fallback")).toBe("broken")
     expect(errorMessage("unknown", "fallback")).toBe("fallback")
+  })
+
+  test("project quick-switch keybind does not capture browser tab shortcuts (issue #27568)", () => {
+    for (let i = 0; i < 9; i++) {
+      const number = `${i + 1}`
+      const keybinds = parseKeybind(projectIndexKeybind(i))
+      const kb = keybinds[0]
+      // Browser tab shortcuts (Cmd+1..9 on Mac, Ctrl+1..9 elsewhere) must not be captured.
+      expect(matchKeybind(keybinds, new KeyboardEvent("keydown", { key: number, metaKey: true }))).toBe(false)
+      expect(matchKeybind(keybinds, new KeyboardEvent("keydown", { key: number, ctrlKey: true }))).toBe(false)
+      // The intended chord (mod+alt+N) still matches on the active platform.
+      expect(
+        matchKeybind(
+          keybinds,
+          new KeyboardEvent("keydown", { key: number, ctrlKey: kb.ctrl, metaKey: kb.meta, altKey: true }),
+        ),
+      ).toBe(true)
+    }
   })
 })

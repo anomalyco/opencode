@@ -70,6 +70,7 @@ import {
   effectiveWorkspaceOrder,
   errorMessage,
   latestRootSession,
+  projectIndexKeybind,
   sortedRootSessions,
 } from "./layout/helpers"
 import {
@@ -1056,7 +1057,7 @@ export default function Layout(props: ParentProps) {
           id: `project.${number}`,
           category: language.t("command.category.project"),
           title: `Open Project {number}`,
-          keybind: `mod+${number}`,
+          keybind: projectIndexKeybind(index),
           disabled: layout.projects.list().length <= index,
           hidden: true,
           onSelect: () => navigateToProjectIndex(index),

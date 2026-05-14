@@ -55,6 +55,9 @@ export const childSessionOnPath = (sessions: Session[] | undefined, rootID: stri
 export const displayName = (project: { name?: string; worktree: string }) =>
   project.name || getFilename(project.worktree)
 
+// mod+alt+N (not mod+N) so Cmd/Ctrl+1..9 stay free for the browser's tab switching shortcut.
+export const projectIndexKeybind = (index: number) => `mod+alt+${index + 1}`
+
 export const errorMessage = (err: unknown, fallback: string) => {
   if (err && typeof err === "object" && "data" in err) {
     const data = (err as { data?: { message?: string } }).data
