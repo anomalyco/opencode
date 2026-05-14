@@ -145,7 +145,15 @@ const useMcpToggleMutation = () => {
   return useMutation(() => ({
     mutationFn: async (name: string) => {
       const status = sync.data.mcp[name]
-      await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
+      if (status?.status === "connected") {
+        await sdk.client.mcp.disconnect({ name })
+        return
+      }
+      if (status?.status === "needs_auth") {
+        await sdk.client.mcp.auth.authenticate({ name })
+        return
+      }
+      await sdk.client.mcp.connect({ name })
     },
     onSuccess: () => queryClient.refetchQueries(queryOptions.mcp(pathKey(sync.directory))),
     onError: (err) => {
@@ -316,7 +324,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                     return (
                       <button
                         type="button"
-                        class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
+                        class="flex items-center gap-2 w-full min-h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
                         onClick={() => {
                           if (toggleMcp.isPending) return
                           toggleMcp.mutate(name)
@@ -333,7 +341,16 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                               status() === "needs_auth" || status() === "needs_client_registration",
                           }}
                         />
-                        <span class="text-14-regular text-text-base truncate flex-1">{name}</span>
+                        <span class="flex flex-col min-w-0 flex-1">
+                          <span class="flex items-center gap-2 min-w-0">
+                            <span class="text-14-regular text-text-base truncate">{name}</span>
+                          </span>
+                          <Show when={status() === "needs_auth"}>
+                            <span class="text-11-regular text-text-weaker truncate">
+                              {language.t("mcp.auth.clickToAuthenticate")}
+                            </span>
+                          </Show>
+                        </span>
                         <div onClick={(event) => event.stopPropagation()}>
                           <Switch
                             checked={enabled()}
