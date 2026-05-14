@@ -1,3 +1,7 @@
+// Legacy sync event system. It should stay unaware of core EventV2 execution;
+// the only temporary V2 coupling here is exposing versioned core event schemas
+// in effectPayloads() so existing HTTP/SDK schema generation remains stable.
+// Remove that registry read when event schemas are generated from core directly.
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
 import { GlobalBus } from "@/bus/global"
@@ -9,6 +13,7 @@ import type { WorkspaceID } from "@/control-plane/schema"
 import { EventID } from "./schema"
 import { Context, Effect, Layer, Schema as EffectSchema } from "effect"
 import type { DeepMutable } from "@opencode-ai/core/schema"
+import { EventV2 } from "@opencode-ai/core/event"
 import { serviceUse } from "@/effect/service-use"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -221,6 +226,9 @@ export function reset() {
 }
 
 export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; convertEvent?: ConvertEvent }) {
+  for (const [def] of input.projectors) {
+    register(def)
+  }
   projectors = new Map(input.projectors)
 
   // Install all the latest event defs to the bus. We only ever emit
@@ -269,9 +277,7 @@ export function define<
     properties: (input.busSchema ?? input.schema) as BusSchema,
   }
 
-  versions.set(def.type, Math.max(def.version, versions.get(def.type) || 0))
-
-  registry.set(versionedType(def.type, def.version), def)
+  register(def)
 
   return def
 }
@@ -280,7 +286,13 @@ export function project<Def extends Definition>(
   def: Def,
   func: (db: Database.TxOrDb, data: Event<Def>["data"], event: Event<Def>) => void,
 ): [Definition, ProjectorFunc] {
+  register(def)
   return [def, func as ProjectorFunc]
+}
+
+function register(def: Definition) {
+  versions.set(def.type, Math.max(def.version, versions.get(def.type) || 0))
+  registry.set(versionedType(def.type, def.version), def)
 }
 
 function process<Def extends Definition>(
@@ -355,19 +367,38 @@ function process<Def extends Definition>(
 }
 
 export function effectPayloads() {
-  return registry
-    .entries()
-    .map(([type, def]) =>
-      EffectSchema.Struct({
-        type: EffectSchema.Literal("sync"),
-        name: EffectSchema.Literal(type),
-        id: EffectSchema.String,
-        seq: EffectSchema.Finite,
-        aggregateID: EffectSchema.Literal(def.aggregate),
-        data: def.schema,
-      }).annotate({ identifier: `SyncEvent.${type}` }),
-    )
-    .toArray()
+  return [
+    ...registry
+      .entries()
+      .map(([type, def]) =>
+        EffectSchema.Struct({
+          type: EffectSchema.Literal("sync"),
+          name: EffectSchema.Literal(type),
+          id: EffectSchema.String,
+          seq: EffectSchema.Finite,
+          aggregateID: EffectSchema.Literal(def.aggregate),
+          data: def.schema,
+        }).annotate({ identifier: `SyncEvent.${type}` }),
+      )
+      .toArray(),
+    ...EventV2.registry
+      .values()
+      .filter(
+        (definition) =>
+          definition.version !== undefined && !registry.has(versionedType(definition.type, definition.version)),
+      )
+      .map((definition) =>
+        EffectSchema.Struct({
+          type: EffectSchema.Literal("sync"),
+          name: EffectSchema.Literal(versionedType(definition.type, definition.version!)),
+          id: EffectSchema.String,
+          seq: EffectSchema.Finite,
+          aggregateID: EffectSchema.String,
+          data: definition.data,
+        }).annotate({ identifier: `SyncEvent.${definition.type}` }),
+      )
+      .toArray(),
+  ]
 }
 
 export * as SyncEvent from "."
