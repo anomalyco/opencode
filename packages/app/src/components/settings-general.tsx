@@ -312,8 +312,11 @@ export const SettingsGeneral: Component = () => {
           title={language.t("command.permissions.autoaccept.enable")}
           description={language.t("toast.permissions.autoaccept.on.description")}
         >
-          <div data-action="settings-auto-accept-permissions">
-            <Switch checked={accepting()} disabled={!dir()} onChange={toggleAccept} />
+          <div data-action="settings-auto-approve-permissions">
+            <Switch
+              checked={settings.permissions.autoApprove()}
+              onChange={(checked) => settings.permissions.setAutoApprove(checked)}
+            />
           </div>
         </SettingsRow>
 
