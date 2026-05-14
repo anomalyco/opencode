@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { isNushell, mergeShellEnv, parseShellEnv } from "./shell-env"
+import { isNushell, mergeShellEnv, parseShellEnv, resolveUserShell } from "./shell-env"
 
 describe("shell env", () => {
   test("parseShellEnv supports null-delimited pairs", () => {
@@ -32,6 +32,13 @@ describe("shell env", () => {
     expect(env.PATH).toBe("/desktop/path")
     expect(env.HOME).toBe("/tmp/home")
     expect(env.OPENCODE_CLIENT).toBe("desktop")
+  })
+
+  test("resolveUserShell falls back to the login shell before /bin/sh", () => {
+    expect(resolveUserShell("/custom/env-shell", "/bin/zsh")).toBe("/custom/env-shell")
+    expect(resolveUserShell(undefined, "/bin/zsh")).toBe("/bin/zsh")
+    expect(resolveUserShell(undefined, "unknown")).toBe("/bin/sh")
+    expect(resolveUserShell(undefined, undefined)).toBe("/bin/sh")
   })
 
   test("isNushell handles path and binary name", () => {

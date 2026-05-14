@@ -1,11 +1,52 @@
-import { createMemo, For } from "solid-js"
+import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import { createMemo, For, type Accessor } from "solid-js"
 import { DEFAULT_THEMES, useTheme } from "@tui/context/theme"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { useCommandShortcut } from "../../keymap"
 
 const themeCount = Object.keys(DEFAULT_THEMES).length
-const themeTip = `Use {highlight}/themes{/highlight} or {highlight}Ctrl+X T{/highlight} to switch between ${themeCount} built-in themes`
 
 type TipPart = { text: string; highlight: boolean }
+type TipShortcut = Accessor<string>
+type Shortcuts = {
+  agentCycle: TipShortcut
+  childFirst: TipShortcut
+  childNext: TipShortcut
+  childPrevious: TipShortcut
+  commandList: TipShortcut
+  editorOpen: TipShortcut
+  helpShow: TipShortcut
+  inputClear: TipShortcut
+  inputNewline: TipShortcut
+  inputPaste: TipShortcut
+  inputUndo: TipShortcut
+  leader: TipShortcut
+  messagesCopy: TipShortcut
+  messagesFirst: TipShortcut
+  messagesLast: TipShortcut
+  messagesPageDown: TipShortcut
+  messagesPageUp: TipShortcut
+  messagesToggleConceal: TipShortcut
+  modelCycleRecent: TipShortcut
+  modelList: TipShortcut
+  sessionCycleRecent: TipShortcut
+  sessionCycleRecentReverse: TipShortcut
+  sessionExport: TipShortcut
+  sessionInterrupt: TipShortcut
+  sessionList: TipShortcut
+  sessionNew: TipShortcut
+  sessionParent: TipShortcut
+  sessionPinToggle: TipShortcut
+  sessionQuickSwitch1: TipShortcut
+  sessionQuickSwitch9: TipShortcut
+  sessionSidebarToggle: TipShortcut
+  sessionTimeline: TipShortcut
+  sessionToggleRecent: TipShortcut
+  statusView: TipShortcut
+  terminalSuspend: TipShortcut
+  themeList: TipShortcut
+}
+type Tip = string | ((shortcuts: Shortcuts) => string | undefined)
 
 function parse(tip: string): TipPart[] {
   const parts: TipPart[] = []
@@ -33,17 +74,86 @@ function parse(tip: string): TipPart[] {
 
 const NO_MODELS_TIP = "Run {highlight}/connect{/highlight} to add an AI provider and start coding"
 
-export function Tips(props: { connected?: boolean }) {
+function shortcutText(value: string) {
+  return `{highlight}${value}{/highlight}`
+}
+
+function commandText(command: string, shortcut: string) {
+  if (!shortcut) return shortcutText(command)
+  return `${shortcutText(command)} or ${shortcutText(shortcut)}`
+}
+
+function press(shortcut: string, text: string) {
+  if (!shortcut) return undefined
+  return `Press ${shortcutText(shortcut)} ${text}`
+}
+
+function configShortcut(api: TuiPluginApi, command: string): TipShortcut {
+  return () =>
+    api.tuiConfig.keybinds
+      .get(command)
+      .map((binding) => api.keys.formatSequence(Array.from(api.keymap.parseKeySequence(binding.key))))
+      .filter(Boolean)
+      .join(", ")
+}
+
+export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
   const theme = useTheme().theme
-  const randomTip = TIPS[Math.floor(Math.random() * TIPS.length)]
-  const parts = createMemo(() => parse(props.connected === false ? NO_MODELS_TIP : randomTip))
+  const tipOffset = Math.random()
+  const shortcuts: Shortcuts = {
+    agentCycle: useCommandShortcut("agent.cycle"),
+    childFirst: configShortcut(props.api, "session.child.first"),
+    childNext: configShortcut(props.api, "session.child.next"),
+    childPrevious: configShortcut(props.api, "session.child.previous"),
+    commandList: useCommandShortcut("command.palette.show"),
+    editorOpen: useCommandShortcut("prompt.editor"),
+    helpShow: useCommandShortcut("help.show"),
+    inputClear: useCommandShortcut("prompt.clear"),
+    inputNewline: useCommandShortcut("input.newline"),
+    inputPaste: useCommandShortcut("prompt.paste"),
+    inputUndo: useCommandShortcut("input.undo"),
+    leader: configShortcut(props.api, "leader"),
+    messagesCopy: configShortcut(props.api, "messages.copy"),
+    messagesFirst: configShortcut(props.api, "session.first"),
+    messagesLast: configShortcut(props.api, "session.last"),
+    messagesPageDown: configShortcut(props.api, "session.page.down"),
+    messagesPageUp: configShortcut(props.api, "session.page.up"),
+    messagesToggleConceal: configShortcut(props.api, "session.toggle.conceal"),
+    modelCycleRecent: useCommandShortcut("model.cycle_recent"),
+    modelList: useCommandShortcut("model.list"),
+    sessionCycleRecent: useCommandShortcut("session.cycle_recent"),
+    sessionCycleRecentReverse: useCommandShortcut("session.cycle_recent_reverse"),
+    sessionExport: configShortcut(props.api, "session.export"),
+    sessionInterrupt: configShortcut(props.api, "session.interrupt"),
+    sessionList: useCommandShortcut("session.list"),
+    sessionNew: useCommandShortcut("session.new"),
+    sessionParent: configShortcut(props.api, "session.parent"),
+    sessionPinToggle: configShortcut(props.api, "session.pin.toggle"),
+    sessionQuickSwitch1: useCommandShortcut("session.quick_switch.1"),
+    sessionQuickSwitch9: useCommandShortcut("session.quick_switch.9"),
+    sessionSidebarToggle: configShortcut(props.api, "session.sidebar.toggle"),
+    sessionTimeline: configShortcut(props.api, "session.timeline"),
+    sessionToggleRecent: configShortcut(props.api, "session.toggle.recent"),
+    statusView: useCommandShortcut("opencode.status"),
+    terminalSuspend: useCommandShortcut("terminal.suspend"),
+    themeList: useCommandShortcut("theme.switch"),
+  }
+  const tip = createMemo(() => {
+    if (props.connected === false) return NO_MODELS_TIP
+    const tips = TIPS.flatMap((item) => {
+      const value = typeof item === "string" ? item : item(shortcuts)
+      return value ? [value] : []
+    })
+    return tips[Math.floor(tipOffset * tips.length)] ?? NO_MODELS_TIP
+  })
+  const parts = createMemo(() => parse(tip()))
 
   return (
     <box flexDirection="row" maxWidth="100%">
       <text flexShrink={0} style={{ fg: theme.warning }}>
         ● Tip{" "}
       </text>
-      <text flexShrink={1}>
+      <text flexShrink={1} wrapMode="word">
         <For each={parts()}>
           {(part) => <span style={{ fg: part.highlight ? theme.text : theme.textMuted }}>{part.text}</span>}
         </For>
@@ -52,46 +162,66 @@ export function Tips(props: { connected?: boolean }) {
   )
 }
 
-const TIPS = [
+const TIPS: Tip[] = [
   "Type {highlight}@{/highlight} followed by a filename to fuzzy search and attach files",
   "Start a message with {highlight}!{/highlight} to run shell commands directly (e.g., {highlight}!ls -la{/highlight})",
-  "Press {highlight}Tab{/highlight} to cycle between Build and Plan agents",
+  (shortcuts) => press(shortcuts.agentCycle(), "to cycle between Build and Plan agents"),
   "Use {highlight}/undo{/highlight} to revert the last message and file changes",
   "Use {highlight}/redo{/highlight} to restore previously undone messages and file changes",
   "Run {highlight}/share{/highlight} to create a public link to your conversation at opencode.ai",
   "Drag and drop images or PDFs into the terminal to add them as context",
-  "Press {highlight}Ctrl+V{/highlight} to paste images from your clipboard into the prompt",
-  "Press {highlight}Ctrl+X E{/highlight} or {highlight}/editor{/highlight} to compose messages in your external editor",
+  (shortcuts) => press(shortcuts.inputPaste(), "to paste images from your clipboard into the prompt"),
+  (shortcuts) => `Use ${commandText("/editor", shortcuts.editorOpen())} to compose messages in your external editor`,
   "Run {highlight}/init{/highlight} to auto-generate project rules based on your codebase",
-  "Run {highlight}/models{/highlight} or {highlight}Ctrl+X M{/highlight} to see and switch between available AI models",
-  themeTip,
-  "Press {highlight}Ctrl+X N{/highlight} or {highlight}/new{/highlight} to start a fresh conversation session",
-  "Use {highlight}/sessions{/highlight} or {highlight}Ctrl+X L{/highlight} to list and continue previous conversations",
+  (shortcuts) => `Use ${commandText("/models", shortcuts.modelList())} to see and switch between available AI models`,
+  (shortcuts) => `Use ${commandText("/themes", shortcuts.themeList())} to switch between ${themeCount} built-in themes`,
+  (shortcuts) => `Use ${commandText("/new", shortcuts.sessionNew())} to start a fresh conversation session`,
+  (shortcuts) => `Use ${commandText("/sessions", shortcuts.sessionList())} to list and continue previous conversations`,
   ...(Flag.OPENCODE_EXPERIMENTAL_SESSION_SWITCHING
-    ? [
-        "Press {highlight}Ctrl+F{/highlight} in the session list to pin a session so it stays at the top",
-        "Pinned and recent sessions are bound to {highlight}Ctrl+X 1{/highlight} through {highlight}Ctrl+X 9{/highlight} for one-press switching",
-        "Press {highlight}Ctrl+X ]{/highlight} / {highlight}Ctrl+X [{/highlight} to cycle through recently visited sessions",
-        "Press {highlight}Ctrl+H{/highlight} in the session list to show or hide a session in the Recent group",
-      ]
+    ? ([
+        (shortcuts) =>
+          press(shortcuts.sessionPinToggle(), "in the session list to pin a session so it stays at the top"),
+        (shortcuts) =>
+          shortcuts.sessionQuickSwitch1() && shortcuts.sessionQuickSwitch9()
+            ? `Pinned and recent sessions are bound to ${shortcutText(shortcuts.sessionQuickSwitch1())} through ${shortcutText(shortcuts.sessionQuickSwitch9())} for one-press switching`
+            : undefined,
+        (shortcuts) =>
+          shortcuts.sessionCycleRecent() && shortcuts.sessionCycleRecentReverse()
+            ? `Press ${shortcutText(shortcuts.sessionCycleRecent())} / ${shortcutText(shortcuts.sessionCycleRecentReverse())} to cycle through recently visited sessions`
+            : undefined,
+        (shortcuts) =>
+          press(shortcuts.sessionToggleRecent(), "in the session list to show or hide a session in the Recent group"),
+      ] satisfies Tip[])
     : []),
   "Run {highlight}/compact{/highlight} to summarize long sessions near context limits",
-  "Press {highlight}Ctrl+X X{/highlight} or {highlight}/export{/highlight} to save the conversation as Markdown",
-  "Press {highlight}Ctrl+X Y{/highlight} to copy the assistant's last message to clipboard",
-  "Press {highlight}Ctrl+P{/highlight} to see all available actions and commands",
+  (shortcuts) => `Use ${commandText("/export", shortcuts.sessionExport())} to save the conversation as Markdown`,
+  (shortcuts) => press(shortcuts.messagesCopy(), "to copy the assistant's last message to clipboard"),
+  (shortcuts) => press(shortcuts.commandList(), "to see all available actions and commands"),
   "Run {highlight}/connect{/highlight} to add API keys for 75+ supported LLM providers",
-  "The leader key is {highlight}Ctrl+X{/highlight}; combine with other keys for quick actions",
-  "Press {highlight}F2{/highlight} to quickly switch between recently used models",
-  "Press {highlight}Ctrl+X B{/highlight} to show/hide the sidebar panel",
-  "Use {highlight}PageUp{/highlight}/{highlight}PageDown{/highlight} to navigate through conversation history",
-  "Press {highlight}Ctrl+G{/highlight} or {highlight}Home{/highlight} to jump to the beginning of the conversation",
-  "Press {highlight}Ctrl+Alt+G{/highlight} or {highlight}End{/highlight} to jump to the most recent message",
-  "Press {highlight}Shift+Enter{/highlight} or {highlight}Ctrl+J{/highlight} to add newlines in your prompt",
-  "Press {highlight}Ctrl+C{/highlight} when typing to clear the input field",
-  "Press {highlight}Escape{/highlight} to stop the AI mid-response",
+  (shortcuts) => `The leader key is ${shortcutText(shortcuts.leader())}; combine with other keys for quick actions`,
+  (shortcuts) => press(shortcuts.modelCycleRecent(), "to quickly switch between recently used models"),
+  (shortcuts) => press(shortcuts.sessionSidebarToggle(), "in a session to show or hide the sidebar panel"),
+  (shortcuts) =>
+    shortcuts.messagesPageUp() && shortcuts.messagesPageDown()
+      ? `Use ${shortcutText(shortcuts.messagesPageUp())}/${shortcutText(shortcuts.messagesPageDown())} to navigate through conversation history`
+      : undefined,
+  (shortcuts) => press(shortcuts.messagesFirst(), "to jump to the beginning of the conversation"),
+  (shortcuts) => press(shortcuts.messagesLast(), "to jump to the most recent message"),
+  (shortcuts) => press(shortcuts.inputNewline(), "to add newlines in your prompt"),
+  (shortcuts) => press(shortcuts.inputClear(), "when typing to clear the input field"),
+  (shortcuts) => press(shortcuts.sessionInterrupt(), "to stop the AI mid-response"),
   "Switch to {highlight}Plan{/highlight} agent to get suggestions without making actual changes",
   "Use {highlight}@agent-name{/highlight} in prompts to invoke specialized subagents",
-  "Press {highlight}Ctrl+X Right/Left{/highlight} to cycle through parent and child sessions",
+  (shortcuts) => {
+    const items = [
+      shortcuts.sessionParent(),
+      shortcuts.childFirst(),
+      shortcuts.childPrevious(),
+      shortcuts.childNext(),
+    ].filter(Boolean)
+    if (!items.length) return undefined
+    return `Use ${items.map(shortcutText).join(" / ")} to move between parent and child sessions`
+  },
   "Create {highlight}opencode.json{/highlight} for server settings and {highlight}tui.json{/highlight} for TUI settings",
   "Place TUI settings in {highlight}~/.config/opencode/tui.json{/highlight} for global config",
   "Add {highlight}$schema{/highlight} to your config for autocomplete in your editor",
@@ -99,22 +229,21 @@ const TIPS = [
   "Override any keybind in {highlight}tui.json{/highlight} via the {highlight}keybinds{/highlight} section",
   "Set any keybind to {highlight}none{/highlight} to disable it completely",
   "Configure local or remote MCP servers in the {highlight}mcp{/highlight} config section",
-  "OpenCode auto-handles OAuth for remote MCP servers requiring auth",
-  "Add {highlight}.md{/highlight} files to {highlight}.opencode/command/{/highlight} to define reusable custom prompts",
+  "Add {highlight}.md{/highlight} files to {highlight}.opencode/commands/{/highlight} to define reusable custom prompts",
   "Use {highlight}$ARGUMENTS{/highlight}, {highlight}$1{/highlight}, {highlight}$2{/highlight} in custom commands for dynamic input",
   "Use backticks in commands to inject shell output (e.g., {highlight}`git status`{/highlight})",
-  "Add {highlight}.md{/highlight} files to {highlight}.opencode/agent/{/highlight} for specialized AI personas",
+  "Add {highlight}.md{/highlight} files to {highlight}.opencode/agents/{/highlight} for specialized AI personas",
   "Configure per-agent permissions for {highlight}edit{/highlight}, {highlight}bash{/highlight}, and {highlight}webfetch{/highlight} tools",
   'Use patterns like {highlight}"git *": "allow"{/highlight} for granular bash permissions',
   'Set {highlight}"rm -rf *": "deny"{/highlight} to block destructive commands',
   'Configure {highlight}"git push": "ask"{/highlight} to require approval before pushing',
-  "OpenCode auto-formats files using prettier, gofmt, ruff, and more",
-  'Set {highlight}"formatter": false{/highlight} in config to disable all auto-formatting',
+  'Set {highlight}"formatter": true{/highlight} in config to enable built-in formatters like prettier, gofmt, and ruff',
+  'Set {highlight}"formatter": false{/highlight} in config to disable formatters enabled by another config layer',
   "Define custom formatter commands with file extensions in config",
-  "OpenCode uses LSP servers for intelligent code analysis",
+  'Set {highlight}"lsp": true{/highlight} in config to enable built-in LSP servers for code analysis',
   "Create {highlight}.ts{/highlight} files in {highlight}.opencode/tools/{/highlight} to define new LLM tools",
   "Tool definitions can invoke scripts written in Python, Go, etc",
-  "Add {highlight}.ts{/highlight} files to {highlight}.opencode/plugin/{/highlight} for event hooks",
+  "Add {highlight}.ts{/highlight} files to {highlight}.opencode/plugins/{/highlight} for event hooks",
   "Use plugins to send OS notifications when sessions complete",
   "Create a plugin to prevent OpenCode from reading sensitive files",
   "Use {highlight}opencode run{/highlight} for non-interactive scripting",
@@ -133,7 +262,7 @@ const TIPS = [
   'Use {highlight}"theme": "system"{/highlight} to match your terminal\'s colors',
   "Create JSON theme files in {highlight}.opencode/themes/{/highlight} directory",
   "Themes support dark/light variants for both modes",
-  "Reference ANSI colors 0-255 in custom themes",
+  "Use numeric xterm color codes 0-255 in custom theme JSON",
   "Use {highlight}{env:VAR_NAME}{/highlight} syntax to reference environment variables in config",
   "Use {highlight}{file:path}{/highlight} to include file contents in config values",
   "Use {highlight}instructions{/highlight} in config to load additional rules files",
@@ -149,18 +278,23 @@ const TIPS = [
   "Permission {highlight}external_directory{/highlight} protects files outside project",
   "Run {highlight}opencode debug config{/highlight} to troubleshoot configuration",
   "Use {highlight}--print-logs{/highlight} flag to see detailed logs in stderr",
-  "Press {highlight}Ctrl+X G{/highlight} or {highlight}/timeline{/highlight} to jump to specific messages",
-  "Press {highlight}Ctrl+X H{/highlight} to toggle code block visibility in messages",
-  "Press {highlight}Ctrl+X S{/highlight} or {highlight}/status{/highlight} to see system status info",
+  (shortcuts) => `Use ${commandText("/timeline", shortcuts.sessionTimeline())} to jump to specific messages`,
+  (shortcuts) => press(shortcuts.messagesToggleConceal(), "to toggle code block visibility in messages"),
+  (shortcuts) => `Use ${commandText("/status", shortcuts.statusView())} to see system status info`,
   "Enable {highlight}scroll_acceleration{/highlight} in {highlight}tui.json{/highlight} for smooth macOS-style scrolling",
-  "Toggle username display in chat via command palette ({highlight}Ctrl+P{/highlight})",
+  (shortcuts) =>
+    shortcuts.commandList()
+      ? `Toggle username display in chat via the command palette (${shortcutText(shortcuts.commandList())})`
+      : "Toggle username display in chat via the command palette",
   "Run {highlight}docker run -it --rm ghcr.io/anomalyco/opencode{/highlight} for containerized use",
   "Use {highlight}/connect{/highlight} with OpenCode Zen for curated, tested models",
   "Commit your project's {highlight}AGENTS.md{/highlight} file to Git for team sharing",
   "Use {highlight}/review{/highlight} to review uncommitted changes, branches, or PRs",
-  "Run {highlight}/help{/highlight} or {highlight}Ctrl+X H{/highlight} to show the help dialog",
+  (shortcuts) => `Use ${commandText("/help", shortcuts.helpShow())} to show the help dialog`,
   "Use {highlight}/rename{/highlight} to rename the current session",
   ...(process.platform === "win32"
-    ? ["Press {highlight}Ctrl+Z{/highlight} to undo changes in your prompt"]
-    : ["Press {highlight}Ctrl+Z{/highlight} to suspend the terminal and return to your shell"]),
+    ? ([(shortcuts) => press(shortcuts.inputUndo(), "to undo changes in your prompt")] satisfies Tip[])
+    : ([
+        (shortcuts) => press(shortcuts.terminalSuspend(), "to suspend the terminal and return to your shell"),
+      ] satisfies Tip[])),
 ]
