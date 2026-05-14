@@ -1,14 +1,17 @@
-import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { Context, Duration, Effect, Layer, Option, Schedule, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { Installation } from "../installation"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Flock } from "@opencode-ai/core/util/flock"
-import { Hash } from "@opencode-ai/core/util/hash"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { withTransientReadRetry } from "@/util/effect-http-client"
-import { CatalogModelStatus } from "./model-status"
+import { Global } from "./global"
+import { Flag } from "./flag/flag"
+import { Flock } from "./util/flock"
+import { Hash } from "./util/hash"
+import { AppFileSystem } from "./filesystem"
+import { InstallationChannel, InstallationVersion } from "./installation/version"
+
+export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
+export type CatalogModelStatus = typeof CatalogModelStatus.Type
+
+const USER_AGENT = `opencode/${InstallationChannel}/${InstallationVersion}/${Flag.OPENCODE_CLIENT}`
 
 const CostTier = Schema.Struct({
   input: Schema.Finite,
@@ -109,11 +112,21 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
-export const layer: Layer.Layer<Service, never, AppFileSystem.Service | HttpClient.HttpClient> = Layer.effect(
+type Requirements = AppFileSystem.Service | HttpClient.HttpClient
+
+export const layer: Layer.Layer<Service, never, Requirements> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
-    const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
+    const http = HttpClient.filterStatusOk(
+      (yield* HttpClient.HttpClient).pipe(
+        HttpClient.retryTransient({
+          retryOn: "errors-and-responses",
+          times: 2,
+          schedule: Schedule.exponential(200).pipe(Schedule.jittered),
+        }),
+      ),
+    )
 
     const source = Flag.OPENCODE_MODELS_URL || "https://models.dev"
     const filepath = path.join(
@@ -132,7 +145,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | HttpClie
 
     const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
       return yield* HttpClientRequest.get(`${source}/api.json`).pipe(
-        HttpClientRequest.setHeader("User-Agent", Installation.USER_AGENT),
+        HttpClientRequest.setHeader("User-Agent", USER_AGENT),
         http.execute,
         Effect.flatMap((res) => res.text),
         Effect.timeout("10 seconds"),

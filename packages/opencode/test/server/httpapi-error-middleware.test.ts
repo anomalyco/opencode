@@ -1,4 +1,5 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
@@ -26,6 +27,26 @@ describe("HttpApi error middleware", () => {
         data: { message: "Unexpected server error. Check server logs for details." },
       })
       expect(JSON.stringify(body)).not.toContain("secret stack marker")
+    }),
+  )
+
+  it.live("returns a safe body for named defects", () =>
+    Effect.gen(function* () {
+      yield* HttpRouter.add(
+        "GET",
+        "/named",
+        Effect.die(new NamedError.Unknown({ message: "secret named marker" })),
+      ).pipe(Layer.provide(errorLayer), HttpRouter.serve, Layer.build)
+
+      const response = yield* HttpClientRequest.get("/named").pipe(HttpClient.execute)
+      const body = yield* response.json
+
+      expect(response.status).toBe(500)
+      expect(body).toEqual({
+        name: "UnknownError",
+        data: { message: "Unexpected server error. Check server logs for details." },
+      })
+      expect(JSON.stringify(body)).not.toContain("secret named marker")
     }),
   )
 

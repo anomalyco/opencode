@@ -1067,14 +1067,16 @@ async function load(input: { api: Api; config: TuiConfig.Resolved; dispose?: () 
   }
   runtime = next
   try {
+    const flags = await Effect.runPromise(
+      Effect.gen(function* () {
+        return yield* RuntimeFlags.Service
+      }).pipe(Effect.provide(RuntimeFlags.defaultLayer)),
+    )
     const records = Flag.OPENCODE_PURE ? [] : (config.plugin_origins ?? [])
     if (Flag.OPENCODE_PURE && config.plugin_origins?.length) {
       log.info("skipping external tui plugins in pure mode", { count: config.plugin_origins.length })
     }
 
-    const flags = await Effect.runPromise(
-      RuntimeFlags.Service.use((flags) => Effect.succeed(flags)).pipe(Effect.provide(RuntimeFlags.defaultLayer)),
-    )
     for (const item of internalTuiPlugins(flags)) {
       log.info("loading internal tui plugin", { id: item.id })
       const entry = loadInternalPlugin(item)

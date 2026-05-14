@@ -4,7 +4,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { XAIPlugin } from "@opencode-ai/core/plugin/provider/xai"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { testEffect } from "../../lib/effect"
+import { testEffect } from "../lib/effect"
 import { fakeSelectorSdk } from "./provider-helper"
 
 const it = testEffect(PluginV2.defaultLayer)
