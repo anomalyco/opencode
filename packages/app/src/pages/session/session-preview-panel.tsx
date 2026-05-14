@@ -25,8 +25,9 @@ function createSessionPreview() {
     const ctrl = new AbortController()
     const check = () =>
       fetch(url, { cache: "no-store", mode: "cors", signal: ctrl.signal })
-        .then((res) => setPreviewReady(res.ok))
-        .catch(() => setPreviewReady(false))
+        // Hide only on 503 (service unavailable); show preview for any other status.
+        .then((res) => setPreviewReady(res.status !== 503))
+        .catch(() => setPreviewReady(true))
 
     void check()
     const unsubIdle = sdk.event.on("session.idle", () => {
