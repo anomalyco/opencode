@@ -17,24 +17,57 @@ async function probeModelIDs(baseURL: string): Promise<string[]> {
     .finally(() => clearTimeout(timer))
 }
 
+const LOCAL_PORTS = [11434, 11435, 8080, 8081]
+
+async function probeLocalhost(): Promise<LocalLlamaSwapService[]> {
+  const results = await Promise.all(
+    LOCAL_PORTS.map(async (port) => {
+      const baseURL = `http://127.0.0.1:${port}/v1`
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 1000)
+      return fetch(`${baseURL}/models`, { signal: controller.signal })
+        .then((r) => {
+          if (!r.ok) return null
+          return r.json() as Promise<{ data?: unknown[] }>
+        })
+        .then((body) => {
+          if (!body?.data) return null
+          return { name: `localhost:${port}`, host: "127.0.0.1", port, baseURL } satisfies LocalLlamaSwapService
+        })
+        .catch(() => null)
+        .finally(() => clearTimeout(timer))
+    }),
+  )
+  return results.filter((r): r is LocalLlamaSwapService => r !== null)
+}
+
 export async function scanLlamaSwap(timeoutMs = 4000): Promise<Array<LocalLlamaSwapService & { models: string[] }>> {
   const bonjour = new Bonjour()
   const raw: LocalLlamaSwapService[] = []
 
-  await new Promise<void>((resolve) => {
-    const browser = bonjour.find({ type: "llamaswap", protocol: "tcp" })
-    browser.on("up", (svc) => {
-      const host = svc.host ?? svc.referer?.address ?? svc.addresses?.[0] ?? ""
-      if (!host) return
-      const baseURL = `http://${host}:${svc.port}/v1`
-      raw.push({ name: svc.name, host, port: svc.port, baseURL })
-    })
-    setTimeout(() => {
-      browser.stop()
-      bonjour.destroy()
-      resolve()
-    }, timeoutMs)
-  })
+  const [, localHits] = await Promise.all([
+    new Promise<void>((resolve) => {
+      const browser = bonjour.find({ type: "llamaswap", protocol: "tcp" })
+      browser.on("up", (svc) => {
+        const host = svc.host ?? svc.referer?.address ?? svc.addresses?.[0] ?? ""
+        if (!host) return
+        const baseURL = `http://${host}:${svc.port}/v1`
+        raw.push({ name: svc.name, host, port: svc.port, baseURL })
+      })
+      setTimeout(() => {
+        browser.stop()
+        bonjour.destroy()
+        resolve()
+      }, timeoutMs)
+    }),
+    probeLocalhost(),
+  ])
+
+  // Merge localhost hits, deduplicating by port against mDNS results
+  const mdnsPorts = new Set(raw.map((s) => s.port))
+  for (const local of localHits) {
+    if (!mdnsPorts.has(local.port)) raw.push(local)
+  }
 
   return Promise.all(raw.map(async (svc) => ({ ...svc, models: await probeModelIDs(svc.baseURL) })))
 }
