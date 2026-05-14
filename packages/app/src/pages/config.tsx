@@ -49,6 +49,7 @@ import { monoFontFamily, useSettings } from "@/context/settings"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { normalizeProviderList } from "@/context/global-sync/utils"
+import { useMainProviders } from "@/hooks/use-providers"
 import { useServer } from "@/context/server"
 import { extraAgents, mainDomain } from "@/pages/layout/extra-agents"
 import type { Agent, Config, Project, ProviderListResponse } from "@opencode-ai/sdk/v2/client"
@@ -1868,6 +1869,7 @@ export default function ConfigPage() {
   const platform = usePlatform()
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
+  const mainProviders = useMainProviders()
   const server = useServer()
   const navigate = useNavigate()
   const params = useParams()
@@ -1972,9 +1974,14 @@ export default function ConfigPage() {
     },
   )
 
+  const mainRoot = createMemo(() => globalSync.data.rootByDomain[mainDomain])
+  const mainPath = createMemo(() => mainRoot()?.path ?? globalSync.data.path)
+  const mainConfig = createMemo(() => mainRoot()?.config ?? globalSync.data.config)
+  const mainProviderAuth = createMemo(() => mainRoot()?.provider_auth ?? globalSync.data.provider_auth)
+
   const space = createMemo<ConfigWorkspace | undefined>(() => {
     const data = workspace() as ConfigWorkspace | undefined
-    const root = globalSync.data.path.config
+    const root = mainPath().config
     if (!data && !root) return
     if (!root) return data
     return {
@@ -1987,19 +1994,18 @@ export default function ConfigPage() {
       plugins: data?.plugins ?? [],
     }
   })
-  const cfg = createMemo(() => globalSync.data.config)
-  const mainProviders = createMemo(() => globalSync.data.rootByDomain[mainDomain]?.provider ?? globalSync.data.provider)
+  const cfg = mainConfig
   const t = language.t
 
   const setMainProviders = (provider: ProviderListResponse) => {
-    const root = globalSync.data.rootByDomain[mainDomain]
+    const root = mainRoot()
     globalSync.set("rootByDomain", mainDomain, {
       ready: root?.ready ?? globalSync.data.ready,
       error: root?.error ?? globalSync.data.error,
-      path: root?.path ?? globalSync.data.path,
+      path: mainPath(),
       provider,
-      provider_auth: root?.provider_auth ?? globalSync.data.provider_auth,
-      config: root?.config ?? globalSync.data.config,
+      provider_auth: mainProviderAuth(),
+      config: mainConfig(),
       reload: root?.reload ?? globalSync.data.reload,
     })
     globalSync.set("provider", provider)
@@ -2069,7 +2075,7 @@ export default function ConfigPage() {
 
   const skills = createMemo<SkillItem[]>(() => {
     const root = local(space()?.skillsRoot ?? "")
-    const claude = globalSync.data.path.home ? join(globalSync.data.path.home, ".claude", "skills") : undefined
+    const claude = mainPath().home ? join(mainPath().home, ".claude", "skills") : undefined
     return (rawSkills() ?? []).map((item) => {
       const hit = owner(item.location, opened())
       const group = bucket(item.location, { skills: root, claude, project: hit })
@@ -2093,7 +2099,7 @@ export default function ConfigPage() {
   })
 
   const claudeRoot = createMemo(() => {
-    if (globalSync.data.path.home) return join(globalSync.data.path.home, ".claude", "skills")
+    if (mainPath().home) return join(mainPath().home, ".claude", "skills")
 
     const hit = skills().find((item) => item.group === "claude")
     if (hit) return norm(hit.location).split("/.claude/skills/")[0] + "/.claude/skills"
@@ -2233,7 +2239,7 @@ export default function ConfigPage() {
   )
 
   const [pluginAgents] = createResource(
-    () => [state.agentRev, globalSync.data.path.home, cfg().plugin] as const,
+    () => [state.agentRev, mainPath().home, cfg().plugin] as const,
     async ([, home, plugins]) => {
       const cache = home ? join(home, ".cache", "opencode") : undefined
       if (!cache || !plugins?.length) return [] as DocItem[]
@@ -2532,7 +2538,7 @@ export default function ConfigPage() {
   )
 
   const providers = createMemo<ProviderItem[]>(() => {
-    const data = mainProviders()
+    const data = mainProviders.data()
     const off = new Set(cfg().disabled_providers ?? [])
     const entries = cfg().provider ?? {}
     const on = new Set(data.connected ?? [])
@@ -3545,7 +3551,7 @@ export default function ConfigPage() {
   }
 
   function isConfigCustom(id: string) {
-    const provider = globalSync.data.config.provider?.[id]
+      const provider = cfg().provider?.[id]
     if (!provider) return false
     if (provider.npm !== "@ai-sdk/openai-compatible") return false
     if (!provider.models || Object.keys(provider.models).length === 0) return false
