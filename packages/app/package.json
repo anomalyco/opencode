@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@codemirror/commands": "6.10.3",
+    "@codemirror/lang-html": "6.4.11",
     "@codemirror/lang-javascript": "6.2.5",
     "@codemirror/lang-markdown": "6.5.0",
     "@codemirror/language": "6.12.3",

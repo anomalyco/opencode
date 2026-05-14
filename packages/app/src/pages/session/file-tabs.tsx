@@ -54,8 +54,9 @@ function isHtmlPath(p: string | undefined): boolean {
   return lower.endsWith(".html") || lower.endsWith(".htm")
 }
 
-// HTML 预览大文件阈值(超过退源码视图,见 spec R3)
-const HTML_PREVIEW_MAX_BYTES = 2 * 1024 * 1024
+// HTML 预览大文件阈值 — 对齐 file-limits.ts MAX_EDITABLE_BYTES(预览与编辑同卡 10MB)
+// FORK: 2026-05-14 2MB → 10MB,user 反馈大 PPT / Slides 常见 >2MB,旧阈值过保守
+const HTML_PREVIEW_MAX_BYTES = 10 * 1024 * 1024
 
 // 文件路径父目录(forward slash;支持 Windows 反斜杠)
 function pathDirname(p: string): string {
@@ -1097,6 +1098,36 @@ export function FileTabContent(props: {
     })
   })
 
+  // FORK: html-viewer-ux-polish 2026-05-14 — iframe 内事件桥接
+  // Rust handler 给 HTML 响应注 capture-phase listener:
+  //   - contextmenu: 翻译坐标后弹自家 mdMenu(与 .md 右键体验一致)
+  //   - mousedown:   若 mdMenu 当前 open,左键点 iframe 内任意处自动关菜单(对齐 light DOM 的点空白消失行为)
+  onMount(() => {
+    if (typeof window === "undefined") return
+    const handler = (event: MessageEvent) => {
+      const data = event.data
+      if (!data || typeof data !== "object") return
+      if ((data as { __deskfox?: unknown }).__deskfox !== true) return
+      const t = (data as { type?: unknown }).type
+      if (t === "contextmenu") {
+        if (!isHtmlPath(path())) return
+        const iframe = document.querySelector('iframe[data-html-preview="true"]') as HTMLIFrameElement | null
+        if (!iframe) return
+        const rect = iframe.getBoundingClientRect()
+        const x = rect.left + (Number((data as { x?: unknown }).x) || 0)
+        const y = rect.top + (Number((data as { y?: unknown }).y) || 0)
+        const txt = (data as { text?: unknown }).text
+        const text = typeof txt === "string" ? txt : ""
+        setMdComment("")
+        setMdMenu({ open: true, x, y, text, mode: "menu" })
+      } else if (t === "mousedown") {
+        if (mdMenu().open) closeMdMenu()
+      }
+    }
+    window.addEventListener("message", handler)
+    onCleanup(() => window.removeEventListener("message", handler))
+  })
+
   // FORK: 给 <Markdown> 注入本地资源 src 重写(.md 同目录/相对目录 <img>/<video>/<audio> 走 localasset:// 而非 404)2026-05-05
   // baseDir = 当前 .md 文件所在目录的绝对路径(sdk.directory + dirname(path()));聊天侧不传 rewriteAssetSrc 钩子,无回归
   const mdAssetRewriter = createMemo(() => {
@@ -1173,11 +1204,6 @@ export function FileTabContent(props: {
       <Markdown text={stripFrontmatter(source)} cacheKey={cacheKey()} rewriteAssetSrc={mdAssetRewriter()} />
     </div>
   )
-
-  // FORK: HTML 预览/源码切换状态 2026-05-05
-  const [htmlMode, setHtmlMode] = createSignal<"preview" | "source">("preview")
-  // 切 path 时重置回预览态(default)
-  createEffect(on(path, () => setHtmlMode("preview"), { defer: true }))
 
   // 媒体文件(audio + video):server 对 binary 扩展返 content="",走 Tauri command 直读本地成 base64
   // 用 createSignal + createEffect 手动管理(避开 createResource 触发外层 Suspense fallback 导致整屏闪)
@@ -1452,44 +1478,35 @@ export function FileTabContent(props: {
     </div>
   )
 
-  // FORK: HTML 预览 — 默认渲染后样子,iframe + sandbox(allow-same-origin + allow-scripts)
-  // 大文件(>2MB)自动退源码;预览/源码 切换;iframe 内的相对资源(./img.png 等)走 localasset:// 自然解析 2026-05-05
-  // FORK: 2026-05-14 开 allow-scripts — 用户 PPT/Slides 翻页等内嵌 JS 失效问题;parent 与 iframe 跨 origin(app webview vs localasset://),MDN "scripts+same-origin" 警告不适用
+  // FORK: HTML 预览 — iframe 占满,无顶部 toolbar;右键 → 编辑 进 CodeMirror html 源码模式
+  // sandbox: allow-same-origin + allow-scripts(parent 跨 origin,MDN 警告不适用,详 html-viewer-allow-scripts)
+  // iframe 内的相对资源(./img.png 等)走 localasset:// 自然解析
+  // 大文件(>10MB)走 placeholder(预览 + 编辑同卡,渲染源码也无意义)
+  // FORK: 2026-05-14 去顶部 toolbar(预览/源码 toggle 删除)+ 阈值 2MB→10MB + 右键菜单接入 [feat: html-viewer-ux-polish]
   const renderHtml = (source: string) => {
     const root = sdk.directory
     const p = path()
     const sourceLen = source?.length ?? 0
     const tooLargeForPreview = sourceLen > HTML_PREVIEW_MAX_BYTES
     const previewUrl = root && p ? localAssetUrl(root, `${root}/${p}`) : ""
-    const effectiveMode = tooLargeForPreview ? "source" : htmlMode()
+
+    if (tooLargeForPreview) {
+      return (
+        <div
+          class="relative flex flex-col h-full items-center justify-center px-6 py-8 text-center"
+          onContextMenu={handleLightDomContextMenu}
+        >
+          <div class="text-text-base text-sm">文件 &gt;10MB,不支持预览/编辑</div>
+          <div class="text-text-weak text-xs mt-2">请用本机软件打开</div>
+        </div>
+      )
+    }
 
     return (
-      <div class="relative flex flex-col h-full overflow-hidden">
-        <div class="flex items-center gap-2 px-4 py-1.5 border-b border-border-weak bg-surface-raised-base">
-          <button
-            type="button"
-            class="text-xs px-2 py-1 rounded border border-border-base hover:bg-surface-base-hover disabled:opacity-40"
-            classList={{ "bg-surface-base-active": effectiveMode === "preview" }}
-            disabled={tooLargeForPreview}
-            title={tooLargeForPreview ? "文件 >2MB,自动退源码" : "渲染后样子"}
-            onClick={() => setHtmlMode("preview")}
-          >
-            预览
-          </button>
-          <button
-            type="button"
-            class="text-xs px-2 py-1 rounded border border-border-base hover:bg-surface-base-hover"
-            classList={{ "bg-surface-base-active": effectiveMode === "source" }}
-            onClick={() => setHtmlMode("source")}
-          >
-            源码
-          </button>
-          <Show when={tooLargeForPreview}>
-            <span class="text-xs text-text-weak ml-2">文件 &gt;2MB,渲染禁用</span>
-          </Show>
-        </div>
-        <Show when={effectiveMode === "preview" && previewUrl} fallback={renderDefault(source)}>
+      <div class="relative flex flex-col h-full overflow-hidden" onContextMenu={handleLightDomContextMenu}>
+        <Show when={previewUrl} fallback={renderDefault(source)}>
           <iframe
+            data-html-preview="true"
             src={previewUrl}
             sandbox="allow-same-origin allow-scripts"
             referrerpolicy="no-referrer"
