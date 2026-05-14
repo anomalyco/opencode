@@ -1,15 +1,12 @@
-import type { ParsedKey } from "@opentui/core"
 import type { TuiDialogSelectOption, TuiPluginApi, TuiRouteDefinition, TuiSlotProps } from "@opencode-ai/plugin/tui"
-import type { useCommandDialog } from "@tui/component/dialog-command"
 import type { useEvent } from "@tui/context/event"
-import type { useKeybind } from "@tui/context/keybind"
 import type { useRoute } from "@tui/context/route"
 import type { useSDK } from "@tui/context/sdk"
 import type { useSync } from "@tui/context/sync"
 import type { useTheme } from "@tui/context/theme"
 import { Dialog as DialogUI, type useDialog } from "@tui/ui/dialog"
 import type { TuiConfig } from "@/cli/cmd/tui/config/tui"
-import { createPluginKeybind } from "../context/plugin-keybinds"
+import type { useOpencodeKeymap } from "../keymap"
 import type { useKV } from "../context/kv"
 import { DialogAlert } from "../ui/dialog-alert"
 import { DialogConfirm } from "../ui/dialog-confirm"
@@ -19,6 +16,8 @@ import { Prompt } from "../component/prompt"
 import { Slot as HostSlot } from "./slots"
 import type { useToast } from "../ui/toast"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import * as Keymap from "../keymap"
+import { createCommandShim } from "./command-shim"
 
 type RouteEntry = {
   key: symbol
@@ -28,10 +27,9 @@ type RouteEntry = {
 export type RouteMap = Map<string, RouteEntry[]>
 
 type Input = {
-  command: ReturnType<typeof useCommandDialog>
-  tuiConfig: TuiConfig.Info
+  tuiConfig: TuiConfig.Resolved
   dialog: ReturnType<typeof useDialog>
-  keybind: ReturnType<typeof useKeybind>
+  keymap: ReturnType<typeof useOpencodeKeymap>
   kv: ReturnType<typeof useKV>
   route: ReturnType<typeof useRoute>
   routes: RouteMap
@@ -42,6 +40,7 @@ type Input = {
   theme: ReturnType<typeof useTheme>
   toast: ReturnType<typeof useToast>
   renderer: TuiPluginApi["renderer"]
+  attention: TuiPluginApi["attention"]
 }
 
 function routeRegister(routes: RouteMap, list: TuiRouteDefinition[], bump: () => void) {
@@ -149,8 +148,13 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
       count() {
         return sync.data.session.length
       },
+      get(sessionID) {
+        return sync.session.get(sessionID)
+      },
       diff(sessionID) {
-        return sync.data.session_diff[sessionID] ?? []
+        return (sync.data.session_diff[sessionID] ?? []).flatMap((item) =>
+          item.file === undefined ? [] : [{ ...item, file: item.file }],
+        )
       },
       todo(sessionID) {
         return sync.data.todo[sessionID] ?? []
@@ -201,20 +205,20 @@ export function createTuiApi(input: Input): TuiPluginApi {
       return () => {}
     },
   }
-
   return {
     app: appApi(),
-    command: {
-      register(cb) {
-        return input.command.register(() => cb())
+    attention: input.attention,
+    // Keep deprecated `api.command` working for v1 plugins; remove in v2.
+    command: createCommandShim(input.keymap, input.dialog, input.tuiConfig.keybinds),
+    keys: {
+      formatSequence(parts) {
+        return Keymap.formatKeySequence(parts, input.tuiConfig)
       },
-      trigger(value) {
-        input.command.trigger(value)
-      },
-      show() {
-        input.command.show()
+      formatBindings(bindings) {
+        return Keymap.formatKeyBindings(bindings, input.tuiConfig)
       },
     },
+    keymap: input.keymap,
     route: {
       register(list) {
         return routeRegister(input.routes, list, input.bump)
@@ -304,17 +308,6 @@ export function createTuiApi(input: Input): TuiPluginApi {
         get open() {
           return input.dialog.stack.length > 0
         },
-      },
-    },
-    keybind: {
-      match(key, evt: ParsedKey) {
-        return input.keybind.match(key, evt)
-      },
-      print(key) {
-        return input.keybind.print(key)
-      },
-      create(defaults, overrides) {
-        return createPluginKeybind(input.keybind, defaults, overrides)
       },
     },
     get tuiConfig() {

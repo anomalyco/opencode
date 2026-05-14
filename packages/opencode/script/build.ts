@@ -50,6 +50,7 @@ console.log(`Loaded ${migrations.length} migrations`)
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
+const sourcemapsFlag = process.argv.includes("--sourcemaps")
 const plugin = createSolidTransformPlugin()
 const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
 
@@ -60,6 +61,7 @@ const createEmbeddedWebUIBundle = async () => {
   await $`bun run --cwd ${appDir} build`
   const files = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: dist })))
     .map((file) => file.replaceAll("\\", "/"))
+    .filter((file) => !file.endsWith(".map"))
     .sort()
   const imports = files.map((file, i) => {
     const spec = path.relative(dir, path.join(dist, file)).replaceAll("\\", "/")
@@ -199,6 +201,7 @@ for (const item of targets) {
     external: ["node-gyp"],
     format: "esm",
     minify: true,
+    sourcemap: sourcemapsFlag ? "linked" : "none",
     splitting: true,
     compile: {
       autoloadBunfig: false,
