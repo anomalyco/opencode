@@ -211,6 +211,26 @@ describe("worktree endpoint reproduction", () => {
   )
 
   worktreeTest(
+    "direct HttpApi worktree create accepts missing content type and body",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const server = yield* serverScoped()
+
+        const response = yield* createWorktreeScoped({
+          server,
+          directory: test.directory,
+          path: `${ExperimentalPaths.worktree}?directory=${encodeURIComponent(test.directory)}`,
+          init: { method: "POST" },
+          timeoutLabel: "direct worktree create without content type or body",
+        })
+
+        expect(response).toMatchObject({ directory: expect.any(String) })
+      }),
+    { git: true },
+  )
+
+  worktreeTest(
     "workspace worktree create does not hang",
     () =>
       Effect.gen(function* () {
