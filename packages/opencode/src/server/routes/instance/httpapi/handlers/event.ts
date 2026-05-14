@@ -1,34 +1,13 @@
 import { Bus } from "@/bus"
 import * as Log from "@opencode-ai/core/util/log"
-import { Effect, Schema } from "effect"
+import { Effect } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerResponse } from "effect/unstable/http"
-import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
-import { WorkspaceRoutingQuery } from "./middleware/workspace-routing"
+import { EventApi } from "../groups/event"
 
 const log = Log.create({ service: "server" })
-
-export const EventPaths = {
-  event: "/event",
-} as const
-
-export const EventApi = HttpApi.make("event").add(
-  HttpApiGroup.make("event")
-    .add(
-      HttpApiEndpoint.get("subscribe", EventPaths.event, {
-        query: WorkspaceRoutingQuery,
-        success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/event-stream" })),
-      }).annotateMerge(
-        OpenApi.annotations({
-          identifier: "event.subscribe",
-          summary: "Subscribe to events",
-          description: "Get events",
-        }),
-      ),
-    )
-    .annotateMerge(OpenApi.annotations({ title: "event", description: "Instance event stream route." })),
-)
 
 function eventData(data: unknown): Sse.Event {
   return {
