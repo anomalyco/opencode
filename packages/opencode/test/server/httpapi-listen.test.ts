@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import net from "node:net"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Log from "@opencode-ai/core/util/log"
 import { Server } from "../../src/server/server"
@@ -302,6 +303,32 @@ describe("HttpApi Server.listen", () => {
     expect(output).not.toContain("Sent HTTP response")
   })
 
+  test("port 0 prefers 4096 when free", async () => {
+    if (!(await isPortFree(4096))) return
+    const listener = await startListener()
+    try {
+      expect(listener.port).toBe(4096)
+    } finally {
+      await stop(listener, "timed out cleaning up port-0 prefers-4096 listener")
+    }
+  })
+
+  test("port 0 falls back when 4096 is taken", async () => {
+    const blocker = await occupyPort(4096)
+    if (!blocker) return
+    try {
+      const listener = await startListener()
+      try {
+        expect(listener.port).not.toBe(4096)
+        expect(listener.port).toBeGreaterThan(0)
+      } finally {
+        await stop(listener, "timed out cleaning up port-0 fallback listener")
+      }
+    } finally {
+      await new Promise<void>((resolve) => blocker.close(() => resolve()))
+    }
+  })
+
   testPty("rejects unsafe PTY ticket mint and connect requests", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const listener = await startListener()
@@ -389,3 +416,20 @@ describe("HttpApi Server.listen", () => {
     }
   })
 })
+
+function isPortFree(port: number) {
+  return new Promise<boolean>((resolve) => {
+    const probe = net.createServer()
+    probe.once("error", () => resolve(false))
+    probe.once("listening", () => probe.close(() => resolve(true)))
+    probe.listen(port, "127.0.0.1")
+  })
+}
+
+function occupyPort(port: number) {
+  return new Promise<net.Server | undefined>((resolve) => {
+    const server = net.createServer()
+    server.once("error", () => resolve(undefined))
+    server.listen(port, "127.0.0.1", () => resolve(server))
+  })
+}
