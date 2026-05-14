@@ -219,6 +219,20 @@ export type ProviderHook = {
 /** @deprecated Use AuthOAuthResult instead. */
 export type AuthOuathResult = AuthOAuthResult
 
+export type SidebarPanelStatus = "success" | "warning" | "error" | "info"
+
+export interface SidebarPanelItem {
+  label: string
+  value?: string
+  status?: SidebarPanelStatus
+}
+
+export interface SidebarPanel {
+  id: string
+  title: string
+  items: SidebarPanelItem[] | (() => SidebarPanelItem[])
+}
+
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
@@ -330,4 +344,9 @@ export interface Hooks {
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  /**
+   * Register sidebar panels. The sidebar polls every 5 seconds for updates.
+   * Each panel shows a title with labeled status items.
+   */
+  sidebar?: SidebarPanel[] | (() => SidebarPanel[])
 }
