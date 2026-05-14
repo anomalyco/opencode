@@ -2,9 +2,33 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { Instance } from "@opencode-ai/core/instance"
 import { InstanceServiceMap } from "@opencode-ai/core/instance-layer"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
-import { HttpApiMiddleware } from "effect/unstable/httpapi"
+import { HttpApiMiddleware, OpenApi } from "effect/unstable/httpapi"
+
+export const InstanceQuery = Schema.Struct({
+  instance: Schema.optional(
+    Schema.Struct({
+      directory: Schema.optional(Schema.String),
+      workspace: Schema.optional(Schema.String),
+    }),
+  ),
+}).annotate({ identifier: "V2InstanceQuery" })
+
+export const instanceQueryOpenApi = OpenApi.annotations({
+  transform: (operation) => {
+    const parameters = operation.parameters
+    if (!Array.isArray(parameters)) return operation
+    return {
+      ...operation,
+      parameters: parameters.map((parameter) =>
+        parameter?.name === "instance" && parameter?.in === "query"
+          ? { ...parameter, style: "deepObject", explode: true }
+          : parameter,
+      ),
+    }
+  },
+})
 
 export class V2InstanceMiddleware extends HttpApiMiddleware.Service<
   V2InstanceMiddleware,
@@ -14,9 +38,10 @@ export class V2InstanceMiddleware extends HttpApiMiddleware.Service<
 >()("@opencode/ExperimentalHttpApiV2Instance") {}
 
 function ref(request: HttpServerRequest.HttpServerRequest): Instance.Ref {
+  const query = new URL(request.url, "http://localhost").searchParams
   return {
-    directory: request.headers["x-opencode-directory"] ?? process.cwd(),
-    workspaceID: request.headers["x-opencode-workspace"],
+    directory: query.get("instance[directory]") || request.headers["x-opencode-directory"] || process.cwd(),
+    workspaceID: query.get("instance[workspace]") || request.headers["x-opencode-workspace"],
   }
 }
 
