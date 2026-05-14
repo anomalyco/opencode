@@ -19,6 +19,7 @@ import { PoeAuthPlugin } from "opencode-poe-auth"
 import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
 import { AzureAuthPlugin } from "./azure"
 import { DigitalOceanAuthPlugin } from "./digitalocean"
+import { MinimaxAuthPlugin, MinimaxCnAuthPlugin } from "./minimax/minimax"
 import { Effect, Layer, Context, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
@@ -66,6 +67,8 @@ const INTERNAL_PLUGINS: PluginInstance[] = [
   CloudflareAIGatewayAuthPlugin,
   AzureAuthPlugin,
   DigitalOceanAuthPlugin,
+  MinimaxAuthPlugin,
+  MinimaxCnAuthPlugin,
 ]
 
 function isServerPlugin(value: unknown): value is PluginInstance {
