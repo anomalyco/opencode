@@ -1630,11 +1630,16 @@ describe("session.message-v2.filterCompacted", () => {
     expect(ids).toContain(OVERFLOW_ASSISTANT)
 
     // Replicate the backward walk in SessionPrompt.runLoop
-    // (packages/opencode/src/session/prompt.ts ~1660).
+    // (packages/opencode/src/session/prompt.ts ~1660). The runLoop sorts msgs
+    // chronologically by id before walking so the model-consumption reorder
+    // performed by filterCompacted does not poison lastFinished.
+    const chronological = filtered
+      .slice()
+      .sort((a, b) => (a.info.id < b.info.id ? -1 : a.info.id > b.info.id ? 1 : 0))
     let lastUser: MessageV2.User | undefined
     let lastFinished: MessageV2.Assistant | undefined
-    for (let i = filtered.length - 1; i >= 0; i--) {
-      const msg = filtered[i]
+    for (let i = chronological.length - 1; i >= 0; i--) {
+      const msg = chronological[i]
       if (!lastUser && msg.info.role === "user") lastUser = msg.info
       if (!lastFinished && msg.info.role === "assistant" && msg.info.finish) lastFinished = msg.info
       if (lastUser && lastFinished) break
