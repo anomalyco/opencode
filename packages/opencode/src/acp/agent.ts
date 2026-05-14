@@ -38,7 +38,7 @@ import { pathToFileURL } from "url"
 import { Filesystem } from "@/util/filesystem"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { ACPSessionManager } from "./session"
-import type { ACPConfig } from "./types"
+import type { ACPConfig, ACPSessionState } from "./types"
 import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { Agent as AgentModule } from "../agent/agent"
@@ -561,11 +561,17 @@ export class Agent implements ACPAgent {
     try {
       const model = await defaultModel(this.config, directory)
 
-      // Store ACP session state
-      const state = await this.sessionManager.create(params.cwd, params.mcpServers, model)
+      const systemPrompt = (params._meta as { systemPrompt?: ACPSessionState["systemPrompt"] } | undefined)
+        ?.systemPrompt
+
+      const state = await this.sessionManager.create(params.cwd, params.mcpServers, model, systemPrompt)
       const sessionId = state.id
 
-      log.info("creating_session", { sessionId, mcpServers: params.mcpServers.length })
+      log.info("creating_session", {
+        sessionId,
+        mcpServers: params.mcpServers.length,
+        hasSystemPrompt: systemPrompt !== undefined,
+      })
 
       const load = await this.loadSessionMode({
         cwd: directory,
@@ -1435,6 +1441,11 @@ export class Agent implements ACPAgent {
     })
 
     if (!cmd) {
+      const system =
+        typeof session.systemPrompt === "string"
+          ? session.systemPrompt
+          : session.systemPrompt?.append
+
       const response = await this.sdk.session.prompt({
         sessionID,
         model: {
@@ -1445,6 +1456,7 @@ export class Agent implements ACPAgent {
         parts,
         agent,
         directory,
+        ...(system !== undefined && system !== "" ? { system } : {}),
       })
       const msg = response.data?.info
 

@@ -17,7 +17,12 @@ export class ACPSessionManager {
     return this.sessions.get(sessionId)
   }
 
-  async create(cwd: string, mcpServers: McpServer[], model?: ACPSessionState["model"]): Promise<ACPSessionState> {
+  async create(
+    cwd: string,
+    mcpServers: McpServer[],
+    model?: ACPSessionState["model"],
+    systemPrompt?: ACPSessionState["systemPrompt"],
+  ): Promise<ACPSessionState> {
     const session = await this.sdk.session
       .create(
         {
@@ -36,6 +41,7 @@ export class ACPSessionManager {
       mcpServers,
       createdAt: new Date(),
       model: resolvedModel,
+      systemPrompt,
     }
     log.info("creating_session", { state })
 
