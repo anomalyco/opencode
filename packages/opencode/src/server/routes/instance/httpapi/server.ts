@@ -21,6 +21,7 @@ import { File } from "@/file"
 import { FileWatcher } from "@/file/watcher"
 import { Ripgrep } from "@/file/ripgrep"
 import { Format } from "@/format"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { Permission } from "@/permission"
@@ -172,7 +173,10 @@ const uiRoute = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
     const client = yield* HttpClient.HttpClient
-    yield* router.add("*", "/*", (request) => serveUIEffect(request, { fs, client }))
+    const flags = yield* RuntimeFlags.Service
+    yield* router.add("*", "/*", (request) =>
+      serveUIEffect(request, { fs, client, disableEmbeddedWebUi: flags.disableEmbeddedWebUi }),
+    )
   }),
 ).pipe(Layer.provide(authOnlyRouterLayer))
 
@@ -206,6 +210,7 @@ export function createRoutes(corsOptions?: CorsOptions) {
       PtyTicket.defaultLayer,
       Question.defaultLayer,
       Ripgrep.defaultLayer,
+      RuntimeFlags.defaultLayer,
       Session.defaultLayer,
       SessionCompaction.defaultLayer,
       SessionPrompt.defaultLayer,
