@@ -924,6 +924,108 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
   })
 })
 
+describe("ProviderTransform.schema - gemini $ref schemas", () => {
+  const geminiModel = {
+    providerID: "google",
+    api: {
+      id: "gemini-3-pro",
+    },
+  } as any
+
+  test("inlines local refs that contain Gemini-unsupported sibling fields", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        questions: {
+          type: "array",
+          items: {
+            $ref: "#/$defs/QuestionPrompt",
+            description: "Question prompts to ask the user",
+            type: "object",
+            required: ["question", "missing"],
+            properties: {
+              question: { type: "string" },
+            },
+          },
+        },
+      },
+      $defs: {
+        QuestionPrompt: {
+          type: "object",
+          properties: {
+            question: { type: "string" },
+            header: { type: "string" },
+          },
+          required: ["question", "header"],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+    const item = result.properties.questions.items
+
+    expect(result.$defs).toBeUndefined()
+    expect(item.$ref).toBeUndefined()
+    expect(item.type).toBe("object")
+    expect(item.properties.question.type).toBe("string")
+    expect(item.required).toEqual(["question"])
+  })
+
+  test("keeps only Gemini-allowed siblings when a local ref cannot be resolved", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        prompt: {
+          $ref: "#/$defs/MissingPrompt",
+          description: "Prompt to ask",
+          type: "object",
+          properties: { question: { type: "string" } },
+          default: { question: "Continue?" },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+    const prompt = result.properties.prompt
+
+    expect(prompt).toEqual({
+      $ref: "#/$defs/MissingPrompt",
+      description: "Prompt to ask",
+      default: { question: "Continue?" },
+    })
+  })
+
+  test("does not affect refs for non-gemini providers", () => {
+    const openaiModel = {
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+      },
+    } as any
+
+    const schema = {
+      type: "object",
+      properties: {
+        prompt: {
+          $ref: "#/$defs/Prompt",
+          description: "Prompt to ask",
+          type: "object",
+          properties: { question: { type: "string" } },
+        },
+      },
+      $defs: {
+        Prompt: { type: "object", properties: { question: { type: "string" } } },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    expect(result.properties.prompt.$ref).toBe("#/$defs/Prompt")
+    expect(result.properties.prompt.properties).toBeDefined()
+    expect(result.$defs).toBeDefined()
+  })
+})
+
 describe("ProviderTransform.schema - moonshot $ref siblings", () => {
   const moonshotModel = {
     providerID: "moonshotai",

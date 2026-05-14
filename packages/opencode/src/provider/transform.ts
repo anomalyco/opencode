@@ -1319,17 +1319,47 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
       ].some((key) => key in node)
     }
 
-    const sanitizeGemini = (obj: any): any => {
+    const rootDefinitions = [schema].flatMap((node) => {
+      if (!isPlainObject(node)) return []
+      return [node.$defs, node.definitions].filter(isPlainObject)
+    })
+
+    const resolveLocalReference = (ref: string): unknown => {
+      const name = ref.match(/^#\/\$defs\/(.+)$/)?.[1] ?? ref.match(/^#\/definitions\/(.+)$/)?.[1]
+      if (!name) return undefined
+      for (const definitions of rootDefinitions) {
+        const target = definitions[name]
+        if (target !== undefined) return target
+      }
+      return undefined
+    }
+
+    const sanitizeGemini = (obj: any, seenRefs = new Set<string>()): any => {
       if (obj === null || typeof obj !== "object") {
         return obj
       }
 
       if (Array.isArray(obj)) {
-        return obj.map(sanitizeGemini)
+        return obj.map((item) => sanitizeGemini(item, seenRefs))
+      }
+
+      if (typeof obj.$ref === "string") {
+        const target = resolveLocalReference(obj.$ref)
+        if (isPlainObject(target) && !seenRefs.has(obj.$ref)) {
+          const { $ref: _ref, ...siblings } = obj
+          const merged = { ...target, ...siblings }
+          return sanitizeGemini(merged, new Set(seenRefs).add(obj.$ref))
+        }
+
+        const result: any = { $ref: obj.$ref }
+        if (typeof obj.description === "string") result.description = obj.description
+        if ("default" in obj) result.default = sanitizeGemini(obj.default, seenRefs)
+        return result
       }
 
       const result: any = {}
       for (const [key, value] of Object.entries(obj)) {
+        if (key === "$schema" || key === "$defs" || key === "definitions") continue
         if (key === "enum" && Array.isArray(value)) {
           // Convert all enum values to strings
           result[key] = value.map((v) => String(v))
@@ -1338,7 +1368,7 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
             result.type = "string"
           }
         } else if (typeof value === "object" && value !== null) {
-          result[key] = sanitizeGemini(value)
+          result[key] = sanitizeGemini(value, seenRefs)
         } else {
           result[key] = value
         }
