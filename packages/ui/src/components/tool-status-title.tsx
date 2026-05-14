@@ -1,6 +1,7 @@
 import { Show, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextShimmer } from "./text-shimmer"
+import { Spinner } from "./spinner"
 
 function common(active: string, done: string) {
   const a = Array.from(active)
@@ -106,6 +107,11 @@ export function ToolStatusTitle(props: {
       class={props.class}
       aria-label={props.active ? props.activeText : props.doneText}
     >
+      <Show when={props.active}>
+        <span data-slot="tool-status-spinner">
+          <Spinner style={{ color: "currentColor" }} />
+        </span>
+      </Show>
       <Show
         when={suffix()}
         fallback={

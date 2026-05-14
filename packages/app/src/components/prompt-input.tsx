@@ -1380,7 +1380,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             }}
           />
 
-          <div class="pointer-events-none absolute bottom-2 right-2 flex items-center gap-2">
+          <div class="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1">
             <input
               ref={fileInputRef}
               type="file"
@@ -1403,7 +1403,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   tabIndex={store.mode === "normal" ? undefined : -1}
                   icon={working() ? "stop" : "arrow-up"}
                   variant="primary"
-                  class="size-8"
+                  class="size-7.5"
                   style={buttons()}
                   aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
                 />
@@ -1428,7 +1428,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   data-action="prompt-attach"
                   type="button"
                   variant="ghost"
-                  class="size-8 p-0"
+                  class="size-7.5 p-0"
                   style={buttons()}
                   onClick={pick}
                   disabled={store.mode !== "normal"}
@@ -1473,6 +1473,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       valueClass="truncate text-13-regular text-text-base"
                       triggerStyle={control()}
                       triggerProps={{ "data-action": "prompt-agent" }}
+                      contentProps={{ "data-codle-menu": "true" }}
                       variant="ghost"
                     />
                   </TooltipKeybind>
@@ -1566,6 +1567,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         valueClass="truncate text-13-regular text-text-base"
                         triggerStyle={control()}
                         triggerProps={{ "data-action": "prompt-model-variant" }}
+                        contentProps={{ "data-codle-menu": "true" }}
                         variant="ghost"
                       />
                     </TooltipKeybind>

@@ -1,12 +1,17 @@
 ;(function () {
   var key = "opencode-theme-id"
-  var themeId = localStorage.getItem(key) || "oc-2"
+  var themeId = localStorage.getItem(key) || "codle"
 
   if (themeId === "oc-1") {
     themeId = "oc-2"
     localStorage.setItem(key, themeId)
     localStorage.removeItem("opencode-theme-css-light")
     localStorage.removeItem("opencode-theme-css-dark")
+  }
+
+  if (themeId === "lovable") {
+    themeId = "codle"
+    localStorage.setItem(key, themeId)
   }
 
   var scheme = localStorage.getItem("opencode-color-scheme") || "system"

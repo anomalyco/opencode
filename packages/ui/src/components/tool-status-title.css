@@ -1,8 +1,24 @@
 [data-component="tool-status-title"] {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
+  gap: 6px;
   white-space: nowrap;
   text-align: start;
+
+  [data-slot="tool-status-spinner"] {
+    width: 14px;
+    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: currentColor;
+
+    [data-component="spinner"] {
+      width: 14px;
+      height: 14px;
+    }
+  }
 
   [data-slot="tool-status-suffix"] {
     display: inline-flex;

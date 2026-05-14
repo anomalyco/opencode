@@ -294,7 +294,8 @@ export function MessageTimeline(props: {
   const shareUrl = createMemo(() => info()?.share?.url)
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const parentID = createMemo(() => info()?.parentID)
-  const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  const headerEnabled = import.meta.env.VITE_SESSION_HEADER !== "hidden"
+  const showHeader = createMemo(() => headerEnabled && !!(titleValue() || parentID()))
   const stageCfg = { init: 1, batch: 3 }
   const staging = createTimelineStaging({
     sessionKey,
@@ -575,8 +576,10 @@ export function MessageTimeline(props: {
           }}
         >
           <button
+            data-component="codle-scroll-bottom"
             class="pointer-events-auto size-8 flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
             onClick={props.onResumeScroll}
+            aria-label={language.t("session.messages.jumpToLatest")}
           >
             <Icon name="arrow-down-to-line" />
           </button>

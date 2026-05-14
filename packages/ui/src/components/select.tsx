@@ -20,6 +20,7 @@ export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "
   triggerStyle?: JSX.CSSProperties
   triggerVariant?: "settings"
   triggerProps?: Record<string, string | number | boolean | undefined>
+  contentProps?: Record<string, string | number | boolean | undefined>
 }
 
 export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">) {
@@ -40,6 +41,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
     "triggerStyle",
     "triggerVariant",
     "triggerProps",
+    "contentProps",
   ])
 
   const state = {
@@ -159,6 +161,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
       </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content
+          {...local.contentProps}
           classList={{
             ...(local.classList ?? {}),
             [local.class ?? ""]: !!local.class,

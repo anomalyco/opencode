@@ -34,6 +34,23 @@ describe("theme preload", () => {
     expect(document.getElementById("oc-theme-preload")).toBeNull()
   })
 
+  test("migrates legacy lovable to codle before mount", () => {
+    localStorage.setItem("opencode-theme-id", "lovable")
+
+    run()
+
+    expect(document.documentElement.dataset.theme).toBe("codle")
+    expect(localStorage.getItem("opencode-theme-id")).toBe("codle")
+  })
+
+  test("defaults to codle when no theme is stored", () => {
+    run()
+
+    expect(document.documentElement.dataset.theme).toBe("codle")
+    expect(document.documentElement.dataset.colorScheme).toBe("light")
+    expect(document.getElementById("oc-theme-preload")).toBeNull()
+  })
+
   test("keeps cached css for non-default themes", () => {
     localStorage.setItem("opencode-theme-id", "nightowl")
     localStorage.setItem("opencode-theme-css-light", "--background-base:#fff;")

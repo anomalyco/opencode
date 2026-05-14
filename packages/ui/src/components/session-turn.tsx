@@ -18,6 +18,7 @@ import { Icon } from "./icon"
 import { TextShimmer } from "./text-shimmer"
 import { SessionRetry } from "./session-retry"
 import { TextReveal } from "./text-reveal"
+import { Spinner } from "./spinner"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
 
@@ -415,6 +416,7 @@ export function SessionTurn(
               </Show>
               <Show when={showThinking()}>
                 <div data-slot="session-turn-thinking">
+                  <Spinner class="shrink-0" style={{ color: "currentColor" }} />
                   <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
                   <Show when={!showReasoningSummaries()}>
                     <TextReveal
