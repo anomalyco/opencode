@@ -91,6 +91,7 @@ const failed = t("share.error", "Error")
       const ok = document.execCommand("copy")
       document.body.removeChild(el)
       setState(ok ? "copied" : "failed")
+      return ok
     }
 
     btn.addEventListener("click", () => {
@@ -103,7 +104,7 @@ const failed = t("share.error", "Error")
           if (!res.ok) return setState("failed")
           return res.text().then((md) => {
             if (!navigator.clipboard?.writeText) return fallback(md)
-            navigator.clipboard.writeText(md).then(
+            return navigator.clipboard.writeText(md).then(
               () => setState("copied"),
               () => fallback(md),
             )
@@ -145,6 +146,8 @@ const failed = t("share.error", "Error")
     line-height: var(--sl-line-height-headings);
     font-family: var(--__sl-font-headings);
     letter-spacing: -0.5px;
+    color: var(--sl-color-text);
+    text-transform: uppercase;
   }
 
   .page-description {
