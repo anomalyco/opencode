@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, LLMError, Usage } from "../../src"
+import { CacheHint, LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
 import { LLMClient } from "../../src/route"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { it } from "../lib/effect"
@@ -18,6 +18,9 @@ const request = LLM.request({
   model,
   system: { type: "text", text: "You are concise.", cache: new CacheHint({ type: "ephemeral" }) },
   prompt: "Say hello.",
+  // This fixture predates the `cache: "auto"` default; pin the policy off so
+  // existing wire-shape assertions only see the manual hint on the system part.
+  cache: "none",
   generation: { maxTokens: 20, temperature: 0 },
 })
 
@@ -44,10 +47,11 @@ describe("Anthropic Messages route", () => {
           id: "req_tool_result",
           model,
           messages: [
-            LLM.user("What is the weather?"),
-            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
-            LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
           ],
+          cache: "none",
         }),
       )
 
@@ -73,7 +77,7 @@ describe("Anthropic Messages route", () => {
         LLM.request({
           model,
           messages: [
-            LLM.assistant([
+            Message.assistant([
               { type: "reasoning", text: "thinking", providerMetadata: { anthropic: { signature: "sig_1" } } },
             ]),
           ],
@@ -120,7 +124,7 @@ describe("Anthropic Messages route", () => {
         providerMetadata: { anthropic: { signature: "sig_1" } },
       })
       expect(response.events.at(-1)).toMatchObject({
-        type: "request-finish",
+        type: "finish",
         reason: "stop",
         providerMetadata: { anthropic: { stopSequence: "\n\nHuman:" } },
       })
@@ -142,24 +146,46 @@ describe("Anthropic Messages route", () => {
           tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
+      const usage = new Usage({
+        inputTokens: 5,
+        outputTokens: 1,
+        nonCachedInputTokens: 5,
+        cacheReadInputTokens: undefined,
+        cacheWriteInputTokens: undefined,
+        totalTokens: 6,
+        providerMetadata: { anthropic: { input_tokens: 5, output_tokens: 1 } },
+      })
 
       expect(response.toolCalls).toEqual([
-        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { query: "weather" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
       ])
       expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        { type: "tool-input-start", id: "call_1", name: "lookup" },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
-        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata: undefined },
         {
-          type: "request-finish",
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { query: "weather" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+        { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
+        {
+          type: "finish",
           reason: "tool-calls",
-          usage: new Usage({
-            inputTokens: 5,
-            outputTokens: 1,
-            nonCachedInputTokens: 5,
-            totalTokens: 6,
-            providerMetadata: { anthropic: { input_tokens: 5, output_tokens: 1 } },
-          }),
+          providerMetadata: undefined,
+          usage,
         },
       ])
     }),
@@ -249,7 +275,7 @@ describe("Anthropic Messages route", () => {
         providerMetadata: { anthropic: { blockType: "web_search_tool_result" } },
       })
       expect(response.text).toBe("Found it.")
-      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "stop" })
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
     }),
   )
 
@@ -300,8 +326,8 @@ describe("Anthropic Messages route", () => {
           id: "req_round_trip",
           model,
           messages: [
-            LLM.user("Search for something."),
-            LLM.assistant([
+            Message.user("Search for something."),
+            Message.assistant([
               {
                 type: "tool-call",
                 id: "srvtoolu_abc",
@@ -318,7 +344,7 @@ describe("Anthropic Messages route", () => {
               },
               { type: "text", text: "Found it." },
             ]),
-            LLM.user("Thanks."),
+            Message.user("Thanks."),
           ],
         }),
       )
@@ -351,7 +377,7 @@ describe("Anthropic Messages route", () => {
           id: "req_unknown_server_tool",
           model,
           messages: [
-            LLM.assistant([
+            Message.assistant([
               {
                 type: "tool-result",
                 id: "srvtoolu_abc",
@@ -374,7 +400,7 @@ describe("Anthropic Messages route", () => {
         LLM.request({
           id: "req_media",
           model,
-          messages: [LLM.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [Message.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
         }),
       ).pipe(Effect.flip)
 
@@ -412,9 +438,9 @@ describe("Anthropic Messages route", () => {
             },
           ],
           messages: [
-            LLM.user("What's the weather?"),
-            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: {} })]),
-            LLM.toolMessage({
+            Message.user("What's the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+            Message.tool({
               id: "call_1",
               name: "lookup",
               result: { temp: 72 },
@@ -497,7 +523,7 @@ describe("Anthropic Messages route", () => {
             },
           ],
           system: [{ type: "text", text: "system-tail", cache: hint }],
-          messages: [LLM.user([{ type: "text", text: "message-tail", cache: hint }])],
+          messages: [Message.user([{ type: "text", text: "message-tail", cache: hint }])],
         }),
       )
 

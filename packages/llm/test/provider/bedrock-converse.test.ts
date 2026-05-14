@@ -2,7 +2,7 @@ import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM } from "../../src"
+import { CacheHint, LLM, Message, ToolCallPart, ToolChoice } from "../../src"
 import { LLMClient } from "../../src/route"
 import * as BedrockConverse from "../../src/protocols/bedrock-converse"
 import { it } from "../lib/effect"
@@ -63,6 +63,9 @@ const baseRequest = LLM.request({
   model,
   system: "You are concise.",
   prompt: "Say hello.",
+  // Wire-shape assertions in this file predate the `cache: "auto"` default;
+  // pin the policy off so they only exercise the lowering path itself.
+  cache: "none",
   generation: { maxTokens: 64, temperature: 0 },
 })
 
@@ -91,7 +94,7 @@ describe("Bedrock Converse route", () => {
               inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
             },
           ],
-          toolChoice: LLM.toolChoice({ type: "required" }),
+          toolChoice: ToolChoice.make({ type: "required" }),
         }),
       )
 
@@ -121,10 +124,11 @@ describe("Bedrock Converse route", () => {
           id: "req_history",
           model,
           messages: [
-            LLM.user("What is the weather?"),
-            LLM.assistant([LLM.toolCall({ id: "tool_1", name: "lookup", input: { query: "weather" } })]),
-            LLM.toolMessage({ id: "tool_1", name: "lookup", result: { forecast: "sunny" } }),
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "tool_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "tool_1", name: "lookup", result: { forecast: "sunny" } }),
           ],
+          cache: "none",
         }),
       )
 
@@ -165,12 +169,12 @@ describe("Bedrock Converse route", () => {
       const response = yield* LLMClient.generate(baseRequest).pipe(Effect.provide(fixedBytes(body)))
 
       expect(response.text).toBe("Hello!")
-      const finishes = response.events.filter((event) => event.type === "request-finish")
+      const finishes = response.events.filter((event) => event.type === "finish")
       // Bedrock splits the finish across `messageStop` (carries reason) and
       // `metadata` (carries usage). We consolidate them into a single
-      // terminal `request-finish` event with both.
+      // terminal `finish` event with both.
       expect(finishes).toHaveLength(1)
-      expect(finishes[0]).toMatchObject({ type: "request-finish", reason: "stop" })
+      expect(finishes[0]).toMatchObject({ type: "finish", reason: "stop" })
       expect(response.usage).toMatchObject({
         inputTokens: 5,
         outputTokens: 2,
@@ -209,7 +213,7 @@ describe("Bedrock Converse route", () => {
         { type: "tool-input-delta", id: "tool_1", name: "lookup", text: '{"query"' },
         { type: "tool-input-delta", id: "tool_1", name: "lookup", text: ':"weather"}' },
       ])
-      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "tool-calls" })
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "tool-calls" })
     }),
   )
 
@@ -290,8 +294,8 @@ describe("Bedrock Converse route", () => {
           model,
           system: [{ type: "text", text: "System prefix.", cache }],
           messages: [
-            LLM.user([{ type: "text", text: "User prefix.", cache }]),
-            LLM.assistant([{ type: "text", text: "Assistant prefix.", cache }]),
+            Message.user([{ type: "text", text: "User prefix.", cache }]),
+            Message.assistant([{ type: "text", text: "Assistant prefix.", cache }]),
           ],
           generation: { maxTokens: 16, temperature: 0 },
         }),
@@ -331,7 +335,7 @@ describe("Bedrock Converse route", () => {
           id: "req_image",
           model,
           messages: [
-            LLM.user([
+            Message.user([
               { type: "text", text: "What is in this image?" },
               { type: "media", mediaType: "image/png", data: "AAAA" },
               { type: "media", mediaType: "image/jpeg", data: "BBBB" },
@@ -339,6 +343,7 @@ describe("Bedrock Converse route", () => {
               { type: "media", mediaType: "image/webp", data: "DDDD" },
             ]),
           ],
+          cache: "none",
         }),
       )
 
@@ -366,7 +371,7 @@ describe("Bedrock Converse route", () => {
         LLM.request({
           id: "req_image_bytes",
           model,
-          messages: [LLM.user([{ type: "media", mediaType: "image/png", data: new Uint8Array([1, 2, 3, 4, 5]) }])],
+          messages: [Message.user([{ type: "media", mediaType: "image/png", data: new Uint8Array([1, 2, 3, 4, 5]) }])],
         }),
       )
 
@@ -389,7 +394,7 @@ describe("Bedrock Converse route", () => {
           id: "req_doc",
           model,
           messages: [
-            LLM.user([
+            Message.user([
               { type: "media", mediaType: "application/pdf", data: "PDFDATA", filename: "report.pdf" },
               { type: "media", mediaType: "text/csv", data: "CSVDATA" },
             ]),
@@ -419,7 +424,7 @@ describe("Bedrock Converse route", () => {
         LLM.request({
           id: "req_bad_image",
           model,
-          messages: [LLM.user([{ type: "media", mediaType: "image/svg+xml", data: "x" }])],
+          messages: [Message.user([{ type: "media", mediaType: "image/svg+xml", data: "x" }])],
         }),
       ).pipe(Effect.flip)
 
@@ -433,7 +438,7 @@ describe("Bedrock Converse route", () => {
         LLM.request({
           id: "req_bad_doc",
           model,
-          messages: [LLM.user([{ type: "media", mediaType: "application/x-tar", data: "x", filename: "a.tar" }])],
+          messages: [Message.user([{ type: "media", mediaType: "application/x-tar", data: "x", filename: "a.tar" }])],
         }),
       ).pipe(Effect.flip)
 
@@ -466,10 +471,11 @@ describe("Bedrock Converse route", () => {
           model,
           tools: [{ name: "lookup", description: "lookup", inputSchema: { type: "object", properties: {} }, cache }],
           messages: [
-            LLM.user("What's the weather?"),
-            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: {} })]),
-            LLM.toolMessage({ id: "call_1", name: "lookup", result: { temp: 72 }, cache }),
+            Message.user("What's the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+            Message.tool({ id: "call_1", name: "lookup", result: { temp: 72 }, cache }),
           ],
+          cache: "none",
         }),
       )
 
@@ -555,6 +561,7 @@ describe("Bedrock Converse recorded", () => {
           model: recordedModel(),
           system: "Reply with the single word 'Hello'.",
           prompt: "Say hello.",
+          cache: "none",
           generation: { maxTokens: 16, temperature: 0 },
         }),
       )
@@ -576,7 +583,8 @@ describe("Bedrock Converse recorded", () => {
           system: "Call tools exactly as requested.",
           prompt: "Call get_weather with city exactly Paris.",
           tools: [weatherTool],
-          toolChoice: LLM.toolChoice(weatherTool),
+          toolChoice: ToolChoice.make(weatherTool),
+          cache: "none",
           generation: { maxTokens: 80, temperature: 0 },
         }),
       )

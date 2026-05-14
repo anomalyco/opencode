@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process"
+import { userInfo } from "node:os"
 import { basename } from "node:path"
 import { getLogger } from "./logging"
 
@@ -6,8 +7,17 @@ const TIMEOUT = 5_000
 
 type Probe = { type: "Loaded"; value: Record<string, string> } | { type: "Timeout" } | { type: "Unavailable" }
 
+export function resolveUserShell(envShell: string | undefined, loginShell: string | null | undefined) {
+  const resolvedLoginShell = loginShell && loginShell !== "unknown" ? loginShell : undefined
+  return envShell || resolvedLoginShell || "/bin/sh"
+}
+
 export function getUserShell() {
-  return process.env.SHELL || "/bin/sh"
+  try {
+    return resolveUserShell(process.env.SHELL, userInfo().shell)
+  } catch {
+    return resolveUserShell(process.env.SHELL, undefined)
+  }
 }
 
 export function parseShellEnv(out: Buffer) {

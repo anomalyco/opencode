@@ -71,10 +71,7 @@ export const totalTokens = (
  * counts). If `subtrahend` is `undefined`, returns `total` unchanged. The
  * provider-native breakdown stays available on `Usage.native` for debugging.
  */
-export const subtractTokens = (
-  total: number | undefined,
-  subtrahend: number | undefined,
-): number | undefined => {
+export const subtractTokens = (total: number | undefined, subtrahend: number | undefined): number | undefined => {
   if (total === undefined) return undefined
   if (subtrahend === undefined) return total
   return Math.max(0, total - subtrahend)

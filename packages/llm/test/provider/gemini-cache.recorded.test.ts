@@ -8,7 +8,7 @@ import { recordedTests } from "../recorded-test"
 
 const model = Gemini.model({
   id: "gemini-2.5-flash",
-  apiKey: process.env.GEMINI_API_KEY ?? "fixture",
+  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY ?? "fixture",
 })
 
 // Gemini does implicit prefix caching on 2.5+ models above ~1024 tokens. The
@@ -28,7 +28,9 @@ const recorded = recordedTests({
   prefix: "gemini-cache",
   provider: "google",
   protocol: "gemini",
-  requires: ["GEMINI_API_KEY"],
+  requires: ["GOOGLE_GENERATIVE_AI_API_KEY"],
+  // Two identical requests in one cassette — replay walks the cassette in
+  // recording order so the second call replays the cached-hit interaction.
 })
 
 describe("Gemini cache recorded", () => {

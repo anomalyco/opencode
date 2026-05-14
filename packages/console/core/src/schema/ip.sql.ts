@@ -40,3 +40,24 @@ export const ModelTpmRateLimitTable = mysqlTable(
   },
   (table) => [primaryKey({ columns: [table.id, table.interval] })],
 )
+
+export const ModelTpsRateLimitTable = mysqlTable(
+  "model_tps_rate_limit",
+  {
+    id: varchar("id", { length: 255 }).notNull(),
+    interval: bigint("interval", { mode: "number" }).notNull(),
+    qualify: int("qualify").notNull(),
+    unqualify: int("unqualify").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.id, table.interval] })],
+)
+
+export const ModelStickyProviderTable = mysqlTable(
+  "model_sticky_provider",
+  {
+    id: varchar("id", { length: 255 }).notNull(),
+    ...timestamps,
+    providerId: varchar("provider_id", { length: 255 }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.id] })],
+)

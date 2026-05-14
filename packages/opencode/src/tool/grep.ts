@@ -54,19 +54,20 @@ export const GrepTool = Tool.define(
           })
 
           const ins = yield* InstanceState.context
-          const search = AppFileSystem.resolve(
-            path.isAbsolute(params.path ?? ins.directory)
-              ? (params.path ?? ins.directory)
-              : path.join(ins.directory, params.path ?? "."),
-          )
-          yield* reference.ensure(search)
+          const requested = path.isAbsolute(params.path ?? ins.directory)
+            ? (params.path ?? ins.directory)
+            : path.join(ins.directory, params.path ?? ".")
+          yield* reference.ensure(requested)
+          const requestedInfo = yield* fs.stat(requested).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          yield* assertExternalDirectoryEffect(ctx, requested, {
+            bypass: yield* reference.contains(requested),
+            kind: requestedInfo?.type === "Directory" ? "directory" : "file",
+          })
+
+          const search = AppFileSystem.resolve(requested)
           const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
           const cwd = info?.type === "Directory" ? search : path.dirname(search)
           const file = info?.type === "Directory" ? undefined : [path.relative(cwd, search)]
-          yield* assertExternalDirectoryEffect(ctx, search, {
-            bypass: yield* reference.contains(search),
-            kind: info?.type === "Directory" ? "directory" : "file",
-          })
 
           const result = yield* rg.search({
             cwd,
