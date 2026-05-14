@@ -1468,6 +1468,31 @@ describe("session.message-v2.fromError", () => {
     })
   })
 
+  test("detects request max-token overflow API call errors", () => {
+    const cases = [
+      "tokens in request more than max tokens allowed",
+      "Input token count exceeded maximum number of tokens allowed",
+    ]
+
+    cases.forEach((message) => {
+      const result = MessageV2.fromError(
+        new APICallError({
+          message,
+          url: "https://example.com",
+          requestBodyValues: {},
+          statusCode: 400,
+          responseHeaders: { "content-type": "application/json" },
+          isRetryable: false,
+        }),
+        { providerID },
+      )
+
+      expect(MessageV2.ContextOverflowError.isInstance(result)).toBe(true)
+      if (!MessageV2.ContextOverflowError.isInstance(result)) throw new Error("expected ContextOverflowError")
+      expect(result.data.message).toBe(message)
+    })
+  })
+
   test("detects context overflow from context_length_exceeded code in response body", () => {
     const error = new APICallError({
       message: "Request failed",
@@ -1502,6 +1527,27 @@ describe("session.message-v2.fromError", () => {
     )
     expect(SessionV1.ContextOverflowError.isInstance(result)).toBe(false)
     expect(SessionV1.APIError.isInstance(result)).toBe(true)
+  })
+
+  test("does not classify max_tokens setting errors as context overflow", () => {
+    const message = "max_tokens must be less than or equal to 4096"
+    const result = MessageV2.fromError(
+      new APICallError({
+        message,
+        url: "https://example.com",
+        requestBodyValues: {},
+        statusCode: 400,
+        responseHeaders: { "content-type": "application/json" },
+        responseBody: JSON.stringify({ error: { message } }),
+        isRetryable: false,
+      }),
+      { providerID },
+    )
+
+    expect(MessageV2.ContextOverflowError.isInstance(result)).toBe(false)
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    if (!MessageV2.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.message).toContain(message)
   })
 
   test("serializes unknown inputs", () => {

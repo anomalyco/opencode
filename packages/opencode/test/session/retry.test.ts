@@ -191,6 +191,23 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
   })
 
+  test("does not retry request max-token overflow API call errors", () => {
+    const error = MessageV2.fromError(
+      new APICallError({
+        message: "tokens in request more than max tokens allowed",
+        url: "https://example.com",
+        requestBodyValues: {},
+        statusCode: 400,
+        responseHeaders: { "content-type": "application/json" },
+        isRetryable: false,
+      }),
+      { providerID },
+    )
+
+    expect(MessageV2.ContextOverflowError.isInstance(error)).toBe(true)
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+  })
+
   test("retries 500 errors even when isRetryable is false", () => {
     const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
       new SessionV1.APIError({
