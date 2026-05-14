@@ -2005,6 +2005,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         agent: userAgent,
         parts,
         variant: input.variant,
+        noReply: cmd.noReply ?? false,
       })
       yield* bus.publish(Command.Event.Executed, {
         name: input.command,
