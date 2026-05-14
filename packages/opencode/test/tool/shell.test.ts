@@ -17,6 +17,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Plugin } from "../../src/plugin"
 import { testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const shellLayer = Layer.mergeAll(
   CrossSpawnSpawner.defaultLayer,
@@ -25,6 +26,7 @@ const shellLayer = Layer.mergeAll(
   Truncate.defaultLayer,
   Config.defaultLayer,
   Agent.defaultLayer,
+  RuntimeFlags.defaultLayer,
 )
 const it = testEffect(shellLayer)
 type ShellTestServices =
@@ -1074,6 +1076,23 @@ describe("tool.shell abort", () => {
           expect(result.output).toContain("retry with a larger timeout value in milliseconds")
         }),
       ),
+    15_000,
+  )
+
+  it.live(
+    "uses RuntimeFlags bashDefaultTimeoutMs when timeout is omitted",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const result = yield* run({
+            command: `echo started && sleep 60`,
+            description: "Default timeout test",
+          })
+          expect(result.output).toContain("started")
+          expect(result.output).toContain("exceeding timeout 500 ms")
+        }),
+      ).pipe(Effect.provide(RuntimeFlags.layer({ bashDefaultTimeoutMs: 500 }))),
     15_000,
   )
 

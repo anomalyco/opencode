@@ -6,6 +6,7 @@ import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
+import { BackgroundJob } from "@/background/job"
 import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
 import { Config } from "@/config/config"
@@ -176,6 +177,7 @@ function makeHttp(input?: { processor?: "blocking" }) {
     lsp,
     mcp,
     AppFileSystem.defaultLayer,
+    BackgroundJob.defaultLayer,
     status,
     SyncEvent.defaultLayer,
   ).pipe(Layer.provideMerge(infra))
@@ -332,6 +334,21 @@ const pollWithTimeout = <A, E, R>(
       duration,
       orElse: () => Effect.fail(new Error(message)),
     }),
+  )
+
+// Wait for a session's runner to enter a busy state. SessionStatus is flipped to
+// "busy" inside Runner.startShell's modifyEffect at the same moment the runner
+// is registered, so this is a deterministic readiness signal — cancel can't
+// no-op once we observe it.
+const waitForBusy = (sessionID: SessionID, duration: Duration.Input = "2 seconds") =>
+  pollWithTimeout(
+    Effect.gen(function* () {
+      const status = yield* SessionStatus.Service
+      const s = yield* status.get(sessionID)
+      return s.type === "busy" ? (true as const) : undefined
+    }),
+    `session ${sessionID} never became busy`,
+    duration,
   )
 
 const hasBash = Effect.sync(() => Bun.which("bash") !== null)
@@ -1491,7 +1508,7 @@ it.instance(
       const sh = yield* prompt
         .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
         .pipe(Effect.forkChild)
-      yield* Effect.sleep(50)
+      yield* waitForBusy(chat.id)
 
       const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
       yield* Effect.sleep(50)
@@ -1528,7 +1545,7 @@ it.instance(
       const sh = yield* prompt
         .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
         .pipe(Effect.forkChild)
-      yield* Effect.sleep(50)
+      yield* waitForBusy(chat.id)
 
       const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
       const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
@@ -1595,7 +1612,7 @@ unix(
         const sh = yield* prompt
           .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
           .pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
+        yield* waitForBusy(chat.id)
 
         yield* prompt.cancel(chat.id)
 
@@ -1719,7 +1736,7 @@ unix(
       const { prompt, chat } = yield* boot()
 
       const sh = yield* prompt.shell({ sessionID: chat.id, agent: "build", command: "sleep 30" }).pipe(Effect.forkChild)
-      yield* Effect.sleep(50)
+      yield* waitForBusy(chat.id)
 
       const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
       yield* Effect.sleep(50)
@@ -1749,7 +1766,7 @@ unix(
         const a = yield* prompt
           .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
           .pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
+        yield* waitForBusy(chat.id)
 
         const exit = yield* prompt.shell({ sessionID: chat.id, agent: "build", command: "echo hi" }).pipe(Effect.exit)
         expect(Exit.isFailure(exit)).toBe(true)

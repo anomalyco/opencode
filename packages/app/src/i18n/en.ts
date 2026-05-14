@@ -903,7 +903,7 @@ export const dict = {
   "settings.permissions.tool.read.title": "Read",
   "settings.permissions.tool.read.description": "Reading a file (matches the file path)",
   "settings.permissions.tool.edit.title": "Edit",
-  "settings.permissions.tool.edit.description": "Modify files, including edits, writes, patches, and multi-edits",
+  "settings.permissions.tool.edit.description": "Modify files, including edits, writes, and patches",
   "settings.permissions.tool.glob.title": "Glob",
   "settings.permissions.tool.glob.description": "Match files using glob patterns",
   "settings.permissions.tool.grep.title": "Grep",
