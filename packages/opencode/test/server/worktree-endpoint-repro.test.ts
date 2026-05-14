@@ -129,6 +129,10 @@ function createWorktreeScoped(input: {
         input.timeoutLabel,
         input.timeoutMs,
       )
+      if (response.status !== 200) {
+        const message = yield* Effect.promise(() => response.text())
+        throw new Error(`${input.timeoutLabel} failed: ${response.status} ${message}`)
+      }
       expect(response.status).toBe(200)
       const body = yield* json<CreatedWorktree>(response)
       return { directory: body.directory, body, ready: waitReady(body.directory) } satisfies ScopedWorktree
@@ -179,6 +183,46 @@ describe("worktree endpoint reproduction", () => {
             body: JSON.stringify({}),
           },
           timeoutLabel: "direct worktree create",
+        })
+
+        expect(response).toMatchObject({ directory: expect.any(String) })
+      }),
+    { git: true },
+  )
+
+  worktreeTest(
+    "direct HttpApi worktree create accepts missing body",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const server = yield* serverScoped()
+
+        const response = yield* createWorktreeScoped({
+          server,
+          directory: test.directory,
+          path: `${ExperimentalPaths.worktree}?directory=${encodeURIComponent(test.directory)}`,
+          init: { method: "POST", headers: { "content-type": "application/json" } },
+          timeoutLabel: "direct worktree create without body",
+        })
+
+        expect(response).toMatchObject({ directory: expect.any(String) })
+      }),
+    { git: true },
+  )
+
+  worktreeTest(
+    "direct HttpApi worktree create accepts missing content type and body",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const server = yield* serverScoped()
+
+        const response = yield* createWorktreeScoped({
+          server,
+          directory: test.directory,
+          path: `${ExperimentalPaths.worktree}?directory=${encodeURIComponent(test.directory)}`,
+          init: { method: "POST" },
+          timeoutLabel: "direct worktree create without content type or body",
         })
 
         expect(response).toMatchObject({ directory: expect.any(String) })
