@@ -2,6 +2,8 @@ import { expect, test } from "bun:test"
 import * as DateTime from "effect/DateTime"
 import { SessionID } from "../../src/session/schema"
 import { EventV2 } from "../../src/v2/event"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionEvent } from "../../src/v2/session-event"
 import { SessionMessageUpdater } from "../../src/v2/session-message-updater"
 
@@ -16,7 +18,11 @@ test("step snapshots carry over to assistant messages", () => {
       sessionID,
       timestamp: DateTime.makeUnsafe(1),
       agent: "build",
-      model: { id: "model", providerID: "provider" },
+      model: {
+        id: ModelV2.ID.make("model"),
+        providerID: ProviderV2.ID.make("provider"),
+        variant: ModelV2.VariantID.make("default"),
+      },
       snapshot: "before",
     },
   } satisfies SessionEvent.Event)
@@ -56,7 +62,11 @@ test("text ended populates assistant text content", () => {
       sessionID,
       timestamp: DateTime.makeUnsafe(1),
       agent: "build",
-      model: { id: "model", providerID: "provider" },
+      model: {
+        id: ModelV2.ID.make("model"),
+        providerID: ProviderV2.ID.make("provider"),
+        variant: ModelV2.VariantID.make("default"),
+      },
     },
   } satisfies SessionEvent.Event)
 
@@ -96,7 +106,11 @@ test("tool completion stores completed timestamp", () => {
       sessionID,
       timestamp: DateTime.makeUnsafe(1),
       agent: "build",
-      model: { id: "model", providerID: "provider" },
+      model: {
+        id: ModelV2.ID.make("model"),
+        providerID: ProviderV2.ID.make("provider"),
+        variant: ModelV2.VariantID.make("default"),
+      },
     },
   } satisfies SessionEvent.Event)
 

@@ -1,6 +1,6 @@
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppProcess } from "@opencode-ai/core/process"
 import { Effect, Layer, Context, Stream } from "effect"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { ChildProcess } from "effect/unstable/process"
 
 const cfg = [
   "--no-optional-locks",
@@ -68,6 +68,7 @@ export interface Options {
   readonly cwd: string
   readonly env?: Record<string, string>
   readonly maxOutputBytes?: number
+  readonly stdin?: ChildProcess.CommandInput
 }
 
 export interface Interface {
@@ -85,6 +86,7 @@ export interface Interface {
   readonly patchAll: (cwd: string, ref: string, options?: PatchOptions) => Effect.Effect<Patch>
   readonly patchUntracked: (cwd: string, file: string, options?: PatchOptions) => Effect.Effect<Patch>
   readonly statUntracked: (cwd: string, file: string) => Effect.Effect<Stat | undefined>
+  readonly applyPatch: (cwd: string, patch: string) => Effect.Effect<Result>
 }
 
 const kind = (code: string): Kind => {
@@ -100,47 +102,31 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Gi
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const appProcess = yield* AppProcess.Service
+    const encoder = new TextEncoder()
+    const stdin = (text: string) => Stream.make(encoder.encode(text))
 
     const run = Effect.fn("Git.run")(
       function* (args: string[], opts: Options) {
-        const proc = ChildProcess.make("git", [...cfg, ...args], {
-          cwd: opts.cwd,
-          env: opts.env,
-          extendEnv: true,
-          stdin: "ignore",
-          stdout: "pipe",
-          stderr: "pipe",
-        })
-        const handle = yield* spawner.spawn(proc)
-        const collect = (stream: typeof handle.stdout) =>
-          Stream.runFold(
-            stream,
-            () => ({ chunks: [] as Uint8Array[], bytes: 0, truncated: false }),
-            (acc, chunk) => {
-              if (opts.maxOutputBytes === undefined) {
-                acc.chunks.push(chunk)
-                acc.bytes += chunk.length
-                return acc
-              }
-
-              const remaining = opts.maxOutputBytes - acc.bytes
-              if (remaining > 0) acc.chunks.push(remaining >= chunk.length ? chunk : chunk.slice(0, remaining))
-              acc.bytes += chunk.length
-              acc.truncated = acc.truncated || acc.bytes > opts.maxOutputBytes
-              return acc
-            },
-          ).pipe(Effect.map((x) => ({ buffer: Buffer.concat(x.chunks), truncated: x.truncated })))
-        const [stdout, stderr] = yield* Effect.all([collect(handle.stdout), collect(handle.stderr)], { concurrency: 2 })
+        const result = yield* appProcess.run(
+          ChildProcess.make("git", [...cfg, ...args], {
+            cwd: opts.cwd,
+            env: opts.env,
+            extendEnv: true,
+            stdin: opts.stdin ?? "ignore",
+            stdout: "pipe",
+            stderr: "pipe",
+          }),
+          { maxOutputBytes: opts.maxOutputBytes },
+        )
         return {
-          exitCode: yield* handle.exitCode,
-          text: () => stdout.buffer.toString("utf8"),
-          stdout: stdout.buffer,
-          stderr: stderr.buffer,
-          truncated: stdout.truncated || stderr.truncated,
+          exitCode: result.exitCode,
+          text: () => result.stdout.toString("utf8"),
+          stdout: result.stdout,
+          stderr: result.stderr,
+          truncated: result.stdoutTruncated || result.stderrTruncated,
         } satisfies Result
       },
-      Effect.scoped,
       Effect.catch((err) => Effect.succeed(fail(err))),
     )
 
@@ -316,9 +302,13 @@ export const layer = Layer.effect(
         cwd,
         maxOutputBytes: 4096,
       })
+
       if (result.truncated) return
-      const parts = result.text().split("\t")
+      const text = result.text()
+
+      const parts = text.split("\t")
       if (parts.length < 2) return
+
       const additions = parts[0] === "-" ? 0 : Number.parseInt(parts[0] || "0", 10)
       const deletions = parts[1] === "-" ? 0 : Number.parseInt(parts[1] || "0", 10)
       return {
@@ -326,6 +316,10 @@ export const layer = Layer.effect(
         additions: Number.isFinite(additions) ? additions : 0,
         deletions: Number.isFinite(deletions) ? deletions : 0,
       } satisfies Stat
+    })
+
+    const applyPatch = Effect.fn("Git.applyPatch")(function* (cwd: string, patch: string) {
+      return yield* run(["apply", "-"], { cwd, stdin: stdin(patch) })
     })
 
     return Service.of({
@@ -343,10 +337,11 @@ export const layer = Layer.effect(
       patchAll,
       patchUntracked,
       statUntracked,
+      applyPatch,
     })
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide(AppProcess.defaultLayer))
 
 export * as Git from "."

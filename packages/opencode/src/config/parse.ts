@@ -2,11 +2,8 @@ export * as ConfigParse from "./parse"
 
 import { type ParseError as JsoncParseError, parse as parseJsoncImpl, printParseErrorCode } from "jsonc-parser"
 import { Cause, Exit, Schema as EffectSchema, SchemaIssue } from "effect"
-import z from "zod"
-import type { DeepMutable } from "@/util/schema"
+import type { DeepMutable } from "@opencode-ai/core/schema"
 import { InvalidError, JsonError } from "./error"
-
-type ZodSchema<T> = z.ZodType<T>
 
 export function jsonc(text: string, filepath: string): unknown {
   const errors: JsoncParseError[] = []
@@ -35,17 +32,7 @@ export function jsonc(text: string, filepath: string): unknown {
   return data
 }
 
-export function schema<T>(schema: ZodSchema<T>, data: unknown, source: string): T {
-  const parsed = schema.safeParse(data)
-  if (parsed.success) return parsed.data
-
-  throw new InvalidError({
-    path: source,
-    issues: parsed.error.issues,
-  })
-}
-
-export function effectSchema<S extends EffectSchema.Decoder<unknown, never>>(
+export function schema<S extends EffectSchema.Decoder<unknown, never>>(
   schema: S,
   data: unknown,
   source: string,
@@ -60,7 +47,7 @@ export function effectSchema<S extends EffectSchema.Decoder<unknown, never>>(
           keys: extra,
           path: [],
           message: `Unrecognized key${extra.length === 1 ? "" : "s"}: ${extra.join(", ")}`,
-        } as z.core.$ZodIssue,
+        },
       ],
     })
   }
@@ -73,8 +60,12 @@ export function effectSchema<S extends EffectSchema.Decoder<unknown, never>>(
     {
       path: source,
       issues: EffectSchema.isSchemaError(error)
-        ? (SchemaIssue.makeFormatterStandardSchemaV1()(error.issue).issues as z.core.$ZodIssue[])
-        : ([{ code: "custom", message: String(error), path: [] }] as z.core.$ZodIssue[]),
+        ? SchemaIssue.makeFormatterStandardSchemaV1()(error.issue).issues.map((issue) => ({
+            ...issue,
+            message: issue.message,
+            path: issue.path?.map(String) ?? [],
+          }))
+        : [{ message: String(error), path: [] }],
     },
     { cause: error },
   )
