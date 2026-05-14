@@ -49,7 +49,7 @@ import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
 import { Reference } from "../../src/reference/reference"
 import { TestInstance } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
 import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -305,36 +305,6 @@ const useServerConfig = Effect.fn("test.useServerConfig")(function* (config: (ur
   yield* writeConfig(dir, config(llm.url))
   return { dir, llm }
 })
-
-const awaitWithTimeout = <A, E, R>(
-  self: Effect.Effect<A, E, R>,
-  message: string,
-  duration: Duration.Input = "2 seconds",
-) =>
-  self.pipe(
-    Effect.timeoutOrElse({
-      duration,
-      orElse: () => Effect.fail(new Error(message)),
-    }),
-  )
-
-const pollWithTimeout = <A, E, R>(
-  self: Effect.Effect<A | undefined, E, R>,
-  message: string,
-  duration: Duration.Input = "5 seconds",
-) =>
-  Effect.gen(function* () {
-    while (true) {
-      const result = yield* self
-      if (result !== undefined) return result
-      yield* Effect.sleep("20 millis")
-    }
-  }).pipe(
-    Effect.timeoutOrElse({
-      duration,
-      orElse: () => Effect.fail(new Error(message)),
-    }),
-  )
 
 // Wait for a session's runner to enter a busy state. SessionStatus is flipped to
 // "busy" inside Runner.startShell's modifyEffect at the same moment the runner
