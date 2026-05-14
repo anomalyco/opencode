@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
 import { APICallError } from "ai"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { Bus } from "../../src/bus"
 import { Config } from "@/config/config"
@@ -28,6 +28,7 @@ import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { TestConfig } from "../fixture/config"
 import { SyncEvent } from "@/sync"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 void Log.init({ print: false })
 
@@ -211,7 +212,7 @@ function layer(result: "continue" | "compact") {
 }
 
 function cfg(compaction?: Config.Info["compaction"]) {
-  const base = Config.Info.zod.parse({})
+  const base = Schema.decodeUnknownSync(Config.Info)({}) as Config.Info
   return TestConfig.layer({
     get: () => Effect.succeed({ ...base, compaction }),
   })
@@ -225,6 +226,7 @@ const deps = Layer.mergeAll(
   Bus.layer,
   Config.defaultLayer,
   SyncEvent.defaultLayer,
+  RuntimeFlags.layer({ experimentalEventSystem: true }),
 )
 
 const env = Layer.mergeAll(
@@ -257,6 +259,7 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
     ? SessionProcessorModule.SessionProcessor.layer.pipe(
         Layer.provide(summary),
         Layer.provide(Image.defaultLayer),
+        Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
         Layer.provide(status),
       )
     : layer(options?.result ?? "continue")
@@ -272,6 +275,7 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
     Layer.provide(bus),
     Layer.provide(options?.config ?? Config.defaultLayer),
     Layer.provide(SyncEvent.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
   )
 }
 
@@ -1756,6 +1760,101 @@ describe("SessionNs.getUsage", () => {
     })
 
     expect(result.cost).toBe(3 + 1.5)
+  })
+
+  test("uses matching context cost tier before over-200k fallback", () => {
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: {
+        input: 1,
+        output: 2,
+        cache: { read: 0.1, write: 0.5 },
+        tiers: [
+          {
+            input: 3,
+            output: 4,
+            cache: { read: 0.3, write: 1.5 },
+            tier: { type: "context", size: 200_000 },
+          },
+          {
+            input: 5,
+            output: 6,
+            cache: { read: 0.5, write: 2.5 },
+            tier: { type: "context", size: 500_000 },
+          },
+        ],
+        experimentalOver200K: {
+          input: 100,
+          output: 100,
+          cache: { read: 100, write: 100 },
+        },
+      },
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: {
+        inputTokens: 650_000,
+        outputTokens: 100_000,
+        totalTokens: 750_000,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: 100_000,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
+      },
+    })
+
+    expect(result.tokens.input).toBe(550_000)
+    expect(result.cost).toBe(2.75 + 0.6 + 0.05)
+  })
+
+  test("falls back to over-200k pricing when no cost tier matches", () => {
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: {
+        input: 1,
+        output: 2,
+        cache: { read: 0.1, write: 0.5 },
+        tiers: [
+          {
+            input: 5,
+            output: 6,
+            cache: { read: 0.5, write: 2.5 },
+            tier: { type: "context", size: 500_000 },
+          },
+        ],
+        experimentalOver200K: {
+          input: 3,
+          output: 4,
+          cache: { read: 0.3, write: 1.5 },
+        },
+      },
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: {
+        inputTokens: 300_000,
+        outputTokens: 100_000,
+        totalTokens: 400_000,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
+      },
+    })
+
+    expect(result.cost).toBe(0.9 + 0.4)
   })
 
   test.each(["@ai-sdk/anthropic", "@ai-sdk/amazon-bedrock", "@ai-sdk/google-vertex/anthropic"])(

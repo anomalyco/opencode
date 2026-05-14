@@ -1,6 +1,6 @@
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppProcess } from "@opencode-ai/core/process"
 import { Effect, Layer, Context, Stream } from "effect"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { ChildProcess } from "effect/unstable/process"
 
 const cfg = [
   "--no-optional-locks",
@@ -102,49 +102,31 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Gi
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const appProcess = yield* AppProcess.Service
     const encoder = new TextEncoder()
     const stdin = (text: string) => Stream.make(encoder.encode(text))
 
     const run = Effect.fn("Git.run")(
       function* (args: string[], opts: Options) {
-        const proc = ChildProcess.make("git", [...cfg, ...args], {
-          cwd: opts.cwd,
-          env: opts.env,
-          extendEnv: true,
-          stdin: opts.stdin ?? "ignore",
-          stdout: "pipe",
-          stderr: "pipe",
-        })
-        const handle = yield* spawner.spawn(proc)
-        const collect = (stream: typeof handle.stdout) =>
-          Stream.runFold(
-            stream,
-            () => ({ chunks: [] as Uint8Array[], bytes: 0, truncated: false }),
-            (acc, chunk) => {
-              if (opts.maxOutputBytes === undefined) {
-                acc.chunks.push(chunk)
-                acc.bytes += chunk.length
-                return acc
-              }
-
-              const remaining = opts.maxOutputBytes - acc.bytes
-              if (remaining > 0) acc.chunks.push(remaining >= chunk.length ? chunk : chunk.slice(0, remaining))
-              acc.bytes += chunk.length
-              acc.truncated = acc.truncated || acc.bytes > opts.maxOutputBytes
-              return acc
-            },
-          ).pipe(Effect.map((x) => ({ buffer: Buffer.concat(x.chunks), truncated: x.truncated })))
-        const [stdout, stderr] = yield* Effect.all([collect(handle.stdout), collect(handle.stderr)], { concurrency: 2 })
+        const result = yield* appProcess.run(
+          ChildProcess.make("git", [...cfg, ...args], {
+            cwd: opts.cwd,
+            env: opts.env,
+            extendEnv: true,
+            stdin: opts.stdin ?? "ignore",
+            stdout: "pipe",
+            stderr: "pipe",
+          }),
+          { maxOutputBytes: opts.maxOutputBytes },
+        )
         return {
-          exitCode: yield* handle.exitCode,
-          text: () => stdout.buffer.toString("utf8"),
-          stdout: stdout.buffer,
-          stderr: stderr.buffer,
-          truncated: stdout.truncated || stderr.truncated,
+          exitCode: result.exitCode,
+          text: () => result.stdout.toString("utf8"),
+          stdout: result.stdout,
+          stderr: result.stderr,
+          truncated: result.stdoutTruncated || result.stderrTruncated,
         } satisfies Result
       },
-      Effect.scoped,
       Effect.catch((err) => Effect.succeed(fail(err))),
     )
 
@@ -360,6 +342,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide(AppProcess.defaultLayer))
 
 export * as Git from "."

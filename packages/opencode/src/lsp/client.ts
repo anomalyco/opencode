@@ -7,7 +7,6 @@ import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types
 import * as Log from "@opencode-ai/core/util/log"
 import { Process } from "@/util/process"
 import { LANGUAGE_EXTENSIONS } from "./language"
-import z from "zod"
 import { Schema } from "effect"
 import type * as LSPServer from "./server"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -32,12 +31,9 @@ export type Info = NonNullable<Awaited<ReturnType<typeof create>>>
 
 export type Diagnostic = VSCodeDiagnostic
 
-export const InitializeError = NamedError.create(
-  "LSPInitializeError",
-  z.object({
-    serverID: z.string(),
-  }),
-)
+export const InitializeError = NamedError.create("LSPInitializeError", {
+  serverID: Schema.String,
+})
 
 export const Event = {
   Diagnostics: BusEvent.define(

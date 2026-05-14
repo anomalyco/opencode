@@ -40,30 +40,37 @@ function eventData(data: unknown): Sse.Event {
 }
 
 function eventResponse(bus: Bus.Interface) {
-  const events = bus.subscribeAll().pipe(Stream.takeUntil((event) => event.type === Bus.InstanceDisposed.type))
-  const heartbeat = Stream.tick("10 seconds").pipe(
-    Stream.drop(1),
-    Stream.map(() => ({ id: Bus.createID(), type: "server.heartbeat", properties: {} })),
-  )
+  return Effect.gen(function* () {
+    const context = yield* Effect.context()
 
-  log.info("event connected")
-  return HttpServerResponse.stream(
-    Stream.make({ id: Bus.createID(), type: "server.connected", properties: {} }).pipe(
-      Stream.concat(events.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }))),
-      Stream.map(eventData),
-      Stream.pipeThroughChannel(Sse.encode()),
-      Stream.encodeText,
-      Stream.ensuring(Effect.sync(() => log.info("event disconnected"))),
-    ),
-    {
-      contentType: "text/event-stream",
-      headers: {
-        "Cache-Control": "no-cache, no-transform",
-        "X-Accel-Buffering": "no",
-        "X-Content-Type-Options": "nosniff",
+    const events = bus.subscribeAll().pipe(
+      Stream.provideContext(context),
+      Stream.takeUntil((event) => event.type === Bus.InstanceDisposed.type),
+    )
+    const heartbeat = Stream.tick("10 seconds").pipe(
+      Stream.drop(1),
+      Stream.map(() => ({ id: Bus.createID(), type: "server.heartbeat", properties: {} })),
+    )
+
+    log.info("event connected")
+    return HttpServerResponse.stream(
+      Stream.make({ id: Bus.createID(), type: "server.connected", properties: {} }).pipe(
+        Stream.concat(events.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }))),
+        Stream.map(eventData),
+        Stream.pipeThroughChannel(Sse.encode()),
+        Stream.encodeText,
+        Stream.ensuring(Effect.sync(() => log.info("event disconnected"))),
+      ),
+      {
+        contentType: "text/event-stream",
+        headers: {
+          "Cache-Control": "no-cache, no-transform",
+          "X-Accel-Buffering": "no",
+          "X-Content-Type-Options": "nosniff",
+        },
       },
-    },
-  )
+    )
+  })
 }
 
 export const eventHandlers = HttpApiBuilder.group(EventApi, "event", (handlers) =>
@@ -72,7 +79,7 @@ export const eventHandlers = HttpApiBuilder.group(EventApi, "event", (handlers) 
     return handlers.handleRaw(
       "subscribe",
       Effect.fn("EventHttpApi.subscribe")(function* () {
-        return eventResponse(bus)
+        return yield* eventResponse(bus)
       }),
     )
   }),
