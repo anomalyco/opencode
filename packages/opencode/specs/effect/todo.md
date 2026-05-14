@@ -224,6 +224,63 @@ Goal:
   explicit context where practical.
 - Delete `project/instance.ts` only after ambient Instance coupling is gone.
 
+Important distinction:
+
+- `InstanceState.context`, `InstanceState.directory`, and
+  `InstanceState.workspaceID` are acceptable inside normal Effect service
+  code when `InstanceRef` / `WorkspaceRef` are provided by the runtime.
+- The deletion blockers are the fallback and callback paths that rely on
+  ambient ALS: direct `Instance.*` reads, `InstanceState.bind(...)`,
+  `AppRuntime.runPromise(...)` re-entry from plain JS, and bridge restore
+  code that installs legacy ALS before invoking callbacks.
+
+Current bottom-up inventory from `dev`:
+
+- Direct `Instance.*` value readers:
+  [`tool/repo_overview.ts`](../../src/tool/repo_overview.ts),
+  [`control-plane/adapters/worktree.ts`](../../src/control-plane/adapters/worktree.ts),
+  [`cli/bootstrap.ts`](../../src/cli/bootstrap.ts).
+- `InstanceState.bind(...)` callback boundaries:
+  [`file/watcher.ts`](../../src/file/watcher.ts) native watcher callback,
+  [`storage/db.ts`](../../src/storage/db.ts) transaction/effect callbacks,
+  [`session/llm.ts`](../../src/session/llm.ts) workflow approval callback.
+- `AppRuntime.runPromise(...)` / re-entry from plain JS:
+  [`project/with-instance.ts`](../../src/project/with-instance.ts),
+  [`project/instance-runtime.ts`](../../src/project/instance-runtime.ts),
+  [`control-plane/adapters/worktree.ts`](../../src/control-plane/adapters/worktree.ts),
+  [`cli/effect-cmd.ts`](../../src/cli/effect-cmd.ts), plus global/non-instance
+  callsites such as CLI upgrade and ACP agent defaults.
+- Intentional bridge users to classify, not delete blindly:
+  workspace adapters in [`control-plane/workspace.ts`](../../src/control-plane/workspace.ts),
+  MCP, command execution, plugins, pty lifecycle, bus scope cleanup, task
+  cancellation, and HTTP lifecycle reload/dispose paths.
+- Core fallback layer to shrink last:
+  [`effect/run-service.ts`](../../src/effect/run-service.ts),
+  [`effect/bridge.ts`](../../src/effect/bridge.ts), and
+  [`effect/instance-state.ts`](../../src/effect/instance-state.ts).
+
+Recommended PR order:
+
+- [ ] `INST-1` Remove direct `Instance.*` value readers. Start with
+      `repo_overview`, `worktree` adapter, and `cli/bootstrap`; pass context
+      explicitly or obtain it from an Effect boundary.
+- [ ] `INST-2` Move type-only `InstanceContext` imports from
+      [`project/instance.ts`](../../src/project/instance.ts) to
+      [`project/instance-context.ts`](../../src/project/instance-context.ts).
+- [ ] `INST-3` Audit each `InstanceState.bind(...)` callback from the inside
+      out: list what the callback calls (`Bus.publish`, database effects,
+      permission/session services), then replace ambient capture with explicit
+      `InstanceRef` / `WorkspaceRef` provision or an `EffectBridge` call.
+- [ ] `INST-4` Classify `AppRuntime.runPromise(...)` callsites as global,
+      instance-scoped with explicit refs, or bridge-required. Eliminate the
+      instance-scoped callsites that rely on `run-service.attach()` falling
+      back to `Instance.current`.
+- [ ] `INST-5` After consumers are explicit, remove `Instance.current` fallback
+      from `InstanceState.context` and `run-service.attach()`.
+- [ ] `INST-6` Move any remaining `restore` / `bind` compatibility helpers to
+      the boundary that still needs them, then delete
+      [`project/instance.ts`](../../src/project/instance.ts).
+
 ## Lower Priority Tracks
 
 - `PROC` / `FS` — continue AppProcess and AppFileSystem migrations as
