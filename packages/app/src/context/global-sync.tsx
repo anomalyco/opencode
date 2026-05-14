@@ -234,16 +234,17 @@ function createGlobalSync() {
     ;(setGlobalStore as (...args: unknown[]) => unknown)(key, value)
   }
 
-  const setBootStore = ((...input: unknown[]) => {
+  const bootStoreFor = (domain: DomainId) =>
+    ((...input: unknown[]) => {
     if (input[0] === "project" && Array.isArray(input[1])) {
-      setProjectsFor(currentDomain(), input[1] as Project[])
+      setProjectsFor(domain, input[1] as Project[])
       return input[1]
     }
     if (
       typeof input[0] === "string" &&
       ["ready", "error", "path", "provider", "provider_auth", "config", "reload"].includes(input[0])
     ) {
-      setRoot(currentDomain(), input[0] as keyof ReturnType<typeof blankRoot>, input[1])
+      setRoot(domain, input[0] as keyof ReturnType<typeof blankRoot>, input[1])
       return input[1]
     }
     return (setGlobalStore as (...args: unknown[]) => unknown)(...input)
@@ -704,7 +705,7 @@ function createGlobalSync() {
         requestFailedTitle: language.t("common.requestFailed"),
         translate: language.t,
         formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
-        setGlobalStore: setBootStore,
+        setGlobalStore: bootStoreFor(domain),
       })
       await Promise.allSettled(
         directoriesInDomain(domain)

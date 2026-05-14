@@ -3,6 +3,7 @@ import {
   createEffect,
   createMemo,
   createResource,
+  createSignal,
   For,
   Match,
   on,
@@ -20,6 +21,7 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Switch as Toggle } from "@opencode-ai/ui/switch"
 import { showToast } from "@opencode-ai/ui/toast"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { applyEdits, modify } from "jsonc-parser"
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { paint } from "@/components/prompt-input/expand"
@@ -46,9 +48,10 @@ import {
 import { monoFontFamily, useSettings } from "@/context/settings"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
+import { normalizeProviderList } from "@/context/global-sync/utils"
 import { useServer } from "@/context/server"
-import { extraAgents } from "@/pages/layout/extra-agents"
-import type { Agent, Config, Project } from "@opencode-ai/sdk/v2/client"
+import { extraAgents, mainDomain } from "@/pages/layout/extra-agents"
+import type { Agent, Config, Project, ProviderListResponse } from "@opencode-ai/sdk/v2/client"
 
 const CORE_SECTIONS = ["agents-md", "providers", "agents", "skills", "plugins", "claws"] as const
 type CoreSection = (typeof CORE_SECTIONS)[number]
@@ -1891,6 +1894,7 @@ export default function ConfigPage() {
     saved: "",
     query: "",
     providerBusy: "",
+    providerOffCollapsed: true,
     customID: "",
     customApiDirty: false,
     custom: providerCfg(undefined),
@@ -1984,7 +1988,22 @@ export default function ConfigPage() {
     }
   })
   const cfg = createMemo(() => globalSync.data.config)
+  const mainProviders = createMemo(() => globalSync.data.rootByDomain[mainDomain]?.provider ?? globalSync.data.provider)
   const t = language.t
+
+  const setMainProviders = (provider: ProviderListResponse) => {
+    const root = globalSync.data.rootByDomain[mainDomain]
+    globalSync.set("rootByDomain", mainDomain, {
+      ready: root?.ready ?? globalSync.data.ready,
+      error: root?.error ?? globalSync.data.error,
+      path: root?.path ?? globalSync.data.path,
+      provider,
+      provider_auth: root?.provider_auth ?? globalSync.data.provider_auth,
+      config: root?.config ?? globalSync.data.config,
+      reload: root?.reload ?? globalSync.data.reload,
+    })
+    globalSync.set("provider", provider)
+  }
 
   function agentModeLabel(mode?: string) {
     if (mode === "subagent") return t("config.agents.badge.subagent")
@@ -2513,10 +2532,11 @@ export default function ConfigPage() {
   )
 
   const providers = createMemo<ProviderItem[]>(() => {
+    const data = mainProviders()
     const off = new Set(cfg().disabled_providers ?? [])
     const entries = cfg().provider ?? {}
-    const on = new Set(globalSync.data.provider.connected ?? [])
-    const list = globalSync.data.provider.all
+    const on = new Set(data.connected ?? [])
+    const list = data.all
       .map((item) => {
         const source: ProviderItem["source"] =
           "source" in item &&
@@ -2559,9 +2579,18 @@ export default function ConfigPage() {
     return [...list, ...extra].sort((a, b) => a.id.localeCompare(b.id))
   })
 
-  const providerList = createMemo(() => providers().filter((item) => fuzzy(item.id, state.query)))
-  const providerOn = createMemo(() => providerList().filter((item) => providerEnabled(item)))
-  const providerOff = createMemo(() => providerList().filter((item) => !providerEnabled(item)))
+  const providerList = createMemo(() => {
+    const result = providers().filter((item) => fuzzy(item.id, state.query))
+    return result
+  })
+  const providerOn = createMemo(() => {
+    const result = providerList().filter((item) => providerEnabled(item))
+    return result
+  })
+  const providerOff = createMemo(() => {
+    const result = providerList().filter((item) => !providerEnabled(item))
+    return result
+  })
   const providerVisible = createMemo(() => [...providerOn(), ...providerOff()])
 
   const docs = createMemo(() => {
@@ -3309,6 +3338,28 @@ export default function ConfigPage() {
     setState("custom", providerCfg(undefined))
   }
 
+  const [refreshing, setRefreshing] = createSignal(false)
+
+  const refreshProviders = async () => {
+    if (refreshing()) return
+    setRefreshing(true)
+    try {
+      const result = await globalSDK.forDomain(mainDomain).client.provider.list()
+      setMainProviders(normalizeProviderList(result.data!))
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: t("settings.providers.refreshed.title"),
+        description: t("settings.providers.refreshed.description"),
+      })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
+      showToast({ title: t("common.requestFailed"), description: message })
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   function createSkill() {
     const text = skillTemplate("")
     setState("pick", SKILL_NEW)
@@ -3624,7 +3675,7 @@ export default function ConfigPage() {
         <div class="flex min-h-0 min-w-0 flex-1 flex-col xl:flex-row">
           <section class="shrink-0 border-b border-border-weak-base bg-surface-base/80 backdrop-blur xl:w-[400px] xl:border-r xl:border-b-0">
             <div class="flex h-full min-h-0 flex-col">
-              <div class="border-b border-border-weak-base px-4 py-4">
+            <div class="px-4 py-4">
                 <Switch>
                   <Match when={state.section === "agents-md"}>
                     <div class="text-15-medium text-text-strong">AGENTS.md</div>
@@ -3633,10 +3684,21 @@ export default function ConfigPage() {
                   <Match when={state.section === "providers"}>
                     <div class="text-15-medium text-text-strong">{t("config.providers.title")}</div>
                     <div class="mt-1 text-12-regular text-text-weak">{t("config.providers.header")}</div>
-                    <div class="mt-3">
+                    <div class="mt-3 flex items-center gap-2">
                       <Button size="small" variant="secondary" icon="plus-small" onClick={createCustomProvider}>
                         {t("config.custom.new")}
                       </Button>
+                      <Tooltip placement="top" value={t("settings.providers.refresh")}>
+                        <IconButton
+                          icon="arrow-sync"
+                          variant="ghost"
+                          iconSize="normal"
+                          class="size-6"
+                          disabled={refreshing()}
+                          aria-label={t("settings.providers.refresh")}
+                          onClick={() => void refreshProviders()}
+                        />
+                      </Tooltip>
                     </div>
                     <div class="mt-3 rounded-xl border border-border-weak-base bg-background-base px-3 py-2.5">
                       <input
@@ -3646,18 +3708,6 @@ export default function ConfigPage() {
                         class="w-full bg-transparent text-13-regular text-text-base outline-none placeholder:text-text-weak"
                         onInput={(event) => setState("query", event.currentTarget.value)}
                       />
-                      <div class="mt-2 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.08em] text-text-weak">
-                        <span>{t("config.providers.matches", { count: providerList().length })}</span>
-                        <Show when={state.query}>
-                          <button
-                            type="button"
-                            class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] text-text-weak transition-colors hover:text-text-base"
-                            onClick={() => setState("query", "")}
-                          >
-                            {t("ui.list.clearFilter")}
-                          </button>
-                        </Show>
-                      </div>
                     </div>
                   </Match>
                   <Match when={state.section === "agents"}>
@@ -3764,46 +3814,58 @@ export default function ConfigPage() {
 
                           <Show when={providerOff().length > 0}>
                             <div class="flex flex-col gap-2">
-                              <div class="flex items-center justify-between gap-3 px-1">
-                                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
-                                  {t("config.providers.group.existing")}
+                              <button
+                                type="button"
+                                class="flex items-center justify-between gap-3 px-1 cursor-pointer hover:opacity-80"
+                                onClick={() => setState("providerOffCollapsed", !state.providerOffCollapsed)}
+                              >
+                                <div class="flex items-center gap-2">
+                                  <Icon
+                                    name={state.providerOffCollapsed ? "chevron-right" : "chevron-down"}
+                                    size="small"
+                                  />
+                                  <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                    {t("config.providers.group.existing")}
+                                  </div>
                                 </div>
                                 <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
                                   {providerOff().length}
                                 </div>
-                              </div>
-                              <div class="rounded-xl border border-border-weak-base bg-surface-base px-3 py-2 text-12-regular text-text-weak">
-                                {t("config.providers.existingNote")}
-                              </div>
-                              <div class="flex flex-col">
-                                <For each={providerOff()}>
-                                  {(item) => (
-                                    <ListButton
-                                      active={state.pick === `provider:${item.id}`}
-                                      title={item.id}
-                                      note={
-                                        item.custom
-                                          ? item.allowed
-                                            ? t("config.providers.note.customEnabled", { count: item.models.length })
-                                            : t("config.providers.note.customDisabled", { count: item.models.length })
-                                          : t("config.providers.note.known", { count: item.models.length })
-                                      }
-                                      meta={item.custom ? item.sdk : undefined}
-                                      onClick={() => setState("pick", `provider:${item.id}`)}
-                                      extra={
-                                        <Toggle
-                                          checked={item.custom ? item.allowed : item.connected}
-                                          disabled={state.providerBusy === item.id}
-                                          onChange={(value) => toggleProvider(item, value)}
-                                          hideLabel
-                                        >
-                                          {item.id}
-                                        </Toggle>
-                                      }
-                                    />
-                                  )}
-                                </For>
-                              </div>
+                              </button>
+                              <Show when={!state.providerOffCollapsed}>
+                                <div class="rounded-xl border border-border-weak-base bg-surface-base px-3 py-2 text-12-regular text-text-weak">
+                                  {t("config.providers.existingNote")}
+                                </div>
+                                <div class="flex flex-col">
+                                  <For each={providerOff()}>
+                                    {(item) => (
+                                      <ListButton
+                                        active={state.pick === `provider:${item.id}`}
+                                        title={item.id}
+                                        note={
+                                          item.custom
+                                            ? item.allowed
+                                              ? t("config.providers.note.customEnabled", { count: item.models.length })
+                                              : t("config.providers.note.customDisabled", { count: item.models.length })
+                                            : t("config.providers.note.known", { count: item.models.length })
+                                        }
+                                        meta={item.custom ? item.sdk : undefined}
+                                        onClick={() => setState("pick", `provider:${item.id}`)}
+                                        extra={
+                                          <Toggle
+                                            checked={item.custom ? item.allowed : item.connected}
+                                            disabled={state.providerBusy === item.id}
+                                            onChange={(value) => toggleProvider(item, value)}
+                                            hideLabel
+                                          >
+                                            {item.id}
+                                          </Toggle>
+                                        }
+                                      />
+                                    )}
+                                  </For>
+                                </div>
+                              </Show>
                             </div>
                           </Show>
                         </div>

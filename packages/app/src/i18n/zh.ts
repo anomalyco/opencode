@@ -905,6 +905,9 @@ export const dict = {
   "settings.providers.tag.config": "配置",
   "settings.providers.tag.custom": "自定义",
   "settings.providers.tag.other": "其他",
+  "settings.providers.refresh": "刷新提供商",
+  "settings.providers.refreshed.title": "提供商已刷新",
+  "settings.providers.refreshed.description": "提供商列表已更新。",
 
   "settings.models.title": "模型",
   "settings.models.description": "模型设置将在此处可配置。",
