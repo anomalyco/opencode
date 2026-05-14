@@ -9,6 +9,7 @@ const enabledByExperimental = (name: string) =>
 export class Service extends ConfigService.Service<Service>()("@opencode/RuntimeFlags", {
   pure: bool("OPENCODE_PURE"),
   disableDefaultPlugins: bool("OPENCODE_DISABLE_DEFAULT_PLUGINS"),
+  disableChannelDb: bool("OPENCODE_DISABLE_CHANNEL_DB"),
   enableExa: Config.all({
     experimental,
     enabled: bool("OPENCODE_ENABLE_EXA"),
