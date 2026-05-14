@@ -1,28 +1,26 @@
 #!/usr/bin/env bash
-# install Acompany SecureCode user-config files into ~/.config/securecode/.
+# install Acompany SecureCode user-config templates into ~/.config/securecode/.
 #
 # What this does:
-#   - copy acompany-branding.tsx into ~/.config/securecode/plugins/
-#   - copy tui.json into  ~/.config/securecode/         (preserves any existing one)
 #   - copy securecode.json into ~/.config/securecode/    (preserves any existing one)
+#   - copy tui.json into  ~/.config/securecode/         (preserves any existing one)
+#
+# Branding (SecureCode wordmark / sidebar badge) is shipped inside the binary
+# and does not need a separate plugin file.
 #
 # After install, set OPENAI_API_KEY in your shell environment to the LiteLLM
 # API key your Acompany contact issued for you, then run:
 #
 #   securecode run "Hello"
 #
-# Re-running this script is safe: existing files are kept and only the plugin
-# is refreshed.
+# Re-running this script is safe: existing config files are kept.
 
 set -eu
 
 src="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 dest="${XDG_CONFIG_HOME:-$HOME/.config}/securecode"
 
-mkdir -p "$dest/plugins"
-
-cp "$src/acompany-branding.tsx" "$dest/plugins/acompany-branding.tsx"
-echo "installed: $dest/plugins/acompany-branding.tsx"
+mkdir -p "$dest"
 
 if [ ! -e "$dest/tui.json" ]; then
   cp "$src/tui.json.example" "$dest/tui.json"
