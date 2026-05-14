@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   onMount,
   Show,
   Switch,
@@ -82,6 +83,7 @@ import * as Model from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { MINIMAL_AUTO_COLLAPSE_MS, nextThinkingMode, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
@@ -157,6 +159,7 @@ const context = createContext<{
   width: number
   sessionID: string
   conceal: () => boolean
+  thinkingMode: () => ThinkingMode
   showThinking: () => boolean
   showTimestamps: () => boolean
   showDetails: () => boolean
@@ -214,7 +217,9 @@ export function Session() {
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [conceal, setConceal] = createSignal(true)
-  const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
+  const thinking = useThinkingMode()
+  const thinkingMode = thinking.mode
+  const showThinking = createMemo(() => thinkingMode() !== "hide")
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
   const [showAssistantMetadata, _setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
@@ -683,7 +688,12 @@ export function Session() {
       },
     },
     {
-      title: showThinking() ? "Hide thinking" : "Show thinking",
+      title: (() => {
+        const next = nextThinkingMode(thinkingMode())
+        if (next === "minimal") return "Switch thinking to minimal"
+        if (next === "hide") return "Hide thinking"
+        return "Show thinking"
+      })(),
       value: "session.toggle.thinking",
       category: "Session",
       slash: {
@@ -691,7 +701,17 @@ export function Session() {
         aliases: ["toggle-thinking"],
       },
       run: () => {
-        setShowThinking((prev) => !prev)
+        // Env override forces minimal for the process. Updating KV here would
+        // silently diverge from what's rendered; tell the user instead.
+        if (thinking.locked()) {
+          toast.show({
+            message: "Thinking mode is locked to minimal by OPENCODE_EXPERIMENTAL_MINIMAL_THINKING",
+            variant: "info",
+          })
+          dialog.clear()
+          return
+        }
+        thinking.set(nextThinkingMode(thinkingMode()))
         dialog.clear()
       },
     },
@@ -1086,6 +1106,7 @@ export function Session() {
           },
           sessionID: route.sessionID,
           conceal,
+          thinkingMode,
           showThinking,
           showTimestamps,
           showDetails,
@@ -1492,32 +1513,103 @@ const PART_MAPPING = {
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme, subtleSyntax } = useTheme()
   const ctx = use()
+  // `userExpanded` is the user's explicit choice. `undefined` means "no choice
+  // yet, follow the auto behavior". Once they click, it pins to true/false.
+  const [userExpanded, setUserExpanded] = createSignal<boolean | undefined>(undefined)
+  // Flips to true after the grace period elapses post-finalization.
+  const [autoFolded, setAutoFolded] = createSignal(false)
+
   const content = createMemo(() => {
     // Filter out redacted reasoning chunks from OpenRouter
     // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
     return props.part.text.replace("[REDACTED]", "").trim()
   })
+  // Reasoning is finalized when the server sets `time.end` (see processor.ts).
+  // This flips independently of the parent message completing, so the
+  // collapse happens as soon as thinking ends — even while text/tools stream.
+  const isDone = createMemo(() => props.part.time.end !== undefined)
+  const collapsible = createMemo(() => ctx.thinkingMode() === "minimal" && isDone())
+  const duration = createMemo(() => {
+    const end = props.part.time.end
+    if (end === undefined) return 0
+    return Math.max(0, end - props.part.time.start)
+  })
+
+  // Schedule auto-collapse a short delay after reasoning finalizes in minimal
+  // mode, so the fold doesn't snap the instant streaming stops. A manual
+  // toggle or leaving minimal mode cancels the pending timer. For reasoning
+  // that finished before this component mounted (e.g. loading a past session)
+  // we skip the grace and collapse immediately.
+  createEffect(() => {
+    if (!collapsible()) {
+      setAutoFolded(false)
+      return
+    }
+    if (userExpanded() !== undefined) return
+    if (autoFolded()) return
+    const end = props.part.time.end
+    if (end === undefined) return
+    const remaining = MINIMAL_AUTO_COLLAPSE_MS - (Date.now() - end)
+    if (remaining <= 0) {
+      setAutoFolded(true)
+      return
+    }
+    const timer = setTimeout(() => setAutoFolded(true), remaining)
+    onCleanup(() => clearTimeout(timer))
+  })
+
+  // Effective expansion: stay expanded while streaming and during grace; fold
+  // when auto-fold fires; user clicks override everything.
+  const expanded = createMemo(() => {
+    if (!collapsible()) return true
+    const choice = userExpanded()
+    if (choice !== undefined) return choice
+    return !autoFolded()
+  })
+  const collapsed = createMemo(() => collapsible() && !expanded())
+  const toggle = () => {
+    if (!collapsible()) return
+    setUserExpanded(!expanded())
+  }
+
   return (
-    <Show when={content() && ctx.showThinking()}>
-      <box
-        id={"text-" + props.part.id}
-        paddingLeft={2}
-        marginTop={1}
-        flexDirection="column"
-        border={["left"]}
-        customBorderChars={SplitBorder.customBorderChars}
-        borderColor={theme.backgroundElement}
+    <Show when={content() && ctx.thinkingMode() !== "hide"}>
+      <Show
+        when={collapsed()}
+        fallback={
+          <box
+            id={"text-" + props.part.id}
+            paddingLeft={2}
+            marginTop={1}
+            flexDirection="column"
+            border={["left"]}
+            customBorderChars={SplitBorder.customBorderChars}
+            borderColor={theme.backgroundElement}
+            onMouseUp={toggle}
+          >
+            <code
+              filetype="markdown"
+              drawUnstyledText={false}
+              streaming={true}
+              syntaxStyle={subtleSyntax()}
+              content={(collapsible() ? "▼ " : "") + "_Thinking:_ " + content()}
+              conceal={ctx.conceal()}
+              fg={theme.textMuted}
+            />
+          </box>
+        }
       >
-        <code
-          filetype="markdown"
-          drawUnstyledText={false}
-          streaming={true}
-          syntaxStyle={subtleSyntax()}
-          content={"_Thinking:_ " + content()}
-          conceal={ctx.conceal()}
-          fg={theme.textMuted}
-        />
-      </box>
+        <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
+          <code
+            filetype="markdown"
+            drawUnstyledText={false}
+            syntaxStyle={subtleSyntax()}
+            content={"▶ _Thought for " + Locale.duration(duration()) + "_"}
+            conceal={ctx.conceal()}
+            fg={theme.textMuted}
+          />
+        </box>
+      </Show>
     </Show>
   )
 }

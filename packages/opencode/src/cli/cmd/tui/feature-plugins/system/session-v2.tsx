@@ -5,6 +5,7 @@ import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { useTheme } from "@tui/context/theme"
 import { useLocal } from "@tui/context/local"
+import { MINIMAL_AUTO_COLLAPSE_MS, useThinkingMode } from "@tui/context/thinking"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { TextAttributes, type BoxRenderable, type SyntaxStyle } from "@opentui/core"
 import { useBindings } from "../../keymap"
@@ -28,7 +29,7 @@ import type {
   ToolFileContent,
   ToolTextContent,
 } from "@opencode-ai/sdk/v2"
-import { createEffect, createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 
 const id = "internal:session-v2-debug"
 const route = "session.v2.messages"
@@ -317,7 +318,11 @@ function AssistantMessage(props: {
               <AssistantText part={part as SessionMessageAssistantText} syntax={props.syntax} />
             </Match>
             <Match when={part.type === "reasoning"}>
-              <AssistantReasoning part={part as SessionMessageAssistantReasoning} subtleSyntax={props.subtleSyntax} />
+              <AssistantReasoning
+                part={part as SessionMessageAssistantReasoning}
+                subtleSyntax={props.subtleSyntax}
+                completedAt={() => props.message.time.completed}
+              />
             </Match>
             <Match when={part.type === "tool"}>
               <AssistantTool part={part as SessionMessageAssistantTool} sessionID={props.sessionID} />
@@ -378,30 +383,89 @@ function AssistantText(props: { part: SessionMessageAssistantText; syntax: Synta
   )
 }
 
-function AssistantReasoning(props: { part: SessionMessageAssistantReasoning; subtleSyntax: SyntaxStyle }) {
+function AssistantReasoning(props: {
+  part: SessionMessageAssistantReasoning
+  subtleSyntax: SyntaxStyle
+  completedAt: () => number | undefined
+}) {
   const { theme } = useTheme()
+  const thinking = useThinkingMode()
+  const [userExpanded, setUserExpanded] = createSignal<boolean | undefined>(undefined)
+  const [autoFolded, setAutoFolded] = createSignal(false)
   const content = createMemo(() => props.part.text.replace("[REDACTED]", "").trim())
+  // v2 reasoning parts have no `time.end` (see SessionMessageAssistantReasoning
+  // in the v2 SDK), so collapse on parent-message completion. Coarser than
+  // the main session view but the best signal we have here.
+  const collapsible = createMemo(() => thinking.mode() === "minimal" && props.completedAt() !== undefined)
+
+  createEffect(() => {
+    if (!collapsible()) {
+      setAutoFolded(false)
+      return
+    }
+    if (userExpanded() !== undefined) return
+    if (autoFolded()) return
+    const completed = props.completedAt()
+    if (completed === undefined) return
+    const remaining = MINIMAL_AUTO_COLLAPSE_MS - (Date.now() - completed)
+    if (remaining <= 0) {
+      setAutoFolded(true)
+      return
+    }
+    const timer = setTimeout(() => setAutoFolded(true), remaining)
+    onCleanup(() => clearTimeout(timer))
+  })
+
+  const expanded = createMemo(() => {
+    if (!collapsible()) return true
+    const choice = userExpanded()
+    if (choice !== undefined) return choice
+    return !autoFolded()
+  })
+  const collapsed = createMemo(() => collapsible() && !expanded())
+  const toggle = () => {
+    if (!collapsible()) return
+    setUserExpanded(!expanded())
+  }
+
   return (
-    <Show when={content()}>
-      <box
-        paddingLeft={2}
-        marginTop={1}
-        flexDirection="column"
-        border={["left"]}
-        customBorderChars={SplitBorder.customBorderChars}
-        borderColor={theme.backgroundElement}
-        flexShrink={0}
+    <Show when={content() && thinking.mode() !== "hide"}>
+      <Show
+        when={collapsed()}
+        fallback={
+          <box
+            paddingLeft={2}
+            marginTop={1}
+            flexDirection="column"
+            border={["left"]}
+            customBorderChars={SplitBorder.customBorderChars}
+            borderColor={theme.backgroundElement}
+            flexShrink={0}
+            onMouseUp={toggle}
+          >
+            <code
+              filetype="markdown"
+              drawUnstyledText={false}
+              streaming={true}
+              syntaxStyle={props.subtleSyntax}
+              content={(collapsible() ? "▼ " : "") + "_Thinking:_ " + content()}
+              conceal={true}
+              fg={theme.textMuted}
+            />
+          </box>
+        }
       >
-        <code
-          filetype="markdown"
-          drawUnstyledText={false}
-          streaming={true}
-          syntaxStyle={props.subtleSyntax}
-          content={"_Thinking:_ " + content()}
-          conceal={true}
-          fg={theme.textMuted}
-        />
-      </box>
+        <box paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
+          <code
+            filetype="markdown"
+            drawUnstyledText={false}
+            syntaxStyle={props.subtleSyntax}
+            content={"▶ _Thought_"}
+            conceal={true}
+            fg={theme.textMuted}
+          />
+        </box>
+      </Show>
     </Show>
   )
 }
