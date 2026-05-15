@@ -22,7 +22,6 @@ import {
 } from "solid-js"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import semver from "semver"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { ErrorComponent } from "@tui/component/error-component"
 import { PluginRouteMissing } from "@tui/component/plugin-route-missing"
@@ -39,14 +38,11 @@ import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
-import { DialogAlert } from "./ui/dialog-alert"
-import { DialogConfirm } from "./ui/dialog-confirm"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
-import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/cli/cmd/tui/config/tui"
@@ -134,6 +130,23 @@ function parseModel(model: string) {
     providerID,
     modelID: rest.join("/"),
   }
+}
+
+function isVersionNewer(version: string, skipped: string) {
+  const parse = (input: string) => {
+    const [core] = input.split("-")
+    if (!core) return undefined
+    const parts = core.split(".").map((part) => Number.parseInt(part, 10))
+    if (parts.length < 3 || parts.some((part) => Number.isNaN(part))) return undefined
+    return parts as [number, number, number]
+  }
+
+  const current = parse(version)
+  const previous = parse(skipped)
+  if (!current || !previous) return true
+  if (current[0] !== previous[0]) return current[0] > previous[0]
+  if (current[1] !== previous[1]) return current[1] > previous[1]
+  return current[2] > previous[2]
 }
 
 function rendererConfig(_config: TuiConfig.Resolved): CliRendererConfig {
@@ -705,7 +718,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       {
         name: "docs.open",
         title: "Open docs",
-        run: () => {
+        run: async () => {
+          const open = (await import("open")).default
           open("https://opencode.ai/docs").catch(() => {})
           dialog.clear()
         },
@@ -912,7 +926,12 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     const version = evt.properties.version
 
     const skipped = kv.get("skipped_version")
-    if (skipped && !semver.gt(version, skipped)) return
+    if (skipped && !isVersionNewer(version, skipped)) return
+
+    const [{ DialogConfirm }, { DialogAlert }] = await Promise.all([
+      import("./ui/dialog-confirm"),
+      import("./ui/dialog-alert"),
+    ])
 
     const choice = await DialogConfirm.show(
       dialog,

@@ -16,6 +16,10 @@ import "./performance"
 import type { Argv } from "yargs"
 
 const processMetadata = ensureProcessMetadata("main")
+const startupClock = globalThis as { __galStarted?: bigint }
+if (!startupClock.__galStarted) {
+  startupClock.__galStarted = process.hrtime.bigint()
+}
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
