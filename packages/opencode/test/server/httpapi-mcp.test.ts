@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Context, Effect, Layer } from "effect"
-import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
+import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { McpPaths } from "../../src/server/routes/instance/httpapi/groups/mcp"
 import { Server } from "../../src/server/server"
 import * as Log from "@opencode-ai/core/util/log"
@@ -23,10 +23,10 @@ function app() {
   return Server.Default().app
 }
 type TestApp = ReturnType<typeof app>
-type TestHandler = ReturnType<typeof ExperimentalHttpApiServer.webHandler>
+type TestHandler = ReturnType<typeof HttpApiApp.webHandler>
 
 const handlerScoped = Effect.acquireRelease(
-  Effect.sync(() => ExperimentalHttpApiServer.webHandler()),
+  Effect.sync(() => HttpApiApp.webHandler()),
   (handler) => Effect.promise(() => handler.dispose()).pipe(Effect.ignore),
 )
 

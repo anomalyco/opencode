@@ -11,7 +11,7 @@ import { Permission } from "../../../permission"
 import { iife } from "../../../util/iife"
 import { effectCmd, fail } from "../../effect-cmd"
 import { InstanceRef } from "@/effect/instance-ref"
-import type { InstanceContext } from "@/project/instance"
+import type { InstanceContext } from "@/project/instance-context"
 
 export const AgentCommand = effectCmd({
   command: "agent <name>",

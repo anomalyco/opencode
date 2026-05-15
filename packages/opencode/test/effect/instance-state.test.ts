@@ -159,7 +159,7 @@ it.live("InstanceState preserves directory across async boundaries", () =>
 
           return Test.of({
             get: Effect.fn("Test.get")(function* () {
-              yield* Effect.promise(() => Bun.sleep(1))
+              yield* Effect.sleep(Duration.millis(1))
               yield* Effect.sleep(Duration.millis(1))
               for (let i = 0; i < 100; i++) {
                 yield* Effect.yieldNow
@@ -168,7 +168,7 @@ it.live("InstanceState preserves directory across async boundaries", () =>
                 yield* Effect.promise(() => Promise.resolve())
               }
               yield* Effect.sleep(Duration.millis(2))
-              yield* Effect.promise(() => Bun.sleep(1))
+              yield* Effect.sleep(Duration.millis(1))
               return yield* InstanceState.get(state)
             }),
           })
@@ -212,7 +212,7 @@ it.live("InstanceState survives high-contention concurrent access", () =>
           return Test.of({
             get: Effect.fn("Test.get")(function* () {
               for (let i = 0; i < 10; i++) {
-                yield* Effect.promise(() => Bun.sleep(Math.random() * 3))
+                yield* Effect.sleep(Duration.millis(Math.random() * 3))
                 yield* Effect.yieldNow
                 yield* Effect.promise(() => Promise.resolve())
               }
@@ -248,8 +248,8 @@ it.live("InstanceState correct after interleaved init and dispose", () =>
         Test,
         Effect.gen(function* () {
           const state = yield* InstanceState.make((ctx) =>
-            Effect.promise(async () => {
-              await Bun.sleep(5)
+            Effect.gen(function* () {
+              yield* Effect.sleep(Duration.millis(5))
               return ctx.directory
             }),
           )
@@ -305,9 +305,9 @@ it.live("InstanceState dedupes concurrent lookups", () =>
     const dir = yield* tmpdirScoped()
     let n = 0
     const state = yield* InstanceState.make(() =>
-      Effect.promise(async () => {
+      Effect.gen(function* () {
         n += 1
-        await Bun.sleep(10)
+        yield* Effect.sleep(Duration.millis(10))
         return { n }
       }),
     )

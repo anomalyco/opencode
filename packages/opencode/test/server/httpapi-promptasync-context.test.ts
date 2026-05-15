@@ -8,7 +8,6 @@
 // Effect.provideService calls there are required, not defensive duplication.
 
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Layer, Scope } from "effect"
 import * as Stream from "effect/Stream"
@@ -19,24 +18,20 @@ import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { InstanceRef, WorkspaceRef } from "../../src/effect/instance-ref"
-import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceLayer } from "../../src/project/instance-layer"
-import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
 import { instanceRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/instance-context"
 import { workspaceRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/workspace-routing"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
+import { workspaceLayerWithRuntimeFlags } from "../fixture/workspace"
 import { testEffect } from "../lib/effect"
 
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
     yield* Effect.promise(() => resetDatabase())
-    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
-        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
         await disposeAllInstances()
         await resetDatabase()
       }),
@@ -44,10 +39,7 @@ const testStateLayer = Layer.effectDiscard(
   }),
 )
 
-const workspaceLayer = Workspace.defaultLayer.pipe(
-  Layer.provide(InstanceStore.defaultLayer),
-  Layer.provide(InstanceBootstrap.defaultLayer),
-)
+const workspaceLayer = workspaceLayerWithRuntimeFlags({ experimentalWorkspaces: true })
 
 const it = testEffect(
   Layer.mergeAll(

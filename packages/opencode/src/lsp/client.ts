@@ -9,7 +9,6 @@ import { Process } from "@/util/process"
 import { LANGUAGE_EXTENSIONS } from "./language"
 import { Schema } from "effect"
 import type * as LSPServer from "./server"
-import { NamedError } from "@opencode-ai/core/util/error"
 import { withTimeout } from "../util/timeout"
 import { Filesystem } from "@/util/filesystem"
 
@@ -31,9 +30,10 @@ export type Info = NonNullable<Awaited<ReturnType<typeof create>>>
 
 export type Diagnostic = VSCodeDiagnostic
 
-export const InitializeError = NamedError.create("LSPInitializeError", {
+export class InitializeError extends Schema.TaggedErrorClass<InitializeError>()("LSPInitializeError", {
   serverID: Schema.String,
-})
+  cause: Schema.optional(Schema.Defect),
+}) {}
 
 export const Event = {
   Diagnostics: BusEvent.define(
@@ -275,12 +275,7 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
     INITIALIZE_TIMEOUT_MS,
   ).catch((err) => {
     logger.error("initialize error", { error: err })
-    throw new InitializeError(
-      { serverID: input.serverID },
-      {
-        cause: err,
-      },
-    )
+    throw new InitializeError({ serverID: input.serverID, cause: err })
   })
 
   const syncKind = getSyncKind(initialized.capabilities)
