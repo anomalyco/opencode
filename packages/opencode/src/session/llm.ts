@@ -256,7 +256,7 @@ const live: Layer.Layer<
 
         const bridge = yield* EffectBridge.make()
         const approvedToolsForSession = new Set<string>()
-        workflowModel.approvalHandler = async (approvalTools) => {
+        workflowModel.approvalHandler = bridge.bind(async (approvalTools) => {
           const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
           // Auto-approve tools that were already approved in this session
           // (prevents infinite approval loops for server-side MCP tools)
@@ -267,13 +267,9 @@ const live: Layer.Layer<
           const id = PermissionID.ascending()
           let unsub: (() => void) | undefined
           try {
-            unsub = await bridge.promise(
-              Effect.sync(() =>
-                Bus.subscribe(Permission.Event.Replied, (evt) => {
-                  if (evt.properties.requestID === id) void evt.properties.reply
-                }),
-              ),
-            )
+            unsub = Bus.subscribe(Permission.Event.Replied, (evt) => {
+              if (evt.properties.requestID === id) void evt.properties.reply
+            })
             const toolPatterns = approvalTools.map((t: { name: string; args: string }) => {
               try {
                 const parsed = JSON.parse(t.args) as Record<string, unknown>
@@ -303,7 +299,7 @@ const live: Layer.Layer<
           } finally {
             unsub?.()
           }
-        }
+        })
       }
 
       const tracer = cfg.experimental?.openTelemetry

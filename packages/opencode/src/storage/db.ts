@@ -11,11 +11,9 @@ import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
-import { WorkspaceContext } from "@/control-plane/workspace-context"
-import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
-import { context as instanceContext } from "@/project/instance-context"
+import { EffectBridge } from "@/effect/bridge"
 import { init } from "#db"
-import { Context, Effect, Fiber, Schema } from "effect"
+import { Effect, Schema } from "effect"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
@@ -200,24 +198,7 @@ export function transaction<T>(
 }
 
 function bindInstanceRef<Args extends readonly unknown[], Result>(fn: (...args: Args) => Result) {
-  const fiber = Fiber.getCurrent()
-  const instance = fiber
-    ? Context.getReferenceUnsafe(fiber.context, InstanceRef)
-    : (() => {
-        try {
-          return instanceContext.use()
-        } catch (err) {
-          if (!(err instanceof LocalContext.NotFound)) throw err
-        }
-      })()
-  const workspace = fiber ? Context.getReferenceUnsafe(fiber.context, WorkspaceRef) : WorkspaceContext.workspaceID
-  if (!instance && workspace === undefined) return fn
-  return (...args: Args) => {
-    const run = () => fn(...args)
-    const withInstance = instance ? () => instanceContext.provide(instance, run) : run
-    if (workspace === undefined) return withInstance()
-    return WorkspaceContext.restore(workspace, withInstance)
-  }
+  return EffectBridge.bind(fn)
 }
 
 export * as Database from "./db"
