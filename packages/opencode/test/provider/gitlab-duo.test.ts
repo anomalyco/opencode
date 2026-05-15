@@ -8,7 +8,6 @@ export {}
 
 // import { ProviderID, ModelID } from "../../src/provider/schema"
 // import { tmpdir } from "../fixture/fixture"
-// import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 // import { Provider } from "@/provider/provider"
 // import { Env } from "../../src/env"

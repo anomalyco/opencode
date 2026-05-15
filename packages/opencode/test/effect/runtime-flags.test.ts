@@ -27,6 +27,9 @@ describe("RuntimeFlags", () => {
             OPENCODE_DISABLE_CHANNEL_DB: "true",
             OPENCODE_AUTO_SHARE: "true",
             OPENCODE_DISABLE_EMBEDDED_WEB_UI: "true",
+            OPENCODE_DISABLE_EXTERNAL_SKILLS: "true",
+            OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
+            OPENCODE_SKIP_MIGRATIONS: "true",
             OPENCODE_EXPERIMENTAL: "true",
             OPENCODE_ENABLE_EXA: "true",
             OPENCODE_ENABLE_PARALLEL: "true",
@@ -42,6 +45,10 @@ describe("RuntimeFlags", () => {
       expect(flags.disableDefaultPlugins).toBe(true)
       expect(flags.disableChannelDb).toBe(true)
       expect(flags.disableEmbeddedWebUi).toBe(true)
+      expect(flags.disableExternalSkills).toBe(true)
+      expect(flags.disableLspDownload).toBe(true)
+      expect(flags.skipMigrations).toBe(true)
+      expect(flags.disableClaudeCodePrompt).toBe(false)
       expect(flags.enableExa).toBe(true)
       expect(flags.enableParallel).toBe(true)
       expect(flags.enableExperimentalModels).toBe(true)
@@ -84,6 +91,10 @@ describe("RuntimeFlags", () => {
       expect(flags.disableDefaultPlugins).toBe(true)
       expect(flags.disableChannelDb).toBe(false)
       expect(flags.disableEmbeddedWebUi).toBe(false)
+      expect(flags.disableExternalSkills).toBe(false)
+      expect(flags.disableLspDownload).toBe(false)
+      expect(flags.skipMigrations).toBe(false)
+      expect(flags.disableClaudeCodePrompt).toBe(false)
       expect(flags.disableClaudeCodeSkills).toBe(false)
       expect(flags.enableExa).toBe(false)
       expect(flags.experimentalIconDiscovery).toBe(false)
@@ -100,6 +111,78 @@ describe("RuntimeFlags", () => {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
 
       expect(flags.experimentalIconDiscovery).toBe(false)
+    }),
+  )
+
+  it.effect("disableExternalSkills defaults to false", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
+
+      expect(flags.disableExternalSkills).toBe(false)
+    }),
+  )
+
+  it.effect("disableExternalSkills reads OPENCODE_DISABLE_EXTERNAL_SKILLS", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_DISABLE_EXTERNAL_SKILLS: "true" })))
+
+      expect(flags.disableExternalSkills).toBe(true)
+    }),
+  )
+
+  it.effect("disableLspDownload defaults to false", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
+
+      expect(flags.disableLspDownload).toBe(false)
+    }),
+  )
+
+  it.effect("disableLspDownload reads OPENCODE_DISABLE_LSP_DOWNLOAD", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_DISABLE_LSP_DOWNLOAD: "true" })))
+
+      expect(flags.disableLspDownload).toBe(true)
+    }),
+  )
+
+  it.effect("skipMigrations defaults to false", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
+
+      expect(flags.skipMigrations).toBe(false)
+    }),
+  )
+
+  it.effect("skipMigrations reads OPENCODE_SKIP_MIGRATIONS", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_SKIP_MIGRATIONS: "true" })))
+
+      expect(flags.skipMigrations).toBe(true)
+    }),
+  )
+
+  it.effect("disableClaudeCodePrompt defaults to false", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
+
+      expect(flags.disableClaudeCodePrompt).toBe(false)
+    }),
+  )
+
+  it.effect("disableClaudeCodePrompt reads OPENCODE_DISABLE_CLAUDE_CODE_PROMPT", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_DISABLE_CLAUDE_CODE_PROMPT: "true" })))
+
+      expect(flags.disableClaudeCodePrompt).toBe(true)
+    }),
+  )
+
+  it.effect("disableClaudeCodePrompt inherits OPENCODE_DISABLE_CLAUDE_CODE", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_DISABLE_CLAUDE_CODE: "true" })))
+
+      expect(flags.disableClaudeCodePrompt).toBe(true)
     }),
   )
 
@@ -222,6 +305,9 @@ describe("RuntimeFlags", () => {
             ConfigProvider.fromUnknown({
               OPENCODE_PURE: "true",
               OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
+              OPENCODE_DISABLE_EXTERNAL_SKILLS: "true",
+              OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
+              OPENCODE_SKIP_MIGRATIONS: "true",
               OPENCODE_EXPERIMENTAL: "true",
               OPENCODE_ENABLE_EXA: "true",
               OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "1234",
@@ -235,6 +321,10 @@ describe("RuntimeFlags", () => {
       expect(flags.disableDefaultPlugins).toBe(false)
       expect(flags.disableChannelDb).toBe(false)
       expect(flags.disableEmbeddedWebUi).toBe(false)
+      expect(flags.disableExternalSkills).toBe(false)
+      expect(flags.disableLspDownload).toBe(false)
+      expect(flags.skipMigrations).toBe(false)
+      expect(flags.disableClaudeCodePrompt).toBe(false)
       expect(flags.disableClaudeCodeSkills).toBe(false)
       expect(flags.enableExa).toBe(false)
       expect(flags.experimentalIconDiscovery).toBe(false)
