@@ -145,7 +145,11 @@ export const layer: Layer.Layer<
           const entries = Object.entries(def.args)
           const allZod = entries.every((entry) => isZodType(entry[1]))
           const zodParams = allZod ? z.object(def.args) : undefined
-          const jsonSchema = zodParams ? zodJsonSchema(zodParams) : legacyJsonSchema(entries)
+          const jsonSchema = zodParams
+            ? isJsonSchemaDefinition(def.jsonSchema)
+              ? (def.jsonSchema as JSONSchema7)
+              : zodJsonSchema(zodParams)
+            : legacyJsonSchema(entries)
           const parameters = zodParams
             ? Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success)
             : Schema.Unknown

@@ -48,7 +48,12 @@ export function tool<Args extends z.ZodRawShape>(input: {
   args: Args
   execute(args: z.infer<z.ZodObject<Args>>, context: ToolContext): Promise<ToolResult>
 }) {
-  return input
+  return {
+    ...input,
+    // Generate JSON Schema with the same Zod instance that created `tool.schema`
+    // args; Zod metadata such as `.describe()` is stored per module instance.
+    jsonSchema: z.toJSONSchema(z.object(input.args), { io: "input" }),
+  }
 }
 tool.schema = z
 
