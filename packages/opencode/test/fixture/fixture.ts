@@ -29,7 +29,7 @@ export async function provideTestInstance<R>(input: {
   init?: Effect.Effect<void>
   fn: (ctx: InstanceContext) => R
 }) {
-    const ctx = await runTestInstanceStore((store) => store.load({ directory: input.directory }))
+  const ctx = await runTestInstanceStore((store) => store.load({ directory: input.directory }))
   try {
     if (input.init) await testInstanceRuntime.runPromise(input.init.pipe(Effect.provideService(InstanceRef, ctx)))
     return await input.fn(ctx)
