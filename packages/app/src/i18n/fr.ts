@@ -869,7 +869,17 @@ export const dict = {
   "settings.general.row.terminalFont.description": "Personnalisez la police utilisée dans le terminal",
   "settings.general.row.uiFont.title": "Police de l'interface",
   "settings.general.row.uiFont.description": "Personnaliser la police utilisée dans toute l'interface",
+<<<<<<< HEAD
   "settings.general.row.followup.title": "Comportement des messages de suivi",
+||||||| parent of 32cbfa95c1 (feat: Added adjustable font size and line height support for desktop and web.)
+  "settings.general.row.followup.title": "Comportement de suivi",
+=======
+  "settings.general.row.fontSize.title": "Taille de police",
+  "settings.general.row.fontSize.description": "Personnaliser la taille de police de base utilisée dans toute l'app",
+  "settings.general.row.lineHeight.title": "Hauteur de ligne",
+  "settings.general.row.lineHeight.description": "Personnaliser la hauteur de ligne pour un texte et du code lisibles",
+  "settings.general.row.followup.title": "Comportement de suivi",
+>>>>>>> 32cbfa95c1 (feat: Added adjustable font size and line height support for desktop and web.)
   "settings.general.row.followup.description":
     "Choisissez si les messages de suivi orientent immédiatement l'agent ou sont placés dans une file d'attente",
   "settings.general.row.followup.option.queue": "File d'attente",
