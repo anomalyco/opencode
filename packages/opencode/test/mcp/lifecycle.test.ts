@@ -110,6 +110,7 @@ void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
       super("Unauthorized")
     }
   },
+  auth: async () => "AUTHORIZED",
 }))
 
 // Mock Client that delegates to per-name MockClientState

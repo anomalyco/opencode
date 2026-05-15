@@ -33,6 +33,11 @@ type AuthData = Record<string, Entry>
 
 const filepath = path.join(Global.Path.data, "mcp-auth.json")
 
+function normalizeEntry(entry: Entry | undefined) {
+  if (!entry) return
+  if (entry.tokens || entry.clientInfo || entry.codeVerifier || entry.oauthState || entry.serverUrl) return entry
+}
+
 export interface Interface {
   readonly all: () => Effect.Effect<Record<string, Entry>>
   readonly get: (mcpName: string) => Effect.Effect<Entry | undefined>
@@ -58,7 +63,12 @@ export const layer = Layer.effect(
 
     const all = Effect.fn("McpAuth.all")(function* () {
       return yield* fs.readJson(filepath).pipe(
-        Effect.map((data): AuthData => Option.getOrElse(decodeAuthData(data), () => ({}) as AuthData) as AuthData),
+        Effect.map((data): AuthData => {
+          const decoded = Option.getOrElse(decodeAuthData(data), () => ({}) as AuthData) as AuthData
+          return Object.fromEntries(
+            Object.entries(decoded).flatMap(([mcpName, entry]) => (normalizeEntry(entry) ? [[mcpName, entry]] : [])),
+          )
+        }),
         Effect.catch(() => Effect.succeed({} as AuthData)),
       )
     })
@@ -78,8 +88,13 @@ export const layer = Layer.effect(
 
     const set = Effect.fn("McpAuth.set")(function* (mcpName: string, entry: Entry, serverUrl?: string) {
       const data = yield* all()
-      if (serverUrl) entry.serverUrl = serverUrl
-      yield* fs.writeJson(filepath, { ...data, [mcpName]: entry }, 0o600).pipe(Effect.orDie)
+      const next = normalizeEntry(serverUrl ? { ...entry, serverUrl } : entry)
+      if (!next) {
+        delete data[mcpName]
+        yield* fs.writeJson(filepath, data, 0o600).pipe(Effect.orDie)
+        return
+      }
+      yield* fs.writeJson(filepath, { ...data, [mcpName]: next }, 0o600).pipe(Effect.orDie)
     })
 
     const remove = Effect.fn("McpAuth.remove")(function* (mcpName: string) {

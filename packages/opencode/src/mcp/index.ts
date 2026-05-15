@@ -3,7 +3,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
-import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
+import { auth as performOAuth, UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
+import { createFetchWithInit } from "@modelcontextprotocol/sdk/shared/transport.js"
 import {
   CallToolResultSchema,
   ListToolsResultSchema,
@@ -756,7 +757,7 @@ export const layer = Layer.effect(
       return mcpConfig
     })
 
-    const startAuth = Effect.fn("MCP.startAuth")(function* (mcpName: string) {
+    const beginAuth = Effect.fn("MCP.beginAuth")(function* (mcpName: string) {
       const mcpConfig = yield* getMcpConfig(mcpName)
       if (!mcpConfig) throw new Error(`MCP server ${mcpName} not found or disabled`)
       if (mcpConfig.type !== "remote") throw new Error(`MCP server ${mcpName} is not a remote server`)
@@ -792,7 +793,24 @@ export const layer = Layer.effect(
         auth,
       )
 
-      const transport = new StreamableHTTPClientTransport(url, { authProvider })
+      const requestInit = mcpConfig.headers ? { headers: mcpConfig.headers } : undefined
+      const transport = new StreamableHTTPClientTransport(url, { authProvider, requestInit })
+
+      const authorization = yield* Effect.tryPromise({
+        try: () =>
+          performOAuth(authProvider, {
+            serverUrl: url,
+            scope: oauthConfig?.scope,
+            fetchFn: createFetchWithInit(undefined, requestInit),
+          }),
+        catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      })
+
+      if (authorization === "REDIRECT") {
+        if (!capturedUrl) throw new Error(`OAuth redirect requested without authorization URL for MCP server: ${mcpName}`)
+        pendingOAuthTransports.set(mcpName, transport)
+        return { authorizationUrl: capturedUrl.toString(), oauthState } satisfies AuthResult
+      }
 
       return yield* Effect.tryPromise({
         try: () => {
@@ -802,19 +820,11 @@ export const layer = Layer.effect(
             .then(() => ({ authorizationUrl: "", oauthState, client }) satisfies AuthResult)
         },
         catch: (error) => error,
-      }).pipe(
-        Effect.catch((error) => {
-          if (error instanceof UnauthorizedError && capturedUrl) {
-            pendingOAuthTransports.set(mcpName, transport)
-            return Effect.succeed({ authorizationUrl: capturedUrl.toString(), oauthState } satisfies AuthResult)
-          }
-          return Effect.die(error)
-        }),
-      )
+      })
     })
 
-    const authenticate = Effect.fn("MCP.authenticate")(function* (mcpName: string) {
-      const result = yield* startAuth(mcpName)
+    const authenticateImpl = Effect.fn("MCP.authenticate")(function* (mcpName: string) {
+      const result = yield* beginAuth(mcpName)
       if (!result.authorizationUrl) {
         const client = "client" in result ? result.client : undefined
         const mcpConfig = yield* getMcpConfig(mcpName)
@@ -829,8 +839,19 @@ export const layer = Layer.effect(
           return { status: "failed", error: "Failed to get tools" } as Status
         }
 
-        const s = yield* InstanceState.get(state)
         yield* auth.clearOAuthState(mcpName)
+        yield* auth.clearCodeVerifier(mcpName)
+        const authStatus = yield* getAuthStatus(mcpName)
+        if (authStatus !== "authenticated") {
+          log.warn("oauth authenticate completed without stored tokens", { mcpName, authStatus })
+          yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+          return {
+            status: "failed",
+            error: "Server connected without requesting OAuth. This MCP endpoint may not support interactive OAuth authentication.",
+          } as Status
+        }
+
+        const s = yield* InstanceState.get(state)
         return yield* storeClient(s, mcpName, client, listed, mcpConfig.timeout)
       }
 
@@ -870,6 +891,14 @@ export const layer = Layer.effect(
       yield* auth.clearOAuthState(mcpName)
       return yield* finishAuth(mcpName, code)
     })
+
+    const startAuth = (mcpName: string) =>
+      beginAuth(mcpName).pipe(
+        Effect.map((result) => ({ authorizationUrl: result.authorizationUrl, oauthState: result.oauthState })),
+        Effect.orDie,
+      )
+
+    const authenticate = (mcpName: string) => authenticateImpl(mcpName).pipe(Effect.orDie)
 
     const finishAuth = Effect.fn("MCP.finishAuth")(function* (mcpName: string, authorizationCode: string) {
       const transport = pendingOAuthTransports.get(mcpName)

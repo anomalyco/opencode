@@ -95,6 +95,18 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 // Mock UnauthorizedError in the auth module
 void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
   UnauthorizedError: MockUnauthorizedError,
+  auth: async (
+    provider: {
+      state?: () => Promise<string>
+      saveCodeVerifier?: (v: string) => Promise<void>
+      redirectToAuthorization?: (url: URL) => Promise<void>
+    },
+  ) => {
+    await provider.state?.()
+    await provider.saveCodeVerifier?.("test-verifier")
+    await provider.redirectToAuthorization?.(new URL("https://auth.example.com/authorize?client_id=test"))
+    return "REDIRECT"
+  },
 }))
 
 beforeEach(() => {
