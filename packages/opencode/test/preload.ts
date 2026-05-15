@@ -59,6 +59,7 @@ delete process.env["GOOGLE_API_KEY"]
 delete process.env["GOOGLE_GENERATIVE_AI_API_KEY"]
 delete process.env["AZURE_OPENAI_API_KEY"]
 delete process.env["AZURE_RESOURCE_NAME"]
+delete process.env["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME"]
 delete process.env["AZURE_API_KEY"]
 delete process.env["AWS_ACCESS_KEY_ID"]
 delete process.env["AWS_SECRET_ACCESS_KEY"]
@@ -98,6 +99,7 @@ delete process.env["CLOUDFLARE_API_KEY"]
 delete process.env["CF_AIG_TOKEN"]
 delete process.env["GITHUB_TOKEN"]
 delete process.env["GITLAB_TOKEN"]
+delete process.env["GITLAB_INSTANCE_URL"]
 delete process.env["OPENCODE_API_KEY"]
 delete process.env["GEMINI_API_KEY"]
 delete process.env["HF_TOKEN"]
@@ -114,12 +116,25 @@ delete process.env["OPENCODE_SERVER_USERNAME"]
 // Use in-memory sqlite
 process.env["OPENCODE_DB"] = ":memory:"
 
-// Capture baseline AFTER all preload deletes/sets settle. With the env layer
-// now writing through to `process.env` directly (see src/env/index.ts), tests
-// that call `set()` mutate global state. Without a per-test reset, leaks
-// would cross file boundaries (Bun runs all .test.ts files in one shared
-// process per `bunfig.toml` defaults). This `afterEach` snapshot/restore
-// makes test isolation automatic regardless of contributor discipline.
+// Now safe to import from src/
+const { Log } = await import("@opencode-ai/core/util/log")
+const { initProjectors } = await import("../src/server/projectors")
+
+void Log.init({
+  print: false,
+  dev: true,
+  level: "DEBUG",
+})
+
+initProjectors()
+
+// Capture baseline AFTER all preload deletes/sets AND src/ side-effectful
+// imports (Log.init, initProjectors) settle. With the env layer now writing
+// through to `process.env` directly (see src/env/index.ts), tests that call
+// `set()` mutate global state. Without a per-test reset, leaks would cross
+// file boundaries (Bun runs all .test.ts files in one shared process per
+// `bunfig.toml` defaults). This `afterEach` snapshot/restore makes test
+// isolation automatic regardless of contributor discipline.
 const ENV_BASELINE: Record<string, string | undefined> = { ...process.env }
 afterEach(() => {
   for (const key of Object.keys(process.env)) {
@@ -133,15 +148,3 @@ afterEach(() => {
     if (process.env[key] !== value) process.env[key] = value
   }
 })
-
-// Now safe to import from src/
-const { Log } = await import("@opencode-ai/core/util/log")
-const { initProjectors } = await import("../src/server/projectors")
-
-void Log.init({
-  print: false,
-  dev: true,
-  level: "DEBUG",
-})
-
-initProjectors()

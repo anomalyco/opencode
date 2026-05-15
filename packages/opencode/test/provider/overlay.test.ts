@@ -71,6 +71,13 @@ test("resolveEnvOverlay: cached config entry without key, multi-env apiKey -> ca
   expect(r).toBe(cached)
 })
 
+test("resolveEnvOverlay: cached env entry, multi-env candidate -> existing key preserved", () => {
+  const cached = { ...baseInfo(["A", "B"]), key: "preserved" }
+  const r = resolveEnvOverlay(cached, baseInfo(["A", "B"]), "any-env-value")
+  expect(r).toBe(cached)
+  expect(r?.key).toBe("preserved")
+})
+
 test("currentProviders: late env adds provider drawn from cleanedDatabase", () => {
   const candidate = baseInfo(["FOO_KEY"])
   const r = currentProviders(

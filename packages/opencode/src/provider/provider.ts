@@ -1054,13 +1054,15 @@ interface State {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
 
 /**
- * Single-provider env precedence (pure):
+ * @internal Test-only export. Not part of the public Provider API; subject to
+ * change without notice. Single-provider env precedence (pure):
  *   - !apiKey, cached.source==="env"    → drop
  *   - !apiKey, otherwise                → keep cached
  *   - apiKey, cached non-"env" w/o key, single-env candidate → cached + key
  *   - apiKey, cached non-"env"          → cached wins
  *   - apiKey, cached==="env" same key   → identity
- *   - apiKey, cached==="env" new key    → cached + new key
+ *   - apiKey, cached==="env" new key (single-env candidate) → cached + new key
+ *   - apiKey, cached==="env" multi-env candidate → cached.key preserved
  *   - apiKey, no cached                 → new env entry from candidate
  */
 export function resolveEnvOverlay(
@@ -1076,12 +1078,14 @@ export function resolveEnvOverlay(
     if (!cached.key && candidate.env.length === 1) return { ...cached, key: apiKey }
     return cached
   }
-  const nextKey = candidate.env.length === 1 ? apiKey : undefined
+  // Multi-env: preserve cached.key (no single-source-of-truth value).
+  const nextKey = candidate.env.length === 1 ? apiKey : (cached?.key ?? undefined)
   if (cached && cached.key === nextKey) return cached
   if (cached) return { ...cached, key: nextKey }
   return { ...candidate, source: "env", key: nextKey }
 }
 
+/** @internal Test-only export. Not part of the public Provider API. */
 export function currentProviders(
   s: Pick<State, "cachedProviders" | "cleanedDatabase">,
   envs: Record<string, string | undefined>,
@@ -1115,6 +1119,18 @@ function warnLateEnvRefused(
       env: present,
     })
   }
+}
+
+// JSON.stringify drops functions silently, so two distinct closures (e.g.
+// AWS credentialProvider instances stored in options) collide on the same
+// hash. Replace with a name-tagged sentinel so they surface as distinct.
+function hashIdentity(parts: Record<string, unknown>): string {
+  return Hash.fast(
+    JSON.stringify(parts, (_key, value) => {
+      if (typeof value === "function") return `__fn:${value.name || "anon"}`
+      return value
+    }),
+  )
 }
 
 function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
@@ -1267,6 +1283,11 @@ function modelSuggestions(provider: Info | undefined, modelID: ModelID, enableEx
     .map((item) => item.id)
 }
 
+/**
+ * @internal Bare layer without sub-layer wiring; exposed only so tests can
+ * compose with stubbed sub-layers (e.g. RuntimeFlags overrides). Production
+ * code MUST use `defaultLayer` instead.
+ */
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -1614,6 +1635,9 @@ export const layer = Layer.effect(
           }
         }
 
+        // toPublicInfo (line ~982) deep-clones via JSON, and mergeDeep produces
+        // fresh objects, so providers[id].models and database[id].models hold
+        // distinct Model instances. prepareModel inside both loops is safe.
         for (const [id, provider] of Object.entries(providers)) {
           const providerID = ProviderID.make(id)
           if (!isProviderAllowed(providerID)) {
@@ -1641,7 +1665,7 @@ export const layer = Layer.effect(
         // Build cleanedDatabase. Apply the same prepareModel + keepModel pipeline
         // so a late env-detected provider exposes the same models, with the same
         // variants, as it would if env had been present at init.
-        const cleanedDatabase: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
+        const cleanedDatabase: Record<ProviderID, Info> = {}
         for (const [id, info] of Object.entries(database)) {
           if (disabled.has(id)) continue
           if (enabled && !enabled.has(id)) continue
@@ -1728,13 +1752,11 @@ export const layer = Layer.effect(
             ...model.headers,
           }
 
-        const key = Hash.fast(
-          JSON.stringify({
-            providerID: model.providerID,
-            npm: model.api.npm,
-            options,
-          }),
-        )
+        const key = hashIdentity({
+          providerID: model.providerID,
+          npm: model.api.npm,
+          options,
+        })
         const existing = s.sdk.get(key)
         if (existing) return existing
 
@@ -1868,19 +1890,17 @@ export const layer = Layer.effect(
           .map((m) => m.target)
         return yield* new ModelNotFoundError({ providerID: model.providerID, modelID: model.id, suggestions })
       }
-      // Mirror s.sdk's Hash.fast keying (see resolveSDK) so the cached
+      // Mirror s.sdk's hashIdentity keying (see resolveSDK) so the cached
       // LanguageModel invalidates whenever the underlying SDK rebuilds —
       // env key rotation, multi-env credential changes, env-templated
       // baseURL mutations, and option changes all flow through the same
       // invariant.
-      const cacheKey = Hash.fast(
-        JSON.stringify({
-          providerID: model.providerID,
-          modelID: model.id,
-          key: provider.key,
-          options: { ...provider.options, ...model.options },
-        }),
-      )
+      const cacheKey = hashIdentity({
+        providerID: model.providerID,
+        modelID: model.id,
+        key: provider.key,
+        options: { ...provider.options, ...model.options },
+      })
       if (s.models.has(cacheKey)) return s.models.get(cacheKey)!
 
       return yield* EffectPromise.refineRejection(
