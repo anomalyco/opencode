@@ -1565,19 +1565,22 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
           </box>
         </Match>
         <Match when={isDone()}>
-          {/* Settled: timestamp, with the OpenAI summary title when we have one. */}
+          {/* Settled: ▶ at the start as the click-to-expand cue. */}
           <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
             <text fg={theme.textMuted} wrapMode="none">
-              {title()
-                ? "▶ " + title() + " · " + Locale.duration(duration())
-                : "▶ Thought for " + Locale.duration(duration())}
+              {"▶ " +
+                (title()
+                  ? title() + " · " + Locale.duration(duration())
+                  : "Thought for " + Locale.duration(duration()))}
             </text>
           </box>
         </Match>
         <Match when={true}>
-          {/* Streaming: spinner + title (or generic "Thinking" pre-title). */}
+          {/* Streaming: ▶ at the start, label, trailing animated spinner. */}
           <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
-            <Spinner color={theme.textMuted}>{title() ? "Thinking: " + title() : "Thinking"}</Spinner>
+            <Spinner color={theme.textMuted} trailing>
+              {"▶ " + (title() ? "Thinking: " + title() : "Thinking")}
+            </Spinner>
           </box>
         </Match>
       </Switch>
