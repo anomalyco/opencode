@@ -401,6 +401,10 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     const match = sync.data.session
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .find((x) => x.parentID === undefined)?.id
+    if (!match) {
+      toast.show({ message: "No previous sessions in this project", variant: "error" })
+      route.navigate({ type: "home" })
+    }
     if (match) {
       continued = true
       if (args.fork) {
