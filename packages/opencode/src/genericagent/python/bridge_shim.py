@@ -24,9 +24,11 @@ Python stdlib only (ThreadingHTTPServer + http.server). No pip deps.
 """
 
 import argparse
+import importlib
 import json
 import os
 import queue
+import re
 import signal
 import socket
 import sys
@@ -112,11 +114,13 @@ def _notify_active_dq_abort() -> None:
     with _ACTIVE_DQ_LOCK:
         dq = _ACTIVE_DQ
     if dq is None:
+        _eprint("[bridge_shim] /abort: no active dq to notify")
         return
     try:
         dq.put({"_abort": True})
+        _eprint("[bridge_shim] /abort: sentinel put to active dq")
     except Exception as e:
-        _eprint(f"[bridge_shim] failed to notify active dq abort: {e}")
+        _eprint(f"[bridge_shim] /abort: failed to put sentinel: {e}")
 
 
 def _agent():
@@ -149,6 +153,19 @@ def _reset_history(agent) -> None:
             pass
 
 
+_SESSION_MESSAGES_RE = re.compile(r"^/sessions/([^/]+)/messages$")
+_SESSION_RESTORE_RE = re.compile(r"^/sessions/([^/]+)/restore$")
+
+
+def _find_session_path(session_id: str):
+    continue_cmd = importlib.import_module("frontends.continue_cmd")
+
+    for path, _mtime, _preview, _rounds in continue_cmd.list_sessions():
+        if os.path.splitext(os.path.basename(path))[0] == session_id:
+            return path
+    return None
+
+
 class Handler(BaseHTTPRequestHandler):
     # Quiet the default stderr access log — noisy under streaming.
     def log_message(self, format, *args):  # noqa: A003
@@ -156,7 +173,7 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- helpers ----
 
-    def _write_json(self, status: int, body: dict) -> None:
+    def _write_json(self, status: int, body) -> None:
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -212,6 +229,41 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._write_json(200, items)
             return
+        if self.path == "/sessions":
+            try:
+                continue_cmd = importlib.import_module("frontends.continue_cmd")
+
+                sessions = [
+                    {
+                        "id": os.path.splitext(os.path.basename(path))[0],
+                        "path": path,
+                        "mtime": float(mtime),
+                        "preview": preview_text,
+                        "rounds": int(n_rounds),
+                    }
+                    for path, mtime, preview_text, n_rounds in continue_cmd.list_sessions()
+                ]
+            except Exception as e:
+                self._write_json(500, {"ok": False, "error": str(e)})
+                return
+            self._write_json(200, sessions)
+            return
+        session_messages_match = _SESSION_MESSAGES_RE.match(self.path)
+        if session_messages_match:
+            session_id = session_messages_match.group(1)
+            try:
+                continue_cmd = importlib.import_module("frontends.continue_cmd")
+
+                path = _find_session_path(session_id)
+                if path is None:
+                    self._write_json(404, {"ok": False, "error": "session_not_found"})
+                    return
+                messages = continue_cmd.extract_ui_messages(path)
+            except Exception as e:
+                self._write_json(500, {"ok": False, "error": str(e)})
+                return
+            self._write_json(200, messages)
+            return
         self._write_json(404, {"ok": False, "error": "not_found"})
 
     def do_POST(self):  # noqa: N802
@@ -219,13 +271,18 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_prompt()
             return
         if self.path == "/abort":
+            _eprint("[bridge_shim] /abort received")
             agent = _agent()
             if agent is not None:
                 try:
                     agent.abort()
+                    _eprint("[bridge_shim] /abort: agent.abort() returned")
                 except Exception as e:
+                    _eprint(f"[bridge_shim] /abort: agent.abort() raised: {e}")
                     self._write_json(500, {"ok": False, "error": str(e)})
                     return
+            else:
+                _eprint("[bridge_shim] /abort: agent not loaded")
             _notify_active_dq_abort()
             self._write_json(200, {"ok": True})
             return
@@ -250,6 +307,30 @@ class Handler(BaseHTTPRequestHandler):
                 self._write_json(500, {"ok": False, "error": str(e)})
                 return
             self._write_json(200, {"ok": True, "model": _model_name(agent)})
+            return
+        session_restore_match = _SESSION_RESTORE_RE.match(self.path)
+        if session_restore_match:
+            agent = _agent()
+            if agent is None:
+                self._write_json(503, {"ok": False, "error": "agent_not_loaded"})
+                return
+            session_id = session_restore_match.group(1)
+            try:
+                continue_cmd = importlib.import_module("frontends.continue_cmd")
+
+                path = _find_session_path(session_id)
+                if path is None:
+                    self._write_json(404, {"ok": False, "error": "session_not_found"})
+                    return
+                with _AGENT_LOCK:
+                    message, is_full = continue_cmd.restore(agent, path)
+            except Exception as e:
+                self._write_json(500, {"ok": False, "error": str(e)})
+                return
+            if isinstance(message, str) and message.startswith("❌"):
+                self._write_json(400, {"ok": False, "error": message})
+                return
+            self._write_json(200, {"ok": True, "message": message, "full": bool(is_full)})
             return
         self._write_json(404, {"ok": False, "error": "not_found"})
 
@@ -283,6 +364,7 @@ class Handler(BaseHTTPRequestHandler):
                     self._write_sse({"type": "error", "message": "timeout"})
                     return
                 if item.get("_abort"):
+                    _eprint("[bridge_shim] _handle_prompt: _abort sentinel received, closing stream")
                     self._write_sse({"type": "done", "text": full_text})
                     return
                 if "tool_event" in item:
