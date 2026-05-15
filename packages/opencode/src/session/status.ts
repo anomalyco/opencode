@@ -2,10 +2,8 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
 import { SessionID } from "./schema"
-import { zod } from "@/util/effect-zod"
-import { NonNegativeInt, withStatics } from "@/util/schema"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Effect, Layer, Context, Schema } from "effect"
-import z from "zod"
 
 export const Info = Schema.Union([
   Schema.Struct({
@@ -17,6 +15,8 @@ export const Info = Schema.Union([
     message: Schema.String,
     action: Schema.optional(
       Schema.Struct({
+        reason: Schema.String,
+        provider: Schema.String,
         title: Schema.String,
         message: Schema.String,
         label: Schema.String,
@@ -28,9 +28,7 @@ export const Info = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("busy"),
   }),
-])
-  .annotate({ identifier: "SessionStatus" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+]).annotate({ identifier: "SessionStatus" })
 export type Info = Schema.Schema.Type<typeof Info>
 
 export const Event = {

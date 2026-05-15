@@ -1,100 +1,218 @@
 ---
 title: Keybinds
-description: Customize your keyboard shortcuts.
+description: Customize your keybinds.
 ---
 
-OpenCode customizes TUI keyboard shortcuts with `keymap` in `tui.json`.
-
-The older `keybinds` field is still accepted as a migration fallback, but it is deprecated and will be removed in OpenCode v2.0. If `keymap` is present, OpenCode ignores `keybinds` for shortcut resolution.
-
-`keymap` is merged with built-in defaults, so you only need to configure the shortcuts you want to change.
-
----
-
-## Leader key
-
-OpenCode uses a `leader` key for many shortcuts. This avoids conflicts in your terminal.
-
-By default, `ctrl+x` is the leader key and leader shortcuts require you to first press the leader key and then the shortcut. For example, to start a new session you first press `ctrl+x` and then press `n`.
-
-You do not need to use a leader key, but we recommend doing so.
-
----
-
-## Minimal example
+OpenCode has a list of keybinds that you can customize through `tui.json`.
 
 ```json title="tui.json"
 {
   "$schema": "https://opencode.ai/tui.json",
-  "keymap": {
+  "leader_timeout": 2000,
+  "keybinds": {
     "leader": "ctrl+x",
-    "leader_timeout": 2000,
-    "sections": {
-      "global": {
-        "command.palette.show": "ctrl+p",
-        "session.new": "<leader>n",
-        "session.list": "<leader>l"
-      },
-      "session": {
-        "session.compact": "<leader>c",
-        "session.undo": "<leader>u",
-        "session.redo": "<leader>r"
-      },
-      "input": {
-        "input.submit": "return",
-        "input.newline": ["shift+return", "ctrl+return", "alt+return", "ctrl+j"]
-      }
-    }
+    "app_exit": "ctrl+c,ctrl+d,<leader>q",
+    "app_debug": "none",
+    "app_console": "none",
+    "app_heap_snapshot": "none",
+    "app_toggle_animations": "none",
+    "app_toggle_file_context": "none",
+    "app_toggle_diffwrap": "none",
+    "app_toggle_paste_summary": "none",
+    "app_toggle_session_directory_filter": "none",
+    "command_list": "ctrl+p",
+    "help_show": "none",
+    "docs_open": "none",
+
+    "editor_open": "<leader>e",
+    "theme_list": "<leader>t",
+    "theme_switch_mode": "none",
+    "theme_mode_lock": "none",
+    "sidebar_toggle": "<leader>b",
+    "scrollbar_toggle": "none",
+    "status_view": "<leader>s",
+
+    "session_export": "<leader>x",
+    "session_copy": "none",
+    "session_new": "<leader>n",
+    "session_list": "<leader>l",
+    "session_timeline": "<leader>g",
+    "session_fork": "none",
+    "session_rename": "ctrl+r",
+    "session_delete": "ctrl+d",
+    "session_share": "none",
+    "session_unshare": "none",
+    "session_interrupt": "escape",
+    "session_compact": "<leader>c",
+    "session_toggle_timestamps": "none",
+    "session_toggle_generic_tool_output": "none",
+    "session_child_first": "<leader>down",
+    "session_child_cycle": "right",
+    "session_child_cycle_reverse": "left",
+    "session_parent": "up",
+
+    "stash_delete": "ctrl+d",
+    "model_provider_list": "ctrl+a",
+    "model_favorite_toggle": "ctrl+f",
+    "model_list": "<leader>m",
+    "model_cycle_recent": "f2",
+    "model_cycle_recent_reverse": "shift+f2",
+    "model_cycle_favorite": "none",
+    "model_cycle_favorite_reverse": "none",
+    "mcp_list": "none",
+    "provider_connect": "none",
+    "console_org_switch": "none",
+    "agent_list": "<leader>a",
+    "agent_cycle": "tab",
+    "agent_cycle_reverse": "shift+tab",
+    "variant_cycle": "ctrl+t",
+    "variant_list": "none",
+
+    "messages_page_up": "pageup,ctrl+alt+b",
+    "messages_page_down": "pagedown,ctrl+alt+f",
+    "messages_line_up": "ctrl+alt+y",
+    "messages_line_down": "ctrl+alt+e",
+    "messages_half_page_up": "ctrl+alt+u",
+    "messages_half_page_down": "ctrl+alt+d",
+    "messages_first": "ctrl+g,home",
+    "messages_last": "ctrl+alt+g,end",
+    "messages_next": "none",
+    "messages_previous": "none",
+    "messages_last_user": "none",
+    "messages_copy": "<leader>y",
+    "messages_undo": "<leader>u",
+    "messages_redo": "<leader>r",
+    "messages_toggle_conceal": "<leader>h",
+    "tool_details": "none",
+    "display_thinking": "none",
+
+    "prompt_submit": "none",
+    "prompt_editor_context_clear": "none",
+    "prompt_skills": "none",
+    "prompt_stash": "none",
+    "prompt_stash_pop": "none",
+    "prompt_stash_list": "none",
+    "workspace_set": "none",
+
+    "input_clear": "ctrl+c",
+    "input_paste": {
+      "key": "ctrl+v",
+      "preventDefault": false
+    },
+    "input_submit": "return",
+    "input_newline": "shift+return,ctrl+return,alt+return,ctrl+j",
+    "input_move_left": "left,ctrl+b",
+    "input_move_right": "right,ctrl+f",
+    "input_move_up": "up",
+    "input_move_down": "down",
+    "input_select_left": "shift+left",
+    "input_select_right": "shift+right",
+    "input_select_up": "shift+up",
+    "input_select_down": "shift+down",
+    "input_line_home": "ctrl+a",
+    "input_line_end": "ctrl+e",
+    "input_select_line_home": "ctrl+shift+a",
+    "input_select_line_end": "ctrl+shift+e",
+    "input_visual_line_home": "alt+a",
+    "input_visual_line_end": "alt+e",
+    "input_select_visual_line_home": "alt+shift+a",
+    "input_select_visual_line_end": "alt+shift+e",
+    "input_buffer_home": "home",
+    "input_buffer_end": "end",
+    "input_select_buffer_home": "shift+home",
+    "input_select_buffer_end": "shift+end",
+    "input_delete_line": "ctrl+shift+d",
+    "input_delete_to_line_end": "ctrl+k",
+    "input_delete_to_line_start": "ctrl+u",
+    "input_backspace": "backspace,shift+backspace",
+    "input_delete": "ctrl+d,delete,shift+delete",
+    "input_undo": "ctrl+-,super+z",
+    "input_redo": "ctrl+.,super+shift+z",
+    "input_word_forward": "alt+f,alt+right,ctrl+right",
+    "input_word_backward": "alt+b,alt+left,ctrl+left",
+    "input_select_word_forward": "alt+shift+f,alt+shift+right",
+    "input_select_word_backward": "alt+shift+b,alt+shift+left",
+    "input_delete_word_forward": "alt+d,alt+delete,ctrl+delete",
+    "input_delete_word_backward": "ctrl+w,ctrl+backspace,alt+backspace",
+    "input_select_all": "super+a",
+    "history_previous": "up",
+    "history_next": "down",
+
+    "dialog.select.prev": "up,ctrl+p",
+    "dialog.select.next": "down,ctrl+n",
+    "dialog.select.page_up": "pageup",
+    "dialog.select.page_down": "pagedown",
+    "dialog.select.home": "home",
+    "dialog.select.end": "end",
+    "dialog.select.submit": "return",
+    "dialog.mcp.toggle": "space",
+    "prompt.autocomplete.prev": "up,ctrl+p",
+    "prompt.autocomplete.next": "down,ctrl+n",
+    "prompt.autocomplete.hide": "escape",
+    "prompt.autocomplete.select": "return",
+    "prompt.autocomplete.complete": "tab",
+    "permission.prompt.fullscreen": "ctrl+f",
+    "plugins.toggle": "space",
+    "dialog.plugins.install": "shift+i",
+
+    "terminal_suspend": "ctrl+z",
+    "terminal_title_toggle": "none",
+    "tips_toggle": "<leader>h",
+    "plugin_manager": "none",
+    "plugin_install": "none",
+
+    "which_key_toggle": "ctrl+alt+k",
+    "which_key_layout_toggle": "ctrl+alt+shift+k",
+    "which_key_pending_toggle": "ctrl+alt+shift+p",
+    "which_key_group_previous": "ctrl+alt+left,ctrl+alt+[",
+    "which_key_group_next": "ctrl+alt+right,ctrl+alt+]",
+    "which_key_scroll_up": "ctrl+alt+up,ctrl+alt+p",
+    "which_key_scroll_down": "ctrl+alt+down,ctrl+alt+n",
+    "which_key_page_up": "ctrl+alt+pageup",
+    "which_key_page_down": "ctrl+alt+pagedown",
+    "which_key_home": "ctrl+alt+home",
+    "which_key_end": "ctrl+alt+end"
   }
 }
 ```
 
----
+:::note
+On Windows, the defaults for `input_undo` and `terminal_suspend` are different:
 
-## Keymap structure
-
-`keymap.sections` is grouped by semantic area. Each section contains command names and the key sequence that triggers them.
-
-| Field            | Description                                                                                         |
-| ---------------- | --------------------------------------------------------------------------------------------------- |
-| `leader`         | The key used by `<leader>` sequences. Defaults to `ctrl+x`.                                         |
-| `leader_timeout` | How long OpenCode waits for the next key after the leader key, in milliseconds. Defaults to `2000`. |
-| `sections`       | A map of TUI areas to command bindings.                                                             |
+- `input_undo` defaults to `ctrl+z,ctrl+-,super+z` when it is not explicitly configured. The `ctrl+z` binding is added because Windows terminals do not support POSIX suspend.
+- `terminal_suspend` is forced to `none` because native Windows terminals do not support POSIX suspend.
+  :::
 
 ---
 
-## Binding values
+## Leader Key
 
-A string can contain one shortcut or multiple comma-separated shortcuts. You can also use an array for multiple shortcuts, or `"none"`/`false` to disable a command.
+OpenCode uses a `leader` key for many keybinds. This avoids conflicts in your terminal.
 
-```json title="tui.json"
-{
-  "$schema": "https://opencode.ai/tui.json",
-  "keymap": {
-    "sections": {
-      "session": {
-        "session.compact": "none",
-        "session.export": "<leader>x,ctrl+shift+x",
-        "session.copy": ["<leader>y", "ctrl+shift+c"]
-      }
-    }
-  }
-}
-```
+By default, `ctrl+x` is the leader key and many actions require you to first press the leader key and then the shortcut. For example, to start a new session you first press `ctrl+x` and then press `n`.
+
+You don't need to use a leader key for your keybinds but we recommend doing so.
+
+Some navigation keybinds intentionally do not use the leader key by default. For subagent sessions, the defaults are `session_child_first` = `<leader>down`, `session_child_cycle` = `right`, `session_child_cycle_reverse` = `left`, and `session_parent` = `up`.
+
+`leader_timeout` controls how long OpenCode waits for the next key after the leader key. It defaults to `2000` milliseconds.
+
+---
+
+## Binding Values
+
+A string can contain one shortcut or multiple comma-separated shortcuts. You can also use an array for multiple shortcuts.
 
 For advanced cases, use an object with `key`, `event`, `preventDefault`, or `fallthrough`.
 
 ```json title="tui.json"
 {
   "$schema": "https://opencode.ai/tui.json",
-  "keymap": {
-    "sections": {
-      "prompt": {
-        "prompt.paste": {
-          "key": "ctrl+v",
-          "preventDefault": false
-        }
-      }
+  "keybinds": {
+    "messages_copy": ["<leader>y", "ctrl+shift+c"],
+    "input_paste": {
+      "key": "ctrl+v",
+      "preventDefault": false
     }
   }
 }
@@ -102,219 +220,22 @@ For advanced cases, use an object with `key`, `event`, `preventDefault`, or `fal
 
 ---
 
-## Complete keymap reference
+## Disable Keybind
 
-This example lists the built-in sections, command names, and default fallback bindings. Commands set to `"none"` are available to bind but disabled by default.
-
-```json title="tui.json"
-{
-  "$schema": "https://opencode.ai/tui.json",
-  "keymap": {
-    "leader": "ctrl+x",
-    "leader_timeout": 2000,
-    "sections": {
-      "global": {
-        "command.palette.show": "ctrl+p",
-        "session.list": "<leader>l",
-        "session.new": "<leader>n",
-        "model.list": "<leader>m",
-        "model.cycle_recent": "f2",
-        "model.cycle_recent_reverse": "shift+f2",
-        "model.cycle_favorite": "none",
-        "model.cycle_favorite_reverse": "none",
-        "agent.list": "<leader>a",
-        "mcp.list": "none",
-        "agent.cycle": "tab",
-        "agent.cycle.reverse": "shift+tab",
-        "variant.cycle": "ctrl+t",
-        "variant.list": "none",
-        "provider.connect": "none",
-        "console.org.switch": "none",
-        "opencode.status": "<leader>s",
-        "theme.switch": "<leader>t",
-        "theme.switch_mode": "none",
-        "theme.mode.lock": "none",
-        "help.show": "none",
-        "docs.open": "none",
-        "app.exit": "ctrl+c,ctrl+d,<leader>q",
-        "app.debug": "none",
-        "app.console": "none",
-        "app.heap_snapshot": "none",
-        "app.toggle.animations": "none",
-        "app.toggle.file_context": "none",
-        "app.toggle.diffwrap": "none",
-        "app.toggle.paste_summary": "none",
-        "app.toggle.session_directory_filter": "none",
-        "terminal.suspend": "ctrl+z",
-        "terminal.title.toggle": "none"
-      },
-      "session": {
-        "session.share": "none",
-        "session.rename": "ctrl+r",
-        "session.timeline": "<leader>g",
-        "session.fork": "none",
-        "session.compact": "<leader>c",
-        "session.unshare": "none",
-        "session.undo": "<leader>u",
-        "session.redo": "<leader>r",
-        "session.sidebar.toggle": "<leader>b",
-        "session.toggle.conceal": "<leader>h",
-        "session.toggle.timestamps": "none",
-        "session.toggle.thinking": "none",
-        "session.toggle.actions": "none",
-        "session.toggle.scrollbar": "none",
-        "session.toggle.generic_tool_output": "none",
-        "session.page.up": "pageup,ctrl+alt+b",
-        "session.page.down": "pagedown,ctrl+alt+f",
-        "session.line.up": "ctrl+alt+y",
-        "session.line.down": "ctrl+alt+e",
-        "session.half.page.up": "ctrl+alt+u",
-        "session.half.page.down": "ctrl+alt+d",
-        "session.first": "ctrl+g,home",
-        "session.last": "ctrl+alt+g,end",
-        "session.messages_last_user": "none",
-        "session.message.next": "none",
-        "session.message.previous": "none",
-        "messages.copy": "<leader>y",
-        "session.copy": "none",
-        "session.export": "<leader>x",
-        "session.child.first": "<leader>down",
-        "session.parent": "up",
-        "session.child.next": "right",
-        "session.child.previous": "left"
-      },
-      "prompt": {
-        "prompt.submit": "none",
-        "prompt.editor": "<leader>e",
-        "prompt.editor_context.clear": "none",
-        "prompt.skills": "none",
-        "prompt.stash": "none",
-        "prompt.stash.pop": "none",
-        "prompt.stash.list": "none",
-        "workspace.set": "none",
-        "session.interrupt": "escape",
-        "prompt.clear": "ctrl+c",
-        "prompt.paste": {
-          "key": "ctrl+v",
-          "preventDefault": false
-        },
-        "prompt.history.previous": "up",
-        "prompt.history.next": "down"
-      },
-      "autocomplete": {
-        "prompt.autocomplete.prev": "up,ctrl+p",
-        "prompt.autocomplete.next": "down,ctrl+n",
-        "prompt.autocomplete.hide": "escape",
-        "prompt.autocomplete.select": "return",
-        "prompt.autocomplete.complete": "tab"
-      },
-      "input": {
-        "input.submit": "return",
-        "input.newline": "shift+return,ctrl+return,alt+return,ctrl+j",
-        "input.move.left": "left,ctrl+b",
-        "input.move.right": "right,ctrl+f",
-        "input.move.up": "up",
-        "input.move.down": "down",
-        "input.select.left": "shift+left",
-        "input.select.right": "shift+right",
-        "input.select.up": "shift+up",
-        "input.select.down": "shift+down",
-        "input.line.home": "ctrl+a",
-        "input.line.end": "ctrl+e",
-        "input.select.line.home": "ctrl+shift+a",
-        "input.select.line.end": "ctrl+shift+e",
-        "input.visual.line.home": "alt+a",
-        "input.visual.line.end": "alt+e",
-        "input.select.visual.line.home": "alt+shift+a",
-        "input.select.visual.line.end": "alt+shift+e",
-        "input.buffer.home": "home",
-        "input.buffer.end": "end",
-        "input.select.buffer.home": "shift+home",
-        "input.select.buffer.end": "shift+end",
-        "input.delete.line": "ctrl+shift+d",
-        "input.delete.to.line.end": "ctrl+k",
-        "input.delete.to.line.start": "ctrl+u",
-        "input.backspace": "backspace,shift+backspace",
-        "input.delete": "ctrl+d,delete,shift+delete",
-        "input.undo": "ctrl+-,super+z",
-        "input.redo": "ctrl+.,super+shift+z",
-        "input.word.forward": "alt+f,alt+right,ctrl+right",
-        "input.word.backward": "alt+b,alt+left,ctrl+left",
-        "input.select.word.forward": "alt+shift+f,alt+shift+right",
-        "input.select.word.backward": "alt+shift+b,alt+shift+left",
-        "input.delete.word.forward": "alt+d,alt+delete,ctrl+delete",
-        "input.delete.word.backward": "ctrl+w,ctrl+backspace,alt+backspace",
-        "input.select.all": "super+a"
-      },
-      "dialog_select": {
-        "dialog.select.prev": "up,ctrl+p",
-        "dialog.select.next": "down,ctrl+n",
-        "dialog.select.page_up": "pageup",
-        "dialog.select.page_down": "pagedown",
-        "dialog.select.home": "home",
-        "dialog.select.end": "end",
-        "dialog.select.submit": "return"
-      },
-      "dialog_actions": {
-        "dialog.action.toggle": "space",
-        "dialog.action.delete": "ctrl+d",
-        "dialog.action.rename": "ctrl+r"
-      },
-      "model": {
-        "model.dialog.provider": "ctrl+a",
-        "model.dialog.favorite": "ctrl+f"
-      },
-      "permission": {
-        "permission.reject.cancel": "ctrl+c,ctrl+d,<leader>q",
-        "permission.prompt.escape": "ctrl+c,ctrl+d,<leader>q",
-        "permission.prompt.fullscreen": "ctrl+f"
-      },
-      "question": {
-        "question.reject": "ctrl+c,ctrl+d,<leader>q",
-        "question.edit.clear": "ctrl+c"
-      },
-      "plugins": {
-        "plugins.list": "none",
-        "plugins.install": "none",
-        "plugin.dialog.install": "shift+i"
-      },
-      "home_tips": {
-        "tips.toggle": "<leader>h"
-      }
-    }
-  }
-}
-```
-
----
-
-## Legacy keybinds
-
-`keybinds` is deprecated. It is kept so existing configs continue to work while users migrate to `keymap`.
-
-Only use `keybinds` when `keymap` is not present. If both fields are set, `keymap` wins and `keybinds` are ignored for shortcut resolution.
+You can disable a keybind by adding the key to `tui.json` with a value of `"none"` or `false`.
 
 ```json title="tui.json"
 {
   "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
-    "command_list": "ctrl+p",
-    "session_new": "<leader>n",
-    "session_compact": "<leader>c"
+    "session_compact": "none"
   }
 }
 ```
 
-:::note
-On native Windows, the defaults for undo and terminal suspend are different for both `keymap` and legacy `keybinds`:
-
-- `input.undo` defaults to `ctrl+z,ctrl+-,super+z` when it is not explicitly configured (the `ctrl+z` binding is added because Windows terminals do not support POSIX suspend).
-- `terminal.suspend` is disabled because native Windows terminals do not support POSIX suspend.
-  :::
-
 ---
 
-## Desktop prompt shortcuts
+## Desktop Prompt Shortcuts
 
 The OpenCode desktop app prompt input supports common Readline/Emacs-style shortcuts for editing text. These are built-in and currently not configurable via `opencode.json`.
 
