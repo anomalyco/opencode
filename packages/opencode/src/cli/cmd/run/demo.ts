@@ -15,7 +15,7 @@
 // Demo mode also handles permission and question replies locally, completing
 // or failing the synthetic tool parts as appropriate.
 import path from "path"
-import type { Event, ToolPart } from "@opencode-ai/sdk/v2"
+import type { ToolPart } from "@opencode-ai/sdk/v2"
 import { createSessionData, reduceSessionData, type SessionData } from "./session-data"
 import { writeSessionOutput } from "./stream"
 import type { FooterApi, PermissionReply, QuestionReject, QuestionReply, RunPrompt, StreamCommit } from "./types"
@@ -37,6 +37,12 @@ const KINDS = [
 ]
 const PERMISSIONS = ["edit", "bash", "read", "task", "external", "doom"] as const
 const QUESTIONS = ["multi", "single", "checklist", "custom"] as const
+
+type DemoEvent = {
+  id?: string
+  type: string
+  properties: any
+}
 
 type PermissionKind = (typeof PERMISSIONS)[number]
 type QuestionKind = (typeof QUESTIONS)[number]
@@ -256,7 +262,7 @@ function take(state: State, key: "msg" | "part" | "call" | "perm" | "ask", prefi
   return `demo_${prefix}_${state[key]}`
 }
 
-function feed(state: State, event: Event): void {
+function feed(state: State, event: any): void {
   const out = reduceSessionData({
     data: state.data,
     event,
@@ -307,7 +313,7 @@ function open(state: State): string {
         },
       },
     },
-  } as Event)
+  })
   return id
 }
 
@@ -332,7 +338,7 @@ async function emitText(state: State, body: string, signal?: AbortSignal): Promi
         },
       },
     },
-  } as Event)
+  })
 
   let next = ""
   for (const item of split(body)) {
@@ -350,7 +356,7 @@ async function emitText(state: State, body: string, signal?: AbortSignal): Promi
         field: "text",
         delta: item,
       },
-    } as Event)
+    })
     await wait(45, signal)
   }
 
@@ -371,7 +377,7 @@ async function emitText(state: State, body: string, signal?: AbortSignal): Promi
         },
       },
     },
-  } as Event)
+  })
 }
 
 async function emitReasoning(state: State, body: string, signal?: AbortSignal): Promise<void> {
@@ -395,7 +401,7 @@ async function emitReasoning(state: State, body: string, signal?: AbortSignal): 
         },
       },
     },
-  } as Event)
+  })
 
   let next = ""
   for (const item of split(body)) {
@@ -413,7 +419,7 @@ async function emitReasoning(state: State, body: string, signal?: AbortSignal): 
         field: "text",
         delta: item,
       },
-    } as Event)
+    })
     await wait(45, signal)
   }
 
@@ -434,7 +440,7 @@ async function emitReasoning(state: State, body: string, signal?: AbortSignal): 
         },
       },
     },
-  } as Event)
+  })
 }
 
 function make(state: State, tool: string, input: Record<string, unknown>): Ref {
@@ -471,7 +477,7 @@ function startTool(state: State, ref: Ref, metadata: Record<string, unknown> = {
         },
       },
     },
-  } as Event)
+  })
 }
 
 function askPermission(state: State, item: Permit): void {
@@ -497,7 +503,7 @@ function askPermission(state: State, item: Permit): void {
         callID: item.ref.call,
       },
     },
-  } as Event)
+  })
 }
 
 function doneTool(
@@ -534,7 +540,7 @@ function doneTool(
         },
       },
     },
-  } as Event)
+  })
 }
 
 function failTool(state: State, ref: Ref, error: string): void {
@@ -562,7 +568,7 @@ function failTool(state: State, ref: Ref, error: string): void {
         },
       },
     },
-  } as Event)
+  })
 }
 
 function emitError(state: State, text: string): void {
@@ -578,7 +584,7 @@ function emitError(state: State, text: string): void {
         },
       },
     },
-  } satisfies Event
+  } satisfies DemoEvent
   feed(state, event)
 }
 
@@ -1017,7 +1023,7 @@ function emitQuestion(state: State, kind: QuestionKind = "multi"): void {
         callID: ref.call,
       },
     },
-  } as Event)
+  })
 }
 
 async function emitFmt(state: State, kind: string, body: string, signal?: AbortSignal): Promise<boolean> {
@@ -1207,7 +1213,7 @@ export function createRunDemo(input: Input) {
         requestID: input.requestID,
         reply: input.reply,
       },
-    } satisfies Event
+    } satisfies DemoEvent
     feed(state, event)
 
     if (input.reply === "reject") {
@@ -1234,7 +1240,7 @@ export function createRunDemo(input: Input) {
         requestID: input.requestID,
         answers: input.answers,
       },
-    } satisfies Event
+    } satisfies DemoEvent
     feed(state, event)
     doneTool(state, ask.ref, {
       title: "question",
@@ -1259,7 +1265,7 @@ export function createRunDemo(input: Input) {
         sessionID: state.id,
         requestID: input.requestID,
       },
-    } as Event)
+    })
     failTool(state, ask.ref, "question rejected")
     return true
   }

@@ -190,7 +190,7 @@ export class Agent implements ACPAgent {
     }
   }
 
-  private async handleEvent(event: Event) {
+  private async handleEvent(event: any) {
     switch (event.type) {
       case "permission.asked": {
         const permission = event.properties

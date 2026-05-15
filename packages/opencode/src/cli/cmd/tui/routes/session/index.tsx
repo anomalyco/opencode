@@ -280,7 +280,8 @@ export function Session() {
   })
 
   let lastSwitch: string | undefined = undefined
-  event.on("message.part.updated", (evt) => {
+  event.subscribe((evt) => {
+    if (evt.type !== "message.part.updated") return
     const part = evt.properties.part
     if (part.type !== "tool") return
     if (part.sessionID !== route.sessionID) return

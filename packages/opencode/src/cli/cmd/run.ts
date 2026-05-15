@@ -608,7 +608,7 @@ export const RunCommand = effectCmd({
           const toggles = new Map<string, boolean>()
           let error: string | undefined
 
-          for await (const event of events.stream) {
+          for await (const event of events.stream as AsyncGenerator<any, unknown, unknown>) {
             if (
               event.type === "message.updated" &&
               event.properties.sessionID === sessionID &&

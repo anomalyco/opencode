@@ -59,10 +59,6 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const key = (directory: string, payload: Event) => {
       if (payload.type === "session.status") return `session.status:${directory}:${payload.properties.sessionID}`
       if (payload.type === "lsp.updated") return `lsp.updated:${directory}`
-      if (payload.type === "message.part.updated") {
-        const part = payload.properties.part
-        return `message.part.updated:${directory}:${part.messageID}:${part.id}`
-      }
     }
 
     const flush = () => {
@@ -165,10 +161,6 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
                 const i = coalesced.get(k)
                 if (i !== undefined) {
                   queue[i] = { directory, payload }
-                  if (payload.type === "message.part.updated") {
-                    const part = payload.properties.part
-                    staleDeltas.add(deltaKey(directory, part.messageID, part.id))
-                  }
                   continue
                 }
                 coalesced.set(k, queue.length)
