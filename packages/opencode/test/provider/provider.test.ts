@@ -4,6 +4,7 @@ import path from "path"
 
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { Global } from "@opencode-ai/core/global"
+import { Log } from "@opencode-ai/core/util/log"
 import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Plugin } from "../../src/plugin/index"
@@ -3309,4 +3310,138 @@ test("getLanguage rebuilds language model after env key rotation", async () => {
       remove("ANTHROPIC_API_KEY")
     },
   })
+})
+
+const RESTART_CASES = [
+  {
+    id: "azure",
+    providerID: ProviderID.azure,
+    cleanup: ["AZURE_RESOURCE_NAME"],
+    setKey: "AZURE_RESOURCE_NAME",
+    setValue: "late-resource",
+  },
+  {
+    id: "azure-cognitive-services",
+    providerID: ProviderID.make("azure-cognitive-services"),
+    cleanup: ["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME"],
+    setKey: "AZURE_COGNITIVE_SERVICES_RESOURCE_NAME",
+    setValue: "late-cognitive",
+  },
+  {
+    id: "google-vertex",
+    providerID: ProviderID.googleVertex,
+    cleanup: [
+      "GOOGLE_VERTEX_PROJECT",
+      "GOOGLE_CLOUD_PROJECT",
+      "GCP_PROJECT",
+      "GCLOUD_PROJECT",
+      "GOOGLE_VERTEX_LOCATION",
+      "GOOGLE_CLOUD_LOCATION",
+      "VERTEX_LOCATION",
+      "GOOGLE_APPLICATION_CREDENTIALS",
+    ],
+    setKey: "GOOGLE_VERTEX_PROJECT",
+    setValue: "late-project",
+  },
+  {
+    id: "google-vertex-anthropic",
+    providerID: ProviderID.make("google-vertex-anthropic"),
+    cleanup: [
+      "GOOGLE_VERTEX_PROJECT",
+      "GOOGLE_CLOUD_PROJECT",
+      "GCP_PROJECT",
+      "GCLOUD_PROJECT",
+      "GOOGLE_VERTEX_LOCATION",
+      "GOOGLE_CLOUD_LOCATION",
+      "VERTEX_LOCATION",
+      "GOOGLE_APPLICATION_CREDENTIALS",
+    ],
+    setKey: "GOOGLE_CLOUD_PROJECT",
+    setValue: "late-project",
+  },
+  {
+    id: "sap-ai-core",
+    providerID: ProviderID.make("sap-ai-core"),
+    cleanup: ["AICORE_SERVICE_KEY", "AICORE_DEPLOYMENT_ID", "AICORE_RESOURCE_GROUP"],
+    setKey: "AICORE_SERVICE_KEY",
+    setValue: '{"clientid":"x","clientsecret":"y","url":"https://x"}',
+  },
+  {
+    id: "cloudflare-workers-ai",
+    providerID: ProviderID.make("cloudflare-workers-ai"),
+    cleanup: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
+    setKey: "CLOUDFLARE_ACCOUNT_ID",
+    setValue: "late-account",
+  },
+  {
+    id: "cloudflare-ai-gateway",
+    providerID: ProviderID.make("cloudflare-ai-gateway"),
+    cleanup: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_GATEWAY_ID", "CLOUDFLARE_API_TOKEN"],
+    setKey: "CLOUDFLARE_ACCOUNT_ID",
+    setValue: "late-account",
+  },
+] as const
+
+for (const c of RESTART_CASES) {
+  test(`late-detected ${c.id} is excluded (requires restart)`, async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+        )
+      },
+    })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        c.cleanup.forEach(remove)
+        const before = await list()
+        expect(before[c.providerID]).toBeUndefined()
+        set(c.setKey, c.setValue)
+        const after = await list()
+        expect(after[c.providerID]).toBeUndefined()
+        remove(c.setKey)
+      },
+    })
+  })
+}
+
+test("warnRestartRequired emits at most one warn per provider per instance", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  const providerLog = Log.create({ service: "provider" })
+  const calls: { providerID: string; env: string }[] = []
+  const original = providerLog.warn
+  providerLog.warn = (message?: any, extra?: Record<string, any>) => {
+    if (typeof message === "string" && message.includes("requires restart")) {
+      calls.push({ providerID: extra?.providerID, env: extra?.env })
+    }
+    return original.call(providerLog, message, extra)
+  }
+  try {
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        ;["AICORE_SERVICE_KEY", "AICORE_DEPLOYMENT_ID", "AICORE_RESOURCE_GROUP"].forEach(remove)
+        await list()
+        set("AICORE_SERVICE_KEY", "late")
+        await list()
+        await list()
+        await list()
+        const sapWarns = calls.filter((c) => c.providerID === "sap-ai-core")
+        expect(sapWarns.length).toBe(1)
+        expect(sapWarns[0].env).toBe("AICORE_SERVICE_KEY")
+        remove("AICORE_SERVICE_KEY")
+      },
+    })
+  } finally {
+    providerLog.warn = original
+  }
 })
