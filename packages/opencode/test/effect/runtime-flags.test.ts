@@ -28,6 +28,7 @@ describe("RuntimeFlags", () => {
             OPENCODE_AUTO_SHARE: "true",
             OPENCODE_DISABLE_EMBEDDED_WEB_UI: "true",
             OPENCODE_DISABLE_EXTERNAL_SKILLS: "true",
+            OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
             OPENCODE_EXPERIMENTAL: "true",
             OPENCODE_ENABLE_EXA: "true",
             OPENCODE_ENABLE_PARALLEL: "true",
@@ -44,6 +45,7 @@ describe("RuntimeFlags", () => {
       expect(flags.disableChannelDb).toBe(true)
       expect(flags.disableEmbeddedWebUi).toBe(true)
       expect(flags.disableExternalSkills).toBe(true)
+      expect(flags.disableLspDownload).toBe(true)
       expect(flags.disableClaudeCodePrompt).toBe(false)
       expect(flags.enableExa).toBe(true)
       expect(flags.enableParallel).toBe(true)
@@ -88,6 +90,7 @@ describe("RuntimeFlags", () => {
       expect(flags.disableChannelDb).toBe(false)
       expect(flags.disableEmbeddedWebUi).toBe(false)
       expect(flags.disableExternalSkills).toBe(false)
+      expect(flags.disableLspDownload).toBe(false)
       expect(flags.disableClaudeCodePrompt).toBe(false)
       expect(flags.disableClaudeCodeSkills).toBe(false)
       expect(flags.enableExa).toBe(false)
@@ -121,6 +124,22 @@ describe("RuntimeFlags", () => {
       const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_DISABLE_EXTERNAL_SKILLS: "true" })))
 
       expect(flags.disableExternalSkills).toBe(true)
+    }),
+  )
+
+  it.effect("disableLspDownload defaults to false", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({})))
+
+      expect(flags.disableLspDownload).toBe(false)
+    }),
+  )
+
+  it.effect("disableLspDownload reads OPENCODE_DISABLE_LSP_DOWNLOAD", () =>
+    Effect.gen(function* () {
+      const flags = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_DISABLE_LSP_DOWNLOAD: "true" })))
+
+      expect(flags.disableLspDownload).toBe(true)
     }),
   )
 
@@ -268,6 +287,7 @@ describe("RuntimeFlags", () => {
               OPENCODE_PURE: "true",
               OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
               OPENCODE_DISABLE_EXTERNAL_SKILLS: "true",
+              OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
               OPENCODE_EXPERIMENTAL: "true",
               OPENCODE_ENABLE_EXA: "true",
               OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: "1234",
@@ -282,6 +302,7 @@ describe("RuntimeFlags", () => {
       expect(flags.disableChannelDb).toBe(false)
       expect(flags.disableEmbeddedWebUi).toBe(false)
       expect(flags.disableExternalSkills).toBe(false)
+      expect(flags.disableLspDownload).toBe(false)
       expect(flags.disableClaudeCodePrompt).toBe(false)
       expect(flags.disableClaudeCodeSkills).toBe(false)
       expect(flags.enableExa).toBe(false)
