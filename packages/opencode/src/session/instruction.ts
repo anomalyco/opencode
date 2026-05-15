@@ -118,7 +118,9 @@ export const layer: Layer.Layer<
       // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
       if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
         for (const file of FILES) {
-          const matches = yield* fs.findUp(file, ctx.directory, ctx.worktree)
+          const matches = yield* fs
+            .findUp(file, ctx.directory, ctx.worktree)
+            .pipe(Effect.catch(() => Effect.succeed([])))
           if (matches.length > 0) {
             matches.forEach((item) => paths.add(path.resolve(item)))
             break

@@ -157,3 +157,48 @@ const failingAccountLayer = Layer.mock(Account.Service, {
 ```
 
 This is much shorter than stubbing every method with `Effect.void` / `Effect.succeed(...)` placeholders, and it keeps the test focused on the behaviour under test.
+
+## Synchronizing With Concurrent Work
+
+### The Anti-Pattern
+
+Using `Effect.sleep(N)` or `setTimeout` as a "wait for the forked fiber to be ready" hack races the scheduler. The forked fiber may not have reached the synchronization point within `N` ms on a slow CI host, and the test fails intermittently. See PR #27622 for a concrete flake that fell out of this exact pattern.
+
+### The Fix
+
+Wait on a **published readiness signal**, not wall-clock time. Available affordances:
+
+- `pollWithTimeout(effect, message, duration?)` from `test/lib/effect.ts` — repeatedly run a predicate effect until it returns a non-`undefined` value, with a timeout.
+- `awaitWithTimeout(effect, message, duration?)` from `test/lib/effect.ts` — wrap any effect with `Effect.timeoutOrElse` and a custom error message.
+- `llm.wait(n)` from `test/lib/llm-server.ts` — wait until the mock LLM has received `n` HTTP calls.
+- `SessionStatus.Service` `.get(sessionID)` — observable per-session state (`{ type: "busy" | "idle" | ... }`).
+- `BackgroundJob.wait({ id, timeout })` from `src/background/job.ts` — wait for a background job to complete.
+- Bus subscriptions — fork `Stream.runForEach(bus.subscribe(Event), ...)` and open a `Latch` inside the callback to signal first-event readiness.
+- `Deferred.await(deferred).pipe(Effect.timeoutOrElse(...))` for one-shot signals.
+
+### Example
+
+```ts
+// Antipattern — race
+yield * prompt.shell({ command: "sleep 30" }).pipe(Effect.forkChild)
+yield * Effect.sleep(50)
+yield * prompt.cancel(chat.id)
+
+// Fix — wait for a published readiness signal
+yield * prompt.shell({ command: "sleep 30" }).pipe(Effect.forkChild)
+yield *
+  pollWithTimeout(
+    Effect.gen(function* () {
+      const s = yield* (yield* SessionStatus.Service).get(chat.id)
+      return s.type === "busy" ? (true as const) : undefined
+    }),
+    "session never became busy",
+  )
+yield * prompt.cancel(chat.id)
+```
+
+### When Fixed Sleeps Are OK
+
+- Testing debounce or throttle behavior, where the sleep **is** the test.
+- Letting real wall-clock advance past a genuine timestamp resolution boundary (e.g. mtime granularity).
+- Simulating network latency in race-regression tests that intentionally exercise ordering.

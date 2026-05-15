@@ -1,5 +1,5 @@
 import { SessionID } from "@/session/schema"
-import { SessionMessage } from "@/v2/session-message"
+import { SessionMessage } from "@opencode-ai/core/session-message"
 import { Prompt } from "@opencode-ai/core/session-prompt"
 import { SessionV2 } from "@/v2/session"
 import { Schema } from "effect"

@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer } from "effect"
+import { Effect, Fiber, Layer, Queue } from "effect"
 import { QuestionTool } from "../../src/tool/question"
 import { Question } from "../../src/question"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -7,6 +7,7 @@ import { Agent } from "../../src/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Truncate } from "@/tool/truncate"
 import { testEffect } from "../lib/effect"
+import { Bus } from "../../src/bus"
 
 const ctx = {
   sessionID: SessionID.make("ses_test-session"),
@@ -20,15 +21,25 @@ const ctx = {
 }
 
 const it = testEffect(
-  Layer.mergeAll(Question.defaultLayer, CrossSpawnSpawner.defaultLayer, Truncate.defaultLayer, Agent.defaultLayer),
+  Layer.mergeAll(
+    Question.layer.pipe(Layer.provideMerge(Bus.layer)),
+    CrossSpawnSpawner.defaultLayer,
+    Truncate.defaultLayer,
+    Agent.defaultLayer,
+  ),
 )
 
 const pending = Effect.fn("QuestionToolTest.pending")(function* (question: Question.Interface) {
+  const bus = yield* Bus.Service
+  const asked = yield* Queue.unbounded<void>()
+  const off = yield* bus.subscribeCallback(Question.Event.Asked, () => Queue.offerUnsafe(asked, undefined))
+  yield* Effect.addFinalizer(() => Effect.sync(off))
+
   for (;;) {
     const items = yield* question.list()
     const item = items[0]
     if (item) return item
-    yield* Effect.sleep("10 millis")
+    yield* Queue.take(asked).pipe(Effect.timeout("2 seconds"))
   }
 })
 

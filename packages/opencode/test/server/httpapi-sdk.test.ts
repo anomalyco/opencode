@@ -10,7 +10,7 @@ import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { validateSession } from "../../src/cli/cmd/tui/validate-session"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
 import { InstanceStore } from "../../src/project/instance-store"
-import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
+import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { Server } from "../../src/server/server"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -53,7 +53,7 @@ function app(serverPath: ServerPath, input?: { password?: string; username?: str
   if (serverPath === "default") return Server.Default().app
 
   const handler = HttpRouter.toWebHandler(
-    ExperimentalHttpApiServer.routes.pipe(
+    HttpApiApp.routes.pipe(
       Layer.provide(
         ConfigProvider.layer(
           ConfigProvider.fromUnknown({
@@ -66,7 +66,7 @@ function app(serverPath: ServerPath, input?: { password?: string; username?: str
     { disableLogger: true },
   ).handler
   return {
-    fetch: (request: Request) => handler(request, ExperimentalHttpApiServer.context),
+    fetch: (request: Request) => handler(request, HttpApiApp.context),
     request(input: string | URL | Request, init?: RequestInit) {
       return this.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
     },
