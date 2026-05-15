@@ -2858,7 +2858,7 @@ test("openai-compatible: discovers models from /v1/models", async () => {
         )
       },
     })
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         const providers = await list(ctx)
@@ -2921,7 +2921,7 @@ test("openai-compatible: discoverModels:true merges discovered models without ov
         )
       },
     })
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         const providers = await list(ctx)
@@ -2975,7 +2975,7 @@ test("openai-compatible: discoverModels:true fills limits for existing model stu
         )
       },
     })
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         const providers = await list(ctx)
@@ -3018,7 +3018,7 @@ test("openai-compatible: discoverModels:false disables discovery", async () => {
         )
       },
     })
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         await list(ctx)
@@ -3048,7 +3048,7 @@ test("openai-compatible: discovery silently fails when server unreachable", asyn
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
       // should not throw; provider has no models so it's dropped from the list
@@ -3086,7 +3086,7 @@ test("openai-compatible: discovery skipped for non-openai-compatible npm", async
         )
       },
     })
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         await list(ctx)
@@ -3123,7 +3123,7 @@ test("openai-compatible: discovery URL is baseURL + /models (no /v1 forced)", as
         )
       },
     })
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         const providers = await list(ctx)
@@ -3158,7 +3158,7 @@ test("openai-compatible: discovery handles non-200 response silently", async () 
         )
       },
     })
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         const providers = await list(ctx)
@@ -3195,7 +3195,7 @@ test("openai-compatible: discovery handles missing data field silently", async (
         )
       },
     })
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         // should not throw; provider has no models so it's dropped
