@@ -123,3 +123,48 @@ test("currentProviders: cached api entry preserved across env presence/absence",
   )
   expect(noEnv["foo" as ProviderID]).toBe(cached)
 })
+
+test("currentProviders: whitespace-only env value treated as absent", () => {
+  const r = currentProviders(
+    {
+      cachedProviders: {} as Record<ProviderID, Provider.Info>,
+      cleanedDatabase: { foo: baseInfo(["FOO_KEY"]) } as Record<ProviderID, Provider.Info>,
+    },
+    { FOO_KEY: "   " },
+  )
+  expect(r["foo" as ProviderID]).toBeUndefined()
+})
+
+test("currentProviders: empty-string env value treated as absent", () => {
+  const r = currentProviders(
+    {
+      cachedProviders: {} as Record<ProviderID, Provider.Info>,
+      cleanedDatabase: { foo: baseInfo(["FOO_KEY"]) } as Record<ProviderID, Provider.Info>,
+    },
+    { FOO_KEY: "" },
+  )
+  expect(r["foo" as ProviderID]).toBeUndefined()
+})
+
+test("currentProviders: surrounding-whitespace env value preserved verbatim (not trimmed)", () => {
+  const r = currentProviders(
+    {
+      cachedProviders: {} as Record<ProviderID, Provider.Info>,
+      cleanedDatabase: { foo: baseInfo(["FOO_KEY"]) } as Record<ProviderID, Provider.Info>,
+    },
+    { FOO_KEY: "  abc  " },
+  )
+  expect(r["foo" as ProviderID]?.key).toBe("  abc  ")
+})
+
+test("currentProviders: blank env skipped, falls through to next env in multi-env list", () => {
+  const r = currentProviders(
+    {
+      cachedProviders: {} as Record<ProviderID, Provider.Info>,
+      cleanedDatabase: { foo: baseInfo(["A", "B"]) } as Record<ProviderID, Provider.Info>,
+    },
+    { A: "  ", B: "real-key" },
+  )
+  expect(r["foo" as ProviderID]?.source).toBe("env")
+  expect(r["foo" as ProviderID]?.key).toBeUndefined()
+})

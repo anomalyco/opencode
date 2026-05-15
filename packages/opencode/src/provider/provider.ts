@@ -261,9 +261,18 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           resourceName: resource,
         },
         vars(_options): Record<string, string> {
-          if (resource) {
+          // Re-read live env at call time so late `AZURE_RESOURCE_NAME` env
+          // rotation propagates through `${AZURE_RESOURCE_NAME}` baseURL
+          // templating in `resolveSDK`. Precedence preserved:
+          // provider.options.resourceName > auth.metadata.resourceName > env.
+          const liveResource = [
+            provider.options?.resourceName,
+            auth?.type === "api" ? auth.metadata?.resourceName : undefined,
+            process.env["AZURE_RESOURCE_NAME"],
+          ].find((name) => typeof name === "string" && name.trim() !== "")
+          if (liveResource) {
             return {
-              AZURE_RESOURCE_NAME: resource,
+              AZURE_RESOURCE_NAME: liveResource,
             }
           }
           return {}
@@ -504,10 +513,23 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: true,
         vars(_options: Record<string, any>) {
-          const endpoint = location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`
+          // Re-read live env at call time so post-init rotation of any of the
+          // GOOGLE_VERTEX_* / GOOGLE_CLOUD_* / GCP_PROJECT envs propagates
+          // through baseURL templating. Falls back to init-time capture for
+          // parity with the non-rotated case.
+          const liveProject =
+            process.env["GOOGLE_VERTEX_PROJECT"] ??
+            process.env["GOOGLE_CLOUD_PROJECT"] ??
+            process.env["GCP_PROJECT"] ??
+            process.env["GCLOUD_PROJECT"] ??
+            project
+          const liveLocation =
+            process.env["GOOGLE_VERTEX_LOCATION"] ?? process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? location
+          const endpoint =
+            liveLocation === "global" ? "aiplatform.googleapis.com" : `${liveLocation}-aiplatform.googleapis.com`
           return {
-            ...(project && { GOOGLE_VERTEX_PROJECT: project }),
-            GOOGLE_VERTEX_LOCATION: location,
+            ...(liveProject && { GOOGLE_VERTEX_PROJECT: liveProject }),
+            GOOGLE_VERTEX_LOCATION: liveLocation,
             GOOGLE_VERTEX_ENDPOINT: endpoint,
           }
         },
@@ -766,8 +788,11 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           return sdk.languageModel(modelID)
         },
         vars(_options) {
+          // Re-read live env at call time so late `CLOUDFLARE_ACCOUNT_ID`
+          // rotation propagates through baseURL templating. Falls back to
+          // init-time capture (env or auth metadata) when env is unset.
           return {
-            CLOUDFLARE_ACCOUNT_ID: accountId,
+            CLOUDFLARE_ACCOUNT_ID: process.env["CLOUDFLARE_ACCOUNT_ID"] ?? accountId,
           }
         },
       }
@@ -1051,8 +1076,10 @@ interface State {
   // Providers whose custom loader returned `dynamicEnv: false`. Populated at
   // init only; never mutated post-init.
   loaderRefusedDynamicEnv: Set<ProviderID>
-  // Mutated post-init by `warnLateEnvRefused` to dedupe the once-per-process
-  // warning emitted when a refused provider's env appears.
+  // Mutated post-init by `warnLateEnvRefused` to dedupe the once-per-instance
+  // warning emitted when a refused provider's env appears. Note: this is
+  // per-`InstanceState`, not per-process — multi-instance hosts (desktop
+  // sidecar with several workspaces) will warn once per workspace.
   warnedLateEnvRefused: Set<ProviderID>
 }
 
@@ -1098,13 +1125,20 @@ export function currentProviders(
   const result: Record<ProviderID, Info> = { ...s.cachedProviders }
   for (const [id, info] of Object.entries(s.cleanedDatabase)) {
     const providerID = id as ProviderID
-    // Treat empty strings as absent: an empty env var is never a valid API key.
-    const apiKey = info.env.map((k) => envs[k]).find(Boolean)
+    // Treat empty AND whitespace-only strings as absent: a blank env var is
+    // never a valid API key. The original (un-trimmed) value is preserved
+    // when non-blank — a surrounding-whitespace key is still passed through
+    // verbatim because trimming a real key would be silently incorrect.
+    const apiKey = info.env.map((k) => envs[k]).find(isNonBlank)
     const next = resolveEnvOverlay(result[providerID], info, apiKey)
     if (next) result[providerID] = next
     else delete result[providerID]
   }
   return result
+}
+
+function isNonBlank(v: string | undefined): v is string {
+  return typeof v === "string" && v.trim() !== ""
 }
 
 function warnLateEnvRefused(
@@ -1116,7 +1150,7 @@ function warnLateEnvRefused(
     if (s.warnedLateEnvRefused.has(providerID)) continue
     const info = s.catalog[providerID]
     if (!info) continue
-    const present = info.env.find((k) => envs[k])
+    const present = info.env.find((k) => isNonBlank(envs[k]))
     if (!present) continue
     s.warnedLateEnvRefused.add(providerID)
     log.warn("late env detected for provider that requires restart", {
@@ -1133,10 +1167,29 @@ function warnLateEnvRefused(
 // arrows still collide on `__fn:anon` — that is intentional: it lets the
 // per-call `fetch` wrapper installed in `resolveSDK` (an arrow built on
 // every invocation) hit the SDK cache instead of busting it on every call.
-function hashIdentity(parts: Record<string, unknown>): string {
+//
+// CAVEAT: named-function collisions across UNRELATED callers are still
+// possible. If a third-party plugin stores a function named `coalesceProvider`
+// in `provider.options`, it will hash-collide with the in-tree AWS bedrock
+// loader's same-named closure and silently serve a stale SDK. In-tree
+// loaders avoid this; plugin authors must not put stateful closures in
+// `provider.options` outside the per-call `fetch` wrapper convention.
+//
+// BigInt values are stringified with an `n` suffix so JSON.stringify does not
+// throw `TypeError: Do not know how to serialize a BigInt`. Plain numeric
+// types serialize as-is, so `1` and `1n` produce distinct hashes (`1` vs
+// `"1n"`).
+//
+// TODO(hash): migrate to `effect/Hash` + `Equal.equals` for structural value
+// hashing combined with a `WeakMap`-tracked identity for functions. That
+// would fix the named-collision risk above without the per-call cache-bust
+// regression.
+/** @internal Test-only export. Not part of the public Provider API. */
+export function hashIdentity(parts: Record<string, unknown>): string {
   return Hash.fast(
     JSON.stringify(parts, (_key, value) => {
       if (typeof value === "function") return `__fn:${value.name || "anon"}`
+      if (typeof value === "bigint") return `${value.toString()}n`
       return value
     }),
   )
@@ -1691,6 +1744,11 @@ export const layer = Layer.effect(
           if (Object.keys(filteredModels).length === 0) continue
           cleanedDatabase[providerID] = { ...info, models: filteredModels }
         }
+        // Back the comment-only `Readonly<...>` invariant at runtime so a
+        // future refactor that accidentally mutates `cleanedDatabase`
+        // (e.g. assigning a new entry post-init) fails loudly under strict
+        // mode instead of silently desynchronizing the env overlay.
+        Object.freeze(cleanedDatabase)
 
         return {
           models: languages,
@@ -1706,7 +1764,7 @@ export const layer = Layer.effect(
       }),
     )
 
-    const view = Effect.fnUntraced(function* (s: State) {
+    const observeProviders = Effect.fnUntraced(function* (s: State) {
       const envs = yield* env.all()
       warnLateEnvRefused(s, envs)
       return currentProviders(s, envs)
@@ -1714,7 +1772,7 @@ export const layer = Layer.effect(
 
     const list = Effect.fn("Provider.list")(function* () {
       const s = yield* InstanceState.get(state)
-      return yield* view(s)
+      return yield* observeProviders(s)
     })
 
     async function resolveSDK(model: Model, s: State, provider: Info, envs: Record<string, string | undefined>) {
@@ -1859,13 +1917,13 @@ export const layer = Layer.effect(
 
     const getProvider = Effect.fn("Provider.getProvider")(function* (providerID: ProviderID) {
       const s = yield* InstanceState.get(state)
-      const all = yield* view(s)
+      const all = yield* observeProviders(s)
       return all[providerID]
     })
 
     const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderID, modelID: ModelID) {
       const s = yield* InstanceState.get(state)
-      const all = yield* view(s)
+      const all = yield* observeProviders(s)
       const provider = all[providerID]
       if (!provider) {
         const catalogProvider = s.catalog[providerID]
@@ -1933,7 +1991,7 @@ export const layer = Layer.effect(
 
     const closest = Effect.fn("Provider.closest")(function* (providerID: ProviderID, query: string[]) {
       const s = yield* InstanceState.get(state)
-      const provider = (yield* view(s))[providerID]
+      const provider = (yield* observeProviders(s))[providerID]
       if (!provider) return undefined
       for (const item of query) {
         for (const modelID of Object.keys(provider.models)) {
@@ -1954,7 +2012,7 @@ export const layer = Layer.effect(
       }
 
       const s = yield* InstanceState.get(state)
-      const provider = (yield* view(s))[providerID]
+      const provider = (yield* observeProviders(s))[providerID]
       if (!provider) return undefined
 
       let priority = [
@@ -2006,7 +2064,7 @@ export const layer = Layer.effect(
       if (cfg.model) return parseModel(cfg.model)
 
       const s = yield* InstanceState.get(state)
-      const all = yield* view(s)
+      const all = yield* observeProviders(s)
       const recent = yield* fs.readJson(path.join(Global.Path.state, "model.json")).pipe(
         Effect.map((x): { providerID: ProviderID; modelID: ModelID }[] => {
           if (!isRecord(x) || !Array.isArray(x.recent)) return []
