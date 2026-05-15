@@ -8,6 +8,7 @@ const defaultThreshold = 2
 const defaultSleepMs = 20_000
 const defaultPrintLimit = 50
 const positiveReactions = new Set(["THUMBS_UP", "HEART", "HOORAY", "ROCKET"])
+const cleanupLabel = "automated-pr-cleanup"
 const cleanupMarker = "<!-- opencode-pr-cleanup -->"
 
 const { values } = parseArgs({
@@ -88,6 +89,16 @@ type PullRequest = {
       totalCount: number
     }
   }>
+  labels: {
+    nodes: Array<{
+      name: string
+    }>
+  }
+  comments: {
+    nodes: Array<{
+      body: string
+    }>
+  }
 }
 
 type GraphqlResponse = {
@@ -143,19 +154,19 @@ async function main() {
 
   const prs = await fetchOpenPullRequests()
   const recentCount = prs.filter((pr) => new Date(pr.createdAt) >= cutoff).length
-  const candidates = prs
+  const matching = prs
     .map((pr) => ({ ...pr, positiveReactions: positiveReactionCount(pr) }))
     .filter((pr) => new Date(pr.createdAt) < cutoff && pr.positiveReactions < threshold)
+  const candidates = matching.filter((pr) => !hasPriorCleanup(pr))
+  const selected = maxClose === undefined ? candidates : candidates.slice(0, maxClose)
 
   console.log(`Fetched ${prs.length} open PRs`)
-  console.log(`Matching cleanup criteria: ${candidates.length}`)
+  console.log(`Matching cleanup criteria: ${matching.length}`)
+  console.log(`Skipped previously cleaned PRs: ${matching.length - candidates.length}`)
   console.log(`Recent PRs untouched: ${recentCount}`)
   console.log(
-    `Older PRs with at least ${threshold} positive reactions untouched: ${prs.length - candidates.length - recentCount}`,
+    `Older PRs with at least ${threshold} positive reactions untouched: ${prs.length - matching.length - recentCount}`,
   )
-
-  const selected = await selectWithoutPriorCleanup(candidates)
-  console.log(`Eligible after prior cleanup-comment skips: ${selected.length}`)
 
   if (selected.length === 0) return
 
@@ -169,29 +180,14 @@ async function main() {
     return
   }
 
+  await ensureCleanupLabel()
+
   console.log(`\nCommenting and closing ${selected.length} PRs...`)
   for (const pr of selected) {
     await closePullRequest(pr)
     if (sleepMs > 0) await sleep(sleepMs)
   }
   console.log(`Closed ${selected.length} PRs`)
-}
-
-async function selectWithoutPriorCleanup(candidates: CleanupCandidate[]) {
-  const selected: CleanupCandidate[] = []
-  let skipped = 0
-
-  for (const pr of candidates) {
-    if (maxClose !== undefined && selected.length >= maxClose) break
-    if (await hasCleanupComment(pr.number)) {
-      skipped++
-      continue
-    }
-    selected.push(pr)
-  }
-
-  if (skipped > 0) console.log(`Skipped ${skipped} PRs that already received the cleanup comment`)
-  return selected
 }
 
 async function fetchOpenPullRequests() {
@@ -221,6 +217,16 @@ async function fetchOpenPullRequests() {
                 content
                 users {
                   totalCount
+                }
+              }
+              labels(first: 100) {
+                nodes {
+                  name
+                }
+              }
+              comments(last: 10) {
+                nodes {
+                  body
                 }
               }
             }
@@ -263,6 +269,10 @@ async function graphql(input: { query: string; variables: Record<string, string 
 }
 
 async function closePullRequest(pr: CleanupCandidate) {
+  await githubRequest(`/repos/${repo.owner}/${repo.name}/issues/${pr.number}/labels`, {
+    method: "POST",
+    body: JSON.stringify({ labels: [cleanupLabel] }),
+  })
   await githubRequest(`/repos/${repo.owner}/${repo.name}/issues/${pr.number}/comments`, {
     method: "POST",
     body: JSON.stringify({ body: message }),
@@ -274,27 +284,25 @@ async function closePullRequest(pr: CleanupCandidate) {
   console.log(`Closed #${pr.number} positive=${pr.positiveReactions} ${pr.url}`)
 }
 
-async function hasCleanupComment(number: number) {
-  let page = 1
+async function ensureCleanupLabel() {
+  const response = await fetch(
+    `https://api.github.com/repos/${repo.owner}/${repo.name}/labels/${encodeURIComponent(cleanupLabel)}`,
+    {
+      headers,
+    },
+  )
+  if (response.ok) return
+  if (response.status !== 404)
+    throw new Error(`Failed to check cleanup label: ${response.status} ${response.statusText}`)
 
-  while (true) {
-    const response = await githubRequest(
-      `/repos/${repo.owner}/${repo.name}/issues/${number}/comments?per_page=100&page=${page}`,
-      {
-        method: "GET",
-      },
-    )
-    const comments = (await response.json()) as Array<{ body?: string }>
-    if (
-      comments.some(
-        (comment) => comment.body?.includes(cleanupMarker) || comment.body?.includes("Automated PR Cleanup"),
-      )
-    ) {
-      return true
-    }
-    if (comments.length < 100) return false
-    page++
-  }
+  await githubRequest(`/repos/${repo.owner}/${repo.name}/labels`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: cleanupLabel,
+      color: "ededed",
+      description: "PR was closed by automated cleanup",
+    }),
+  })
 }
 
 async function githubRequest(path: string, init: RequestInit, attempt = 0): Promise<Response> {
@@ -332,6 +340,15 @@ function positiveReactionCount(pr: PullRequest) {
   return pr.reactionGroups
     .filter((group) => positiveReactions.has(group.content))
     .reduce((total, group) => total + group.users.totalCount, 0)
+}
+
+function hasPriorCleanup(pr: PullRequest) {
+  return (
+    pr.labels.nodes.some((label) => label.name === cleanupLabel) ||
+    pr.comments.nodes.some(
+      (comment) => comment.body.includes(cleanupMarker) || comment.body.includes("Automated PR Cleanup"),
+    )
+  )
 }
 
 function requireRepo(value: string | undefined) {
