@@ -58,3 +58,6 @@ const seed = async () => {
 }
 
 await seed()
+// This one-shot seed script is run as a child process by e2e-local.
+// Some imported app services leave Bun work scheduled, so exit after cleanup.
+process.exit(0)
