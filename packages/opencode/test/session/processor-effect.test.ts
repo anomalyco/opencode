@@ -26,6 +26,7 @@ import { testEffect } from "../lib/effect"
 import { raw, reply, TestLLMServer } from "../lib/llm-server"
 import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { EventV2Bridge } from "@/event-v2-bridge"
 
 void Log.init({ print: false })
 
@@ -105,6 +106,17 @@ function defer<T>() {
   return { promise, resolve }
 }
 
+const waitFor = <A>(check: Effect.Effect<A | undefined>, message: string) =>
+  Effect.gen(function* () {
+    const stop = Date.now() + 500
+    while (Date.now() < stop) {
+      const value = yield* check
+      if (value !== undefined) return value
+      yield* Effect.sleep("10 millis")
+    }
+    return yield* Effect.fail(new Error(message))
+  })
+
 const user = Effect.fn("TestSession.user")(function* (sessionID: SessionID, text: string) {
   const session = yield* Session.Service
   const msg = yield* session.updateMessage({
@@ -169,6 +181,7 @@ const deps = Layer.mergeAll(
   Provider.defaultLayer,
   status,
   SyncEvent.defaultLayer,
+  EventV2Bridge.defaultLayer,
 ).pipe(Layer.provideMerge(infra))
 const env = Layer.mergeAll(
   TestLLMServer.layer,
@@ -301,15 +314,10 @@ it.live("session.processor effect tests preserve text start time", () =>
           })
           .pipe(Effect.forkChild)
 
-        yield* Effect.promise(async () => {
-          const stop = Date.now() + 500
-          while (Date.now() < stop) {
-            const text = MessageV2.parts(msg.id).find((part): part is MessageV2.TextPart => part.type === "text")
-            if (text?.time?.start) return
-            await Bun.sleep(10)
-          }
-          throw new Error("timed out waiting for text part")
-        })
+        yield* waitFor(
+          Effect.sync(() => MessageV2.parts(msg.id).find((part): part is MessageV2.TextPart => part.type === "text")),
+          "timed out waiting for text part",
+        )
         yield* Effect.sleep("20 millis")
         gate.resolve()
 
@@ -691,14 +699,10 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
           .pipe(Effect.forkChild)
 
         yield* llm.wait(1)
-        yield* Effect.promise(async () => {
-          const end = Date.now() + 500
-          while (Date.now() < end) {
-            const parts = await MessageV2.parts(msg.id)
-            if (parts.some((part) => part.type === "tool")) return
-            await Bun.sleep(10)
-          }
-        })
+        yield* waitFor(
+          Effect.sync(() => MessageV2.parts(msg.id).find((part): part is MessageV2.ToolPart => part.type === "tool")),
+          "timed out waiting for tool part",
+        )
         yield* Fiber.interrupt(run)
 
         const exit = yield* Fiber.await(run)

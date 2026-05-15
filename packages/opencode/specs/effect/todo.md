@@ -2,8 +2,9 @@
 
 Short roadmap for Effect cleanup in `packages/opencode`.
 
-Current patterns and examples live in [`guide.md`](./guide.md). Test
-migration rules live in
+Current patterns and examples live in [`guide.md`](./guide.md). Error
+boundary migration details live in
+[`error-boundaries-plan.md`](./error-boundaries-plan.md). Test migration rules live in
 [`test/EFFECT_TEST_MIGRATION.md`](../../test/EFFECT_TEST_MIGRATION.md).
 Older deep-dive notes in this directory may still be useful, but treat
 this roadmap and the guide as the current entry points.
@@ -63,13 +64,11 @@ P6  OA
   explicit and testable instead of mutable module state.
   Shrinks: [`global.ts`](../../../core/src/global.ts) import-time side
   effects, mutable `Global.Path` overrides, and its `Flag` dependency.
-- `INST` Instance shim — remove ambient `Instance` usage and old ALS
-  access patterns.
-  Shrinks: [`src/project/instance.ts`](../../src/project/instance.ts).
+- `INST` Instance context — keep project context explicit through Effect refs
+  and bridge boundaries.
 - `BRIDGE` Promise/callback interop — keep bridge helpers, but reduce
   legacy ALS coupling.
-  Shrinks: [`src/effect/bridge.ts`](../../src/effect/bridge.ts)
-  dependency on [`project/instance.ts`](../../src/project/instance.ts).
+  Shrinks: ad hoc Promise/callback re-entry code.
 - `PROC` AppProcess migration — prefer `AppProcess.Service` over raw
   process wrappers.
   Shrinks: direct spawn callsites and legacy process helpers.
@@ -93,19 +92,16 @@ shapes and sometimes collapse rich errors into opaque strings.
 
 ### Problems
 
-- Some expected service failures still use `NamedError.create(...)`.
-- Some expected service failures still become `Effect.die(...)`, which
-  makes them defects instead of typed, recoverable failures.
-- CLI and HTTP boundaries can render structured errors as generic
-  `Error: SomeName` output.
-- HTTP error middleware still guesses status codes from error names like
-  `Worktree*` or `ProviderAuthValidationFailed`.
+- Some expected service failures still use `NamedError.create(...)` or
+  collapse to `Effect.die(...)`. The storage/worktree/provider-auth
+  conversions are done; an inventory sweep is needed for the rest.
+- HTTP error middleware still guesses status codes from error names —
+  some entries (e.g. storage `NotFound`, provider auth) can now be
+  removed, but the middleware overall has not shrunk.
 - Route handlers and route groups do not consistently declare the public
   error body they intend to expose.
 - Repeated route error translations do not yet have a clear home: some
   should stay inline, some deserve tiny shared mapper helpers.
-- Unknown 500s should log full detail server-side while returning a safe
-  public body.
 
 ### Target Shape
 
@@ -125,19 +121,33 @@ shapes and sometimes collapse rich errors into opaque strings.
 - Generic HTTP middleware should shrink; it should not accumulate more
   name-based domain knowledge.
 
+### Recently completed
+
+- [x] `RENDER-1` CLI tagged config error rendering (#27256, tests #27257).
+- [x] `ERR-1` [`storage/storage.ts`](../../src/storage/storage.ts) typed
+      `NotFoundError` (#27265) and removal of the server defect fallback
+      (#27287).
+- [x] `ERR-2` [`worktree/index.ts`](../../src/worktree/index.ts) typed
+      errors (#27296).
+- [x] `ERR-3` [`provider/auth.ts`](../../src/provider/auth.ts) typed
+      validation/oauth errors (#27301).
+- [x] `HTTP-1` Unknown-500 details no longer leaked (#27251); follow-up
+      to stop exposing named defects (#27471).
+- [x] Session message reads typed and made effectful (#27269, #27275,
+      #27280, #27291).
+- [x] Session HTTP error contracts tightened (#27308); busy-session
+      mapping centralized (#27375, #27473).
+- [x] Provider init (#27484) and LSP init (#27494) errors typed.
+
 ### First PR Candidates
 
-- [ ] `RENDER-1` Fix CLI top-level rendering for typed config errors.
-- [ ] `ERR-1` Convert [`storage/storage.ts`](../../src/storage/storage.ts)
-      not-found errors.
-- [ ] `ERR-2` Convert [`worktree/index.ts`](../../src/worktree/index.ts)
-      errors and remove matching HTTP name checks where possible.
-- [ ] `ERR-3` Convert [`provider/auth.ts`](../../src/provider/auth.ts)
-      validation errors.
-- [ ] `HTTP-1` Remove the unknown-500 stack leak from
-      [`middleware/error.ts`](../../src/server/routes/instance/httpapi/middleware/error.ts).
 - [ ] `HTTP-2` Audit one route group for explicit error contracts and
       decide which mappings stay inline vs. shared helper.
+- [ ] `ERR-4` Sweep remaining `NamedError.create(...)` and
+      `Effect.die(...)` callsites for expected failures — re-run `git
+grep` to build a current inventory.
+- [ ] `RENDER-2` Audit CLI and TUI surfaces for any remaining opaque
+      `Error: Name` rendering of typed errors.
 
 ## P1: Tests
 
@@ -162,26 +172,24 @@ Recently completed:
 - [x] Built-in websearch provider selection uses the same runtime flags as
       tool visibility.
 - [x] Removed global default-plugin disabling from test preload.
+- [x] `RF-1` Scout reads routed through runtime flags (#27318).
+- [x] `RF-2` Plan-mode prompt read routed through runtime flags (#27320).
+- [x] `RF-3` Event-system reads routed through runtime flags (#27323).
+- [x] `RF-4` Workspaces reads routed through runtime flags for session
+      (#27335), sync (#27336), and control-plane (#27337).
+- [x] LLM client (#27368) and installation client (#27369) routed
+      through runtime flags.
+- [x] TUI plugin runtime flags simplified (#27506).
+- [x] Background-subagents flag moved to RuntimeFlags, then removed
+      (`refactor(task): use runtime flag for background subagents`,
+      `refactor(flags): remove background subagents flag`).
 
-Recommended next PRs:
+Remaining cleanup:
 
-```text
-RF-1 scout consumers ─┐
-                      ├─ can run in parallel
-RF-2 plan-mode prompt ┘
-   └─ RF-3 event-system cluster, stacked only if RF-2 still touches prompt.ts
-
-RF-4 workspaces cluster: later, after mutable Flag tests are cleaned up
-```
-
-- [ ] `RF-1` Move scout reads in [`agent.ts`](../../src/agent/agent.ts)
-      and [`reference.ts`](../../src/reference/reference.ts).
-- [ ] `RF-2` Move plan-mode prompt read in
-      [`session/prompt.ts`](../../src/session/prompt.ts).
-- [ ] `RF-3` Move event-system reads in session prompt/processor/
-      compaction and TUI debug plugin.
-- [ ] `RF-4` Move workspaces reads in session/sync/control-plane after
-      tests stop relying on mutable `Flag` timing.
+- [ ] Sweep lingering `Flag.*` reads — many CLI/TUI/config/observability
+      callsites still import [`flag.ts`](../../../core/src/flag/flag.ts).
+      Decide per-callsite whether to route through RuntimeFlags, accept
+      as legitimate env/config boundary, or migrate to typed `Config`.
 - [ ] Delete [`test/fixture/flag.ts`](../../test/fixture/flag.ts) once
       tests no longer mutate `Flag`.
 - [ ] Delete [`flag.ts`](../../../core/src/flag/flag.ts) once no packages
@@ -211,17 +219,13 @@ Next PR candidates:
 
 ## P4: Instance And Bridge
 
-[`project/instance.ts`](../../src/project/instance.ts) is the deletion
-target. [`effect/bridge.ts`](../../src/effect/bridge.ts) is not a near-term
-deletion target; Promise/callback interop will continue to exist.
+Instance context migration is complete for the legacy sync shim. Promise and callback interop continues through [`effect/bridge.ts`](../../src/effect/bridge.ts).
 
-Goal:
+Current rules:
 
-- Keep a sanctioned bridge for Promise/callback boundaries.
-- Reduce bridge dependence on legacy `Instance.restore` / `Instance.current`.
-- Move callers toward `InstanceRef`, `WorkspaceRef`, `InstanceState`, or
-  explicit context where practical.
-- Delete `project/instance.ts` only after ambient Instance coupling is gone.
+- Effect services read instance data from `InstanceRef`, `WorkspaceRef`, `InstanceState`, or explicit arguments.
+- Plain JavaScript callback boundaries use `EffectBridge` or explicit context arguments.
+- Runtime entrypoints must provide refs explicitly when they are instance-scoped.
 
 ## Lower Priority Tracks
 

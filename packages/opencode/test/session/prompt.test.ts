@@ -6,6 +6,7 @@ import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
+import { BackgroundJob } from "@/background/job"
 import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
 import { Config } from "@/config/config"
@@ -48,10 +49,11 @@ import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
 import { Reference } from "../../src/reference/reference"
 import { TestInstance } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
 import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { EventV2Bridge } from "@/event-v2-bridge"
 
 void Log.init({ print: false })
 
@@ -152,7 +154,16 @@ const lsp = Layer.succeed(
 const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
 const run = SessionRunState.layer.pipe(Layer.provide(status))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
-function makeHttp() {
+
+const processorCreateStarted: Array<() => void> = []
+const blockingProcessor = Layer.succeed(
+  SessionProcessor.Service,
+  SessionProcessor.Service.of({
+    create: () => Effect.sync(() => processorCreateStarted.shift()?.()).pipe(Effect.andThen(Effect.never)),
+  }),
+)
+
+function makeHttp(input?: { processor?: "blocking" }) {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
@@ -167,8 +178,10 @@ function makeHttp() {
     lsp,
     mcp,
     AppFileSystem.defaultLayer,
+    BackgroundJob.defaultLayer,
     status,
     SyncEvent.defaultLayer,
+    EventV2Bridge.defaultLayer,
   ).pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
@@ -186,12 +199,15 @@ function makeHttp() {
     Layer.provideMerge(deps),
   )
   const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  const proc = SessionProcessor.layer.pipe(
-    Layer.provide(summary),
-    Layer.provide(Image.defaultLayer),
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-    Layer.provideMerge(deps),
-  )
+  const proc =
+    input?.processor === "blocking"
+      ? blockingProcessor
+      : SessionProcessor.layer.pipe(
+          Layer.provide(summary),
+          Layer.provide(Image.defaultLayer),
+          Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+          Layer.provideMerge(deps),
+        )
   const compact = SessionCompaction.layer.pipe(
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
     Layer.provideMerge(proc),
@@ -218,6 +234,7 @@ function makeHttp() {
 }
 
 const it = testEffect(makeHttp())
+const race = testEffect(makeHttp({ processor: "blocking" }))
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 
 // Config that registers a custom "test" provider with a "test-model" model
@@ -291,34 +308,19 @@ const useServerConfig = Effect.fn("test.useServerConfig")(function* (config: (ur
   return { dir, llm }
 })
 
-const awaitWithTimeout = <A, E, R>(
-  self: Effect.Effect<A, E, R>,
-  message: string,
-  duration: Duration.Input = "2 seconds",
-) =>
-  self.pipe(
-    Effect.timeoutOrElse({
-      duration,
-      orElse: () => Effect.fail(new Error(message)),
+// Wait for a session's runner to enter a busy state. SessionStatus is flipped to
+// "busy" inside Runner.startShell's modifyEffect at the same moment the runner
+// is registered, so this is a deterministic readiness signal — cancel can't
+// no-op once we observe it.
+const waitForBusy = (sessionID: SessionID, duration: Duration.Input = "2 seconds") =>
+  pollWithTimeout(
+    Effect.gen(function* () {
+      const status = yield* SessionStatus.Service
+      const s = yield* status.get(sessionID)
+      return s.type === "busy" ? (true as const) : undefined
     }),
-  )
-
-const pollWithTimeout = <A, E, R>(
-  self: Effect.Effect<A | undefined, E, R>,
-  message: string,
-  duration: Duration.Input = "5 seconds",
-) =>
-  Effect.gen(function* () {
-    while (true) {
-      const result = yield* self
-      if (result !== undefined) return result
-      yield* Effect.sleep("20 millis")
-    }
-  }).pipe(
-    Effect.timeoutOrElse({
-      duration,
-      orElse: () => Effect.fail(new Error(message)),
-    }),
+    `session ${sessionID} never became busy`,
+    duration,
   )
 
 const hasBash = Effect.sync(() => Bun.which("bash") !== null)
@@ -340,6 +342,14 @@ const deferredAsPromise = <A>(deferred: Deferred.Deferred<A>): PromiseLike<A> =>
     return deferredAsPromise(deferred) as PromiseLike<never>
   },
 })
+
+function defer<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
 
 const succeedVoid = (deferred: Deferred.Deferred<void>) => {
   Effect.runSync(Deferred.succeed(deferred, void 0).pipe(Effect.ignore))
@@ -896,6 +906,96 @@ it.instance(
   3_000,
 )
 
+race.instance(
+  "finalizes assistant when cancelled before processor creation completes",
+  () =>
+    Effect.gen(function* () {
+      yield* useServerConfig(providerCfg)
+      processorCreateStarted.length = 0
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          processorCreateStarted.length = 0
+        }),
+      )
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Processor creation race" })
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "first" }],
+      })
+
+      const firstCreate = defer<void>()
+      processorCreateStarted.push(firstCreate.resolve)
+      const first = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* Effect.promise(() => firstCreate.promise)
+
+      yield* prompt.cancel(chat.id)
+      const firstExit = yield* Fiber.await(first)
+      expect(Exit.isSuccess(firstExit)).toBe(true)
+
+      let messages = yield* sessions.messages({ sessionID: chat.id })
+      const firstInterrupted = messages.at(-1)
+      expect(firstInterrupted?.info.role).toBe("assistant")
+      expect(firstInterrupted?.parts).toHaveLength(0)
+      if (firstInterrupted?.info.role === "assistant") {
+        expect(firstInterrupted.info.finish).toBeUndefined()
+        expect(firstInterrupted.info.time.completed).toBeNumber()
+        expect(firstInterrupted.info.error?.name).toBe("MessageAbortedError")
+      }
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "second" }],
+      })
+
+      const secondCreate = defer<void>()
+      processorCreateStarted.push(secondCreate.resolve)
+      const second = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* Effect.promise(() => secondCreate.promise)
+
+      yield* prompt.cancel(chat.id)
+      const secondExit = yield* Fiber.await(second)
+      expect(Exit.isSuccess(secondExit)).toBe(true)
+
+      messages = yield* sessions.messages({ sessionID: chat.id })
+      const poisonMessages = messages.filter(
+        (message) =>
+          message.info.role === "assistant" &&
+          message.parts.length === 0 &&
+          !message.info.finish &&
+          !message.info.time.completed &&
+          !message.info.error,
+      )
+      expect(poisonMessages).toHaveLength(0)
+
+      const interruptedMessages = messages.filter(
+        (message) =>
+          message.info.role === "assistant" &&
+          message.parts.length === 0 &&
+          message.info.time.completed &&
+          message.info.error?.name === "MessageAbortedError",
+      )
+      expect(interruptedMessages).toHaveLength(2)
+
+      const lastUser = messages.at(-2)
+      const lastAssistant = messages.at(-1)
+      expect(lastUser?.info.role).toBe("user")
+      expect(lastAssistant?.info.role).toBe("assistant")
+      if (lastUser?.info.role === "user" && lastAssistant?.info.role === "assistant") {
+        expect(lastAssistant.info.parentID).toBe(lastUser?.info.id)
+      }
+    }),
+  { git: true },
+  3_000,
+)
+
 it.instance(
   "cancel finalizes subtask tool state",
   () =>
@@ -1119,7 +1219,7 @@ it.instance(
 )
 
 it.instance(
-  "assertNotBusy throws BusyError when loop running",
+  "assertNotBusy fails with BusyError when loop running",
   () =>
     Effect.gen(function* () {
       const { llm } = yield* useServerConfig(providerCfg)
@@ -1138,6 +1238,7 @@ it.instance(
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
         expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "SessionBusyError", sessionID: chat.id })
       }
 
       yield* prompt.cancel(chat.id)
@@ -1181,6 +1282,7 @@ it.instance(
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
         expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "SessionBusyError", sessionID: chat.id })
       }
 
       yield* prompt.cancel(chat.id)
@@ -1378,7 +1480,7 @@ it.instance(
       const sh = yield* prompt
         .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
         .pipe(Effect.forkChild)
-      yield* Effect.sleep(50)
+      yield* waitForBusy(chat.id)
 
       const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
       yield* Effect.sleep(50)
@@ -1415,7 +1517,7 @@ it.instance(
       const sh = yield* prompt
         .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
         .pipe(Effect.forkChild)
-      yield* Effect.sleep(50)
+      yield* waitForBusy(chat.id)
 
       const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
       const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
@@ -1482,7 +1584,7 @@ unix(
         const sh = yield* prompt
           .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
           .pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
+        yield* waitForBusy(chat.id)
 
         yield* prompt.cancel(chat.id)
 
@@ -1512,11 +1614,26 @@ unix(
     withSh(() =>
       Effect.gen(function* () {
         const { prompt, chat } = yield* boot()
+        const { directory: dir } = yield* TestInstance
+        const afs = yield* AppFileSystem.Service
+        const ready = path.join(dir, ".trap-ready")
 
         const sh = yield* prompt
-          .shell({ sessionID: chat.id, agent: "build", command: "trap '' TERM; sleep 30" })
+          .shell({
+            sessionID: chat.id,
+            agent: "build",
+            // Touch marker AFTER trap installs so the test waits for the actual
+            // ignore-TERM state before cancelling; otherwise SIGTERM can arrive
+            // before `trap` runs and the escalation path is never exercised.
+            command: `trap '' TERM; touch "${ready}"; sleep 30`,
+          })
           .pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
+
+        yield* Effect.gen(function* () {
+          while (!(yield* afs.existsSafe(ready))) {
+            yield* Effect.sleep(Duration.millis(10))
+          }
+        }).pipe(Effect.timeout(Duration.seconds(5)))
 
         yield* prompt.cancel(chat.id)
 
@@ -1591,7 +1708,7 @@ unix(
       const { prompt, chat } = yield* boot()
 
       const sh = yield* prompt.shell({ sessionID: chat.id, agent: "build", command: "sleep 30" }).pipe(Effect.forkChild)
-      yield* Effect.sleep(50)
+      yield* waitForBusy(chat.id)
 
       const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
       yield* Effect.sleep(50)
@@ -1621,7 +1738,7 @@ unix(
         const a = yield* prompt
           .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
           .pipe(Effect.forkChild)
-        yield* Effect.sleep(50)
+        yield* waitForBusy(chat.id)
 
         const exit = yield* prompt.shell({ sessionID: chat.id, agent: "build", command: "echo hi" }).pipe(Effect.exit)
         expect(Exit.isFailure(exit)).toBe(true)

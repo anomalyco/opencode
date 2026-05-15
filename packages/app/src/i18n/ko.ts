@@ -275,6 +275,7 @@ export const dict = {
   "mcp.status.connected": "연결됨",
   "mcp.status.failed": "실패",
   "mcp.status.needs_auth": "인증 필요",
+  "mcp.auth.clickToAuthenticate": "클릭하여 인증",
   "mcp.status.disabled": "비활성화됨",
   "dialog.fork.empty": "분기할 메시지 없음",
   "dialog.directory.search.placeholder": "폴더 검색",

@@ -48,7 +48,13 @@ export function tool<Args extends z.ZodRawShape>(input: {
   args: Args
   execute(args: z.infer<z.ZodObject<Args>>, context: ToolContext): Promise<ToolResult>
 }) {
-  return input
+  return {
+    ...input,
+    // Generate JSON Schema here with the same Zod instance that created
+    // `tool.schema` args. Zod metadata such as `.describe()` is stored in a
+    // module-local registry, so converting later from opencode can lose it.
+    jsonSchema: z.toJSONSchema(z.object(input.args), { target: "draft-7", io: "input" }),
+  }
 }
 tool.schema = z
 

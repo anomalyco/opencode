@@ -64,6 +64,31 @@ describe("cli.error", () => {
     expect(formatted).toContain("Check your network, proxy, or VPN configuration and try again.")
   })
 
+  test("formats legacy and tagged provider model errors the same way", () => {
+    const data = {
+      providerID: "anthropic",
+      modelID: "claude-sonet-4",
+      suggestions: ["claude-sonnet-4"],
+    }
+    const expected = [
+      "Model not found: anthropic/claude-sonet-4",
+      "Did you mean: claude-sonnet-4",
+      "Try: `opencode models` to list available models",
+      "Or check your config (opencode.json) provider/model names",
+    ].join("\n")
+
+    expect(FormatError({ name: "ProviderModelNotFoundError", data })).toBe(expected)
+    expect(FormatError({ _tag: "ProviderModelNotFoundError", ...data })).toBe(expected)
+  })
+
+  test("formats legacy and tagged provider init errors the same way", () => {
+    const data = { providerID: "anthropic" }
+    const expected = 'Failed to initialize provider "anthropic". Check credentials and configuration.'
+
+    expect(FormatError({ name: "ProviderInitError", data })).toBe(expected)
+    expect(FormatError({ _tag: "ProviderInitError", ...data })).toBe(expected)
+  })
+
   test("formats cancelled UI errors as empty output", () => {
     expect(FormatError(new UI.CancelledError())).toBe("")
   })

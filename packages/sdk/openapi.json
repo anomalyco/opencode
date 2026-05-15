@@ -7606,6 +7606,171 @@
         ]
       }
     },
+    "/api/model": {
+      "get": {
+        "tags": ["v2 models"],
+        "operationId": "v2.model.list",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModelV2Info"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve available v2 models ordered by release date.",
+        "summary": "List v2 models",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.model.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/provider": {
+      "get": {
+        "tags": ["v2 providers"],
+        "operationId": "v2.provider.list",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderV2Info"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve active v2 AI providers so clients can show provider availability and configuration.",
+        "summary": "List v2 providers",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.provider.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/provider/{providerID}": {
+      "get": {
+        "tags": ["v2 providers"],
+        "operationId": "v2.provider.get",
+        "parameters": [
+          {
+            "name": "providerID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ProviderV2.Info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderV2Info"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve a single v2 AI provider so clients can inspect its availability and endpoint settings.",
+        "summary": "Get v2 provider",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.provider.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/tui/append-prompt": {
       "post": {
         "tags": ["tui"],
@@ -8909,12 +9074,6 @@
             "$ref": "#/components/schemas/EventSessionError"
           },
           {
-            "$ref": "#/components/schemas/EventInstallationUpdated"
-          },
-          {
-            "$ref": "#/components/schemas/EventInstallationUpdate-available"
-          },
-          {
             "$ref": "#/components/schemas/EventQuestionAsked"
           },
           {
@@ -8931,9 +9090,6 @@
           },
           {
             "$ref": "#/components/schemas/EventSessionIdle"
-          },
-          {
-            "$ref": "#/components/schemas/EventSessionCompacted"
           },
           {
             "$ref": "#/components/schemas/Event.tui.prompt.append"
@@ -8958,6 +9114,9 @@
           },
           {
             "$ref": "#/components/schemas/EventProjectUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionCompacted"
           },
           {
             "$ref": "#/components/schemas/EventVcsBranchUpdated"
@@ -8988,6 +9147,12 @@
           },
           {
             "$ref": "#/components/schemas/EventPtyDeleted"
+          },
+          {
+            "$ref": "#/components/schemas/EventInstallationUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/EventInstallationUpdate-available"
           },
           {
             "$ref": "#/components/schemas/EventMessageUpdated"
@@ -9093,6 +9258,87 @@
           },
           {
             "$ref": "#/components/schemas/EventGlobalDisposed"
+          },
+          {
+            "$ref": "#/components/schemas/EventCatalogModelUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextAgentSwitched"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextModelSwitched"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextPrompted"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextSynthetic"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextShellStarted"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextShellEnded"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextStepStarted"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextStepEnded"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextStepFailed"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextTextStarted"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextTextDelta"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextTextEnded"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextReasoningStarted"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextReasoningDelta"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextReasoningEnded"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextToolInputStarted"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextToolInputDelta"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextToolInputEnded"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextToolCalled"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextToolProgress"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextToolSuccess"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextToolFailed"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextRetried"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextCompactionStarted"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextCompactionDelta"
+          },
+          {
+            "$ref": "#/components/schemas/EventSessionNextCompactionEnded"
           }
         ]
       },
@@ -11208,12 +11454,6 @@
                 "$ref": "#/components/schemas/EventSessionError"
               },
               {
-                "$ref": "#/components/schemas/EventInstallationUpdated"
-              },
-              {
-                "$ref": "#/components/schemas/EventInstallationUpdate-available"
-              },
-              {
                 "$ref": "#/components/schemas/EventQuestionAsked"
               },
               {
@@ -11230,9 +11470,6 @@
               },
               {
                 "$ref": "#/components/schemas/EventSessionIdle"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionCompacted"
               },
               {
                 "$ref": "#/components/schemas/Event.tui.prompt.append"
@@ -11257,6 +11494,9 @@
               },
               {
                 "$ref": "#/components/schemas/EventProjectUpdated"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionCompacted"
               },
               {
                 "$ref": "#/components/schemas/EventVcsBranchUpdated"
@@ -11287,6 +11527,12 @@
               },
               {
                 "$ref": "#/components/schemas/EventPtyDeleted"
+              },
+              {
+                "$ref": "#/components/schemas/EventInstallationUpdated"
+              },
+              {
+                "$ref": "#/components/schemas/EventInstallationUpdate-available"
               },
               {
                 "$ref": "#/components/schemas/EventMessageUpdated"
@@ -11392,6 +11638,87 @@
               },
               {
                 "$ref": "#/components/schemas/EventGlobalDisposed"
+              },
+              {
+                "$ref": "#/components/schemas/EventCatalogModelUpdated"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextAgentSwitched"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextModelSwitched"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextPrompted"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextSynthetic"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextShellStarted"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextShellEnded"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextStepStarted"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextStepEnded"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextStepFailed"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextTextStarted"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextTextDelta"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextTextEnded"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextReasoningStarted"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextReasoningDelta"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextReasoningEnded"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextToolInputStarted"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextToolInputDelta"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextToolInputEnded"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextToolCalled"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextToolProgress"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextToolSuccess"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextToolFailed"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextRetried"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextCompactionStarted"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextCompactionDelta"
+              },
+              {
+                "$ref": "#/components/schemas/EventSessionNextCompactionEnded"
               },
               {
                 "$ref": "#/components/schemas/SyncEventMessageUpdated"
@@ -16363,54 +16690,6 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
-      "EventInstallationUpdated": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["installation.updated"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": ["version"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventInstallationUpdate-available": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["installation.update-available"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": ["version"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
       "EventQuestionAsked": {
         "type": "object",
         "properties": {
@@ -16546,31 +16825,6 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
-      "EventSessionCompacted": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.compacted"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              }
-            },
-            "required": ["sessionID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
       "EventMcpToolsChanged": {
         "type": "object",
         "properties": {
@@ -16669,6 +16923,31 @@
           },
           "properties": {
             "$ref": "#/components/schemas/Project"
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionCompacted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.compacted"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              }
+            },
+            "required": ["sessionID"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "type", "properties"],
@@ -16921,6 +17200,54 @@
               }
             },
             "required": ["id"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventInstallationUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["installation.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": ["version"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventInstallationUpdate-available": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["installation.update-available"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": ["version"],
             "additionalProperties": false
           }
         },
@@ -18312,6 +18639,354 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "ModelV2Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "apiID": {
+            "type": "string"
+          },
+          "providerID": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["unknown"]
+                  }
+                },
+                "required": ["type"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["openai/responses"]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "websocket": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["type", "url"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["openai/completions"]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "reasoning": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": ["reasoning_content"]
+                          }
+                        },
+                        "required": ["type"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": ["reasoning_details"]
+                          }
+                        },
+                        "required": ["type"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": ["type", "url"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["anthropic/messages"]
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": ["type", "url"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["aisdk"]
+                  },
+                  "package": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": ["type", "package"],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "capabilities": {
+            "type": "object",
+            "properties": {
+              "tools": {
+                "type": "boolean"
+              },
+              "input": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "output": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": ["tools", "input", "output"],
+            "additionalProperties": false
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "headers": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "body": {
+                "type": "object"
+              },
+              "aisdk": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "object"
+                  },
+                  "request": {
+                    "type": "object"
+                  }
+                },
+                "required": ["provider", "request"],
+                "additionalProperties": false
+              },
+              "variant": {
+                "type": "string"
+              }
+            },
+            "required": ["headers", "body", "aisdk"],
+            "additionalProperties": false
+          },
+          "variants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "headers": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "body": {
+                  "type": "object"
+                },
+                "aisdk": {
+                  "type": "object",
+                  "properties": {
+                    "provider": {
+                      "type": "object"
+                    },
+                    "request": {
+                      "type": "object"
+                    }
+                  },
+                  "required": ["provider", "request"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["id", "headers", "body", "aisdk"],
+              "additionalProperties": false
+            }
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "released": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              }
+            },
+            "required": ["released"],
+            "additionalProperties": false
+          },
+          "cost": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tier": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": ["context"]
+                    },
+                    "size": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["type", "size"],
+                  "additionalProperties": false
+                },
+                "input": {
+                  "type": "number"
+                },
+                "output": {
+                  "type": "number"
+                },
+                "cache": {
+                  "type": "object",
+                  "properties": {
+                    "read": {
+                      "type": "number"
+                    },
+                    "write": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["read", "write"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["input", "output", "cache"],
+              "additionalProperties": false
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": ["alpha", "beta", "deprecated", "active"]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "object",
+            "properties": {
+              "context": {
+                "type": "integer"
+              },
+              "input": {
+                "type": "integer"
+              },
+              "output": {
+                "type": "integer"
+              }
+            },
+            "required": ["context", "output"],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "apiID",
+          "providerID",
+          "name",
+          "endpoint",
+          "capabilities",
+          "options",
+          "variants",
+          "time",
+          "cost",
+          "status",
+          "enabled",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "EventCatalogModelUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["catalog.model.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "$ref": "#/components/schemas/ModelV2Info"
+              }
+            },
+            "required": ["model"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "SessionInfo": {
         "type": "object",
         "properties": {
@@ -18991,6 +19666,207 @@
           }
         ]
       },
+      "ProviderV2Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean",
+                "enum": [false]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "via": {
+                    "type": "string",
+                    "enum": ["env"]
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": ["via", "name"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "via": {
+                    "type": "string",
+                    "enum": ["auth"]
+                  },
+                  "service": {
+                    "type": "string"
+                  }
+                },
+                "required": ["via", "service"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "via": {
+                    "type": "string",
+                    "enum": ["custom"]
+                  },
+                  "data": {
+                    "type": "object"
+                  }
+                },
+                "required": ["via", "data"],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "env": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["unknown"]
+                  }
+                },
+                "required": ["type"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["openai/responses"]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "websocket": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["type", "url"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["openai/completions"]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "reasoning": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": ["reasoning_content"]
+                          }
+                        },
+                        "required": ["type"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": ["reasoning_details"]
+                          }
+                        },
+                        "required": ["type"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": ["type", "url"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["anthropic/messages"]
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": ["type", "url"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["aisdk"]
+                  },
+                  "package": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": ["type", "package"],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "headers": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "body": {
+                "type": "object"
+              },
+              "aisdk": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "object"
+                  },
+                  "request": {
+                    "type": "object"
+                  }
+                },
+                "required": ["provider", "request"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["headers", "body", "aisdk"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "name", "enabled", "env", "endpoint", "options"],
+        "additionalProperties": false
+      },
       "EventTuiToastShow1": {
         "type": "object",
         "properties": {
@@ -19024,6 +19900,326 @@
           }
         },
         "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "ModelV2Info1": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "apiID": {
+            "type": "string"
+          },
+          "providerID": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["unknown"]
+                  }
+                },
+                "required": ["type"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["openai/responses"]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "websocket": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["type", "url"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["openai/completions"]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "reasoning": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": ["reasoning_content"]
+                          }
+                        },
+                        "required": ["type"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": ["reasoning_details"]
+                          }
+                        },
+                        "required": ["type"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": ["type", "url"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["anthropic/messages"]
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": ["type", "url"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["aisdk"]
+                  },
+                  "package": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": ["type", "package"],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "capabilities": {
+            "type": "object",
+            "properties": {
+              "tools": {
+                "type": "boolean"
+              },
+              "input": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "output": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": ["tools", "input", "output"],
+            "additionalProperties": false
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "headers": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "body": {
+                "type": "object"
+              },
+              "aisdk": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "object"
+                  },
+                  "request": {
+                    "type": "object"
+                  }
+                },
+                "required": ["provider", "request"],
+                "additionalProperties": false
+              },
+              "variant": {
+                "type": "string"
+              }
+            },
+            "required": ["headers", "body", "aisdk"],
+            "additionalProperties": false
+          },
+          "variants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "headers": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "body": {
+                  "type": "object"
+                },
+                "aisdk": {
+                  "type": "object",
+                  "properties": {
+                    "provider": {
+                      "type": "object"
+                    },
+                    "request": {
+                      "type": "object"
+                    }
+                  },
+                  "required": ["provider", "request"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["id", "headers", "body", "aisdk"],
+              "additionalProperties": false
+            }
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "released": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  }
+                ]
+              }
+            },
+            "required": ["released"],
+            "additionalProperties": false
+          },
+          "cost": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tier": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": ["context"]
+                    },
+                    "size": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["type", "size"],
+                  "additionalProperties": false
+                },
+                "input": {
+                  "type": "number"
+                },
+                "output": {
+                  "type": "number"
+                },
+                "cache": {
+                  "type": "object",
+                  "properties": {
+                    "read": {
+                      "type": "number"
+                    },
+                    "write": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["read", "write"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["input", "output", "cache"],
+              "additionalProperties": false
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": ["alpha", "beta", "deprecated", "active"]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "object",
+            "properties": {
+              "context": {
+                "type": "integer"
+              },
+              "input": {
+                "type": "integer"
+              },
+              "output": {
+                "type": "integer"
+              }
+            },
+            "required": ["context", "output"],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "apiID",
+          "providerID",
+          "name",
+          "endpoint",
+          "capabilities",
+          "options",
+          "variants",
+          "time",
+          "cost",
+          "status",
+          "enabled",
+          "limit"
+        ],
         "additionalProperties": false
       },
       "BadRequestError": {
@@ -19120,6 +20316,14 @@
     {
       "name": "v2 messages",
       "description": "Experimental v2 message routes."
+    },
+    {
+      "name": "v2 models",
+      "description": "Experimental v2 model routes."
+    },
+    {
+      "name": "v2 providers",
+      "description": "Experimental v2 provider routes."
     },
     {
       "name": "tui",

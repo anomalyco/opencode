@@ -62,11 +62,14 @@ export interface Interface {
   readonly generate: (input: {
     description: string
     model?: { providerID: ProviderID; modelID: ModelID }
-  }) => Effect.Effect<{
-    identifier: string
-    whenToUse: string
-    systemPrompt: string
-  }>
+  }) => Effect.Effect<
+    {
+      identifier: string
+      whenToUse: string
+      systemPrompt: string
+    },
+    Provider.ModelNotFoundError
+  >
 }
 
 type State = Omit<Interface, "generate">
