@@ -2861,8 +2861,8 @@ test("openai-compatible: discovers models from /v1/models", async () => {
     })
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const providers = await list()
+      fn: async (ctx) => {
+        const providers = await list(ctx)
         const provider = providers[ProviderID.make("local-llm")]
         expect(provider).toBeDefined()
         expect(provider.models["llama-3.2-8b"]).toBeDefined()
@@ -2924,8 +2924,8 @@ test("openai-compatible: discoverModels:true merges discovered models without ov
     })
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const providers = await list()
+      fn: async (ctx) => {
+        const providers = await list(ctx)
         const provider = providers[ProviderID.make("local-llm")]
         const manual = provider?.models["my-model"]
         const discovered = provider?.models["new-model"]
@@ -2978,8 +2978,8 @@ test("openai-compatible: discoverModels:true fills limits for existing model stu
     })
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const providers = await list()
+      fn: async (ctx) => {
+        const providers = await list(ctx)
         const model = providers[ProviderID.make("local-llm")]?.models.qwen3
         expect(model?.name).toBe("Qwen Local")
         expect(model?.limit.context).toBe(131072)
@@ -3021,8 +3021,8 @@ test("openai-compatible: discoverModels:false disables discovery", async () => {
     })
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        await list()
+      fn: async (ctx) => {
+        await list(ctx)
         expect(called).toBe(false)
       },
     })
@@ -3051,9 +3051,9 @@ test("openai-compatible: discovery silently fails when server unreachable", asyn
   })
   await WithInstance.provide({
     directory: tmp.path,
-    fn: async () => {
+    fn: async (ctx) => {
       // should not throw; provider has no models so it's dropped from the list
-      const providers = await list()
+      const providers = await list(ctx)
       expect(providers[ProviderID.make("offline-llm")]).toBeUndefined()
     },
   })
@@ -3089,8 +3089,8 @@ test("openai-compatible: discovery skipped for non-openai-compatible npm", async
     })
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        await list()
+      fn: async (ctx) => {
+        await list(ctx)
         expect(called).toBe(false)
       },
     })
@@ -3126,8 +3126,8 @@ test("openai-compatible: discovery URL is baseURL + /models (no /v1 forced)", as
     })
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const providers = await list()
+      fn: async (ctx) => {
+        const providers = await list(ctx)
         expect(requestPath).toBe("/models")
         expect(providers[ProviderID.make("local-llm")]?.models["model-a"]).toBeDefined()
       },
@@ -3161,8 +3161,8 @@ test("openai-compatible: discovery handles non-200 response silently", async () 
     })
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const providers = await list()
+      fn: async (ctx) => {
+        const providers = await list(ctx)
         expect(providers[ProviderID.make("local-llm")]).toBeUndefined()
       },
     })
@@ -3198,9 +3198,9 @@ test("openai-compatible: discovery handles missing data field silently", async (
     })
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
+      fn: async (ctx) => {
         // should not throw; provider has no models so it's dropped
-        const providers = await list()
+        const providers = await list(ctx)
         expect(providers[ProviderID.make("local-llm")]).toBeUndefined()
       },
     })
