@@ -5,7 +5,7 @@ import { LocalContext } from "@/util/local-context"
 import { InstanceRef, WorkspaceRef } from "./instance-ref"
 import * as Observability from "@opencode-ai/core/effect/observability"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
-import type { InstanceContext } from "@/project/instance"
+import type { InstanceContext } from "@/project/instance-context"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 
 type Refs = {
