@@ -92,6 +92,7 @@ import { useCommandPalette } from "../../context/command-palette"
 import { useBindings, useCommandShortcut } from "../../keymap"
 import { PathFormatterProvider, usePathFormatter } from "../../context/path-format"
 import {
+  clearTerminalImageOutput,
   hasTerminalImageOutput,
   supportsTerminalImageOutput,
   terminalImageSector,
@@ -169,6 +170,7 @@ const fallbackTerminalImageRows = 12
 const context = createContext<{
   width: number
   height: number
+  scrollViewport: { y: number; height: number } | undefined
   sessionID: string
   conceal: () => boolean
   showThinking: () => boolean
@@ -1101,6 +1103,10 @@ export function Session() {
           get height() {
             return dimensions().height
           },
+          get scrollViewport() {
+            if (!scroll?.viewport) return
+            return { y: scroll.viewport.screenY, height: scroll.viewport.height }
+          },
           sessionID: route.sessionID,
           conceal,
           showThinking,
@@ -1668,7 +1674,7 @@ function GenericTool(props: ToolProps<any>) {
   )
   const terminalOutputSupported = createMemo(() => supportsTerminalImageOutput())
   const shouldRenderImageArea = createMemo(() => Boolean((hasTerminalOutput() || imagePath()) && terminalOutputSupported()))
-  const inlineImageMaxRows = createMemo(() => Math.max(1, Math.floor(ctx.height * 0.45)))
+  const inlineImageMaxRows = createMemo(() => Math.max(1, Math.floor(ctx.height / 2)))
   const inlineImageSector = createMemo(() => {
     const width = Math.max(1, Math.floor(ctx.width))
     return terminalImageSectorFromOutput(output(), { maxWidth: width, maxHeight: inlineImageMaxRows() }) ?? fileImageSector() ?? {
@@ -1677,7 +1683,8 @@ function GenericTool(props: ToolProps<any>) {
     }
   })
   const [expanded, setExpanded] = createSignal<boolean | undefined>()
-  const isExpanded = createMemo(() => expanded() ?? configuredOutput())
+  const defaultExpanded = createMemo(() => configuredOutput() || Boolean(imagePath()))
+  const isExpanded = createMemo(() => expanded() ?? defaultExpanded())
   const title = createMemo(() => {
     if ("title" in props.part.state && props.part.state.title) return props.part.state.title
     return `${props.tool} ${input(props.input)}`
@@ -1694,23 +1701,65 @@ function GenericTool(props: ToolProps<any>) {
     if (!terminalOutputSupported()) return "Inline image output requires an iTerm2-compatible terminal"
     return stripAnsi(limited()).trim() || "Displayed inline image"
   })
+  const canToggleExpanded = createMemo(() => overflow() || shouldRenderImageArea())
+  const shouldShowInlineImage = createMemo(() => shouldRenderImageArea() && isExpanded())
   let pendingInlineImageWrite: Promise<void> | undefined
   let renderedInlineImageKey: string | undefined
-  let lastInlineImageWriteAt = 0
+  let renderedInlineImagePlacement: { x: number; y: number; width: number; height: number } | undefined
+  let pendingInlineImageClear: { x: number; y: number; width: number; height: number } | undefined
+  let skipNextFrameImageWrite = false
 
-  const inlineImageKey = () => {
+  const inlineImagePlacement = () => {
     const box = imageBox()
     if (!box) return
     if (!props.output) return
-    if (!shouldRenderImageArea()) return
+    if (!shouldShowInlineImage()) return
+    const viewport = ctx.scrollViewport
+    if (!viewport) return
+    const y = Math.floor(box.screenY)
+    const viewportTop = Math.floor(viewport.y)
+    const viewportBottom = Math.floor(viewport.y + viewport.height)
+    const height = inlineImageSector().rows
+    if (y < viewportTop) return
+    if (Math.floor(box.height) < height) return
+    if (y + height > viewportBottom) return
+    return {
+      x: box.screenX,
+      y,
+      width: Math.min(Math.max(1, Math.floor(box.width)), inlineImageSector().columns),
+      height,
+    }
+  }
+
+  const shouldCollapseInlineImage = () => {
+    const box = imageBox()
+    if (!box) return false
+    if (!props.output) return false
+    if (!shouldShowInlineImage()) return false
+    const viewport = ctx.scrollViewport
+    if (!viewport) return false
+    const y = Math.floor(box.screenY)
+    const height = inlineImageSector().rows
+    return (
+      y < Math.floor(viewport.y) ||
+      Math.floor(box.height) < height ||
+      y + height > Math.floor(viewport.y + viewport.height)
+    )
+  }
+
+  const inlineImageKey = () => {
+    const raw = props.output
+    if (!raw) return
+    const placement = inlineImagePlacement()
+    if (!placement) return
     return [
       props.part.callID,
-      props.output.length,
+      raw.length,
       imagePath() ?? "",
-      Math.floor(box.screenX),
-      Math.floor(box.screenY),
-      inlineImageSector().columns,
-      Math.min(inlineImageSector().rows, Math.max(1, Math.floor(ctx.height - box.screenY - 2))),
+      Math.floor(placement.x),
+      Math.floor(placement.y),
+      placement.width,
+      placement.height,
     ].join(":")
   }
 
@@ -1718,36 +1767,57 @@ function GenericTool(props: ToolProps<any>) {
     if (!props.output) return
     if (!hasTerminalOutput() && !imagePath()) return
     if (!terminalOutputSupported()) return
+    if (!shouldShowInlineImage()) return
     if (!ctx.showGenericToolOutput() && !configuredOutput() && !imagePath()) return
-    const box = imageBox()
-    if (!box) return
-    const width = Math.min(Math.max(1, Math.floor(box.width)), inlineImageSector().columns)
-    const height = Math.min(inlineImageSector().rows, Math.max(1, Math.floor(ctx.height - box.screenY - 2)))
+    const placement = inlineImagePlacement()
+    if (!placement) return
+    renderedInlineImagePlacement = placement
     const raw = props.output
     const filePath = imagePath()
     if (hasTerminalImageOutput(raw)) {
-      await writeTerminalImageOutput(raw, { placement: { x: box.screenX, y: box.screenY, width, height } })
+      await writeTerminalImageOutput(raw, { placement })
       return
     }
     if (filePath) {
       await writeTerminalImageFileOutput(filePath, {
-        display: { width, height, preserveAspectRatio: true },
-        placement: { x: box.screenX, y: box.screenY, width, height },
+        display: { width: placement.width, height: placement.height, preserveAspectRatio: true },
+        placement,
       })
     }
   }
 
-  const scheduleInlineImageWrite = (force = false) => {
+  const clearRenderedInlineImage = async (options: { requestRender?: boolean } = {}) => {
+    const placements = [renderedInlineImagePlacement, pendingInlineImageClear].filter(
+      (placement): placement is { x: number; y: number; width: number; height: number } => Boolean(placement),
+    )
+    if (!placements.length) return
+    renderedInlineImagePlacement = undefined
+    pendingInlineImageClear = undefined
+    renderedInlineImageKey = undefined
+    await Promise.all(placements.map((placement) => clearTerminalImageOutput(placement)))
+    if (options.requestRender === false) return
+    skipNextFrameImageWrite = true
+    renderer.requestRender()
+  }
+
+  const scheduleInlineImageWrite = () => {
     if (pendingInlineImageWrite) return
-    const delay = force ? Math.max(0, 250 - (Date.now() - lastInlineImageWriteAt)) : 25
-    pendingInlineImageWrite = new Promise<void>((resolve) => setTimeout(resolve, delay))
+    pendingInlineImageWrite = new Promise<void>((resolve) => setTimeout(resolve, 25))
       .then(async () => {
         const key = inlineImageKey()
         if (!key) return
-        if (!force && key === renderedInlineImageKey) return
+        if (key === renderedInlineImageKey) return
+        if (renderedInlineImagePlacement) {
+          pendingInlineImageClear = renderedInlineImagePlacement
+          renderedInlineImagePlacement = undefined
+          renderedInlineImageKey = undefined
+          renderer.requestRender()
+          return
+        }
         renderedInlineImageKey = key
         await writeInlineImage()
-        lastInlineImageWriteAt = Date.now()
+        skipNextFrameImageWrite = true
+        renderer.requestRender()
       })
       .finally(() => {
         pendingInlineImageWrite = undefined
@@ -1771,7 +1841,7 @@ function GenericTool(props: ToolProps<any>) {
   })
 
   createEffect(() => {
-    if (!shouldRenderImageArea()) return
+    if (!shouldShowInlineImage()) return
     if (!imageBox()) return
     output()
     inlineImageSector()
@@ -1780,11 +1850,37 @@ function GenericTool(props: ToolProps<any>) {
   })
 
   const frameCallback = async () => {
-    if (!shouldRenderImageArea()) return
-    void renderer.idle().then(() => scheduleInlineImageWrite(true))
+    if (!shouldShowInlineImage()) return
+    if (skipNextFrameImageWrite) {
+      skipNextFrameImageWrite = false
+      return
+    }
+    if (shouldCollapseInlineImage() && renderedInlineImagePlacement) {
+      setExpanded(false)
+      await clearRenderedInlineImage()
+      return
+    }
+    if (!inlineImagePlacement() && renderedInlineImagePlacement) {
+      await clearRenderedInlineImage({ requestRender: false })
+      return
+    }
+    if (pendingInlineImageClear) {
+      const placement = pendingInlineImageClear
+      pendingInlineImageClear = undefined
+      await clearTerminalImageOutput(placement)
+    }
+    void renderer.idle().then(() => scheduleInlineImageWrite())
   }
   renderer.setFrameCallback(frameCallback)
-  onCleanup(() => renderer.removeFrameCallback(frameCallback))
+  onCleanup(() => {
+    renderer.removeFrameCallback(frameCallback)
+    void clearRenderedInlineImage()
+  })
+
+  createEffect(() => {
+    if (shouldShowInlineImage()) return
+    void clearRenderedInlineImage()
+  })
 
   return (
     <Show
@@ -1798,14 +1894,14 @@ function GenericTool(props: ToolProps<any>) {
       <BlockTool
         title={`# ${title()}`}
         part={props.part}
-        onClick={overflow() ? () => setExpanded((prev) => !(prev ?? configuredOutput())) : undefined}
+        onClick={canToggleExpanded() ? () => setExpanded((prev) => !(prev ?? defaultExpanded())) : undefined}
       >
         <box gap={1}>
           <text fg={theme.text}>{visible()}</text>
-          <Show when={shouldRenderImageArea()}>
+          <Show when={shouldShowInlineImage()}>
             <box ref={(box: BoxRenderable) => setImageBox(box)} height={inlineImageSector().rows} flexShrink={0} />
           </Show>
-          <Show when={overflow()}>
+          <Show when={canToggleExpanded()}>
             <text fg={theme.textMuted}>{isExpanded() ? "Click to collapse" : "Click to expand"}</text>
           </Show>
         </box>

@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import {
+  clearTerminalImageOutput,
   hasTerminalImageOutput,
   supportsTerminalImageOutput,
+  terminalImageClearOutput,
   terminalImageOutputFromFile,
   terminalImagePlacementOutput,
   terminalImagePath,
@@ -104,15 +106,23 @@ describe("terminal image output", () => {
     })
 
     expect(await terminalImageSizeFromFile(`${tmp.path}/wide.png`)).toEqual({ width: 900, height: 360 })
+    expect(terminalImageSector({ width: 900, height: 360 }, { maxWidth: 120, maxHeight: 20 })).toEqual({
+      columns: 100,
+      rows: 20,
+    })
     expect(terminalImageSector({ width: 900, height: 360 }, { maxWidth: 80 })).toEqual({ columns: 80, rows: 16 })
     expect(terminalImageSector({ width: 900, height: 360 }, { maxWidth: 80, maxHeight: 8 })).toEqual({
       columns: 40,
       rows: 8,
     })
+    expect(terminalImageSector({ width: 90, height: 360 }, { maxWidth: 80, maxHeight: 10 })).toEqual({
+      columns: 5,
+      rows: 10,
+    })
     expect(terminalImageSector({ width: 90, height: 36 }, { maxWidth: 80 })).toEqual({ columns: 10, rows: 2 })
   })
 
-  test("marks explicit OSC cell dimensions as a render sector", () => {
+  test("scales explicit OSC cell dimensions into the render sector", () => {
     expect(
       terminalImageSectorFromOutput("\x1b]1337;File=name=test.png;inline=1;width=40;height=12:aW1hZ2U=\x07", {
         maxWidth: 80,
@@ -122,13 +132,13 @@ describe("terminal image output", () => {
       terminalImageSectorFromOutput("\x1b]1337;File=name=test.png;inline=1;width=200;height=12:aW1hZ2U=\x07", {
         maxWidth: 80,
       }),
-    ).toEqual({ columns: 80, rows: 12 })
+    ).toEqual({ columns: 80, rows: 4 })
     expect(
       terminalImageSectorFromOutput("\x1b]1337;File=name=test.png;inline=1;width=40;height=20:aW1hZ2U=\x07", {
         maxWidth: 80,
         maxHeight: 8,
       }),
-    ).toEqual({ columns: 40, rows: 8 })
+    ).toEqual({ columns: 16, rows: 8 })
     expect(
       terminalImageSectorFromOutput("\x1b]1337;File=name=test.png;inline=1;width=40px;height=12:aW1hZ2U=\x07", {
         maxWidth: 80,
@@ -139,8 +149,32 @@ describe("terminal image output", () => {
 
   test("positions OSC image output inside a reserved terminal area", () => {
     expect(terminalImagePlacementOutput(image, { x: 4, y: 2, width: 8, height: 3 })).toBe(
-      "\x1b7\x1b[3;5H\x1b[8X\x1b[4;5H\x1b[8X\x1b[5;5H\x1b[8X\x1b[3;5H" + image + "\x1b8",
+      "\x1b7\x1b[3;5H" + image + "\x1b8",
     )
+  })
+
+  test("clears a reserved terminal image area", async () => {
+    expect(terminalImageClearOutput({ x: 4, y: 2, width: 8, height: 3 })).toBe(
+      "\x1b7\x1b[3;5H\x1b[8X\x1b[4;5H\x1b[8X\x1b[5;5H\x1b[8X\x1b8",
+    )
+    const writes: string[] = []
+    const write = async (raw: string) => {
+      writes.push(raw)
+    }
+
+    expect(
+      await clearTerminalImageOutput(
+        { x: 4, y: 2, width: 8, height: 3 },
+        { env: { TERM_PROGRAM: "Apple_Terminal" }, platform: "darwin", write },
+      ),
+    ).toBe(false)
+    expect(
+      await clearTerminalImageOutput(
+        { x: 4, y: 2, width: 8, height: 3 },
+        { env: { TERM_PROGRAM: "iTerm.app" }, platform: "darwin", write },
+      ),
+    ).toBe(true)
+    expect(writes).toEqual(["\x1b7\x1b[3;5H\x1b[8X\x1b[4;5H\x1b[8X\x1b[5;5H\x1b[8X\x1b8"])
   })
 
   test("writes local image files only for supported terminal environments", async () => {
@@ -172,9 +206,7 @@ describe("terminal image output", () => {
       }),
     ).toBe(true)
     expect(writes).toEqual([
-      "\x1b7" +
-        Array.from({ length: 10 }, (_, index) => `\x1b[${index + 2};2H\x1b[20X`).join("") +
-        "\x1b[2;2H\x1b]1337;File=name=aW1hZ2UucG5n;inline=1;doNotMoveCursor=1;width=20;height=10:aW1hZ2U=\x07\x1b8",
+      "\x1b7\x1b[2;2H\x1b]1337;File=name=aW1hZ2UucG5n;inline=1;doNotMoveCursor=1;width=20;height=10:aW1hZ2U=\x07\x1b8",
     ])
   })
 

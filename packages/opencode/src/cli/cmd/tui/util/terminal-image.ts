@@ -85,6 +85,19 @@ export async function writeTerminalImageFileOutput(
   return true
 }
 
+export async function clearTerminalImageOutput(
+  placement: TerminalImagePlacementOptions,
+  options: {
+    env?: NodeJS.ProcessEnv
+    platform?: NodeJS.Platform
+    write?: (raw: string) => Promise<void>
+  } = {},
+) {
+  if (!supportsTerminalImageOutput(options.env, options.platform)) return false
+  await writeQueued(terminalImageClearOutput(placement), options.write)
+  return true
+}
+
 export async function terminalImageOutputFromFile(filePath: string, options: TerminalImageDisplayOptions = {}) {
   const mime = imageMime[path.extname(filePath).toLowerCase().slice(1) as keyof typeof imageMime]
   if (!mime) return
@@ -111,13 +124,13 @@ export function terminalImageSector(
   const imageHeight = Math.max(1, size.height)
   const maxWidth = Math.max(1, Math.floor(options.maxWidth))
   const maxHeight = Math.max(1, Math.floor(options.maxHeight ?? Number.POSITIVE_INFINITY))
-  const columns = Math.min(maxWidth, Math.max(1, Math.ceil(imageWidth / cellWidth)))
-  const rows = Math.max(1, Math.ceil((imageHeight * ((columns * cellWidth) / imageWidth)) / cellHeight))
-  if (rows <= maxHeight) return { columns, rows }
-  const heightBoundColumns = Math.max(1, Math.ceil((imageWidth * ((maxHeight * cellHeight) / imageHeight)) / cellWidth))
+  const columns = Math.max(1, Math.ceil(imageWidth / cellWidth))
+  const rows = Math.max(1, Math.ceil(imageHeight / cellHeight))
+  if (columns <= maxWidth && rows <= maxHeight) return { columns, rows }
+  const scale = Math.min(maxWidth / columns, maxHeight / rows)
   return {
-    columns: Math.min(maxWidth, heightBoundColumns),
-    rows: maxHeight,
+    columns: Math.max(1, Math.floor(columns * scale)),
+    rows: Math.max(1, Math.floor(rows * scale)),
   }
 }
 
@@ -127,26 +140,39 @@ export function terminalImageSectorFromOutput(raw: string, options: { maxWidth: 
   const width = terminalImageCellParam(params, "width")
   const height = terminalImageCellParam(params, "height")
   if (!height) return
+  const maxWidth = Math.max(1, Math.floor(options.maxWidth))
   const maxHeight = Math.max(1, Math.floor(options.maxHeight ?? Number.POSITIVE_INFINITY))
+  const columns = width ?? maxWidth
+  if (columns <= maxWidth && height <= maxHeight) return { columns, rows: height }
+  const scale = Math.min(maxWidth / columns, maxHeight / height)
   return {
-    columns: Math.min(Math.max(1, Math.floor(options.maxWidth)), width ?? Math.max(1, Math.floor(options.maxWidth))),
-    rows: Math.min(height, maxHeight),
+    columns: Math.max(1, Math.floor(columns * scale)),
+    rows: Math.max(1, Math.floor(height * scale)),
   }
 }
 
 export function terminalImagePlacementOutput(raw: string, options: TerminalImagePlacementOptions) {
   const x = Math.max(1, Math.floor(options.x) + 1)
   const y = Math.max(1, Math.floor(options.y) + 1)
-  const width = Math.max(1, Math.floor(options.width))
-  const height = Math.max(1, Math.floor(options.height))
-  const clear = Array.from({ length: height }, (_, row) => `\x1b[${y + row};${x}H\x1b[${width}X`).join("")
-  return `\x1b7${clear}\x1b[${y};${x}H${raw}\x1b8`
+  return `\x1b7\x1b[${y};${x}H${raw}\x1b8`
+}
+
+export function terminalImageClearOutput(options: TerminalImagePlacementOptions) {
+  return `\x1b7${terminalImageClearRows(options)}\x1b8`
 }
 
 export function terminalImagePath(input: Record<string, unknown> | undefined) {
   const value = input?.path ?? input?.filePath ?? input?.file_path
   if (typeof value !== "string") return
   return value
+}
+
+function terminalImageClearRows(options: TerminalImagePlacementOptions) {
+  const x = Math.max(1, Math.floor(options.x) + 1)
+  const y = Math.max(1, Math.floor(options.y) + 1)
+  const width = Math.max(1, Math.floor(options.width))
+  const height = Math.max(1, Math.floor(options.height))
+  return Array.from({ length: height }, (_, row) => `\x1b[${y + row};${x}H\x1b[${width}X`).join("")
 }
 
 function supportsITermImageVersion(version: string | undefined) {
