@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 # Acompany SecureCode one-shot installer.
 #
-# Recommended invocation:
+# Recommended invocation (private repo, internal use):
+#   gh release download -R acompany-develop/securecode --pattern install -O - | bash
+#
+# Recommended invocation (when the repo is public):
 #   curl -fsSL https://github.com/acompany-develop/securecode/releases/latest/download/install | bash
 #
 # Or for a pinned version:
-#   curl -fsSL https://github.com/acompany-develop/securecode/releases/latest/download/install | bash -s -- --version 0.1.0
+#   gh release download -R acompany-develop/securecode --pattern install -O - | bash -s -- --version 0.1.0
+#
+# When the repository is private, this script transparently uses the `gh` CLI
+# (must be authenticated via `gh auth login`) for both metadata lookup and
+# archive download. If `gh` is unavailable or unauthenticated, it falls back to
+# bare curl, which only works for public repositories.
 #
 # Refs https://github.com/acompany-develop/securecode/issues/82.
 set -euo pipefail
@@ -34,8 +42,14 @@ Options:
       --no-config         Skip running the bundled setup/install.sh (plugin/config seed).
 
 Examples:
+  # Private repo (internal use, requires gh auth login)
+  gh release download -R ${GH_REPO} --pattern install -O - | bash
+  gh release download -R ${GH_REPO} --pattern install -O - | bash -s -- --version 0.1.0
+
+  # Public repo (when applicable)
   curl -fsSL https://github.com/${GH_REPO}/releases/latest/download/install | bash
-  curl -fsSL https://github.com/${GH_REPO}/releases/latest/download/install | bash -s -- --version 0.1.0
+
+  # Local archive
   ./install --binary /path/to/SecureCode
 EOF
 }
@@ -147,14 +161,26 @@ require_tool() {
   done
 }
 
+# Detects an authenticated `gh` CLI. We prefer `gh` over bare curl because the
+# repository is currently private (issue #82 follow-up): `gh release download`
+# transparently handles GitHub auth, asset_id resolution, and the redirect to
+# the signed S3 asset URL, none of which a bare `curl` can do for private repos.
+have_gh_auth() {
+  command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1
+}
+
 download_archive() {
-  local url="$1" output="$2"
+  local url="$1" output="$2" version="$3" filename="$4"
+  if have_gh_auth; then
+    gh release download "v${version}" -R "$GH_REPO" --pattern "$filename" -O "$output"
+    return
+  fi
   if command -v curl >/dev/null 2>&1; then
     curl -fsSL -o "$output" "$url"
   elif command -v wget >/dev/null 2>&1; then
     wget -qO "$output" "$url"
   else
-    err "Need curl or wget to download release archive"; exit 1
+    err "Need curl or wget (or gh) to download release archive"; exit 1
   fi
 }
 
@@ -163,6 +189,18 @@ resolve_version() {
     echo "${requested_version#v}"
     return
   fi
+
+  if have_gh_auth; then
+    local resolved=""
+    if ! resolved=$(gh release view -R "$GH_REPO" --json tagName --jq '.tagName' 2>/dev/null); then
+      err "gh release view failed. Make sure you have access to ${GH_REPO}"
+      err "and that 'gh auth login' completed successfully."
+      exit 1
+    fi
+    echo "${resolved#v}"
+    return
+  fi
+
   require_tool curl
   local resolved=""
   # Wrap the curl pipeline in an `if ! ...` guard rather than the bare
@@ -172,8 +210,9 @@ resolve_version() {
   # terminates with no diagnostic — issue #82 review finding A.
   if ! resolved=$(curl -fsSL "https://api.github.com/repos/${GH_REPO}/releases/latest" \
     | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p'); then
-    err "Failed to query GitHub for the latest release (possibly rate limited)."
-    err "Pass --version <ver> explicitly to skip the lookup, e.g. --version 0.1.0"
+    err "Failed to query GitHub for the latest release."
+    err "If ${GH_REPO} is private, install gh CLI and run 'gh auth login' first,"
+    err "or pass --version <ver> explicitly to skip the lookup."
     exit 1
   fi
   if [ -z "$resolved" ]; then
@@ -290,7 +329,7 @@ main() {
     trap 'rm -rf "$tmp"' EXIT
 
     info "Downloading ${filename} (v${version})..."
-    download_archive "$url" "$tmp/$filename"
+    download_archive "$url" "$tmp/$filename" "$version" "$filename"
     info "Extracting ${filename}..."
     extract_archive "$tmp/$filename" "$tmp/unpacked"
 
