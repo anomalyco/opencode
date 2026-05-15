@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { AppRuntime } from "../../src/effect/app-runtime"
+import { ProjectID } from "../../src/project/schema"
 import { SessionGoal } from "../../src/session/goal"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Session } from "../../src/session/session"
@@ -654,6 +655,34 @@ describe("SessionGoal", () => {
       expect(result.active.some((goal) => goal.sessionID === result.activeSession.id)).toBe(true)
       expect(result.active.some((goal) => goal.sessionID === result.pausedSession.id)).toBe(false)
       expect(result.active.some((goal) => goal.sessionID === result.completeSession.id)).toBe(false)
+    })
+  })
+
+  test("lists active goals only for unarchived sessions in the requested project", async () => {
+    await run(async () => {
+      const result = await effect(
+        Session.Service.use((sessions) =>
+          SessionGoal.Service.use((goals) =>
+            Effect.gen(function* () {
+              const activeSession = yield* sessions.create({ title: "active-goal" })
+              const archivedSession = yield* sessions.create({ title: "archived-goal" })
+              yield* goals.create({ sessionID: activeSession.id, objective: "keep running" })
+              yield* goals.create({ sessionID: archivedSession.id, objective: "do not resume" })
+              yield* sessions.setArchived({ sessionID: archivedSession.id, time: Date.now() })
+              return {
+                activeSession,
+                archivedSession,
+                active: yield* goals.listActive({ projectID: activeSession.projectID }),
+                wrongProject: yield* goals.listActive({ projectID: ProjectID.global }),
+              }
+            }),
+          ),
+        ),
+      )
+
+      expect(result.active.some((goal) => goal.sessionID === result.activeSession.id)).toBe(true)
+      expect(result.active.some((goal) => goal.sessionID === result.archivedSession.id)).toBe(false)
+      expect(result.wrongProject).toHaveLength(0)
     })
   })
 })

@@ -1,11 +1,12 @@
 import { BusEvent } from "@/bus/bus-event"
-import { Database, eq } from "@/storage/db"
+import { Database, and, eq, isNull } from "@/storage/db"
 import { NotFoundError } from "@/storage/storage"
 import { SyncEvent } from "@/sync"
 import { NonNegativeInt, PositiveInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { Context, Effect, Layer, Schema, Types } from "effect"
+import { ProjectID } from "../project/schema"
 import { GoalID, MessageID, SessionID } from "./schema"
-import { SessionGoalTable } from "./session.sql"
+import { SessionGoalTable, SessionTable } from "./session.sql"
 
 export const Status = Schema.Literals(["active", "paused", "budget_limited", "complete"]).annotate({
   identifier: "SessionGoalStatus",
@@ -102,7 +103,7 @@ type NotFound = InstanceType<typeof NotFoundError>
 
 export interface Interface {
   readonly get: (sessionID: SessionID) => Effect.Effect<Info | undefined>
-  readonly listActive: () => Effect.Effect<Info[]>
+  readonly listActive: (input?: { projectID?: ProjectID }) => Effect.Effect<Info[]>
   readonly create: (input: CreateInput) => Effect.Effect<Info, GoalError>
   readonly update: (input: UpdateInput) => Effect.Effect<Info, GoalError | NotFound>
   readonly clear: (sessionID: SessionID) => Effect.Effect<void>
@@ -185,9 +186,26 @@ export const layer = Layer.effect(
       return row ? fromRow(row) : undefined
     })
 
-    const listActive = Effect.fn("SessionGoal.listActive")(function* () {
+    const listActive = Effect.fn("SessionGoal.listActive")(function* (input?: { projectID?: ProjectID }) {
+      const conditions = [eq(SessionGoalTable.status, "active"), isNull(SessionTable.time_archived)]
+      if (input?.projectID) conditions.push(eq(SessionTable.project_id, input.projectID))
       const rows = Database.use((db) =>
-        db.select().from(SessionGoalTable).where(eq(SessionGoalTable.status, "active")).all(),
+        db
+          .select({
+            id: SessionGoalTable.id,
+            session_id: SessionGoalTable.session_id,
+            objective: SessionGoalTable.objective,
+            status: SessionGoalTable.status,
+            token_budget: SessionGoalTable.token_budget,
+            tokens_used: SessionGoalTable.tokens_used,
+            time_used: SessionGoalTable.time_used,
+            time_created: SessionGoalTable.time_created,
+            time_updated: SessionGoalTable.time_updated,
+          })
+          .from(SessionGoalTable)
+          .innerJoin(SessionTable, eq(SessionGoalTable.session_id, SessionTable.id))
+          .where(and(...conditions))
+          .all(),
       )
       return rows.map(fromRow)
     })
