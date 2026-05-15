@@ -1,8 +1,8 @@
 import type { Argv } from "yargs"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
-import { AppRuntime } from "@/effect/app-runtime"
 import { Installation } from "../../installation"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
 export const UpgradeCommand = {
   command: "upgrade [target]",
@@ -25,7 +25,7 @@ export const UpgradeCommand = {
     UI.println(UI.logo("  "))
     UI.empty()
     prompts.intro("Upgrade")
-    const detectedMethod = await AppRuntime.runPromise(Installation.Service.use((svc) => svc.method()))
+    const detectedMethod = await Installation.method()
     const method = (args.method as Installation.Method) ?? detectedMethod
     if (method === "unknown") {
       prompts.log.error(`opencode is installed to ${process.execPath} and may be managed by a package manager`)
@@ -43,22 +43,18 @@ export const UpgradeCommand = {
       }
     }
     prompts.log.info("Using method: " + method)
-    const target = args.target
-      ? args.target.replace(/^v/, "")
-      : await AppRuntime.runPromise(Installation.Service.use((svc) => svc.latest()))
+    const target = args.target ? args.target.replace(/^v/, "") : await Installation.latest()
 
-    if (Installation.VERSION === target) {
+    if (InstallationVersion === target) {
       prompts.log.warn(`opencode upgrade skipped: ${target} is already installed`)
       prompts.outro("Done")
       return
     }
 
-    prompts.log.info(`From ${Installation.VERSION} → ${target}`)
+    prompts.log.info(`From ${InstallationVersion} → ${target}`)
     const spinner = prompts.spinner()
     spinner.start("Upgrading...")
-    const err = await AppRuntime.runPromise(Installation.Service.use((svc) => svc.upgrade(method, target))).catch(
-      (err) => err,
-    )
+    const err = await Installation.upgrade(method, target).catch((err) => err)
     if (err) {
       spinner.stop("Upgrade failed", 1)
       if (err instanceof Installation.UpgradeFailedError) {

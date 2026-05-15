@@ -1,7 +1,3 @@
-import { dict as en } from "./en"
-
-type Keys = keyof typeof en
-
 export const dict = {
   "command.category.suggested": "추천",
   "command.category.view": "보기",
@@ -213,7 +209,7 @@ export const dict = {
   "common.saving": "저장 중...",
   "common.default": "기본값",
   "common.attachment": "첨부 파일",
-  "prompt.placeholder.shell": "셸 명령어 입력...",
+  "prompt.placeholder.shell": "셸 명령어 입력... {{example}}",
   "prompt.placeholder.normal": '무엇이든 물어보세요... "{{example}}"',
   "prompt.placeholder.simple": "무엇이든 물어보세요...",
   "prompt.placeholder.summarizeComments": "댓글 요약…",
@@ -279,6 +275,7 @@ export const dict = {
   "mcp.status.connected": "연결됨",
   "mcp.status.failed": "실패",
   "mcp.status.needs_auth": "인증 필요",
+  "mcp.auth.clickToAuthenticate": "클릭하여 인증",
   "mcp.status.disabled": "비활성화됨",
   "dialog.fork.empty": "분기할 메시지 없음",
   "dialog.directory.search.placeholder": "폴더 검색",
@@ -405,6 +402,8 @@ export const dict = {
   "error.page.description": "애플리케이션을 로드하는 동안 오류가 발생했습니다.",
   "error.page.details.label": "오류 세부 정보",
   "error.page.action.restart": "다시 시작",
+  "error.page.action.report": "오류 신고",
+  "error.page.action.reported": "오류가 신고됨",
   "error.page.action.checking": "확인 중...",
   "error.page.action.checkUpdates": "업데이트 확인",
   "error.page.action.updateTo": "{{version}} 버전으로 업데이트",
@@ -570,7 +569,9 @@ export const dict = {
   "settings.general.row.theme.title": "테마",
   "settings.general.row.theme.description": "OpenCode 테마 사용자 지정",
   "settings.general.row.font.title": "코드 글꼴",
-  "settings.general.row.font.description": "코드 블록과 터미널에 사용되는 글꼴을 사용자 지정",
+  "settings.general.row.font.description": "코드 블록에 사용되는 글꼴을 사용자 지정",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "UI 글꼴",
   "settings.general.row.uiFont.description": "인터페이스 전반에 사용되는 글꼴을 사용자 지정",
   "settings.general.row.followup.title": "후속 조치 동작",
@@ -585,6 +586,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "edit 도구 파트 펼치기",
   "settings.general.row.editToolPartsExpanded.description":
     "타임라인에서 기본적으로 edit, write, patch 도구 파트를 펼친 상태로 표시합니다",
+  "settings.general.row.showSessionProgressBar.title": "세션 진행 표시줄 표시",
+  "settings.general.row.showSessionProgressBar.description":
+    "에이전트가 작업 중일 때 세션 상단에 애니메이션 진행 표시줄을 표시합니다",
   "settings.general.row.wayland.title": "네이티브 Wayland 사용",
   "settings.general.row.wayland.description": "Wayland에서 X11 폴백을 비활성화합니다. 다시 시작해야 합니다.",
   "settings.general.row.wayland.tooltip":
@@ -721,8 +725,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "URL에서 콘텐츠 가져오기",
   "settings.permissions.tool.websearch.title": "웹 검색",
   "settings.permissions.tool.websearch.description": "웹 검색",
-  "settings.permissions.tool.codesearch.title": "코드 검색",
-  "settings.permissions.tool.codesearch.description": "웹에서 코드 검색",
   "settings.permissions.tool.external_directory.title": "외부 디렉터리",
   "settings.permissions.tool.external_directory.description": "프로젝트 디렉터리 외부의 파일에 액세스",
   "settings.permissions.tool.doom_loop.title": "무한 반복",

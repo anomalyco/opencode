@@ -1,15 +1,14 @@
-import z from "zod"
+import { Schema } from "effect"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 
-export const ConsoleState = z.object({
-  consoleManagedProviders: z.array(z.string()),
-  activeOrgName: z.string().optional(),
-  switchableOrgCount: z.number().int().nonnegative(),
-})
+export class ConsoleState extends Schema.Class<ConsoleState>("ConsoleState")({
+  consoleManagedProviders: Schema.mutable(Schema.Array(Schema.String)),
+  activeOrgName: Schema.optional(Schema.String),
+  switchableOrgCount: NonNegativeInt,
+}) {}
 
-export type ConsoleState = z.infer<typeof ConsoleState>
-
-export const emptyConsoleState: ConsoleState = {
+export const emptyConsoleState: ConsoleState = ConsoleState.make({
   consoleManagedProviders: [],
   activeOrgName: undefined,
   switchableOrgCount: 0,
-}
+})

@@ -1,9 +1,30 @@
 import { describe, expect, test } from "bun:test"
 import { ACP } from "../../src/acp/agent"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
-import type { Event, EventMessagePartUpdated, ToolStatePending, ToolStateRunning } from "@opencode-ai/sdk/v2"
-import { Instance } from "../../src/project/instance"
-import { tmpdir } from "../fixture/fixture"
+import type {
+  Event,
+  EventMessagePartUpdated,
+  ToolStateCompleted,
+  ToolStatePending,
+  ToolStateRunning,
+} from "@opencode-ai/sdk/v2"
+import { provideTestInstance, tmpdir } from "../fixture/fixture"
+
+const pollUntil = async <T>(
+  check: () => T | undefined | false | Promise<T | undefined | false>,
+  message: string,
+  opts?: { timeoutMs?: number; intervalMs?: number },
+): Promise<T> => {
+  const timeoutMs = opts?.timeoutMs ?? 2000
+  const intervalMs = opts?.intervalMs ?? 5
+  const started = Date.now()
+  while (true) {
+    const v = await check()
+    if (v !== undefined && v !== null && v !== false) return v as T
+    if (Date.now() - started > timeoutMs) throw new Error(message)
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+}
 
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
 type RequestPermissionParams = Parameters<AgentSideConnection["requestPermission"]>[0]
@@ -35,6 +56,14 @@ function isToolCallUpdate(
   return update.sessionUpdate === "tool_call_update"
 }
 
+function completedToolUpdate(sessionUpdates: SessionUpdateParams[], sessionId: string, callID: string) {
+  return sessionUpdates
+    .filter((u) => u.sessionId === sessionId)
+    .map((u) => u.update)
+    .filter(isToolCallUpdate)
+    .find((u) => u.toolCallId === callID && u.status === "completed")
+}
+
 function toolEvent(
   sessionId: string,
   cwd: string,
@@ -58,6 +87,47 @@ function toolEvent(
           raw: opts.raw,
         }
   const payload: EventMessagePartUpdated = {
+    id: `evt_${opts.callID}`,
+    type: "message.part.updated",
+    properties: {
+      sessionID: sessionId,
+      time: Date.now(),
+      part: {
+        id: `part_${opts.callID}`,
+        sessionID: sessionId,
+        messageID: `msg_${opts.callID}`,
+        type: "tool",
+        callID: opts.callID,
+        tool: opts.tool,
+        state,
+      },
+    },
+  }
+  return { directory: cwd, payload }
+}
+
+function completedToolEvent(
+  sessionId: string,
+  cwd: string,
+  opts: {
+    callID: string
+    tool: string
+    input: Record<string, unknown>
+    output: string
+    attachments?: ToolStateCompleted["attachments"]
+  },
+): GlobalEventEnvelope {
+  const state: ToolStateCompleted = {
+    status: "completed",
+    input: opts.input,
+    output: opts.output,
+    title: opts.tool,
+    metadata: {},
+    time: { start: Date.now() - 1, end: Date.now() },
+    ...(opts.attachments && { attachments: opts.attachments }),
+  }
+  const payload: EventMessagePartUpdated = {
+    id: `evt_${opts.callID}`,
     type: "message.part.updated",
     properties: {
       sessionID: sessionId,
@@ -262,7 +332,7 @@ function createFakeAgent() {
 describe("acp.agent event subscription", () => {
   test("routes message.part.delta by the event sessionID (no cross-session pollution)", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, updates, stop } = createFakeAgent()
@@ -285,7 +355,10 @@ describe("acp.agent event subscription", () => {
           },
         } as any)
 
-        await new Promise((r) => setTimeout(r, 10))
+        await pollUntil(
+          () => (updates.get(sessionB) ?? []).includes("agent_message_chunk"),
+          "sessionB never received agent_message_chunk",
+        )
 
         expect((updates.get(sessionA) ?? []).includes("agent_message_chunk")).toBe(false)
         expect((updates.get(sessionB) ?? []).includes("agent_message_chunk")).toBe(true)
@@ -295,9 +368,67 @@ describe("acp.agent event subscription", () => {
     })
   })
 
+  test("does not emit user_message_chunk for live prompt parts", async () => {
+    await using tmp = await tmpdir()
+    await provideTestInstance({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, sessionUpdates, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              sessionID: sessionId,
+              time: Date.now(),
+              part: {
+                id: "part_1",
+                sessionID: sessionId,
+                messageID: "msg_user",
+                type: "text",
+                text: "hello",
+              },
+            },
+          },
+        } as any)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.delta",
+            properties: {
+              sessionID: sessionId,
+              messageID: "msg_marker",
+              partID: "msg_marker_part",
+              field: "text",
+              delta: "marker",
+            },
+          },
+        } as any)
+
+        await pollUntil(
+          () =>
+            sessionUpdates.some((u) => u.sessionId === sessionId && u.update.sessionUpdate === "agent_message_chunk"),
+          "marker event was never processed",
+        )
+
+        expect(
+          sessionUpdates
+            .filter((u) => u.sessionId === sessionId)
+            .some((u) => u.update.sessionUpdate === "user_message_chunk"),
+        ).toBe(false)
+
+        stop()
+      },
+    })
+  })
+
   test("keeps concurrent sessions isolated when message.part.delta events are interleaved", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, chunks, stop } = createFakeAgent()
@@ -332,7 +463,12 @@ describe("acp.agent event subscription", () => {
         push(sessionA, "msg_a", tokenA[2])
         push(sessionB, "msg_b", tokenB[2])
 
-        await new Promise((r) => setTimeout(r, 20))
+        await pollUntil(
+          () =>
+            (chunks.get(sessionA) ?? "").includes(tokenA.join("")) &&
+            (chunks.get(sessionB) ?? "").includes(tokenB.join("")),
+          "interleaved chunks never fully arrived",
+        )
 
         const a = chunks.get(sessionA) ?? ""
         const b = chunks.get(sessionB) ?? ""
@@ -349,7 +485,7 @@ describe("acp.agent event subscription", () => {
 
   test("does not create additional event subscriptions on repeated loadSession()", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, calls, stop } = createFakeAgent()
@@ -371,7 +507,7 @@ describe("acp.agent event subscription", () => {
 
   test("permission.asked events are handled and replied", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const permissionReplies: string[] = []
@@ -399,7 +535,7 @@ describe("acp.agent event subscription", () => {
           },
         } as any)
 
-        await new Promise((r) => setTimeout(r, 20))
+        await pollUntil(() => permissionReplies.includes("perm_1"), "perm_1 was never replied")
 
         expect(permissionReplies).toContain("perm_1")
 
@@ -410,7 +546,7 @@ describe("acp.agent event subscription", () => {
 
   test("permission prompt on session A does not block message updates for session B", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const permissionReplies: string[] = []
@@ -423,9 +559,9 @@ describe("acp.agent event subscription", () => {
 
         // Make permission request for session A block until we release it
         const originalRequestPermission = connection.requestPermission.bind(connection)
-        let permissionCalls = 0
+        let _permissionCalls = 0
         connection.requestPermission = async (params: RequestPermissionParams) => {
-          permissionCalls++
+          _permissionCalls++
           if (params.sessionId.endsWith("1")) {
             await permissionABlocking
           }
@@ -458,10 +594,8 @@ describe("acp.agent event subscription", () => {
           },
         } as any)
 
-        // Give time for permission handling to start
-        await new Promise((r) => setTimeout(r, 10))
+        await pollUntil(() => _permissionCalls > 0, "permission handling for A never started")
 
-        // Push message for session B while A's permission is pending
         controller.push({
           directory: cwd,
           payload: {
@@ -476,18 +610,17 @@ describe("acp.agent event subscription", () => {
           },
         } as any)
 
-        // Wait for session B's message to be processed
-        await new Promise((r) => setTimeout(r, 20))
+        await pollUntil(
+          () => (chunks.get(sessionB) ?? "").includes("session_b_message"),
+          "session B never received its message",
+        )
 
-        // Session B should have received message even though A's permission is still pending
         expect(chunks.get(sessionB) ?? "").toContain("session_b_message")
         expect(permissionReplies).not.toContain("perm_a")
 
-        // Release session A's permission
         resolvePermissionA!()
-        await new Promise((r) => setTimeout(r, 20))
+        await pollUntil(() => permissionReplies.includes("perm_a"), "perm_a was never replied after release")
 
-        // Now session A's permission should be replied
         expect(permissionReplies).toContain("perm_a")
 
         stop()
@@ -497,7 +630,7 @@ describe("acp.agent event subscription", () => {
 
   test("streams running bash output snapshots and de-dupes identical snapshots", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop } = createFakeAgent()
@@ -516,7 +649,15 @@ describe("acp.agent event subscription", () => {
             }),
           )
         }
-        await new Promise((r) => setTimeout(r, 20))
+        await pollUntil(
+          () =>
+            sessionUpdates
+              .filter((u) => u.sessionId === sessionId)
+              .filter((u) => isToolCallUpdate(u.update))
+              .map((u) => inProgressText(u.update))
+              .filter((t) => t === "ab").length > 0,
+          "final bash snapshot 'ab' never arrived",
+        )
 
         const snapshots = sessionUpdates
           .filter((u) => u.sessionId === sessionId)
@@ -531,7 +672,7 @@ describe("acp.agent event subscription", () => {
 
   test("emits synthetic pending before first running update for any tool", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop } = createFakeAgent()
@@ -555,7 +696,14 @@ describe("acp.agent event subscription", () => {
             input: { filePath: "/tmp/example.txt" },
           }),
         )
-        await new Promise((r) => setTimeout(r, 20))
+        await pollUntil(
+          () =>
+            sessionUpdates
+              .filter((u) => u.sessionId === sessionId)
+              .map((u) => u.update.sessionUpdate)
+              .filter((u) => u === "tool_call" || u === "tool_call_update").length >= 4,
+          "expected 4 tool_call/tool_call_update events",
+        )
 
         const types = sessionUpdates
           .filter((u) => u.sessionId === sessionId)
@@ -574,9 +722,136 @@ describe("acp.agent event subscription", () => {
     })
   })
 
+  test("emits image attachments as ACP tool content blocks on live completed tool updates", async () => {
+    await using tmp = await tmpdir()
+    await provideTestInstance({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, sessionUpdates, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const data = Buffer.from("image-data").toString("base64")
+
+        controller.push(
+          completedToolEvent(sessionId, cwd, {
+            callID: "call_image",
+            tool: "read",
+            input: { filePath: "/tmp/image.png" },
+            output: "Image read successfully",
+            attachments: [
+              {
+                id: "part_image",
+                sessionID: sessionId,
+                messageID: "msg_image",
+                type: "file",
+                mime: "image/png",
+                filename: "image.png",
+                url: `data:image/png;base64,${data}`,
+              },
+              {
+                id: "part_text",
+                sessionID: sessionId,
+                messageID: "msg_image",
+                type: "file",
+                mime: "text/plain",
+                filename: "note.txt",
+                url: "data:text/plain;base64,Zm9v",
+              },
+            ],
+          }),
+        )
+        await pollUntil(
+          () => completedToolUpdate(sessionUpdates, sessionId, "call_image"),
+          "completed tool update for call_image never arrived",
+        )
+
+        const update = completedToolUpdate(sessionUpdates, sessionId, "call_image")
+        expect(update?.content).toContainEqual({
+          type: "content",
+          content: { type: "text", text: "Image read successfully" },
+        })
+        expect(update?.content).toContainEqual({
+          type: "content",
+          content: { type: "image", mimeType: "image/png", data },
+        })
+        expect(update?.content?.some((item) => item.type === "content" && item.content.type === "resource")).toBe(false)
+        expect((update?.rawOutput as { attachments?: unknown[] } | undefined)?.attachments?.length).toBe(2)
+
+        stop()
+      },
+    })
+  })
+
+  test("replays completed tool image attachments as ACP tool content blocks", async () => {
+    await using tmp = await tmpdir()
+    await provideTestInstance({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, sessionUpdates, stop, sdk } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const data = Buffer.from("replay-image").toString("base64")
+
+        sdk.session.messages = async () => ({
+          data: [
+            {
+              info: {
+                role: "assistant",
+                sessionID: sessionId,
+              },
+              parts: [
+                {
+                  id: "part_replay",
+                  sessionID: sessionId,
+                  messageID: "msg_replay",
+                  type: "tool",
+                  callID: "call_replay_image",
+                  tool: "webfetch",
+                  state: {
+                    status: "completed",
+                    input: { url: "https://example.com/image.png" },
+                    output: "Image fetched successfully",
+                    title: "webfetch",
+                    metadata: {},
+                    time: { start: Date.now() - 1, end: Date.now() },
+                    attachments: [
+                      {
+                        id: "part_replay_image",
+                        sessionID: sessionId,
+                        messageID: "msg_replay",
+                        type: "file",
+                        mime: "image/jpeg",
+                        filename: "image.jpg",
+                        url: `data:image/jpeg;base64,${data}`,
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        })
+
+        await agent.loadSession({ sessionId, cwd, mcpServers: [] } as any)
+
+        const update = completedToolUpdate(sessionUpdates, sessionId, "call_replay_image")
+        expect(update?.content).toContainEqual({
+          type: "content",
+          content: { type: "text", text: "Image fetched successfully" },
+        })
+        expect(update?.content).toContainEqual({
+          type: "content",
+          content: { type: "image", mimeType: "image/jpeg", data },
+        })
+
+        stop()
+      },
+    })
+  })
+
   test("does not emit duplicate synthetic pending after replayed running tool", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop, sdk } = createFakeAgent()
@@ -618,7 +893,16 @@ describe("acp.agent event subscription", () => {
             metadata: { output: "hi\nthere\n" },
           }),
         )
-        await new Promise((r) => setTimeout(r, 20))
+        await pollUntil(
+          () =>
+            sessionUpdates
+              .filter((u) => u.sessionId === sessionId)
+              .map((u) => u.update)
+              .filter((u) => "toolCallId" in u && u.toolCallId === "call_1")
+              .map((u) => u.sessionUpdate)
+              .filter((u) => u === "tool_call" || u === "tool_call_update").length >= 3,
+          "expected 3 tool events for call_1",
+        )
 
         const types = sessionUpdates
           .filter((u) => u.sessionId === sessionId)
@@ -635,7 +919,7 @@ describe("acp.agent event subscription", () => {
 
   test("clears bash snapshot marker on pending state", async () => {
     await using tmp = await tmpdir()
-    await Instance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const { agent, controller, sessionUpdates, stop } = createFakeAgent()
@@ -670,7 +954,15 @@ describe("acp.agent event subscription", () => {
             metadata: { output: "a" },
           }),
         )
-        await new Promise((r) => setTimeout(r, 20))
+        await pollUntil(
+          () =>
+            sessionUpdates
+              .filter((u) => u.sessionId === sessionId)
+              .filter((u) => isToolCallUpdate(u.update))
+              .map((u) => inProgressText(u.update))
+              .filter((t) => t === "a").length >= 2,
+          "expected two 'a' bash snapshots after pending reset",
+        )
 
         const snapshots = sessionUpdates
           .filter((u) => u.sessionId === sessionId)

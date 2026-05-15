@@ -228,7 +228,7 @@ export const dict = {
   "common.default": "Podrazumijevano",
   "common.attachment": "prilog",
 
-  "prompt.placeholder.shell": "Unesi shell naredbu...",
+  "prompt.placeholder.shell": "Unesi shell naredbu... {{example}}",
   "prompt.placeholder.normal": 'Pitaj bilo šta... "{{example}}"',
   "prompt.placeholder.simple": "Pitaj bilo šta...",
   "prompt.placeholder.summarizeComments": "Sažmi komentare…",
@@ -300,6 +300,7 @@ export const dict = {
   "mcp.status.connected": "povezano",
   "mcp.status.failed": "neuspjelo",
   "mcp.status.needs_auth": "potrebna autentifikacija",
+  "mcp.auth.clickToAuthenticate": "Kliknite za autentifikaciju",
   "mcp.status.disabled": "onemogućeno",
 
   "dialog.fork.empty": "Nema poruka za fork",
@@ -449,6 +450,8 @@ export const dict = {
   "error.page.description": "Došlo je do greške prilikom učitavanja aplikacije.",
   "error.page.details.label": "Detalji greške",
   "error.page.action.restart": "Restartuj",
+  "error.page.action.report": "Prijavi grešku",
+  "error.page.action.reported": "Greška prijavljena",
   "error.page.action.checking": "Provjera...",
   "error.page.action.checkUpdates": "Provjeri ažuriranja",
   "error.page.action.updateTo": "Ažuriraj na {{version}}",
@@ -637,7 +640,9 @@ export const dict = {
   "settings.general.row.theme.title": "Tema",
   "settings.general.row.theme.description": "Prilagodi temu OpenCode-a.",
   "settings.general.row.font.title": "Font za kod",
-  "settings.general.row.font.description": "Prilagodi font koji se koristi u blokovima koda i terminalima",
+  "settings.general.row.font.description": "Prilagodi font koji se koristi u blokovima koda",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "UI font",
   "settings.general.row.uiFont.description": "Prilagodi font koji se koristi u cijelom interfejsu",
   "settings.general.row.followup.title": "Ponašanje nadovezivanja",
@@ -653,6 +658,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Proširi dijelove alata za uređivanje",
   "settings.general.row.editToolPartsExpanded.description":
     "Prikaži dijelove alata za uređivanje, pisanje i patch podrazumijevano proširene na vremenskoj traci",
+  "settings.general.row.showSessionProgressBar.title": "Prikaži traku napretka sesije",
+  "settings.general.row.showSessionProgressBar.description":
+    "Prikaži animiranu traku napretka na vrhu sesije kada agent radi",
   "settings.general.row.wayland.title": "Koristi nativni Wayland",
   "settings.general.row.wayland.description": "Onemogući X11 fallback na Waylandu. Zahtijeva restart.",
   "settings.general.row.wayland.tooltip":
@@ -801,8 +809,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Preuzmi sadržaj sa URL-a",
   "settings.permissions.tool.websearch.title": "Web pretraga",
   "settings.permissions.tool.websearch.description": "Pretražuj web",
-  "settings.permissions.tool.codesearch.title": "Pretraga koda",
-  "settings.permissions.tool.codesearch.description": "Pretraži kod na webu",
   "settings.permissions.tool.external_directory.title": "Vanjski direktorij",
   "settings.permissions.tool.external_directory.description": "Pristup datotekama izvan direktorija projekta",
   "settings.permissions.tool.doom_loop.title": "Beskonačna petlja",

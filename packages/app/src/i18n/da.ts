@@ -226,7 +226,7 @@ export const dict = {
   "common.default": "Standard",
   "common.attachment": "vedhæftning",
 
-  "prompt.placeholder.shell": "Indtast shell-kommando...",
+  "prompt.placeholder.shell": "Indtast shell-kommando... {{example}}",
   "prompt.placeholder.normal": 'Spørg om hvad som helst... "{{example}}"',
   "prompt.placeholder.simple": "Spørg om hvad som helst...",
   "prompt.placeholder.summarizeComments": "Opsummér kommentarer…",
@@ -298,6 +298,7 @@ export const dict = {
   "mcp.status.connected": "forbundet",
   "mcp.status.failed": "mislykkedes",
   "mcp.status.needs_auth": "kræver godkendelse",
+  "mcp.auth.clickToAuthenticate": "Klik for at godkende",
   "mcp.status.disabled": "deaktiveret",
 
   "dialog.fork.empty": "Ingen beskeder at forgrene fra",
@@ -446,6 +447,8 @@ export const dict = {
   "error.page.description": "Der opstod en fejl under indlæsning af applikationen.",
   "error.page.details.label": "Fejldetaljer",
   "error.page.action.restart": "Genstart",
+  "error.page.action.report": "Rapportér fejl",
+  "error.page.action.reported": "Fejl rapporteret",
   "error.page.action.checking": "Tjekker...",
   "error.page.action.checkUpdates": "Tjek for opdateringer",
   "error.page.action.updateTo": "Opdater til {{version}}",
@@ -632,7 +635,9 @@ export const dict = {
   "settings.general.row.theme.title": "Tema",
   "settings.general.row.theme.description": "Tilpas hvordan OpenCode er temabestemt.",
   "settings.general.row.font.title": "Kode-skrifttype",
-  "settings.general.row.font.description": "Tilpas skrifttypen, der bruges i kodeblokke og terminaler",
+  "settings.general.row.font.description": "Tilpas skrifttypen, der bruges i kodeblokke",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "UI-skrifttype",
   "settings.general.row.uiFont.description": "Tilpas skrifttypen, der bruges i hele brugerfladen",
   "settings.general.row.followup.title": "Opfølgningsadfærd",
@@ -647,6 +652,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Udvid edit-værktøjsdele",
   "settings.general.row.editToolPartsExpanded.description":
     "Vis edit-, write- og patch-værktøjsdele udvidet som standard i tidslinjen",
+  "settings.general.row.showSessionProgressBar.title": "Vis sessionens fremdriftslinje",
+  "settings.general.row.showSessionProgressBar.description":
+    "Vis den animerede fremdriftslinje øverst i sessionen, når agenten arbejder",
   "settings.general.row.wayland.title": "Brug native Wayland",
   "settings.general.row.wayland.description": "Deaktiver X11-fallback på Wayland. Kræver genstart.",
   "settings.general.row.wayland.tooltip":
@@ -795,8 +803,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Hent indhold fra en URL",
   "settings.permissions.tool.websearch.title": "Websøgning",
   "settings.permissions.tool.websearch.description": "Søg på nettet",
-  "settings.permissions.tool.codesearch.title": "Kodesøgning",
-  "settings.permissions.tool.codesearch.description": "Søg kode på nettet",
   "settings.permissions.tool.external_directory.title": "Ekstern mappe",
   "settings.permissions.tool.external_directory.description": "Få adgang til filer uden for projektmappen",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",

@@ -75,7 +75,7 @@ export function TextField(props: TextFieldProps) {
   }
 
   function handleClick() {
-    if (local.copyable) handleCopy()
+    if (local.copyable) void handleCopy()
   }
 
   return (

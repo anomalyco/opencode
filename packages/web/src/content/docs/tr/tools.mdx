@@ -95,7 +95,7 @@ Yeni dosyalar oluşturur veya mevcut dosyaları üzerine yazar.
 LLM'in yeni dosya oluşturmasına izin vermek için bunu kullanın. Dosya zaten varsa üzerine yazar.
 
 :::note
-`write` aracı `edit` izniyle kontrol edilir; bu izin tüm dosya değişikliklerini kapsar (`edit`, `write`, `patch`, `multiedit`).
+`write` aracı `edit` izniyle kontrol edilir; bu izin tüm dosya değişikliklerini kapsar (`edit`, `write`, `patch`).
 :::
 
 ---
@@ -151,23 +151,6 @@ Desen eşleştirme ile dosya bulur.
 
 ---
 
-### list
-
-Verilen yoldaki dosya ve dizinleri listeler.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-Bu araç dizin içeriğini listeler. Sonuçları filtrelemek için glob desenlerini kabul eder.
-
----
-
 ### lsp (deneysel)
 
 Tanım, referans, hover bilgisi ve çağrılar hiyerarşisi gibi kod zekası özellikleri için yapılandırdığınız LSP sunucularıyla etkileşir.
@@ -207,7 +190,7 @@ Dosyalara patch uygular.
 Bu araç patch dosyalarını kod tabanınıza uygular. Farklı kaynaklardan gelen diff ve patch'leri uygulamak için kullanışlıdır.
 
 :::note
-`patch` aracı `edit` izniyle kontrol edilir; bu izin tüm dosya değişikliklerini kapsar (`edit`, `write`, `patch`, `multiedit`).
+`patch` aracı `edit` izniyle kontrol edilir; bu izin tüm dosya değişikliklerini kapsar (`edit`, `write`, `patch`).
 :::
 
 ---
@@ -341,7 +324,7 @@ MCP sunucularını yapılandırma için [daha fazla bilgi alın](/docs/mcp-serve
 
 ## Dahili detaylar
 
-Dahilde `grep`, `glob` ve `list` gibi araçlar [ripgrep](https://github.com/BurntSushi/ripgrep) kullanır. Varsayılan olarak ripgrep `.gitignore` desenlerine uyar; yani `.gitignore` içindeki dosya ve dizinler arama ve listeleme sonucuna dahil edilmez.
+Dahilde `grep` ve `glob` gibi araçlar [ripgrep](https://github.com/BurntSushi/ripgrep) kullanır. Varsayılan olarak ripgrep `.gitignore` desenlerine uyar; yani `.gitignore` içindeki dosya ve dizinler arama ve listeleme sonucuna dahil edilmez.
 
 ---
 

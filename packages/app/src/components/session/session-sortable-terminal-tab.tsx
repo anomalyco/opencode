@@ -44,7 +44,7 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
 
   const close = () => {
     const count = terminal.all().length
-    terminal.close(props.terminal.id)
+    void terminal.close(props.terminal.id)
     if (count === 1) {
       props.onClose?.()
     }

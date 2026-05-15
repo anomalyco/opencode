@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "Enterprise",
   "nav.zen": "Zen",
   "nav.login": "Entrar",
-  "nav.free": "Grátis",
+  "nav.free": "Download",
   "nav.home": "Início",
   "nav.openMenu": "Abrir menu",
   "nav.getStartedFree": "Começar grátis",
@@ -253,7 +253,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Modelos de codificação de baixo custo para todos",
   "go.meta.description":
-    "O Go começa em $5 no primeiro mês, depois $10/mês, com limites generosos de solicitação de 5 horas para GLM-5.1, GLM-5, Kimi K2.5, MiMo-V2-Pro, MiMo-V2-Omni, MiniMax M2.5 e MiniMax M2.7.",
+    "O Go começa em $5 no primeiro mês, depois $10/mês, com limites generosos de solicitação de 5 horas para GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro e DeepSeek V4 Flash.",
   "go.hero.title": "Modelos de codificação de baixo custo para todos",
   "go.hero.body":
     "O Go traz a codificação com agentes para programadores em todo o mundo. Oferecendo limites generosos e acesso confiável aos modelos de código aberto mais capazes, para que você possa construir com agentes poderosos sem se preocupar com custos ou disponibilidade.",
@@ -302,7 +302,8 @@ export const dict = {
   "go.problem.item1": "Preço de assinatura de baixo custo",
   "go.problem.item2": "Limites generosos e acesso confiável",
   "go.problem.item3": "Feito para o maior número possível de programadores",
-  "go.problem.item4": "Inclui GLM-5.1, GLM-5, Kimi K2.5, MiMo-V2-Pro, MiMo-V2-Omni, MiniMax M2.5 e MiniMax M2.7",
+  "go.problem.item4":
+    "Inclui GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro e DeepSeek V4 Flash",
   "go.how.title": "Como o Go funciona",
   "go.how.body":
     "O Go começa em $5 no primeiro mês, depois $10/mês. Você pode usá-lo com o OpenCode ou qualquer agente.",
@@ -325,11 +326,10 @@ export const dict = {
   "go.faq.a1":
     "Go é uma assinatura de baixo custo que oferece acesso confiável a modelos de código aberto capazes para codificação com agentes.",
   "go.faq.q2": "Quais modelos o Go inclui?",
-  "go.faq.a2":
-    "Go inclui GLM-5.1, GLM-5, Kimi K2.5, MiMo-V2-Pro, MiMo-V2-Omni, MiniMax M2.5 e MiniMax M2.7, com limites generosos e acesso confiável.",
+  "go.faq.a2": "O Go inclui os modelos listados abaixo, com limites generosos e acesso confiável.",
   "go.faq.q3": "O Go é o mesmo que o Zen?",
   "go.faq.a3":
-    "Não. Zen é pay-as-you-go, enquanto o Go começa em $5 no primeiro mês, depois $10/mês, com limites generosos e acesso confiável aos modelos open source GLM-5.1, GLM-5, Kimi K2.5, MiMo-V2-Pro, MiMo-V2-Omni, MiniMax M2.5 e MiniMax M2.7.",
+    "Não. Zen é pay-as-you-go, enquanto o Go começa em $5 no primeiro mês, depois $10/mês, com limites generosos e acesso confiável aos modelos open source GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro e DeepSeek V4 Flash.",
   "go.faq.q4": "Quanto custa o Go?",
   "go.faq.a4.p1.beforePricing": "O Go custa",
   "go.faq.a4.p1.pricingLink": "$5 no primeiro mês",
@@ -353,7 +353,7 @@ export const dict = {
 
   "go.faq.q9": "Qual a diferença entre os modelos gratuitos e o Go?",
   "go.faq.a9":
-    "Os modelos gratuitos incluem Big Pickle e modelos promocionais disponíveis no momento, com uma cota de 200 requisições/dia. O Go inclui GLM-5.1, GLM-5, Kimi K2.5, MiMo-V2-Pro, MiMo-V2-Omni, MiniMax M2.5 e MiniMax M2.7 com cotas de requisição mais altas aplicadas em janelas móveis (5 horas, semanal e mensal), aproximadamente equivalentes a $12 por 5 horas, $30 por semana e $60 por mês (as contagens reais de requisições variam de acordo com o modelo e o uso).",
+    "Os modelos gratuitos incluem Big Pickle e modelos promocionais disponíveis no momento, com uma cota de 200 requisições/dia. O Go inclui GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro e DeepSeek V4 Flash com cotas de requisição mais altas aplicadas em janelas móveis (5 horas, semanal e mensal), aproximadamente equivalentes a $12 por 5 horas, $30 por semana e $60 por mês (as contagens reais de requisições variam de acordo com o modelo e o uso).",
 
   "zen.api.error.rateLimitExceeded": "Limite de taxa excedido. Por favor, tente novamente mais tarde.",
   "zen.api.error.modelNotSupported": "Modelo {{model}} não suportado",
@@ -363,8 +363,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "Chave de API ausente.",
   "zen.api.error.invalidApiKey": "Chave de API inválida.",
   "zen.api.error.subscriptionQuotaExceeded": "Cota de assinatura excedida. Tente novamente em {{retryIn}}.",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "Cota de assinatura excedida. Você pode continuar usando modelos gratuitos.",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "Limite de uso de 5 horas atingido. Será reiniciado em {{retryIn}}. Para continuar usando este modelo agora, habilite o uso a partir do seu saldo disponível: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "Limite de uso semanal atingido. Será reiniciado em {{retryIn}}. Para continuar usando este modelo agora, habilite o uso a partir do seu saldo disponível: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "Limite de uso mensal atingido. Será reiniciado em {{retryIn}}. Para continuar usando este modelo agora, habilite o uso a partir do seu saldo disponível: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "Nenhuma forma de pagamento. Adicione uma forma de pagamento aqui: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "Saldo insuficiente. Gerencie seu faturamento aqui: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
@@ -566,6 +570,13 @@ export const dict = {
   "workspace.monthlyLimit.noLimit": "Nenhum limite de uso definido.",
   "workspace.monthlyLimit.currentUsage.beforeMonth": "Uso atual para",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "é $",
+
+  "workspace.redeem.title": "Resgatar Cupom",
+  "workspace.redeem.subtitle": "Resgate um código de cupom para receber créditos ou vantagens.",
+  "workspace.redeem.placeholder": "Digite o código do cupom",
+  "workspace.redeem.redeem": "Resgatar",
+  "workspace.redeem.redeeming": "Resgatando...",
+  "workspace.redeem.success": "Cupom resgatado com sucesso.",
 
   "workspace.reload.title": "Recarga Automática",
   "workspace.reload.disabled.before": "A recarga automática está",

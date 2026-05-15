@@ -95,7 +95,7 @@ Twórz nowe pliki lub nadpisuj istniejące.
 Użyj tego, aby umożliwić LLM tworzenie nowych plików. Zastąpi istniejące pliki, jeśli już istnieją.
 
 :::note
-Narzędzie `write` jest kontrolowane przez uprawnienie `edit`, które obejmuje wszystkie modyfikacje plików (`edit`, `write`, `patch`, `multiedit`).
+Narzędzie `write` jest kontrolowane przez uprawnienie `edit`, które obejmuje wszystkie modyfikacje plików (`edit`, `write`, `patch`).
 :::
 
 ---
@@ -151,23 +151,6 @@ Szukaj plików przy użyciu wzorców glob, takich jak `**/*.js` lub `src/**/*.ts
 
 ---
 
-### list
-
-Wyświetla listę plików i katalogów w podanej ścieżce.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "list": "allow"
-  }
-}
-```
-
-To narzędzie wyświetla zawartość katalogu. Akceptuje wzorce glob do filtrowania wyników.
-
----
-
 ### LSP (eksperymentalne)
 
 Interakcja ze skonfigurowanymi serwerami LSP w celu uzyskania funkcji analizy kodu, takich jak definicje, referencje, podpowiedzi (hover) i hierarchia wywołań.
@@ -207,7 +190,7 @@ Stosuj łatki (patches) do plików.
 To narzędzie stosuje pliki różnicowe (diffs) do bazy kodu. Przydatne do stosowania zmian z różnych źródeł.
 
 :::note
-Narzędzie `patch` jest kontrolowane przez uprawnienie `edit`, które obejmuje wszystkie modyfikacje plików (`edit`, `write`, `patch`, `multiedit`).
+Narzędzie `patch` jest kontrolowane przez uprawnienie `edit`, które obejmuje wszystkie modyfikacje plików (`edit`, `write`, `patch`).
 :::
 
 ---
@@ -341,7 +324,7 @@ Serwery MCP (Model Context Protocol) umożliwiają integrację zewnętrznych nar
 
 ## Szczegóły techniczne
 
-Wewnętrznie narzędzia takie jak `grep`, `glob` i `list` używają [ripgrep](https://github.com/BurntSushi/ripgrep). Domyślnie ripgrep respektuje wzorce `.gitignore`, co oznacza, że pliki i katalogi wymienione w Twoim `.gitignore` zostaną wykluczone z wyszukiwań i list.
+Wewnętrznie narzędzia takie jak `grep` i `glob` używają [ripgrep](https://github.com/BurntSushi/ripgrep). Domyślnie ripgrep respektuje wzorce `.gitignore`, co oznacza, że pliki i katalogi wymienione w Twoim `.gitignore` zostaną wykluczone z wyszukiwań i list.
 
 ---
 

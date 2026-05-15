@@ -10,6 +10,7 @@ import { useI18n } from "../context/i18n"
 export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "children" | "variant"> {
   tool: string
   error: string
+  title?: string
   defaultOpen?: boolean
   metaText?: string
   metaInterrupted?: boolean
@@ -28,6 +29,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
   const [split, rest] = splitProps(props, [
     "tool",
     "error",
+    "title",
     "defaultOpen",
     "metaText",
     "metaInterrupted",
@@ -35,6 +37,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     "href",
   ])
   const name = createMemo(() => {
+    if (split.title) return split.title
     const map: Record<string, string> = {
       read: "ui.tool.read",
       list: "ui.tool.list",
@@ -43,7 +46,6 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
       task: "ui.tool.task",
       webfetch: "ui.tool.webfetch",
       websearch: "ui.tool.websearch",
-      codesearch: "ui.tool.codesearch",
       bash: "ui.tool.shell",
       apply_patch: "ui.tool.patch",
       question: "ui.tool.questions",
@@ -146,7 +148,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={(e) => {
                       e.stopPropagation()
-                      copy()
+                      void copy()
                     }}
                     aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
                   />

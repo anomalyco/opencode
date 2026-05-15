@@ -102,7 +102,7 @@ export function TextReveal(props: {
       requestAnimationFrame(() => setState("ready", true))
       return
     }
-    fonts.ready.finally(() => {
+    void fonts.ready.finally(() => {
       widen(win())
       requestAnimationFrame(() => setState("ready", true))
     })

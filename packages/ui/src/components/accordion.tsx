@@ -15,7 +15,7 @@ function AccordionRoot(props: AccordionProps) {
       {...rest}
       data-component="accordion"
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     />
@@ -29,7 +29,7 @@ function AccordionItem(props: AccordionItemProps) {
       {...rest}
       data-slot="accordion-item"
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     />
@@ -43,7 +43,7 @@ function AccordionHeader(props: ParentProps<AccordionHeaderProps>) {
       {...rest}
       data-slot="accordion-header"
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >
@@ -59,7 +59,7 @@ function AccordionTrigger(props: ParentProps<AccordionTriggerProps>) {
       {...rest}
       data-slot="accordion-trigger"
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >
@@ -75,7 +75,7 @@ function AccordionContent(props: ParentProps<AccordionContentProps>) {
       {...rest}
       data-slot="accordion-content"
       classList={{
-        ...(split.classList ?? {}),
+        ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
     >

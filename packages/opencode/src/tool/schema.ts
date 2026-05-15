@@ -1,16 +1,14 @@
 import { Schema } from "effect"
-import z from "zod"
 
 import { Identifier } from "@/id/id"
-import { withStatics } from "@/util/schema"
+import { withStatics } from "@opencode-ai/core/schema"
 
-const toolIdSchema = Schema.String.pipe(Schema.brand("ToolID"))
+const toolIdSchema = Schema.String.check(Schema.isStartsWith("tool")).pipe(Schema.brand("ToolID"))
 
 export type ToolID = typeof toolIdSchema.Type
 
 export const ToolID = toolIdSchema.pipe(
   withStatics((schema: typeof toolIdSchema) => ({
     ascending: (id?: string) => schema.make(Identifier.ascending("tool", id)),
-    zod: Identifier.schema("tool").pipe(z.custom<ToolID>()),
   })),
 )
