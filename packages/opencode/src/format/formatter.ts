@@ -3,9 +3,10 @@ import type { InstanceContext } from "../project/instance"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { which } from "../util/which"
-import { Flag } from "@opencode-ai/core/flag/flag"
 
-export interface Context extends Pick<InstanceContext, "directory" | "worktree"> {}
+export interface Context extends Pick<InstanceContext, "directory" | "worktree"> {
+  experimentalOxfmt: boolean
+}
 
 export interface Info {
   name: string
@@ -90,7 +91,7 @@ export const oxfmt: Info = {
   },
   extensions: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"],
   async enabled(context) {
-    if (!Flag.OPENCODE_EXPERIMENTAL_OXFMT) return false
+    if (!context.experimentalOxfmt) return false
     const items = await Filesystem.findUp("package.json", context.directory, context.worktree)
     for (const item of items) {
       const json = await Filesystem.readJson<{

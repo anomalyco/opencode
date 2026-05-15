@@ -1,12 +1,13 @@
-import { SessionID } from "@/session/schema"
-import { NonNegativeInt } from "@opencode-ai/core/schema"
-import { EventV2 } from "./event"
-import { FileAttachment, Prompt } from "@opencode-ai/core/session-prompt"
 import { Schema } from "effect"
+import { EventV2 } from "./event"
+import { ModelV2 } from "./model"
+import { NonNegativeInt } from "./schema"
+import { Session } from "./session"
+import { FileAttachment, Prompt } from "./session-prompt"
+import { ToolOutput } from "./tool-output"
+import { V2Schema } from "./v2-schema"
+
 export { FileAttachment }
-import { ToolOutput } from "@opencode-ai/core/tool-output"
-import { V2Schema } from "@opencode-ai/core/v2-schema"
-import { ModelV2 } from "@opencode-ai/core/model"
 
 export const Source = Schema.Struct({
   start: NonNegativeInt,
@@ -15,12 +16,17 @@ export const Source = Schema.Struct({
 }).annotate({
   identifier: "session.next.event.source",
 })
-export type Source = Schema.Schema.Type<typeof Source>
+export type Source = typeof Source.Type
 
 const Base = {
   timestamp: V2Schema.DateTimeUtcFromMillis,
-  sessionID: SessionID,
+  sessionID: Session.ID,
 }
+
+const options = {
+  aggregate: "sessionID",
+  version: 1,
+} as const
 
 export const UnknownError = Schema.Struct({
   type: Schema.Literal("unknown"),
@@ -28,79 +34,76 @@ export const UnknownError = Schema.Struct({
 }).annotate({
   identifier: "Session.Error.Unknown",
 })
-export type UnknownError = Schema.Schema.Type<typeof UnknownError>
+export type UnknownError = typeof UnknownError.Type
 
 export const AgentSwitched = EventV2.define({
   type: "session.next.agent.switched",
-  aggregate: "sessionID",
-  version: 1,
+  ...options,
   schema: {
     ...Base,
     agent: Schema.String,
   },
 })
-export type AgentSwitched = Schema.Schema.Type<typeof AgentSwitched>
+export type AgentSwitched = typeof AgentSwitched.Type
 
 export const ModelSwitched = EventV2.define({
   type: "session.next.model.switched",
-  aggregate: "sessionID",
-  version: 1,
+  ...options,
   schema: {
     ...Base,
     model: ModelV2.Ref,
   },
 })
-export type ModelSwitched = Schema.Schema.Type<typeof ModelSwitched>
+export type ModelSwitched = typeof ModelSwitched.Type
 
 export const Prompted = EventV2.define({
   type: "session.next.prompted",
-  aggregate: "sessionID",
-  version: 1,
+  ...options,
   schema: {
     ...Base,
     prompt: Prompt,
   },
 })
-export type Prompted = Schema.Schema.Type<typeof Prompted>
+export type Prompted = typeof Prompted.Type
 
 export const Synthetic = EventV2.define({
   type: "session.next.synthetic",
-  aggregate: "sessionID",
+  ...options,
   schema: {
     ...Base,
     text: Schema.String,
   },
 })
-export type Synthetic = Schema.Schema.Type<typeof Synthetic>
+export type Synthetic = typeof Synthetic.Type
 
 export namespace Shell {
   export const Started = EventV2.define({
     type: "session.next.shell.started",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       callID: Schema.String,
       command: Schema.String,
     },
   })
-  export type Started = Schema.Schema.Type<typeof Started>
+  export type Started = typeof Started.Type
 
   export const Ended = EventV2.define({
     type: "session.next.shell.ended",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       callID: Schema.String,
       output: Schema.String,
     },
   })
-  export type Ended = Schema.Schema.Type<typeof Ended>
+  export type Ended = typeof Ended.Type
 }
 
 export namespace Step {
   export const Started = EventV2.define({
     type: "session.next.step.started",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       agent: Schema.String,
@@ -108,11 +111,11 @@ export namespace Step {
       snapshot: Schema.String.pipe(Schema.optional),
     },
   })
-  export type Started = Schema.Schema.Type<typeof Started>
+  export type Started = typeof Started.Type
 
   export const Ended = EventV2.define({
     type: "session.next.step.ended",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       finish: Schema.String,
@@ -129,123 +132,123 @@ export namespace Step {
       snapshot: Schema.String.pipe(Schema.optional),
     },
   })
-  export type Ended = Schema.Schema.Type<typeof Ended>
+  export type Ended = typeof Ended.Type
 
   export const Failed = EventV2.define({
     type: "session.next.step.failed",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       error: UnknownError,
     },
   })
-  export type Failed = Schema.Schema.Type<typeof Failed>
+  export type Failed = typeof Failed.Type
 }
 
 export namespace Text {
   export const Started = EventV2.define({
     type: "session.next.text.started",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
     },
   })
-  export type Started = Schema.Schema.Type<typeof Started>
+  export type Started = typeof Started.Type
 
   export const Delta = EventV2.define({
     type: "session.next.text.delta",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       delta: Schema.String,
     },
   })
-  export type Delta = Schema.Schema.Type<typeof Delta>
+  export type Delta = typeof Delta.Type
 
   export const Ended = EventV2.define({
     type: "session.next.text.ended",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       text: Schema.String,
     },
   })
-  export type Ended = Schema.Schema.Type<typeof Ended>
+  export type Ended = typeof Ended.Type
 }
 
 export namespace Reasoning {
   export const Started = EventV2.define({
     type: "session.next.reasoning.started",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       reasoningID: Schema.String,
     },
   })
-  export type Started = Schema.Schema.Type<typeof Started>
+  export type Started = typeof Started.Type
 
   export const Delta = EventV2.define({
     type: "session.next.reasoning.delta",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       reasoningID: Schema.String,
       delta: Schema.String,
     },
   })
-  export type Delta = Schema.Schema.Type<typeof Delta>
+  export type Delta = typeof Delta.Type
 
   export const Ended = EventV2.define({
     type: "session.next.reasoning.ended",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       reasoningID: Schema.String,
       text: Schema.String,
     },
   })
-  export type Ended = Schema.Schema.Type<typeof Ended>
+  export type Ended = typeof Ended.Type
 }
 
 export namespace Tool {
   export namespace Input {
     export const Started = EventV2.define({
       type: "session.next.tool.input.started",
-      aggregate: "sessionID",
+      ...options,
       schema: {
         ...Base,
         callID: Schema.String,
         name: Schema.String,
       },
     })
-    export type Started = Schema.Schema.Type<typeof Started>
+    export type Started = typeof Started.Type
 
     export const Delta = EventV2.define({
       type: "session.next.tool.input.delta",
-      aggregate: "sessionID",
+      ...options,
       schema: {
         ...Base,
         callID: Schema.String,
         delta: Schema.String,
       },
     })
-    export type Delta = Schema.Schema.Type<typeof Delta>
+    export type Delta = typeof Delta.Type
 
     export const Ended = EventV2.define({
       type: "session.next.tool.input.ended",
-      aggregate: "sessionID",
+      ...options,
       schema: {
         ...Base,
         callID: Schema.String,
         text: Schema.String,
       },
     })
-    export type Ended = Schema.Schema.Type<typeof Ended>
+    export type Ended = typeof Ended.Type
   }
 
   export const Called = EventV2.define({
     type: "session.next.tool.called",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       callID: Schema.String,
@@ -257,11 +260,11 @@ export namespace Tool {
       }),
     },
   })
-  export type Called = Schema.Schema.Type<typeof Called>
+  export type Called = typeof Called.Type
 
   export const Progress = EventV2.define({
     type: "session.next.tool.progress",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       callID: Schema.String,
@@ -269,11 +272,11 @@ export namespace Tool {
       content: Schema.Array(ToolOutput.Content),
     },
   })
-  export type Progress = Schema.Schema.Type<typeof Progress>
+  export type Progress = typeof Progress.Type
 
   export const Success = EventV2.define({
     type: "session.next.tool.success",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       callID: Schema.String,
@@ -285,11 +288,11 @@ export namespace Tool {
       }),
     },
   })
-  export type Success = Schema.Schema.Type<typeof Success>
+  export type Success = typeof Success.Type
 
   export const Failed = EventV2.define({
     type: "session.next.tool.failed",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       callID: Schema.String,
@@ -300,7 +303,7 @@ export namespace Tool {
       }),
     },
   })
-  export type Failed = Schema.Schema.Type<typeof Failed>
+  export type Failed = typeof Failed.Type
 }
 
 export const RetryError = Schema.Struct({
@@ -313,49 +316,50 @@ export const RetryError = Schema.Struct({
 }).annotate({
   identifier: "session.next.retry_error",
 })
-export type RetryError = Schema.Schema.Type<typeof RetryError>
+export type RetryError = typeof RetryError.Type
 
 export const Retried = EventV2.define({
   type: "session.next.retried",
-  aggregate: "sessionID",
+  ...options,
   schema: {
     ...Base,
     attempt: Schema.Finite,
     error: RetryError,
   },
 })
-export type Retried = Schema.Schema.Type<typeof Retried>
+export type Retried = typeof Retried.Type
 
 export namespace Compaction {
   export const Started = EventV2.define({
     type: "session.next.compaction.started",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       reason: Schema.Union([Schema.Literal("auto"), Schema.Literal("manual")]),
     },
   })
-  export type Started = Schema.Schema.Type<typeof Started>
+  export type Started = typeof Started.Type
 
   export const Delta = EventV2.define({
     type: "session.next.compaction.delta",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       text: Schema.String,
     },
   })
+  export type Delta = typeof Delta.Type
 
   export const Ended = EventV2.define({
     type: "session.next.compaction.ended",
-    aggregate: "sessionID",
+    ...options,
     schema: {
       ...Base,
       text: Schema.String,
       include: Schema.String.pipe(Schema.optional),
     },
   })
-  export type Ended = Schema.Schema.Type<typeof Ended>
+  export type Ended = typeof Ended.Type
 }
 
 export const All = Schema.Union(
@@ -392,16 +396,7 @@ export const All = Schema.Union(
   },
 ).pipe(Schema.toTaggedUnion("type"))
 
-// user
-// assistant
-// assistant
-// assistant
-// user
-// compaction marker
-// -> text
-// assistant
-
-export type Event = Schema.Schema.Type<typeof All>
+export type Event = typeof All.Type
 export type Type = Event["type"]
 
 export * as SessionEvent from "./session-event"

@@ -1,8 +1,7 @@
 import { expect, mock, beforeEach } from "bun:test"
 import { EventEmitter } from "events"
 import { Deferred, Effect, Layer, Option } from "effect"
-import type { Duration } from "effect"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 
 // Track open() calls and control failure behavior
@@ -135,18 +134,6 @@ const config = (name: string) => ({
 
 const withCallbackStop = Effect.addFinalizer(() => Effect.promise(() => McpOAuthCallback.stop()).pipe(Effect.ignore))
 
-const awaitWithTimeout = <A, E, R>(
-  self: Effect.Effect<A, E, R>,
-  message: string,
-  duration: Duration.Input = "5 seconds",
-) =>
-  self.pipe(
-    Effect.timeoutOrElse({
-      duration,
-      orElse: () => Effect.fail(new Error(message)),
-    }),
-  )
-
 const trackBrowserOpen = Effect.gen(function* () {
   const opened = yield* Deferred.make<string>()
   openDeferred = opened
@@ -184,7 +171,11 @@ mcpTest.instance(
       const event = yield* trackBrowserOpenFailed
       yield* authenticateScoped("test-oauth-server")
 
-      const failure = yield* awaitWithTimeout(Deferred.await(event), "Timed out waiting for BrowserOpenFailed event")
+      const failure = yield* awaitWithTimeout(
+        Deferred.await(event),
+        "Timed out waiting for BrowserOpenFailed event",
+        "5 seconds",
+      )
 
       expect(failure.mcpName).toBe("test-oauth-server")
       expect(failure.url).toContain("https://")
@@ -203,7 +194,7 @@ mcpTest.instance(
       const event = yield* trackBrowserOpenFailed
       yield* authenticateScoped("test-oauth-server-2")
 
-      yield* awaitWithTimeout(Deferred.await(opened), "Timed out waiting for open()")
+      yield* awaitWithTimeout(Deferred.await(opened), "Timed out waiting for open()", "5 seconds")
       const failure = yield* Deferred.await(event).pipe(Effect.timeoutOption("700 millis"))
 
       expect(failure).toEqual(Option.none())
@@ -224,7 +215,7 @@ mcpTest.instance(
       const event = yield* trackBrowserOpenFailed
       yield* authenticateScoped("test-oauth-server-3")
 
-      const url = yield* awaitWithTimeout(Deferred.await(opened), "Timed out waiting for open()")
+      const url = yield* awaitWithTimeout(Deferred.await(opened), "Timed out waiting for open()", "5 seconds")
       const failure = yield* Deferred.await(event).pipe(Effect.timeoutOption("700 millis"))
 
       expect(failure).toEqual(Option.none())
