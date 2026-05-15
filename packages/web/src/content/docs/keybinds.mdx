@@ -43,6 +43,18 @@ OpenCode has a list of keybinds that you can customize through `tui.json`.
     "session_share": "none",
     "session_unshare": "none",
     "session_interrupt": "escape",
+    "session_navigation_enter": "escape",
+    "session_navigation_exit": "i,a,return",
+    "session_navigation_line_down": "j",
+    "session_navigation_line_up": "k",
+    "session_navigation_half_page_down": "ctrl+d",
+    "session_navigation_half_page_up": "ctrl+u",
+    "session_navigation_page_down": "ctrl+f",
+    "session_navigation_page_up": "ctrl+b",
+    "session_navigation_first": "gg",
+    "session_navigation_last": "shift+g",
+    "session_navigation_next_message": "n",
+    "session_navigation_previous_message": "shift+n,p",
     "session_compact": "<leader>c",
     "session_toggle_timestamps": "none",
     "session_toggle_generic_tool_output": "none",
@@ -196,6 +208,42 @@ You don't need to use a leader key for your keybinds but we recommend doing so.
 Some navigation keybinds intentionally do not use the leader key by default. For subagent sessions, the defaults are `session_child_first` = `<leader>down`, `session_child_cycle` = `right`, `session_child_cycle_reverse` = `left`, and `session_parent` = `up`.
 
 `leader_timeout` controls how long OpenCode waits for the next key after the leader key. It defaults to `2000` milliseconds.
+
+---
+
+## Session Navigation Mode
+
+Session navigation mode lets you navigate long session output with Vim-style keys without changing prompt editing behavior.
+
+While the prompt is focused, letters type normally. In navigation mode, the prompt is blurred, a compact `NAV` indicator is shown, and bare navigation keys control the session output.
+
+Entering navigation mode does not override dialogs, autocomplete, or running session interrupts.
+
+| Shortcut          | Action                                                                 |
+| ----------------- | ---------------------------------------------------------------------- |
+| `escape`          | Enter session navigation mode                                          |
+| `i`, `a`, `enter` | Exit navigation mode and focus prompt                                  |
+| `j`               | Scroll messages down one line                                          |
+| `k`               | Scroll messages up one line                                            |
+| `ctrl+d`          | Scroll messages down half page                                         |
+| `ctrl+u`          | Scroll messages up half page                                           |
+| `ctrl+f`          | Scroll messages down one page                                          |
+| `ctrl+b`          | Scroll messages up one page                                            |
+| `gg`              | Jump to first message                                                  |
+| `G`               | Jump to last message                                                   |
+| `n`               | Jump to next user message                                              |
+| `N`, `p`          | Jump to previous user message                                          |
+
+This is not full Vim mode for prompt editing. Prompt text editing still uses normal input keybinds.
+
+For terminal-native keyboard navigation, you can also disable mouse capture:
+
+```jsonc title="tui.jsonc"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "mouse": false
+}
+```
 
 ---
 

@@ -154,6 +154,22 @@ const sessionBindingCommands = [
   "session.child.previous",
 ] as const
 
+const sessionNavigationEnterBindingCommands = ["session.navigation.enter"] as const
+
+const sessionNavigationBindingCommands = [
+  "session.navigation.exit",
+  "session.navigation.line.down",
+  "session.navigation.line.up",
+  "session.navigation.half.page.down",
+  "session.navigation.half.page.up",
+  "session.navigation.page.down",
+  "session.navigation.page.up",
+  "session.navigation.first",
+  "session.navigation.last",
+  "session.navigation.message.next",
+  "session.navigation.message.previous",
+] as const
+
 const context = createContext<{
   width: number
   sessionID: string
@@ -208,6 +224,8 @@ export function Session() {
     return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
   })
 
+  const status = createMemo(() => sync.data.session_status?.[route.sessionID] ?? { type: "idle" })
+
   const lastAssistant = createMemo(() => {
     return messages().findLast((x) => x.role === "assistant")
   })
@@ -226,6 +244,7 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [navigationMode, setNavigationMode] = createSignal(false)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -314,6 +333,13 @@ export function Session() {
   const dialog = useDialog()
   const renderer = useRenderer()
 
+  createEffect(() => {
+    if (!navigationMode()) return
+    if (visible() && status().type === "idle" && dialog.stack.length === 0) return
+    if (visible() && dialog.stack.length === 0) prompt?.focus()
+    setNavigationMode(false)
+  })
+
   event.on("session.status", (evt) => {
     if (evt.properties.sessionID !== route.sessionID) return
     if (evt.properties.status.type !== "retry") return
@@ -355,7 +381,7 @@ export function Session() {
     )
   })
 
-  // Helper: Find next visible message boundary in direction
+  // Helper: Find next visible user message boundary in direction
   const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
     const children = scroll.getChildren()
     const messagesList = messages()
@@ -742,6 +768,113 @@ export function Session() {
       },
     },
     {
+      title: "Enter navigation mode",
+      value: "session.navigation.enter",
+      category: "Session",
+      hidden: true,
+      enabled: visible() && status().type === "idle" && !navigationMode(),
+      run: () => {
+        if (dialog.stack.length > 0) return
+        if (!visible()) return
+        if (status().type !== "idle") return
+        setNavigationMode(true)
+        prompt?.blur()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Exit navigation mode",
+      value: "session.navigation.exit",
+      category: "Session",
+      hidden: true,
+      enabled: navigationMode(),
+      run: () => {
+        setNavigationMode(false)
+        prompt?.focus()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Navigation mode line down",
+      value: "session.navigation.line.down",
+      category: "Session",
+      hidden: true,
+      enabled: navigationMode(),
+      run: () => command.run("session.line.down"),
+    },
+    {
+      title: "Navigation mode line up",
+      value: "session.navigation.line.up",
+      category: "Session",
+      hidden: true,
+      enabled: navigationMode(),
+      run: () => command.run("session.line.up"),
+    },
+    {
+      title: "Navigation mode half page down",
+      value: "session.navigation.half.page.down",
+      category: "Session",
+      hidden: true,
+      enabled: navigationMode(),
+      run: () => command.run("session.half.page.down"),
+    },
+    {
+      title: "Navigation mode half page up",
+      value: "session.navigation.half.page.up",
+      category: "Session",
+      hidden: true,
+      enabled: navigationMode(),
+      run: () => command.run("session.half.page.up"),
+    },
+    {
+      title: "Navigation mode page down",
+      value: "session.navigation.page.down",
+      category: "Session",
+      hidden: true,
+      enabled: navigationMode(),
+      run: () => command.run("session.page.down"),
+    },
+    {
+      title: "Navigation mode page up",
+      value: "session.navigation.page.up",
+      category: "Session",
+      hidden: true,
+      enabled: navigationMode(),
+      run: () => command.run("session.page.up"),
+    },
+    {
+      title: "Navigation mode first message",
+      value: "session.navigation.first",
+      category: "Session",
+      hidden: true,
+      enabled: navigationMode(),
+      run: () => command.run("session.first"),
+    },
+    {
+      title: "Navigation mode last message",
+      value: "session.navigation.last",
+      category: "Session",
+      hidden: true,
+      enabled: navigationMode(),
+      run: () => command.run("session.last"),
+    },
+    {
+      title: "Navigation mode next message",
+      value: "session.navigation.message.next",
+      category: "Session",
+      hidden: true,
+      enabled: navigationMode(),
+      run: () => command.run("session.message.next"),
+    },
+    {
+      title: "Navigation mode previous message",
+      value: "session.navigation.message.previous",
+      category: "Session",
+      hidden: true,
+      enabled: navigationMode(),
+      run: () => command.run("session.message.previous"),
+    },
+    {
       title: "Page up",
       value: "session.page.up",
       category: "Session",
@@ -1070,6 +1203,16 @@ export function Session() {
     bindings: tuiConfig.keybinds.gather("session", sessionBindingCommands),
   }))
 
+  useBindings(() => ({
+    enabled: () => command.matcher.get() && !navigationMode() && visible() && status().type === "idle",
+    bindings: tuiConfig.keybinds.gather("session-navigation-enter", sessionNavigationEnterBindingCommands),
+  }))
+
+  useBindings(() => ({
+    enabled: () => command.matcher.get() && navigationMode(),
+    bindings: tuiConfig.keybinds.gather("session-navigation", sessionNavigationBindingCommands),
+  }))
+
   const revertInfo = createMemo(() => session()?.revert)
   const revertMessageID = createMemo(() => revertInfo()?.messageID)
 
@@ -1095,6 +1238,7 @@ export function Session() {
 
   // snap to bottom when session changes
   createEffect(on(() => route.sessionID, toBottom))
+  createEffect(on(() => route.sessionID, () => setNavigationMode(false)))
 
   return (
     <PathFormatterProvider path={session()?.directory}>
@@ -1262,7 +1406,16 @@ export function Session() {
                         toBottom()
                       }}
                       sessionID={route.sessionID}
-                      right={<TuiPluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
+                      right={
+                        <>
+                          <Show when={navigationMode()}>
+                            <text>
+                              <span style={{ fg: theme.warning, bold: true }}>NAV</span>
+                            </text>
+                          </Show>
+                          <TuiPluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />
+                        </>
+                      }
                     />
                   </TuiPluginRuntime.Slot>
                 </Show>

@@ -1,6 +1,7 @@
 import { expect } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
+import { createTestKeymap } from "@opentui/keymap/testing"
 import { Effect, Layer } from "effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Global } from "@opencode-ai/core/global"
@@ -8,6 +9,7 @@ import { Config } from "@/config/config"
 import { ConfigPlugin } from "@/config/plugin"
 import { CurrentWorkingDirectory } from "@/cli/cmd/tui/config/cwd"
 import { TuiConfig } from "../../src/cli/cmd/tui/config/tui"
+import { TuiKeybind } from "../../src/cli/cmd/tui/config/keybind"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -499,6 +501,66 @@ it.instance("resolves keybind lookup from canonical keybinds", () =>
       ).toEqual(["dialog.plugins.install"])
     }),
   ),
+)
+
+it.instance("resolves session navigation keybinds separately from normal message keybinds", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+
+      const config = yield* getTuiConfig(test.directory)
+      expect(config.keybinds.get("session.navigation.enter")?.[0]?.key).toBe("escape")
+      expect(config.keybinds.get("session.navigation.exit")?.[0]?.key).toBe("i,a,return")
+      expect(config.keybinds.get("session.navigation.line.down")?.[0]?.key).toBe("j")
+      expect(config.keybinds.get("session.navigation.line.up")?.[0]?.key).toBe("k")
+      expect(config.keybinds.get("session.navigation.first")?.[0]?.key).toBe("gg")
+      expect(config.keybinds.get("session.navigation.last")?.[0]?.key).toBe("shift+g")
+      expect(config.keybinds.get("session.navigation.message.previous")?.[0]?.key).toBe("shift+n,p")
+      expect(config.keybinds.get("session.line.down")?.[0]?.key).toBe("ctrl+alt+e")
+      expect(config.keybinds.get("session.line.up")?.[0]?.key).toBe("ctrl+alt+y")
+      expect(
+        config.keybinds
+          .gather("session-navigation-test", ["session.navigation.line.down", "session.navigation.line.up"])
+          .map((binding) => binding.cmd),
+      ).toEqual(["session.navigation.line.down", "session.navigation.line.up"])
+    }),
+  ),
+)
+
+it.instance("applies explicit session navigation keybind overrides", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const test = yield* TestInstance
+      yield* fs.writeJson(path.join(test.directory, "tui.json"), {
+        keybinds: {
+          session_navigation_enter: "<leader>v",
+          session_navigation_line_down: "down",
+          session_navigation_first: "ctrl+g",
+        },
+      })
+
+      const config = yield* getTuiConfig(test.directory)
+      expect(config.keybinds.get("session.navigation.enter")?.[0]?.key).toBe("<leader>v")
+      expect(config.keybinds.get("session.navigation.line.down")?.[0]?.key).toBe("down")
+      expect(config.keybinds.get("session.navigation.first")?.[0]?.key).toBe("ctrl+g")
+      expect(config.keybinds.get("session.line.down")?.[0]?.key).toBe("ctrl+alt+e")
+    }),
+  ),
+)
+
+it.effect("parses session navigation first as a gg sequence", () =>
+  Effect.sync(() => {
+    const first = TuiKeybind.defaultValue("session_navigation_first")
+    if (typeof first !== "string") throw new Error("session_navigation_first should be a string keybind")
+
+    const harness = createTestKeymap({ defaultKeys: true })
+    try {
+      expect(harness.keymap.parseKeySequence(first).map((part) => part.display)).toEqual(["g", "g"])
+    } finally {
+      harness.cleanup()
+    }
+  }),
 )
 
 it.instance("keybinds accept OpenTUI binding specs", () =>
