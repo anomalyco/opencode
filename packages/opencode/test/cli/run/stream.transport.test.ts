@@ -79,7 +79,7 @@ function assistant(id: string) {
         parts: [],
       }).info,
     },
-  } satisfies SdkEvent
+  } as unknown as SdkEvent
 }
 
 function feed<T>() {
@@ -275,7 +275,7 @@ function textUpdated(part: TextPart): SdkEvent {
       part,
       time: 1,
     },
-  }
+  } as unknown as SdkEvent
 }
 
 function toolUpdated(part: SessionToolPart): SdkEvent {
@@ -287,7 +287,7 @@ function toolUpdated(part: SessionToolPart): SdkEvent {
       part,
       time: 1,
     },
-  }
+  } as unknown as SdkEvent
 }
 
 function textDelta(messageID: string, partID: string, delta: string): SdkEvent {
@@ -319,7 +319,7 @@ function child(id: string): SessionChild {
   }
 }
 
-function globalEvent(payload: GlobalEvent["payload"]): GlobalEvent {
+function globalEvent(payload: any): GlobalEvent {
   return {
     directory: "/tmp",
     project: "project-1",

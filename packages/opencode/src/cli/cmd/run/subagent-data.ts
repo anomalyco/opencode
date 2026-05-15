@@ -1,4 +1,4 @@
-import type { Event, Message, Part, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
+import type { Message, Part, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
 import * as Locale from "@/util/locale"
 import {
   bootstrapSessionData,
@@ -519,7 +519,7 @@ function applyChildEvent(input: {
 
 function bootstrapChildEvent(input: {
   detail: DetailState
-  event: Event
+  event: any
   thinking: boolean
   limits: Record<string, number>
 }) {
@@ -750,7 +750,7 @@ export function clearFinishedSubagents(data: SubagentData) {
 
 export function reduceSubagentData(input: {
   data: SubagentData
-  event: Event
+  event: any
   sessionID: string
   thinking: boolean
   limits: Record<string, number>

@@ -3,7 +3,6 @@ import { ACP } from "../../src/acp/agent"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
 import type {
   Event,
-  EventMessagePartUpdated,
   ToolStateCompleted,
   ToolStatePending,
   ToolStateRunning,
@@ -86,7 +85,7 @@ function toolEvent(
           input: opts.input,
           raw: opts.raw,
         }
-  const payload: EventMessagePartUpdated = {
+  const payload = {
     id: `evt_${opts.callID}`,
     type: "message.part.updated",
     properties: {
@@ -102,7 +101,7 @@ function toolEvent(
         state,
       },
     },
-  }
+  } as any
   return { directory: cwd, payload }
 }
 
@@ -126,7 +125,7 @@ function completedToolEvent(
     time: { start: Date.now() - 1, end: Date.now() },
     ...(opts.attachments && { attachments: opts.attachments }),
   }
-  const payload: EventMessagePartUpdated = {
+  const payload = {
     id: `evt_${opts.callID}`,
     type: "message.part.updated",
     properties: {
@@ -142,7 +141,7 @@ function completedToolEvent(
         state,
       },
     },
-  }
+  } as any
   return { directory: cwd, payload }
 }
 
