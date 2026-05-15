@@ -6,7 +6,8 @@ import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
-import { Instance } from "../../src/project/instance"
+import { InstanceRef } from "../../src/effect/instance-ref"
+import { context } from "../../src/project/instance-context"
 import { WithInstance } from "../../src/project/with-instance"
 import { Auth } from "../../src/auth"
 import { Account } from "../../src/account/account"
@@ -61,9 +62,25 @@ const layer = Config.layer.pipe(
 
 const it = testEffect(layer)
 
-const load = () => Effect.runPromise(Config.Service.use((svc) => svc.get()).pipe(Effect.scoped, Effect.provide(layer)))
+function currentInstance() {
+  try {
+    return context.use()
+  } catch {
+    return undefined
+  }
+}
+
+const provideCurrentInstance = <A, E, R>(effect: Effect.Effect<A, E, R>) => {
+  const ctx = currentInstance()
+  return ctx ? effect.pipe(Effect.provideService(InstanceRef, ctx)) : effect
+}
+
+const load = () =>
+  Effect.runPromise(Config.Service.use((svc) => provideCurrentInstance(svc.get())).pipe(Effect.scoped, Effect.provide(layer)))
 const save = (config: Config.Info) =>
-  Effect.runPromise(Config.Service.use((svc) => svc.update(config)).pipe(Effect.scoped, Effect.provide(layer)))
+  Effect.runPromise(
+    Config.Service.use((svc) => provideCurrentInstance(svc.update(config))).pipe(Effect.scoped, Effect.provide(layer)),
+  )
 const saveGlobal = (config: Config.Info) =>
   Effect.runPromise(
     Config.Service.use((svc) => svc.updateGlobal(config)).pipe(
@@ -73,13 +90,22 @@ const saveGlobal = (config: Config.Info) =>
     ),
   )
 const clear = async (wait = false) => {
-  await Effect.runPromise(Config.Service.use((svc) => svc.invalidate()).pipe(Effect.scoped, Effect.provide(layer)))
+  await Effect.runPromise(
+    Config.Service.use((svc) => provideCurrentInstance(svc.invalidate())).pipe(Effect.scoped, Effect.provide(layer)),
+  )
   if (wait) await InstanceRuntime.disposeAllInstances()
 }
 const listDirs = () =>
-  Effect.runPromise(Config.Service.use((svc) => svc.directories()).pipe(Effect.scoped, Effect.provide(layer)))
+  Effect.runPromise(
+    Config.Service.use((svc) => provideCurrentInstance(svc.directories())).pipe(Effect.scoped, Effect.provide(layer)),
+  )
 const ready = () =>
-  Effect.runPromise(Config.Service.use((svc) => svc.waitForDependencies()).pipe(Effect.scoped, Effect.provide(layer)))
+  Effect.runPromise(
+    Config.Service.use((svc) => provideCurrentInstance(svc.waitForDependencies())).pipe(
+      Effect.scoped,
+      Effect.provide(layer),
+    ),
+  )
 
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
@@ -116,11 +142,11 @@ async function check(map: (dir: string) => string) {
     })
     await WithInstance.provide({
       directory: map(tmp.path),
-      fn: async () => {
+      fn: async (ctx) => {
         const cfg = await load()
         expect(cfg.snapshot).toBe(true)
-        expect(Instance.directory).toBe(Filesystem.resolve(tmp.path))
-        expect(Instance.project.id).not.toBe(ProjectID.global)
+        expect(ctx.directory).toBe(Filesystem.resolve(tmp.path))
+        expect(ctx.project.id).not.toBe(ProjectID.global)
       },
     })
   } finally {
@@ -1064,10 +1090,18 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
   try {
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        await Effect.runPromise(Config.Service.use((svc) => svc.get()).pipe(Effect.scoped, Effect.provide(testLayer)))
+      fn: async (ctx) => {
         await Effect.runPromise(
-          Config.Service.use((svc) => svc.waitForDependencies()).pipe(Effect.scoped, Effect.provide(testLayer)),
+          Config.Service.use((svc) => svc.get().pipe(Effect.provideService(InstanceRef, ctx))).pipe(
+            Effect.scoped,
+            Effect.provide(testLayer),
+          ),
+        )
+        await Effect.runPromise(
+          Config.Service.use((svc) => svc.waitForDependencies().pipe(Effect.provideService(InstanceRef, ctx))).pipe(
+            Effect.scoped,
+            Effect.provide(testLayer),
+          ),
         )
       },
     })

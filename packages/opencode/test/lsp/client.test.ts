@@ -4,7 +4,6 @@ import { pathToFileURL } from "url"
 import { tmpdir } from "../fixture/fixture"
 import { LSPClient } from "@/lsp/client"
 import * as LSPServer from "@/lsp/server"
-import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import * as Log from "@opencode-ai/core/util/log"
 

@@ -4,7 +4,7 @@ import { unlink } from "fs/promises"
 
 import { ProviderID } from "../../src/provider/schema"
 import { tmpdir } from "../fixture/fixture"
-import { Instance } from "../../src/project/instance"
+import { context } from "../../src/project/instance-context"
 import { WithInstance } from "../../src/project/with-instance"
 import { Provider } from "@/provider/provider"
 import { Env } from "../../src/env"
@@ -12,17 +12,22 @@ import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
 import { Effect } from "effect"
 import { AppRuntime } from "../../src/effect/app-runtime"
+import { InstanceRef } from "../../src/effect/instance-ref"
 import { makeRuntime } from "../../src/effect/run-service"
 
 const env = makeRuntime(Env.Service, Env.defaultLayer)
-const set = (k: string, v: string) => env.runSync((svc) => svc.set(k, v))
+const set = (k: string, v: string) => {
+  const ctx = context.use()
+  return env.runSync((svc) => svc.set(k, v).pipe(Effect.provideService(InstanceRef, ctx)))
+}
 
 async function list() {
+  const ctx = context.use()
   return AppRuntime.runPromise(
     Effect.gen(function* () {
       const provider = yield* Provider.Service
       return yield* provider.list()
-    }),
+    }).pipe(Effect.provideService(InstanceRef, ctx)),
   )
 }
 

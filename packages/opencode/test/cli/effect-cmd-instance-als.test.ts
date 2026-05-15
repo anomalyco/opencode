@@ -12,11 +12,11 @@ afterEach(async () => {
   await disposeAllInstances()
 })
 
-it.live("effect-cmd.ts does not restore legacy Instance ALS", () =>
+it.live("effect-cmd.ts does not restore legacy instance ALS", () =>
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
     const source = yield* fs.readFileString(fileURLToPath(new URL("../../src/cli/effect-cmd.ts", import.meta.url)))
-    expect(source).not.toContain("Instance.restore(ctx")
+    expect(source).not.toContain("restore(ctx")
   }),
 )
 

@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { PtyID } from "../../src/pty/schema"
-import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import * as Log from "@opencode-ai/core/util/log"

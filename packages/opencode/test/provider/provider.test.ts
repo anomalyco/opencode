@@ -4,7 +4,7 @@ import path from "path"
 
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { Global } from "@opencode-ai/core/global"
-import { Instance } from "../../src/project/instance"
+import { context } from "../../src/project/instance-context"
 import { WithInstance } from "../../src/project/with-instance"
 import { Plugin } from "../../src/plugin/index"
 import { ModelsDev } from "@opencode-ai/core/models"
@@ -14,6 +14,7 @@ import { Filesystem } from "@/util/filesystem"
 import { Env } from "../../src/env"
 import { Effect, Layer } from "effect"
 import { AppRuntime } from "../../src/effect/app-runtime"
+import { InstanceRef } from "../../src/effect/instance-ref"
 import { makeRuntime } from "../../src/effect/run-service"
 import { testEffect } from "../lib/effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -22,8 +23,14 @@ import { Auth } from "@/auth"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const env = makeRuntime(Env.Service, Env.defaultLayer)
-const set = (k: string, v: string) => env.runSync((svc) => svc.set(k, v))
-const remove = (k: string) => env.runSync((svc) => svc.remove(k))
+const set = (k: string, v: string) => {
+  const ctx = context.use()
+  return env.runSync((svc) => svc.set(k, v).pipe(Effect.provideService(InstanceRef, ctx)))
+}
+const remove = (k: string) => {
+  const ctx = context.use()
+  return env.runSync((svc) => svc.remove(k).pipe(Effect.provideService(InstanceRef, ctx)))
+}
 
 const providerLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Provider.layer.pipe(
@@ -37,11 +44,12 @@ const providerLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   )
 
 async function run<A, E>(fn: (provider: Provider.Interface) => Effect.Effect<A, E, never>) {
+  const ctx = context.use()
   return AppRuntime.runPromise(
     Effect.gen(function* () {
       const provider = yield* Provider.Service
       return yield* fn(provider)
-    }),
+    }).pipe(Effect.provideService(InstanceRef, ctx)),
   )
 }
 
@@ -2624,14 +2632,14 @@ test("plugin config providers persist after instance dispose", async () => {
 
   const first = await WithInstance.provide({
     directory: tmp.path,
-    fn: async () =>
+    fn: async (ctx) =>
       AppRuntime.runPromise(
         Effect.gen(function* () {
           const plugin = yield* Plugin.Service
           const provider = yield* Provider.Service
           yield* plugin.init()
           return yield* provider.list()
-        }),
+        }).pipe(Effect.provideService(InstanceRef, ctx)),
       ),
   })
   expect(first[ProviderID.make("demo")]).toBeDefined()

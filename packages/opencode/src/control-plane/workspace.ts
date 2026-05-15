@@ -26,7 +26,6 @@ import { SessionID } from "@/session/schema"
 import { NotFoundError } from "@/storage/storage"
 import { errorData } from "@/util/error"
 import { waitEvent } from "./util"
-import { WorkspaceContext } from "./workspace-context"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { Vcs } from "@/project/vcs"
@@ -384,30 +383,23 @@ export const layer = Layer.effect(
         events: events.length,
       })
 
-      yield* Effect.promise(async () => {
-        await WorkspaceContext.provide({
-          workspaceID: space.id,
-          async fn() {
-            await Effect.runPromise(
-              Effect.forEach(
-                events,
-                (event) =>
-                  sync.replay(
-                    {
-                      id: event.id,
-                      aggregateID: event.aggregate_id,
-                      seq: event.seq,
-                      type: event.type,
-                      data: event.data,
-                    },
-                    { publish: true },
-                  ),
-                { discard: true },
-              ),
+      yield* Effect.forEach(
+        events,
+        (event) =>
+          sync
+            .replay(
+              {
+                id: event.id,
+                aggregateID: event.aggregate_id,
+                seq: event.seq,
+                type: event.type,
+                data: event.data,
+              },
+              { publish: true },
             )
-          },
-        })
-      })
+            .pipe(Effect.provideService(WorkspaceRef, space.id)),
+        { discard: true },
+      )
     })
 
     const syncWorkspaceLoop = Effect.fn("Workspace.syncWorkspaceLoop")(function* (space: Info) {

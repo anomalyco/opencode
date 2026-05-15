@@ -6,8 +6,7 @@ import z from "zod"
 import { makeRuntime } from "../../src/effect/run-service"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { LLM } from "../../src/session/llm"
-import { Instance } from "../../src/project/instance"
-import type { InstanceContext } from "../../src/project/instance-context"
+import { context, type InstanceContext } from "../../src/project/instance-context"
 import { WithInstance } from "../../src/project/with-instance"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
@@ -21,7 +20,7 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import { AppRuntime } from "../../src/effect/app-runtime"
 
 async function getModel(providerID: ProviderID, modelID: ModelID, ctx?: InstanceContext) {
-  const instance = ctx ?? Instance.current
+  const instance = ctx ?? context.use()
   const effect = Effect.gen(function* () {
     const provider = yield* Provider.Service
     return yield* provider.getModel(providerID, modelID)
@@ -32,7 +31,7 @@ async function getModel(providerID: ProviderID, modelID: ModelID, ctx?: Instance
 const llm = makeRuntime(LLM.Service, LLM.defaultLayer)
 
 async function drain(input: LLM.StreamInput, ctx?: InstanceContext) {
-  const instance = ctx ?? Instance.current
+  const instance = ctx ?? context.use()
   return llm.runPromise((svc) => {
     const effect = svc.stream(input).pipe(Stream.runDrain)
     return effect.pipe(Effect.provideService(InstanceRef, instance))
