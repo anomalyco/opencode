@@ -209,7 +209,7 @@ export function tui(input: {
                         input.args.continue
                           ? {
                               type: "session",
-                              sessionID: "dummy",
+                              sessionID: "ses_dummy",
                             }
                           : undefined
                       }
