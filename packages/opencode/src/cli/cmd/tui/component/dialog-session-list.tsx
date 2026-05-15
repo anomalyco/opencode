@@ -199,10 +199,7 @@ export function DialogSessionList() {
       })
       .filter((x) => x !== undefined)
 
-    return [
-      ...pinned.map((id) => buildOption(id, "Pinned")).filter((x) => x !== undefined),
-      ...remaining,
-    ]
+    return [...pinned.map((id) => buildOption(id, "Pinned")).filter((x) => x !== undefined), ...remaining]
   })
 
   onMount(() => {
