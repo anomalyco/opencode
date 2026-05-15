@@ -6,6 +6,7 @@ import { readdir, realpath } from "fs/promises"
 import path from "path"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
+import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Git } from "@/git"
@@ -88,13 +89,13 @@ export const layer = Layer.effect(
           if (!w) return
 
           log.info("watcher backend", { directory: ctx.directory, platform: process.platform, backend })
-
+          const bridge = yield* EffectBridge.make()
           const subs: ParcelWatcher.AsyncSubscription[] = []
           yield* Effect.addFinalizer(() =>
             Effect.promise(() => Promise.allSettled(subs.map((sub) => sub.unsubscribe()))),
           )
 
-          const cb: ParcelWatcher.SubscribeCallback = InstanceState.bind((err, evts) => {
+          const cb: ParcelWatcher.SubscribeCallback = bridge.bind((err, evts) => {
             if (err) return
             for (const evt of evts) {
               if (evt.type === "create") void Bus.publish(Event.Updated, { file: evt.path, event: "add" })

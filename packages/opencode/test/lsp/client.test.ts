@@ -4,7 +4,6 @@ import { pathToFileURL } from "url"
 import { tmpdir } from "../fixture/fixture"
 import { LSPClient } from "@/lsp/client"
 import * as LSPServer from "@/lsp/server"
-import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import * as Log from "@opencode-ai/core/util/log"
 
@@ -28,12 +27,13 @@ describe("LSPClient interop", () => {
 
     const client = await WithInstance.provide({
       directory: process.cwd(),
-      fn: () =>
+      fn: (ctx) =>
         LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
           root: process.cwd(),
           directory: process.cwd(),
+          instance: ctx,
         }),
     })
 
@@ -51,12 +51,13 @@ describe("LSPClient interop", () => {
 
     const client = await WithInstance.provide({
       directory: process.cwd(),
-      fn: () =>
+      fn: (ctx) =>
         LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
           root: process.cwd(),
           directory: process.cwd(),
+          instance: ctx,
         }),
     })
 
@@ -74,12 +75,13 @@ describe("LSPClient interop", () => {
 
     const client = await WithInstance.provide({
       directory: process.cwd(),
-      fn: () =>
+      fn: (ctx) =>
         LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
           root: process.cwd(),
           directory: process.cwd(),
+          instance: ctx,
         }),
     })
 
@@ -97,12 +99,13 @@ describe("LSPClient interop", () => {
 
     const client = await WithInstance.provide({
       directory: process.cwd(),
-      fn: () =>
+      fn: (ctx) =>
         LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
           root: process.cwd(),
           directory: process.cwd(),
+          instance: ctx,
         }),
     })
 
@@ -124,7 +127,7 @@ describe("LSPClient interop", () => {
 
     const client = await WithInstance.provide({
       directory: process.cwd(),
-      fn: () =>
+      fn: (ctx) =>
         LSPClient.create({
           serverID: "fake",
           server: {
@@ -133,6 +136,7 @@ describe("LSPClient interop", () => {
           },
           root: process.cwd(),
           directory: process.cwd(),
+          instance: ctx,
         }),
     })
 
@@ -153,12 +157,13 @@ describe("LSPClient interop", () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
+      fn: async (ctx) => {
         const client = await LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
           root: tmp.path,
           directory: tmp.path,
+          instance: ctx,
         })
 
         await client.notify.open({ path: file })
@@ -196,12 +201,13 @@ describe("LSPClient interop", () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
+      fn: async (ctx) => {
         const client = await LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
           root: tmp.path,
           directory: tmp.path,
+          instance: ctx,
         })
 
         const version = await client.notify.open({ path: file })
@@ -242,12 +248,13 @@ describe("LSPClient interop", () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
+      fn: async (ctx) => {
         const client = await LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
           root: tmp.path,
           directory: tmp.path,
+          instance: ctx,
         })
 
         const version = await client.notify.open({ path: file })
@@ -289,12 +296,13 @@ describe("LSPClient interop", () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
+      fn: async (ctx) => {
         const client = await LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
           root: tmp.path,
           directory: tmp.path,
+          instance: ctx,
         })
 
         await client.connection.sendRequest("test/configure-pull-diagnostics", {
@@ -337,12 +345,13 @@ describe("LSPClient interop", () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
+      fn: async (ctx) => {
         const client = await LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
           root: tmp.path,
           directory: tmp.path,
+          instance: ctx,
         })
 
         await client.connection.sendRequest("test/configure-pull-diagnostics", {
@@ -390,12 +399,13 @@ describe("LSPClient interop", () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
+      fn: async (ctx) => {
         const client = await LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
           root: tmp.path,
           directory: tmp.path,
+          instance: ctx,
         })
 
         await client.connection.sendRequest("test/configure-pull-diagnostics", {
@@ -454,12 +464,13 @@ describe("LSPClient interop", () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
+      fn: async (ctx) => {
         const client = await LSPClient.create({
           serverID: "fake",
           server: handle as unknown as LSPServer.Handle,
           root: tmp.path,
           directory: tmp.path,
+          instance: ctx,
         })
 
         await client.connection.sendRequest("test/configure-pull-diagnostics", {

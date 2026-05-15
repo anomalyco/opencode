@@ -256,7 +256,7 @@ const live: Layer.Layer<
 
         const bridge = yield* EffectBridge.make()
         const approvedToolsForSession = new Set<string>()
-        workflowModel.approvalHandler = InstanceState.bind(async (approvalTools) => {
+        workflowModel.approvalHandler = bridge.bind(async (approvalTools) => {
           const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
           // Auto-approve tools that were already approved in this session
           // (prevents infinite approval loops for server-side MCP tools)

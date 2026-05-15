@@ -14,8 +14,7 @@ import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Database } from "@/storage/db"
 import { ProjectID } from "@/project/schema"
 import { ProjectTable } from "@/project/project.sql"
-import { Instance } from "@/project/instance"
-import { WithInstance } from "../../src/project/with-instance"
+import { context, type InstanceContext } from "@/project/instance-context"
 import { InstanceRef } from "@/effect/instance-ref"
 import { Session as SessionNs } from "@/session/session"
 import { SessionID } from "@/session/schema"
@@ -122,12 +121,10 @@ afterEach(async () => {
   await resetDatabase()
 })
 
-async function withInstance<T>(fn: (dir: string) => T | Promise<T>) {
+async function withInstance<T>(fn: (ctx: InstanceContext) => T | Promise<T>) {
   await using tmp = await tmpdir({ git: true })
-  return await WithInstance.provide({
-    directory: tmp.path,
-    fn: () => fn(tmp.path),
-  })
+  const ctx = await AppRuntime.runPromise(InstanceStore.Service.use((store) => store.load({ directory: tmp.path })))
+  return await context.provide(ctx, () => fn(ctx))
 }
 
 async function initGitRepo(dir: string) {
@@ -142,7 +139,18 @@ async function initGitRepo(dir: string) {
   await $`git commit -m "base"`.cwd(dir).quiet()
 }
 
-const runWorkspace = <A, E>(effect: Effect.Effect<A, E, Workspace.Service>) => AppRuntime.runPromise(effect)
+function currentInstance() {
+  try {
+    return context.use()
+  } catch {
+    return undefined
+  }
+}
+
+const runWorkspace = <A, E>(effect: Effect.Effect<A, E, Workspace.Service>) => {
+  const ctx = currentInstance()
+  return AppRuntime.runPromise(ctx ? effect.pipe(Effect.provideService(InstanceRef, ctx)) : effect)
+}
 const createWorkspace = (input: Workspace.CreateInput) =>
   runWorkspace(Workspace.Service.use((workspace) => workspace.create(input)))
 const warpWorkspaceSession = (input: Workspace.SessionWarpInput) =>
@@ -416,16 +424,16 @@ describe("workspace CRUD", () => {
   })
 
   test("list maps database rows, filters by project, and sorts by id", async () => {
-    await withInstance(async () => {
+    await withInstance(async (instance) => {
       const otherProjectID = ProjectID.make("project-other")
       insertProject(otherProjectID, "/tmp/other")
-      const a = workspaceInfo(Instance.project.id, "manual", {
+      const a = workspaceInfo(instance.project.id, "manual", {
         id: WorkspaceID.ascending("wrk_a_list"),
         branch: "a",
         directory: "/a",
         extra: { a: true },
       })
-      const b = workspaceInfo(Instance.project.id, "manual", {
+      const b = workspaceInfo(instance.project.id, "manual", {
         id: WorkspaceID.ascending("wrk_b_list"),
         branch: "b",
         directory: "/b",
@@ -436,12 +444,12 @@ describe("workspace CRUD", () => {
       insertWorkspace(other)
       insertWorkspace(a)
 
-      expect(await listWorkspaces(Instance.project)).toEqual([a, b])
+      expect(await listWorkspaces(instance.project)).toEqual([a, b])
     })
   })
 
   test("create configures, persists, creates, starts local sync, and passes environment", async () => {
-    await withInstance(async (dir) => {
+    await withInstance(async (instance) => {
       process.env.OPENCODE_AUTH_CONTENT = JSON.stringify({ test: { type: "api", key: "secret" } })
       process.env.OTEL_EXPORTER_OTLP_HEADERS = "authorization=otel"
       process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "https://otel.test"
@@ -449,7 +457,7 @@ describe("workspace CRUD", () => {
 
       const workspaceID = WorkspaceID.ascending("wrk_create_local")
       const type = unique("create-local")
-      const targetDir = path.join(dir, "created-local")
+      const targetDir = path.join(instance.directory, "created-local")
       const recorded = recordedAdapter({
         configure(info) {
           return {
@@ -467,13 +475,13 @@ describe("workspace CRUD", () => {
           return { type: "local", directory: targetDir }
         },
       })
-      registerAdapter(Instance.project.id, type, recorded.adapter)
+      registerAdapter(instance.project.id, type, recorded.adapter)
 
       const info = await createWorkspace({
         id: workspaceID,
         type,
         branch: null,
-        projectID: Instance.project.id,
+        projectID: instance.project.id,
         extra: null,
       })
 
@@ -484,11 +492,11 @@ describe("workspace CRUD", () => {
         name: "Configured Name",
         directory: targetDir,
         extra: { configured: true },
-        projectID: Instance.project.id,
+        projectID: instance.project.id,
         timeUsed: info.timeUsed,
       })
       expect(await getWorkspace(workspaceID)).toEqual(info)
-      expect(await listWorkspaces(Instance.project)).toEqual([info])
+      expect(await listWorkspaces(instance.project)).toEqual([info])
       expect(recorded.calls.configure).toHaveLength(1)
       expect(recorded.calls.configure[0]).toMatchObject({ id: workspaceID, type, directory: null })
       expect(recorded.calls.create).toHaveLength(1)
@@ -499,7 +507,7 @@ describe("workspace CRUD", () => {
         name: "Configured Name",
         directory: targetDir,
         extra: { configured: true },
-        projectID: Instance.project.id,
+        projectID: instance.project.id,
       })
       expect(JSON.parse(recorded.calls.create[0].env.OPENCODE_AUTH_CONTENT ?? "{}")).toEqual({
         test: { type: "api", key: "secret" },
@@ -517,10 +525,10 @@ describe("workspace CRUD", () => {
   })
 
   test("create propagates configure failures and does not insert a workspace", async () => {
-    await withInstance(async () => {
+    await withInstance(async (instance) => {
       const type = unique("configure-failure")
       registerAdapter(
-        Instance.project.id,
+        instance.project.id,
         type,
         recordedAdapter({
           configure() {
@@ -533,14 +541,14 @@ describe("workspace CRUD", () => {
       )
 
       await expect(
-        createWorkspace({ type, branch: null, projectID: Instance.project.id, extra: null }),
+        createWorkspace({ type, branch: null, projectID: instance.project.id, extra: null }),
       ).rejects.toThrow("configure exploded")
-      expect(await listWorkspaces(Instance.project)).toEqual([])
+      expect(await listWorkspaces(instance.project)).toEqual([])
     })
   })
 
   test("create leaves the inserted row when adapter create fails", async () => {
-    await withInstance(async () => {
+    await withInstance(async (instance) => {
       const type = unique("create-failure")
       const recorded = recordedAdapter({
         async create() {
@@ -550,13 +558,13 @@ describe("workspace CRUD", () => {
           return { type: "local", directory: "/unused" }
         },
       })
-      registerAdapter(Instance.project.id, type, recorded.adapter)
+      registerAdapter(instance.project.id, type, recorded.adapter)
 
       await expect(
-        createWorkspace({ type, branch: "branch", projectID: Instance.project.id, extra: { x: 1 } }),
+        createWorkspace({ type, branch: "branch", projectID: instance.project.id, extra: { x: 1 } }),
       ).rejects.toThrow("create exploded")
 
-      const rows = await listWorkspaces(Instance.project)
+      const rows = await listWorkspaces(instance.project)
       expect(rows).toHaveLength(1)
       expect(rows[0]).toMatchObject({ type, branch: "branch", extra: { x: 1 } })
       expect(recorded.calls.target).toHaveLength(0)
@@ -565,13 +573,13 @@ describe("workspace CRUD", () => {
   })
 
   test("create returns after a local workspace reports error", async () => {
-    await withInstance(async (dir) => {
+    await withInstance(async (instance) => {
       const type = unique("local-error")
-      const missing = path.join(dir, "missing-local-target")
+      const missing = path.join(instance.directory, "missing-local-target")
       const recorded = localAdapter(missing, { createDir: false })
-      registerAdapter(Instance.project.id, type, recorded.adapter)
+      registerAdapter(instance.project.id, type, recorded.adapter)
 
-      const info = await createWorkspace({ type, branch: null, projectID: Instance.project.id, extra: null })
+      const info = await createWorkspace({ type, branch: null, projectID: instance.project.id, extra: null })
 
       expect(info.directory).toBe(missing)
       expect((await workspaceStatus()).find((item) => item.workspaceID === info.id)?.status).toBe("error")
@@ -580,12 +588,12 @@ describe("workspace CRUD", () => {
   })
 
   test("syncList registers adapter-listed workspaces that are missing by name", async () => {
-    await withInstance(async (dir) => {
+    await withInstance(async (instance) => {
       const type = unique("list-sync")
-      const existing = workspaceInfo(Instance.project.id, type, {
+      const existing = workspaceInfo(instance.project.id, type, {
         id: WorkspaceID.ascending("wrk_list_sync_existing"),
         name: "existing",
-        directory: path.join(dir, "existing"),
+        directory: path.join(instance.directory, "existing"),
       })
       insertWorkspace(existing)
 
@@ -593,9 +601,9 @@ describe("workspace CRUD", () => {
         type,
         name: "discovered",
         branch: "feature/discovered",
-        directory: path.join(dir, "discovered"),
+        directory: path.join(instance.directory, "discovered"),
         extra: { source: "adapter" },
-        projectID: Instance.project.id,
+        projectID: instance.project.id,
       }
       const recorded = recordedAdapter({
         list() {
@@ -604,26 +612,26 @@ describe("workspace CRUD", () => {
               type,
               name: existing.name,
               branch: "ignored",
-              directory: path.join(dir, "ignored"),
+              directory: path.join(instance.directory, "ignored"),
               extra: null,
-              projectID: Instance.project.id,
+              projectID: instance.project.id,
             },
             discovered,
           ]
         },
         target(info) {
-          return { type: "local", directory: info.directory ?? dir }
+          return { type: "local", directory: info.directory ?? instance.directory }
         },
       })
-      registerAdapter(Instance.project.id, type, recorded.adapter)
+      registerAdapter(instance.project.id, type, recorded.adapter)
 
-      await syncListWorkspaces(Instance.project)
-      const synced = (await listWorkspaces(Instance.project)).filter((item) => item.name === discovered.name)
+      await syncListWorkspaces(instance.project)
+      const synced = (await listWorkspaces(instance.project)).filter((item) => item.name === discovered.name)
 
       expect(synced).toHaveLength(1)
       expect(synced[0]).toMatchObject(discovered)
       expect(synced[0]?.id).toStartWith("wrk_")
-      expect(await listWorkspaces(Instance.project)).toEqual(expect.arrayContaining([existing, synced[0]]))
+      expect(await listWorkspaces(instance.project)).toEqual(expect.arrayContaining([existing, synced[0]]))
       expect(recorded.calls.list).toBe(1)
       expect(recorded.calls.configure).toHaveLength(0)
       expect(recorded.calls.create).toHaveLength(0)
@@ -632,7 +640,7 @@ describe("workspace CRUD", () => {
   })
 
   test("syncList calls every registered adapter with a list method", async () => {
-    await withInstance(async (dir) => {
+    await withInstance(async (instance) => {
       const typeA = unique("list-sync-a")
       const typeB = unique("list-sync-b")
       const adapterA = recordedAdapter({
@@ -642,14 +650,14 @@ describe("workspace CRUD", () => {
               type: typeA,
               name: "adapter-a",
               branch: null,
-              directory: path.join(dir, "adapter-a"),
+              directory: path.join(instance.directory, "adapter-a"),
               extra: null,
-              projectID: Instance.project.id,
+              projectID: instance.project.id,
             },
           ]
         },
         target(info) {
-          return { type: "local", directory: info.directory ?? dir }
+          return { type: "local", directory: info.directory ?? instance.directory }
         },
       })
       const adapterB = recordedAdapter({
@@ -659,27 +667,27 @@ describe("workspace CRUD", () => {
               type: typeB,
               name: "adapter-b",
               branch: null,
-              directory: path.join(dir, "adapter-b"),
+              directory: path.join(instance.directory, "adapter-b"),
               extra: null,
-              projectID: Instance.project.id,
+              projectID: instance.project.id,
             },
           ]
         },
         target(info) {
-          return { type: "local", directory: info.directory ?? dir }
+          return { type: "local", directory: info.directory ?? instance.directory }
         },
       })
       const noList = recordedAdapter({
         target() {
-          return { type: "local", directory: dir }
+          return { type: "local", directory: instance.directory }
         },
       })
-      registerAdapter(Instance.project.id, typeA, adapterA.adapter)
-      registerAdapter(Instance.project.id, typeB, adapterB.adapter)
-      registerAdapter(Instance.project.id, unique("list-sync-none"), noList.adapter)
+      registerAdapter(instance.project.id, typeA, adapterA.adapter)
+      registerAdapter(instance.project.id, typeB, adapterB.adapter)
+      registerAdapter(instance.project.id, unique("list-sync-none"), noList.adapter)
 
-      await syncListWorkspaces(Instance.project)
-      const synced = await listWorkspaces(Instance.project)
+      await syncListWorkspaces(instance.project)
+      const synced = await listWorkspaces(instance.project)
 
       expect(
         synced
@@ -719,11 +727,13 @@ describe("workspace CRUD", () => {
         (dir) =>
           Effect.gen(function* () {
             const workspace = yield* Workspace.Service
+            const instance = yield* InstanceRef
+            if (!instance) return yield* Effect.die(new Error("missing test instance"))
             const type = unique("remote-create")
             const recorded = remoteAdapter(`${url}/base/?ignored=1#hash`, { directory: dir })
-            registerAdapter(Instance.project.id, type, recorded.adapter)
+            registerAdapter(instance.project.id, type, recorded.adapter)
 
-            const info = yield* workspace.create({ type, branch: null, projectID: Instance.project.id, extra: null })
+            const info = yield* workspace.create({ type, branch: null, projectID: instance.project.id, extra: null })
 
             expect(
               calls.map((call) => `${call.method} ${call.url.pathname}${call.url.search}${call.url.hash}`),
@@ -782,11 +792,11 @@ describe("workspace CRUD", () => {
   )
 
   test("remove still deletes the row when the adapter cannot remove resources", async () => {
-    await withInstance(async () => {
+    await withInstance(async (instance) => {
       const type = unique("remove-throws")
-      const info = workspaceInfo(Instance.project.id, type, { id: WorkspaceID.ascending("wrk_remove_throws") })
+      const info = workspaceInfo(instance.project.id, type, { id: WorkspaceID.ascending("wrk_remove_throws") })
       registerAdapter(
-        Instance.project.id,
+        instance.project.id,
         type,
         recordedAdapter({
           async remove() {
@@ -911,24 +921,26 @@ describe("workspace CRUD", () => {
   )
 
   test("sessionWarp detaches to the source project when invoked from a workspace instance", async () => {
-    await withInstance(async () => {
-      const projectID = Instance.project.id
+    await withInstance(async (instance) => {
+      const projectID = instance.project.id
       await using workspaceTmp = await tmpdir({ git: true })
       const previousType = unique("warp-detach-workspace-instance")
       const previous = workspaceInfo(projectID, previousType)
       insertWorkspace(previous)
       registerAdapter(projectID, previousType, localAdapter(workspaceTmp.path, { createDir: false }).adapter)
-      const session = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
+      const session = await AppRuntime.runPromise(
+        SessionNs.Service.use((svc) => svc.create({})).pipe(Effect.provideService(InstanceRef, instance)),
+      )
       attachSessionToWorkspace(session.id, previous.id)
 
-      const workspaceProjectID = await WithInstance.provide({
-        directory: workspaceTmp.path,
-        fn: async () => {
-          const id = Instance.project.id
-          expect(id).not.toBe(projectID)
-          await warpWorkspaceSession({ workspaceID: null, sessionID: session.id })
-          return id
-        },
+      const workspaceCtx = await AppRuntime.runPromise(
+        InstanceStore.Service.use((store) => store.load({ directory: workspaceTmp.path })),
+      )
+      const workspaceProjectID = await context.provide(workspaceCtx, async () => {
+        const id = workspaceCtx.project.id
+        expect(id).not.toBe(projectID)
+        await warpWorkspaceSession({ workspaceID: null, sessionID: session.id })
+        return id
       })
 
       expect(
@@ -988,14 +1000,16 @@ describe("workspace CRUD", () => {
           Effect.gen(function* () {
             const workspace = yield* Workspace.Service
             const sessionSvc = yield* SessionNs.Service
+            const instance = yield* InstanceRef
+            if (!instance) return yield* Effect.die(new Error("missing test instance"))
             const previousType = unique("warp-remote-source")
             const targetType = unique("warp-remote-target")
-            const previous = workspaceInfo(Instance.project.id, previousType)
-            const target = workspaceInfo(Instance.project.id, targetType, { directory: "remote-target-dir" })
+            const previous = workspaceInfo(instance.project.id, previousType)
+            const target = workspaceInfo(instance.project.id, targetType, { directory: "remote-target-dir" })
             insertWorkspace(previous)
             insertWorkspace(target)
-            registerAdapter(Instance.project.id, previousType, remoteAdapter(`${url}/warp-source`).adapter)
-            registerAdapter(Instance.project.id, targetType, remoteAdapter(`${url}/warp-target`).adapter)
+            registerAdapter(instance.project.id, previousType, remoteAdapter(`${url}/warp-source`).adapter)
+            registerAdapter(instance.project.id, targetType, remoteAdapter(`${url}/warp-target`).adapter)
             const session = yield* sessionSvc.create({})
             attachSessionToWorkspace(session.id, previous.id)
             historySessionID = session.id
@@ -1197,15 +1211,17 @@ describe("workspace sync state", () => {
           Effect.gen(function* () {
             const workspace = yield* Workspace.Service
             const sessionSvc = yield* SessionNs.Service
+            const instance = yield* InstanceRef
+            if (!instance) return yield* Effect.die(new Error("missing test instance"))
             const captured = captureGlobalEvents()
             try {
               const type = unique("remote-start")
-              const info = workspaceInfo(Instance.project.id, type)
+              const info = workspaceInfo(instance.project.id, type)
               insertWorkspace(info)
-              registerAdapter(Instance.project.id, type, remoteAdapter(`${url}/sync`).adapter)
+              registerAdapter(instance.project.id, type, remoteAdapter(`${url}/sync`).adapter)
               attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
 
-              yield* workspace.startWorkspaceSyncing(Instance.project.id)
+              yield* workspace.startWorkspaceSyncing(instance.project.id)
               yield* eventuallyEffect(
                 Effect.gen(function* () {
                   expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe(
@@ -1213,7 +1229,7 @@ describe("workspace sync state", () => {
                   )
                 }),
               )
-              yield* workspace.startWorkspaceSyncing(Instance.project.id)
+              yield* workspace.startWorkspaceSyncing(instance.project.id)
               yield* Effect.sleep("25 millis")
 
               expect(
@@ -1252,13 +1268,15 @@ describe("workspace sync state", () => {
           Effect.gen(function* () {
             const workspace = yield* Workspace.Service
             const sessionSvc = yield* SessionNs.Service
+            const instance = yield* InstanceRef
+            if (!instance) return yield* Effect.die(new Error("missing test instance"))
             const type = unique("remote-connect-fail")
-            const info = workspaceInfo(Instance.project.id, type)
+            const info = workspaceInfo(instance.project.id, type)
             insertWorkspace(info)
-            registerAdapter(Instance.project.id, type, remoteAdapter(`${url}/failed`).adapter)
+            registerAdapter(instance.project.id, type, remoteAdapter(`${url}/failed`).adapter)
             attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
 
-            yield* workspace.startWorkspaceSyncing(Instance.project.id)
+            yield* workspace.startWorkspaceSyncing(instance.project.id)
 
             yield* eventuallyEffect(
               Effect.gen(function* () {
@@ -1292,13 +1310,15 @@ describe("workspace sync state", () => {
           Effect.gen(function* () {
             const workspace = yield* Workspace.Service
             const sessionSvc = yield* SessionNs.Service
+            const instance = yield* InstanceRef
+            if (!instance) return yield* Effect.die(new Error("missing test instance"))
             const type = unique("remote-history-fail")
-            const info = workspaceInfo(Instance.project.id, type)
+            const info = workspaceInfo(instance.project.id, type)
             insertWorkspace(info)
-            registerAdapter(Instance.project.id, type, remoteAdapter(`${url}/history-failed`).adapter)
+            registerAdapter(instance.project.id, type, remoteAdapter(`${url}/history-failed`).adapter)
             attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
 
-            yield* workspace.startWorkspaceSyncing(Instance.project.id)
+            yield* workspace.startWorkspaceSyncing(instance.project.id)
 
             yield* eventuallyEffect(
               Effect.gen(function* () {
@@ -1347,18 +1367,20 @@ describe("workspace sync state", () => {
           Effect.gen(function* () {
             const workspace = yield* Workspace.Service
             const sessionSvc = yield* SessionNs.Service
+            const instance = yield* InstanceRef
+            if (!instance) return yield* Effect.die(new Error("missing test instance"))
             const captured = captureGlobalEvents()
             try {
               const type = unique("history-replay")
-              const info = workspaceInfo(Instance.project.id, type)
+              const info = workspaceInfo(instance.project.id, type)
               insertWorkspace(info)
-              registerAdapter(Instance.project.id, type, remoteAdapter(`${url}/history`).adapter)
+              registerAdapter(instance.project.id, type, remoteAdapter(`${url}/history`).adapter)
               const session = yield* sessionSvc.create({ title: "before history" })
               attachSessionToWorkspace(session.id, info.id)
               historySessionID = session.id
               historyNextSeq = (sessionSequence(session.id) ?? -1) + 1
 
-              yield* workspace.startWorkspaceSyncing(Instance.project.id)
+              yield* workspace.startWorkspaceSyncing(instance.project.id)
 
               yield* eventuallyEffect(
                 Effect.gen(function* () {
@@ -1414,15 +1436,17 @@ describe("workspace sync state", () => {
           Effect.gen(function* () {
             const workspace = yield* Workspace.Service
             const sessionSvc = yield* SessionNs.Service
+            const instance = yield* InstanceRef
+            if (!instance) return yield* Effect.die(new Error("missing test instance"))
             const captured = captureGlobalEvents()
             try {
               const type = unique("sse-forward")
-              const info = workspaceInfo(Instance.project.id, type)
+              const info = workspaceInfo(instance.project.id, type)
               insertWorkspace(info)
-              registerAdapter(Instance.project.id, type, remoteAdapter(`${url}/sse-forward`).adapter)
+              registerAdapter(instance.project.id, type, remoteAdapter(`${url}/sse-forward`).adapter)
               attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
 
-              yield* workspace.startWorkspaceSyncing(Instance.project.id)
+              yield* workspace.startWorkspaceSyncing(instance.project.id)
 
               yield* eventuallyEffect(
                 Effect.sync(() =>
@@ -1495,18 +1519,20 @@ describe("workspace sync state", () => {
           Effect.gen(function* () {
             const workspace = yield* Workspace.Service
             const sessionSvc = yield* SessionNs.Service
+            const instance = yield* InstanceRef
+            if (!instance) return yield* Effect.die(new Error("missing test instance"))
             const captured = captureGlobalEvents()
             try {
               const type = unique("sse-sync")
-              const info = workspaceInfo(Instance.project.id, type)
+              const info = workspaceInfo(instance.project.id, type)
               insertWorkspace(info)
-              registerAdapter(Instance.project.id, type, remoteAdapter(`${url}/sse-sync`).adapter)
+              registerAdapter(instance.project.id, type, remoteAdapter(`${url}/sse-sync`).adapter)
               const session = yield* sessionSvc.create({ title: "before sse" })
               attachSessionToWorkspace(session.id, info.id)
               sseSessionID = session.id
               sseNextSeq = (sessionSequence(session.id) ?? -1) + 1
 
-              yield* workspace.startWorkspaceSyncing(Instance.project.id)
+              yield* workspace.startWorkspaceSyncing(instance.project.id)
 
               yield* eventuallyEffect(
                 Effect.gen(function* () {
