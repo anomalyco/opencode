@@ -31,7 +31,11 @@ describe("authFromUrl", () => {
     expect(authFromUrl("https://:secret@example.test")).toEqual({ username: "opencode", password: "secret" })
   })
 
-  test("ignores URLs without a password", () => {
+  test("decodes username-only credentials from a URL", () => {
+    expect(authFromUrl("https://kit@example.test")).toEqual({ username: "kit", password: "" })
+  })
+
+  test("ignores URLs without credentials", () => {
     expect(authFromUrl("https://example.test")).toBeUndefined()
     expect(authFromUrl("not a url")).toBeUndefined()
   })

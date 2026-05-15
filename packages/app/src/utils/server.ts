@@ -20,7 +20,7 @@ export function authFromToken(token: string | null) {
 export function authFromUrl(input: string) {
   try {
     const url = new URL(input)
-    if (!url.password) return undefined
+    if (!url.username && !url.password) return undefined
     return {
       username: url.username ? decodeURIComponent(url.username) : "opencode",
       password: decodeURIComponent(url.password),
@@ -37,7 +37,7 @@ export function createSdkForServer({
   server: ServerConnection.HttpBase
 }) {
   const auth = (() => {
-    if (!server.password) return undefined
+    if (server.password === undefined) return undefined
     return {
       Authorization: `Basic ${authTokenFromCredentials({ username: server.username, password: server.password })}`,
     }
