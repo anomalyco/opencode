@@ -2972,3 +2972,254 @@ test("getProvider() reflects env var set after first call", async () => {
     },
   })
 })
+
+test("getModel() resolves late-detected env provider", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      remove("ANTHROPIC_API_KEY")
+      await list()
+      set("ANTHROPIC_API_KEY", "late-key")
+      const model = await getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"))
+      expect(model).toBeDefined()
+      expect(model.providerID).toBe(ProviderID.anthropic)
+      remove("ANTHROPIC_API_KEY")
+    },
+  })
+})
+
+test("getLanguage() resolves late-detected env provider", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      remove("ANTHROPIC_API_KEY")
+      await list()
+      set("ANTHROPIC_API_KEY", "late-key")
+      const model = await getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"))
+      const lang = await getLanguage(model)
+      expect(lang).toBeDefined()
+      remove("ANTHROPIC_API_KEY")
+    },
+  })
+})
+
+test("closest() resolves late-detected env provider", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      remove("ANTHROPIC_API_KEY")
+      await list()
+      set("ANTHROPIC_API_KEY", "late-key")
+      const r = await closest(ProviderID.anthropic, ["sonnet-4-20250514"])
+      expect(r?.providerID).toBe(ProviderID.anthropic)
+      remove("ANTHROPIC_API_KEY")
+    },
+  })
+})
+
+test("getSmallModel() resolves late-detected env provider", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      remove("ANTHROPIC_API_KEY")
+      await list()
+      set("ANTHROPIC_API_KEY", "late-key")
+      const small = await getSmallModel(ProviderID.anthropic)
+      expect(small).toBeDefined()
+      remove("ANTHROPIC_API_KEY")
+    },
+  })
+})
+
+test("defaultModel() finds late-detected env provider", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      remove("ANTHROPIC_API_KEY")
+      await list()
+      set("ANTHROPIC_API_KEY", "late-key")
+      const d = await defaultModel()
+      expect(d).toBeDefined()
+      remove("ANTHROPIC_API_KEY")
+    },
+  })
+})
+
+test("late-detected env provider does NOT expose alpha models without flag", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "alpha-only": {
+              name: "Alpha Only",
+              npm: "@ai-sdk/openai-compatible",
+              api: "https://api.example.com/v1",
+              env: ["CUSTOM_API_KEY"],
+              models: {
+                active: { name: "Active" },
+                experimental: { name: "Experimental", status: "alpha" as const },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      remove("CUSTOM_API_KEY")
+      await list()
+      set("CUSTOM_API_KEY", "late-key")
+      const after = await list()
+      const p = after[ProviderID.make("alpha-only")]
+      expect(p).toBeDefined()
+      expect(p.models["active"]).toBeDefined()
+      expect(p.models["experimental"]).toBeUndefined()
+      remove("CUSTOM_API_KEY")
+    },
+  })
+})
+
+test("late-detected env provider respects blacklist", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: { blacklist: ["claude-sonnet-4-20250514"] },
+          },
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      remove("ANTHROPIC_API_KEY")
+      await list()
+      set("ANTHROPIC_API_KEY", "late-key")
+      const after = await list()
+      expect(after[ProviderID.anthropic]).toBeDefined()
+      expect(after[ProviderID.anthropic].models["claude-sonnet-4-20250514"]).toBeUndefined()
+      remove("ANTHROPIC_API_KEY")
+    },
+  })
+})
+
+test("late-detected multi-env provider yields source=env with key undefined", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      ;["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION", "AWS_BEARER_TOKEN_BEDROCK"].forEach(remove)
+      const before = await list()
+      expect(before[ProviderID.amazonBedrock]).toBeUndefined()
+      set("AWS_ACCESS_KEY_ID", "AKIA-LATE")
+      const after = await list()
+      const bedrock = after[ProviderID.amazonBedrock]
+      if (bedrock) {
+        expect(bedrock.source).toBe("env")
+        expect(bedrock.key).toBeUndefined()
+      }
+      remove("AWS_ACCESS_KEY_ID")
+    },
+  })
+})
+
+test("auth source wins over late-detected env", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  const authPath = path.join(Global.Path.data, "auth.json")
+  let prev: string | undefined
+  try {
+    prev = await Filesystem.readText(authPath)
+  } catch {}
+  try {
+    await mkdir(path.dirname(authPath), { recursive: true })
+    await Filesystem.write(
+      authPath,
+      JSON.stringify({ anthropic: { type: "api", key: "auth-key" } }),
+    )
+    await disposeAllInstances()
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        remove("ANTHROPIC_API_KEY")
+        set("ANTHROPIC_API_KEY", "env-key")
+        const providers = await list()
+        expect(providers[ProviderID.anthropic]).toBeDefined()
+        expect(providers[ProviderID.anthropic].source).toBe("api")
+        expect(providers[ProviderID.anthropic].key).toBe("auth-key")
+        remove("ANTHROPIC_API_KEY")
+      },
+    })
+  } finally {
+    if (prev !== undefined) {
+      await Filesystem.write(authPath, prev)
+    } else {
+      try {
+        await unlink(authPath)
+      } catch {}
+    }
+    await disposeAllInstances()
+  }
+})

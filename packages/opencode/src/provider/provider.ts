@@ -997,39 +997,60 @@ export interface Interface {
 
 interface State {
   models: Map<string, LanguageModelV3>
-  providers: Record<ProviderID, Info>
+  // INVARIANT: never holds env-only entries (env-derived entries are layered in
+  // by `currentProviders`). Readers MUST go through `view`, not `s.cachedProviders`.
+  cachedProviders: Record<ProviderID, Info>
   catalog: Record<ProviderID, Info>
   sdk: Map<string, BundledSDK>
   modelLoaders: Record<string, CustomModelLoader>
   varsLoaders: Record<string, CustomVarsLoader>
-  database: Record<ProviderID, Info>
-  envEligible: ReadonlySet<string>
+  // INVARIANT: env-eligible only; models pre-filtered (status/blacklist/whitelist);
+  // non-autoload custom-loader options pre-folded. Immutable post-init.
+  cleanedDatabase: Record<ProviderID, Info>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
 
-function overlayEnv(s: State, envs: Record<string, string | undefined>): Record<ProviderID, Info> {
-  const result: Record<ProviderID, Info> = { ...s.providers }
-  for (const [id, info] of Object.entries(s.database)) {
-    const providerID = ProviderID.make(id)
-    if (!s.envEligible.has(providerID)) continue
+/**
+ * Single-provider env precedence (pure):
+ *   - !apiKey, cached.source==="env"    → drop
+ *   - !apiKey, otherwise                → keep cached
+ *   - apiKey, cached non-"env" w/o key, single-env candidate → cached + key
+ *   - apiKey, cached non-"env"          → cached wins
+ *   - apiKey, cached==="env" same key   → identity
+ *   - apiKey, cached==="env" new key    → cached + new key
+ *   - apiKey, no cached                 → new env entry from candidate
+ */
+export function resolveEnvOverlay(
+  cached: Info | undefined,
+  candidate: Info,
+  apiKey: string | undefined,
+): Info | undefined {
+  if (!apiKey) {
+    if (cached?.source === "env") return undefined
+    return cached
+  }
+  if (cached && cached.source !== "env") {
+    if (!cached.key && candidate.env.length === 1) return { ...cached, key: apiKey }
+    return cached
+  }
+  const nextKey = candidate.env.length === 1 ? apiKey : undefined
+  if (cached && cached.key === nextKey) return cached
+  if (cached) return { ...cached, key: nextKey }
+  return { ...candidate, source: "env", key: nextKey }
+}
+
+export function currentProviders(
+  s: Pick<State, "cachedProviders" | "cleanedDatabase">,
+  envs: Record<string, string | undefined>,
+): Record<ProviderID, Info> {
+  const result: Record<ProviderID, Info> = { ...s.cachedProviders }
+  for (const [id, info] of Object.entries(s.cleanedDatabase)) {
+    const providerID = id as ProviderID
     const apiKey = info.env.map((k) => envs[k]).find(Boolean)
-    const cached = result[providerID]
-    if (!apiKey) {
-      if (cached?.source === "env") delete result[providerID]
-      continue
-    }
-    if (cached) {
-      if (cached.source !== "env") continue
-      const nextKey = info.env.length === 1 ? apiKey : undefined
-      if (cached.key === nextKey) continue
-      result[providerID] = mergeDeep(cached, { key: nextKey }) as Info
-      continue
-    }
-    result[providerID] = mergeDeep(info, {
-      source: "env",
-      key: info.env.length === 1 ? apiKey : undefined,
-    }) as Info
+    const next = resolveEnvOverlay(result[providerID], info, apiKey)
+    if (next) result[providerID] = next
+    else delete result[providerID]
   }
   return result
 }
@@ -1373,18 +1394,8 @@ export const layer = Layer.effect(
           database[providerID] = parsed
         }
 
-        // load env
+        // env snapshot for source-label preservation in the custom loop below.
         const envs = yield* env.all()
-        for (const [id, provider] of Object.entries(database)) {
-          const providerID = ProviderID.make(id)
-          if (disabled.has(providerID)) continue
-          const apiKey = provider.env.map((item) => envs[item]).find(Boolean)
-          if (!apiKey) continue
-          mergeProvider(providerID, {
-            source: "env",
-            key: provider.env.length === 1 ? apiKey : undefined,
-          })
-        }
 
         // load apikeys
         const auths = yield* auth.all().pipe(Effect.orDie)
@@ -1429,13 +1440,44 @@ export const layer = Layer.effect(
             continue
           }
           const result = yield* fn(data)
-          if (result && (result.autoload || providers[providerID])) {
-            if (result.getModel) modelLoaders[providerID] = result.getModel
-            if (result.vars) varsLoaders[providerID] = result.vars
-            if (result.discoverModels) discoveryLoaders[providerID] = result.discoverModels
+          if (!result) continue
+
+          // Always register loaders so a late env-promoted provider can find
+          // its modelLoader / varsLoader / discoverModels.
+          if (result.getModel) modelLoaders[providerID] = result.getModel
+          if (result.vars) varsLoaders[providerID] = result.vars
+          if (result.discoverModels) discoveryLoaders[providerID] = result.discoverModels
+
+          if (result.autoload) {
             const opts = result.options ?? {}
-            const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
+            if (providers[providerID]) {
+              mergeProvider(providerID, { options: opts })
+              continue
+            }
+            // autoload=true with no prior auth/config entry. Most common cause:
+            // env-conditional autoload (gitlab, cloudflare-ai-gateway) fired
+            // because env was present at init. Preserve source="env" so labels
+            // match the pre-fix behavior of the deleted env-stamp loop.
+            const envKey = data.env.length > 0 ? data.env.map((k) => envs[k]).find(Boolean) : undefined
+            const patch: Partial<Info> = envKey
+              ? { source: "env", options: opts, key: data.env.length === 1 ? envKey : undefined }
+              : { source: "custom", options: opts }
             mergeProvider(providerID, patch)
+            continue
+          }
+
+          // Non-autoload loader returned options: merge into providers if
+          // already stamped (auth/config), otherwise fold into database so a
+          // late env detection picks them up via the overlay.
+          if (result.options) {
+            if (providers[providerID]) {
+              mergeProvider(providerID, { options: result.options })
+            } else {
+              database[providerID] = {
+                ...data,
+                options: mergeDeep(data.options ?? {}, result.options) as Record<string, any>,
+              }
+            }
           }
         }
 
@@ -1516,48 +1558,63 @@ export const layer = Layer.effect(
           log.info("found", { providerID })
         }
 
-        const envEligible = new Set<string>()
+        // Build cleanedDatabase: filter models per env-eligible provider so a
+        // late env-detected provider exposes only the same surviving set the
+        // cleanup loop above produced for init-stamped providers.
+        const cleanedDatabase: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
         for (const [id, info] of Object.entries(database)) {
           if (disabled.has(id)) continue
           if (enabled && !enabled.has(id)) continue
           if (info.env.length === 0) continue
+          const providerID = ProviderID.make(id)
           const configProvider = cfg.provider?.[id]
-          const surviving = Object.entries(info.models).filter(([modelID, model]) => {
-            if (model.status === "alpha" && !runtimeFlags.enableExperimentalModels) return false
-            if (model.status === "deprecated") return false
-            if (configProvider?.blacklist?.includes(modelID)) return false
-            if (configProvider?.whitelist && !configProvider.whitelist.includes(modelID)) return false
-            return true
-          })
-          if (surviving.length === 0) continue
-          envEligible.add(id)
+          const filteredModels: Record<string, Model> = {}
+          for (const [modelID, model] of Object.entries(info.models)) {
+            if (
+              (modelID === "gpt-5-chat-latest" &&
+                (providerID === ProviderID.openai ||
+                  providerID === ProviderID.githubCopilot ||
+                  providerID === ProviderID.openrouter)) ||
+              (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
+            )
+              continue
+            if (model.status === "alpha" && !runtimeFlags.enableExperimentalModels) continue
+            if (model.status === "deprecated") continue
+            if (configProvider?.blacklist?.includes(modelID)) continue
+            if (configProvider?.whitelist && !configProvider.whitelist.includes(modelID)) continue
+            filteredModels[modelID] = model
+          }
+          if (Object.keys(filteredModels).length === 0) continue
+          cleanedDatabase[providerID] = { ...info, models: filteredModels }
         }
 
         return {
           models: languages,
-          providers,
+          cachedProviders: providers,
           catalog,
           sdk,
           modelLoaders,
           varsLoaders,
-          database,
-          envEligible,
+          cleanedDatabase,
         }
       }),
     )
 
-    const list = Effect.fn("Provider.list")(function* () {
-      const s = yield* InstanceState.get(state)
+    const view = Effect.fnUntraced(function* (s: State) {
       const envs = yield* env.all()
-      return overlayEnv(s, envs)
+      return currentProviders(s, envs)
     })
 
-    async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
+    const list = Effect.fn("Provider.list")(function* () {
+      const s = yield* InstanceState.get(state)
+      return yield* view(s)
+    })
+
+    async function resolveSDK(model: Model, s: State, provider: Info, envs: Record<string, string | undefined>) {
       try {
         using _ = log.time("getSDK", {
           providerID: model.providerID,
         })
-        const provider = s.providers[model.providerID]
         const options = { ...provider.options }
 
         if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
@@ -1697,19 +1754,20 @@ export const layer = Layer.effect(
 
     const getProvider = Effect.fn("Provider.getProvider")(function* (providerID: ProviderID) {
       const s = yield* InstanceState.get(state)
-      const envs = yield* env.all()
-      return overlayEnv(s, envs)[providerID]
+      const all = yield* view(s)
+      return all[providerID]
     })
 
     const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderID, modelID: ModelID) {
       const s = yield* InstanceState.get(state)
-      const provider = s.providers[providerID]
+      const all = yield* view(s)
+      const provider = all[providerID]
       if (!provider) {
         const catalogProvider = s.catalog[providerID]
         const suggestions = catalogProvider
           ? modelSuggestions(catalogProvider, modelID, runtimeFlags.enableExperimentalModels)
           : fuzzysort
-              .go(providerID, Object.keys({ ...s.catalog, ...s.providers }), { limit: 3, threshold: -10000 })
+              .go(providerID, Object.keys({ ...s.catalog, ...all }), { limit: 3, threshold: -10000 })
               .map((m) => m.target)
         return yield* new ModelNotFoundError({ providerID, modelID, suggestions })
       }
@@ -1731,10 +1789,10 @@ export const layer = Layer.effect(
       const key = `${model.providerID}/${model.id}`
       if (s.models.has(key)) return s.models.get(key)!
 
-      const provider = s.providers[model.providerID]
+      const provider = currentProviders(s, envs)[model.providerID]
       return yield* EffectPromise.refineRejection(
         async () => {
-          const sdk = await resolveSDK(model, s, envs)
+          const sdk = await resolveSDK(model, s, provider, envs)
           const language = s.modelLoaders[model.providerID]
             ? await s.modelLoaders[model.providerID](sdk, model.api.id, {
                 ...provider.options,
@@ -1753,7 +1811,7 @@ export const layer = Layer.effect(
 
     const closest = Effect.fn("Provider.closest")(function* (providerID: ProviderID, query: string[]) {
       const s = yield* InstanceState.get(state)
-      const provider = s.providers[providerID]
+      const provider = (yield* view(s))[providerID]
       if (!provider) return undefined
       for (const item of query) {
         for (const modelID of Object.keys(provider.models)) {
@@ -1774,7 +1832,7 @@ export const layer = Layer.effect(
       }
 
       const s = yield* InstanceState.get(state)
-      const provider = s.providers[providerID]
+      const provider = (yield* view(s))[providerID]
       if (!provider) return undefined
 
       let priority = [
@@ -1826,6 +1884,7 @@ export const layer = Layer.effect(
       if (cfg.model) return parseModel(cfg.model)
 
       const s = yield* InstanceState.get(state)
+      const all = yield* view(s)
       const recent = yield* fs.readJson(path.join(Global.Path.state, "model.json")).pipe(
         Effect.map((x): { providerID: ProviderID; modelID: ModelID }[] => {
           if (!isRecord(x) || !Array.isArray(x.recent)) return []
@@ -1839,13 +1898,13 @@ export const layer = Layer.effect(
         Effect.catch(() => Effect.succeed([] as { providerID: ProviderID; modelID: ModelID }[])),
       )
       for (const entry of recent) {
-        const provider = s.providers[entry.providerID]
+        const provider = all[entry.providerID]
         if (!provider) continue
         if (!provider.models[entry.modelID]) continue
         return { providerID: entry.providerID, modelID: entry.modelID }
       }
 
-      const provider = Object.values(s.providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
+      const provider = Object.values(all).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
       if (!provider) throw new Error("no providers found")
       const [model] = sort(Object.values(provider.models))
       if (!model) throw new Error("no models found")
