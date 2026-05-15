@@ -2,7 +2,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
-import { createMemo, createResource, createSignal, onMount, type JSX } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onMount, type JSX } from "solid-js"
 import { Locale } from "@/util/locale"
 import { useProject } from "@tui/context/project"
 import { useTheme } from "../context/theme"
@@ -18,6 +18,10 @@ import { errorMessage } from "@/util/error"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 import { WorkspaceLabel } from "./workspace-label"
 import { useCommandShortcut } from "../keymap"
+
+// Track sessions the user has clicked so their dot disappears until they run again
+// This persists across dialog open/close cycles
+const [seenIdle, setSeenIdle] = createSignal(new Set<string>(), { equals: false })
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -43,6 +47,25 @@ export function DialogSessionList() {
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
   const sessions = createMemo(() => searchResults() ?? sync.data.session)
+
+  // Collect currently-busy session IDs reactively via memo so the effect below
+  // properly tracks new key additions to session_status
+  const busySessions = createMemo(() =>
+    Object.entries(sync.data.session_status)
+      .filter(([, s]) => s.type === "busy" || s.type === "retry")
+      .map(([id]) => id),
+  )
+
+  // When a session starts running again, un-dismiss it so the dot reappears on completion
+  createEffect(() => {
+    for (const id of busySessions()) setSeenIdle((prev) => { prev.delete(id); return prev })
+  })
+
+  // Auto-dismiss when the user navigates to a session (through click, dialog, etc.)
+  createEffect(() => {
+    const id = currentSessionID()
+    if (id) setSeenIdle((prev) => { prev.add(id); return prev })
+  })
 
   function recover(session: NonNullable<ReturnType<typeof sessions>[number]>) {
     const workspace = project.workspace.get(session.workspaceID!)
@@ -181,12 +204,22 @@ export function DialogSessionList() {
       const isDeleting = toDelete() === x.id
       const status = sync.data.session_status?.[x.id]
       const isWorking = status?.type === "busy" || status?.type === "retry"
+      const isCurrent = x.id === currentSessionID()
+      const needsAttention = () => {
+        if (status?.type === "idle") return true
+        const perms = sync.data.permission[x.id] ?? []
+        const questions = sync.data.question[x.id] ?? []
+        return perms.length > 0 || questions.length > 0
+      }
+      const showDot = () => !isCurrent && needsAttention() && !seenIdle().has(x.id)
       const slot = slotByID.get(x.id)
       const gutter = isWorking
         ? () => <Spinner />
-        : slot !== undefined
-          ? () => <text fg={theme.accent}>{slot}</text>
-          : undefined
+        : showDot()
+          ? () => <text fg={theme.info}>●</text>
+          : slot !== undefined
+            ? () => <text fg={theme.accent}>{slot}</text>
+            : undefined
       return {
         title: isDeleting ? `Press ${deleteHint()} again to confirm` : x.title,
         bg: isDeleting ? theme.error : undefined,
@@ -238,29 +271,29 @@ export function DialogSessionList() {
       actions={[
         ...(Flag.OPENCODE_EXPERIMENTAL_SESSION_SWITCHING
           ? [
-              {
-                command: "session.pin.toggle",
-                title: "pin/unpin",
-                onTrigger: (option: { value: string }) => {
-                  local.session.togglePin(option.value)
-                },
+            {
+              command: "session.pin.toggle",
+              title: "pin/unpin",
+              onTrigger: (option: { value: string }) => {
+                local.session.togglePin(option.value)
               },
-              {
-                command: "session.toggle.recent",
-                title: "toggle recent",
-                onTrigger: (option: { value: string }) => {
-                  if (local.session.isPinned(option.value)) {
-                    toast.show({
-                      variant: "info",
-                      message: "Unpin the session first to toggle it in Recent",
-                      duration: 3000,
-                    })
-                    return
-                  }
-                  local.session.toggleRecent(option.value)
-                },
+            },
+            {
+              command: "session.toggle.recent",
+              title: "toggle recent",
+              onTrigger: (option: { value: string }) => {
+                if (local.session.isPinned(option.value)) {
+                  toast.show({
+                    variant: "info",
+                    message: "Unpin the session first to toggle it in Recent",
+                    duration: 3000,
+                  })
+                  return
+                }
+                local.session.toggleRecent(option.value)
               },
-            ]
+            },
+          ]
           : []),
         {
           command: "session.delete",
