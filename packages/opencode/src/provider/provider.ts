@@ -125,28 +125,12 @@ type CustomLoader = (provider: Info) => Effect.Effect<{
   vars?: CustomVarsLoader
   options?: Record<string, any>
   discoverModels?: CustomDiscoverModels
-  // Set to `false` on a non-autoload return to opt out of late-env detection.
-  //
-  // Mark a return path with `dynamicEnv: false` whenever the loader cannot
-  // reconstruct its options from env alone — i.e. when missing init-time
-  // inputs (auth metadata, credential providers obtained via dynamic SDK
-  // imports, derived URLs, region/deployment/account IDs) close over values
-  // that later env mutations cannot replay. Without this flag a late env
-  // would surface the provider in `list()`, but `getLanguage()` would build
-  // an SDK with stale or undefined options and fail silently at first
-  // request. Loaders marked `dynamicEnv: false` are excluded from
-  // `cleanedDatabase` so the provider stays hidden until opencode restart;
-  // a one-time warn is emitted when the refused env appears.
-  //
-  // Single-credential providers whose only env input is the API key
-  // (anthropic, openai, openrouter, ...) do NOT need this flag: their late
-  // env value flows through `provider.key` via the env overlay and is
-  // applied by `resolveSDK` at call time.
-  //
-  // TODO(rerunOn): replace this binary opt-out with a declarative
-  // `rerunOn: string[]` env-dependency list so refused providers can be
-  // re-evaluated when one of their declared env inputs changes (would
-  // close the sap-ai-core / amazon-bedrock late-env case without restart).
+  // Set on a non-autoload return when the loader cannot reconstruct its
+  // options from env alone (auth metadata, dynamic SDK imports, derived URLs).
+  // `dynamicEnv: false` excludes the provider from `cleanedDatabase` so a late
+  // env never surfaces it with stale options; a one-time warn is emitted
+  // instead. Single-env-key providers (anthropic, openai, ...) do not need it.
+  // TODO(rerunOn): replace with declarative `rerunOn: string[]` env-dep list.
   dynamicEnv?: boolean
 }>
 
@@ -322,8 +306,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const envBearerToken = env["AWS_BEARER_TOKEN_BEDROCK"]
       const awsBearerToken = envBearerToken ?? (auth?.type === "api" ? auth.key : undefined)
       if (!envBearerToken && awsBearerToken) {
-        // TODO(multi-instance): writes to process-wide process.env via Env.set;
-        // see env/index.ts docstring on multi-workspace credential clobbering.
+        // TODO(multi-instance): see env/index.ts docstring.
         yield* dep.set("AWS_BEARER_TOKEN_BEDROCK", awsBearerToken)
       }
 
@@ -581,8 +564,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         return { autoload: false, dynamicEnv: false }
       }
       if (!envAICoreServiceKey) {
-        // TODO(multi-instance): writes to process-wide process.env via Env.set;
-        // see env/index.ts docstring on multi-workspace credential clobbering.
+        // TODO(multi-instance): see env/index.ts docstring.
         yield* dep.set("AICORE_SERVICE_KEY", envServiceKey)
       }
       const deploymentId = env["AICORE_DEPLOYMENT_ID"]
@@ -1060,42 +1042,26 @@ export interface Interface {
 
 interface State {
   models: Map<string, LanguageModelV3>
-  // Stamped at init from auth/config/loader results. May contain entries with
-  // source:"env" for autoload-with-env-key providers (e.g. gitlab,
-  // cloudflare-ai-gateway) that have no other config source. Readers MUST go
-  // through `currentProviders(...)` to apply the live env overlay on top.
+  // Init-time providers from auth/config/loader. Readers MUST go through
+  // `currentProviders(...)` to apply the live env overlay on top.
   cachedProviders: Record<ProviderID, Info>
   catalog: Record<ProviderID, Info>
   sdk: Map<string, BundledSDK>
   modelLoaders: Record<string, CustomModelLoader>
   varsLoaders: Record<string, CustomVarsLoader>
-  // Env-eligible providers only (info.env.length > 0); models pre-filtered
-  // (status/blacklist/whitelist); non-autoload custom-loader options pre-folded.
-  // Treated as immutable after init — all reads go through `currentProviders`.
+  // Env-eligible providers with models pre-filtered. Frozen at init.
   cleanedDatabase: Readonly<Record<ProviderID, Info>>
-  // Providers whose custom loader returned `dynamicEnv: false`. Populated at
-  // init only; never mutated post-init.
+  // Providers excluded from late-env overlay (loader returned `dynamicEnv: false`).
   loaderRefusedDynamicEnv: Set<ProviderID>
-  // Mutated post-init by `warnLateEnvRefused` to dedupe the once-per-instance
-  // warning emitted when a refused provider's env appears. Note: this is
-  // per-`InstanceState`, not per-process — multi-instance hosts (desktop
-  // sidecar with several workspaces) will warn once per workspace.
+  // Per-instance dedupe set for `warnLateEnvRefused`.
   warnedLateEnvRefused: Set<ProviderID>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
 
 /**
- * @internal Test-only export. Not part of the public Provider API; subject to
- * change without notice. Single-provider env precedence (pure):
- *   - !apiKey, cached.source==="env"    → drop
- *   - !apiKey, otherwise                → keep cached
- *   - apiKey, cached non-"env" w/o key, single-env candidate → cached + key
- *   - apiKey, cached non-"env"          → cached wins
- *   - apiKey, cached==="env" same key   → identity
- *   - apiKey, cached==="env" new key (single-env candidate) → cached + new key
- *   - apiKey, cached==="env" multi-env candidate → cached.key preserved
- *   - apiKey, no cached                 → new env entry from candidate
+ * @internal Test-only export. Pure single-provider env-overlay step. See
+ * `overlay.test.ts` for the exhaustive precedence table.
  */
 export function resolveEnvOverlay(
   cached: Info | undefined,
@@ -1110,7 +1076,7 @@ export function resolveEnvOverlay(
     if (!cached.key && candidate.env.length === 1) return { ...cached, key: apiKey }
     return cached
   }
-  // Multi-env: preserve cached.key (no single-source-of-truth value).
+  // Multi-env candidate: cached.key has no single source of truth, preserve it.
   const nextKey = candidate.env.length === 1 ? apiKey : cached?.key
   if (cached && cached.key === nextKey) return cached
   if (cached) return { ...cached, key: nextKey }
@@ -1125,10 +1091,8 @@ export function currentProviders(
   const result: Record<ProviderID, Info> = { ...s.cachedProviders }
   for (const [id, info] of Object.entries(s.cleanedDatabase)) {
     const providerID = id as ProviderID
-    // Treat empty AND whitespace-only strings as absent: a blank env var is
-    // never a valid API key. The original (un-trimmed) value is preserved
-    // when non-blank — a surrounding-whitespace key is still passed through
-    // verbatim because trimming a real key would be silently incorrect.
+    // Empty/whitespace env values count as absent. Non-blank values are
+    // passed through verbatim — trimming a real key would be silently wrong.
     const apiKey = info.env.map((k) => envs[k]).find(isNonBlank)
     const next = resolveEnvOverlay(result[providerID], info, apiKey)
     if (next) result[providerID] = next
@@ -1160,31 +1124,20 @@ function warnLateEnvRefused(
   }
 }
 
-// JSON.stringify drops functions silently, so two distinct closures (e.g.
-// AWS credentialProvider instances stored in options) collide on the same
-// hash. Replace with a name-tagged sentinel that disambiguates named
-// closures (e.g. `coalesceProvider` vs another named factory). Anonymous
-// arrows still collide on `__fn:anon` — that is intentional: it lets the
-// per-call `fetch` wrapper installed in `resolveSDK` (an arrow built on
-// every invocation) hit the SDK cache instead of busting it on every call.
+// JSON.stringify drops functions silently and throws on BigInt. Tag both so
+// distinct closures (e.g. AWS `coalesceProvider`) and BigInt values produce
+// stable, distinct hashes. Anonymous arrows collide on `__fn:anon` — that is
+// intentional: the per-call `fetch` wrapper built in `resolveSDK` would
+// otherwise bust the SDK cache on every invocation.
 //
-// CAVEAT: named-function collisions across UNRELATED callers are still
-// possible. If a third-party plugin stores a function named `coalesceProvider`
-// in `provider.options`, it will hash-collide with the in-tree AWS bedrock
-// loader's same-named closure and silently serve a stale SDK. In-tree
-// loaders avoid this; plugin authors must not put stateful closures in
-// `provider.options` outside the per-call `fetch` wrapper convention.
+// CAVEAT: same-named closures from unrelated callers (e.g. a third-party
+// plugin storing a `coalesceProvider` in `provider.options`) collide and may
+// silently serve a stale SDK. Plugin authors must keep stateful closures out
+// of `provider.options` outside the per-call `fetch` convention.
 //
-// BigInt values are stringified with an `n` suffix so JSON.stringify does not
-// throw `TypeError: Do not know how to serialize a BigInt`. Plain numeric
-// types serialize as-is, so `1` and `1n` produce distinct hashes (`1` vs
-// `"1n"`).
-//
-// TODO(hash): migrate to `effect/Hash` + `Equal.equals` for structural value
-// hashing combined with a `WeakMap`-tracked identity for functions. That
-// would fix the named-collision risk above without the per-call cache-bust
-// regression.
-/** @internal Test-only export. Not part of the public Provider API. */
+// TODO(hash): swap for `effect/Hash` + `Equal.equals` with WeakMap-tracked
+// function identity to fix the named-collision risk.
+/** @internal Test-only export. */
 export function hashIdentity(parts: Record<string, unknown>): string {
   return Hash.fast(
     JSON.stringify(parts, (_key, value) => {

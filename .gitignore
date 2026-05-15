@@ -30,3 +30,6 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# Sisyphus orchestrator state (local only)
+.sisyphus/

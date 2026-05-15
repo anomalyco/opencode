@@ -513,8 +513,7 @@ export const layer = Layer.effect(
         for (const [key, value] of Object.entries(auth)) {
           if (value.type === "wellknown") {
             const url = key.replace(/\/+$/, "")
-            // TODO(multi-instance): writes to process-wide process.env via Env.set;
-            // see env/index.ts docstring on multi-workspace credential clobbering.
+            // TODO(multi-instance): see env/index.ts docstring.
             yield* env.set(value.key, value.token)
             log.debug("fetching remote config", { url: `${url}/.well-known/opencode` })
             const response = yield* Effect.promise(() => fetch(`${url}/.well-known/opencode`))
@@ -649,8 +648,7 @@ export const layer = Layer.effect(
               { concurrency: 2 },
             )
             if (Option.isSome(tokenOpt)) {
-              // TODO(multi-instance): writes to process-wide process.env via Env.set;
-              // see env/index.ts docstring on multi-workspace credential clobbering.
+              // TODO(multi-instance): see env/index.ts docstring.
               yield* env.set("OPENCODE_CONSOLE_TOKEN", tokenOpt.value)
             }
 
