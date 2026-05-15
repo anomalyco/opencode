@@ -118,7 +118,10 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
 }
 
 type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
-type CustomVarsLoader = (options: Record<string, any>) => Record<string, string>
+type CustomVarsLoader = (
+  options: Record<string, any>,
+  envs: Record<string, string | undefined>,
+) => Record<string, string>
 type CustomDiscoverModels = () => Promise<Record<string, Model>>
 type CustomLoader = (provider: Info) => Effect.Effect<{
   autoload: boolean
@@ -153,15 +156,6 @@ function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean) {
   if (sdk.messages) return sdk.messages(modelID)
   if (sdk.chat) return sdk.chat(modelID)
   return sdk.languageModel(modelID)
-}
-
-// Synchronous live-read of `process.env`. Loader `vars()` callbacks are sync
-// and run on every `currentProviders` overlay, so they cannot yield to
-// `dep.env()`. Routing all reads through this single helper names the intent
-// and gives one extension point if `Env` ever stops being a `process.env`
-// proxy.
-function liveEnv(key: string): string | undefined {
-  return process.env[key]
 }
 
 function custom(dep: CustomDep): Record<string, CustomLoader> {
@@ -254,7 +248,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         options: {
           resourceName: resource,
         },
-        vars(_options): Record<string, string> {
+        vars(_options, envs): Record<string, string> {
           // Re-read live env at call time so late `AZURE_RESOURCE_NAME` env
           // rotation propagates through `${AZURE_RESOURCE_NAME}` baseURL
           // templating in `resolveSDK`. Precedence preserved:
@@ -262,7 +256,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           const liveResource = [
             provider.options?.resourceName,
             auth?.type === "api" ? auth.metadata?.resourceName : undefined,
-            liveEnv("AZURE_RESOURCE_NAME"),
+            envs["AZURE_RESOURCE_NAME"],
           ].find((name) => typeof name === "string" && name.trim() !== "")
           if (liveResource) {
             return {
@@ -505,19 +499,19 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       if (!autoload) return { autoload: false, requiresRestart: true }
       return {
         autoload: true,
-        vars(_options: Record<string, any>) {
+        vars(_options: Record<string, any>, envs: Record<string, string | undefined>) {
           // Re-read live env at call time so post-init rotation of any of the
           // GOOGLE_VERTEX_* / GOOGLE_CLOUD_* / GCP_PROJECT envs propagates
           // through baseURL templating. Falls back to init-time capture for
           // parity with the non-rotated case.
           const liveProject =
-            liveEnv("GOOGLE_VERTEX_PROJECT") ??
-            liveEnv("GOOGLE_CLOUD_PROJECT") ??
-            liveEnv("GCP_PROJECT") ??
-            liveEnv("GCLOUD_PROJECT") ??
+            envs["GOOGLE_VERTEX_PROJECT"] ??
+            envs["GOOGLE_CLOUD_PROJECT"] ??
+            envs["GCP_PROJECT"] ??
+            envs["GCLOUD_PROJECT"] ??
             project
           const liveLocation =
-            liveEnv("GOOGLE_VERTEX_LOCATION") ?? liveEnv("GOOGLE_CLOUD_LOCATION") ?? liveEnv("VERTEX_LOCATION") ?? location
+            envs["GOOGLE_VERTEX_LOCATION"] ?? envs["GOOGLE_CLOUD_LOCATION"] ?? envs["VERTEX_LOCATION"] ?? location
           const endpoint =
             liveLocation === "global" ? "aiplatform.googleapis.com" : `${liveLocation}-aiplatform.googleapis.com`
           return {
@@ -779,12 +773,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         async getModel(sdk: any, modelID: string) {
           return sdk.languageModel(modelID)
         },
-        vars(_options) {
+        vars(_options, envs) {
           // Re-read live env at call time so late `CLOUDFLARE_ACCOUNT_ID`
           // rotation propagates through baseURL templating. Falls back to
           // init-time capture (env or auth metadata) when env is unset.
           return {
-            CLOUDFLARE_ACCOUNT_ID: liveEnv("CLOUDFLARE_ACCOUNT_ID") ?? accountId,
+            CLOUDFLARE_ACCOUNT_ID: envs["CLOUDFLARE_ACCOUNT_ID"] ?? accountId,
           }
         },
       }
@@ -1050,13 +1044,75 @@ export interface Interface {
   readonly defaultModel: () => Effect.Effect<{ providerID: ProviderID; modelID: ModelID }>
 }
 
+interface BoundedAsyncCache<V> {
+  get(key: string): V | undefined
+  getOrLoad(key: string, build: () => Promise<V>): Promise<V>
+}
+
+// Capacity-bounded LRU + in-flight Promise dedup. Two concurrent callers with
+// the same key share one build; rejections evict the in-flight slot so a
+// transient init failure never poisons the cache. Insertion order in the
+// underlying `Map` doubles as LRU order — `get` re-inserts the key to refresh
+// recency. Eviction is O(1) (drop the iterator's first key when at capacity).
+//
+// Bounds protect long-running daemons against rotation-driven leaks: every
+// distinct credential or templated baseURL produces a new `hashIdentity`, so
+// without a cap the underlying maps would grow once per rotation forever.
+function makeBoundedAsyncCache<V>(capacity: number): BoundedAsyncCache<V> {
+  const entries = new Map<string, V>()
+  const inflight = new Map<string, Promise<V>>()
+
+  const set = (key: string, value: V) => {
+    if (entries.has(key)) entries.delete(key)
+    else if (entries.size >= capacity) {
+      const oldest = entries.keys().next().value
+      if (oldest !== undefined) entries.delete(oldest)
+    }
+    entries.set(key, value)
+  }
+
+  const get = (key: string) => {
+    const v = entries.get(key)
+    if (v === undefined) return undefined
+    entries.delete(key)
+    entries.set(key, v)
+    return v
+  }
+
+  return {
+    get,
+    getOrLoad(key, build) {
+      const cached = get(key)
+      if (cached !== undefined) return Promise.resolve(cached)
+      const pending = inflight.get(key)
+      if (pending) return pending
+      const promise = build().then(
+        (v) => {
+          set(key, v)
+          inflight.delete(key)
+          return v
+        },
+        (err) => {
+          inflight.delete(key)
+          throw err
+        },
+      )
+      inflight.set(key, promise)
+      return promise
+    },
+  }
+}
+
+const SDK_CACHE_CAPACITY = 256
+const LANGUAGE_MODEL_CACHE_CAPACITY = 256
+
 interface State {
-  models: Map<string, LanguageModelV3>
+  models: BoundedAsyncCache<LanguageModelV3>
   // Init-time providers from auth/config/loader. Readers MUST go through
   // `currentProviders(...)` to apply the live env overlay on top.
   cachedProviders: Record<ProviderID, Info>
   catalog: Record<ProviderID, Info>
-  sdk: Map<string, BundledSDK>
+  sdk: BoundedAsyncCache<BundledSDK>
   modelLoaders: Record<string, CustomModelLoader>
   varsLoaders: Record<string, CustomVarsLoader>
   // Env-eligible providers with models pre-filtered. Frozen at init.
@@ -1264,14 +1320,14 @@ export const layer = Layer.effect(
         const database = mapValues(catalog, toPublicInfo)
 
         const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
-        const languages = new Map<string, LanguageModelV3>()
+        const languages = makeBoundedAsyncCache<LanguageModelV3>(LANGUAGE_MODEL_CACHE_CAPACITY)
         const modelLoaders: {
           [providerID: string]: CustomModelLoader
         } = {}
         const varsLoaders: {
           [providerID: string]: CustomVarsLoader
         } = {}
-        const sdk = new Map<string, BundledSDK>()
+        const sdk = makeBoundedAsyncCache<BundledSDK>(SDK_CACHE_CAPACITY)
         const discoveryLoaders: {
           [providerID: string]: CustomDiscoverModels
         } = {}
@@ -1651,7 +1707,7 @@ export const layer = Layer.effect(
 
           const loader = s.varsLoaders[model.providerID]
           if (loader) {
-            const vars = loader(options)
+            const vars = loader(options, envs)
             for (const [key, value] of Object.entries(vars)) {
               const field = "${" + key + "}"
               url = url.replaceAll(field, value)
@@ -1678,92 +1734,89 @@ export const layer = Layer.effect(
           npm: model.api.npm,
           options,
         })
-        const existing = s.sdk.get(key)
-        if (existing) return existing
 
-        const customFetch = options["fetch"]
-        const chunkTimeout = options["chunkTimeout"]
-        delete options["chunkTimeout"]
+        return (await s.sdk.getOrLoad(key, async () => {
+          const customFetch = options["fetch"]
+          const chunkTimeout = options["chunkTimeout"]
+          delete options["chunkTimeout"]
 
-        options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
-          const fetchFn = customFetch ?? fetch
-          const opts = init ?? {}
-          const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
-          const signals: AbortSignal[] = []
+          options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+            const fetchFn = customFetch ?? fetch
+            const opts = init ?? {}
+            const chunkAbortCtl =
+              typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
+            const signals: AbortSignal[] = []
 
-          if (opts.signal) signals.push(opts.signal)
-          if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
-          if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false)
-            signals.push(AbortSignal.timeout(options["timeout"]))
+            if (opts.signal) signals.push(opts.signal)
+            if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
+            if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false)
+              signals.push(AbortSignal.timeout(options["timeout"]))
 
-          const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
-          if (combined) opts.signal = combined
+            const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
+            if (combined) opts.signal = combined
 
-          // Strip openai itemId metadata following what codex does
-          if (
-            (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure") &&
-            opts.body &&
-            opts.method === "POST"
-          ) {
-            const body = JSON.parse(opts.body as string)
-            const keepIds = body.store === true
-            if (!keepIds && Array.isArray(body.input)) {
-              for (const item of body.input) {
-                if ("id" in item) {
-                  delete item.id
+            // Strip openai itemId metadata following what codex does
+            if (
+              (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure") &&
+              opts.body &&
+              opts.method === "POST"
+            ) {
+              const body = JSON.parse(opts.body as string)
+              const keepIds = body.store === true
+              if (!keepIds && Array.isArray(body.input)) {
+                for (const item of body.input) {
+                  if ("id" in item) {
+                    delete item.id
+                  }
                 }
+                opts.body = JSON.stringify(body)
               }
-              opts.body = JSON.stringify(body)
             }
+
+            const res = await fetchFn(input, {
+              ...opts,
+              // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+              timeout: false,
+            })
+
+            if (!chunkAbortCtl) return res
+            return wrapSSE(res, chunkTimeout, chunkAbortCtl)
           }
 
-          const res = await fetchFn(input, {
-            ...opts,
-            // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
-            timeout: false,
-          })
+          const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
+          if (bundledLoader) {
+            log.info("using bundled provider", {
+              providerID: model.providerID,
+              pkg: model.api.npm,
+            })
+            const factory = await bundledLoader()
+            return factory({
+              name: model.providerID,
+              ...options,
+            })
+          }
 
-          if (!chunkAbortCtl) return res
-          return wrapSSE(res, chunkTimeout, chunkAbortCtl)
-        }
+          let installedPath: string
+          if (!model.api.npm.startsWith("file://")) {
+            const item = await Npm.add(model.api.npm)
+            if (!item.entrypoint) throw new Error(`Package ${model.api.npm} has no import entrypoint`)
+            installedPath = item.entrypoint
+          } else {
+            log.info("loading local provider", { pkg: model.api.npm })
+            installedPath = model.api.npm
+          }
 
-        const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
-        if (bundledLoader) {
-          log.info("using bundled provider", {
-            providerID: model.providerID,
-            pkg: model.api.npm,
-          })
-          const factory = await bundledLoader()
-          const loaded = factory({
+          // `installedPath` is a local entry path or an existing `file://` URL. Normalize
+          // only path inputs so Node on Windows accepts the dynamic import.
+          const importSpec = installedPath.startsWith("file://") ? installedPath : pathToFileURL(installedPath).href
+          const mod = await import(importSpec)
+
+          const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
+          return fn({
             name: model.providerID,
             ...options,
           })
-          s.sdk.set(key, loaded)
-          return loaded as SDK
-        }
-
-        let installedPath: string
-        if (!model.api.npm.startsWith("file://")) {
-          const item = await Npm.add(model.api.npm)
-          if (!item.entrypoint) throw new Error(`Package ${model.api.npm} has no import entrypoint`)
-          installedPath = item.entrypoint
-        } else {
-          log.info("loading local provider", { pkg: model.api.npm })
-          installedPath = model.api.npm
-        }
-
-        // `installedPath` is a local entry path or an existing `file://` URL. Normalize
-        // only path inputs so Node on Windows accepts the dynamic import.
-        const importSpec = installedPath.startsWith("file://") ? installedPath : pathToFileURL(installedPath).href
-        const mod = await import(importSpec)
-
-        const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
-        const loaded = fn({
-          name: model.providerID,
-          ...options,
-        })
-        s.sdk.set(key, loaded)
-        return loaded as SDK
+        })) as SDK
       } catch (e) {
         throw new InitError({ providerID: model.providerID, cause: e })
       }
@@ -1822,20 +1875,20 @@ export const layer = Layer.effect(
         key: provider.key,
         options: { ...provider.options, ...model.options },
       })
-      if (s.models.has(cacheKey)) return s.models.get(cacheKey)!
+      const cached = s.models.get(cacheKey)
+      if (cached !== undefined) return cached
 
       return yield* EffectPromise.refineRejection(
-        async () => {
-          const sdk = await resolveSDK(model, s, provider, envs)
-          const language = s.modelLoaders[model.providerID]
-            ? await s.modelLoaders[model.providerID](sdk, model.api.id, {
-                ...provider.options,
-                ...model.options,
-              })
-            : sdk.languageModel(model.api.id)
-          s.models.set(cacheKey, language)
-          return language
-        },
+        () =>
+          s.models.getOrLoad(cacheKey, async () => {
+            const sdk = await resolveSDK(model, s, provider, envs)
+            return s.modelLoaders[model.providerID]
+              ? await s.modelLoaders[model.providerID](sdk, model.api.id, {
+                  ...provider.options,
+                  ...model.options,
+                })
+              : sdk.languageModel(model.api.id)
+          }),
         (cause) =>
           cause instanceof NoSuchModelError
             ? new ModelNotFoundError({ modelID: model.id, providerID: model.providerID, cause })
