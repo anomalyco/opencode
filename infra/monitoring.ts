@@ -73,7 +73,6 @@ const modelHttpErrorsQuery = (product: "go" | "zen") => {
 const providerHttpErrorsQuery = () => {
   const filters = [
     { column: "provider", op: "exists" },
-    { column: "status", op: "!=", value: "404" },
     { column: "user_agent", op: "contains", value: "opencode" },
   ]
   const successHttpStatus = calculatedField({
@@ -101,11 +100,11 @@ const providerHttpErrorsQuery = () => {
         name: "FAILED",
         column: failedProviderHttpStatus.name,
         filterCombination: "AND",
-        filters: [...filters, { column: "event_type", op: "=", value: "llm.error" }],
+        filters: [...filters, { column: "event_type", op: "=", value: "llm.error" }, { column: "llm.error.code", op: "!=", value: "404" }],
       },
     ],
     formulas: [
-      { name: "ERROR", expression: "IF(GTE(SUM($SUCCESS, $FAILED), 100), DIV($FAILED, SUM($SUCCESS, $FAILED)), 0)" },
+      { name: "ERROR", expression: "IF(GTE(SUM($SUCCESS, $FAILED), 200), DIV($FAILED, SUM($SUCCESS, $FAILED)), 0)" },
     ],
     timeRange: 900,
   }).json
