@@ -135,6 +135,18 @@ describe("run prompt shared", () => {
     expect(mentionTriggerIndex("中文 @src file")).toBeUndefined()
   })
 
+  test("keeps autocomplete slicing width-safe after CJK prefixes", () => {
+    const mention = "中文 @readme"
+    const mentionStart = mentionTriggerIndex(mention, Bun.stringWidth(mention))
+    expect(mentionStart).toBe(5)
+    expect(displaySlice(mention, mentionStart! + 1, Bun.stringWidth(mention))).toBe("readme")
+    expect(displaySlice(mention, mentionStart!, Bun.stringWidth(mention)).match(/\s/)).toBeNull()
+
+    const slash = "/修复 bug"
+    expect(displaySlice(slash, 0, Bun.stringWidth("/修复")).match(/\s/)).toBeNull()
+    expect(displaySlice(slash, 0, Bun.stringWidth(slash)).match(/\s/)).not.toBeNull()
+  })
+
   test("handles direct and leader-based variant cycling", () => {
     const keys = promptKeys(keybinds)
 

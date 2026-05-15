@@ -20,7 +20,7 @@ import { useFrecency } from "./frecency"
 import { useBindings } from "../../keymap"
 import { Reference } from "@/reference/reference"
 import type { Config } from "@/config/config"
-import { displayCharAt, mentionTriggerIndex } from "@/cli/cmd/prompt-display"
+import { displayCharAt, displaySlice, mentionTriggerIndex } from "@/cli/cmd/prompt-display"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -135,7 +135,7 @@ export function Autocomplete(props: {
     // Track props.value to make memo reactive to text changes
     props.value // <- there surely is a better way to do this, like making .input() reactive
 
-    return props.input().getTextRange(store.index + 1, props.input().cursorOffset)
+    return displaySlice(props.value, store.index + 1, props.input().cursorOffset)
   })
 
   // filter() reads reactive props.value plus non-reactive cursor/text state.
@@ -767,7 +767,7 @@ export function Autocomplete(props: {
             // Typed text before the trigger
             props.input().cursorOffset <= store.index ||
             // There is a space between the trigger and the cursor
-            props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/) ||
+            displaySlice(value, store.index, props.input().cursorOffset).match(/\s/) ||
             // "/<command>" is not the sole content
             (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
           ) {
@@ -781,7 +781,7 @@ export function Autocomplete(props: {
         if (offset === 0) return
 
         // Check for "/" at position 0 - reopen slash commands
-        if (value.startsWith("/") && !value.slice(0, offset).match(/\s/)) {
+        if (value.startsWith("/") && !displaySlice(value, 0, offset).match(/\s/)) {
           show("/")
           setStore("index", 0)
           return
