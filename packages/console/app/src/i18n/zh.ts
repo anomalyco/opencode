@@ -643,7 +643,6 @@ export const dict = {
   "workspace.lite.promo.otherMethods": "其他付款方式",
   "workspace.lite.promo.selectMethod": "选择付款方式",
 
-  "workspace.referral.inviteApplied": "已应用邀请。订阅 Go 后将获得用量抵扣。",
   "workspace.referral.inviteLink": "邀请链接",
   "workspace.referral.copyLink": "复制链接",
   "workspace.referral.copied": "已复制",

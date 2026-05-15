@@ -662,7 +662,6 @@ export const dict = {
   "workspace.lite.promo.otherMethods": "Other payment methods",
   "workspace.lite.promo.selectMethod": "Select payment method",
 
-  "workspace.referral.inviteApplied": "Invite applied. Subscribe to Go to earn a usage deduction.",
   "workspace.referral.inviteLink": "Invite link",
   "workspace.referral.copyLink": "Copy Link",
   "workspace.referral.copied": "Copied",

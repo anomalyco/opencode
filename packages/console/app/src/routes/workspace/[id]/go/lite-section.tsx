@@ -311,9 +311,6 @@ export function LiteSection() {
             <li>DeepSeek V4 Flash</li>
           </ul>
           <p data-slot="promo-description">{i18n.t("workspace.lite.promo.footer")}</p>
-          <Show when={inviteCode()}>
-            <p data-slot="invite-applied">{i18n.t("workspace.referral.inviteApplied")}</p>
-          </Show>
           <div data-slot="subscribe-actions">
             <button
               data-slot="subscribe-button"
