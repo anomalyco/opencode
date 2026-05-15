@@ -269,10 +269,7 @@ it.live("InstanceState correct after interleaved init and dispose", () =>
       expect(a).toBe(one)
 
       const [, b] = yield* Effect.all(
-        [
-          reloadInstance({ directory: one }),
-          Test.use((svc) => svc.get()).pipe(provideInstanceEffect(two)),
-        ],
+        [reloadInstance({ directory: one }), Test.use((svc) => svc.get()).pipe(provideInstanceEffect(two))],
         { concurrency: "unbounded" },
       )
       expect(b).toBe(two)

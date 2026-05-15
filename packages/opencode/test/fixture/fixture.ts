@@ -18,9 +18,7 @@ import { TestLLMServer } from "../lib/llm-server"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 export const testInstanceStoreLayer = InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap))
-const testInstanceRuntime = ManagedRuntime.make(
-  testInstanceStoreLayer.pipe(Layer.provideMerge(Observability.layer)),
-)
+const testInstanceRuntime = ManagedRuntime.make(testInstanceStoreLayer.pipe(Layer.provideMerge(Observability.layer)))
 
 const runTestInstanceStore = <A>(fn: (store: InstanceStore.Interface) => Effect.Effect<A>) =>
   testInstanceRuntime.runPromise(InstanceStore.Service.use(fn))
@@ -207,10 +205,7 @@ export const withTmpdirInstance =
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped(options)
       return yield* self.pipe(Effect.provideService(TestInstance, { directory }), provideInstanceEffect(directory))
-    }).pipe(
-      Effect.provide(testInstanceStoreLayer),
-      Effect.provide(CrossSpawnSpawner.defaultLayer),
-    )
+    }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer))
 
 export function provideTmpdirServer<A, E, R>(
   self: (input: { dir: string; llm: TestLLMServer["Service"] }) => Effect.Effect<A, E, R>,
