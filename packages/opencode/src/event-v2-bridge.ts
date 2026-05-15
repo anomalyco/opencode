@@ -4,13 +4,12 @@
 import { Bus as ProjectBus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
-import { InstanceLayer } from "@/project/instance-layer"
 import { InstanceStore } from "@/project/instance-store"
 import { SyncEvent } from "@/sync"
 import { EventV2 } from "@opencode-ai/core/event"
 import "@opencode-ai/core/catalog"
 import "@opencode-ai/core/session-event"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Option } from "effect"
 
 const syncDefinitions = new WeakMap<EventV2.Definition, SyncEvent.Definition>()
 
@@ -41,7 +40,6 @@ export const layer = Layer.effect(
     const events = yield* EventV2.Service
     const bus = yield* ProjectBus.Service
     const sync = yield* SyncEvent.Service
-    const store = yield* InstanceStore.Service
 
     const publishGlobal = (event: EventV2.Payload) =>
       Effect.sync(() => {
@@ -56,19 +54,19 @@ export const layer = Layer.effect(
       })
 
     const provideEventLocation = <E, R>(event: EventV2.Payload, effect: Effect.Effect<void, E, R>) => {
-      if (!event.location?.directory) {
-        return Effect.gen(function* () {
-          if (yield* InstanceRef) return yield* effect
-          return yield* publishGlobal(event)
-        })
-      }
-      return store.load({ directory: event.location.directory }).pipe(
-        Effect.flatMap((ctx) => {
-          const withInstance = effect.pipe(Effect.provideService(InstanceRef, ctx))
-          if (!event.location?.workspaceID) return withInstance
-          return withInstance.pipe(Effect.provideService(WorkspaceRef, event.location.workspaceID))
-        }),
-      )
+      return Effect.gen(function* () {
+        const ctx = yield* InstanceRef
+        if (ctx) return yield* effect
+        const store = Option.getOrUndefined(yield* Effect.serviceOption(InstanceStore.Service))
+        if (!event.location?.directory || !store) return yield* publishGlobal(event)
+        return yield* store.load({ directory: event.location.directory }).pipe(
+          Effect.flatMap((ctx) => {
+            const withInstance = effect.pipe(Effect.provideService(InstanceRef, ctx))
+            if (!event.location?.workspaceID) return withInstance
+            return withInstance.pipe(Effect.provideService(WorkspaceRef, event.location.workspaceID))
+          }),
+        )
+      })
     }
 
     const unsubscribe = yield* events.sync((event) => {
@@ -94,7 +92,6 @@ export const layer = Layer.effect(
 
 export const defaultLayer = layer.pipe(
   Layer.provideMerge(EventV2.defaultLayer),
-  Layer.provide(InstanceLayer.layer),
   Layer.provide(SyncEvent.defaultLayer),
   Layer.provide(ProjectBus.defaultLayer),
 )
