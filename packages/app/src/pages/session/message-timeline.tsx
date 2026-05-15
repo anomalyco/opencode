@@ -33,6 +33,8 @@ import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { makeTimer } from "@solid-primitives/timer"
+// FORK: 聊天对话区右键选区菜单 [feat: chat-selection-menu] 2026-05-15
+import { ChatSelectionMenu } from "./chat-selection-menu"
 
 type MessageComment = {
   path: string
@@ -1113,6 +1115,8 @@ export function MessageTimeline(props: {
           </div>
         </ScrollView>
       </div>
+      {/* FORK: 聊天对话区右键选区菜单(全局 contextmenu capture,scope 到 session-turn-list)2026-05-15 */}
+      <ChatSelectionMenu />
     </Show>
   )
 }
