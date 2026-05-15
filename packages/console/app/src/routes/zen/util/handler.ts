@@ -47,6 +47,7 @@ import { Resource } from "@opencode-ai/console-resource"
 import { i18n, type Key } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
 import { createModelTpmLimiter } from "./modelTpmLimiter"
+import { createModelTpsLimiter } from "./modelTpsLimiter"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type RetryOptions = {
@@ -122,13 +123,15 @@ export async function handler(
       ? createIpRateLimiter(modelInfo.id, modelInfo.rateLimit, ip, input.request)
       : createKeyRateLimiter(modelInfo.id, modelInfo.rateLimit, zenApiKey, input.request)
     await rateLimiter?.check()
-    const stickyTracker = createStickyTracker(modelInfo.stickyProvider, sessionId)
+    const stickyTracker = createStickyTracker(modelInfo.id, modelInfo.stickyProvider, sessionId)
     const stickyProvider = await stickyTracker?.get()
     const authInfo = await authenticate(modelInfo, zenApiKey)
     const billingSource = validateBilling(authInfo, modelInfo)
     logger.metric({ source: billingSource })
     const modelTpmLimiter = createModelTpmLimiter(modelInfo.providers)
     const modelTpmLimits = await modelTpmLimiter?.check()
+    const modelTpsLimiter = createModelTpsLimiter(modelInfo.providers)
+    const modelTpsLimits = await modelTpsLimiter?.check()
 
     const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
       const providerInfo = selectProvider(
@@ -142,6 +145,7 @@ export async function handler(
         retry,
         stickyProvider,
         modelTpmLimits,
+        modelTpsLimits,
       )
       validateModelSettings(billingSource, authInfo)
       updateProviderKey(authInfo, providerInfo)
@@ -212,7 +216,7 @@ export async function handler(
         // ie. 400 error is usually provider error like malformed request
         res.status !== 400 &&
         // ie. openai 404 error: Item with id 'msg_0ead8b004a3b165d0069436a6b6834819896da85b63b196a3f' not found.
-        res.status !== 404 &&
+        !(modelInfo.id.startsWith("gpt-") && res.status === 404) &&
         // ie. cannot change codex model providers mid-session
         modelInfo.stickyProvider !== "strict" &&
         modelInfo.fallbackProvider &&
@@ -234,7 +238,7 @@ export async function handler(
     dataDumper?.provideRequest(reqBody)
 
     // Store sticky provider
-    await stickyTracker?.set(providerInfo.id)
+    if (res.status === 200) await stickyTracker?.set(providerInfo.id)
 
     // Temporarily change 404 to 400 status code b/c solid start automatically override 404 response
     const resStatus = res.status === 404 ? 400 : res.status
@@ -294,14 +298,16 @@ export async function handler(
 
         let buffer = ""
         let responseLength = 0
+        let timestampFirstByte = 0
 
         function pump(): Promise<void> {
           return (
             reader?.read().then(async ({ done, value: rawValue }) => {
               if (done) {
+                const timestampLastByte = Date.now()
                 logger.metric({
                   response_length: responseLength,
-                  "timestamp.last_byte": Date.now(),
+                  "timestamp.last_byte": timestampLastByte,
                 })
                 dataDumper?.flush()
                 await rateLimiter?.track()
@@ -311,6 +317,14 @@ export async function handler(
                   const costInfo = calculateCost(modelInfo, usageInfo)
                   await trialLimiter?.track(usageInfo)
                   await modelTpmLimiter?.track(providerInfo.id, providerInfo.model, usageInfo)
+                  await modelTpsLimiter?.track(
+                    providerInfo.id,
+                    providerInfo.model,
+                    providerInfo.tpsGoal,
+                    timestampFirstByte,
+                    timestampLastByte,
+                    usageInfo,
+                  )
                   await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
                   await reload(billingSource, authInfo, costInfo)
                   const cost = calculateOccurredCost(billingSource, costInfo)
@@ -321,10 +335,10 @@ export async function handler(
               }
 
               if (responseLength === 0) {
-                const now = Date.now()
+                timestampFirstByte = Date.now()
                 logger.metric({
-                  time_to_first_byte: now - startTimestamp,
-                  "timestamp.first_byte": now,
+                  time_to_first_byte: timestampFirstByte - startTimestamp,
+                  "timestamp.first_byte": timestampFirstByte,
                 })
               }
 
@@ -478,6 +492,7 @@ export async function handler(
     retry: RetryOptions,
     stickyProvider: string | undefined,
     modelTpmLimits: Record<string, number> | undefined,
+    modelTpsLimits: Record<string, boolean> | undefined,
   ) {
     const modelProvider = (() => {
       // Byok is top priority b/c if user set their own API key, we should use it
@@ -508,6 +523,11 @@ export async function handler(
             if (!provider.tpmLimit) return true
             const usage = modelTpmLimits?.[`${provider.id}/${provider.model}`] ?? 0
             return usage < provider.tpmLimit * 1_000_000
+          })
+          .filter((provider) => {
+            if (!provider.tpsGoal) return true
+            const isLowTps = modelTpsLimits?.[`${provider.id}/${provider.model}/${provider.tpsGoal}`] ?? false
+            return !isLowTps
           })
           .map((provider) => {
             topPriority = Math.min(topPriority, provider.priority)

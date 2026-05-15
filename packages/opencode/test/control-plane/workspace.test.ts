@@ -6,23 +6,24 @@ import path from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
 import { NodeHttpServer } from "@effect/platform-node"
 import { Effect, Layer, Schema } from "effect"
-import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { eq } from "drizzle-orm"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import * as Log from "@opencode-ai/core/util/log"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Database } from "@/storage/db"
 import { ProjectID } from "@/project/schema"
 import { ProjectTable } from "@/project/project.sql"
 import { Instance } from "@/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
+import { InstanceRef } from "@/effect/instance-ref"
 import { Session as SessionNs } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { SessionTable } from "@/session/session.sql"
 import { SyncEvent } from "@/sync"
 import { EventSequenceTable } from "@/sync/event.sql"
 import { resetDatabase } from "../fixture/db"
-import { disposeAllInstances, provideTmpdirInstance, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, provideTmpdirInstance, TestInstance, tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import { WorkspaceID } from "../../src/control-plane/schema"
@@ -32,23 +33,42 @@ import * as Workspace from "../../src/control-plane/workspace"
 import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceBootstrap } from "@/project/bootstrap"
+import { Auth } from "@/auth"
+import { SessionPrompt } from "@/session/prompt"
+import { Project } from "@/project/project"
+import { Vcs } from "@/project/vcs"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 void Log.init({ print: false })
 
-const testServerLayer = Layer.mergeAll(
-  NodeHttpServer.layer(Http.createServer, { host: "127.0.0.1", port: 0 }),
-  Workspace.defaultLayer.pipe(Layer.provide(InstanceStore.defaultLayer), Layer.provide(InstanceBootstrap.defaultLayer)),
-  SessionNs.defaultLayer,
-)
-const it = testEffect(testServerLayer)
-
-const originalWorkspacesFlag = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 const originalEnv = {
   OPENCODE_AUTH_CONTENT: process.env.OPENCODE_AUTH_CONTENT,
+  OPENCODE_EXPERIMENTAL_WORKSPACES: process.env.OPENCODE_EXPERIMENTAL_WORKSPACES,
   OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
   OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
   OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
 }
+
+const workspaceLayer = (experimentalWorkspaces: boolean) =>
+  Workspace.layer.pipe(
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(SessionNs.defaultLayer),
+    Layer.provide(SyncEvent.defaultLayer),
+    Layer.provide(SessionPrompt.defaultLayer),
+    Layer.provide(Project.defaultLayer),
+    Layer.provide(Vcs.defaultLayer),
+    Layer.provide(FetchHttpClient.layer),
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces })),
+    Layer.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))),
+  )
+
+const testServerLayer = Layer.mergeAll(
+  NodeHttpServer.layer(Http.createServer, { host: "127.0.0.1", port: 0 }),
+  workspaceLayer(true),
+  SessionNs.defaultLayer,
+)
+const it = testEffect(testServerLayer)
 
 type RecordedCreate = {
   info: WorkspaceInfo
@@ -91,21 +111,20 @@ function restoreEnv() {
 
 beforeEach(() => {
   Database.close()
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
   restoreEnv()
+  process.env.OPENCODE_EXPERIMENTAL_WORKSPACES = "true"
 })
 
 afterEach(async () => {
   mock.restore()
   await disposeAllInstances()
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspacesFlag
   restoreEnv()
   await resetDatabase()
 })
 
 async function withInstance<T>(fn: (dir: string) => T | Promise<T>) {
   await using tmp = await tmpdir({ git: true })
-  return WithInstance.provide({
+  return await WithInstance.provide({
     directory: tmp.path,
     fn: () => fn(tmp.path),
   })
@@ -140,6 +159,12 @@ const isWorkspaceSyncing = (id: WorkspaceID) =>
 const startWorkspaceSyncing = (projectID: ProjectID) => {
   void runWorkspace(Workspace.Service.use((workspace) => workspace.startWorkspaceSyncing(projectID)))
 }
+const startWorkspaceSyncingWithFlag = (projectID: ProjectID, experimentalWorkspaces: boolean) =>
+  Effect.runPromise(
+    Workspace.Service.use((workspace) => workspace.startWorkspaceSyncing(projectID)).pipe(
+      Effect.provide(workspaceLayer(experimentalWorkspaces)),
+    ),
+  )
 const waitForWorkspaceSync = (workspaceID: WorkspaceID, state: Record<string, number>, signal?: AbortSignal) =>
   runWorkspace(Workspace.Service.use((workspace) => workspace.waitForSync(workspaceID, state, signal)))
 
@@ -722,30 +747,39 @@ describe("workspace CRUD", () => {
     })
   })
 
-  test("remove deletes the workspace, associated sessions, adapter resources, and status", async () => {
-    await withInstance(async (dir) => {
-      const type = unique("remove-local")
-      const recorded = localAdapter(path.join(dir, "remove-local"))
-      registerAdapter(Instance.project.id, type, recorded.adapter)
-      const info = await createWorkspace({ type, branch: null, projectID: Instance.project.id, extra: null })
-      const one = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
-      const two = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
-      attachSessionToWorkspace(one.id, info.id)
-      attachSessionToWorkspace(two.id, info.id)
+  it.instance(
+    "remove deletes the workspace, associated sessions, adapter resources, and status",
+    () => {
+      return Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
+        const instance = yield* InstanceRef
+        if (!instance) return yield* Effect.die(new Error("missing test instance"))
+        const workspace = yield* Workspace.Service
+        const sessionSvc = yield* SessionNs.Service
+        const type = unique("remove-local")
+        const recorded = localAdapter(path.join(dir, "remove-local"))
+        registerAdapter(instance.project.id, type, recorded.adapter)
+        const info = yield* workspace.create({ type, branch: null, projectID: instance.project.id, extra: null })
+        const one = yield* sessionSvc.create({})
+        const two = yield* sessionSvc.create({})
+        attachSessionToWorkspace(one.id, info.id)
+        attachSessionToWorkspace(two.id, info.id)
 
-      const removed = await removeWorkspace(info.id)
+        const removed = yield* workspace.remove(info.id)
 
-      expect(removed).toEqual(info)
-      expect(await getWorkspace(info.id)).toBeUndefined()
-      expect(recorded.calls.remove).toEqual([info])
-      expect((await workspaceStatus()).find((item) => item.workspaceID === info.id)?.status).toBeUndefined()
-      expect(
-        Database.use((db) =>
-          db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.workspace_id, info.id)).all(),
-        ),
-      ).toEqual([])
-    })
-  })
+        expect(removed).toEqual(info)
+        expect(yield* workspace.get(info.id)).toBeUndefined()
+        expect(recorded.calls.remove).toEqual([info])
+        expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBeUndefined()
+        expect(
+          Database.use((db) =>
+            db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.workspace_id, info.id)).all(),
+          ),
+        ).toEqual([])
+      })
+    },
+    { git: true },
+  )
 
   test("remove still deletes the row when the adapter cannot remove resources", async () => {
     await withInstance(async () => {
@@ -770,84 +804,111 @@ describe("workspace CRUD", () => {
     })
   })
 
-  test("sessionWarp moves a session into a local workspace and claims ownership", async () => {
-    await withInstance(async (dir) => {
-      const previousType = unique("warp-prev-local")
-      const targetType = unique("warp-target-local")
-      const previous = workspaceInfo(Instance.project.id, previousType)
-      const target = workspaceInfo(Instance.project.id, targetType)
-      insertWorkspace(previous)
-      insertWorkspace(target)
-      registerAdapter(Instance.project.id, previousType, localAdapter(path.join(dir, "warp-prev-local")).adapter)
-      registerAdapter(Instance.project.id, targetType, localAdapter(path.join(dir, "warp-target-local")).adapter)
-      const session = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
-      attachSessionToWorkspace(session.id, previous.id)
+  it.instance(
+    "sessionWarp moves a session into a local workspace and claims ownership",
+    () => {
+      return Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
+        const instance = yield* InstanceRef
+        if (!instance) return yield* Effect.die(new Error("missing test instance"))
+        const workspace = yield* Workspace.Service
+        const sessionSvc = yield* SessionNs.Service
+        const previousType = unique("warp-prev-local")
+        const targetType = unique("warp-target-local")
+        const previous = workspaceInfo(instance.project.id, previousType)
+        const target = workspaceInfo(instance.project.id, targetType)
+        insertWorkspace(previous)
+        insertWorkspace(target)
+        registerAdapter(instance.project.id, previousType, localAdapter(path.join(dir, "warp-prev-local")).adapter)
+        registerAdapter(instance.project.id, targetType, localAdapter(path.join(dir, "warp-target-local")).adapter)
+        const session = yield* sessionSvc.create({})
+        attachSessionToWorkspace(session.id, previous.id)
 
-      await warpWorkspaceSession({ workspaceID: target.id, sessionID: session.id })
+        yield* workspace.sessionWarp({ workspaceID: target.id, sessionID: session.id })
 
-      expect(
-        Database.use((db) =>
-          db
-            .select({ workspaceID: SessionTable.workspace_id })
-            .from(SessionTable)
-            .where(eq(SessionTable.id, session.id))
-            .get(),
-        )?.workspaceID,
-      ).toBe(target.id)
-      expect(sessionSequenceOwner(session.id)).toBe(target.id)
-    })
-  })
+        expect(
+          Database.use((db) =>
+            db
+              .select({ workspaceID: SessionTable.workspace_id })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, session.id))
+              .get(),
+          )?.workspaceID,
+        ).toBe(target.id)
+        expect(sessionSequenceOwner(session.id)).toBe(target.id)
+      })
+    },
+    { git: true },
+  )
 
-  test("sessionWarp applies source workspace patch to local target workspace", async () => {
-    await withInstance(async (dir) => {
-      const previousType = unique("warp-patch-prev-local")
-      const targetType = unique("warp-patch-target-local")
-      const previousDir = path.join(dir, "warp-patch-prev-local")
-      const targetDir = path.join(dir, "warp-patch-target-local")
-      await initGitRepo(previousDir)
-      await initGitRepo(targetDir)
-      await fs.writeFile(path.join(previousDir, "tracked.txt"), "changed\n")
-      await fs.writeFile(path.join(previousDir, "new.txt"), "new\n")
+  it.instance(
+    "sessionWarp applies source workspace patch to local target workspace",
+    () => {
+      return Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
+        const instance = yield* InstanceRef
+        if (!instance) return yield* Effect.die(new Error("missing test instance"))
+        const workspace = yield* Workspace.Service
+        const sessionSvc = yield* SessionNs.Service
+        const previousType = unique("warp-patch-prev-local")
+        const targetType = unique("warp-patch-target-local")
+        const previousDir = path.join(dir, "warp-patch-prev-local")
+        const targetDir = path.join(dir, "warp-patch-target-local")
+        yield* Effect.promise(() => initGitRepo(previousDir))
+        yield* Effect.promise(() => initGitRepo(targetDir))
+        yield* Effect.promise(() => fs.writeFile(path.join(previousDir, "tracked.txt"), "changed\n"))
+        yield* Effect.promise(() => fs.writeFile(path.join(previousDir, "new.txt"), "new\n"))
 
-      const previous = workspaceInfo(Instance.project.id, previousType)
-      const target = workspaceInfo(Instance.project.id, targetType)
-      insertWorkspace(previous)
-      insertWorkspace(target)
-      registerAdapter(Instance.project.id, previousType, localAdapter(previousDir, { createDir: false }).adapter)
-      registerAdapter(Instance.project.id, targetType, localAdapter(targetDir, { createDir: false }).adapter)
-      const session = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
-      attachSessionToWorkspace(session.id, previous.id)
+        const previous = workspaceInfo(instance.project.id, previousType)
+        const target = workspaceInfo(instance.project.id, targetType)
+        insertWorkspace(previous)
+        insertWorkspace(target)
+        registerAdapter(instance.project.id, previousType, localAdapter(previousDir, { createDir: false }).adapter)
+        registerAdapter(instance.project.id, targetType, localAdapter(targetDir, { createDir: false }).adapter)
+        const session = yield* sessionSvc.create({})
+        attachSessionToWorkspace(session.id, previous.id)
 
-      await warpWorkspaceSession({ workspaceID: target.id, sessionID: session.id, copyChanges: true })
+        yield* workspace.sessionWarp({ workspaceID: target.id, sessionID: session.id, copyChanges: true })
 
-      expect(await fs.readFile(path.join(targetDir, "tracked.txt"), "utf8")).toBe("changed\n")
-      expect(await fs.readFile(path.join(targetDir, "new.txt"), "utf8")).toBe("new\n")
-    })
-  })
+        expect(yield* Effect.promise(() => fs.readFile(path.join(targetDir, "tracked.txt"), "utf8"))).toBe("changed\n")
+        expect(yield* Effect.promise(() => fs.readFile(path.join(targetDir, "new.txt"), "utf8"))).toBe("new\n")
+      })
+    },
+    { git: true },
+  )
 
-  test("sessionWarp detaches a session to the local project and claims project ownership", async () => {
-    await withInstance(async (dir) => {
-      const previousType = unique("warp-detach-local")
-      const previous = workspaceInfo(Instance.project.id, previousType)
-      insertWorkspace(previous)
-      registerAdapter(Instance.project.id, previousType, localAdapter(path.join(dir, "warp-detach-local")).adapter)
-      const session = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
-      attachSessionToWorkspace(session.id, previous.id)
+  it.instance(
+    "sessionWarp detaches a session to the local project and claims project ownership",
+    () => {
+      return Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
+        const instance = yield* InstanceRef
+        if (!instance) return yield* Effect.die(new Error("missing test instance"))
+        const workspace = yield* Workspace.Service
+        const sessionSvc = yield* SessionNs.Service
+        const previousType = unique("warp-detach-local")
+        const previous = workspaceInfo(instance.project.id, previousType)
+        insertWorkspace(previous)
+        registerAdapter(instance.project.id, previousType, localAdapter(path.join(dir, "warp-detach-local")).adapter)
+        const session = yield* sessionSvc.create({})
+        attachSessionToWorkspace(session.id, previous.id)
 
-      await warpWorkspaceSession({ workspaceID: null, sessionID: session.id })
+        yield* workspace.sessionWarp({ workspaceID: null, sessionID: session.id })
 
-      expect(
-        Database.use((db) =>
-          db
-            .select({ workspaceID: SessionTable.workspace_id })
-            .from(SessionTable)
-            .where(eq(SessionTable.id, session.id))
-            .get(),
-        )?.workspaceID,
-      ).toBeNull()
-      expect(sessionSequenceOwner(session.id)).toBe(Instance.project.id)
-    })
-  })
+        expect(
+          Database.use((db) =>
+            db
+              .select({ workspaceID: SessionTable.workspace_id })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, session.id))
+              .get(),
+          )?.workspaceID,
+        ).toBeNull()
+        expect(sessionSequenceOwner(session.id)).toBe(instance.project.id)
+      })
+    },
+    { git: true },
+  )
 
   test("sessionWarp detaches to the source project when invoked from a workspace instance", async () => {
     await withInstance(async () => {
@@ -977,110 +1038,138 @@ describe("workspace CRUD", () => {
 })
 
 describe("workspace sync state", () => {
-  test("startWorkspaceSyncing is disabled by the experimental workspace flag", async () => {
-    await withInstance(async (dir) => {
-      Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = false
-      const type = unique("flag-disabled")
-      const info = workspaceInfo(Instance.project.id, type)
-      const session = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
-      attachSessionToWorkspace(session.id, info.id)
-      insertWorkspace(info)
-      registerAdapter(Instance.project.id, type, localAdapter(path.join(dir, "flag-disabled")).adapter)
-
-      startWorkspaceSyncing(Instance.project.id)
-      await delay(25)
-
-      expect((await workspaceStatus()).find((item) => item.workspaceID === info.id)?.status).toBeUndefined()
-    })
-  })
-
-  test("startWorkspaceSyncing starts all workspaces", async () => {
-    await withInstance(async (dir) => {
-      const firstType = unique("first")
-      const secondType = unique("second")
-      const first = workspaceInfo(Instance.project.id, firstType)
-      const second = workspaceInfo(Instance.project.id, secondType)
-      await fs.mkdir(path.join(dir, "first"), { recursive: true })
-      await fs.mkdir(path.join(dir, "second"), { recursive: true })
-      insertWorkspace(first)
-      insertWorkspace(second)
-      registerAdapter(Instance.project.id, firstType, localAdapter(path.join(dir, "first")).adapter)
-      registerAdapter(Instance.project.id, secondType, localAdapter(path.join(dir, "second")).adapter)
-
-      startWorkspaceSyncing(Instance.project.id)
-
-      await eventually(() =>
-        workspaceStatus().then((status) => {
-          expect(status.find((item) => item.workspaceID === first.id)?.status).toBe("connected")
-          expect(status.find((item) => item.workspaceID === second.id)?.status).toBe("connected")
-        }),
-      )
-      await removeWorkspace(first.id)
-      await removeWorkspace(second.id)
-    })
-  })
-
-  test("local start reports error when the target directory is missing", async () => {
-    await withInstance(async (dir) => {
-      const type = unique("missing-local")
-      const info = workspaceInfo(Instance.project.id, type)
-      insertWorkspace(info)
-      registerAdapter(
-        Instance.project.id,
-        type,
-        localAdapter(path.join(dir, "missing-target"), { createDir: false }).adapter,
-      )
-      attachSessionToWorkspace(
-        (await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))).id,
-        info.id,
-      )
-
-      startWorkspaceSyncing(Instance.project.id)
-
-      await eventually(() =>
-        workspaceStatus().then((status) =>
-          expect(status.find((item) => item.workspaceID === info.id)?.status).toBe("error"),
-        ),
-      )
-      expect(await isWorkspaceSyncing(info.id)).toBe(false)
-      await removeWorkspace(info.id)
-    })
-  })
-
-  test("duplicate local status updates are suppressed", async () => {
-    await withInstance(async (dir) => {
-      const captured = captureGlobalEvents()
-      try {
-        const type = unique("dedupe-local")
-        const info = workspaceInfo(Instance.project.id, type)
-        const target = path.join(dir, "dedupe-local")
-        await fs.mkdir(target, { recursive: true })
+  it.instance(
+    "startWorkspaceSyncing is disabled by the experimental workspace flag",
+    () =>
+      Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
+        const instance = yield* InstanceRef
+        if (!instance) return yield* Effect.die(new Error("missing test instance"))
+        const workspace = yield* Workspace.Service
+        const sessionSvc = yield* SessionNs.Service
+        const type = unique("flag-disabled")
+        const info = workspaceInfo(instance.project.id, type)
+        const session = yield* sessionSvc.create({})
+        attachSessionToWorkspace(session.id, info.id)
         insertWorkspace(info)
-        registerAdapter(Instance.project.id, type, localAdapter(target).adapter)
-        attachSessionToWorkspace(
-          (await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))).id,
-          info.id,
+        registerAdapter(instance.project.id, type, localAdapter(path.join(dir, "flag-disabled")).adapter)
+
+        yield* Effect.promise(() => startWorkspaceSyncingWithFlag(instance.project.id, false))
+        yield* Effect.sleep("25 millis")
+
+        expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBeUndefined()
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "startWorkspaceSyncing starts all workspaces",
+    () =>
+      Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
+        const instance = yield* InstanceRef
+        if (!instance) return yield* Effect.die(new Error("missing test instance"))
+        const workspace = yield* Workspace.Service
+        const projectID = instance.project.id
+        const firstType = unique("first")
+        const secondType = unique("second")
+        const first = workspaceInfo(projectID, firstType)
+        const second = workspaceInfo(projectID, secondType)
+        yield* Effect.promise(() => fs.mkdir(path.join(dir, "first"), { recursive: true }))
+        yield* Effect.promise(() => fs.mkdir(path.join(dir, "second"), { recursive: true }))
+        yield* Effect.sync(() => {
+          insertWorkspace(first)
+          insertWorkspace(second)
+          registerAdapter(projectID, firstType, localAdapter(path.join(dir, "first")).adapter)
+          registerAdapter(projectID, secondType, localAdapter(path.join(dir, "second")).adapter)
+        })
+        yield* Effect.addFinalizer(() =>
+          Effect.all([workspace.remove(first.id), workspace.remove(second.id)], { discard: true }).pipe(Effect.ignore),
         )
 
-        startWorkspaceSyncing(Instance.project.id)
-        startWorkspaceSyncing(Instance.project.id)
+        yield* workspace.startWorkspaceSyncing(projectID)
 
-        await eventually(() =>
-          workspaceStatus().then((status) =>
-            expect(status.find((item) => item.workspaceID === info.id)?.status).toBe("connected"),
-          ),
+        yield* eventuallyEffect(
+          Effect.gen(function* () {
+            const status = yield* workspace.status()
+            expect(status.find((item) => item.workspaceID === first.id)?.status).toBe("connected")
+            expect(status.find((item) => item.workspaceID === second.id)?.status).toBe("connected")
+          }),
+        )
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "local start reports error when the target directory is missing",
+    () =>
+      Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
+        const instance = yield* InstanceRef
+        if (!instance) return yield* Effect.die(new Error("missing test instance"))
+        const workspace = yield* Workspace.Service
+        const sessionSvc = yield* SessionNs.Service
+        const type = unique("missing-local")
+        const info = workspaceInfo(instance.project.id, type)
+        insertWorkspace(info)
+        registerAdapter(
+          instance.project.id,
+          type,
+          localAdapter(path.join(dir, "missing-target"), { createDir: false }).adapter,
+        )
+        attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+
+        yield* workspace.startWorkspaceSyncing(instance.project.id)
+
+        yield* eventuallyEffect(
+          Effect.gen(function* () {
+            const status = yield* workspace.status()
+            expect(status.find((item) => item.workspaceID === info.id)?.status).toBe("error")
+          }),
+        )
+        expect(yield* workspace.isSyncing(info.id)).toBe(false)
+        yield* workspace.remove(info.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "duplicate local status updates are suppressed",
+    () =>
+      Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
+        const instance = yield* InstanceRef
+        if (!instance) return yield* Effect.die(new Error("missing test instance"))
+        const workspace = yield* Workspace.Service
+        const sessionSvc = yield* SessionNs.Service
+        const captured = captureGlobalEvents()
+        yield* Effect.addFinalizer(() => Effect.sync(() => captured.dispose()))
+        const type = unique("dedupe-local")
+        const info = workspaceInfo(instance.project.id, type)
+        const target = path.join(dir, "dedupe-local")
+        yield* Effect.promise(() => fs.mkdir(target, { recursive: true }))
+        insertWorkspace(info)
+        registerAdapter(instance.project.id, type, localAdapter(target).adapter)
+        attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+
+        yield* workspace.startWorkspaceSyncing(instance.project.id)
+        yield* workspace.startWorkspaceSyncing(instance.project.id)
+
+        yield* eventuallyEffect(
+          Effect.gen(function* () {
+            const status = yield* workspace.status()
+            expect(status.find((item) => item.workspaceID === info.id)?.status).toBe("connected")
+          }),
         )
         expect(
           captured.events.filter(
             (event) => event.workspace === info.id && event.payload.type === Workspace.Event.Status.type,
           ),
         ).toHaveLength(1)
-        await removeWorkspace(info.id)
-      } finally {
-        captured.dispose()
-      }
-    })
-  })
+        yield* workspace.remove(info.id)
+      }),
+    { git: true },
+  )
 
   it.live("remote start emits disconnected, connecting, and connected then refuses duplicate listeners", () => {
     const calls: FetchCall[] = []

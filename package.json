@@ -28,16 +28,16 @@
       "packages/slack"
     ],
     "catalog": {
-      "@effect/opentelemetry": "4.0.0-beta.57",
-      "@effect/platform-node": "4.0.0-beta.57",
+      "@effect/opentelemetry": "4.0.0-beta.65",
+      "@effect/platform-node": "4.0.0-beta.65",
       "@npmcli/arborist": "9.4.0",
       "@types/bun": "1.3.12",
       "@types/cross-spawn": "6.0.6",
       "@octokit/rest": "22.0.0",
       "@hono/zod-validator": "0.4.2",
-      "@opentui/core": "0.2.6",
-      "@opentui/keymap": "0.2.6",
-      "@opentui/solid": "0.2.6",
+      "@opentui/core": "0.2.10",
+      "@opentui/keymap": "0.2.10",
+      "@opentui/solid": "0.2.10",
       "ulid": "3.0.1",
       "@kobalte/core": "0.13.11",
       "@types/luxon": "3.7.1",
@@ -55,7 +55,7 @@
       "dompurify": "3.3.1",
       "drizzle-kit": "1.0.0-beta.19-d95b7a4",
       "drizzle-orm": "1.0.0-beta.19-d95b7a4",
-      "effect": "4.0.0-beta.59",
+      "effect": "4.0.0-beta.65",
       "ai": "6.0.168",
       "cross-spawn": "7.0.6",
       "hono": "4.10.7",
@@ -128,6 +128,9 @@
     "electron"
   ],
   "overrides": {
+    "@opentui/core": "catalog:",
+    "@opentui/keymap": "catalog:",
+    "@opentui/solid": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:"
   },

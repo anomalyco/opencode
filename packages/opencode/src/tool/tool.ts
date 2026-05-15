@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect"
+import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { MessageV2 } from "../session/message-v2"
 import type { Permission } from "../permission"
 import type { SessionID, MessageID } from "../session/schema"
@@ -38,6 +39,7 @@ export interface Def<
   id: string
   description: string
   parameters: Parameters
+  jsonSchema?: JSONSchema7
   execute(args: Schema.Schema.Type<Parameters>, ctx: Context): Effect.Effect<ExecuteResult<M>>
   formatValidationError?(error: unknown): string
 }

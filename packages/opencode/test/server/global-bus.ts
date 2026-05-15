@@ -29,6 +29,3 @@ export function waitGlobalBusEvent(input: {
     ),
   )
 }
-
-export const waitGlobalBusEventPromise = (input: Parameters<typeof waitGlobalBusEvent>[0]) =>
-  Effect.runPromise(waitGlobalBusEvent(input))
