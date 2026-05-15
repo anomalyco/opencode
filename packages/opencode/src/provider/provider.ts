@@ -127,11 +127,11 @@ type CustomLoader = (provider: Info) => Effect.Effect<{
   discoverModels?: CustomDiscoverModels
   // Set on a non-autoload return when the loader cannot reconstruct its
   // options from env alone (auth metadata, dynamic SDK imports, derived URLs).
-  // `dynamicEnv: false` excludes the provider from `cleanedDatabase` so a late
+  // `requiresRestart: true` excludes the provider from `cleanedDatabase` so a late
   // env never surfaces it with stale options; a one-time warn is emitted
   // instead. Single-env-key providers (anthropic, openai, ...) do not need it.
   // TODO(rerunOn): replace with declarative `rerunOn: string[]` env-dep list.
-  dynamicEnv?: boolean
+  requiresRestart?: boolean
 }>
 
 type CustomDep = {
@@ -236,7 +236,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       if (!resource && !provider.options?.baseURL) {
         return {
           autoload: false,
-          dynamicEnv: false,
+          requiresRestart: true,
           async getModel() {
             throw new Error(
               "AZURE_RESOURCE_NAME is missing, set it using env var or reconnecting the azure provider and setting it",
@@ -277,7 +277,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       if (!resourceName && !provider.options?.baseURL) {
         return {
           autoload: false,
-          dynamicEnv: false,
+          requiresRestart: true,
           async getModel() {
             throw new Error(
               "AZURE_COGNITIVE_SERVICES_RESOURCE_NAME is missing, set it via env var or configure provider.options.baseURL",
@@ -326,7 +326,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       )
 
       if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
-        return { autoload: false, dynamicEnv: false }
+        return { autoload: false, requiresRestart: true }
 
       const { fromNodeProviderChain } = yield* Effect.promise(() => import("@aws-sdk/credential-providers"))
 
@@ -501,7 +501,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       )
 
       const autoload = Boolean(project)
-      if (!autoload) return { autoload: false, dynamicEnv: false }
+      if (!autoload) return { autoload: false, requiresRestart: true }
       return {
         autoload: true,
         vars(_options: Record<string, any>) {
@@ -551,7 +551,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const project = env["GOOGLE_CLOUD_PROJECT"] ?? env["GCP_PROJECT"] ?? env["GCLOUD_PROJECT"]
       const location = env["GOOGLE_CLOUD_LOCATION"] ?? env["VERTEX_LOCATION"] ?? "global"
       const autoload = Boolean(project)
-      if (!autoload) return { autoload: false, dynamicEnv: false }
+      if (!autoload) return { autoload: false, requiresRestart: true }
       return {
         autoload: true,
         options: {
@@ -570,7 +570,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const envAICoreServiceKey = env["AICORE_SERVICE_KEY"]
       const envServiceKey = envAICoreServiceKey ?? (auth?.type === "api" ? auth.key : undefined)
       if (!envServiceKey) {
-        return { autoload: false, dynamicEnv: false }
+        return { autoload: false, requiresRestart: true }
       }
       if (!envAICoreServiceKey) {
         // TODO(multi-instance): see env/index.ts docstring.
@@ -752,7 +752,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       if (!accountId)
         return {
           autoload: false,
-          dynamicEnv: false,
+          requiresRestart: true,
           async getModel() {
             throw new Error(
               "CLOUDFLARE_ACCOUNT_ID is missing. Set it with: export CLOUDFLARE_ACCOUNT_ID=<your-account-id>",
@@ -805,7 +805,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         ].filter((x): x is string => Boolean(x))
         return {
           autoload: false,
-          dynamicEnv: false,
+          requiresRestart: true,
           async getModel() {
             throw new Error(
               `${missing.join(" and ")} missing. Set with: ${missing.map((x) => `export ${x}=<value>`).join(" && ")}`,
@@ -1060,10 +1060,10 @@ interface State {
   varsLoaders: Record<string, CustomVarsLoader>
   // Env-eligible providers with models pre-filtered. Frozen at init.
   cleanedDatabase: Readonly<Record<ProviderID, Info>>
-  // Providers excluded from late-env overlay (loader returned `dynamicEnv: false`).
-  loaderRefusedDynamicEnv: Set<ProviderID>
-  // Per-instance dedupe set for `warnLateEnvRefused`.
-  warnedLateEnvRefused: Set<ProviderID>
+  // Providers excluded from late-env overlay (loader returned `requiresRestart: true`).
+  loaderRequiresRestart: Set<ProviderID>
+  // Per-instance dedupe set for `warnRestartRequired`.
+  warnedRestartRequired: Set<ProviderID>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
@@ -1114,18 +1114,18 @@ function isNonBlank(v: string | undefined): v is string {
   return typeof v === "string" && v.trim() !== ""
 }
 
-function warnLateEnvRefused(
-  s: Pick<State, "catalog" | "loaderRefusedDynamicEnv" | "warnedLateEnvRefused">,
+function warnRestartRequired(
+  s: Pick<State, "catalog" | "loaderRequiresRestart" | "warnedRestartRequired">,
   envs: Record<string, string | undefined>,
 ) {
-  if (s.loaderRefusedDynamicEnv.size === 0) return
-  for (const providerID of s.loaderRefusedDynamicEnv) {
-    if (s.warnedLateEnvRefused.has(providerID)) continue
+  if (s.loaderRequiresRestart.size === 0) return
+  for (const providerID of s.loaderRequiresRestart) {
+    if (s.warnedRestartRequired.has(providerID)) continue
     const info = s.catalog[providerID]
     if (!info) continue
     const present = info.env.find((k) => isNonBlank(envs[k]))
     if (!present) continue
-    s.warnedLateEnvRefused.add(providerID)
+    s.warnedRestartRequired.add(providerID)
     log.warn("late env detected for provider that requires restart", {
       providerID,
       env: present,
@@ -1344,7 +1344,7 @@ export const layer = Layer.effect(
         const discoveryLoaders: {
           [providerID: string]: CustomDiscoverModels
         } = {}
-        const loaderRefusedDynamicEnv = new Set<ProviderID>()
+        const loaderRequiresRestart = new Set<ProviderID>()
         const dep = {
           auth: (id: string) => auth.get(id).pipe(Effect.orDie),
           config: () => config.get(),
@@ -1551,8 +1551,8 @@ export const layer = Layer.effect(
           const result = yield* fn(data)
           if (!result) continue
 
-          if (!result.autoload && result.dynamicEnv === false) {
-            loaderRefusedDynamicEnv.add(providerID)
+          if (!result.autoload && result.requiresRestart === true) {
+            loaderRequiresRestart.add(providerID)
           }
 
           // Always register loaders so a late env-promoted provider can find
@@ -1654,7 +1654,7 @@ export const layer = Layer.effect(
         for (const [id, info] of Object.entries(database)) {
           if (disabled.has(id)) continue
           if (enabled && !enabled.has(id)) continue
-          if (loaderRefusedDynamicEnv.has(ProviderID.make(id))) continue
+          if (loaderRequiresRestart.has(ProviderID.make(id))) continue
           if (info.env.length === 0) continue
           const providerID = ProviderID.make(id)
           const configProvider = cfg.provider?.[id]
@@ -1681,15 +1681,15 @@ export const layer = Layer.effect(
           modelLoaders,
           varsLoaders,
           cleanedDatabase,
-          loaderRefusedDynamicEnv,
-          warnedLateEnvRefused: new Set<ProviderID>(),
+          loaderRequiresRestart,
+          warnedRestartRequired: new Set<ProviderID>(),
         }
       }),
     )
 
     const observeProviders = Effect.fnUntraced(function* (s: State) {
       const envs = yield* env.all()
-      warnLateEnvRefused(s, envs)
+      warnRestartRequired(s, envs)
       return currentProviders(s, envs)
     })
 
