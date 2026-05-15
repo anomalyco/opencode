@@ -13,7 +13,7 @@ import { withTimeout } from "../util/timeout"
 import { Filesystem } from "@/util/filesystem"
 import { InstanceRef } from "@/effect/instance-ref"
 import { makeRuntime } from "@/effect/run-service"
-import { context, type InstanceContext } from "@/project/instance-context"
+import type { InstanceContext } from "@/project/instance-context"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
 const DIAGNOSTICS_DOCUMENT_WAIT_TIMEOUT_MS = 5_000
@@ -143,11 +143,11 @@ export async function create(input: {
   server: LSPServer.Handle
   root: string
   directory: string
-  instance?: InstanceContext
+  instance: InstanceContext
 }) {
   const logger = log.clone().tag("serverID", input.serverID)
   logger.info("starting client")
-  const instance = input.instance ?? context.use()
+  const instance = input.instance
 
   const connection = createMessageConnection(
     new StreamMessageReader(input.server.process.stdout as any),
