@@ -1134,6 +1134,23 @@ function openAICompatibleDiscoveryEnabled(provider: NonNullable<Config.Info["pro
   return provider.discoverModels ?? provider.models === undefined
 }
 
+function mergeDiscoveredModel(existing: Model | undefined, discovered: Model): Model {
+  if (!existing) return discovered
+  return {
+    ...discovered,
+    ...existing,
+    api: {
+      ...discovered.api,
+      ...existing.api,
+    },
+    limit: {
+      context: existing.limit.context || discovered.limit.context,
+      input: existing.limit.input ?? discovered.limit.input,
+      output: existing.limit.output || discovered.limit.output,
+    },
+  }
+}
+
 async function discoverOpenAICompatibleModels(input: {
   providerID: ProviderID
   provider: NonNullable<Config.Info["provider"]>[string]
@@ -1545,7 +1562,7 @@ export const layer = Layer.effect(
           )
           toDiscover.forEach(({ target }, i) => {
             for (const [modelID, model] of Object.entries(results[i])) {
-              if (!target.models[modelID]) target.models[modelID] = model
+              target.models[modelID] = mergeDiscoveredModel(target.models[modelID], model)
             }
           })
         }

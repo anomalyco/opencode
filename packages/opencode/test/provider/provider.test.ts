@@ -2917,6 +2917,56 @@ test("openai-compatible: discoverModels:true merges discovered models without ov
   }
 })
 
+test("openai-compatible: discoverModels:true fills limits for existing model stubs", async () => {
+  const server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      if (new URL(req.url).pathname === "/v1/models") {
+        return Response.json({
+          object: "list",
+          data: [{ id: "qwen3", name: "Qwen 3", context_length: 131072, max_output_tokens: 8192 }],
+        })
+      }
+      return new Response("not found", { status: 404 })
+    },
+  })
+  try {
+    const baseURL = `http://localhost:${server.port}/v1`
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-llm": {
+                npm: "@ai-sdk/openai-compatible",
+                discoverModels: true,
+                options: { baseURL },
+                models: {
+                  qwen3: { name: "Qwen Local" },
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await list()
+        const model = providers[ProviderID.make("local-llm")]?.models.qwen3
+        expect(model?.name).toBe("Qwen Local")
+        expect(model?.limit.context).toBe(131072)
+        expect(model?.limit.output).toBe(8192)
+      },
+    })
+  } finally {
+    await server.stop()
+  }
+})
+
 test("openai-compatible: discoverModels:false disables discovery", async () => {
   let called = false
   const server = Bun.serve({
