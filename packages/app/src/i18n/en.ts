@@ -1228,9 +1228,9 @@ export const dict = {
   "config.plugins.empty": "Choose a plugin from the list to inspect its source file and enabled state.",
   "config.plugins.missingDetail":
     "This plugin is referenced in config, but there is no local `ts`, `js`, or `mjs` entry file inside the global plugins directory.",
-  "config.plugins.note.enabled": "Enabled plugin entrypoint.",
-  "config.plugins.note.available": "Available plugin entrypoint.",
   "config.plugins.note.missing": "Enabled in config, but no ts/js/mjs entry file was found.",
+  "config.plugins.group.global": "Global",
+  "config.plugins.group.project": "Project",
   "config.providers.title": "Providers",
   "config.providers.header":
     "Standard providers toggle connection state. Custom `@ai-sdk/...` providers toggle `disabled_providers` in config.",

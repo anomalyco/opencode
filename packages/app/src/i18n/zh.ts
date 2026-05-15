@@ -1201,9 +1201,9 @@ export const dict = {
   "config.plugins.empty": "从列表中选择一个插件以查看其源文件和启用状态。",
   "config.plugins.missingDetail":
     "这个插件已在配置中被引用，但全局插件目录里没有对应的本地 `ts`、`js` 或 `mjs` 入口文件。",
-  "config.plugins.note.enabled": "已启用的插件入口文件。",
-  "config.plugins.note.available": "可用的插件入口文件。",
   "config.plugins.note.missing": "配置中已启用，但没有找到 ts/js/mjs 入口文件。",
+  "config.plugins.group.global": "全局",
+  "config.plugins.group.project": "项目",
   "config.providers.title": "提供商",
   "config.providers.header": "标准提供商切换连接状态。自定义 `@ai-sdk/...` 提供商会切换配置中的 `disabled_providers`。",
   "config.providers.matches": "{{count}} 个匹配",

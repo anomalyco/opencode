@@ -52,6 +52,14 @@ import { normalizeProviderList } from "@/context/global-sync/utils"
 import { useMainProviders } from "@/hooks/use-providers"
 import { useServer } from "@/context/server"
 import { extraAgents, mainDomain } from "@/pages/layout/extra-agents"
+import {
+  basename,
+  classifyPluginSource,
+  classifySkillSource,
+  isFilePath,
+  localPath,
+  normalizePath,
+} from "@/utils/config-source"
 import type { Agent, Config, Project, ProviderListResponse } from "@opencode-ai/sdk/v2/client"
 
 const CORE_SECTIONS = ["agents-md", "providers", "agents", "skills", "plugins", "claws"] as const
@@ -126,7 +134,13 @@ type PluginItem = {
   exists: boolean
   path?: string
   spec?: string
+  group: "global" | "project" | "external"
+  project?: string
+  root?: string
+  origin?: string
 }
+
+type PluginSource = Pick<PluginItem, "group" | "project" | "root" | "origin">
 
 type ClawItem = {
   id: string
@@ -143,7 +157,7 @@ type TreeNode = {
 }
 
 function name(path: string) {
-  return path.split(/[\\/]/).at(-1) ?? path
+  return basename(path)
 }
 
 function dir(path: string) {
@@ -162,12 +176,7 @@ function short(path: string, root?: string) {
 }
 
 function local(path: string) {
-  if (!path.startsWith("file://")) return path
-  try {
-    return decodeURIComponent(new URL(path).pathname)
-  } catch {
-    return path
-  }
+  return localPath(path)
 }
 
 function plugin(path: string) {
@@ -181,12 +190,19 @@ function plugin(path: string) {
   return path
 }
 
+function pluginKey(path: string) {
+  const next = local(path)
+  if (file(path)) return norm(next)
+  if (path.includes("/") || path.includes("\\")) return norm(next)
+  return plugin(path)
+}
+
 function spec(path: string) {
   return new URL(path.startsWith("file://") ? path : `file://${path}`).href
 }
 
 function norm(path: string) {
-  return local(path).replace(/\\/g, "/").replace(/\/+$/, "")
+  return normalizePath(path)
 }
 
 function join(root: string, ...parts: string[]) {
@@ -196,36 +212,8 @@ function join(root: string, ...parts: string[]) {
     .join(sep)
 }
 
-function inside(path: string, root?: string) {
-  const a = norm(path)
-  const b = norm(root ?? "")
-  if (!b) return false
-  return a === b || a.startsWith(b + "/")
-}
-
-function owner(path: string, list: Project[]) {
-  return list
-    .flatMap((item) =>
-      [item.worktree, ...(item.sandboxes ?? [])].filter((root) => inside(path, root)).map((root) => ({ item, root })),
-    )
-    .sort((a, b) => b.root.length - a.root.length)[0]
-}
-
 function file(path: string) {
-  const next = local(path)
-  if (!next) return false
-  if (next.startsWith("/")) return true
-  return /^[A-Za-z]:\//.test(next)
-}
-
-function origin(path: string) {
-  const next = norm(path)
-  if (next.includes("/.agents/agent/") || next.includes("/.agents/agents/")) return ".agents"
-  if (next.includes("/.opencode/agent/") || next.includes("/.opencode/agents/")) return ".opencode"
-  if (next.includes("/.claude/skills/")) return ".claude"
-  if (next.includes("/.agents/skills/")) return ".agents"
-  if (next.includes("/.opencode/skill/") || next.includes("/.opencode/skills/")) return ".opencode"
-  return "skill"
+  return isFilePath(path)
 }
 
 function rel(root: string, path: string) {
@@ -248,13 +236,6 @@ function pkg(spec: string) {
     return { name: spec.slice(0, last), version: spec.slice(last + 1) || "latest" }
   }
   return { name: spec, version: "latest" }
-}
-
-function bucket(path: string, input: { skills?: string; claude?: string; project?: ReturnType<typeof owner> }) {
-  if (inside(path, input.skills)) return "opencode" as const
-  if (inside(path, input.claude)) return "claude" as const
-  if (input.project) return "project" as const
-  return "external" as const
 }
 
 function skillMeta(text: string, path: string) {
@@ -2043,7 +2024,10 @@ export default function ConfigPage() {
     }
   })
   const opened = createMemo(() =>
-    Object.values(globalSync.data.projectByDomain).flat().filter(Boolean).sort((a, b) => (a.name ?? name(a.worktree)).localeCompare(b.name ?? name(b.worktree))),
+    Object.values(globalSync.data.projectByDomain)
+      .flat()
+      .filter((item): item is Project => !!item)
+      .sort((a, b) => (a.name ?? name(a.worktree)).localeCompare(b.name ?? name(b.worktree))),
   )
 
   const agentsMd = createMemo<DocItem[]>(() => {
@@ -2077,17 +2061,17 @@ export default function ConfigPage() {
     const root = local(space()?.skillsRoot ?? "")
     const claude = mainPath().home ? join(mainPath().home, ".claude", "skills") : undefined
     return (rawSkills() ?? []).map((item) => {
-      const hit = owner(item.location, opened())
-      const group = bucket(item.location, { skills: root, claude, project: hit })
+      const source = classifySkillSource(item.location, opened(), { opencodeRoot: root, claudeRoot: claude })
+      const group: SkillGroup = source.group === "global" ? "external" : source.group
       return {
         ...item,
         location: local(item.location),
         editable: file(item.location),
-        source: group === "project" ? "project" : inside(item.location, root) ? "opencode" : "external",
+        source: group === "project" ? "project" : group === "opencode" ? "opencode" : "external",
         group,
-        project: group === "project" ? (hit?.item.name ?? name(hit?.item.worktree ?? dir(item.location))) : undefined,
-        origin: origin(item.location),
-        root: hit?.item.worktree,
+        project: group === "project" ? source.project : undefined,
+        origin: source.origin,
+        root: source.root,
         warn:
           !item.name.trim() || !item.description.trim()
             ? `Incomplete metadata. Add ${[!item.name.trim() && "`name`", !item.description.trim() && "`description`"]
@@ -2217,15 +2201,15 @@ export default function ConfigPage() {
                   origin: `.opencode${suffix}`,
                 }),
                 scanAgents(join(dir, ".agents", "agent"), {
-                  source: "external",
-                  group: "plugin",
+                  source: "project",
+                  group: "project",
                   project: label,
                   root: item.worktree,
                   origin: `.agents${suffix}`,
                 }),
                 scanAgents(join(dir, ".agents", "agents"), {
-                  source: "external",
-                  group: "plugin",
+                  source: "project",
+                  group: "project",
                   project: label,
                   root: item.worktree,
                   origin: `.agents${suffix}`,
@@ -2285,7 +2269,9 @@ export default function ConfigPage() {
   )
 
   const runtimeAgents = createMemo<DocItem[]>(() => {
-    const names = new Set([...globalAgents(), ...(diskAgents() ?? []), ...(pluginAgents() ?? [])].map((item) => item.label))
+    const names = new Set(
+      [...globalAgents(), ...(diskAgents() ?? []), ...(pluginAgents() ?? [])].map((item) => item.label),
+    )
     return (loaded() ?? [])
       .filter((item) => !item.native && !item.hidden && !names.has(item.name))
       .map((item) => ({
@@ -2448,13 +2434,90 @@ export default function ConfigPage() {
 
   const loadedMap = createMemo(() => new Map((loaded() ?? ([] as Agent[])).map((item) => [item.name, item] as const)))
 
+  const scanPlugins = async (root: string, extra: PluginSource): Promise<PluginItem[]> => {
+    if (!platform.listConfigDirectory) return []
+
+    const walk = async (dir: string): Promise<PluginItem[]> => {
+      const list = await platform.listConfigDirectory?.(dir).catch(() => [] as ConfigTreeItem[])
+      if (!list?.length) return []
+
+      return Promise.all(
+        sortTree(list).map(async (item) => {
+          if (item.kind === "directory") return walk(item.path)
+          if (!/\.(?:ts|js|mjs|cjs|mts|cts)$/i.test(item.path)) return []
+
+          const key = pluginKey(item.path)
+          return [
+            {
+              id: `plugin:${key}`,
+              label: plugin(item.path),
+              name: plugin(item.path),
+              enabled: false,
+              exists: true,
+              path: item.path,
+              spec: spec(item.path),
+              ...extra,
+            },
+          ]
+        }),
+      ).then((list) => list.flat())
+    }
+
+    return walk(root)
+  }
+
+  const [diskProjectPlugins] = createResource(
+    () => [state.skillRev, opened()] as const,
+    async ([, list]) => {
+      return Promise.all(
+        list.map(async (item) => {
+          const label = item.name ?? name(item.worktree)
+          const roots = Array.from(new Set([item.worktree, ...(item.sandboxes ?? [])]))
+
+          return Promise.all(
+            roots.map(async (dir) => {
+              const extra = dir === item.worktree ? undefined : name(dir)
+              const suffix = extra ? ` · ${extra}` : ""
+
+              return Promise.all([
+                scanPlugins(join(dir, ".opencode", "plugin"), {
+                  group: "project",
+                  project: label,
+                  root: item.worktree,
+                  origin: `.opencode${suffix}`,
+                }),
+                scanPlugins(join(dir, ".opencode", "plugins"), {
+                  group: "project",
+                  project: label,
+                  root: item.worktree,
+                  origin: `.opencode${suffix}`,
+                }),
+                scanPlugins(join(dir, ".agents", "plugin"), {
+                  group: "project",
+                  project: label,
+                  root: item.worktree,
+                  origin: `.agents${suffix}`,
+                }),
+                scanPlugins(join(dir, ".agents", "plugins"), {
+                  group: "project",
+                  project: label,
+                  root: item.worktree,
+                  origin: `.agents${suffix}`,
+                }),
+              ]).then((list) => list.flat())
+            }),
+          ).then((list) => list.flat())
+        }),
+      ).then((list) => list.flat())
+    },
+  )
+
   const plugins = createMemo<PluginItem[]>(() => {
-    const pool = space()?.plugins ?? []
     const on = new Set(cfg().plugin ?? [])
     const map = new Map<string, PluginItem>()
 
-    for (const item of pool) {
-      const key = plugin(item.path)
+    for (const item of space()?.plugins ?? []) {
+      const key = pluginKey(item.path)
       map.set(key, {
         id: `plugin:${key}`,
         label: item.name,
@@ -2463,11 +2526,24 @@ export default function ConfigPage() {
         exists: true,
         path: item.path,
         spec: spec(item.path),
+        group: "global",
+        origin: ".opencode",
+        root: space()?.configRoot,
+      })
+    }
+
+    for (const item of diskProjectPlugins() ?? []) {
+      const key = pluginKey(item.path ?? item.name)
+      const existing = map.get(key)
+      map.set(key, {
+        ...item,
+        enabled: existing?.enabled ?? false,
+        spec: existing?.spec ?? item.spec,
       })
     }
 
     for (const spec of on) {
-      const key = plugin(spec)
+      const key = pluginKey(spec)
       const item = map.get(key)
       if (item) {
         item.enabled = true
@@ -2476,17 +2552,48 @@ export default function ConfigPage() {
         continue
       }
 
+      const project = classifyPluginSource(spec, opened())
+
       map.set(key, {
         id: `plugin:${key}`,
-        label: spec,
-        name: key,
+        label: plugin(spec),
+        name: plugin(spec),
         enabled: true,
-        exists: false,
+        exists: file(spec),
         spec,
+        path: file(spec) ? local(spec) : undefined,
+        group: project.scope === "project" ? "project" : "global",
+        project: project.scope === "project" ? project.project : undefined,
+        root: project.root,
+        origin: project.origin,
       })
     }
 
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
+  })
+
+  const pluginGlobal = createMemo(() => (plugins() ?? []).filter((item) => item.group !== "project"))
+  const pluginProject = createMemo(() => (plugins() ?? []).filter((item) => item.group === "project"))
+  const projectPlugins = createMemo(() => {
+    const map = new Map<string, { label: string; path?: string; items: PluginItem[] }>()
+
+    for (const item of pluginProject()
+      .slice()
+      .sort((a, b) => (a.project ?? "").localeCompare(b.project ?? "") || a.label.localeCompare(b.label))) {
+      const key = item.root ?? item.project ?? item.path ?? item.name
+      const prev = map.get(key)
+      if (prev) {
+        prev.items.push(item)
+        continue
+      }
+      map.set(key, {
+        label: item.project ?? name(item.root ?? item.path ?? item.name),
+        path: item.root,
+        items: [item],
+      })
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label))
   })
 
   const claws = createMemo<ClawItem[]>(() => {
@@ -2525,7 +2632,7 @@ export default function ConfigPage() {
   })
 
   const pluginDocs = createMemo<DocItem[]>(() =>
-    plugins()
+    (plugins() ?? [])
       .filter((item) => !!item.path)
       .map((item) => ({
         id: item.id,
@@ -2533,7 +2640,7 @@ export default function ConfigPage() {
         path: item.path!,
         editable: true,
         source: "opencode",
-        note: item.enabled ? t("config.plugins.note.enabled") : t("config.plugins.note.available"),
+        note: undefined,
       })),
   )
 
@@ -2625,13 +2732,13 @@ export default function ConfigPage() {
       group: "opencode" as const,
     }
   })
-  const currentPlugin = createMemo(() => plugins().find((item) => item.id === state.doc))
+  const currentPlugin = createMemo(() => plugins()?.find((item) => item.id === state.doc))
   const currentAgent = createMemo(() => agents().find((item) => item.id === state.doc))
   const currentSkill = createMemo(() => skillDocs().find((item) => item.id === state.doc))
   const selectedProvider = createMemo(() =>
     providers().find((item) => item.id === state.pick.replace(/^provider:/, "")),
   )
-  const selectedPlugin = createMemo(() => plugins().find((item) => item.id === state.pick))
+  const selectedPlugin = createMemo(() => plugins()?.find((item) => item.id === state.pick))
   const selectedClaw = createMemo(() => claws().find((item) => item.id === state.pick))
   const selectedCustom = createMemo(() =>
     providers().find((item) => item.id === state.pick.replace(/^provider:/, "") && item.custom),
@@ -2685,6 +2792,9 @@ export default function ConfigPage() {
       state.pick !== SKILL_NEW &&
       (rawSkills.loading || diskClaude.loading || diskOpenCode.loading || diskProject.loading) &&
       skillDocs().length === 0,
+  )
+  const pluginWait = createMemo(
+    () => state.section === "plugins" && diskProjectPlugins.loading && (plugins()?.length ?? 0) === 0,
   )
 
   async function walk(root: string, depth = 0): Promise<TreeNode[]> {
@@ -2812,7 +2922,7 @@ export default function ConfigPage() {
       const list = skillDocs().map((item) => item.id)
       return state.pick === SKILL_NEW ? [SKILL_NEW, ...list] : list
     }
-    return plugins().map((item) => item.id)
+    return (plugins() ?? []).map((item) => item.id)
   }
 
   async function jump(section: Section) {
@@ -2857,12 +2967,12 @@ export default function ConfigPage() {
         agents().length,
         claws().length,
         skillDocs().length,
-        plugins().length,
+        plugins()?.length ?? 0,
       ],
       () => {
         const list = picks(state.section)
         if (list.includes(state.pick)) return
-        if (list.length === 0 && (agentWait() || skillWait())) {
+        if (list.length === 0 && (agentWait() || skillWait() || pluginWait())) {
           setState("pick", "")
           return
         }
@@ -3605,9 +3715,10 @@ export default function ConfigPage() {
   function togglePlugin(item: PluginItem, enabled: boolean) {
     const prev = cfg().plugin ?? []
     const nextSpec = item.spec ?? (item.path ? spec(item.path) : item.name)
+    const key = pluginKey(nextSpec)
     const next = enabled
-      ? Array.from(new Set([...prev.filter((entry) => plugin(entry) !== item.name), nextSpec]))
-      : prev.filter((entry) => plugin(entry) !== item.name)
+      ? Array.from(new Set([...prev.filter((entry) => pluginKey(entry) !== key), nextSpec]))
+      : prev.filter((entry) => pluginKey(entry) !== key)
     void update({ plugin: next })
   }
 
@@ -3642,14 +3753,6 @@ export default function ConfigPage() {
                   icon={sectionIcon("agents")}
                   onClick={() => jump("agents")}
                 />
-                {clawsSectionEnabled() && (
-                  <SectionButton
-                    current={state.section === "claws"}
-                    title={t("config.claws.title")}
-                    icon={sectionIcon("claws")}
-                    onClick={() => jump("claws")}
-                  />
-                )}
                 <SectionButton
                   current={state.section === "skills"}
                   title={t("config.skills.title")}
@@ -3662,6 +3765,14 @@ export default function ConfigPage() {
                   icon={sectionIcon("plugins")}
                   onClick={() => jump("plugins")}
                 />
+                {clawsSectionEnabled() && (
+                  <SectionButton
+                    current={state.section === "claws"}
+                    title={t("config.claws.title")}
+                    icon={sectionIcon("claws")}
+                    onClick={() => jump("claws")}
+                  />
+                )}
               </div>
             </div>
             <div class="border-t border-border-weak-base p-3">
@@ -3681,7 +3792,7 @@ export default function ConfigPage() {
         <div class="flex min-h-0 min-w-0 flex-1 flex-col xl:flex-row">
           <section class="shrink-0 border-b border-border-weak-base bg-surface-base/80 backdrop-blur xl:w-[400px] xl:border-r xl:border-b-0">
             <div class="flex h-full min-h-0 flex-col">
-            <div class="px-4 py-4">
+              <div class="px-4 py-4">
                 <Switch>
                   <Match when={state.section === "agents-md"}>
                     <div class="text-15-medium text-text-strong">AGENTS.md</div>
@@ -3955,7 +4066,9 @@ export default function ConfigPage() {
                                                 agentModeLabel(loadedMap().get(item.label)?.mode) ||
                                                 item.note
                                               }
-                                              meta={[item.origin, short(item.path, item.root)].filter(Boolean).join(" · ")}
+                                              meta={[item.origin, short(item.path, item.root)]
+                                                .filter(Boolean)
+                                                .join(" · ")}
                                               onClick={() => void open(item)}
                                             />
                                           )}
@@ -3988,7 +4101,9 @@ export default function ConfigPage() {
                                       agentModeLabel(loadedMap().get(item.label)?.mode) ||
                                       item.note
                                     }
-                                    meta={[item.project, item.origin, short(item.path, item.root)].filter(Boolean).join(" · ")}
+                                    meta={[item.project, item.origin, short(item.path, item.root)]
+                                      .filter(Boolean)
+                                      .join(" · ")}
                                     onClick={() => void open(item)}
                                   />
                                 )}
@@ -4193,34 +4308,124 @@ export default function ConfigPage() {
                     </Match>
 
                     <Match when={state.section === "plugins"}>
-                      <For each={plugins()}>
-                        {(item) => (
-                          <ListButton
-                            active={state.pick === item.id}
-                            title={item.label}
-                            note={
-                              item.exists
-                                ? item.enabled
-                                  ? t("config.plugins.note.enabled")
-                                  : t("config.plugins.note.available")
-                                : t("config.plugins.note.missing")
-                            }
-                            meta={item.path ? short(item.path, space()?.pluginsRoot) : undefined}
-                            warn={item.enabled && !item.exists}
-                            onClick={() => {
-                              setState("pick", item.id)
-                              const doc = docs().get(item.id)
-                              if (!doc) return
-                              void open(doc)
-                            }}
-                            extra={
-                              <Toggle checked={item.enabled} onChange={(value) => togglePlugin(item, value)} hideLabel>
-                                {item.label}
-                              </Toggle>
-                            }
-                          />
-                        )}
-                      </For>
+                      <Show when={pluginGlobal().length > 0}>
+                        <div class="flex flex-col">
+                          <div class="flex items-center justify-between gap-3 px-1">
+                            <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                              {t("config.plugins.group.global")}
+                            </div>
+                            <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                              {pluginGlobal().length}
+                            </div>
+                          </div>
+                          <div class="mt-2 flex flex-col">
+                            <For each={pluginGlobal()}>
+                              {(item) => (
+                                <ListButton
+                                  active={state.pick === item.id}
+                                  title={item.label}
+                                  note={item.exists ? undefined : t("config.plugins.note.missing")}
+                                  meta={item.path ? short(item.path, space()?.pluginsRoot) : undefined}
+                                  warn={item.enabled && !item.exists}
+                                  onClick={() => {
+                                    setState("pick", item.id)
+                                    const doc = docs().get(item.id)
+                                    if (!doc) return
+                                    void open(doc)
+                                  }}
+                                  extra={
+                                    <Toggle
+                                      checked={item.enabled}
+                                      onChange={(value) => togglePlugin(item, value)}
+                                      hideLabel
+                                    >
+                                      {item.label}
+                                    </Toggle>
+                                  }
+                                />
+                              )}
+                            </For>
+                          </div>
+                        </div>
+                      </Show>
+
+                      <Show when={pluginProject().length > 0}>
+                        <div class="flex flex-col">
+                          <div class="flex items-center justify-between gap-3 px-1">
+                            <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                              {t("config.plugins.group.project")}
+                            </div>
+                            <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                              {pluginProject().length}
+                            </div>
+                          </div>
+                          <div class="mt-2 flex flex-col gap-3">
+                            <For each={projectPlugins()}>
+                              {(group) => (
+                                <div class="flex flex-col rounded-xl border border-border-weak-base bg-background-base/70">
+                                  <button
+                                    type="button"
+                                    class="flex items-center justify-between gap-3 border-b border-border-weak-base px-3 py-2 text-left"
+                                    onClick={() => toggleGroup(`plugin-group:${group.path ?? group.label}`)}
+                                  >
+                                    <div class="flex min-w-0 items-start gap-2">
+                                      <div class="mt-0.5 text-text-weak">
+                                        <Icon
+                                          name={
+                                            groupOpen(`plugin-group:${group.path ?? group.label}`)
+                                              ? "chevron-down"
+                                              : "chevron-right"
+                                          }
+                                          size="small"
+                                        />
+                                      </div>
+                                      <div class="min-w-0">
+                                        <div class="truncate text-12-medium text-text-strong">{group.label}</div>
+                                        <Show when={group.path}>
+                                          <div class="mt-1 break-all font-mono text-[11px] leading-5 text-text-weak">
+                                            {group.path}
+                                          </div>
+                                        </Show>
+                                      </div>
+                                    </div>
+                                    <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                      {group.items.length}
+                                    </div>
+                                  </button>
+                                  <Show when={groupOpen(`plugin-group:${group.path ?? group.label}`)}>
+                                    <For each={group.items}>
+                                      {(item) => (
+                                        <ListButton
+                                          active={state.pick === item.id}
+                                          title={item.label}
+                                          note={item.exists ? undefined : t("config.plugins.note.missing")}
+                                          meta={item.origin ? `${item.origin} · ${item.path}` : item.path}
+                                          warn={item.enabled && !item.exists}
+                                          onClick={() => {
+                                            setState("pick", item.id)
+                                            const doc = docs().get(item.id)
+                                            if (!doc) return
+                                            void open(doc)
+                                          }}
+                                          extra={
+                                            <Toggle
+                                              checked={item.enabled}
+                                              onChange={(value) => togglePlugin(item, value)}
+                                              hideLabel
+                                            >
+                                              {item.label}
+                                            </Toggle>
+                                          }
+                                        />
+                                      )}
+                                    </For>
+                                  </Show>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </div>
+                      </Show>
                     </Match>
                   </Switch>
                 </div>
