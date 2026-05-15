@@ -22,6 +22,14 @@ APP=securecode
 ARCHIVE_PREFIX=securecode
 GH_REPO=acompany-develop/securecode
 
+# Hold the download-path scratch directory at script scope so the EXIT trap
+# below can read it after main() returns. A `local tmp` inside main() goes out
+# of scope before the trap fires, which trips `set -u` with "tmp: unbound
+# variable" and skips the rm. Default to empty so the trap is a no-op when
+# main() takes the --binary path that does not allocate a tmp dir (refs #136).
+tmp=""
+trap 'rm -rf "${tmp:-}"' EXIT
+
 MUTED='\033[0;2m'
 RED='\033[0;31m'
 ORANGE='\033[38;5;214m'
@@ -324,9 +332,7 @@ main() {
     filename=$(resolve_target_filename)
     url="https://github.com/${GH_REPO}/releases/download/v${version}/${filename}"
 
-    local tmp
     tmp=$(mktemp -d -t securecode-install-XXXXXX)
-    trap 'rm -rf "$tmp"' EXIT
 
     info "Downloading ${filename} (v${version})..."
     download_archive "$url" "$tmp/$filename" "$version" "$filename"
