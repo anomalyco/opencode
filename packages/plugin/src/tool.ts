@@ -50,9 +50,10 @@ export function tool<Args extends z.ZodRawShape>(input: {
 }) {
   return {
     ...input,
-    // Generate JSON Schema with the same Zod instance that created `tool.schema`
-    // args; Zod metadata such as `.describe()` is stored per module instance.
-    jsonSchema: z.toJSONSchema(z.object(input.args), { io: "input" }),
+    // Generate JSON Schema here with the same Zod instance that created
+    // `tool.schema` args. Zod metadata such as `.describe()` is stored in a
+    // module-local registry, so converting later from opencode can lose it.
+    jsonSchema: z.toJSONSchema(z.object(input.args), { target: "draft-7", io: "input" }),
   }
 }
 tool.schema = z

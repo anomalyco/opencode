@@ -289,7 +289,7 @@ describe("tool.registry", () => {
           [
             "import { z } from 'zod'",
             "export function tool(input) {",
-            "  return { ...input, jsonSchema: z.toJSONSchema(z.object(input.args), { io: 'input' }) }",
+            "  return { ...input, jsonSchema: z.toJSONSchema(z.object(input.args), { target: 'draft-7', io: 'input' }) }",
             "}",
             "tool.schema = z",
             "",

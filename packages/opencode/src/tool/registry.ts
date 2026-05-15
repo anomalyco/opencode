@@ -145,6 +145,9 @@ export const layer: Layer.Layer<
           const entries = Object.entries(def.args)
           const allZod = entries.every((entry) => isZodType(entry[1]))
           const zodParams = allZod ? z.object(def.args) : undefined
+          // Newer @opencode-ai/plugin versions precompute JSON Schema with the
+          // Zod instance that owns arg metadata. Fall back for older/manual
+          // custom tools that only expose raw Zod args.
           const jsonSchema = zodParams
             ? isJsonSchemaDefinition(def.jsonSchema)
               ? (def.jsonSchema as JSONSchema7)
