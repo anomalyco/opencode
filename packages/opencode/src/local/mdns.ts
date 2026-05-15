@@ -111,7 +111,7 @@ async function runWithConcurrency<T>(tasks: Array<() => Promise<T>>, limit: numb
 // Common llama-swap ports in the local fleet. mDNS is the primary discovery
 // path; LAN probing is only a bounded fallback for machines that do not
 // advertise.
-const LAN_PORTS = [8080, 8081, 11435]
+const LAN_PORTS = [8080, 8081, 1234, 11434, 11435]
 const LAN_PROBE_TIMEOUT_MS = 200
 // Must cover .1-.254 with enough workers to reach high addresses such as .219
 // before the HTTP scan returns to /connect.
