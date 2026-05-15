@@ -1517,8 +1517,35 @@ export const layer = Layer.effect(
           delete options.fetch
         }
 
-        if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
-          options["includeUsage"] = true
+        const incompatibleHosts = [
+          "api.xiaomimimo.com",
+          "open.bigmodel.cn",
+          "dashscope.aliyuncs.com",
+          "qianfan.baidubce.com",
+          "api.minimax.io",
+          "ark.cn-beijing.volces.com",
+          "api.lkeap.cloud.tencent.com",
+          "api-ai.gitcode.com",
+          "api-inference.modelscope.cn",
+        ]
+
+        let isIncompatible = false
+        const baseURL = typeof options["baseURL"] === "string" ? options["baseURL"] : model.api.url
+        if (baseURL) {
+          try {
+            const host = new URL(baseURL).host.toLowerCase()
+            isIncompatible = incompatibleHosts.some((h) => host === h || host.endsWith(`.${h}`))
+          } catch {
+            // ignore invalid URLs
+          }
+        }
+
+        if (model.api.npm.includes("@ai-sdk/openai-compatible")) {
+          if ("includeUsage" in options) {
+            if (options["includeUsage"] !== false) options["includeUsage"] = true
+          } else if (!isIncompatible) {
+            options["includeUsage"] = true
+          }
         }
 
         const baseURL = iife(() => {
