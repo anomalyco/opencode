@@ -52,8 +52,9 @@ import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { SyncEvent } from "@/sync"
-import { SessionEvent } from "@/v2/session-event"
+import { EventV2 } from "@opencode-ai/core/event"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { SessionEvent } from "@opencode-ai/core/session-event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AgentAttachment, FileAttachment, ReferenceAttachment, Source } from "@opencode-ai/core/session-prompt"
@@ -204,7 +205,7 @@ export const layer = Layer.effect(
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
     const references = yield* Reference.Service
-    const sync = yield* SyncEvent.Service
+    const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const runner = Effect.fn("SessionPrompt.runner")(function* () {
       return yield* EffectBridge.make()
@@ -944,7 +945,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               providerID: model.providerID,
             }
             yield* sessions.updateMessage(msg)
-            const callID = ulid()
             const started = Date.now()
             const part: MessageV2.ToolPart = {
               type: "tool",
@@ -961,10 +961,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             }
             yield* sessions.updatePart(part)
             if (flags.experimentalEventSystem) {
-              yield* sync.run(SessionEvent.Shell.Started.Sync, {
+              yield* events.publish(SessionEvent.Shell.Started, {
                 sessionID: input.sessionID,
                 timestamp: DateTime.makeUnsafe(started),
-                callID,
+                callID: part.callID,
                 command: input.command,
               })
             }
@@ -984,7 +984,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }
               const completed = Date.now()
               if (flags.experimentalEventSystem) {
-                yield* sync.run(SessionEvent.Shell.Ended.Sync, {
+                yield* events.publish(SessionEvent.Shell.Ended, {
                   sessionID: input.sessionID,
                   timestamp: DateTime.makeUnsafe(completed),
                   callID: part.callID,
@@ -1134,7 +1134,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
 
       if (current?.agent !== info.agent) {
-        yield* sync.run(SessionEvent.AgentSwitched.Sync, {
+        yield* events.publish(SessionEvent.AgentSwitched, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(info.time.created),
           agent: info.agent,
@@ -1145,7 +1145,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         current.model.id !== info.model.modelID ||
         (current.model.variant === "default" ? undefined : current.model.variant) !== info.model.variant
       ) {
-        yield* sync.run(SessionEvent.ModelSwitched.Sync, {
+        yield* events.publish(SessionEvent.ModelSwitched, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(info.time.created),
           model: {
@@ -1586,7 +1586,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       )
       // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
       if (flags.experimentalEventSystem) {
-        yield* sync.run(SessionEvent.Prompted.Sync, {
+        yield* events.publish(SessionEvent.Prompted, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(info.time.created),
           prompt: {
@@ -1600,7 +1600,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       for (const text of nextPrompt.synthetic) {
         // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
         if (flags.experimentalEventSystem) {
-          yield* sync.run(SessionEvent.Synthetic.Sync, {
+          yield* events.publish(SessionEvent.Synthetic, {
             sessionID: input.sessionID,
             timestamp: DateTime.makeUnsafe(info.time.created),
             text,
@@ -2038,13 +2038,13 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Image.defaultLayer),
     Layer.provide(
       Layer.mergeAll(
+        EventV2Bridge.defaultLayer,
         Agent.defaultLayer,
         SystemPrompt.defaultLayer,
         LLM.defaultLayer,
         Reference.defaultLayer,
         Bus.layer,
         CrossSpawnSpawner.defaultLayer,
-        SyncEvent.defaultLayer,
         RuntimeFlags.defaultLayer,
       ),
     ),
