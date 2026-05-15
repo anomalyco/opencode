@@ -125,6 +125,24 @@ type CustomLoader = (provider: Info) => Effect.Effect<{
   vars?: CustomVarsLoader
   options?: Record<string, any>
   discoverModels?: CustomDiscoverModels
+  // Set to `false` on a non-autoload return to opt out of late-env detection.
+  //
+  // Mark a return path with `dynamicEnv: false` whenever the loader cannot
+  // reconstruct its options from env alone — i.e. when missing init-time
+  // inputs (auth metadata, credential providers obtained via dynamic SDK
+  // imports, derived URLs, region/deployment/account IDs) close over values
+  // that later env mutations cannot replay. Without this flag a late env
+  // would surface the provider in `list()`, but `getLanguage()` would build
+  // an SDK with stale or undefined options and fail silently at first
+  // request. Loaders marked `dynamicEnv: false` are excluded from
+  // `cleanedDatabase` so the provider stays hidden until opencode restart;
+  // a one-time warn is emitted when the refused env appears.
+  //
+  // Single-credential providers whose only env input is the API key
+  // (anthropic, openai, openrouter, ...) do NOT need this flag: their late
+  // env value flows through `provider.key` via the env overlay and is
+  // applied by `resolveSDK` at call time.
+  dynamicEnv?: boolean
 }>
 
 type CustomDep = {
@@ -132,6 +150,7 @@ type CustomDep = {
   config: () => Effect.Effect<Config.Info>
   env: () => Effect.Effect<Record<string, string | undefined>>
   get: (key: string) => Effect.Effect<string | undefined>
+  set: (key: string, value: string) => Effect.Effect<void>
 }
 
 function useLanguageModel(sdk: any) {
@@ -219,6 +238,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       if (!resource && !provider.options?.baseURL) {
         return {
           autoload: false,
+          dynamicEnv: false,
           async getModel() {
             throw new Error(
               "AZURE_RESOURCE_NAME is missing, set it using env var or reconnecting the azure provider and setting it",
@@ -245,16 +265,27 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
       }
     }),
-    "azure-cognitive-services": Effect.fnUntraced(function* () {
+    "azure-cognitive-services": Effect.fnUntraced(function* (provider: Info) {
       const resourceName = yield* dep.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
+      if (!resourceName && !provider.options?.baseURL) {
+        return {
+          autoload: false,
+          dynamicEnv: false,
+          async getModel() {
+            throw new Error(
+              "AZURE_COGNITIVE_SERVICES_RESOURCE_NAME is missing, set it via env var or configure provider.options.baseURL",
+            )
+          },
+        }
+      }
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]))
         },
-        options: {
-          baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
-        },
+        options: resourceName
+          ? { baseURL: `https://${resourceName}.cognitiveservices.azure.com/openai` }
+          : {},
       }
     }),
     "amazon-bedrock": Effect.fnUntraced(function* () {
@@ -274,15 +305,11 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       const awsAccessKeyId = env["AWS_ACCESS_KEY_ID"]
 
-      const awsBearerToken = iife(() => {
-        const envToken = process.env.AWS_BEARER_TOKEN_BEDROCK
-        if (envToken) return envToken
-        if (auth?.type === "api") {
-          process.env.AWS_BEARER_TOKEN_BEDROCK = auth.key
-          return auth.key
-        }
-        return undefined
-      })
+      const envBearerToken = env["AWS_BEARER_TOKEN_BEDROCK"]
+      const awsBearerToken = envBearerToken ?? (auth?.type === "api" ? auth.key : undefined)
+      if (!envBearerToken && awsBearerToken) {
+        yield* dep.set("AWS_BEARER_TOKEN_BEDROCK", awsBearerToken)
+      }
 
       const awsWebIdentityTokenFile = env["AWS_WEB_IDENTITY_TOKEN_FILE"]
 
@@ -291,7 +318,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       )
 
       if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
-        return { autoload: false }
+        return { autoload: false, dynamicEnv: false }
 
       const { fromNodeProviderChain } = yield* Effect.promise(() => import("@aws-sdk/credential-providers"))
 
@@ -466,7 +493,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       )
 
       const autoload = Boolean(project)
-      if (!autoload) return { autoload: false }
+      if (!autoload) return { autoload: false, dynamicEnv: false }
       return {
         autoload: true,
         vars(_options: Record<string, any>) {
@@ -503,7 +530,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const project = env["GOOGLE_CLOUD_PROJECT"] ?? env["GCP_PROJECT"] ?? env["GCLOUD_PROJECT"]
       const location = env["GOOGLE_CLOUD_LOCATION"] ?? env["VERTEX_LOCATION"] ?? "global"
       const autoload = Boolean(project)
-      if (!autoload) return { autoload: false }
+      if (!autoload) return { autoload: false, dynamicEnv: false }
       return {
         autoload: true,
         options: {
@@ -518,21 +545,21 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
     }),
     "sap-ai-core": Effect.fnUntraced(function* () {
       const auth = yield* dep.auth("sap-ai-core")
-      const envServiceKey = iife(() => {
-        const envAICoreServiceKey = process.env.AICORE_SERVICE_KEY
-        if (envAICoreServiceKey) return envAICoreServiceKey
-        if (auth?.type === "api") {
-          process.env.AICORE_SERVICE_KEY = auth.key
-          return auth.key
-        }
-        return undefined
-      })
-      const deploymentId = process.env.AICORE_DEPLOYMENT_ID
-      const resourceGroup = process.env.AICORE_RESOURCE_GROUP
+      const env = yield* dep.env()
+      const envAICoreServiceKey = env["AICORE_SERVICE_KEY"]
+      const envServiceKey = envAICoreServiceKey ?? (auth?.type === "api" ? auth.key : undefined)
+      if (!envServiceKey) {
+        return { autoload: false, dynamicEnv: false }
+      }
+      if (!envAICoreServiceKey) {
+        yield* dep.set("AICORE_SERVICE_KEY", envServiceKey)
+      }
+      const deploymentId = env["AICORE_DEPLOYMENT_ID"]
+      const resourceGroup = env["AICORE_RESOURCE_GROUP"]
 
       return {
-        autoload: !!envServiceKey,
-        options: envServiceKey ? { deploymentId, resourceGroup } : {},
+        autoload: true,
+        options: { deploymentId, resourceGroup },
         async getModel(sdk: any, modelID: string) {
           return sdk(modelID)
         },
@@ -703,6 +730,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       if (!accountId)
         return {
           autoload: false,
+          dynamicEnv: false,
           async getModel() {
             throw new Error(
               "CLOUDFLARE_ACCOUNT_ID is missing. Set it with: export CLOUDFLARE_ACCOUNT_ID=<your-account-id>",
@@ -752,6 +780,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         ].filter((x): x is string => Boolean(x))
         return {
           autoload: false,
+          dynamicEnv: false,
           async getModel() {
             throw new Error(
               `${missing.join(" and ")} missing. Set with: ${missing.map((x) => `export ${x}=<value>`).join(" && ")}`,
@@ -997,16 +1026,25 @@ export interface Interface {
 
 interface State {
   models: Map<string, LanguageModelV3>
-  // INVARIANT: never holds env-only entries (env-derived entries are layered in
-  // by `currentProviders`). Readers MUST go through `view`, not `s.cachedProviders`.
+  // Stamped at init from auth/config/loader results. May contain entries with
+  // source:"env" for autoload-with-env-key providers (e.g. gitlab,
+  // cloudflare-ai-gateway) that have no other config source. Readers MUST go
+  // through `currentProviders(...)` to apply the live env overlay on top.
   cachedProviders: Record<ProviderID, Info>
   catalog: Record<ProviderID, Info>
   sdk: Map<string, BundledSDK>
   modelLoaders: Record<string, CustomModelLoader>
   varsLoaders: Record<string, CustomVarsLoader>
-  // INVARIANT: env-eligible only; models pre-filtered (status/blacklist/whitelist);
-  // non-autoload custom-loader options pre-folded. Immutable post-init.
-  cleanedDatabase: Record<ProviderID, Info>
+  // Env-eligible providers only (info.env.length > 0); models pre-filtered
+  // (status/blacklist/whitelist); non-autoload custom-loader options pre-folded.
+  // Treated as immutable after init — all reads go through `currentProviders`.
+  cleanedDatabase: Readonly<Record<ProviderID, Info>>
+  // Providers whose custom loader returned `dynamicEnv: false`. Populated at
+  // init only; never mutated post-init.
+  loaderRefusedDynamicEnv: Set<ProviderID>
+  // Mutated post-init by `warnLateEnvRefused` to dedupe the once-per-process
+  // warning emitted when a refused provider's env appears.
+  warnedLateEnvRefused: Set<ProviderID>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
@@ -1047,12 +1085,32 @@ export function currentProviders(
   const result: Record<ProviderID, Info> = { ...s.cachedProviders }
   for (const [id, info] of Object.entries(s.cleanedDatabase)) {
     const providerID = id as ProviderID
+    // Treat empty strings as absent: an empty env var is never a valid API key.
     const apiKey = info.env.map((k) => envs[k]).find(Boolean)
     const next = resolveEnvOverlay(result[providerID], info, apiKey)
     if (next) result[providerID] = next
     else delete result[providerID]
   }
   return result
+}
+
+function warnLateEnvRefused(
+  s: Pick<State, "catalog" | "loaderRefusedDynamicEnv" | "warnedLateEnvRefused">,
+  envs: Record<string, string | undefined>,
+) {
+  if (s.loaderRefusedDynamicEnv.size === 0) return
+  for (const providerID of s.loaderRefusedDynamicEnv) {
+    if (s.warnedLateEnvRefused.has(providerID)) continue
+    const info = s.catalog[providerID]
+    if (!info) continue
+    const present = info.env.find((k) => envs[k])
+    if (!present) continue
+    s.warnedLateEnvRefused.add(providerID)
+    log.warn("late env detected for provider that requires restart", {
+      providerID,
+      env: present,
+    })
+  }
 }
 
 function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
@@ -1237,11 +1295,13 @@ export const layer = Layer.effect(
         const discoveryLoaders: {
           [providerID: string]: CustomDiscoverModels
         } = {}
+        const loaderRefusedDynamicEnv = new Set<ProviderID>()
         const dep = {
           auth: (id: string) => auth.get(id).pipe(Effect.orDie),
           config: () => config.get(),
           env: () => env.all(),
           get: (key: string) => env.get(key),
+          set: (key: string, value: string) => env.set(key, value),
         }
 
         log.info("init")
@@ -1442,6 +1502,10 @@ export const layer = Layer.effect(
           const result = yield* fn(data)
           if (!result) continue
 
+          if (!result.autoload && result.dynamicEnv === false) {
+            loaderRefusedDynamicEnv.add(providerID)
+          }
+
           // Always register loaders so a late env-promoted provider can find
           // its modelLoader / varsLoader / discoverModels.
           if (result.getModel) modelLoaders[providerID] = result.getModel
@@ -1577,6 +1641,7 @@ export const layer = Layer.effect(
         for (const [id, info] of Object.entries(database)) {
           if (disabled.has(id)) continue
           if (enabled && !enabled.has(id)) continue
+          if (loaderRefusedDynamicEnv.has(ProviderID.make(id))) continue
           if (info.env.length === 0) continue
           const providerID = ProviderID.make(id)
           const configProvider = cfg.provider?.[id]
@@ -1598,12 +1663,15 @@ export const layer = Layer.effect(
           modelLoaders,
           varsLoaders,
           cleanedDatabase,
+          loaderRefusedDynamicEnv,
+          warnedLateEnvRefused: new Set<ProviderID>(),
         }
       }),
     )
 
     const view = Effect.fnUntraced(function* (s: State) {
       const envs = yield* env.all()
+      warnLateEnvRefused(s, envs)
       return currentProviders(s, envs)
     })
 

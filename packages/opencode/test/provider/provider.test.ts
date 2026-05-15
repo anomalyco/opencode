@@ -3157,7 +3157,7 @@ test("late-detected env provider respects blacklist", async () => {
   })
 })
 
-test("late-detected multi-env provider yields source=env with key undefined", async () => {
+test("late-detected multi-env provider is excluded (requires restart)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -3184,10 +3184,14 @@ test("late-detected multi-env provider yields source=env with key undefined", as
       expect(before[ProviderID.amazonBedrock]).toBeUndefined()
       set("AWS_ACCESS_KEY_ID", "AKIA-LATE")
       const after = await list()
-      const bedrock = after[ProviderID.amazonBedrock]
-      expect(bedrock).toBeDefined()
-      expect(bedrock.source).toBe("env")
-      expect(bedrock.key).toBeUndefined()
+      // Multi-credential providers (bedrock, sap-ai-core, azure, vertex) require an
+      // opencode restart for newly-set credentials to take effect. The custom
+      // loader emits credentialProvider/deploymentId/etc. only when creds are
+      // present at init, and those options are not re-derivable post-init from
+      // env alone. Live-promoting them via the env overlay would yield an
+      // unauthenticated SDK that fails silently at first request, so we
+      // honestly hide them.
+      expect(after[ProviderID.amazonBedrock]).toBeUndefined()
       remove("AWS_ACCESS_KEY_ID")
     },
   })

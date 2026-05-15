@@ -1,5 +1,21 @@
 import { Context, Effect, Layer } from "effect"
 
+/**
+ * Effect-aware wrapper around `process.env`.
+ *
+ * Contract:
+ * - Reads (`get`, `all`) are LIVE — they reflect the current `process.env` at
+ *   call time, not a snapshot taken at layer construction. `all()` returns a
+ *   fresh shallow copy, so iterating the result is safe across subsequent
+ *   writes.
+ * - Writes (`set`, `remove`) mutate `process.env` directly and therefore
+ *   propagate to any child process spawned afterward and to native consumers
+ *   (e.g. `getenv()` inside vendor SDKs).
+ * - NOT safe for parallel test isolation: all callers share one global
+ *   `process.env`. Tests that mutate env state must serialize within a file
+ *   and rely on `test/preload.ts` afterEach baseline restore for cross-file
+ *   safety.
+ */
 type State = Record<string, string | undefined>
 
 export interface Interface {
@@ -15,7 +31,7 @@ export const layer = Layer.succeed(
   Service,
   Service.of({
     get: Effect.fn("Env.get")((key: string) => Effect.sync(() => process.env[key])),
-    all: Effect.fn("Env.all")(() => Effect.sync(() => ({ ...process.env }) as State)),
+    all: Effect.fn("Env.all")(() => Effect.sync(() => ({ ...process.env }))),
     set: Effect.fn("Env.set")((key: string, value: string) =>
       Effect.sync(() => {
         process.env[key] = value

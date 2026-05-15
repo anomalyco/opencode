@@ -4,7 +4,7 @@ import os from "os"
 import path from "path"
 import fs from "fs/promises"
 import { setTimeout as sleep } from "node:timers/promises"
-import { afterAll } from "bun:test"
+import { afterAll, afterEach } from "bun:test"
 
 // Set XDG env vars FIRST, before any src/ imports
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
@@ -113,6 +113,26 @@ delete process.env["OPENCODE_SERVER_USERNAME"]
 
 // Use in-memory sqlite
 process.env["OPENCODE_DB"] = ":memory:"
+
+// Capture baseline AFTER all preload deletes/sets settle. With the env layer
+// now writing through to `process.env` directly (see src/env/index.ts), tests
+// that call `set()` mutate global state. Without a per-test reset, leaks
+// would cross file boundaries (Bun runs all .test.ts files in one shared
+// process per `bunfig.toml` defaults). This `afterEach` snapshot/restore
+// makes test isolation automatic regardless of contributor discipline.
+const ENV_BASELINE: Record<string, string | undefined> = { ...process.env }
+afterEach(() => {
+  for (const key of Object.keys(process.env)) {
+    if (!(key in ENV_BASELINE)) delete process.env[key]
+  }
+  for (const [key, value] of Object.entries(ENV_BASELINE) as [string, string | undefined][]) {
+    if (value === undefined) {
+      delete process.env[key]
+      continue
+    }
+    if (process.env[key] !== value) process.env[key] = value
+  }
+})
 
 // Now safe to import from src/
 const { Log } = await import("@opencode-ai/core/util/log")
