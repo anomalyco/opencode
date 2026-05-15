@@ -167,7 +167,7 @@ export function use<T>(callback: (trx: TxOrDb) => T): T {
 }
 
 export function effect(fn: () => any | Promise<any>) {
-  const bound = bindInstanceRef(fn)
+  const bound = EffectBridge.bind(fn)
   try {
     ctx.use().effects.push(bound)
   } catch {
@@ -188,17 +188,13 @@ export function transaction<T>(
   } catch (err) {
     if (err instanceof LocalContext.NotFound) {
       const effects: (() => void | Promise<void>)[] = []
-      const txCallback = bindInstanceRef((tx: TxOrDb) => ctx.provide({ tx, effects }, () => callback(tx)))
+      const txCallback = EffectBridge.bind((tx: TxOrDb) => ctx.provide({ tx, effects }, () => callback(tx)))
       const result = Client().transaction(txCallback, { behavior: options?.behavior })
       for (const effect of effects) effect()
       return result as NotPromise<T>
     }
     throw err
   }
-}
-
-function bindInstanceRef<Args extends readonly unknown[], Result>(fn: (...args: Args) => Result) {
-  return EffectBridge.bind(fn)
 }
 
 export * as Database from "./db"
