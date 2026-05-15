@@ -17,12 +17,13 @@ import {
   batch,
   Show,
   on,
+  lazy,
+  Suspense,
 } from "solid-js"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import semver from "semver"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
-import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { ErrorComponent } from "@tui/component/error-component"
 import { PluginRouteMissing } from "@tui/component/plugin-route-missing"
 import { ProjectProvider } from "@tui/context/project"
@@ -33,18 +34,8 @@ import { StartupLoading } from "@tui/component/startup-loading"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { SyncProviderV2 } from "@tui/context/sync-v2"
 import { LocalProvider, useLocal } from "@tui/context/local"
-import { DialogModel } from "@tui/component/dialog-model"
 import { useConnected } from "@tui/component/use-connected"
-import { DialogMcp } from "@tui/component/dialog-mcp"
-import { DialogStatus } from "@tui/component/dialog-status"
-import { DialogThemeList } from "@tui/component/dialog-theme-list"
-import { DialogHelp } from "./ui/dialog-help"
-import { DialogAgent } from "@tui/component/dialog-agent"
-import { DialogSessionList } from "@tui/component/dialog-session-list"
-import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
-import { Home } from "@tui/routes/home"
-import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -52,10 +43,8 @@ import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
-import { Session as SessionApi } from "@/session/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
-import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
@@ -71,7 +60,18 @@ import { OpencodeKeymapProvider, registerOpencodeKeymap, useBindings, useOpencod
 import { logInitialTuiLaunch } from "@/performance"
 
 import type { EventSource } from "./context/sdk"
-import { DialogVariant } from "./component/dialog-variant"
+const HomeRoute = lazy(async () => ({ default: (await import("@tui/routes/home")).Home }))
+const SessionRoute = lazy(async () => ({ default: (await import("@tui/routes/session")).Session }))
+const DialogProviderList = lazy(async () => ({ default: (await import("@tui/component/dialog-provider")).DialogProvider }))
+const DialogSessionList = lazy(async () => ({ default: (await import("@tui/component/dialog-session-list")).DialogSessionList }))
+const DialogModel = lazy(async () => ({ default: (await import("@tui/component/dialog-model")).DialogModel }))
+const DialogAgent = lazy(async () => ({ default: (await import("@tui/component/dialog-agent")).DialogAgent }))
+const DialogMcp = lazy(async () => ({ default: (await import("@tui/component/dialog-mcp")).DialogMcp }))
+const DialogVariant = lazy(async () => ({ default: (await import("./component/dialog-variant")).DialogVariant }))
+const DialogConsoleOrg = lazy(async () => ({ default: (await import("@tui/component/dialog-console-org")).DialogConsoleOrg }))
+const DialogStatus = lazy(async () => ({ default: (await import("@tui/component/dialog-status")).DialogStatus }))
+const DialogThemeList = lazy(async () => ({ default: (await import("@tui/component/dialog-theme-list")).DialogThemeList }))
+const DialogHelp = lazy(async () => ({ default: (await import("./ui/dialog-help")).DialogHelp }))
 
 const appBindingCommands = [
   "command.palette.show",
@@ -118,6 +118,23 @@ const appBindingCommands = [
   "app.toggle.paste_summary",
   "app.toggle.session_directory_filter",
 ] as const
+
+const parentTitlePrefix = "New session - "
+const childTitlePrefix = "Child session - "
+
+function isDefaultSessionTitle(title: string) {
+  return new RegExp(
+    `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$`,
+  ).test(title)
+}
+
+function parseModel(model: string) {
+  const [providerID, ...rest] = model.split("/")
+  return {
+    providerID,
+    modelID: rest.join("/"),
+  }
+}
 
 function rendererConfig(_config: TuiConfig.Resolved): CliRendererConfig {
   const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
@@ -188,7 +205,7 @@ export function tui(input: {
     const renderer = await createCliRenderer(rendererConfig(input.config))
     // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
     void renderer.getPalette({ size: 16 }).catch(() => undefined)
-    const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
+    const mode = renderer.themeMode ?? "dark"
 
     const keymap = createDefaultOpenTuiKeymap(renderer)
     const offKeymap = registerOpencodeKeymap(keymap, renderer, input.config)
@@ -358,7 +375,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
-      if (!session || SessionApi.isDefaultTitle(session.title)) {
+      if (!session || isDefaultSessionTitle(session.title)) {
         renderer.setTerminalTitle("OpenCode")
         return
       }
@@ -378,7 +395,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
       if (args.model) {
-        const { providerID, modelID } = Provider.parseModel(args.model)
+        const { providerID, modelID } = parseModel(args.model)
         if (!providerID || !modelID)
           return toast.show({
             variant: "warning",
@@ -967,14 +984,16 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       </Show>
       <Show when={ready()}>
         <box flexGrow={1} minHeight={0} flexDirection="column">
-          <Switch>
-            <Match when={route.data.type === "home"}>
-              <Home />
-            </Match>
-            <Match when={route.data.type === "session"}>
-              <Session />
-            </Match>
-          </Switch>
+          <Suspense>
+            <Switch>
+              <Match when={route.data.type === "home"}>
+                <HomeRoute />
+              </Match>
+              <Match when={route.data.type === "session"}>
+                <SessionRoute />
+              </Match>
+            </Switch>
+          </Suspense>
           {plugin()}
         </box>
         <box flexShrink={0}>

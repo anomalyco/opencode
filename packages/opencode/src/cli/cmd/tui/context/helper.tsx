@@ -9,12 +9,7 @@ export function createSimpleContext<T, Props extends Record<string, any>>(input:
   return {
     provider: (props: ParentProps<Props>) => {
       const init = input.init(props)
-      return (
-        // @ts-expect-error
-        <Show when={init.ready === undefined || init.ready === true}>
-          <ctx.Provider value={init}>{props.children}</ctx.Provider>
-        </Show>
-      )
+      return <ctx.Provider value={init}>{props.children}</ctx.Provider>
     },
     use() {
       const value = useContext(ctx)
