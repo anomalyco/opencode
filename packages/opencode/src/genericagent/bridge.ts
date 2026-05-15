@@ -125,6 +125,19 @@ type Message = {
 
 type Event = { directory: string; payload: { type: string; properties: Record<string, unknown> } }
 
+type HistorySession = {
+  id: string
+  path: string
+  mtime: number
+  preview: string
+  rounds: number
+}
+
+type HistoryMessage = {
+  role: "user" | "assistant"
+  content: string
+}
+
 function llmModelID(index: number): string {
   return `llm_${index}`
 }
@@ -399,24 +412,29 @@ class ShimClient {
   }
 
   async abort(sessionID: string): Promise<void> {
+    const t0 = Date.now()
     const ctrl = this.aborts.get(sessionID)
     if (ctrl) {
-      log.info("genericagent abort: cancel local fetch", { sessionID })
+      log.info("ShimClient.abort: cancel local fetch", { sessionID })
       this.aborts.delete(sessionID)
       try {
         ctrl.abort()
       } catch (e) {
-        log.warn("genericagent abort: ctrl.abort failed", { error: e instanceof Error ? e.message : String(e) })
+        log.warn("ShimClient.abort: ctrl.abort failed", { error: e instanceof Error ? e.message : String(e) })
       }
     } else {
-      log.debug("genericagent abort: no active fetch for session", { sessionID })
+      log.info("ShimClient.abort: no active fetch", { sessionID, activeCount: this.aborts.size })
     }
     await this.readyPromise
-    if (this.state.kind !== "ready") return
+    if (this.state.kind !== "ready") {
+      log.info("ShimClient.abort: shim not ready, skip POST /abort", { sessionID, state: this.state.kind })
+      return
+    }
     try {
-      await fetch(`http://127.0.0.1:${this.state.port}/abort`, { method: "POST" })
+      const res = await fetch(`http://127.0.0.1:${this.state.port}/abort`, { method: "POST" })
+      log.info("ShimClient.abort: POST /abort done", { sessionID, status: res.status, totalMs: Date.now() - t0 })
     } catch (e) {
-      log.warn("shim abort failed", { error: e instanceof Error ? e.message : String(e) })
+      log.warn("ShimClient.abort: POST /abort failed", { error: e instanceof Error ? e.message : String(e) })
     }
   }
 
@@ -451,6 +469,67 @@ class ShimClient {
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       log.warn("shim selectLlm failed", { index, error: message })
+      return { ok: false, error: message }
+    }
+  }
+
+  async listHistorySessions(): Promise<HistorySession[]> {
+    await this.readyPromise
+    if (this.state.kind !== "ready") return []
+    try {
+      const res = await fetch(`http://127.0.0.1:${this.state.port}/sessions`)
+      if (!res.ok) return []
+      const data = (await res.json()) as HistorySession[]
+      return Array.isArray(data) ? data : []
+    } catch (e) {
+      log.warn("shim listHistorySessions failed", { error: e instanceof Error ? e.message : String(e) })
+      return []
+    }
+  }
+
+  async getHistoryMessages(sessionId: string): Promise<HistoryMessage[]> {
+    await this.readyPromise
+    if (this.state.kind !== "ready") return []
+    try {
+      const res = await fetch(`http://127.0.0.1:${this.state.port}/sessions/${encodeURIComponent(sessionId)}/messages`)
+      if (!res.ok) return []
+      const data = (await res.json()) as HistoryMessage[]
+      return Array.isArray(data) ? data : []
+    } catch (e) {
+      log.warn("shim getHistoryMessages failed", { sessionId, error: e instanceof Error ? e.message : String(e) })
+      return []
+    }
+  }
+
+  async restoreSession(
+    sessionId: string,
+  ): Promise<{ ok: boolean; message?: string; full?: boolean; error?: string }> {
+    await this.readyPromise
+    if (this.state.kind !== "ready") {
+      return { ok: false, error: (this.state as { message?: string }).message ?? this.state.kind }
+    }
+    try {
+      const res = await fetch(`http://127.0.0.1:${this.state.port}/sessions/${encodeURIComponent(sessionId)}/restore`, {
+        method: "POST",
+      })
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        message?: string
+        full?: boolean
+        error?: string
+      }
+      if (!res.ok) {
+        return { ok: false, error: data.error ?? `HTTP ${res.status}` }
+      }
+      return {
+        ok: data.ok === true,
+        message: data.message,
+        full: data.full,
+        error: data.ok === true ? undefined : data.error,
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      log.warn("shim restoreSession failed", { sessionId, error: message })
       return { ok: false, error: message }
     }
   }
@@ -646,6 +725,56 @@ function assistantMessage(sessionID: string, parentID: string, currentModelID: s
   return { info, parts: [] }
 }
 
+function trimSessionTitle(title: string): string {
+  return title.trim().slice(0, 60) || "Historical Conversation"
+}
+
+function historySessionInfo(session: HistorySession): SessionInfo {
+  const timestamp = session.mtime * 1000
+  return {
+    id: session.id,
+    slug: session.id,
+    projectID,
+    directory,
+    title: trimSessionTitle(session.preview),
+    version,
+    time: { created: timestamp, updated: timestamp },
+  }
+}
+
+function historyMessagesToBridge(sessionID: string, timestamp: number, items: HistoryMessage[]): Message[] {
+  let lastUserMessageID: string | undefined
+  return items.map((item) => {
+    const messageID = Identifier.ascending("message")
+    const info: MessageInfo = {
+      id: messageID,
+      sessionID,
+      role: item.role,
+      time: {
+        created: timestamp,
+        ...(item.role === "assistant" ? { completed: timestamp } : {}),
+      },
+      agent: "genericagent",
+      ...(item.role === "assistant" && lastUserMessageID ? { parentID: lastUserMessageID } : {}),
+      providerID,
+      modelID,
+      mode: "default",
+      path: { cwd: directory, root: directory },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    }
+    const part: TextPart = {
+      id: Identifier.ascending("part"),
+      sessionID,
+      messageID,
+      type: "text",
+      text: item.content,
+    }
+    if (item.role === "user") lastUserMessageID = messageID
+    return { info, parts: [part] }
+  })
+}
+
 export namespace GenericAgentBridge {
   export function createApp(opts: Opts) {
     const pythonExecutable = opts.pythonExecutable || DEFAULT_PYTHON
@@ -658,6 +787,15 @@ export namespace GenericAgentBridge {
 
     sessions.set("welcome", welcomeSession())
     messages.set("welcome", welcomeMessages())
+
+    void shim.listHistorySessions().then((historySessions) => {
+      for (const session of historySessions) {
+        if (sessions.has(session.id)) continue
+        sessions.set(session.id, historySessionInfo(session))
+      }
+    }).catch((e) => {
+      log.warn("genericagent history initialization failed", { error: e instanceof Error ? e.message : String(e) })
+    })
 
     const emit = (payload: Event["payload"]) => events.emit({ directory, payload })
     const emitStatus = (sessionID: string, type: "busy" | "idle") =>
@@ -674,7 +812,6 @@ export namespace GenericAgentBridge {
     }
 
     const app = new Hono()
-    return app
       .onError((err, c) => {
         const message = err instanceof Error ? err.message : String(err)
         log.error("genericagent bridge request failed", { error: message })
@@ -857,20 +994,40 @@ export namespace GenericAgentBridge {
       })
       .get("/session/:sessionID/todo", (c) => c.json([]))
       .get("/session/:sessionID/children", (c) => c.json([]))
-      .get("/session/:sessionID/message", (c) => {
+      .get("/session/:sessionID/message", async (c) => {
         const sessionID = c.req.param("sessionID")
-        return c.json(messages.get(sessionID) ?? [])
+        const existing = messages.get(sessionID)
+        if (existing) return c.json(existing)
+
+        const session = sessions.get(sessionID)
+        if (!session) return c.json([])
+
+        const history = await shim.getHistoryMessages(sessionID)
+        const restored = historyMessagesToBridge(sessionID, session.time.updated, history)
+        messages.set(sessionID, restored)
+        return c.json(restored)
+      })
+      .post("/session/:sessionID/restore", async (c) => {
+        const sessionID = c.req.param("sessionID")
+        return c.json(await shim.restoreSession(sessionID))
       })
       .post("/session/:sessionID/abort", async (c) => {
         const sessionID = c.req.param("sessionID")
+        const t0 = Date.now()
+        log.info("abort handler enter", { sessionID, t: t0 })
         const bucket = messages.get(sessionID)
         const last = bucket?.at(-1)
         if (last && last.info.role === "assistant" && typeof last.info.time.completed !== "number") {
           last.info.time.completed = Date.now()
           emit({ type: "message.updated", properties: { info: last.info } })
+          log.info("abort handler emit message.updated", { sessionID, messageID: last.info.id })
+        } else {
+          log.info("abort handler no in-flight assistant", { sessionID, bucketSize: bucket?.length ?? 0 })
         }
         emitStatus(sessionID, "idle")
+        log.info("abort handler emit idle", { sessionID, dtMs: Date.now() - t0 })
         await shim.abort(sessionID)
+        log.info("abort handler shim.abort returned", { sessionID, totalMs: Date.now() - t0 })
         return c.json(true)
       })
       .post("/session/:sessionID/prompt_async", async (c) => {
@@ -1047,10 +1204,11 @@ export namespace GenericAgentBridge {
           } catch (e) {
             const aborted = e instanceof Error && (e.name === "AbortError" || /aborted/i.test(e.message))
             if (aborted) {
-              log.info("genericagent prompt aborted", { sessionID })
+              log.info("prompt_async aborted (fetch cancelled)", { sessionID })
               if (typeof assistant.info.time.completed !== "number") {
                 assistant.info.time.completed = Date.now()
                 emit({ type: "message.updated", properties: { info: assistant.info } })
+                log.info("prompt_async aborted: emit late message.updated", { sessionID })
               }
             } else {
               const message = e instanceof Error ? e.message : String(e)
@@ -1065,6 +1223,7 @@ export namespace GenericAgentBridge {
             }
           } finally {
             emitStatus(sessionID, "idle")
+            log.info("prompt_async finally: emit idle", { sessionID })
           }
         })
 
@@ -1075,10 +1234,12 @@ export namespace GenericAgentBridge {
           status: 400,
         })
       })
+
+    return { app, dispose: () => shim.stop() }
   }
 
   export function listen(opts: Opts) {
-    const app = createApp(opts)
+    const { app, dispose } = createApp(opts)
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
@@ -1093,6 +1254,17 @@ export namespace GenericAgentBridge {
     }
     const server = opts.port === 0 ? (tryServe(4097) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
-    return server
+    return {
+      hostname: server.hostname,
+      port: server.port,
+      stop() {
+        try {
+          dispose()
+        } catch {
+          // ignore
+        }
+        return server.stop()
+      },
+    }
   }
 }
