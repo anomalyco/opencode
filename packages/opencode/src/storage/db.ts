@@ -23,19 +23,19 @@ export const NotFoundError = NamedError.create("NotFoundError", {
 
 const log = Log.create({ service: "db" })
 
-type ChannelDbFlags = Pick<RuntimeFlags.Info, "disableChannelDb">
+type DatabaseFlags = Pick<RuntimeFlags.Info, "disableChannelDb" | "skipMigrations">
 
 const readRuntimeFlags = () =>
   Effect.runSync(RuntimeFlags.Service.useSync((flags) => flags).pipe(Effect.provide(RuntimeFlags.defaultLayer)))
 
-export function getChannelPath(flags: ChannelDbFlags = readRuntimeFlags()) {
+export function getChannelPath(flags: Pick<DatabaseFlags, "disableChannelDb"> = readRuntimeFlags()) {
   if (["latest", "beta", "prod"].includes(InstallationChannel) || flags.disableChannelDb)
     return path.join(Global.Path.data, "opencode.db")
   const safe = InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")
   return path.join(Global.Path.data, `opencode-${safe}.db`)
 }
 
-export const getPath = (flags?: ChannelDbFlags) => {
+export const getPath = (flags?: Pick<DatabaseFlags, "disableChannelDb">) => {
   if (Flag.OPENCODE_DB) {
     if (Flag.OPENCODE_DB === ":memory:" || path.isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
     return path.join(Global.Path.data, Flag.OPENCODE_DB)
@@ -93,7 +93,7 @@ let client: Client | undefined
 let loaded = false
 
 export const Client = Object.assign(
-  (flags?: ChannelDbFlags): Client => {
+  (flags: DatabaseFlags = readRuntimeFlags()): Client => {
     if (loaded) return client as Client
 
     const dbPath = getPath(flags)
@@ -118,7 +118,7 @@ export const Client = Object.assign(
         count: entries.length,
         mode: typeof OPENCODE_MIGRATIONS !== "undefined" ? "bundled" : "dev",
       })
-      if (Flag.OPENCODE_SKIP_MIGRATIONS) {
+      if (flags.skipMigrations) {
         for (const item of entries) {
           item.sql = "select 1;"
         }
