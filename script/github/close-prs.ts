@@ -8,6 +8,7 @@ const defaultThreshold = 2
 const defaultSleepMs = 20_000
 const defaultPrintLimit = 50
 const positiveReactions = new Set(["THUMBS_UP", "HEART", "HOORAY", "ROCKET"])
+const cleanupMarker = "<!-- opencode-pr-cleanup -->"
 
 const { values } = parseArgs({
   args: Bun.argv.slice(2),
@@ -115,7 +116,9 @@ type CleanupCandidate = PullRequest & {
   positiveReactions: number
 }
 
-const message = `Automated PR Cleanup
+const message = `${cleanupMarker}
+
+Automated PR Cleanup
 
 Thank you for contributing to opencode.
 
@@ -143,7 +146,6 @@ async function main() {
   const candidates = prs
     .map((pr) => ({ ...pr, positiveReactions: positiveReactionCount(pr) }))
     .filter((pr) => new Date(pr.createdAt) < cutoff && pr.positiveReactions < threshold)
-  const selected = maxClose === undefined ? candidates : candidates.slice(0, maxClose)
 
   console.log(`Fetched ${prs.length} open PRs`)
   console.log(`Matching cleanup criteria: ${candidates.length}`)
@@ -151,6 +153,9 @@ async function main() {
   console.log(
     `Older PRs with at least ${threshold} positive reactions untouched: ${prs.length - candidates.length - recentCount}`,
   )
+
+  const selected = await selectWithoutPriorCleanup(candidates)
+  console.log(`Eligible after prior cleanup-comment skips: ${selected.length}`)
 
   if (selected.length === 0) return
 
@@ -170,6 +175,23 @@ async function main() {
     if (sleepMs > 0) await sleep(sleepMs)
   }
   console.log(`Closed ${selected.length} PRs`)
+}
+
+async function selectWithoutPriorCleanup(candidates: CleanupCandidate[]) {
+  const selected: CleanupCandidate[] = []
+  let skipped = 0
+
+  for (const pr of candidates) {
+    if (maxClose !== undefined && selected.length >= maxClose) break
+    if (await hasCleanupComment(pr.number)) {
+      skipped++
+      continue
+    }
+    selected.push(pr)
+  }
+
+  if (skipped > 0) console.log(`Skipped ${skipped} PRs that already received the cleanup comment`)
+  return selected
 }
 
 async function fetchOpenPullRequests() {
@@ -250,6 +272,29 @@ async function closePullRequest(pr: CleanupCandidate) {
     body: JSON.stringify({ state: "closed" }),
   })
   console.log(`Closed #${pr.number} positive=${pr.positiveReactions} ${pr.url}`)
+}
+
+async function hasCleanupComment(number: number) {
+  let page = 1
+
+  while (true) {
+    const response = await githubRequest(
+      `/repos/${repo.owner}/${repo.name}/issues/${number}/comments?per_page=100&page=${page}`,
+      {
+        method: "GET",
+      },
+    )
+    const comments = (await response.json()) as Array<{ body?: string }>
+    if (
+      comments.some(
+        (comment) => comment.body?.includes(cleanupMarker) || comment.body?.includes("Automated PR Cleanup"),
+      )
+    ) {
+      return true
+    }
+    if (comments.length < 100) return false
+    page++
+  }
 }
 
 async function githubRequest(path: string, init: RequestInit, attempt = 0): Promise<Response> {
