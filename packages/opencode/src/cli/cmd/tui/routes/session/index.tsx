@@ -7,7 +7,6 @@ import {
   For,
   Match,
   on,
-  onCleanup,
   onMount,
   Show,
   Switch,
@@ -83,7 +82,7 @@ import * as Model from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
-import { MINIMAL_AUTO_COLLAPSE_MS, nextThinkingMode, useThinkingMode, type ThinkingMode } from "../../context/thinking"
+import { nextThinkingMode, reasoningTitle, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
@@ -1513,70 +1512,37 @@ const PART_MAPPING = {
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme, subtleSyntax } = useTheme()
   const ctx = use()
-  // `userExpanded` is the user's explicit choice. `undefined` means "no choice
-  // yet, follow the auto behavior". Once they click, it pins to true/false.
-  const [userExpanded, setUserExpanded] = createSignal<boolean | undefined>(undefined)
-  // Flips to true after the grace period elapses post-finalization.
-  const [autoFolded, setAutoFolded] = createSignal(false)
+  // Collapsed by default in minimal mode: a single line throughout, so the
+  // layout never shifts. Click to open the full markdown block, click to close.
+  const [expanded, setExpanded] = createSignal(false)
 
   const content = createMemo(() => {
-    // Filter out redacted reasoning chunks from OpenRouter
-    // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
+    // OpenRouter encrypts some reasoning blocks; drop the placeholder.
     return props.part.text.replace("[REDACTED]", "").trim()
   })
   // Reasoning is finalized when the server sets `time.end` (see processor.ts).
-  // This flips independently of the parent message completing, so the
-  // collapse happens as soon as thinking ends — even while text/tools stream.
+  // Flips independently of the parent message completing.
   const isDone = createMemo(() => props.part.time.end !== undefined)
-  const collapsible = createMemo(() => ctx.thinkingMode() === "minimal" && isDone())
+  const inMinimal = createMemo(() => ctx.thinkingMode() === "minimal")
   const duration = createMemo(() => {
     const end = props.part.time.end
-    if (end === undefined) return 0
-    return Math.max(0, end - props.part.time.start)
+    return end === undefined ? 0 : Math.max(0, end - props.part.time.start)
   })
+  // OpenAI / Copilot / opencode-via-OpenAI emit `**Title**\n\n<body>` summary
+  // blocks. Surface the title both while streaming and after settling so the
+  // collapsed line carries real signal, not just a duration.
+  const title = createMemo(() => reasoningTitle(content()))
 
-  // Schedule auto-collapse a short delay after reasoning finalizes in minimal
-  // mode, so the fold doesn't snap the instant streaming stops. A manual
-  // toggle or leaving minimal mode cancels the pending timer. For reasoning
-  // that finished before this component mounted (e.g. loading a past session)
-  // we skip the grace and collapse immediately.
-  createEffect(() => {
-    if (!collapsible()) {
-      setAutoFolded(false)
-      return
-    }
-    if (userExpanded() !== undefined) return
-    if (autoFolded()) return
-    const end = props.part.time.end
-    if (end === undefined) return
-    const remaining = MINIMAL_AUTO_COLLAPSE_MS - (Date.now() - end)
-    if (remaining <= 0) {
-      setAutoFolded(true)
-      return
-    }
-    const timer = setTimeout(() => setAutoFolded(true), remaining)
-    onCleanup(() => clearTimeout(timer))
-  })
-
-  // Effective expansion: stay expanded while streaming and during grace; fold
-  // when auto-fold fires; user clicks override everything.
-  const expanded = createMemo(() => {
-    if (!collapsible()) return true
-    const choice = userExpanded()
-    if (choice !== undefined) return choice
-    return !autoFolded()
-  })
-  const collapsed = createMemo(() => collapsible() && !expanded())
   const toggle = () => {
-    if (!collapsible()) return
-    setUserExpanded(!expanded())
+    if (!inMinimal()) return
+    setExpanded((prev) => !prev)
   }
 
   return (
     <Show when={content() && ctx.thinkingMode() !== "hide"}>
-      <Show
-        when={collapsed()}
-        fallback={
+      <Switch>
+        <Match when={!inMinimal() || expanded()}>
+          {/* Full markdown block: `show` mode, or `minimal` after the user opens it. */}
           <box
             id={"text-" + props.part.id}
             paddingLeft={2}
@@ -1592,24 +1558,29 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
               drawUnstyledText={false}
               streaming={true}
               syntaxStyle={subtleSyntax()}
-              content={(collapsible() ? "▼ " : "") + "_Thinking:_ " + content()}
+              content={(inMinimal() ? "▼ " : "") + "_Thinking:_ " + content()}
               conceal={ctx.conceal()}
               fg={theme.textMuted}
             />
           </box>
-        }
-      >
-        <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
-          <code
-            filetype="markdown"
-            drawUnstyledText={false}
-            syntaxStyle={subtleSyntax()}
-            content={"▶ _Thought for " + Locale.duration(duration()) + "_"}
-            conceal={ctx.conceal()}
-            fg={theme.textMuted}
-          />
-        </box>
-      </Show>
+        </Match>
+        <Match when={isDone()}>
+          {/* Settled: timestamp, with the OpenAI summary title when we have one. */}
+          <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
+            <text fg={theme.textMuted} wrapMode="none">
+              {title()
+                ? "▶ " + title() + " · " + Locale.duration(duration())
+                : "▶ Thought for " + Locale.duration(duration())}
+            </text>
+          </box>
+        </Match>
+        <Match when={true}>
+          {/* Streaming: spinner + title (or generic "Thinking" pre-title). */}
+          <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
+            <Spinner color={theme.textMuted}>{title() ? "Thinking: " + title() : "Thinking"}</Spinner>
+          </box>
+        </Match>
+      </Switch>
     </Show>
   )
 }

@@ -5,7 +5,7 @@ import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { useTheme } from "@tui/context/theme"
 import { useLocal } from "@tui/context/local"
-import { MINIMAL_AUTO_COLLAPSE_MS, useThinkingMode } from "@tui/context/thinking"
+import { reasoningTitle, useThinkingMode } from "@tui/context/thinking"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { TextAttributes, type BoxRenderable, type SyntaxStyle } from "@opentui/core"
 import { useBindings } from "../../keymap"
@@ -29,7 +29,7 @@ import type {
   ToolFileContent,
   ToolTextContent,
 } from "@opencode-ai/sdk/v2"
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 
 const id = "internal:session-v2-debug"
 const route = "session.v2.messages"
@@ -390,49 +390,23 @@ function AssistantReasoning(props: {
 }) {
   const { theme } = useTheme()
   const thinking = useThinkingMode()
-  const [userExpanded, setUserExpanded] = createSignal<boolean | undefined>(undefined)
-  const [autoFolded, setAutoFolded] = createSignal(false)
+  const [expanded, setExpanded] = createSignal(false)
   const content = createMemo(() => props.part.text.replace("[REDACTED]", "").trim())
-  // v2 reasoning parts have no `time.end` (see SessionMessageAssistantReasoning
-  // in the v2 SDK), so collapse on parent-message completion. Coarser than
-  // the main session view but the best signal we have here.
-  const collapsible = createMemo(() => thinking.mode() === "minimal" && props.completedAt() !== undefined)
+  const inMinimal = createMemo(() => thinking.mode() === "minimal")
+  // v2 reasoning parts have no per-part `time.end` (see SessionMessageAssistantReasoning
+  // in the v2 SDK); we settle on parent-message completion instead.
+  const isDone = createMemo(() => props.completedAt() !== undefined)
+  const title = createMemo(() => reasoningTitle(content()))
 
-  createEffect(() => {
-    if (!collapsible()) {
-      setAutoFolded(false)
-      return
-    }
-    if (userExpanded() !== undefined) return
-    if (autoFolded()) return
-    const completed = props.completedAt()
-    if (completed === undefined) return
-    const remaining = MINIMAL_AUTO_COLLAPSE_MS - (Date.now() - completed)
-    if (remaining <= 0) {
-      setAutoFolded(true)
-      return
-    }
-    const timer = setTimeout(() => setAutoFolded(true), remaining)
-    onCleanup(() => clearTimeout(timer))
-  })
-
-  const expanded = createMemo(() => {
-    if (!collapsible()) return true
-    const choice = userExpanded()
-    if (choice !== undefined) return choice
-    return !autoFolded()
-  })
-  const collapsed = createMemo(() => collapsible() && !expanded())
   const toggle = () => {
-    if (!collapsible()) return
-    setUserExpanded(!expanded())
+    if (!inMinimal()) return
+    setExpanded((prev) => !prev)
   }
 
   return (
     <Show when={content() && thinking.mode() !== "hide"}>
-      <Show
-        when={collapsed()}
-        fallback={
+      <Switch>
+        <Match when={!inMinimal() || expanded()}>
           <box
             paddingLeft={2}
             marginTop={1}
@@ -448,24 +422,25 @@ function AssistantReasoning(props: {
               drawUnstyledText={false}
               streaming={true}
               syntaxStyle={props.subtleSyntax}
-              content={(collapsible() ? "▼ " : "") + "_Thinking:_ " + content()}
+              content={(inMinimal() ? "▼ " : "") + "_Thinking:_ " + content()}
               conceal={true}
               fg={theme.textMuted}
             />
           </box>
-        }
-      >
-        <box paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
-          <code
-            filetype="markdown"
-            drawUnstyledText={false}
-            syntaxStyle={props.subtleSyntax}
-            content={"▶ _Thought_"}
-            conceal={true}
-            fg={theme.textMuted}
-          />
-        </box>
-      </Show>
+        </Match>
+        <Match when={isDone()}>
+          <box paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
+            <text fg={theme.textMuted} wrapMode="none">
+              {title() ? "▶ " + title() : "▶ Thought"}
+            </text>
+          </box>
+        </Match>
+        <Match when={true}>
+          <box paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
+            <Spinner color={theme.textMuted}>{title() ? "Thinking: " + title() : "Thinking"}</Spinner>
+          </box>
+        </Match>
+      </Switch>
     </Show>
   )
 }

@@ -4,12 +4,17 @@ import { useKV } from "./kv"
 
 export type ThinkingMode = "show" | "minimal" | "hide"
 
-// Grace period between reasoning finishing and the minimal-mode auto-collapse.
-// Long enough that the fold doesn't feel snappy, short enough that you don't
-// have to wait around. Bypassed if the user manually toggles in the meantime.
-export const MINIMAL_AUTO_COLLAPSE_MS = 2000
-
 const MODES: readonly ThinkingMode[] = ["show", "minimal", "hide"] as const
+
+// OpenAI's Responses API surfaces reasoning summaries that start with a bolded
+// title line: "**Inspecting PR workflow**\n\n<body>". GitHub Copilot routes
+// through the same shape, and the opencode provider relays it too. Pull the
+// title out for a nicer label; return null for providers that don't follow
+// this convention so the caller can fall back to a generic "Thinking" string.
+export function reasoningTitle(text: string): string | null {
+  const match = text.trimStart().match(/^\*\*([^*\n]+)\*\*/)
+  return match ? match[1].trim() : null
+}
 
 export function isThinkingMode(value: unknown): value is ThinkingMode {
   return typeof value === "string" && (MODES as readonly string[]).includes(value)
