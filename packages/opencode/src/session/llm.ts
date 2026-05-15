@@ -169,7 +169,7 @@ const live: Layer.Layer<
         },
         {
           temperature: input.model.capabilities.temperature
-            ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
+            ? (ProviderTransform.temperature(input.model) ?? input.agent.temperature)
             : undefined,
           topP: input.agent.topP ?? ProviderTransform.topP(input.model),
           topK: ProviderTransform.topK(input.model),
