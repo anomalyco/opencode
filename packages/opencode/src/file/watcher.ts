@@ -2,7 +2,7 @@ import { Cause, Effect, Layer, Context, Schema } from "effect"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
-import { readdir } from "fs/promises"
+import { readdir, realpath } from "fs/promises"
 import path from "path"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
@@ -131,8 +131,14 @@ export const layer = Layer.effect(
             const result = yield* git.run(["rev-parse", "--git-dir"], {
               cwd: ctx.worktree,
             })
-            const vcsDir = result.exitCode === 0 ? path.resolve(ctx.worktree, result.text().trim()) : undefined
-            if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
+            const resolved = result.exitCode === 0 ? path.resolve(ctx.worktree, result.text().trim()) : undefined
+            const vcsDir = resolved ? yield* Effect.promise(() => realpath(resolved).catch(() => resolved)) : undefined
+            if (
+              vcsDir &&
+              !cfgIgnores.includes(".git") &&
+              !cfgIgnores.includes(vcsDir) &&
+              (!resolved || !cfgIgnores.includes(resolved))
+            ) {
               const ignore = (yield* Effect.promise(() => readdir(vcsDir).catch(() => []))).filter(
                 (entry) => entry !== "HEAD",
               )
