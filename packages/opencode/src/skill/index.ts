@@ -1,3 +1,4 @@
+import { readlink, realpath, stat } from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context, Schema } from "effect"
@@ -24,6 +25,14 @@ const AGENTS_EXTERNAL_DIR = ".agents"
 const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
 const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
 const SKILL_PATTERN = "**/SKILL.md"
+const SCAN_IGNORE_PATTERNS = [
+  "**/node_modules/**",
+  "**/.git/**",
+  "**/dist/**",
+  "**/build/**",
+  "**/.cache/**",
+  "**/__pycache__/**",
+]
 
 // Built-in skill that ships with opencode. The model's intuition for what an
 // opencode.json should look like is often wrong, and opencode hard-fails on
@@ -131,12 +140,88 @@ const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.I
   }
 })
 
+const MAX_SYMLINK_SCAN_DEPTH = 10
+// Keep names in sync with SCAN_IGNORE_PATTERNS above
+const SCAN_SKIP_DIR_NAMES = new Set([
+  "node_modules", ".git", "dist", "build", ".cache", "__pycache__",
+])
+
+const findBrokenSymlinks = Effect.fnUntraced(function* (
+  root: string,
+  fsys: AppFileSystem.Interface,
+  opts?: { subdirs?: string[] },
+) {
+  const broken: string[] = []
+  const visited = new Set<string>()
+
+  const checkDir = (dir: string, prefix: string, depth: number): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      if (depth > MAX_SYMLINK_SCAN_DEPTH) return
+
+      const real = yield* Effect.promise(async () => {
+        try { return await realpath(dir) }
+        catch { return dir }
+      })
+      if (visited.has(real)) return
+      visited.add(real)
+
+      const entries = yield* fsys.readDirectoryEntries(dir).pipe(
+        Effect.catch(() => Effect.succeed([] as AppFileSystem.DirEntry[])),
+      )
+
+      for (const entry of entries) {
+        if (depth === 0 && opts?.subdirs) {
+          if (!opts.subdirs.includes(entry.name)) continue
+        }
+
+        const entryPrefix = prefix ? `${prefix}/${entry.name}` : entry.name
+
+        if (entry.type === "symlink") {
+          const fullPath = path.join(dir, entry.name)
+
+          const isCircular = yield* Effect.promise(async () => {
+            try {
+              const target = await readlink(fullPath)
+              const resolved = path.resolve(path.dirname(fullPath), target)
+              return resolved === fullPath || resolved.startsWith(fullPath + path.sep)
+            } catch { return false }
+          })
+          if (isCircular) {
+            broken.push(`${entryPrefix}/**`)
+            log.warn("circular symlink detected, skipping", { path: fullPath })
+            continue
+          }
+
+          const statOk = yield* Effect.promise(async () => {
+            try { await stat(fullPath); return true }
+            catch (e: any) { return e?.code === "ENOENT" || e?.code === "ELOOP" ? false : true }
+          })
+          if (!statOk) {
+            broken.push(`${entryPrefix}/**`)
+            log.warn("broken symlink detected, skipping", { path: fullPath })
+            continue
+          }
+
+          const isDir = yield* fsys.isDir(fullPath)
+          if (isDir) yield* checkDir(fullPath, entryPrefix, depth + 1)
+        } else if (entry.type === "directory") {
+          if (SCAN_SKIP_DIR_NAMES.has(entry.name)) continue
+          yield* checkDir(path.join(dir, entry.name), entryPrefix, depth + 1)
+        }
+      }
+    })
+
+  yield* checkDir(root, "", 0)
+  return broken
+})
+
 const scan = Effect.fnUntraced(function* (
   state: ScanState,
   root: string,
   pattern: string,
-  opts?: { dot?: boolean; scope?: string },
+  opts?: { dot?: boolean; scope?: string; ignore?: string[] },
 ) {
+  const ignore = [...SCAN_IGNORE_PATTERNS, ...(opts?.ignore ?? [])]
   const matches = yield* Effect.tryPromise({
     try: () =>
       Glob.scan(pattern, {
@@ -145,6 +230,7 @@ const scan = Effect.fnUntraced(function* (
         include: "file",
         symlink: true,
         dot: opts?.dot,
+        ignore: ignore.length > 0 ? ignore : undefined,
       }),
     catch: (error) => error,
   }).pipe(
@@ -180,7 +266,8 @@ const discoverSkills = Effect.fnUntraced(function* (
     for (const dir of externalDirs) {
       const root = path.join(global.home, dir)
       if (!(yield* fsys.isDir(root))) continue
-      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
+      const ignore = yield* findBrokenSymlinks(root, fsys, { subdirs: ["skills"] })
+      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global", ignore })
     }
 
     const upDirs = yield* fsys
@@ -188,13 +275,15 @@ const discoverSkills = Effect.fnUntraced(function* (
       .pipe(Effect.catch(() => Effect.succeed([] as string[])))
 
     for (const root of upDirs) {
-      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
+      const ignore = yield* findBrokenSymlinks(root, fsys, { subdirs: ["skills"] })
+      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project", ignore })
     }
   }
 
   const configDirs = yield* config.directories()
   for (const dir of configDirs) {
-    yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
+    const ignore = yield* findBrokenSymlinks(dir, fsys, { subdirs: ["skill", "skills"] })
+    yield* scan(state, dir, OPENCODE_SKILL_PATTERN, { ignore })
   }
 
   const cfg = yield* config.get()
@@ -206,13 +295,15 @@ const discoverSkills = Effect.fnUntraced(function* (
       continue
     }
 
-    yield* scan(state, dir, SKILL_PATTERN)
+    const ignore = yield* findBrokenSymlinks(dir, fsys)
+    yield* scan(state, dir, SKILL_PATTERN, { ignore })
   }
 
   for (const url of cfg.skills?.urls ?? []) {
     const pulledDirs = yield* discovery.pull(url)
     for (const dir of pulledDirs) {
-      yield* scan(state, dir, SKILL_PATTERN)
+      const ignore = yield* findBrokenSymlinks(dir, fsys)
+      yield* scan(state, dir, SKILL_PATTERN, { ignore })
     }
   }
 
