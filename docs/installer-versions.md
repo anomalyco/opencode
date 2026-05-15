@@ -15,6 +15,45 @@
 
 
 
+## [Windows] 2026.5.15.1 - 2026-05-15 09:39
+
+**主题**:文件查看器 + 聊天对话区 UX 一致性大补 — HTML 预览 iframe 翻页 / UX 优化 + 文件树自动刷新 + 多选拖到聊天 + 聊天选区右键菜单。
+
+5 笔 feat 合 dev 一次性 ship(12 commits 跨 4 笔 feat 分支,每笔代码 + docs + merge):
+
+- **[html-viewer-allow-scripts](features/html-viewer-allow-scripts/3-changelog.md)**(`9acf2e5c3`)— iframe sandbox 加 `allow-scripts`,解决 PPT/Slides 翻页按钮等内嵌 JS 失效(讲师版 PPT 21 页 `◀ 1/21 ▶` 点击无反应)。跨 origin 论证(Win `tauri.localhost` vs `localasset.localhost` 不同 host、Mac `tauri://` vs `localasset://` 不同 scheme)→ MDN "scripts+same-origin combo" 警告不适用,iframe 内 JS 无法 reach parent。反转 `md-office-improvements` spec A1.9 "script 失活"决策
+
+- **[html-viewer-ux-polish](features/html-viewer-ux-polish/3-changelog.md)**(`2ae3e14eb`)— Medium 4 块改动:① 去顶部 `预览/源码` toolbar + iframe 占满 + 编辑入口走右键 → CodeMirror html 语法模式(`@codemirror/lang-html@6.4.11` 新 dep,R4 第 6 笔本季已超配 user 授权) ② iframe 跨 origin 右键弹自家菜单 — `local_asset.rs` 给 HTML 响应注 capture-phase contextmenu listener(preventDefault native + postMessage x/y/选区文本 → 父),父侧 message handler 翻译坐标弹 mdMenu ③ 同注入脚本扩展 mousedown 通道修"右键弹菜单后左键点 iframe 内菜单不消失"bug ④ 阈值 2MB→10MB 对齐 `MAX_EDITABLE_BYTES`,>10MB 走 placeholder。5 个 Rust 单测覆盖 HTML 注入行为
+
+- **[file-tree-llm-write-refresh](features/file-tree-llm-write-refresh/3-changelog.md)**(`5aa50eeec`)— AI 创建新文件后右侧文件树自动浮现。根因:`watcher.ts` `file.edited` 主路径对"路径不在 cache/open"直接 return,不刷父目录;busy→idle 兜底只走 expanded 目录,跳过 `loaded:true + expanded:false` 缓存目录 → user 重新展开看到旧 children,唯一破解 F5。修法:`!hasFile && !isOpen` 时若 `isDirLoaded(parent)` 则 `refreshDir(parent)`。R5 复现测试先写 + `[bug-repro: ...]` tag。watcher.test.ts 10→12
+
+- **[file-tree-multi-drag-to-chat](features/file-tree-multi-drag-to-chat/3-changelog.md)**(`e2f7fef6c`)— 文件树多选(Shift/Ctrl 选 N 项)拖到聊天窗口接通。`file-tree-dnd` feat 留的 `application/x-deskfox-paths` MIME(JSON[abs paths])原本只设计树内移动,聊天侧 `attachments.ts` 只读单选 `text/plain: file:<rel>` → 多选拖等于啥都没拖。修法:新 `multi-path-drop.ts` 纯 helper(7 种边界容错)+ `handleGlobalDrop` 加多选 MIME 分支 N 个路径循环 addPart。helper extract 模式 + 10 单测
+
+- **[chat-selection-menu](features/chat-selection-menu/3-changelog.md)**(`b71a4ad2e`)— 聊天对话区右键选区菜单替换 WebView2 原生菜单。DeskFox 自家两项(添加到聊天 / 复制)+ 输入面板模式跟文件查看器一致(textarea + Ctrl/Cmd/Opt+Enter)+ 红色 overlay(textarea 焦点丢原生选区 → 自家 fixed div 兜底)。新 `chat-selection-quote.ts` 纯 helper(composeQuotedMarkdown + insertTextIntoPrompt,12 单测)+ 新 `chat-selection-menu.tsx` 独立组件(capture-phase document contextmenu + scope `[data-slot="session-turn-list"]` + Portal 弹菜单)
+
+**实测验证**(本机 2026-05-14/15):
+- typecheck 16/16 ✅
+- bun test:watcher 12/12 + attachments 17/17 + chat-selection-quote 12/12 + html-viewer Rust 单测编译干净 ✅
+- pack-installer.ps1 -Env prod 1m32s + iscc 72s → 59.2 MB installer
+- 安装到 `D:\softwares\DeskFox\`(user 自选路径)→ 启动 → 飞书绑定 OAuth ✅(首次撞 opencode jsonc plugin entry 残留,memory `reference_opencode_config_path_win.md` 沉淀)
+- 五项 feat runtime 实测全过(PPT 翻页 + 文件树自动刷 + 多选拖 + 聊天选区菜单)
+
+**installer**:`packages/branding/installer/Output/DeskFox-2026.5.15.1-setup.exe`(62,032,805 bytes)
+
+**📦 安装步骤(给 user 看的)**:
+1. 下载 `DeskFox-2026.5.15.1-setup.exe`
+2. 双击运行(InnoSetup 向导),默认装 `C:\Program Files\DeskFox\` 或可自选路径
+3. 装完会自动覆盖现有 prod 5.12.1(同 AppId `{F9F6F6C5-...}` → InnoSetup 升级模式,保留用户配置)
+4. 首次启动 setup hook 自动 inject 飞书桥接 plugin 到 `~/.config\opencode\opencode.jsonc`(若 inject 缺失,手动 `plugin: ["file:///<install_dir>/plugin/feishu-bridge"]`)
+
+**双平台分发**:
+- GitHub Release `ship-prod-2026.5.15.1`(主仓 `zoulukuang/deskfox`)
+- Gitee Release(镜像 `zoulukuang/deskfox`,Claude 自动跑 mirror-asset-to-gitee.ps1)
+
+**已知**:setup hook `inject_plugin` 在某些场景(2026-05-15 user 实测)未自动写入 plugin URL(`inject_imbot_agent` 同步骤成功但 plugin 字段未注),手动 inject 即修。真 bug 留 backlog 后续 feat 调研
+
+---
+
 ## [macOS] 2026.5.12.1 - 2026-05-12 12:22
 
 **主题**:跟 Win 5.12.1 同步 — imbot v3 极简档(13 ask:9 unix + 4 win)+ dedup-cache-persist + feishu-plugin-dedup-decision + build-script-json-fallback + bug-repro grep 兜底 fix,Mac 端本地 build 出 prod .dmg。
