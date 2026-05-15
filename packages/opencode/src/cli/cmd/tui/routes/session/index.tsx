@@ -1759,6 +1759,7 @@ function GenericTool(props: ToolProps<any>) {
   const canToggleExpanded = createMemo(() => overflow() || shouldRenderImageArea())
   const shouldShowInlineImage = createMemo(() => shouldRenderImageArea() && isExpanded())
   let pendingInlineImageWrite: Promise<void> | undefined
+  let pendingInlineImageRefresh: Promise<void> | undefined
   let renderedInlineImageKey: string | undefined
   let renderedInlineImagePlacement: { x: number; y: number; width: number; height: number } | undefined
   let pendingInlineImageClear: { x: number; y: number; width: number; height: number } | undefined
@@ -1861,7 +1862,10 @@ function GenericTool(props: ToolProps<any>) {
       .then(async () => {
         const key = inlineImageKey()
         if (!key) return
-        if (key === renderedInlineImageKey) return
+        if (key === renderedInlineImageKey) {
+          scheduleInlineImageRefresh()
+          return
+        }
         if (renderedInlineImagePlacement) {
           pendingInlineImageClear = renderedInlineImagePlacement
           renderedInlineImagePlacement = undefined
@@ -1876,6 +1880,24 @@ function GenericTool(props: ToolProps<any>) {
       })
       .finally(() => {
         pendingInlineImageWrite = undefined
+      })
+  }
+
+  const scheduleInlineImageRefresh = () => {
+    if (pendingInlineImageRefresh || pendingInlineImageWrite) return
+    const key = inlineImageKey()
+    if (!key) return
+    if (key !== renderedInlineImageKey) return
+    if (!renderedInlineImagePlacement) return
+    pendingInlineImageRefresh = renderer
+      .idle()
+      .then(async () => {
+        if (inlineImageKey() !== key) return
+        if (!renderedInlineImagePlacement) return
+        await writeInlineImage()
+      })
+      .finally(() => {
+        pendingInlineImageRefresh = undefined
       })
   }
 
@@ -1923,6 +1945,10 @@ function GenericTool(props: ToolProps<any>) {
       const placement = pendingInlineImageClear
       pendingInlineImageClear = undefined
       await clearTerminalImageOutput(placement)
+    }
+    if (inlineImageKey() === renderedInlineImageKey && renderedInlineImagePlacement) {
+      scheduleInlineImageRefresh()
+      return
     }
     void renderer.idle().then(() => scheduleInlineImageWrite())
   }
