@@ -399,23 +399,24 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     const match = sync.data.session
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .find((x) => x.parentID === undefined)?.id
+
+    continued = true
+
     if (!match) {
       toast.show({ message: "No previous sessions in this project", variant: "error" })
       route.navigate({ type: "home" })
+      return
     }
-    if (match) {
-      continued = true
-      if (args.fork) {
-        void sdk.client.session.fork({ sessionID: match }).then((result) => {
-          if (result.data?.id) {
-            route.navigate({ type: "session", sessionID: result.data.id })
-          } else {
-            toast.show({ message: "Failed to fork session", variant: "error" })
-          }
-        })
-      } else {
-        route.navigate({ type: "session", sessionID: match })
-      }
+    if (args.fork) {
+      void sdk.client.session.fork({ sessionID: match }).then((result) => {
+        if (result.data?.id) {
+          route.navigate({ type: "session", sessionID: result.data.id })
+        } else {
+          toast.show({ message: "Failed to fork session", variant: "error" })
+        }
+      })
+    } else {
+      route.navigate({ type: "session", sessionID: match })
     }
   })
 
