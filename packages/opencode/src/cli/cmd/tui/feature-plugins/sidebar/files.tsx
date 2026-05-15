@@ -8,6 +8,15 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const [open, setOpen] = createSignal(true)
   const theme = () => props.api.theme.current
   const list = createMemo(() => props.api.state.session.diff(props.session_id))
+  const totals = createMemo(() =>
+    list().reduce(
+      (acc, item) => ({
+        additions: acc.additions + item.additions,
+        deletions: acc.deletions + item.deletions,
+      }),
+      { additions: 0, deletions: 0 },
+    ),
+  )
 
   return (
     <Show when={list().length > 0}>
@@ -19,6 +28,14 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
           <text fg={theme().text}>
             <b>Modified Files</b>
           </text>
+          <box flexDirection="row" gap={1}>
+            <Show when={totals().additions}>
+              <text fg={theme().diffAdded}>+{totals().additions}</text>
+            </Show>
+            <Show when={totals().deletions}>
+              <text fg={theme().diffRemoved}>-{totals().deletions}</text>
+            </Show>
+          </box>
         </box>
         <Show when={list().length <= 2 || open()}>
           <For each={list()}>
