@@ -1,6 +1,7 @@
 import * as InstanceState from "@/effect/instance-state"
 import { File } from "@/file"
 import { Ripgrep } from "@/file/ripgrep"
+import { LSP } from "@/lsp/lsp"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
@@ -9,6 +10,7 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
   Effect.gen(function* () {
     const svc = yield* File.Service
     const ripgrep = yield* Ripgrep.Service
+    const lsp = yield* LSP.Service
 
     const findText = Effect.fn("FileHttpApi.findText")(function* (ctx: { query: { pattern: string } }) {
       return (yield* ripgrep
@@ -27,8 +29,8 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       })
     })
 
-    const findSymbol = Effect.fn("FileHttpApi.findSymbol")(function* () {
-      return []
+    const findSymbol = Effect.fn("FileHttpApi.findSymbol")(function* (ctx: { query: { query: string } }) {
+      return yield* lsp.workspaceSymbol(ctx.query.query)
     })
 
     const list = Effect.fn("FileHttpApi.list")(function* (ctx: { query: { path: string } }) {

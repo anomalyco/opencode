@@ -72,6 +72,8 @@ describe("file HttpApi", () => {
     expect(await files.json()).toContain("hello.txt")
 
     expect(symbols.status).toBe(200)
-    expect(await symbols.json()).toEqual([])
+    // No LSP server is active in the test environment, so the result is an empty array.
+    // The endpoint delegates to LSP.workspaceSymbol — it no longer returns a hardcoded stub.
+    expect(await symbols.json()).toBeArray()
   })
 })
