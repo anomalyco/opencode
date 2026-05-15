@@ -173,7 +173,7 @@ const live: Layer.Layer<
             : undefined,
           topP: input.agent.topP ?? ProviderTransform.topP(input.model),
           topK: ProviderTransform.topK(input.model),
-          maxOutputTokens: ProviderTransform.maxOutputTokens(input.model),
+          maxOutputTokens: ProviderTransform.maxOutputTokens(input.model, flags.outputTokenMax),
           options,
         },
       )
@@ -194,23 +194,11 @@ const live: Layer.Layer<
 
       const tools = resolveTools(input)
 
-      // LiteLLM and some Anthropic proxies require the tools parameter to be present
-      // when message history contains tool calls, even if no tools are being used.
-      // Add a dummy tool that is never called to satisfy this validation.
-      // This is enabled for:
-      // 1. Providers with "litellm" in their ID or API ID (auto-detected)
-      // 2. Providers with explicit "litellmProxy: true" option (opt-in for custom gateways)
-      const isLiteLLMProxy =
-        item.options?.["litellmProxy"] === true ||
-        input.model.providerID.toLowerCase().includes("litellm") ||
-        input.model.api.id.toLowerCase().includes("litellm")
-
-      // LiteLLM/Bedrock rejects requests where the message history contains tool
-      // calls but no tools param is present. When there are no active tools (e.g.
-      // during compaction), inject a stub tool to satisfy the validation requirement.
-      // The stub description explicitly tells the model not to call it.
+      // GitHub Copilot may require the tools parameter when message history contains
+      // tool calls but no tools are active (e.g. compaction). Inject a stub tool that
+      // is never meant to be invoked. LiteLLM-backed providers are excluded.
       if (
-        (isLiteLLMProxy || input.model.providerID.includes("github-copilot")) &&
+        input.model.providerID.includes("github-copilot") &&
         Object.keys(tools).length === 0 &&
         hasToolCalls(input.messages)
       ) {
@@ -268,7 +256,7 @@ const live: Layer.Layer<
 
         const bridge = yield* EffectBridge.make()
         const approvedToolsForSession = new Set<string>()
-        workflowModel.approvalHandler = InstanceState.bind(async (approvalTools) => {
+        workflowModel.approvalHandler = bridge.bind(async (approvalTools) => {
           const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
           // Auto-approve tools that were already approved in this session
           // (prevents infinite approval loops for server-side MCP tools)
@@ -457,7 +445,7 @@ function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" 
 }
 
 // Check if messages contain any tool-call content
-// Used to determine if a dummy tool should be added for LiteLLM proxy compatibility
+// Used to determine if a dummy tool should be added (GitHub Copilot only; see stream()).
 export function hasToolCalls(messages: ModelMessage[]): boolean {
   for (const msg of messages) {
     if (!Array.isArray(msg.content)) continue

@@ -11,9 +11,9 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import type { Config } from "@/config/config"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
+import type { InstanceContext } from "../../src/project/instance-context"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { InstanceStore } from "../../src/project/instance-store"
-import { Instance } from "../../src/project/instance"
 import { TestLLMServer } from "../lib/llm-server"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
@@ -24,11 +24,15 @@ const testInstanceRuntime = ManagedRuntime.make(
 const runTestInstanceStore = <A>(fn: (store: InstanceStore.Interface) => Effect.Effect<A>) =>
   testInstanceRuntime.runPromise(InstanceStore.Service.use(fn))
 
-export async function provideTestInstance<R>(input: { directory: string; init?: Effect.Effect<void>; fn: () => R }) {
+export async function provideTestInstance<R>(input: {
+  directory: string
+  init?: Effect.Effect<void>
+  fn: (ctx: InstanceContext) => R
+}) {
   const ctx = await runTestInstanceStore((store) => store.load({ directory: input.directory }))
   try {
     if (input.init) await testInstanceRuntime.runPromise(input.init.pipe(Effect.provideService(InstanceRef, ctx)))
-    return await Instance.restore(ctx, () => input.fn())
+    return await input.fn(ctx)
   } finally {
     await runTestInstanceStore((store) => store.dispose(ctx))
   }
@@ -157,9 +161,7 @@ export const provideInstance =
     Effect.contextWith((services: Context.Context<R>) =>
       Effect.promise<A>(async () => {
         const ctx = await runTestInstanceStore((store) => store.load({ directory }))
-        return Instance.restore(ctx, () =>
-          Effect.runPromiseWith(services)(self.pipe(Effect.provideService(InstanceRef, ctx))),
-        )
+        return Effect.runPromiseWith(services)(self.pipe(Effect.provideService(InstanceRef, ctx)))
       }),
     )
 

@@ -1,5 +1,4 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { describe, expect } from "bun:test"
 import { Context, Effect, Layer, Queue, Ref } from "effect"
 import {
@@ -20,8 +19,6 @@ import { WorkspaceID } from "../../src/control-plane/schema"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
-import { InstanceBootstrap } from "../../src/project/bootstrap"
-import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import {
@@ -31,27 +28,22 @@ import {
 import { HEADER as FenceHeader } from "../../src/server/shared/fence"
 import { Database } from "../../src/storage/db"
 import { resetDatabase } from "../fixture/db"
+import { workspaceLayerWithRuntimeFlags } from "../fixture/workspace"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
     yield* Effect.promise(() => resetDatabase())
-    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
-        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
         await resetDatabase()
       }),
     )
   }),
 )
 
-const workspaceLayer = Workspace.defaultLayer.pipe(
-  Layer.provide(InstanceStore.defaultLayer),
-  Layer.provide(InstanceBootstrap.defaultLayer),
-)
+const workspaceLayer = workspaceLayerWithRuntimeFlags({ experimentalWorkspaces: true })
 
 const it = testEffect(
   Layer.mergeAll(
