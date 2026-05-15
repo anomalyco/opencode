@@ -635,7 +635,10 @@ export const ContextAwareReplacer: Replacer = function* (content, find) {
   }
 }
 
+const DIFF_MAX_BYTES = 512 * 1024 // 512 KB — keeps SQLite rows manageable and well under V8's string limit
+
 export function trimDiff(diff: string): string {
+  if (diff.length > DIFF_MAX_BYTES) return ""
   const lines = diff.split("\n")
   const contentLines = lines.filter(
     (line) =>
