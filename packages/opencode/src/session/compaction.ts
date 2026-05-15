@@ -504,6 +504,16 @@ export const layer = Layer.effect(
         }
 
         if (!replay) {
+          const lastNonSummaryAssistant = [...input.messages]
+            .reverse()
+            .find((m) => m.info.role === "assistant" && !m.info.summary)?.info as MessageV2.Assistant | undefined
+          const shouldAutoContinue =
+            !lastNonSummaryAssistant?.finish ||
+            lastNonSummaryAssistant.finish === "tool-calls" ||
+            lastNonSummaryAssistant.finish === "unknown"
+
+          if (!shouldAutoContinue) return result
+
           const info = yield* provider.getProvider(userMessage.model.providerID)
           if (
             (yield* plugin.trigger(

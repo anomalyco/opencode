@@ -906,6 +906,40 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
+    "does not add synthetic continue prompt when auto compacting after a finished response",
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const msg = yield* createUserMessage(session.id, "hello")
+      yield* createAssistantMessage(session.id, msg.id, test.directory)
+      yield* createSummaryCompaction(session.id)
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+      const parent = msgs.at(-1)?.info.id
+      expect(parent).toBeTruthy()
+
+      const result = yield* SessionCompaction.use.process({
+        parentID: parent!,
+        messages: msgs,
+        sessionID: session.id,
+        auto: true,
+      })
+
+      const all = yield* ssn.messages({ sessionID: session.id })
+      expect(result).toBe("continue")
+      expect(
+        all.some(
+          (msg) =>
+            msg.info.role === "user" &&
+            msg.parts.some(
+              (part) => part.type === "text" && part.synthetic && part.text.includes("Continue if you have next steps"),
+            ),
+        ),
+      ).toBe(false)
+    }).pipe(withCompaction()),
+  )
+
+  itCompaction.instance(
     "persists tail_start_id for retained recent turns",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
