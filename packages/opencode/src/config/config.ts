@@ -99,7 +99,7 @@ function applyAuthoritative(target: Info, source: Info): Info {
 
 function parseManagedFile(text: string, source: string): Info {
   const raw = ConfigParse.jsonc(text, source)
-  return ConfigParse.effectSchema(Info, raw, source)
+  return ConfigParse.schema(Info, raw, source)
 }
 
 async function loadManagedSettings(dir: string): Promise<Info> {
