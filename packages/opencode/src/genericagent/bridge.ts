@@ -948,7 +948,15 @@ export namespace GenericAgentBridge {
       .get("/permission", (c) => c.json([]))
       .get("/question", (c) => c.json([]))
       .get("/session/status", (c) => c.json({}))
-      .get("/session", (c) => c.json(Array.from(sessions.values())))
+      .get("/session", (c) => {
+        const all = Array.from(sessions.values()).sort((a, b) => b.time.updated - a.time.updated)
+        const limitParam = c.req.query("limit")
+        const limit = limitParam ? Number.parseInt(limitParam, 10) : undefined
+        if (limit && limit > 0 && all.length > limit) {
+          return c.json(all.slice(0, limit))
+        }
+        return c.json(all)
+      })
       .post("/session", async (c) => {
         const body = (await c.req.json().catch(() => ({}))) as { id?: string; title?: string; parentID?: string }
         const id = body.id || Identifier.ascending("session")
