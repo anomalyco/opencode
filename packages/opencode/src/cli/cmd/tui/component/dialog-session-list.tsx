@@ -31,6 +31,8 @@ export function DialogSessionList() {
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
   const deleteHint = useCommandShortcut("session.delete")
+  const quickSwitch1 = useCommandShortcut("session.quick_switch.1")
+  const quickSwitch9 = useCommandShortcut("session.quick_switch.9")
 
   const [searchResults, { refetch }] = createResource(
     () => ({ query: search(), filter: sync.session.query() }),
@@ -130,8 +132,18 @@ export function DialogSessionList() {
 
   const [browseOrder] = createSignal<string[]>(orderByRecency(sync.data.session))
 
+  const quickSwitchHint = createMemo(() => {
+    const first = quickSwitch1()
+    const last = quickSwitch9()
+    if (!first || !last) return undefined
+    return quickSwitchRange(first, last)
+  })
+  const quickSwitchFooterHints = createMemo(() => {
+    const hint = quickSwitchHint()
+    return hint && local.session.slots().length > 0 ? [{ title: "switch", label: hint }] : []
+  })
+
   const options = createMemo(() => {
-    const enabled = Flag.OPENCODE_EXPERIMENTAL_SESSION_SWITCHING
     const today = new Date().toDateString()
     const sessionMap = new Map(
       sessions()
@@ -142,11 +154,9 @@ export function DialogSessionList() {
     const searchResult = searchResults()
     const displayOrder = searchResult ? orderByRecency(searchResult) : browseOrder()
 
-    const pinned = enabled ? local.session.pinned().filter((id) => sessionMap.has(id)) : []
+    const pinned = local.session.pinned().filter((id) => sessionMap.has(id))
     const pinnedSet = new Set(pinned)
-    const slotByID = enabled
-      ? new Map<string, number>(local.session.slots().map((id, i) => [id, i + 1]))
-      : new Map<string, number>()
+    const slotByID = new Map<string, number>(local.session.slots().map((id, i) => [id, i + 1]))
 
     function buildOption(id: string, category: string) {
       const x = sessionMap.get(id)
@@ -224,17 +234,13 @@ export function DialogSessionList() {
         dialog.clear()
       }}
       actions={[
-        ...(Flag.OPENCODE_EXPERIMENTAL_SESSION_SWITCHING
-          ? [
-              {
-                command: "session.pin.toggle",
-                title: "pin/unpin",
-                onTrigger: (option: { value: string }) => {
-                  local.session.togglePin(option.value)
-                },
-              },
-            ]
-          : []),
+        {
+          command: "session.pin.toggle",
+          title: "pin/unpin",
+          onTrigger: (option: { value: string }) => {
+            local.session.togglePin(option.value)
+          },
+        },
         {
           command: "session.delete",
           title: "delete",
@@ -291,6 +297,13 @@ export function DialogSessionList() {
           },
         },
       ]}
+      footerHints={quickSwitchFooterHints()}
     />
   )
+}
+
+function quickSwitchRange(first: string, last: string) {
+  const prefix = first.slice(0, -1)
+  if (first.endsWith("1") && last === `${prefix}9`) return `${prefix}1-9`
+  return `${first} through ${last}`
 }
