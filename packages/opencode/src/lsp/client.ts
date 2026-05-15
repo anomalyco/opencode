@@ -174,9 +174,9 @@ export async function create(input: {
   const updatePushDiagnostics = (filePath: string, next: Diagnostic[]) => {
     pushDiagnostics.set(filePath, next)
     void busRuntime.runPromise((svc) =>
-      svc.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID }).pipe(
-        Effect.provideService(InstanceRef, instance),
-      ),
+      svc
+        .publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
+        .pipe(Effect.provideService(InstanceRef, instance)),
     )
   }
   const updatePullDiagnostics = (filePath: string, next: Diagnostic[]) => {

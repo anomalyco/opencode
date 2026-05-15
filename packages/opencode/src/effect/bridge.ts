@@ -28,7 +28,12 @@ export const bind = <Args extends readonly unknown[], Result>(fn: (...args: Args
   const captured = captureSync()
   return (...args: Args) =>
     restoreWorkspace(captured.workspace, () =>
-      Effect.runSync(attachWith(Effect.sync(() => fn(...args)), captured)),
+      Effect.runSync(
+        attachWith(
+          Effect.sync(() => fn(...args)),
+          captured,
+        ),
+      ),
     )
 }
 
