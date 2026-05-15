@@ -4,9 +4,9 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { Filesystem } from "@/util/filesystem"
 
 const { Plugin } = await import("../../src/plugin/index")
 const { PluginLoader } = await import("../../src/plugin/loader")
@@ -20,7 +20,7 @@ afterEach(async () => {
   await disposeAllInstances()
 })
 
-const it = testEffect(CrossSpawnSpawner.defaultLayer)
+const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, AppFileSystem.defaultLayer))
 
 function withTmp<T, A, E, R>(
   init: (dir: string) => Promise<T>,
@@ -837,7 +837,7 @@ describe("plugin.loader.shared", () => {
         Effect.gen(function* () {
           yield* load(tmp.path)
           expect(
-            yield* Effect.promise(() => Filesystem.readJson<{ source: string; enabled: boolean }>(tmp.extra.mark)),
+            (yield* (yield* AppFileSystem.Service).readJson(tmp.extra.mark)) as { source: string; enabled: boolean },
           ).toEqual({
             source: "tuple",
             enabled: true,
@@ -960,7 +960,8 @@ export default {
       (tmp) =>
         Effect.gen(function* () {
           const file = path.join(tmp.extra.mod, "package.json")
-          const json = yield* Effect.promise(() => Filesystem.readJson<Record<string, unknown>>(file))
+          const fsys = yield* AppFileSystem.Service
+          const json = (yield* fsys.readJson(file)) as Record<string, unknown>
           const list = readPackageThemes("acme-plugin", {
             dir: tmp.extra.mod,
             pkg: file,
@@ -968,8 +969,8 @@ export default {
           })
 
           expect(list).toEqual([
-            Filesystem.resolve(path.join(tmp.extra.mod, "themes", "one.json")),
-            Filesystem.resolve(path.join(tmp.extra.mod, "themes", "two.json")),
+            AppFileSystem.resolve(path.join(tmp.extra.mod, "themes", "one.json")),
+            AppFileSystem.resolve(path.join(tmp.extra.mod, "themes", "two.json")),
           ])
         }),
     ),
@@ -1033,7 +1034,7 @@ export default {
               {
                 spec: "acme-plugin@1.0.0",
                 target: tmp.extra.mod,
-                themes: [Filesystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
+                themes: [AppFileSystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
               },
             ])
             expect(missing).toHaveLength(0)
@@ -1096,7 +1097,7 @@ export default {
             expect(loaded).toEqual([
               {
                 spec: "acme-plugin@1.0.0",
-                themes: [Filesystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
+                themes: [AppFileSystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
               },
             ])
           } finally {
@@ -1117,7 +1118,8 @@ export default {
       },
       (tmp) =>
         Effect.gen(function* () {
-          const json = yield* Effect.promise(() => Filesystem.readJson<Record<string, unknown>>(tmp.extra.file))
+          const fsys = yield* AppFileSystem.Service
+          const json = (yield* fsys.readJson(tmp.extra.file)) as Record<string, unknown>
           expect(() =>
             readPackageThemes("acme", {
               dir: tmp.extra.mod,

@@ -28,7 +28,7 @@ const QueryCommand = cmd({
   handler: async (args: { query?: string; format: string }) => {
     const query = args.query as string | undefined
     if (query) {
-      const db = new BunDatabase(Database.Path, { readonly: true })
+      const db = new BunDatabase(Database.getPath(), { readonly: true })
       try {
         const result = db.query(query).all() as Record<string, unknown>[]
         if (args.format === "json") {
@@ -47,7 +47,7 @@ const QueryCommand = cmd({
       db.close()
       return
     }
-    const child = spawn("sqlite3", [Database.Path], {
+    const child = spawn("sqlite3", [Database.getPath()], {
       stdio: "inherit",
     })
     await new Promise((resolve) => child.on("close", resolve))
@@ -58,7 +58,7 @@ const PathCommand = cmd({
   command: "path",
   describe: "print the database path",
   handler: () => {
-    console.log(Database.Path)
+    console.log(Database.getPath())
   },
 })
 
@@ -66,7 +66,7 @@ const MigrateCommand = cmd({
   command: "migrate",
   describe: "migrate JSON data to SQLite (merges with existing data)",
   handler: async () => {
-    const sqlite = new BunDatabase(Database.Path)
+    const sqlite = new BunDatabase(Database.getPath())
     const tty = process.stderr.isTTY
     const width = 36
     const orange = "\x1b[38;5;214m"

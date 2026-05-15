@@ -1,5 +1,5 @@
 import { SessionID } from "@/session/schema"
-import { SessionMessage } from "@/v2/session-message"
+import { SessionMessage } from "@opencode-ai/core/session-message"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../../middleware/authorization"
