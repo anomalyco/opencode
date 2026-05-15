@@ -17,6 +17,19 @@ export function authFromToken(token: string | null) {
   }
 }
 
+export function authFromUrl(input: string) {
+  try {
+    const url = new URL(input)
+    if (!url.password) return
+    return {
+      username: url.username ? decodeURIComponent(url.username) : "opencode",
+      password: decodeURIComponent(url.password),
+    }
+  } catch {
+    return
+  }
+}
+
 export function createSdkForServer({
   server,
   ...config
