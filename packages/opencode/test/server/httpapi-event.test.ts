@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Bus } from "../../src/bus"
-import { Instance } from "../../src/project/instance"
+import { AppRuntime } from "../../src/effect/app-runtime"
+import { InstanceRef } from "../../src/effect/instance-ref"
 import { Server } from "../../src/server/server"
-import { EventPaths } from "../../src/server/routes/instance/httpapi/event"
+import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
 import { Event as ServerEvent } from "../../src/server/event"
 import * as Log from "@opencode-ai/core/util/log"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, reloadTestInstance, tmpdir } from "../fixture/fixture"
 
@@ -51,6 +52,20 @@ async function readEvent(reader: ReadableStreamDefaultReader<Uint8Array>) {
   return Schema.decodeUnknownSync(EventData)(JSON.parse(new TextDecoder().decode(result.value).replace(/^data: /, "")))
 }
 
+async function readStatusWithin(reader: ReadableStreamDefaultReader<Uint8Array>, delay: number) {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      reader.read().then((result) => (result.done ? "closed" : "event")),
+      new Promise<"open">((resolve) => {
+        timeout = setTimeout(() => resolve("open"), delay)
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
+
 afterEach(async () => {
   await disposeAllInstances()
   await resetDatabase()
@@ -69,14 +84,6 @@ describe("event HttpApi", () => {
     expect(await readFirstEvent(response)).toMatchObject({ type: "server.connected", properties: {} })
   })
 
-  test("serves the initial server connected event", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    const headers = { "x-opencode-directory": tmp.path }
-    const response = await app().request(EventPaths.event, { headers })
-
-    expect(await readFirstEvent(response)).toMatchObject({ type: "server.connected", properties: {} })
-  })
-
   test("keeps the event stream open after the initial event", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const response = await app().request(EventPaths.event, { headers: { "x-opencode-directory": tmp.path } })
@@ -85,12 +92,7 @@ describe("event HttpApi", () => {
     const reader = response.body.getReader()
     try {
       expect(await readEvent(reader)).toMatchObject({ type: "server.connected", properties: {} })
-      const next = await Promise.race([
-        reader.read().then((result) => (result.done ? "closed" : "event")),
-        new Promise<"open">((resolve) => setTimeout(() => resolve("open"), 250)),
-      ])
-
-      expect(next).toBe("open")
+      expect(await readStatusWithin(reader, 250)).toBe("open")
     } finally {
       await reader.cancel()
     }
@@ -107,7 +109,9 @@ describe("event HttpApi", () => {
 
       const next = readEvent(reader)
       const ctx = await reloadTestInstance({ directory: tmp.path })
-      await Instance.restore(ctx, () => Bus.publish(ServerEvent.Connected, {}))
+      await AppRuntime.runPromise(
+        Bus.Service.use((svc) => svc.publish(ServerEvent.Connected, {})).pipe(Effect.provideService(InstanceRef, ctx)),
+      )
 
       expect(await next).toMatchObject({ type: "server.connected", properties: {} })
     } finally {

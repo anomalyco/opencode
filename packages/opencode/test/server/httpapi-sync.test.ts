@@ -3,7 +3,7 @@ import { Context, Effect } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Server } from "../../src/server/server"
 import { SyncPaths } from "../../src/server/routes/instance/httpapi/groups/sync"
-import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
+import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { Session } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
@@ -144,7 +144,7 @@ describe("sync HttpApi", () => {
       Effect.gen(function* () {
         const tmp = yield* TestInstance
         const response = yield* Effect.promise(() =>
-          ExperimentalHttpApiServer.webHandler().handler(
+          HttpApiApp.webHandler().handler(
             new Request(`http://localhost${SyncPaths.history}`, {
               method: "POST",
               headers: { "x-opencode-directory": tmp.directory, "content-type": "application/json" },

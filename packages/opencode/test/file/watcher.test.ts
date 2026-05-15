@@ -260,4 +260,58 @@ describeWatcher("FileWatcher", () => {
       }),
     { git: true },
   )
+
+  // Symlink support varies by platform; skip where unavailable
+  const describeSymlink = process.platform !== "win32" ? describe : describe.skip
+
+  describeSymlink("symlinked .git", () => {
+    it.instance(
+      "publishes .git/HEAD events through a symlinked .git directory",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const fs = yield* AppFileSystem.Service
+          const git = yield* Git.Service
+          const dir = test.directory
+          const actualGit = path.join(dir, "..", "tmp_actual_git_" + Math.random().toString(36).slice(2))
+
+          // Move .git to a sibling directory and replace with a symlink
+          yield* Effect.promise(() => import("fs")).pipe(
+            Effect.flatMap((nodeFs) =>
+              Effect.all([
+                Effect.promise(() => nodeFs.promises.rename(path.join(dir, ".git"), actualGit)),
+                Effect.promise(() => nodeFs.promises.symlink(actualGit, path.join(dir, ".git"))),
+              ]),
+            ),
+          )
+
+          yield* Effect.acquireRelease(Effect.succeed(actualGit), (p) =>
+            Effect.promise(() =>
+              import("fs").then((f) => f.promises.rm(p, { recursive: true, force: true }).catch(() => undefined)),
+            ),
+          )
+
+          const head = path.join(dir, ".git", "HEAD")
+          const branch = `watch-${Math.random().toString(36).slice(2)}`
+          yield* git.run(["branch", branch], { cwd: dir })
+
+          yield* withWatcher(
+            dir,
+            nextUpdate(
+              dir,
+              (evt) => evt.file === path.join(actualGit, "HEAD") && evt.event !== "unlink",
+              fs.writeFileString(head, `ref: refs/heads/${branch}\n`),
+            ).pipe(
+              Effect.tap((evt) =>
+                Effect.sync(() => {
+                  expect(evt.file).toBe(path.join(actualGit, "HEAD"))
+                  expect(["add", "change"]).toContain(evt.event)
+                }),
+              ),
+            ),
+          )
+        }),
+      { git: true },
+    )
+  })
 })
