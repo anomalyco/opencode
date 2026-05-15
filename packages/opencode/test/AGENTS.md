@@ -116,7 +116,7 @@ describe("my service", () => {
 Prefer the Effect-aware helpers from `fixture/fixture.ts` instead of building a manual runtime in each test.
 
 - `tmpdirScoped(options?)` creates a scoped temp directory and cleans it up when the Effect scope closes.
-- `provideInstance(dir)(effect)` is the low-level helper. It does not create a directory; it just runs an Effect with `Instance.current` bound to `dir`.
+- `provideInstance(dir)(effect)` is the low-level helper. It does not create a directory; it runs an Effect with `InstanceRef` provided for `dir`.
 - `provideTmpdirInstance((dir) => effect, options?)` is the convenience helper. It creates a temp directory, binds it as the active instance, and disposes the instance on cleanup.
 - `provideTmpdirServer((input) => effect, options?)` does the same, but also provides the test LLM server.
 

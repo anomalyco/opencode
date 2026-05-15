@@ -70,11 +70,11 @@ const modelHttpErrorsQuery = (product: "go" | "zen") => {
   }).json
 }
 
-const providerHttpErrorsQuery = (product: "go" | "zen") => {
+const providerHttpErrorsQuery = () => {
   const filters = [
     { column: "provider", op: "exists" },
+    { column: "provider", op: "!=", value: "fireworks-go-glm-5.1" },
     { column: "user_agent", op: "contains", value: "opencode" },
-    { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
   ]
   const successHttpStatus = calculatedField({
     name: "is_success_http_status",
@@ -215,29 +215,10 @@ new honeycomb.Trigger("LowModelTpsZen", {
   ],
 })
 
-new honeycomb.Trigger("IncreasedProviderHttpErrorsGo", {
-  name: "Increased Provider HTTP Errors [Go]",
+new honeycomb.Trigger("IncreasedProviderHttpErrors", {
+  name: "Increased Provider HTTP Errors",
   description,
-  queryJson: providerHttpErrorsQuery("go"),
-  alertType: "on_change",
-  frequency: 300,
-  thresholds: [{ op: ">=", value: 0.7, exceededLimit: 1 }],
-  recipients: [
-    {
-      id: webhookRecipient.id,
-      notificationDetails: [
-        {
-          variables: [{ name: "type", value: "provider_http_errors" }],
-        },
-      ],
-    },
-  ],
-})
-
-new honeycomb.Trigger("IncreasedProviderHttpErrorsZen", {
-  name: "Increased Provider HTTP Errors [Zen]",
-  description,
-  queryJson: providerHttpErrorsQuery("zen"),
+  queryJson: providerHttpErrorsQuery(),
   alertType: "on_change",
   frequency: 300,
   thresholds: [{ op: ">=", value: 0.7, exceededLimit: 1 }],
