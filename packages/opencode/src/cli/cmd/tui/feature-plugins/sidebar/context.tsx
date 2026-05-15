@@ -1,9 +1,15 @@
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
-import { createMemo } from "solid-js"
+import { createMemo, Show } from "solid-js"
 
 const id = "internal:sidebar-context"
+
+function fmtCtxK(n: number): string {
+  if (n >= 1024 && n % 1024 === 0) return `${n / 1024}k`
+  if (n >= 1000) return `${Math.round(n / 1024)}k`
+  return `${n}`
+}
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -22,15 +28,18 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       return {
         tokens: 0,
         percent: null,
+        ctxWindow: null,
       }
     }
 
     const tokens =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     const model = props.api.state.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
+    const ctx = model?.limit.context ?? 0
     return {
       tokens,
-      percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null,
+      percent: ctx > 0 ? Math.round((tokens / ctx) * 100) : null,
+      ctxWindow: ctx > 0 ? fmtCtxK(ctx) : null,
     }
   })
 
@@ -39,8 +48,13 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       <text fg={theme().text}>
         <b>Context</b>
       </text>
-      <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
-      <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
+      <text fg={theme().textMuted}>
+        {state().tokens.toLocaleString()}
+        {state().ctxWindow ? ` / ${state().ctxWindow}` : ""} tokens
+      </text>
+      <Show when={state().percent !== null}>
+        <text fg={theme().textMuted}>{state().percent}% used</text>
+      </Show>
       <text fg={theme().textMuted}>{money.format(cost())} spent</text>
     </box>
   )
