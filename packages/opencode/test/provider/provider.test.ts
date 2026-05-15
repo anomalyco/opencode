@@ -3068,7 +3068,10 @@ test("defaultModel() finds late-detected env provider", async () => {
     init: async (dir) => {
       await Bun.write(
         path.join(dir, "opencode.json"),
-        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          enabled_providers: ["anthropic"],
+        }),
       )
     },
   })
@@ -3076,10 +3079,12 @@ test("defaultModel() finds late-detected env provider", async () => {
     directory: tmp.path,
     fn: async () => {
       remove("ANTHROPIC_API_KEY")
-      await list()
+      const before = await list()
+      expect(before[ProviderID.anthropic]).toBeUndefined()
       set("ANTHROPIC_API_KEY", "late-key")
       const d = await defaultModel()
       expect(d).toBeDefined()
+      expect(d.providerID).toBe(ProviderID.anthropic)
       remove("ANTHROPIC_API_KEY")
     },
   })
@@ -3164,16 +3169,25 @@ test("late-detected multi-env provider yields source=env with key undefined", as
   await WithInstance.provide({
     directory: tmp.path,
     fn: async () => {
-      ;["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION", "AWS_BEARER_TOKEN_BEDROCK"].forEach(remove)
+      ;[
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_REGION",
+        "AWS_BEARER_TOKEN_BEDROCK",
+        "AWS_PROFILE",
+        "AWS_ROLE_ARN",
+        "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+        "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+        "AWS_WEB_IDENTITY_TOKEN_FILE",
+      ].forEach(remove)
       const before = await list()
       expect(before[ProviderID.amazonBedrock]).toBeUndefined()
       set("AWS_ACCESS_KEY_ID", "AKIA-LATE")
       const after = await list()
       const bedrock = after[ProviderID.amazonBedrock]
-      if (bedrock) {
-        expect(bedrock.source).toBe("env")
-        expect(bedrock.key).toBeUndefined()
-      }
+      expect(bedrock).toBeDefined()
+      expect(bedrock.source).toBe("env")
+      expect(bedrock.key).toBeUndefined()
       remove("AWS_ACCESS_KEY_ID")
     },
   })
@@ -3222,4 +3236,30 @@ test("auth source wins over late-detected env", async () => {
     }
     await disposeAllInstances()
   }
+})
+
+test("late-detected env provider has variants populated (parity with env-at-boot)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      remove("ANTHROPIC_API_KEY")
+      await list()
+      set("ANTHROPIC_API_KEY", "late-key")
+      const after = await list()
+      const model = after[ProviderID.anthropic].models["claude-sonnet-4-20250514"]
+      expect(model).toBeDefined()
+      expect(model.capabilities.reasoning).toBe(true)
+      expect(model.variants).toBeDefined()
+      expect(Object.keys(model.variants!).length).toBeGreaterThan(0)
+      remove("ANTHROPIC_API_KEY")
+    },
+  })
 })

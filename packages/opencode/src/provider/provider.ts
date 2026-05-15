@@ -1507,6 +1507,45 @@ export const layer = Layer.effect(
           })
         }
 
+        const keepModel = (
+          model: Model,
+          modelID: string,
+          providerID: ProviderID,
+          configProvider: NonNullable<typeof cfg.provider>[string] | undefined,
+        ): boolean => {
+          if (
+            (modelID === "gpt-5-chat-latest" &&
+              (providerID === ProviderID.openai ||
+                providerID === ProviderID.githubCopilot ||
+                providerID === ProviderID.openrouter)) ||
+            (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
+          )
+            return false
+          if (model.status === "alpha" && !runtimeFlags.enableExperimentalModels) return false
+          if (model.status === "deprecated") return false
+          if (configProvider?.blacklist?.includes(modelID)) return false
+          if (configProvider?.whitelist && !configProvider.whitelist.includes(modelID)) return false
+          return true
+        }
+
+        const prepareModel = (
+          model: Model,
+          modelID: string,
+          configVariants: Record<string, any> | undefined,
+        ) => {
+          model.api.id = model.api.id ?? model.id ?? modelID
+          if (!model.variants || Object.keys(model.variants).length === 0) {
+            model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+          }
+          if (configVariants && model.variants) {
+            const merged = mergeDeep(model.variants, configVariants)
+            model.variants = mapValues(
+              pickBy(merged, (v) => !v.disabled),
+              (v) => omit(v, ["disabled"]),
+            )
+          }
+        }
+
         for (const [id, provider] of Object.entries(providers)) {
           const providerID = ProviderID.make(id)
           if (!isProviderAllowed(providerID)) {
@@ -1517,36 +1556,9 @@ export const layer = Layer.effect(
           const configProvider = cfg.provider?.[providerID]
 
           for (const [modelID, model] of Object.entries(provider.models)) {
-            model.api.id = model.api.id ?? model.id ?? modelID
-            if (
-              // These chat aliases are invalid for the special handling in the
-              // built-in providers below, but custom providers may support them.
-              (modelID === "gpt-5-chat-latest" &&
-                (providerID === ProviderID.openai ||
-                  providerID === ProviderID.githubCopilot ||
-                  providerID === ProviderID.openrouter)) ||
-              (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
-            )
+            prepareModel(model, modelID, configProvider?.models?.[modelID]?.variants)
+            if (!keepModel(model, modelID, providerID, configProvider)) {
               delete provider.models[modelID]
-            if (model.status === "alpha" && !runtimeFlags.enableExperimentalModels) delete provider.models[modelID]
-            if (model.status === "deprecated") delete provider.models[modelID]
-            if (
-              (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
-              (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
-            )
-              delete provider.models[modelID]
-
-            if (!model.variants || Object.keys(model.variants).length === 0) {
-              model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
-            }
-
-            const configVariants = configProvider?.models?.[modelID]?.variants
-            if (configVariants && model.variants) {
-              const merged = mergeDeep(model.variants, configVariants)
-              model.variants = mapValues(
-                pickBy(merged, (v) => !v.disabled),
-                (v) => omit(v, ["disabled"]),
-              )
             }
           }
 
@@ -1558,9 +1570,9 @@ export const layer = Layer.effect(
           log.info("found", { providerID })
         }
 
-        // Build cleanedDatabase: filter models per env-eligible provider so a
-        // late env-detected provider exposes only the same surviving set the
-        // cleanup loop above produced for init-stamped providers.
+        // Build cleanedDatabase. Apply the same prepareModel + keepModel pipeline
+        // so a late env-detected provider exposes the same models, with the same
+        // variants, as it would if env had been present at init.
         const cleanedDatabase: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
         for (const [id, info] of Object.entries(database)) {
           if (disabled.has(id)) continue
@@ -1570,18 +1582,8 @@ export const layer = Layer.effect(
           const configProvider = cfg.provider?.[id]
           const filteredModels: Record<string, Model> = {}
           for (const [modelID, model] of Object.entries(info.models)) {
-            if (
-              (modelID === "gpt-5-chat-latest" &&
-                (providerID === ProviderID.openai ||
-                  providerID === ProviderID.githubCopilot ||
-                  providerID === ProviderID.openrouter)) ||
-              (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
-            )
-              continue
-            if (model.status === "alpha" && !runtimeFlags.enableExperimentalModels) continue
-            if (model.status === "deprecated") continue
-            if (configProvider?.blacklist?.includes(modelID)) continue
-            if (configProvider?.whitelist && !configProvider.whitelist.includes(modelID)) continue
+            prepareModel(model, modelID, configProvider?.models?.[modelID]?.variants)
+            if (!keepModel(model, modelID, providerID, configProvider)) continue
             filteredModels[modelID] = model
           }
           if (Object.keys(filteredModels).length === 0) continue
