@@ -236,6 +236,33 @@ export const RunCommand = effectCmd({
   handler: Effect.fn("Cli.run")(function* (args) {
     const agentSvc = yield* Agent.Service
     const flags = yield* RuntimeFlags.Service
+    const resolvedLocalAgent = yield* Effect.gen(function* () {
+      if (args.attach || !args.agent) return undefined
+
+      const name = args.agent
+      const entry = yield* agentSvc.get(name)
+      if (!entry) {
+        yield* Effect.sync(() => {
+          UI.println(
+            UI.Style.TEXT_WARNING_BOLD + "!",
+            UI.Style.TEXT_NORMAL,
+            `agent "${name}" not found. Falling back to default agent`,
+          )
+        })
+        return undefined
+      }
+      if (entry.mode === "subagent") {
+        yield* Effect.sync(() => {
+          UI.println(
+            UI.Style.TEXT_WARNING_BOLD + "!",
+            UI.Style.TEXT_NORMAL,
+            `agent "${name}" is a subagent, not a primary agent. Falling back to default agent`,
+          )
+        })
+        return undefined
+      }
+      return name
+    })
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
       const thinking = args.interactive ? (args.thinking ?? true) : (args.thinking ?? false)
@@ -505,27 +532,7 @@ export const RunCommand = effectCmd({
       }
 
       async function localAgent() {
-        if (!args.agent) return undefined
-        const name = args.agent
-
-        const entry = await Effect.runPromise(agentSvc.get(name))
-        if (!entry) {
-          UI.println(
-            UI.Style.TEXT_WARNING_BOLD + "!",
-            UI.Style.TEXT_NORMAL,
-            `agent "${name}" not found. Falling back to default agent`,
-          )
-          return undefined
-        }
-        if (entry.mode === "subagent") {
-          UI.println(
-            UI.Style.TEXT_WARNING_BOLD + "!",
-            UI.Style.TEXT_NORMAL,
-            `agent "${name}" is a subagent, not a primary agent. Falling back to default agent`,
-          )
-          return undefined
-        }
-        return name
+        return resolvedLocalAgent
       }
 
       async function attachAgent(sdk: OpencodeClient) {
