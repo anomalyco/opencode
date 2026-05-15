@@ -1,9 +1,9 @@
-import { test, expect, describe } from "bun:test"
+import { afterEach, test, expect, describe } from "bun:test"
 import path from "path"
 import { unlink } from "fs/promises"
 
 import { ProviderID } from "../../src/provider/schema"
-import { tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import type { InstanceContext } from "../../src/project/instance-context"
 import { WithInstance } from "../../src/project/with-instance"
 import { Provider } from "@/provider/provider"
@@ -16,10 +16,26 @@ import { InstanceRef } from "../../src/effect/instance-ref"
 import { makeRuntime } from "../../src/effect/run-service"
 
 const env = makeRuntime(Env.Service, Env.defaultLayer)
+const originalEnv = new Map<string, string | undefined>()
+
+function rememberEnv(k: string) {
+  if (!originalEnv.has(k)) originalEnv.set(k, process.env[k])
+}
+
 const set = (ctx: InstanceContext, k: string, v: string) => {
+  rememberEnv(k)
   process.env[k] = v
   return env.runSync((svc) => svc.set(k, v).pipe(Effect.provideService(InstanceRef, ctx)))
 }
+
+afterEach(async () => {
+  for (const [key, value] of originalEnv) {
+    if (value === undefined) delete process.env[key]
+    else process.env[key] = value
+  }
+  originalEnv.clear()
+  await disposeAllInstances()
+})
 
 async function list(ctx: InstanceContext) {
   return AppRuntime.runPromise(

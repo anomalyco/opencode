@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { afterEach, test, expect } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 
@@ -23,14 +23,31 @@ import { Auth } from "@/auth"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const env = makeRuntime(Env.Service, Env.defaultLayer)
+const originalEnv = new Map<string, string | undefined>()
+
+function rememberEnv(k: string) {
+  if (!originalEnv.has(k)) originalEnv.set(k, process.env[k])
+}
+
 const set = (ctx: InstanceContext, k: string, v: string) => {
+  rememberEnv(k)
   process.env[k] = v
   return env.runSync((svc) => svc.set(k, v).pipe(Effect.provideService(InstanceRef, ctx)))
 }
 const remove = (ctx: InstanceContext, k: string) => {
+  rememberEnv(k)
   delete process.env[k]
   return env.runSync((svc) => svc.remove(k).pipe(Effect.provideService(InstanceRef, ctx)))
 }
+
+afterEach(async () => {
+  for (const [key, value] of originalEnv) {
+    if (value === undefined) delete process.env[key]
+    else process.env[key] = value
+  }
+  originalEnv.clear()
+  await disposeAllInstances()
+})
 
 const providerLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Provider.layer.pipe(
