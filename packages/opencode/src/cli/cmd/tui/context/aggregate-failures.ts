@@ -1,3 +1,5 @@
+import { FormatError } from "@/cli/error"
+
 /**
  * Aggregate Promise.allSettled results into a single Error that names every
  * failed endpoint, or return null when all fulfilled. Used at TUI bootstrap
@@ -23,6 +25,9 @@ export function aggregateFailures(labeled: LabeledSettled[]): Error | null {
 }
 
 function reasonMessage(reason: unknown): string {
+  const formatted = FormatError(reason)
+  if (formatted) return formatted
+
   if (reason instanceof Error) return reason.message
   if (typeof reason === "string") return reason
   if (reason && typeof reason === "object") {

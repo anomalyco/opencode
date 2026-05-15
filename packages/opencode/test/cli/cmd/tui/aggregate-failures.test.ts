@@ -5,6 +5,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import { aggregateFailures } from "@/cli/cmd/tui/context/aggregate-failures"
+import { ConfigError } from "@/config/error"
 
 describe("aggregateFailures", () => {
   test("returns null when every result is fulfilled", () => {
@@ -41,11 +42,33 @@ describe("aggregateFailures", () => {
     expect(err!.message).toContain("agents: boom")
   })
 
+  test("formats structured config errors hidden inside SDK error causes", () => {
+    const configError = new ConfigError.InvalidError({
+      path: "/tmp/opencode.json",
+      issues: [{ message: "Expected object", path: ["provider", "anthropic", "options"] }],
+    })
+    const err = aggregateFailures([
+      {
+        name: "config.get",
+        result: {
+          status: "rejected",
+          reason: new Error("ConfigInvalidError", {
+            cause: {
+              body: configError.toObject(),
+            },
+          }),
+        },
+      },
+    ])
+
+    expect(err!.message).toContain("config.get: Configuration is invalid at /tmp/opencode.json")
+    expect(err!.message).toContain("Expected object provider.anthropic.options")
+  })
+
   test("attaches structured failure list under .cause", () => {
     const reason = new Error("nope")
     const err = aggregateFailures([{ name: "providers", result: { status: "rejected", reason } }])
-    const cause = err!.cause as { failures: Array<{ name: string; reason: unknown }> }
-    expect(cause.failures).toEqual([{ name: "providers", reason }])
+    expect(err!.cause).toEqual({ failures: [{ name: "providers", reason }] })
   })
 
   test("falls back to String() for opaque reasons", () => {
