@@ -69,6 +69,7 @@ function parse(tip: string): TipPart[] {
 }
 
 const NO_MODELS_TIP = "Run {highlight}/connect{/highlight} to add an AI provider and start coding"
+const NO_MODELS_PARTS = parse(NO_MODELS_TIP)
 
 function shortcutText(value: string) {
   return `{highlight}${value}{/highlight}`
@@ -138,8 +139,13 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
       return value ? [value] : []
     })
     return tips[Math.floor(tipOffset * tips.length)] ?? NO_MODELS_TIP
-  })
-  const parts = createMemo(() => parse(tip()))
+  }, NO_MODELS_TIP)
+  // Solid can expose a memo's initial value while a pure computation is pending.
+  const parts = createMemo(() => {
+    const value = tip()
+    if (typeof value === "string") return parse(value)
+    return NO_MODELS_PARTS
+  }, NO_MODELS_PARTS)
 
   return (
     <box flexDirection="row" maxWidth="100%">
