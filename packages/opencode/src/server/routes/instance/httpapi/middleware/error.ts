@@ -20,9 +20,6 @@ export const errorLayer = HttpRouter.middleware<{ handles: unknown }>()((effect)
       const error = defect.defect
       log.error("failed", { error, cause: Cause.pretty(cause) })
 
-      if (error instanceof NamedError) {
-        return Effect.succeed(HttpServerResponse.jsonUnsafe(error.toObject(), { status: 500 }))
-      }
       return Effect.succeed(
         HttpServerResponse.jsonUnsafe(
           new NamedError.Unknown({

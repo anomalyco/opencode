@@ -6,7 +6,7 @@ import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./repo_overview.txt"
 import * as Tool from "./tool"
 import { parseRepositoryReference, repositoryCachePath } from "@/util/repository"
-import { Instance } from "@/project/instance"
+import { InstanceState } from "@/effect/instance-state"
 
 export const Parameters = Schema.Struct({
   repository: Schema.optional(Schema.String).annotate({
@@ -108,7 +108,9 @@ export const RepoOverviewTool = Tool.define<typeof Parameters, Metadata, AppFile
       params: Schema.Schema.Type<typeof Parameters>,
     ) {
       if (params.path) {
-        const full = path.isAbsolute(params.path) ? params.path : path.resolve(Instance.directory, params.path)
+        const full = path.isAbsolute(params.path)
+          ? params.path
+          : path.resolve(yield* InstanceState.directory, params.path)
         return { path: full, repository: params.repository }
       }
 

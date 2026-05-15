@@ -15,7 +15,7 @@ describe("NvidiaPlugin", () => {
     ),
   )
 
-  it.effect("applies legacy referer headers only to nvidia", () =>
+  it.effect("applies NVIDIA tracking headers only to nvidia", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       yield* plugin.add(NvidiaPlugin)
@@ -34,8 +34,60 @@ describe("NvidiaPlugin", () => {
         Existing: "value",
         "HTTP-Referer": "https://opencode.ai/",
         "X-Title": "opencode",
+        "X-BILLING-INVOKE-ORIGIN": "OpenCode",
       })
       expect(ignored.provider.options.headers).toEqual({})
+    }),
+  )
+
+  it.effect("adds billing origin for custom NVIDIA endpoints", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      yield* plugin.add(NvidiaPlugin)
+      const result = yield* plugin.trigger(
+        "provider.update",
+        {},
+        {
+          provider: provider("nvidia", {
+            endpoint: { type: "aisdk", package: "test-provider", url: "http://localhost:8000/v1" },
+            options: { headers: {}, body: {}, aisdk: { provider: {}, request: {} } },
+          }),
+          cancel: false,
+        },
+      )
+
+      expect(result.provider.options.headers).toEqual({
+        "HTTP-Referer": "https://opencode.ai/",
+        "X-Title": "opencode",
+        "X-BILLING-INVOKE-ORIGIN": "OpenCode",
+      })
+    }),
+  )
+
+  it.effect("preserves an explicit NVIDIA billing origin header", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      yield* plugin.add(NvidiaPlugin)
+      const result = yield* plugin.trigger(
+        "provider.update",
+        {},
+        {
+          provider: provider("nvidia", {
+            options: {
+              headers: { "X-BILLING-INVOKE-ORIGIN": "CustomOrigin" },
+              body: {},
+              aisdk: { provider: { baseURL: "https://integrate.api.nvidia.com/v1" }, request: {} },
+            },
+          }),
+          cancel: false,
+        },
+      )
+
+      expect(result.provider.options.headers).toEqual({
+        "HTTP-Referer": "https://opencode.ai/",
+        "X-Title": "opencode",
+        "X-BILLING-INVOKE-ORIGIN": "CustomOrigin",
+      })
     }),
   )
 })

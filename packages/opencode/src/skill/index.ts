@@ -5,12 +5,12 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import type { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { Permission } from "@/permission"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Config } from "@/config/config"
 import { ConfigMarkdown } from "@/config/markdown"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Glob } from "@opencode-ai/core/util/glob"
 import * as Log from "@opencode-ai/core/util/log"
 import { Discovery } from "./discovery"
@@ -165,14 +165,16 @@ const discoverSkills = Effect.fnUntraced(function* (
   discovery: Discovery.Interface,
   fsys: AppFileSystem.Interface,
   global: Global.Interface,
+  disableExternalSkills: boolean,
+  disableClaudeCodeSkills: boolean,
   directory: string,
   worktree: string,
 ) {
   const state: ScanState = { matches: new Set(), dirs: new Set() }
 
   const externalDirs: string[] = []
-  if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
-    if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS) externalDirs.push(CLAUDE_EXTERNAL_DIR)
+  if (!disableExternalSkills) {
+    if (!disableClaudeCodeSkills) externalDirs.push(CLAUDE_EXTERNAL_DIR)
     externalDirs.push(AGENTS_EXTERNAL_DIR)
 
     for (const dir of externalDirs) {
@@ -239,9 +241,19 @@ export const layer = Layer.effect(
     const bus = yield* Bus.Service
     const fsys = yield* AppFileSystem.Service
     const global = yield* Global.Service
+    const flags = yield* RuntimeFlags.Service
     const discovered = yield* InstanceState.make(
       Effect.fn("Skill.discovery")(function* (ctx) {
-        return yield* discoverSkills(config, discovery, fsys, global, ctx.directory, ctx.worktree)
+        return yield* discoverSkills(
+          config,
+          discovery,
+          fsys,
+          global,
+          flags.disableExternalSkills,
+          flags.disableClaudeCodeSkills,
+          ctx.directory,
+          ctx.worktree,
+        )
       }),
     )
     const state = yield* InstanceState.make(
@@ -291,6 +303,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Bus.layer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Global.layer),
+  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 export function fmt(list: Info[], opts: { verbose: boolean }) {

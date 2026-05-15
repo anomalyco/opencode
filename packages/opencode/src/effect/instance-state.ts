@@ -1,6 +1,7 @@
 import { Effect, Fiber, ScopedCache, Scope, Context } from "effect"
 import * as EffectLogger from "@opencode-ai/core/effect/logger"
-import { Instance, type InstanceContext } from "@/project/instance"
+import { Instance } from "@/project/instance"
+import type { InstanceContext } from "@/project/instance-context"
 import { LocalContext } from "@/util/local-context"
 import { InstanceRef, WorkspaceRef } from "./instance-ref"
 import { registerDisposer } from "./instance-registry"
