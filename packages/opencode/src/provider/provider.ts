@@ -1611,45 +1611,6 @@ export const layer = Layer.effect(
           })
         }
 
-        const keepModel = (
-          model: Model,
-          modelID: string,
-          providerID: ProviderID,
-          configProvider: NonNullable<typeof cfg.provider>[string] | undefined,
-        ): boolean => {
-          if (
-            (modelID === "gpt-5-chat-latest" &&
-              (providerID === ProviderID.openai ||
-                providerID === ProviderID.githubCopilot ||
-                providerID === ProviderID.openrouter)) ||
-            (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
-          )
-            return false
-          if (model.status === "alpha" && !runtimeFlags.enableExperimentalModels) return false
-          if (model.status === "deprecated") return false
-          if (configProvider?.blacklist?.includes(modelID)) return false
-          if (configProvider?.whitelist && !configProvider.whitelist.includes(modelID)) return false
-          return true
-        }
-
-        const prepareModel = (
-          model: Model,
-          modelID: string,
-          configVariants: Record<string, any> | undefined,
-        ) => {
-          model.api.id = model.api.id ?? model.id ?? modelID
-          if (!model.variants || Object.keys(model.variants).length === 0) {
-            model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
-          }
-          if (configVariants && model.variants) {
-            const merged = mergeDeep(model.variants, configVariants)
-            model.variants = mapValues(
-              pickBy(merged, (v) => !v.disabled),
-              (v) => omit(v, ["disabled"]),
-            )
-          }
-        }
-
         // toPublicInfo (line ~982) deep-clones via JSON, and mergeDeep produces
         // fresh objects, so providers[id].models and database[id].models hold
         // distinct Model instances. prepareModel inside both loops is safe.
@@ -1664,7 +1625,7 @@ export const layer = Layer.effect(
 
           for (const [modelID, model] of Object.entries(provider.models)) {
             prepareModel(model, modelID, configProvider?.models?.[modelID]?.variants)
-            if (!keepModel(model, modelID, providerID, configProvider)) {
+            if (!keepModel(model, modelID, providerID, configProvider, runtimeFlags.enableExperimentalModels)) {
               delete provider.models[modelID]
             }
           }
@@ -1691,7 +1652,7 @@ export const layer = Layer.effect(
           const filteredModels: Record<string, Model> = {}
           for (const [modelID, model] of Object.entries(info.models)) {
             prepareModel(model, modelID, configProvider?.models?.[modelID]?.variants)
-            if (!keepModel(model, modelID, providerID, configProvider)) continue
+            if (!keepModel(model, modelID, providerID, configProvider, runtimeFlags.enableExperimentalModels)) continue
             filteredModels[modelID] = model
           }
           if (Object.keys(filteredModels).length === 0) continue
@@ -2078,6 +2039,44 @@ export function parseModel(model: string) {
   return {
     providerID: ProviderID.make(providerID),
     modelID: ModelID.make(rest.join("/")),
+  }
+}
+
+type ConfigProviderEntry = NonNullable<NonNullable<Config.Info["provider"]>[string]>
+
+function keepModel(
+  model: Model,
+  modelID: string,
+  providerID: ProviderID,
+  configProvider: ConfigProviderEntry | undefined,
+  enableExperimentalModels: boolean,
+): boolean {
+  if (
+    (modelID === "gpt-5-chat-latest" &&
+      (providerID === ProviderID.openai ||
+        providerID === ProviderID.githubCopilot ||
+        providerID === ProviderID.openrouter)) ||
+    (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
+  )
+    return false
+  if (model.status === "alpha" && !enableExperimentalModels) return false
+  if (model.status === "deprecated") return false
+  if (configProvider?.blacklist?.includes(modelID)) return false
+  if (configProvider?.whitelist && !configProvider.whitelist.includes(modelID)) return false
+  return true
+}
+
+function prepareModel(model: Model, modelID: string, configVariants: Record<string, any> | undefined) {
+  model.api.id = model.api.id ?? model.id ?? modelID
+  if (!model.variants || Object.keys(model.variants).length === 0) {
+    model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+  }
+  if (configVariants && model.variants) {
+    const merged = mergeDeep(model.variants, configVariants)
+    model.variants = mapValues(
+      pickBy(merged, (v) => !v.disabled),
+      (v) => omit(v, ["disabled"]),
+    )
   }
 }
 
