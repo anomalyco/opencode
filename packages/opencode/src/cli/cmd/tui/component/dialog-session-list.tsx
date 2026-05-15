@@ -130,8 +130,6 @@ export function DialogSessionList() {
 
   const [browseOrder] = createSignal<string[]>(orderByRecency(sync.data.session))
 
-  const RECENT_LIMIT = 5
-
   const options = createMemo(() => {
     const enabled = Flag.OPENCODE_EXPERIMENTAL_SESSION_SWITCHING
     const today = new Date().toDateString()
@@ -144,17 +142,11 @@ export function DialogSessionList() {
     const searchResult = searchResults()
     const displayOrder = searchResult ? orderByRecency(searchResult) : browseOrder()
 
-    const dismissed = enabled ? new Set(local.session.dismissedRecent()) : new Set<string>()
     const pinned = enabled ? local.session.pinned().filter((id) => sessionMap.has(id)) : []
     const pinnedSet = new Set(pinned)
     const slotByID = enabled
       ? new Map<string, number>(local.session.slots().map((id, i) => [id, i + 1]))
       : new Map<string, number>()
-
-    const recent = enabled
-      ? displayOrder.filter((id) => !pinnedSet.has(id) && !dismissed.has(id)).slice(0, RECENT_LIMIT)
-      : []
-    const recentSet = new Set(recent)
 
     function buildOption(id: string, category: string) {
       const x = sessionMap.get(id)
@@ -198,7 +190,7 @@ export function DialogSessionList() {
     }
 
     const remaining = displayOrder
-      .filter((id) => !pinnedSet.has(id) && !recentSet.has(id))
+      .filter((id) => !pinnedSet.has(id))
       .map((id) => {
         const x = sessionMap.get(id)
         if (!x) return undefined
@@ -209,7 +201,6 @@ export function DialogSessionList() {
 
     return [
       ...pinned.map((id) => buildOption(id, "Pinned")).filter((x) => x !== undefined),
-      ...recent.map((id) => buildOption(id, "Recent")).filter((x) => x !== undefined),
       ...remaining,
     ]
   })
@@ -243,21 +234,6 @@ export function DialogSessionList() {
                 title: "pin/unpin",
                 onTrigger: (option: { value: string }) => {
                   local.session.togglePin(option.value)
-                },
-              },
-              {
-                command: "session.toggle.recent",
-                title: "toggle recent",
-                onTrigger: (option: { value: string }) => {
-                  if (local.session.isPinned(option.value)) {
-                    toast.show({
-                      variant: "info",
-                      message: "Unpin the session first to toggle it in Recent",
-                      duration: 3000,
-                    })
-                    return
-                  }
-                  local.session.toggleRecent(option.value)
                 },
               },
             ]
