@@ -37,8 +37,11 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/En
 export const layer = Layer.succeed(
   Service,
   Service.of({
-    get: Effect.fn("Env.get")((key: string) => Effect.sync(() => process.env[key])),
-    all: Effect.fn("Env.all")(() => Effect.sync(() => ({ ...process.env }))),
+    // get/all are untraced: every Provider read goes through env.all(); a span
+    // around a literal `process.env[k]` access is hot-path noise. Trace
+    // set/remove where the side effect is interesting.
+    get: (key: string) => Effect.sync(() => process.env[key]),
+    all: () => Effect.sync(() => ({ ...process.env })),
     set: Effect.fn("Env.set")((key: string, value: string) =>
       Effect.sync(() => {
         process.env[key] = value

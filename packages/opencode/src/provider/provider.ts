@@ -142,6 +142,11 @@ type CustomLoader = (provider: Info) => Effect.Effect<{
   // (anthropic, openai, openrouter, ...) do NOT need this flag: their late
   // env value flows through `provider.key` via the env overlay and is
   // applied by `resolveSDK` at call time.
+  //
+  // TODO(rerunOn): replace this binary opt-out with a declarative
+  // `rerunOn: string[]` env-dependency list so refused providers can be
+  // re-evaluated when one of their declared env inputs changes (would
+  // close the sap-ai-core / amazon-bedrock late-env case without restart).
   dynamicEnv?: boolean
 }>
 
@@ -1079,7 +1084,7 @@ export function resolveEnvOverlay(
     return cached
   }
   // Multi-env: preserve cached.key (no single-source-of-truth value).
-  const nextKey = candidate.env.length === 1 ? apiKey : (cached?.key ?? undefined)
+  const nextKey = candidate.env.length === 1 ? apiKey : cached?.key
   if (cached && cached.key === nextKey) return cached
   if (cached) return { ...cached, key: nextKey }
   return { ...candidate, source: "env", key: nextKey }
@@ -1123,7 +1128,11 @@ function warnLateEnvRefused(
 
 // JSON.stringify drops functions silently, so two distinct closures (e.g.
 // AWS credentialProvider instances stored in options) collide on the same
-// hash. Replace with a name-tagged sentinel so they surface as distinct.
+// hash. Replace with a name-tagged sentinel that disambiguates named
+// closures (e.g. `coalesceProvider` vs another named factory). Anonymous
+// arrows still collide on `__fn:anon` — that is intentional: it lets the
+// per-call `fetch` wrapper installed in `resolveSDK` (an arrow built on
+// every invocation) hit the SDK cache instead of busting it on every call.
 function hashIdentity(parts: Record<string, unknown>): string {
   return Hash.fast(
     JSON.stringify(parts, (_key, value) => {
