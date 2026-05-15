@@ -9,6 +9,9 @@ import type { Agent } from "./agent"
  *    restriction lives on the agent ruleset, not on the session, so a
  *    subagent that only inherited the parent SESSION's permission would
  *    silently bypass it. (#26514)
+ *    Only inherited if the subagent does NOT explicitly allow edit — a
+ *    subagent with `edit: allow` should not have its capability reduced by
+ *    a more-restricted parent.
  * 2. The parent **session's** deny rules and external_directory rules —
  *    same forwarding the original code already did.
  * 3. Default `todowrite` and `task` denies if the subagent's own ruleset
@@ -21,8 +24,23 @@ export function deriveSubagentSessionPermission(input: {
 }): Permission.Ruleset {
   const canTask = input.subagent.permission.some((rule) => rule.permission === "task")
   const canTodo = input.subagent.permission.some((rule) => rule.permission === "todowrite")
+
+  // Only inherit parent edit:deny if the subagent does NOT explicitly allow edit.
+  // A subagent with `edit: allow` (or `edit: { "*": "allow" }`) declares its own
+  // capability — the parent's deny should not override it.
+  // A subagent without explicit edit declaration (implicit deny) inherits the
+  // parent's deny as a ceiling.
+  const subagentAllowsEdit = input.subagent.permission.some(
+    (rule) => rule.permission === "edit" && rule.action === "allow" && rule.pattern === "*",
+  )
+
   const parentAgentDenies =
-    input.parentAgent?.permission.filter((rule) => rule.action === "deny" && rule.permission === "edit") ?? []
+    !subagentAllowsEdit
+      ? (input.parentAgent?.permission.filter(
+          (rule) => rule.action === "deny" && rule.permission === "edit",
+        ) ?? [])
+      : []
+
   return [
     ...parentAgentDenies,
     ...input.parentSessionPermission.filter(
