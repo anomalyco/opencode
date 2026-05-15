@@ -264,7 +264,7 @@ describe("tool.registry", () => {
   )
 
   it.instance(
-    "preserves Zod arg descriptions from config-scoped plugin packages",
+    "preserves Zod arg descriptions from older config-scoped plugin packages",
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
@@ -291,7 +291,7 @@ describe("tool.registry", () => {
             [
               "import { z } from 'zod'",
               "export function tool(input) {",
-              "  return { ...input, jsonSchema: z.toJSONSchema(z.object(input.args), { target: 'draft-7', io: 'input' }) }",
+              "  return input",
               "}",
               "tool.schema = z",
               "",
