@@ -1,5 +1,4 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServerResponse } from "effect/unstable/http"
@@ -11,10 +10,8 @@ import { WorkspaceID } from "../../src/control-plane/schema"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { InstanceRef, WorkspaceRef } from "../../src/effect/instance-ref"
-import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { Instance } from "../../src/project/instance"
 import { InstanceLayer } from "../../src/project/instance-layer"
-import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
 import { disposeMiddleware, markInstanceForDisposal } from "../../src/server/routes/instance/httpapi/lifecycle"
 import { instanceRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/instance-context"
@@ -22,17 +19,15 @@ import { workspaceRouterMiddleware } from "../../src/server/routes/instance/http
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
 import { withFixedWorkspaceID } from "../fixture/flag"
+import { workspaceLayerWithRuntimeFlags } from "../fixture/workspace"
 import { waitGlobalBusEvent } from "./global-bus"
 import { testEffect } from "../lib/effect"
 
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
     yield* Effect.promise(() => resetDatabase())
-    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
-        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
         await disposeAllInstances()
         await resetDatabase()
       }),
@@ -40,10 +35,7 @@ const testStateLayer = Layer.effectDiscard(
   }),
 )
 
-const workspaceLayer = Workspace.defaultLayer.pipe(
-  Layer.provide(InstanceStore.defaultLayer),
-  Layer.provide(InstanceBootstrap.defaultLayer),
-)
+const workspaceLayer = workspaceLayerWithRuntimeFlags({ experimentalWorkspaces: true })
 
 const it = testEffect(
   Layer.mergeAll(

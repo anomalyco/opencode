@@ -1,10 +1,10 @@
 import { Schema } from "effect"
-import { Prompt } from "@opencode-ai/core/session-prompt"
+import { Prompt } from "./session-prompt"
 import { SessionEvent } from "./session-event"
 import { EventV2 } from "./event"
-import { ToolOutput } from "@opencode-ai/core/tool-output"
-import { V2Schema } from "@opencode-ai/core/v2-schema"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ToolOutput } from "./tool-output"
+import { V2Schema } from "./v2-schema"
+import { ModelV2 } from "./model"
 
 export const ID = EventV2.ID
 export type ID = Schema.Schema.Type<typeof ID>
@@ -20,7 +20,7 @@ const Base = {
 export class AgentSwitched extends Schema.Class<AgentSwitched>("Session.Message.AgentSwitched")({
   ...Base,
   type: Schema.Literal("agent-switched"),
-  agent: SessionEvent.AgentSwitched.fields.data.fields.agent,
+  agent: SessionEvent.AgentSwitched.data.fields.agent,
 }) {}
 
 export class ModelSwitched extends Schema.Class<ModelSwitched>("Session.Message.ModelSwitched")({
@@ -43,16 +43,16 @@ export class User extends Schema.Class<User>("Session.Message.User")({
 
 export class Synthetic extends Schema.Class<Synthetic>("Session.Message.Synthetic")({
   ...Base,
-  sessionID: SessionEvent.Synthetic.fields.data.fields.sessionID,
-  text: SessionEvent.Synthetic.fields.data.fields.text,
+  sessionID: SessionEvent.Synthetic.data.fields.sessionID,
+  text: SessionEvent.Synthetic.data.fields.text,
   type: Schema.Literal("synthetic"),
 }) {}
 
 export class Shell extends Schema.Class<Shell>("Session.Message.Shell")({
   ...Base,
   type: Schema.Literal("shell"),
-  callID: SessionEvent.Shell.Started.fields.data.fields.callID,
-  command: SessionEvent.Shell.Started.fields.data.fields.command,
+  callID: SessionEvent.Shell.Started.data.fields.callID,
+  command: SessionEvent.Shell.Started.data.fields.command,
   output: Schema.String,
   time: Schema.Struct({
     created: V2Schema.DateTimeUtcFromMillis,
@@ -130,7 +130,7 @@ export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistan
   ...Base,
   type: Schema.Literal("assistant"),
   agent: Schema.String,
-  model: SessionEvent.Step.Started.fields.data.fields.model,
+  model: SessionEvent.Step.Started.data.fields.model,
   content: AssistantContent.pipe(Schema.Array),
   snapshot: Schema.Struct({
     start: Schema.String.pipe(Schema.optional),
@@ -147,7 +147,7 @@ export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistan
       write: Schema.Finite,
     }),
   }).pipe(Schema.optional),
-  error: SessionEvent.Step.Failed.fields.data.fields.error.pipe(Schema.optional),
+  error: SessionEvent.Step.Failed.data.fields.error.pipe(Schema.optional),
   time: Schema.Struct({
     created: V2Schema.DateTimeUtcFromMillis,
     completed: V2Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
@@ -156,7 +156,7 @@ export class Assistant extends Schema.Class<Assistant>("Session.Message.Assistan
 
 export class Compaction extends Schema.Class<Compaction>("Session.Message.Compaction")({
   type: Schema.Literal("compaction"),
-  reason: SessionEvent.Compaction.Started.fields.data.fields.reason,
+  reason: SessionEvent.Compaction.Started.data.fields.reason,
   summary: Schema.String,
   include: Schema.String.pipe(Schema.optional),
   ...Base,

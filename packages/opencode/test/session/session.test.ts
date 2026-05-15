@@ -12,6 +12,7 @@ import { Bus } from "@/bus"
 import { Storage } from "@/storage/storage"
 import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { BackgroundJob } from "@/background/job"
 
 void Log.init({ print: false })
 
@@ -22,6 +23,7 @@ const it = testEffect(
       Layer.provide(Storage.defaultLayer),
       Layer.provide(SyncEvent.defaultLayer),
       Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
+      Layer.provide(BackgroundJob.defaultLayer),
     ),
     CrossSpawnSpawner.defaultLayer,
   ),
