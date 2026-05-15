@@ -43,15 +43,6 @@ describe("getTerminalServerScope", () => {
         "sidecar" as ServerKey,
       ),
     ).toBeUndefined()
-    expect(
-      getTerminalServerScope(
-        { type: "http", http: { url: "http://localhost:4096" } },
-        "http://localhost:4096" as ServerKey,
-      ),
-    ).toBeUndefined()
-    expect(
-      getTerminalServerScope({ type: "http", http: { url: "http://[::1]:4096" } }, "http://[::1]:4096" as ServerKey),
-    ).toBeUndefined()
   })
 
   test("scopes non-local server keys", () => {
@@ -61,6 +52,15 @@ describe("getTerminalServerScope", () => {
         "wsl:Debian" as ServerKey,
       ),
     ).toBe("wsl:Debian" as ServerKey)
+    expect(
+      getTerminalServerScope(
+        { type: "http", http: { url: "http://localhost:4096" } },
+        "http://localhost:4096" as ServerKey,
+      ),
+    ).toBe("http://localhost:4096" as ServerKey)
+    expect(
+      getTerminalServerScope({ type: "http", http: { url: "http://[::1]:4096" } }, "http://[::1]:4096" as ServerKey),
+    ).toBe("http://[::1]:4096" as ServerKey)
     expect(
       getTerminalServerScope(
         { type: "http", http: { url: "https://example.com" } },

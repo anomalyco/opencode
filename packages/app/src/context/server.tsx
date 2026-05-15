@@ -120,6 +120,10 @@ export namespace ServerConnection {
   export const Key = { make: (v: string) => v as Key }
 }
 
+export function isLocalConnection(conn: ServerConnection.Any): boolean {
+  return conn.type === "sidecar" && conn.variant === "base"
+}
+
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
   init: (props: {
@@ -230,7 +234,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     )
     const isLocal = createMemo(() => {
       const c = current()
-      return (c?.type === "sidecar" && c.variant === "base") || (c?.type === "http" && isLocalHost(c.http.url))
+      return !!c && isLocalConnection(c)
     })
 
     return {

@@ -91,20 +91,6 @@ export function getWorkspaceTerminalCacheKey(dir: string, scope?: string) {
 export function getTerminalServerScope(conn: ServerConnection.Any | undefined, key: ServerConnection.Key) {
   if (!conn) return
   if (conn.type === "sidecar" && conn.variant === "base") return
-  if (conn.type === "http") {
-    try {
-      const url = new URL(conn.http.url)
-      if (
-        url.hostname === "localhost" ||
-        url.hostname === "127.0.0.1" ||
-        url.hostname === "::1" ||
-        url.hostname === "[::1]"
-      )
-        return
-    } catch {
-      return key
-    }
-  }
   return key
 }
 
