@@ -11,9 +11,11 @@ import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
-import { InstanceState } from "@/effect/instance-state"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
+import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
+import { context as instanceContext } from "@/project/instance-context"
 import { init } from "#db"
-import { Effect, Schema } from "effect"
+import { Context, Effect, Fiber, Schema } from "effect"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
@@ -167,7 +169,7 @@ export function use<T>(callback: (trx: TxOrDb) => T): T {
 }
 
 export function effect(fn: () => any | Promise<any>) {
-  const bound = InstanceState.bind(fn)
+  const bound = bindInstanceRef(fn)
   try {
     ctx.use().effects.push(bound)
   } catch {
@@ -188,12 +190,33 @@ export function transaction<T>(
   } catch (err) {
     if (err instanceof LocalContext.NotFound) {
       const effects: (() => void | Promise<void>)[] = []
-      const txCallback = InstanceState.bind((tx: TxOrDb) => ctx.provide({ tx, effects }, () => callback(tx)))
+      const txCallback = bindInstanceRef((tx: TxOrDb) => ctx.provide({ tx, effects }, () => callback(tx)))
       const result = Client().transaction(txCallback, { behavior: options?.behavior })
       for (const effect of effects) effect()
       return result as NotPromise<T>
     }
     throw err
+  }
+}
+
+function bindInstanceRef<Args extends readonly unknown[], Result>(fn: (...args: Args) => Result) {
+  const fiber = Fiber.getCurrent()
+  const instance = fiber
+    ? Context.getReferenceUnsafe(fiber.context, InstanceRef)
+    : (() => {
+        try {
+          return instanceContext.use()
+        } catch (err) {
+          if (!(err instanceof LocalContext.NotFound)) throw err
+        }
+      })()
+  const workspace = fiber ? Context.getReferenceUnsafe(fiber.context, WorkspaceRef) : WorkspaceContext.workspaceID
+  if (!instance && workspace === undefined) return fn
+  return (...args: Args) => {
+    const run = () => fn(...args)
+    const withInstance = instance ? () => instanceContext.provide(instance, run) : run
+    if (workspace === undefined) return withInstance()
+    return WorkspaceContext.restore(workspace, withInstance)
   }
 }
 
