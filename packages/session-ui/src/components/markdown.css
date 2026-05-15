@@ -61,7 +61,7 @@
   h4,
   h5,
   h6 {
-    font-size: 13px;
+    font-size: var(--font-size-base);
     color: var(--v2-text-text-muted);
     font-weight: var(--font-weight-medium);
     margin-top: 20px;
@@ -175,7 +175,8 @@
   .shiki {
     background: var(--color-background-stronger);
     color: var(--text-base);
-    font-size: 13px;
+    font-size: var(--font-size-mono);
+    line-height: var(--line-height-mono);
     padding: 12px;
     border-radius: 6px;
     border: 0.5px solid var(--v2-border-border-base);
@@ -243,6 +244,7 @@
     unicode-bidi: isolate;
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
+    font-size: var(--font-size-mono);
     color: var(--v2-text-text-base);
     font-weight: var(--font-weight-medium);
     padding: 2px 4px;

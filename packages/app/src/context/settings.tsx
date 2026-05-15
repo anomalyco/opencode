@@ -42,6 +42,7 @@ export interface Settings {
   }
   appearance: {
     fontSize: number
+    lineHeight: number
     mono: string
     sans: string
     terminal: string
@@ -198,6 +199,7 @@ const defaultSettings: Settings = {
   },
   appearance: {
     fontSize: 14,
+    lineHeight: 1.6,
     mono: "",
     sans: "",
     terminal: "",
@@ -346,8 +348,22 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     createEffect(() => {
       if (typeof document === "undefined") return
       const root = document.documentElement
+      const fontSize = store.appearance?.fontSize ?? defaultSettings.appearance.fontSize
+      const lineHeight = store.appearance?.lineHeight ?? defaultSettings.appearance.lineHeight
       root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.mono))
       root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans))
+      root.style.setProperty("--font-size-base", `${fontSize}px`)
+      root.style.setProperty("--font-size-x-small", `calc(${fontSize}px * 0.85)`)
+      root.style.setProperty("--font-size-small", `calc(${fontSize}px * 0.9)`)
+      root.style.setProperty("--font-size-large", `calc(${fontSize}px * 1.2)`)
+      root.style.setProperty("--font-size-x-large", `calc(${fontSize}px * 1.4)`)
+      root.style.setProperty("--font-size-mono", `${fontSize}px`)
+      root.style.setProperty("--line-height-normal", `${lineHeight * 0.8125}`)
+      root.style.setProperty("--line-height-large", `${lineHeight * 0.9375}`)
+      root.style.setProperty("--line-height-x-large", `${lineHeight * 1.125}`)
+      root.style.setProperty("--line-height-2x-large", `${lineHeight * 1.25}`)
+      root.style.setProperty("--line-height-mono", `${lineHeight}`)
+      root.style.setProperty("--line-height-mono-px", `${fontSize * lineHeight}px`)
     })
 
     createEffect(() => {
@@ -462,6 +478,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         fontSize: withFallback(() => store.appearance?.fontSize, defaultSettings.appearance.fontSize),
         setFontSize(value: number) {
           setStore("appearance", "fontSize", value)
+        },
+        lineHeight: withFallback(() => store.appearance?.lineHeight, defaultSettings.appearance.lineHeight),
+        setLineHeight(value: number) {
+          setStore("appearance", "lineHeight", value)
         },
         font: withFallback(() => store.appearance?.mono, defaultSettings.appearance.mono),
         setFont(value: string) {
