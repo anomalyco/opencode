@@ -11,7 +11,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import type { Config } from "@/config/config"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
-import { context, type InstanceContext } from "../../src/project/instance-context"
+import type { InstanceContext } from "../../src/project/instance-context"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { InstanceStore } from "../../src/project/instance-store"
 import { TestLLMServer } from "../lib/llm-server"
@@ -29,10 +29,10 @@ export async function provideTestInstance<R>(input: {
   init?: Effect.Effect<void>
   fn: (ctx: InstanceContext) => R
 }) {
-  const ctx = await runTestInstanceStore((store) => store.load({ directory: input.directory }))
+    const ctx = await runTestInstanceStore((store) => store.load({ directory: input.directory }))
   try {
     if (input.init) await testInstanceRuntime.runPromise(input.init.pipe(Effect.provideService(InstanceRef, ctx)))
-    return await context.provide(ctx, () => input.fn(ctx))
+    return await input.fn(ctx)
   } finally {
     await runTestInstanceStore((store) => store.dispose(ctx))
   }

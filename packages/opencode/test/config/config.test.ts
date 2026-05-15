@@ -70,16 +70,20 @@ function currentInstance() {
   }
 }
 
-const provideCurrentInstance = <A, E, R>(effect: Effect.Effect<A, E, R>) => {
-  const ctx = currentInstance()
-  return ctx ? effect.pipe(Effect.provideService(InstanceRef, ctx)) : effect
+const provideCurrentInstance = <A, E, R>(effect: Effect.Effect<A, E, R>, input = currentInstance()) => {
+  return input ? effect.pipe(Effect.provideService(InstanceRef, input)) : effect
 }
 
-const load = () =>
-  Effect.runPromise(Config.Service.use((svc) => provideCurrentInstance(svc.get())).pipe(Effect.scoped, Effect.provide(layer)))
-const save = (config: Config.Info) =>
+const load = (ctx = currentInstance()) =>
   Effect.runPromise(
-    Config.Service.use((svc) => provideCurrentInstance(svc.update(config))).pipe(Effect.scoped, Effect.provide(layer)),
+    Config.Service.use((svc) => provideCurrentInstance(svc.get(), ctx)).pipe(Effect.scoped, Effect.provide(layer)),
+  )
+const save = (config: Config.Info, ctx = currentInstance()) =>
+  Effect.runPromise(
+    Config.Service.use((svc) => provideCurrentInstance(svc.update(config), ctx)).pipe(
+      Effect.scoped,
+      Effect.provide(layer),
+    ),
   )
 const saveGlobal = (config: Config.Info) =>
   Effect.runPromise(
@@ -90,18 +94,19 @@ const saveGlobal = (config: Config.Info) =>
     ),
   )
 const clear = async (wait = false) => {
-  await Effect.runPromise(
-    Config.Service.use((svc) => provideCurrentInstance(svc.invalidate())).pipe(Effect.scoped, Effect.provide(layer)),
-  )
+  await Effect.runPromise(Config.Service.use((svc) => svc.invalidate()).pipe(Effect.scoped, Effect.provide(layer)))
   if (wait) await InstanceRuntime.disposeAllInstances()
 }
-const listDirs = () =>
+const listDirs = (ctx = currentInstance()) =>
   Effect.runPromise(
-    Config.Service.use((svc) => provideCurrentInstance(svc.directories())).pipe(Effect.scoped, Effect.provide(layer)),
+    Config.Service.use((svc) => provideCurrentInstance(svc.directories(), ctx)).pipe(
+      Effect.scoped,
+      Effect.provide(layer),
+    ),
   )
-const ready = () =>
+const ready = (ctx = currentInstance()) =>
   Effect.runPromise(
-    Config.Service.use((svc) => provideCurrentInstance(svc.waitForDependencies())).pipe(
+    Config.Service.use((svc) => provideCurrentInstance(svc.waitForDependencies(), ctx)).pipe(
       Effect.scoped,
       Effect.provide(layer),
     ),
@@ -643,9 +648,9 @@ test("validates config schema and throws on invalid fields", async () => {
   })
   await provideTestInstance({
     directory: tmp.path,
-    fn: async () => {
+    fn: async (ctx) => {
       // Strict schema should throw an error for invalid fields
-      await expect(load()).rejects.toThrow()
+      await expect(load(ctx)).rejects.toThrow()
     },
   })
 })
@@ -658,8 +663,8 @@ test("throws error for invalid JSON", async () => {
   })
   await provideTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      await expect(load()).rejects.toThrow()
+    fn: async (ctx) => {
+      await expect(load(ctx)).rejects.toThrow()
     },
   })
 })
@@ -1157,8 +1162,8 @@ test("resolves scoped npm plugins in config", async () => {
 
   await provideTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       const pluginEntries = config.plugin ?? []
       expect(pluginEntries).toContain("@scope/plugin")
     },
@@ -1195,8 +1200,8 @@ test("merges plugin arrays from global and local configs", async () => {
 
   await provideTestInstance({
     directory: path.join(tmp.path, "project"),
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       const plugins = config.plugin ?? []
 
       // Should contain both global and local plugins
@@ -1354,8 +1359,8 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
 
   await provideTestInstance({
     directory: path.join(tmp.path, "project"),
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       const plugins = config.plugin ?? []
 
       // Should contain all unique plugins
@@ -1403,8 +1408,8 @@ test("keeps plugin origins aligned with merged plugin list", async () => {
 
   await provideTestInstance({
     directory: path.join(tmp.path, "project"),
-    fn: async () => {
-      const cfg = await load()
+    fn: async (ctx) => {
+      const cfg = await load(ctx)
       const plugins = cfg.plugin ?? []
       const origins = cfg.plugin_origins ?? []
       const names = plugins.map((item) => ConfigPlugin.pluginSpecifier(item))
@@ -2269,8 +2274,8 @@ describe("deduplicatePluginOrigins", () => {
 
     await provideTestInstance({
       directory: path.join(tmp.path, "project"),
-      fn: async () => {
-        const config = await load()
+      fn: async (ctx) => {
+        const config = await load(ctx)
         const plugins = config.plugin ?? []
 
         expect(plugins.some((p) => ConfigPlugin.pluginSpecifier(p) === "my-plugin@1.0.0")).toBe(true)
