@@ -6,6 +6,7 @@ import { onMount } from "solid-js"
 import { ProjectProvider, useProject } from "../../../src/cli/cmd/tui/context/project"
 import { SDKProvider } from "../../../src/cli/cmd/tui/context/sdk"
 import { useEvent } from "../../../src/cli/cmd/tui/context/event"
+import { ArgsProvider } from "../../../src/cli/cmd/tui/context/args"
 
 const projectID = "proj_test"
 
@@ -46,6 +47,17 @@ function update(version: string): Event {
   }
 }
 
+function sessionStatus(sessionID: string): Event {
+  return {
+    id: `evt_session_status_${sessionID}`,
+    type: "session.status",
+    properties: {
+      sessionID,
+      status: { type: "busy" },
+    },
+  }
+}
+
 function createSource() {
   let fn: ((event: GlobalEvent) => void) | undefined
 
@@ -65,7 +77,7 @@ function createSource() {
   }
 }
 
-async function mount() {
+async function mount(input: { sessionID?: string } = {}) {
   const source = createSource()
   const seen: Event[] = []
   const workspaces: Array<string | undefined> = []
@@ -82,19 +94,21 @@ async function mount() {
   })
 
   const app = await testRender(() => (
-    <SDKProvider url="http://test" directory="/tmp/root" events={source.source} fetch={fetch}>
-      <ProjectProvider>
-        <Probe
-          onReady={async (ctx) => {
-            project = ctx.project
-            await project.sync()
-            done()
-          }}
-          seen={seen}
-          workspaces={workspaces}
-        />
-      </ProjectProvider>
-    </SDKProvider>
+    <ArgsProvider sessionID={input.sessionID}>
+      <SDKProvider url="http://test" directory="/tmp/root" events={source.source} fetch={fetch}>
+        <ProjectProvider>
+          <Probe
+            onReady={async (ctx) => {
+              project = ctx.project
+              await project.sync()
+              done()
+            }}
+            seen={seen}
+            workspaces={workspaces}
+          />
+        </ProjectProvider>
+      </SDKProvider>
+    </ArgsProvider>
   ))
 
   await ready
@@ -174,6 +188,33 @@ describe("useEvent", () => {
       await wait(() => seen.length === 1)
 
       expect(seen).toEqual([update("1.2.3")])
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
+  test("delivers selected session events even when project metadata does not match", async () => {
+    const { app, emit, seen } = await mount({ sessionID: "ses_selected" })
+
+    try {
+      emit(event(sessionStatus("ses_selected"), { directory: "/tmp/other", project: "proj_other" }))
+
+      await wait(() => seen.length === 1)
+
+      expect(seen).toEqual([sessionStatus("ses_selected")])
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
+  test("ignores other session events when project metadata does not match", async () => {
+    const { app, emit, seen } = await mount({ sessionID: "ses_selected" })
+
+    try {
+      emit(event(sessionStatus("ses_other"), { directory: "/tmp/other", project: "proj_other" }))
+      await Bun.sleep(30)
+
+      expect(seen).toHaveLength(0)
     } finally {
       app.renderer.destroy()
     }

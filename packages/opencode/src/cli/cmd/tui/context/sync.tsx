@@ -113,6 +113,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const kv = useKV()
 
     const fullSyncedSessions = new Set<string>()
+    const messageSyncs = new Set<string>()
+    const pendingPartDeltas = new Map<string, Array<{ field: string; delta: string }>>()
 
     function sessionListQuery(): { scope?: "project"; path?: string } {
       if (!kv.get("session_directory_filter_enabled", true)) return { scope: "project" }
@@ -131,6 +133,57 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     }
 
     event.subscribe((event, { workspace }) => {
+      const queuePartDelta = (messageID: string, partID: string, field: string, delta: string) => {
+        const key = `${messageID}:${partID}`
+        pendingPartDeltas.set(key, [...(pendingPartDeltas.get(key) ?? []), { field, delta }])
+      }
+
+      const applyPendingPartDeltas = (messageID: string, partID: string, part: Part) => {
+        const key = `${messageID}:${partID}`
+        const deltas = pendingPartDeltas.get(key)
+        if (!deltas) return
+        for (const pending of deltas) {
+          const field = pending.field as keyof typeof part
+          const existing = part[field] as string | undefined
+          ;(part[field] as string) = (existing ?? "") + pending.delta
+        }
+        pendingPartDeltas.delete(key)
+      }
+
+      const syncMessage = (sessionID: string, messageID: string) => {
+        const key = `${sessionID}:${messageID}`
+        if (messageSyncs.has(key)) return
+        messageSyncs.add(key)
+        void sdk.client.session
+          .message({ sessionID, messageID, workspace })
+          .then((response) => {
+            const message = response.data
+            if (!message) return
+            setStore(
+              produce((draft) => {
+                const messages = (draft.message[sessionID] ??= [])
+                const result = Binary.search(messages, message.info.id, (m) => m.id)
+                if (result.found) messages[result.index] = message.info
+                if (!result.found) messages.splice(result.index, 0, message.info)
+                draft.part[message.info.id] = message.parts
+                for (const part of draft.part[message.info.id] ?? []) {
+                  applyPendingPartDeltas(message.info.id, part.id, part)
+                }
+              }),
+            )
+          })
+          .catch((error) => {
+            Log.Default.debug("failed to sync message after late part delta", {
+              sessionID,
+              messageID,
+              error: error instanceof Error ? error.message : String(error),
+            })
+          })
+          .finally(() => {
+            messageSyncs.delete(key)
+          })
+      }
+
       switch (event.type) {
         case "server.instance.disposed":
           void bootstrap()
@@ -326,9 +379,27 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "message.part.delta": {
           const parts = store.part[event.properties.messageID]
-          if (!parts) break
+          if (!parts) {
+            queuePartDelta(
+              event.properties.messageID,
+              event.properties.partID,
+              event.properties.field,
+              event.properties.delta,
+            )
+            syncMessage(event.properties.sessionID, event.properties.messageID)
+            break
+          }
           const result = Binary.search(parts, event.properties.partID, (p) => p.id)
-          if (!result.found) break
+          if (!result.found) {
+            queuePartDelta(
+              event.properties.messageID,
+              event.properties.partID,
+              event.properties.field,
+              event.properties.delta,
+            )
+            syncMessage(event.properties.sessionID, event.properties.messageID)
+            break
+          }
           setStore(
             "part",
             event.properties.messageID,
