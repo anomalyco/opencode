@@ -37,6 +37,10 @@ export async function provideTestInstance<R>(input: {
   }
 }
 
+export async function withTestInstance<R>(input: { directory: string; fn: (ctx: InstanceContext) => R }) {
+  return input.fn(await runTestInstanceStore((store) => store.load({ directory: input.directory })))
+}
+
 export async function reloadTestInstance(input: { directory: string }) {
   return runTestInstanceStore((store) => store.reload(input))
 }
