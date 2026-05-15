@@ -1,5 +1,10 @@
 import { test, expect } from "bun:test"
+import type { Message, Part } from "@opencode-ai/sdk/v2"
+import { Schema } from "effect"
+import { MessageV2 } from "@/session/message-v2"
 import {
+  normalizeMessageInfoForImport,
+  normalizePartForImport,
   parseShareUrl,
   shouldAttachShareAuthHeaders,
   transformShareData,
@@ -51,4 +56,60 @@ test("returns null for invalid share data", () => {
   expect(transformShareData([])).toBeNull()
   expect(transformShareData([{ type: "message", data: {} as any }])).toBeNull()
   expect(transformShareData([{ type: "session", data: { id: "s" } as any }])).toBeNull() // no messages
+})
+
+test("normalizes legacy messages missing agent before decoding", () => {
+  const messages: Array<{ info: Message; parts: Part[] }> = [
+    {
+      info: {
+        role: "user",
+        time: { created: 1 },
+        id: "msg_01J5Y5H0AH4Q4NXJ6P4C3P5V2M",
+        sessionID: "ses_01J5Y5H0AH4Q4NXJ6P4C3P5V2K",
+      } as unknown as Message,
+      parts: [],
+    },
+    {
+      info: {
+        role: "assistant",
+        time: { created: 2, completed: 3 },
+        modelID: "grok-code",
+        providerID: "opencode",
+        mode: "build",
+        path: { cwd: "/repo", root: "/repo" },
+        cost: 0,
+        tokens: { input: 1, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+        id: "msg_01J5Y5H0AH4Q4NXJ6P4C3P5V2N",
+        sessionID: "ses_01J5Y5H0AH4Q4NXJ6P4C3P5V2K",
+      } as unknown as Message,
+      parts: [],
+    },
+  ]
+  const decode = Schema.decodeUnknownSync(MessageV2.Info)
+
+  expect(decode(normalizeMessageInfoForImport(messages[0].info, messages, 0))).toMatchObject({
+    agent: "build",
+    model: { providerID: "opencode", modelID: "grok-code" },
+  })
+  expect(decode(normalizeMessageInfoForImport(messages[1].info, messages, 1))).toMatchObject({
+    agent: "build",
+    parentID: "msg_01J5Y5H0AH4Q4NXJ6P4C3P5V2M",
+  })
+})
+
+test("normalizes legacy step finish parts missing reason before decoding", () => {
+  const decode = Schema.decodeUnknownSync(MessageV2.Part)
+
+  expect(
+    decode(
+      normalizePartForImport({
+        type: "step-finish",
+        cost: 0,
+        tokens: { input: 1, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+        id: "prt_01J5Y5H0AH4Q4NXJ6P4C3P5V2N",
+        sessionID: "ses_01J5Y5H0AH4Q4NXJ6P4C3P5V2K",
+        messageID: "msg_01J5Y5H0AH4Q4NXJ6P4C3P5V2M",
+      } as unknown as Part),
+    ),
+  ).toMatchObject({ reason: "stop" })
 })

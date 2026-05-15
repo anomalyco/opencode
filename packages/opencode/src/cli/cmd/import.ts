@@ -77,6 +77,38 @@ export function transformShareData(shareData: ShareData[]): {
 
 type ExportData = { info: SDKSession; messages: Array<{ info: Message; parts: Part[] }> }
 
+export function normalizeMessageInfoForImport(info: Message, messages: ExportData["messages"], index: number) {
+  const record = toRecord(info)
+  const context = findMessageContext(messages, index)
+
+  if (record.role === "user") {
+    return {
+      ...info,
+      agent: typeof record.agent === "string" ? record.agent : context.agent,
+      model: isUserModel(record.model) ? record.model : context.model,
+    }
+  }
+
+  if (record.role === "assistant" && (typeof record.agent !== "string" || typeof record.parentID !== "string")) {
+    return {
+      ...info,
+      agent:
+        typeof record.agent === "string" ? record.agent : typeof record.mode === "string" ? record.mode : context.agent,
+      ...(typeof record.parentID === "string" || !context.parentID ? {} : { parentID: context.parentID }),
+    }
+  }
+
+  return info
+}
+
+export function normalizePartForImport(part: Part) {
+  const record = toRecord(part)
+  if (record.type === "step-finish" && typeof record.reason !== "string") {
+    return { ...part, reason: "stop" }
+  }
+  return part
+}
+
 export const ImportCommand = effectCmd({
   command: "import <file>",
   describe: "import session data from JSON file or URL",
@@ -179,8 +211,10 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, projectI
       .run(),
   )
 
-  for (const msg of exportData.messages) {
-    const msgInfo = decodeMessageInfo(msg.info) as MessageV2.Info
+  for (const [index, msg] of exportData.messages.entries()) {
+    const msgInfo = decodeMessageInfo(
+      normalizeMessageInfoForImport(msg.info, exportData.messages, index),
+    ) as MessageV2.Info
     const { id, sessionID: _, ...msgData } = msgInfo
     Database.use((db) =>
       db
@@ -196,7 +230,7 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, projectI
     )
 
     for (const part of msg.parts) {
-      const partInfo = decodePart(part) as MessageV2.Part
+      const partInfo = decodePart(normalizePartForImport(part)) as MessageV2.Part
       const { id: partId, sessionID: _s, messageID, ...partData } = partInfo
       Database.use((db) =>
         db
@@ -216,3 +250,39 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, projectI
   process.stdout.write(`Imported session: ${exportData.info.id}`)
   process.stdout.write(EOL)
 })
+
+function findMessageContext(messages: ExportData["messages"], index: number) {
+  const message = messages
+    .slice(index + 1)
+    .concat(messages.slice(0, index).reverse())
+    .map((item) => toRecord(item.info))
+    .find((item) => item.role === "assistant")
+
+  return {
+    agent:
+      typeof message?.agent === "string" ? message.agent : typeof message?.mode === "string" ? message.mode : "build",
+    model: isUserModel(message?.model)
+      ? message.model
+      : typeof message?.providerID === "string" && typeof message?.modelID === "string"
+        ? {
+            providerID: message.providerID,
+            modelID: message.modelID,
+            ...(typeof message.variant === "string" ? { variant: message.variant } : {}),
+          }
+        : undefined,
+    parentID: messages
+      .slice(0, index)
+      .reverse()
+      .map((item) => toRecord(item.info))
+      .find((item) => item.role === "user" && typeof item.id === "string")?.id,
+  }
+}
+
+function toRecord(value: unknown) {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+}
+
+function isUserModel(value: unknown): value is { providerID: string; modelID: string; variant?: string } {
+  const record = toRecord(value)
+  return typeof record.providerID === "string" && typeof record.modelID === "string"
+}
