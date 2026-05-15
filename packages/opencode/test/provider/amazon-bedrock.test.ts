@@ -4,7 +4,7 @@ import { unlink } from "fs/promises"
 
 import { ProviderID } from "../../src/provider/schema"
 import { tmpdir } from "../fixture/fixture"
-import { context } from "../../src/project/instance-context"
+import type { InstanceContext } from "../../src/project/instance-context"
 import { WithInstance } from "../../src/project/with-instance"
 import { Provider } from "@/provider/provider"
 import { Env } from "../../src/env"
@@ -16,13 +16,12 @@ import { InstanceRef } from "../../src/effect/instance-ref"
 import { makeRuntime } from "../../src/effect/run-service"
 
 const env = makeRuntime(Env.Service, Env.defaultLayer)
-const set = (k: string, v: string) => {
-  const ctx = context.use()
+const set = (ctx: InstanceContext, k: string, v: string) => {
+  process.env[k] = v
   return env.runSync((svc) => svc.set(k, v).pipe(Effect.provideService(InstanceRef, ctx)))
 }
 
-async function list() {
-  const ctx = context.use()
+async function list(ctx: InstanceContext) {
   return AppRuntime.runPromise(
     Effect.gen(function* () {
       const provider = yield* Provider.Service
@@ -51,10 +50,10 @@ test("Bedrock: config region takes precedence over AWS_REGION env var", async ()
   })
   await WithInstance.provide({
     directory: tmp.path,
-    fn: async () => {
-      set("AWS_REGION", "us-east-1")
-      set("AWS_PROFILE", "default")
-      const providers = await list()
+    fn: async (ctx) => {
+      set(ctx, "AWS_REGION", "us-east-1")
+      set(ctx, "AWS_PROFILE", "default")
+      const providers = await list(ctx)
       expect(providers[ProviderID.amazonBedrock]).toBeDefined()
       expect(providers[ProviderID.amazonBedrock].options?.region).toBe("eu-west-1")
     },
@@ -74,10 +73,10 @@ test("Bedrock: falls back to AWS_REGION env var when no config region", async ()
   })
   await WithInstance.provide({
     directory: tmp.path,
-    fn: async () => {
-      set("AWS_REGION", "eu-west-1")
-      set("AWS_PROFILE", "default")
-      const providers = await list()
+    fn: async (ctx) => {
+      set(ctx, "AWS_REGION", "eu-west-1")
+      set(ctx, "AWS_PROFILE", "default")
+      const providers = await list(ctx)
       expect(providers[ProviderID.amazonBedrock]).toBeDefined()
       expect(providers[ProviderID.amazonBedrock].options?.region).toBe("eu-west-1")
     },
@@ -127,11 +126,11 @@ test("Bedrock: loads when bearer token from auth.json is present", async () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        set("AWS_PROFILE", "")
-        set("AWS_ACCESS_KEY_ID", "")
-        set("AWS_BEARER_TOKEN_BEDROCK", "")
-        const providers = await list()
+      fn: async (ctx) => {
+        set(ctx, "AWS_PROFILE", "")
+        set(ctx, "AWS_ACCESS_KEY_ID", "")
+        set(ctx, "AWS_BEARER_TOKEN_BEDROCK", "")
+        const providers = await list(ctx)
         expect(providers[ProviderID.amazonBedrock]).toBeDefined()
         expect(providers[ProviderID.amazonBedrock].options?.region).toBe("eu-west-1")
       },
@@ -171,10 +170,10 @@ test("Bedrock: config profile takes precedence over AWS_PROFILE env var", async 
   })
   await WithInstance.provide({
     directory: tmp.path,
-    fn: async () => {
-      set("AWS_PROFILE", "default")
-      set("AWS_ACCESS_KEY_ID", "test-key-id")
-      const providers = await list()
+    fn: async (ctx) => {
+      set(ctx, "AWS_PROFILE", "default")
+      set(ctx, "AWS_ACCESS_KEY_ID", "test-key-id")
+      const providers = await list(ctx)
       expect(providers[ProviderID.amazonBedrock]).toBeDefined()
       expect(providers[ProviderID.amazonBedrock].options?.region).toBe("us-east-1")
     },
@@ -201,9 +200,9 @@ test("Bedrock: includes custom endpoint in options when specified", async () => 
   })
   await WithInstance.provide({
     directory: tmp.path,
-    fn: async () => {
-      set("AWS_PROFILE", "default")
-      const providers = await list()
+    fn: async (ctx) => {
+      set(ctx, "AWS_PROFILE", "default")
+      const providers = await list(ctx)
       expect(providers[ProviderID.amazonBedrock]).toBeDefined()
       expect(providers[ProviderID.amazonBedrock].options?.endpoint).toBe(
         "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com",
@@ -232,12 +231,12 @@ test("Bedrock: autoloads when AWS_WEB_IDENTITY_TOKEN_FILE is present", async () 
   })
   await WithInstance.provide({
     directory: tmp.path,
-    fn: async () => {
-      set("AWS_WEB_IDENTITY_TOKEN_FILE", "/var/run/secrets/eks.amazonaws.com/serviceaccount/token")
-      set("AWS_ROLE_ARN", "arn:aws:iam::123456789012:role/my-eks-role")
-      set("AWS_PROFILE", "")
-      set("AWS_ACCESS_KEY_ID", "")
-      const providers = await list()
+    fn: async (ctx) => {
+      set(ctx, "AWS_WEB_IDENTITY_TOKEN_FILE", "/var/run/secrets/eks.amazonaws.com/serviceaccount/token")
+      set(ctx, "AWS_ROLE_ARN", "arn:aws:iam::123456789012:role/my-eks-role")
+      set(ctx, "AWS_PROFILE", "")
+      set(ctx, "AWS_ACCESS_KEY_ID", "")
+      const providers = await list(ctx)
       expect(providers[ProviderID.amazonBedrock]).toBeDefined()
       expect(providers[ProviderID.amazonBedrock].options?.region).toBe("us-east-1")
     },
@@ -273,9 +272,9 @@ test("Bedrock: model with us. prefix should not be double-prefixed", async () =>
   })
   await WithInstance.provide({
     directory: tmp.path,
-    fn: async () => {
-      set("AWS_PROFILE", "default")
-      const providers = await list()
+    fn: async (ctx) => {
+      set(ctx, "AWS_PROFILE", "default")
+      const providers = await list(ctx)
       expect(providers[ProviderID.amazonBedrock]).toBeDefined()
       // The model should exist with the us. prefix
       expect(providers[ProviderID.amazonBedrock].models["us.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
@@ -308,9 +307,9 @@ test("Bedrock: model with global. prefix should not be prefixed", async () => {
   })
   await WithInstance.provide({
     directory: tmp.path,
-    fn: async () => {
-      set("AWS_PROFILE", "default")
-      const providers = await list()
+    fn: async (ctx) => {
+      set(ctx, "AWS_PROFILE", "default")
+      const providers = await list(ctx)
       expect(providers[ProviderID.amazonBedrock]).toBeDefined()
       expect(providers[ProviderID.amazonBedrock].models["global.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
     },
@@ -342,9 +341,9 @@ test("Bedrock: model with eu. prefix should not be double-prefixed", async () =>
   })
   await WithInstance.provide({
     directory: tmp.path,
-    fn: async () => {
-      set("AWS_PROFILE", "default")
-      const providers = await list()
+    fn: async (ctx) => {
+      set(ctx, "AWS_PROFILE", "default")
+      const providers = await list(ctx)
       expect(providers[ProviderID.amazonBedrock]).toBeDefined()
       expect(providers[ProviderID.amazonBedrock].models["eu.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
     },
@@ -376,9 +375,9 @@ test("Bedrock: model without prefix in US region should get us. prefix added", a
   })
   await WithInstance.provide({
     directory: tmp.path,
-    fn: async () => {
-      set("AWS_PROFILE", "default")
-      const providers = await list()
+    fn: async (ctx) => {
+      set(ctx, "AWS_PROFILE", "default")
+      const providers = await list(ctx)
       expect(providers[ProviderID.amazonBedrock]).toBeDefined()
       // Non-prefixed model should still be registered
       expect(providers[ProviderID.amazonBedrock].models["anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()

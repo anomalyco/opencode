@@ -6,7 +6,7 @@ import z from "zod"
 import { makeRuntime } from "../../src/effect/run-service"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { LLM } from "../../src/session/llm"
-import { context, type InstanceContext } from "../../src/project/instance-context"
+import type { InstanceContext } from "../../src/project/instance-context"
 import { WithInstance } from "../../src/project/with-instance"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
@@ -19,22 +19,20 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { AppRuntime } from "../../src/effect/app-runtime"
 
-async function getModel(providerID: ProviderID, modelID: ModelID, ctx?: InstanceContext) {
-  const instance = ctx ?? context.use()
-  const effect = Effect.gen(function* () {
+async function getModel(providerID: ProviderID, modelID: ModelID, ctx: InstanceContext) {
+    const effect = Effect.gen(function* () {
     const provider = yield* Provider.Service
     return yield* provider.getModel(providerID, modelID)
   })
-  return AppRuntime.runPromise(effect.pipe(Effect.provideService(InstanceRef, instance)))
+  return AppRuntime.runPromise(effect.pipe(Effect.provideService(InstanceRef, ctx)))
 }
 
 const llm = makeRuntime(LLM.Service, LLM.defaultLayer)
 
-async function drain(input: LLM.StreamInput, ctx?: InstanceContext) {
-  const instance = ctx ?? context.use()
-  return llm.runPromise((svc) => {
+async function drain(input: LLM.StreamInput, ctx: InstanceContext) {
+    return llm.runPromise((svc) => {
     const effect = svc.stream(input).pipe(Stream.runDrain)
-    return effect.pipe(Effect.provideService(InstanceRef, instance))
+    return effect.pipe(Effect.provideService(InstanceRef, ctx))
   })
 }
 
@@ -394,7 +392,7 @@ describe("session.llm.stream", () => {
           system: ["You are a helpful assistant."],
           messages: [{ role: "user", content: "Hello" }],
           tools: {},
-        })
+        }, ctx)
 
         const capture = await request
         const body = capture.body
@@ -542,8 +540,8 @@ describe("session.llm.stream", () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
+      fn: async (ctx) => {
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id), ctx)
         const sessionID = SessionID.make("session-test-tools")
         const agent = {
           name: "test",
@@ -577,7 +575,7 @@ describe("session.llm.stream", () => {
               execute: async () => ({ output: "" }),
             }),
           },
-        })
+        }, ctx)
 
         const capture = await request
         const tools = capture.body.tools as Array<{ function?: { name?: string } }> | undefined
@@ -656,8 +654,8 @@ describe("session.llm.stream", () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
+      fn: async (ctx) => {
+        const resolved = await getModel(ProviderID.openai, ModelID.make(model.id), ctx)
         const sessionID = SessionID.make("session-test-2")
         const agent = {
           name: "test",
@@ -684,7 +682,7 @@ describe("session.llm.stream", () => {
           system: ["You are a helpful assistant."],
           messages: [{ role: "user", content: "Hello" }],
           tools: {},
-        })
+        }, ctx)
 
         const capture = await request
         const body = capture.body
@@ -772,8 +770,8 @@ describe("session.llm.stream", () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
+      fn: async (ctx) => {
+        const resolved = await getModel(ProviderID.openai, ModelID.make(model.id), ctx)
         const sessionID = SessionID.make("session-test-data-url")
         const agent = {
           name: "test",
@@ -812,7 +810,7 @@ describe("session.llm.stream", () => {
             },
           ] as ModelMessage[],
           tools: {},
-        })
+        }, ctx)
 
         const capture = await request
         expect(capture.url.pathname.endsWith("/responses")).toBe(true)
@@ -891,8 +889,8 @@ describe("session.llm.stream", () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
+      fn: async (ctx) => {
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id), ctx)
         const sessionID = SessionID.make("session-test-3")
         const agent = {
           name: "test",
@@ -920,7 +918,7 @@ describe("session.llm.stream", () => {
           system: ["You are a helpful assistant."],
           messages: [{ role: "user", content: "Hello" }],
           tools: {},
-        })
+        }, ctx)
 
         const capture = await request
         const body = capture.body
@@ -1009,8 +1007,8 @@ describe("session.llm.stream", () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const resolved = await getModel(ProviderID.make("anthropic"), ModelID.make(model.id))
+      fn: async (ctx) => {
+        const resolved = await getModel(ProviderID.make("anthropic"), ModelID.make(model.id), ctx)
         const sessionID = SessionID.make("session-test-anthropic-tools")
         const agent = {
           name: "test",
@@ -1139,7 +1137,7 @@ describe("session.llm.stream", () => {
               execute: async () => ({ output: "stub" }),
             }),
           },
-        })
+        }, ctx)
 
         const capture = await request
         const body = capture.body
@@ -1250,8 +1248,8 @@ describe("session.llm.stream", () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
+      fn: async (ctx) => {
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id), ctx)
         const sessionID = SessionID.make("session-test-4")
         const agent = {
           name: "test",
@@ -1279,7 +1277,7 @@ describe("session.llm.stream", () => {
           system: ["You are a helpful assistant."],
           messages: [{ role: "user", content: "Hello" }],
           tools: {},
-        })
+        }, ctx)
 
         const capture = await request
         const body = capture.body
