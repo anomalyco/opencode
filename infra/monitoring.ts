@@ -73,7 +73,7 @@ const modelHttpErrorsQuery = (product: "go" | "zen") => {
 const providerHttpErrorsQuery = () => {
   const filters = [
     { column: "provider", op: "exists" },
-    { column: "provider", op: "!=", value: "fireworks-go-glm-5.1" },
+    { column: "status", op: "!=", value: "404" },
     { column: "user_agent", op: "contains", value: "opencode" },
   ]
   const successHttpStatus = calculatedField({
@@ -105,7 +105,7 @@ const providerHttpErrorsQuery = () => {
       },
     ],
     formulas: [
-      { name: "ERROR", expression: "IF(GTE(SUM($SUCCESS, $FAILED), 50), DIV($FAILED, SUM($SUCCESS, $FAILED)), 0)" },
+      { name: "ERROR", expression: "IF(GTE(SUM($SUCCESS, $FAILED), 100), DIV($FAILED, SUM($SUCCESS, $FAILED)), 0)" },
     ],
     timeRange: 900,
   }).json
