@@ -154,6 +154,15 @@ function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean) {
   return sdk.languageModel(modelID)
 }
 
+// Synchronous live-read of `process.env`. Loader `vars()` callbacks are sync
+// and run on every `currentProviders` overlay, so they cannot yield to
+// `dep.env()`. Routing all reads through this single helper names the intent
+// and gives one extension point if `Env` ever stops being a `process.env`
+// proxy.
+function liveEnv(key: string): string | undefined {
+  return process.env[key]
+}
+
 function custom(dep: CustomDep): Record<string, CustomLoader> {
   return {
     anthropic: () =>
@@ -252,7 +261,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           const liveResource = [
             provider.options?.resourceName,
             auth?.type === "api" ? auth.metadata?.resourceName : undefined,
-            process.env["AZURE_RESOURCE_NAME"],
+            liveEnv("AZURE_RESOURCE_NAME"),
           ].find((name) => typeof name === "string" && name.trim() !== "")
           if (liveResource) {
             return {
@@ -501,13 +510,13 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           // through baseURL templating. Falls back to init-time capture for
           // parity with the non-rotated case.
           const liveProject =
-            process.env["GOOGLE_VERTEX_PROJECT"] ??
-            process.env["GOOGLE_CLOUD_PROJECT"] ??
-            process.env["GCP_PROJECT"] ??
-            process.env["GCLOUD_PROJECT"] ??
+            liveEnv("GOOGLE_VERTEX_PROJECT") ??
+            liveEnv("GOOGLE_CLOUD_PROJECT") ??
+            liveEnv("GCP_PROJECT") ??
+            liveEnv("GCLOUD_PROJECT") ??
             project
           const liveLocation =
-            process.env["GOOGLE_VERTEX_LOCATION"] ?? process.env["GOOGLE_CLOUD_LOCATION"] ?? process.env["VERTEX_LOCATION"] ?? location
+            liveEnv("GOOGLE_VERTEX_LOCATION") ?? liveEnv("GOOGLE_CLOUD_LOCATION") ?? liveEnv("VERTEX_LOCATION") ?? location
           const endpoint =
             liveLocation === "global" ? "aiplatform.googleapis.com" : `${liveLocation}-aiplatform.googleapis.com`
           return {
@@ -774,7 +783,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           // rotation propagates through baseURL templating. Falls back to
           // init-time capture (env or auth metadata) when env is unset.
           return {
-            CLOUDFLARE_ACCOUNT_ID: process.env["CLOUDFLARE_ACCOUNT_ID"] ?? accountId,
+            CLOUDFLARE_ACCOUNT_ID: liveEnv("CLOUDFLARE_ACCOUNT_ID") ?? accountId,
           }
         },
       }
