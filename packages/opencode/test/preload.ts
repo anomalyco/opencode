@@ -3,6 +3,7 @@
 import os from "os"
 import path from "path"
 import fs from "fs/promises"
+import fsSync from "fs"
 import { setTimeout as sleep } from "node:timers/promises"
 import { afterAll, afterEach } from "bun:test"
 
@@ -52,66 +53,51 @@ const cacheDir = path.join(dir, "cache", "opencode")
 await fs.mkdir(cacheDir, { recursive: true })
 await fs.writeFile(path.join(cacheDir, "version"), "14")
 
-// Clear provider and server auth env vars to ensure clean test state
-delete process.env["ANTHROPIC_API_KEY"]
-delete process.env["OPENAI_API_KEY"]
-delete process.env["GOOGLE_API_KEY"]
-delete process.env["GOOGLE_GENERATIVE_AI_API_KEY"]
-delete process.env["AZURE_OPENAI_API_KEY"]
-delete process.env["AZURE_RESOURCE_NAME"]
-delete process.env["AZURE_COGNITIVE_SERVICES_RESOURCE_NAME"]
-delete process.env["AZURE_API_KEY"]
-delete process.env["AWS_ACCESS_KEY_ID"]
-delete process.env["AWS_SECRET_ACCESS_KEY"]
-delete process.env["AWS_PROFILE"]
-delete process.env["AWS_REGION"]
-delete process.env["AWS_BEARER_TOKEN_BEDROCK"]
-delete process.env["AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"]
-delete process.env["AWS_CONTAINER_CREDENTIALS_FULL_URI"]
-delete process.env["AWS_WEB_IDENTITY_TOKEN_FILE"]
-delete process.env["AWS_ROLE_ARN"]
-delete process.env["OPENROUTER_API_KEY"]
-delete process.env["LLM_GATEWAY_API_KEY"]
-delete process.env["GROQ_API_KEY"]
-delete process.env["MISTRAL_API_KEY"]
-delete process.env["PERPLEXITY_API_KEY"]
-delete process.env["TOGETHER_API_KEY"]
-delete process.env["XAI_API_KEY"]
-delete process.env["DEEPSEEK_API_KEY"]
-delete process.env["FIREWORKS_API_KEY"]
-delete process.env["CEREBRAS_API_KEY"]
-delete process.env["SAMBANOVA_API_KEY"]
-delete process.env["AICORE_SERVICE_KEY"]
-delete process.env["AICORE_DEPLOYMENT_ID"]
-delete process.env["AICORE_RESOURCE_GROUP"]
-delete process.env["GOOGLE_APPLICATION_CREDENTIALS"]
-delete process.env["GOOGLE_VERTEX_PROJECT"]
-delete process.env["GOOGLE_VERTEX_LOCATION"]
-delete process.env["GOOGLE_CLOUD_PROJECT"]
-delete process.env["GOOGLE_CLOUD_LOCATION"]
-delete process.env["GCP_PROJECT"]
-delete process.env["GCLOUD_PROJECT"]
-delete process.env["VERTEX_LOCATION"]
-delete process.env["CLOUDFLARE_ACCOUNT_ID"]
-delete process.env["CLOUDFLARE_GATEWAY_ID"]
-delete process.env["CLOUDFLARE_API_TOKEN"]
-delete process.env["CLOUDFLARE_API_KEY"]
-delete process.env["CF_AIG_TOKEN"]
-delete process.env["GITHUB_TOKEN"]
-delete process.env["GITLAB_TOKEN"]
-delete process.env["GITLAB_INSTANCE_URL"]
-delete process.env["OPENCODE_API_KEY"]
-delete process.env["GEMINI_API_KEY"]
-delete process.env["HF_TOKEN"]
-delete process.env["DIGITALOCEAN_ACCESS_TOKEN"]
-delete process.env["SINGLE_ENV_KEY"]
-delete process.env["MULTI_ENV_KEY_1"]
-delete process.env["MULTI_ENV_KEY_2"]
-delete process.env["PRIMARY_KEY"]
-delete process.env["FALLBACK_KEY"]
-delete process.env["CUSTOM_API_KEY"]
-delete process.env["OPENCODE_SERVER_PASSWORD"]
-delete process.env["OPENCODE_SERVER_USERNAME"]
+// Clear provider/server auth env vars so a contributor's shell can never
+// leak a real credential into a test's `connected[]` assertion. Sourced
+// programmatically from the models-api fixture so this list grows with
+// models.dev without manual maintenance. Augmented with non-fixture keys
+// referenced by src/ (OPENCODE_CONSOLE_TOKEN, GITLAB_INSTANCE_URL,
+// AICORE_DEPLOYMENT_ID/RESOURCE_GROUP, the AWS chain helpers) and the
+// synthetic test keys used by overlay/provider tests.
+const fixtureEnv: string[] = (() => {
+  const fixturePath = process.env["OPENCODE_MODELS_PATH"]
+  if (!fixturePath) return []
+  const data: Record<string, { env?: string[] }> = JSON.parse(fsSync.readFileSync(fixturePath, "utf8"))
+  const seen = new Set<string>()
+  for (const provider of Object.values(data)) for (const key of provider.env ?? []) seen.add(key)
+  return [...seen]
+})()
+const extraEnv = [
+  "GOOGLE_API_KEY",
+  "AZURE_OPENAI_API_KEY",
+  "AWS_PROFILE",
+  "AWS_REGION",
+  "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+  "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+  "AWS_WEB_IDENTITY_TOKEN_FILE",
+  "AWS_ROLE_ARN",
+  "AICORE_DEPLOYMENT_ID",
+  "AICORE_RESOURCE_GROUP",
+  "GOOGLE_CLOUD_PROJECT",
+  "GOOGLE_CLOUD_LOCATION",
+  "GCP_PROJECT",
+  "GCLOUD_PROJECT",
+  "VERTEX_LOCATION",
+  "CF_AIG_TOKEN",
+  "GITLAB_INSTANCE_URL",
+  "OPENCODE_CONSOLE_TOKEN",
+  "SINGLE_ENV_KEY",
+  "MULTI_ENV_KEY_1",
+  "MULTI_ENV_KEY_2",
+  "PRIMARY_KEY",
+  "FALLBACK_KEY",
+  "CUSTOM_API_KEY",
+  "OPENCODE_SERVER_PASSWORD",
+  "OPENCODE_SERVER_USERNAME",
+]
+for (const key of fixtureEnv) delete process.env[key]
+for (const key of extraEnv) delete process.env[key]
 
 // Use in-memory sqlite
 process.env["OPENCODE_DB"] = ":memory:"
