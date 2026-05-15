@@ -1570,7 +1570,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
             <text fg={theme.textMuted} wrapMode="none">
               {"▶ " +
                 (title()
-                  ? title() + " · " + Locale.duration(duration())
+                  ? "Thought: " + title() + " · " + Locale.duration(duration())
                   : "Thought for " + Locale.duration(duration()))}
             </text>
           </box>

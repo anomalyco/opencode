@@ -431,7 +431,7 @@ function AssistantReasoning(props: {
         <Match when={isDone()}>
           <box paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
             <text fg={theme.textMuted} wrapMode="none">
-              {"▶ " + (title() ?? "Thought")}
+              {title() ? "▶ Thought: " + title() : "▶ Thought"}
             </text>
           </box>
         </Match>
