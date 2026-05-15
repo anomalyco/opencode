@@ -686,6 +686,70 @@ export const layer = Layer.effect(
           }),
         { concurrency: "unbounded" },
       )
+
+      // Expose a synthetic `<name>__authenticate` tool for every configured
+      // MCP that currently needs OAuth authentication. Without this the
+      // agent has no way to discover that the MCP exists, let alone trigger
+      // its OAuth flow on the user's behalf.
+      const bridge = yield* EffectBridge.make()
+      for (const [name, mcp] of Object.entries(config)) {
+        if (!isMcpConfigured(mcp)) continue
+        if (mcp.type !== "remote") continue
+        if (mcp.oauth === false) continue
+        if (s.status[name]?.status !== "needs_auth") continue
+
+        const toolKey = sanitize(name) + "__authenticate"
+        result[toolKey] = dynamicTool({
+          description: [
+            `Trigger interactive OAuth authentication for the "${name}" MCP server.`,
+            "",
+            "This MCP currently has status `needs_auth` — its tools are not",
+            "available until the user authenticates. Calling this tool opens",
+            "the user's browser at the IdP authorization URL and waits for",
+            "the redirect callback. After successful authentication, the",
+            `tools provided by "${name}" become available immediately in`,
+            "this session — you can call them right after this tool returns.",
+            "",
+            "Call this tool ONLY when:",
+            "- The user explicitly asks to authenticate this MCP, or",
+            `- The user wants to use a tool from "${name}" that is not`,
+            "  currently available because the MCP needs auth.",
+            "",
+            "Do NOT call this without user intent. The user must be present",
+            "to complete the OAuth flow in their browser.",
+          ].join("\n"),
+          inputSchema: jsonSchema({
+            type: "object",
+            properties: {},
+            additionalProperties: false,
+          } as JSONSchema7),
+          execute: async () => {
+            const status = await bridge.promise(authenticate(name))
+            // Match the MCP tool result shape (content[]) so downstream
+            // consumers that read `result.content` don't crash. We surface
+            // a single text part summarising the outcome.
+            const text = (() => {
+              switch (status.status) {
+                case "connected":
+                  return `Authenticated. The "${name}" MCP tools are now available — you can call them immediately in this session.`
+                case "needs_auth":
+                  return `Authentication did not complete for "${name}". The user can retry by asking again.`
+                case "needs_client_registration":
+                  return `Authentication for "${name}" requires a pre-registered OAuth client; the user must update their MCP config. Error: ${status.error}`
+                case "failed":
+                  return `Authentication for "${name}" failed: ${status.error}`
+                default:
+                  return `Authentication for "${name}" returned status: ${status.status}`
+              }
+            })()
+            return {
+              content: [{ type: "text" as const, text }],
+              isError: status.status !== "connected",
+            }
+          },
+        })
+      }
+
       return result
     })
 
