@@ -17,6 +17,13 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   disableDefaultPlugins: bool("OPENCODE_DISABLE_DEFAULT_PLUGINS"),
   disableChannelDb: bool("OPENCODE_DISABLE_CHANNEL_DB"),
   disableEmbeddedWebUi: bool("OPENCODE_DISABLE_EMBEDDED_WEB_UI"),
+  disableExternalSkills: bool("OPENCODE_DISABLE_EXTERNAL_SKILLS"),
+  disableLspDownload: bool("OPENCODE_DISABLE_LSP_DOWNLOAD"),
+  skipMigrations: bool("OPENCODE_SKIP_MIGRATIONS"),
+  disableClaudeCodePrompt: Config.all({
+    broad: bool("OPENCODE_DISABLE_CLAUDE_CODE"),
+    direct: bool("OPENCODE_DISABLE_CLAUDE_CODE_PROMPT"),
+  }).pipe(Config.map((flags) => flags.broad || flags.direct)),
   disableClaudeCodeSkills: Config.all({
     broad: bool("OPENCODE_DISABLE_CLAUDE_CODE"),
     direct: bool("OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"),
@@ -41,6 +48,7 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   experimentalEventSystem: enabledByExperimental("OPENCODE_EXPERIMENTAL_EVENT_SYSTEM"),
   experimentalWorkspaces: enabledByExperimental("OPENCODE_EXPERIMENTAL_WORKSPACES"),
   experimentalIconDiscovery: enabledByExperimental("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY"),
+  outputTokenMax: positiveInteger("OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX"),
   bashDefaultTimeoutMs: positiveInteger("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS"),
   client: Config.string("OPENCODE_CLIENT").pipe(Config.withDefault("cli")),
 }) {}
