@@ -125,6 +125,7 @@ export function applyDirectoryEvent(input: {
       const info = (event.properties as { info: Session }).info
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (info.time.archived) {
+        if (input.store.session[result.index]!.time.archived === info.time.archived) break
         if (result.found) {
           input.setStore(
             "session",

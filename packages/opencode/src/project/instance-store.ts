@@ -156,7 +156,9 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
           Effect.gen(function* () {
             const exit = yield* Deferred.await(item[1].deferred).pipe(Effect.exit)
             if (Exit.isFailure(exit)) {
-              yield* Effect.logWarning("instance dispose failed", { key: item[0], cause: exit.cause })
+              yield* Effect.logWarning("instance dispose failed").pipe(
+                Effect.annotateLogs({ key: item[0], cause: exit.cause }),
+              )
               yield* removeEntry(item[0], item[1])
               return
             }

@@ -10,7 +10,6 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
-import { type InstanceContext } from "../project/instance"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { existsSync } from "fs"
 import { Account } from "@/account/account"
@@ -20,7 +19,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
-import { containsPath } from "../project/instance-context"
+import { containsPath, type InstanceContext } from "../project/instance-context"
 import { NonNegativeInt, PositiveInt, type DeepMutable } from "@opencode-ai/core/schema"
 import { ConfigAgent } from "./agent"
 import { ConfigAttachment } from "./attachment"
@@ -261,10 +260,10 @@ export const Info = Schema.Struct({
       }),
       tail_turns: Schema.optional(NonNegativeInt).annotate({
         description:
-          "Number of recent user turns, including their following assistant/tool responses, to serialize into the compaction summary (default: 2)",
+          "Number of recent user turns, including their following assistant/tool responses, to keep verbatim during compaction (default: 2)",
       }),
       preserve_recent_tokens: Schema.optional(NonNegativeInt).annotate({
-        description: "Maximum number of tokens from recent turns to serialize into the compaction summary",
+        description: "Maximum number of tokens from recent turns to preserve verbatim after compaction",
       }),
       reserved: Schema.optional(NonNegativeInt).annotate({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",

@@ -78,7 +78,7 @@ const streamText = LLM.stream(request).pipe(
   Stream.tap((event) =>
     Effect.sync(() => {
       if (event.type === "text-delta") process.stdout.write(`\ntext: ${event.text}`)
-      if (event.type === "request-finish") process.stdout.write(`\nfinish: ${event.reason}\n`)
+      if (event.type === "finish") process.stdout.write(`\nfinish: ${event.reason}\n`)
     }),
   ),
   Stream.runDrain,
@@ -185,7 +185,7 @@ const FakeProtocol = Protocol.make<FakeBody, string, string, void>({
     event: Schema.String,
     initial: () => undefined,
     step: (_, frame) => Effect.succeed([undefined, [{ type: "text-delta", id: "text-0", text: frame }]] as const),
-    onHalt: () => [{ type: "request-finish", reason: "stop" }],
+    onHalt: () => [{ type: "finish", reason: "stop" }],
   },
 })
 

@@ -127,7 +127,7 @@ describe("llm constructors", () => {
       LLMResponse.text({
         events: [
           { type: "text-delta", id: "text-0", text: "hi" },
-          { type: "request-finish", reason: "stop" },
+          { type: "finish", reason: "stop" },
         ],
       }),
     ).toBe("hi")
