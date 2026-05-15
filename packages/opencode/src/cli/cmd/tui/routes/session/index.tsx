@@ -1513,63 +1513,70 @@ const PART_MAPPING = {
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme, subtleSyntax } = useTheme()
   const ctx = use()
-  // In minimal mode the part stays a single line throughout — closed by default
-  // so the layout never shifts. Clicking expands into the full markdown block.
-  const [expanded, setExpanded] = createSignal(false)
-  // Flips after the grace window: the closed line switches from a live tail
-  // preview of the reasoning to the static "Thought for Xs" stamp.
-  const [graceElapsed, setGraceElapsed] = createSignal(false)
+  // `userExpanded` is the user's explicit choice. `undefined` means "no choice
+  // yet, follow the auto behavior". Once they click, it pins to true/false.
+  const [userExpanded, setUserExpanded] = createSignal<boolean | undefined>(undefined)
+  // Flips to true after the grace period elapses post-finalization.
+  const [autoFolded, setAutoFolded] = createSignal(false)
 
   const content = createMemo(() => {
-    // OpenRouter encrypts some reasoning blocks; drop the placeholder.
+    // Filter out redacted reasoning chunks from OpenRouter
+    // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
     return props.part.text.replace("[REDACTED]", "").trim()
   })
   // Reasoning is finalized when the server sets `time.end` (see processor.ts).
-  // This flips independently of the parent message completing.
+  // This flips independently of the parent message completing, so the
+  // collapse happens as soon as thinking ends — even while text/tools stream.
   const isDone = createMemo(() => props.part.time.end !== undefined)
-  const inMinimal = createMemo(() => ctx.thinkingMode() === "minimal")
+  const collapsible = createMemo(() => ctx.thinkingMode() === "minimal" && isDone())
   const duration = createMemo(() => {
     const end = props.part.time.end
-    return end === undefined ? 0 : Math.max(0, end - props.part.time.start)
-  })
-  // Live single-line preview of the streaming reasoning. Whitespace is
-  // collapsed so multi-paragraph reasoning shows as one flowing line, and we
-  // right-truncate so the most recent words remain visible as deltas arrive.
-  const tailPreview = createMemo(() => {
-    const flat = content().replace(/\s+/g, " ").trim()
-    // Budget for paddingLeft (3) + "▼ Thinking: " (12) + a couple cells slack.
-    const max = Math.max(20, ctx.width - 18)
-    return Locale.truncateLeft(flat, max)
+    if (end === undefined) return 0
+    return Math.max(0, end - props.part.time.start)
   })
 
-  // Grace timer: after finalization the closed view holds the tail preview
-  // for a beat, then switches to the timestamp. Historical sessions (loaded
-  // later) snap directly past the grace.
+  // Schedule auto-collapse a short delay after reasoning finalizes in minimal
+  // mode, so the fold doesn't snap the instant streaming stops. A manual
+  // toggle or leaving minimal mode cancels the pending timer. For reasoning
+  // that finished before this component mounted (e.g. loading a past session)
+  // we skip the grace and collapse immediately.
   createEffect(() => {
-    if (!inMinimal()) return
-    if (!isDone()) return
-    if (graceElapsed()) return
+    if (!collapsible()) {
+      setAutoFolded(false)
+      return
+    }
+    if (userExpanded() !== undefined) return
+    if (autoFolded()) return
     const end = props.part.time.end
     if (end === undefined) return
     const remaining = MINIMAL_AUTO_COLLAPSE_MS - (Date.now() - end)
     if (remaining <= 0) {
-      setGraceElapsed(true)
+      setAutoFolded(true)
       return
     }
-    const timer = setTimeout(() => setGraceElapsed(true), remaining)
+    const timer = setTimeout(() => setAutoFolded(true), remaining)
     onCleanup(() => clearTimeout(timer))
   })
 
+  // Effective expansion: stay expanded while streaming and during grace; fold
+  // when auto-fold fires; user clicks override everything.
+  const expanded = createMemo(() => {
+    if (!collapsible()) return true
+    const choice = userExpanded()
+    if (choice !== undefined) return choice
+    return !autoFolded()
+  })
+  const collapsed = createMemo(() => collapsible() && !expanded())
   const toggle = () => {
-    if (!inMinimal()) return
-    setExpanded((prev) => !prev)
+    if (!collapsible()) return
+    setUserExpanded(!expanded())
   }
 
   return (
     <Show when={content() && ctx.thinkingMode() !== "hide"}>
-      <Switch>
-        <Match when={!inMinimal() || expanded()}>
-          {/* Full markdown block: `show` mode, or `minimal` after the user clicks open. */}
+      <Show
+        when={collapsed()}
+        fallback={
           <box
             id={"text-" + props.part.id}
             paddingLeft={2}
@@ -1585,29 +1592,24 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
               drawUnstyledText={false}
               streaming={true}
               syntaxStyle={subtleSyntax()}
-              content={(inMinimal() ? "▼ " : "") + "_Thinking:_ " + content()}
+              content={(collapsible() ? "▼ " : "") + "_Thinking:_ " + content()}
               conceal={ctx.conceal()}
               fg={theme.textMuted}
             />
           </box>
-        </Match>
-        <Match when={isDone() && graceElapsed()}>
-          {/* Settled: timestamp. */}
-          <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
-            <text fg={theme.textMuted} wrapMode="none">
-              {"▶ Thought for " + Locale.duration(duration())}
-            </text>
-          </box>
-        </Match>
-        <Match when={true}>
-          {/* Still streaming or inside the grace window: live tail preview. */}
-          <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
-            <text fg={theme.textMuted} wrapMode="none">
-              {"▼ Thinking: " + tailPreview()}
-            </text>
-          </box>
-        </Match>
-      </Switch>
+        }
+      >
+        <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
+          <code
+            filetype="markdown"
+            drawUnstyledText={false}
+            syntaxStyle={subtleSyntax()}
+            content={"▶ _Thought for " + Locale.duration(duration()) + "_"}
+            conceal={ctx.conceal()}
+            fg={theme.textMuted}
+          />
+        </box>
+      </Show>
     </Show>
   )
 }

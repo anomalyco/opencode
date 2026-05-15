@@ -390,46 +390,49 @@ function AssistantReasoning(props: {
 }) {
   const { theme } = useTheme()
   const thinking = useThinkingMode()
-  const dimensions = useTerminalDimensions()
-  const [expanded, setExpanded] = createSignal(false)
-  const [graceElapsed, setGraceElapsed] = createSignal(false)
+  const [userExpanded, setUserExpanded] = createSignal<boolean | undefined>(undefined)
+  const [autoFolded, setAutoFolded] = createSignal(false)
   const content = createMemo(() => props.part.text.replace("[REDACTED]", "").trim())
-  const inMinimal = createMemo(() => thinking.mode() === "minimal")
-  // v2 reasoning parts have no `time.end`, so we settle on parent-message
-  // completion. Coarser than the main session view but the best signal here.
-  const isDone = createMemo(() => props.completedAt() !== undefined)
-  const tailPreview = createMemo(() => {
-    const flat = content().replace(/\s+/g, " ").trim()
-    // Budget for the v2 view's container padding (2) + our paddingLeft (3) +
-    // "▼ Thinking: " (12) + a little slack.
-    const max = Math.max(20, dimensions().width - 20)
-    return Locale.truncateLeft(flat, max)
-  })
+  // v2 reasoning parts have no `time.end` (see SessionMessageAssistantReasoning
+  // in the v2 SDK), so collapse on parent-message completion. Coarser than
+  // the main session view but the best signal we have here.
+  const collapsible = createMemo(() => thinking.mode() === "minimal" && props.completedAt() !== undefined)
 
   createEffect(() => {
-    if (!inMinimal()) return
-    if (!isDone()) return
-    if (graceElapsed()) return
+    if (!collapsible()) {
+      setAutoFolded(false)
+      return
+    }
+    if (userExpanded() !== undefined) return
+    if (autoFolded()) return
     const completed = props.completedAt()
     if (completed === undefined) return
     const remaining = MINIMAL_AUTO_COLLAPSE_MS - (Date.now() - completed)
     if (remaining <= 0) {
-      setGraceElapsed(true)
+      setAutoFolded(true)
       return
     }
-    const timer = setTimeout(() => setGraceElapsed(true), remaining)
+    const timer = setTimeout(() => setAutoFolded(true), remaining)
     onCleanup(() => clearTimeout(timer))
   })
 
+  const expanded = createMemo(() => {
+    if (!collapsible()) return true
+    const choice = userExpanded()
+    if (choice !== undefined) return choice
+    return !autoFolded()
+  })
+  const collapsed = createMemo(() => collapsible() && !expanded())
   const toggle = () => {
-    if (!inMinimal()) return
-    setExpanded((prev) => !prev)
+    if (!collapsible()) return
+    setUserExpanded(!expanded())
   }
 
   return (
     <Show when={content() && thinking.mode() !== "hide"}>
-      <Switch>
-        <Match when={!inMinimal() || expanded()}>
+      <Show
+        when={collapsed()}
+        fallback={
           <box
             paddingLeft={2}
             marginTop={1}
@@ -445,27 +448,24 @@ function AssistantReasoning(props: {
               drawUnstyledText={false}
               streaming={true}
               syntaxStyle={props.subtleSyntax}
-              content={(inMinimal() ? "▼ " : "") + "_Thinking:_ " + content()}
+              content={(collapsible() ? "▼ " : "") + "_Thinking:_ " + content()}
               conceal={true}
               fg={theme.textMuted}
             />
           </box>
-        </Match>
-        <Match when={isDone() && graceElapsed()}>
-          <box paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
-            <text fg={theme.textMuted} wrapMode="none">
-              ▶ Thought
-            </text>
-          </box>
-        </Match>
-        <Match when={true}>
-          <box paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
-            <text fg={theme.textMuted} wrapMode="none">
-              {"▼ Thinking: " + tailPreview()}
-            </text>
-          </box>
-        </Match>
-      </Switch>
+        }
+      >
+        <box paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
+          <code
+            filetype="markdown"
+            drawUnstyledText={false}
+            syntaxStyle={props.subtleSyntax}
+            content={"▶ _Thought_"}
+            conceal={true}
+            fg={theme.textMuted}
+          />
+        </box>
+      </Show>
     </Show>
   )
 }
