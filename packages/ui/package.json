@@ -26,7 +26,7 @@
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "test": "bun test src",
-    "test:ci": "mkdir -p .artifacts/unit && bun test src --only-failures --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
+    "test:ci": "mkdir -p .artifacts/unit && bun test src --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
     "dev": "vite",
     "generate:tailwind": "bun run script/tailwind.ts"
   },
