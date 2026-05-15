@@ -48,18 +48,26 @@ export function DialogRetryAction(props: DialogRetryActionProps) {
     bindings: [
       {
         key: "left",
+        desc: "Previous retry option",
+        group: "Dialog",
         cmd: () => setSelected((value) => (value === "action" ? "dismiss" : "action")),
       },
       {
         key: "right",
+        desc: "Next retry option",
+        group: "Dialog",
         cmd: () => setSelected((value) => (value === "action" ? "dismiss" : "action")),
       },
       {
         key: "tab",
+        desc: "Next retry option",
+        group: "Dialog",
         cmd: () => setSelected((value) => (value === "action" ? "dismiss" : "action")),
       },
       {
         key: "return",
+        desc: "Confirm retry option",
+        group: "Dialog",
         cmd: () => {
           if (selected() === "action") runAction(props, dialog)
           else dismiss(props, dialog)

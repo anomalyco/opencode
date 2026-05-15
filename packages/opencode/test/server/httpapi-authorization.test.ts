@@ -72,7 +72,9 @@ describe("HttpApi authorization middleware", () => {
       )
 
       expect(missing.status).toBe(401)
+      expect(missing.headers["www-authenticate"] ?? "").toContain("Basic")
       expect(badPassword.status).toBe(401)
+      expect(badPassword.headers["www-authenticate"] ?? "").toContain("Basic")
       expect(good.status).toBe(200)
     }),
   )

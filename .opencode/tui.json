@@ -6,20 +6,12 @@
       {
         "enabled": false,
         "label": "workspace",
-        "keymap": {
-          "sections": {
-            "global": {
-              "plugin.smoke.modal": "ctrl+alt+m",
-              "plugin.smoke.screen": "ctrl+alt+o"
-            },
-            "screen": {
-              "plugin.smoke.screen.home": "escape,ctrl+shift+h",
-              "plugin.smoke.screen.modal": "ctrl+alt+m"
-            },
-            "dialog": {
-              "plugin.smoke.dialog.close": "escape,q"
-            }
-          }
+        "keybinds": {
+          "smoke_modal": "ctrl+alt+m",
+          "smoke_screen": "ctrl+alt+o",
+          "smoke_screen_home": "escape,ctrl+shift+h",
+          "smoke_screen_modal": "ctrl+alt+m",
+          "smoke_dialog_close": "escape,q"
         }
       }
     ]
