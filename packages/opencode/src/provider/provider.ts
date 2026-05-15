@@ -1002,9 +1002,37 @@ interface State {
   sdk: Map<string, BundledSDK>
   modelLoaders: Record<string, CustomModelLoader>
   varsLoaders: Record<string, CustomVarsLoader>
+  database: Record<ProviderID, Info>
+  envEligible: ReadonlySet<string>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
+
+function overlayEnv(s: State, envs: Record<string, string | undefined>): Record<ProviderID, Info> {
+  const result: Record<ProviderID, Info> = { ...s.providers }
+  for (const [id, info] of Object.entries(s.database)) {
+    const providerID = ProviderID.make(id)
+    if (!s.envEligible.has(providerID)) continue
+    const apiKey = info.env.map((k) => envs[k]).find(Boolean)
+    const cached = result[providerID]
+    if (!apiKey) {
+      if (cached?.source === "env") delete result[providerID]
+      continue
+    }
+    if (cached) {
+      if (cached.source !== "env") continue
+      const nextKey = info.env.length === 1 ? apiKey : undefined
+      if (cached.key === nextKey) continue
+      result[providerID] = mergeDeep(cached, { key: nextKey }) as Info
+      continue
+    }
+    result[providerID] = mergeDeep(info, {
+      source: "env",
+      key: info.env.length === 1 ? apiKey : undefined,
+    }) as Info
+  }
+  return result
+}
 
 function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   const result: Model["cost"] = {
@@ -1488,6 +1516,23 @@ export const layer = Layer.effect(
           log.info("found", { providerID })
         }
 
+        const envEligible = new Set<string>()
+        for (const [id, info] of Object.entries(database)) {
+          if (disabled.has(id)) continue
+          if (enabled && !enabled.has(id)) continue
+          if (info.env.length === 0) continue
+          const configProvider = cfg.provider?.[id]
+          const surviving = Object.entries(info.models).filter(([modelID, model]) => {
+            if (model.status === "alpha" && !runtimeFlags.enableExperimentalModels) return false
+            if (model.status === "deprecated") return false
+            if (configProvider?.blacklist?.includes(modelID)) return false
+            if (configProvider?.whitelist && !configProvider.whitelist.includes(modelID)) return false
+            return true
+          })
+          if (surviving.length === 0) continue
+          envEligible.add(id)
+        }
+
         return {
           models: languages,
           providers,
@@ -1495,11 +1540,17 @@ export const layer = Layer.effect(
           sdk,
           modelLoaders,
           varsLoaders,
+          database,
+          envEligible,
         }
       }),
     )
 
-    const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
+    const list = Effect.fn("Provider.list")(function* () {
+      const s = yield* InstanceState.get(state)
+      const envs = yield* env.all()
+      return overlayEnv(s, envs)
+    })
 
     async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
       try {
@@ -1644,9 +1695,11 @@ export const layer = Layer.effect(
       }
     }
 
-    const getProvider = Effect.fn("Provider.getProvider")((providerID: ProviderID) =>
-      InstanceState.use(state, (s) => s.providers[providerID]),
-    )
+    const getProvider = Effect.fn("Provider.getProvider")(function* (providerID: ProviderID) {
+      const s = yield* InstanceState.get(state)
+      const envs = yield* env.all()
+      return overlayEnv(s, envs)[providerID]
+    })
 
     const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderID, modelID: ModelID) {
       const s = yield* InstanceState.get(state)

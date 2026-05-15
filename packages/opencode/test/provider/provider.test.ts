@@ -2790,3 +2790,185 @@ test("opencode loader keeps paid models when auth exists", async () => {
     }
   }
 })
+
+test("list() reflects env var set after first call", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      remove("ANTHROPIC_API_KEY")
+      const before = await list()
+      expect(before[ProviderID.anthropic]).toBeUndefined()
+
+      set("ANTHROPIC_API_KEY", "late-key")
+      const after = await list()
+      expect(after[ProviderID.anthropic]).toBeDefined()
+      expect(after[ProviderID.anthropic].source).toBe("env")
+      expect(after[ProviderID.anthropic].key).toBe("late-key")
+
+      remove("ANTHROPIC_API_KEY")
+    },
+  })
+})
+
+test("list() reflects env var removed after detection", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      set("ANTHROPIC_API_KEY", "ephemeral-key")
+      const before = await list()
+      expect(before[ProviderID.anthropic]).toBeDefined()
+
+      remove("ANTHROPIC_API_KEY")
+      const after = await list()
+      expect(after[ProviderID.anthropic]).toBeUndefined()
+    },
+  })
+})
+
+test("list() refreshes key when env value changes", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      set("ANTHROPIC_API_KEY", "first-key")
+      const first = await list()
+      expect(first[ProviderID.anthropic].key).toBe("first-key")
+
+      set("ANTHROPIC_API_KEY", "rotated-key")
+      const second = await list()
+      expect(second[ProviderID.anthropic].key).toBe("rotated-key")
+
+      remove("ANTHROPIC_API_KEY")
+    },
+  })
+})
+
+test("list() reflects direct process.env mutation", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      remove("ANTHROPIC_API_KEY")
+      const before = await list()
+      expect(before[ProviderID.anthropic]).toBeUndefined()
+
+      process.env["ANTHROPIC_API_KEY"] = "direct-key"
+      const after = await list()
+      expect(after[ProviderID.anthropic]).toBeDefined()
+      expect(after[ProviderID.anthropic].source).toBe("env")
+      expect(after[ProviderID.anthropic].key).toBe("direct-key")
+
+      delete process.env["ANTHROPIC_API_KEY"]
+    },
+  })
+})
+
+test("list() respects whitelist for late-detected env provider", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: { whitelist: ["nonexistent-model"] },
+          },
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      remove("ANTHROPIC_API_KEY")
+      const before = await list()
+      expect(before[ProviderID.anthropic]).toBeUndefined()
+
+      set("ANTHROPIC_API_KEY", "key-with-whitelist")
+      const after = await list()
+      expect(after[ProviderID.anthropic]).toBeUndefined()
+
+      remove("ANTHROPIC_API_KEY")
+    },
+  })
+})
+
+test("list() respects disabled_providers for late-detected env provider", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          disabled_providers: ["anthropic"],
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      set("ANTHROPIC_API_KEY", "key-but-disabled")
+      const providers = await list()
+      expect(providers[ProviderID.anthropic]).toBeUndefined()
+
+      remove("ANTHROPIC_API_KEY")
+    },
+  })
+})
+
+test("getProvider() reflects env var set after first call", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      remove("ANTHROPIC_API_KEY")
+      const before = await getProvider(ProviderID.anthropic)
+      expect(before).toBeUndefined()
+
+      set("ANTHROPIC_API_KEY", "key-via-getProvider")
+      const after = await getProvider(ProviderID.anthropic)
+      expect(after).toBeDefined()
+      expect(after!.source).toBe("env")
+
+      remove("ANTHROPIC_API_KEY")
+    },
+  })
+})
