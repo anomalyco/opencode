@@ -11,16 +11,7 @@ import "@opencode-ai/core/catalog"
 import "@opencode-ai/core/session-event"
 import { Context, Effect, Layer, Option } from "effect"
 
-const syncDefinitions = new WeakMap<EventV2.Definition, SyncEvent.Definition>()
-
-export function toSyncDefinition<D extends EventV2.Definition>(
-  definition: D,
-): SyncEvent.Definition<D["type"], D["data"], D["data"]> {
-  const cached = syncDefinitions.get(definition)
-  if (cached) return cached as SyncEvent.Definition<D["type"], D["data"], D["data"]>
-  if (definition.version === undefined)
-    throw new Error(`Event.toSyncDefinition: version required for ${definition.type}`)
-  if (!definition.aggregate) throw new Error(`Event.toSyncDefinition: aggregate required for ${definition.type}`)
+export function toSyncDefinition<D extends EventV2.Definition>(definition: D) {
   const result = {
     type: definition.type,
     version: definition.version,
@@ -28,8 +19,7 @@ export function toSyncDefinition<D extends EventV2.Definition>(
     schema: definition.data,
     properties: definition.data,
   }
-  syncDefinitions.set(definition, result)
-  return result
+  return result as SyncEvent.Definition<D["type"], D["data"], D["data"]>
 }
 
 export class Service extends Context.Service<Service, EventV2.Interface>()("@opencode/EventV2Bridge") {}

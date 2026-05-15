@@ -158,6 +158,33 @@ describe("tool.registry", () => {
     }),
   )
 
+  it.instance("ignores non-tool exports in .opencode/tool files", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tool = path.join(test.directory, ".opencode", "tool")
+      yield* Effect.promise(() => fs.mkdir(tool, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tool, "mixed.ts"),
+          [
+            "export const helper = 'not a tool'",
+            "export default {",
+            "  description: 'mixed tool',",
+            "  args: {},",
+            "  execute: async () => 'ok',",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+      expect(ids).toContain("mixed")
+      expect(ids).not.toContain("mixed_helper")
+    }),
+  )
+
   it.instance("loads tools from .opencode/tools (plural)", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance

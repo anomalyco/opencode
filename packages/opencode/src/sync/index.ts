@@ -214,7 +214,7 @@ export const defaultLayer = layer.pipe(Layer.provide(RuntimeFlags.defaultLayer))
 export const use = serviceUse(Service)
 
 export const registry = new Map<string, Definition>()
-let projectors: Map<Definition, ProjectorFunc> | undefined
+let projectors: Map<string, ProjectorFunc> | undefined
 const versions = new Map<string, number>()
 let frozen = false
 let convertEvent: ConvertEvent
@@ -226,10 +226,17 @@ export function reset() {
 }
 
 export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; convertEvent?: ConvertEvent }) {
-  for (const [def] of input.projectors) {
-    register(def)
+  projectors = new Map(input.projectors.map(([def, func]) => [versionedType(def.type, def.version), func]))
+  for (let entry of EventV2.registry.values()) {
+    if (!entry.version || !entry.aggregate) continue
+    register({
+      type: entry.type,
+      version: entry.version,
+      aggregate: entry.aggregate,
+      properties: entry.data,
+      schema: entry.data,
+    })
   }
-  projectors = new Map(input.projectors)
 
   // Install all the latest event defs to the bus. We only ever emit
   // latest versions from code, and keep around old versions for
@@ -237,7 +244,6 @@ export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; co
   // simplifies the bus to only use unversioned latest events
   for (let [type, version] of versions.entries()) {
     let def = registry.get(versionedType(type, version))!
-
     BusEvent.define(def.type, def.properties)
   }
 
@@ -286,7 +292,6 @@ export function project<Def extends Definition>(
   def: Def,
   func: (db: Database.TxOrDb, data: Event<Def>["data"], event: Event<Def>) => void,
 ): [Definition, ProjectorFunc] {
-  register(def)
   return [def, func as ProjectorFunc]
 }
 
@@ -304,9 +309,10 @@ function process<Def extends Definition>(
     throw new Error("No projectors available. Call `SyncEvent.init` to install projectors")
   }
 
-  const projector = projectors.get(def)
+  const projector = projectors.get(versionedType(def.type, def.version))
   if (!projector) {
-    throw new Error(`Projector not found for event: ${def.type}`)
+    if (!def.type.includes("next")) throw new Error(`Projector not found for event: ${def.type}`)
+    return
   }
 
   Database.transaction((tx) => {
@@ -393,7 +399,7 @@ export function effectPayloads() {
           name: EffectSchema.Literal(versionedType(definition.type, definition.version!)),
           id: EffectSchema.String,
           seq: EffectSchema.Finite,
-          aggregateID: EffectSchema.String,
+          aggregateID: EffectSchema.Literal(definition.aggregate!),
           data: definition.data,
         }).annotate({ identifier: `SyncEvent.${definition.type}` }),
       )
