@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Option } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
@@ -7,6 +7,8 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 import { NotFoundError } from "@/storage/storage"
 import * as Log from "@opencode-ai/core/util/log"
 import { testEffect } from "../lib/effect"
+import * as Database from "../../src/storage/db"
+import { MessageTable, PartTable } from "../../src/session/session.sql"
 
 void Log.init({ print: false })
 
@@ -107,6 +109,65 @@ const addAssistant = Effect.fn("Test.addAssistant")(function* (
     error: opts?.error,
   } as unknown as MessageV2.Info)
   return id
+})
+
+const addLegacyTurn = Effect.fn("Test.addLegacyTurn")(function* (sessionID: SessionID) {
+  const userID = MessageID.ascending()
+  const assistantID = MessageID.ascending()
+  const partID = PartID.ascending()
+
+  Database.use((db) =>
+    db
+      .insert(MessageTable)
+      .values([
+        {
+          id: userID,
+          session_id: sessionID,
+          time_created: 1,
+          time_updated: 1,
+          data: {
+            role: "user",
+            time: { created: 1 },
+          } as any,
+        },
+        {
+          id: assistantID,
+          session_id: sessionID,
+          time_created: 2,
+          time_updated: 2,
+          data: {
+            role: "assistant",
+            time: { created: 2, completed: 3 },
+            modelID: "grok-code",
+            providerID: "opencode",
+            mode: "build",
+            path: { cwd: "/repo", root: "/repo" },
+            cost: 0,
+            tokens: { input: 1, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+          } as any,
+        },
+      ])
+      .run(),
+  )
+  Database.use((db) =>
+    db
+      .insert(PartTable)
+      .values({
+        id: partID,
+        session_id: sessionID,
+        message_id: assistantID,
+        time_created: 2,
+        time_updated: 2,
+        data: {
+          type: "step-finish",
+          cost: 0,
+          tokens: { input: 1, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+        } as any,
+      })
+      .run(),
+  )
+
+  return { userID, assistantID, partID }
 })
 
 const addCompactionPart = Effect.fn("Test.addCompactionPart")(function* (
@@ -302,6 +363,38 @@ describe("MessageV2.page", () => {
       }),
     ),
   )
+
+  it.instance("normalizes legacy rows before returning page items", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* addLegacyTurn(sessionID)
+        const result = yield* MessageV2.page({ sessionID, limit: 10 })
+        const decode = Schema.decodeUnknownSync(MessageV2.WithParts)
+
+        expect(result.items.map((item) => item.info.id)).toEqual([ids.userID, ids.assistantID])
+        result.items.forEach((item) => decode(item))
+        expect(result.items[0].info).toMatchObject({
+          agent: "build",
+          model: { providerID: "opencode", modelID: "grok-code" },
+        })
+        expect(result.items[1].info).toMatchObject({ agent: "build", parentID: ids.userID })
+        expect(result.items[1].parts[0]).toMatchObject({ type: "step-finish", reason: "stop" })
+      }),
+    ),
+  )
+
+  it.instance("uses full session context when normalizing a paged legacy item", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* addLegacyTurn(sessionID)
+        const result = yield* MessageV2.page({ sessionID, limit: 1 })
+        Schema.decodeUnknownSync(MessageV2.WithParts)(result.items[0])
+
+        expect(result.items).toHaveLength(1)
+        expect(result.items[0].info).toMatchObject({ id: ids.assistantID, agent: "build", parentID: ids.userID })
+      }),
+    ),
+  )
 })
 
 describe("MessageV2.stream", () => {
@@ -453,6 +546,18 @@ describe("MessageV2.parts", () => {
       }),
     ),
   )
+
+  it.instance("normalizes legacy step-finish parts", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* addLegacyTurn(sessionID)
+        const parts = MessageV2.parts(ids.assistantID)
+
+        Schema.decodeUnknownSync(MessageV2.Part)(parts[0])
+        expect(parts[0]).toMatchObject({ id: ids.partID, type: "step-finish", reason: "stop" })
+      }),
+    ),
+  )
 })
 
 describe("MessageV2.get", () => {
@@ -552,6 +657,26 @@ describe("MessageV2.get", () => {
       }),
     ),
   )
+
+  it.instance("normalizes legacy rows before returning a single message", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* addLegacyTurn(sessionID)
+        const user = yield* MessageV2.get({ sessionID, messageID: ids.userID })
+        const assistant = yield* MessageV2.get({ sessionID, messageID: ids.assistantID })
+        const decode = Schema.decodeUnknownSync(MessageV2.WithParts)
+
+        decode(user)
+        decode(assistant)
+        expect(user.info).toMatchObject({
+          agent: "build",
+          model: { providerID: "opencode", modelID: "grok-code" },
+        })
+        expect(assistant.info).toMatchObject({ agent: "build", parentID: ids.userID })
+        expect(assistant.parts[0]).toMatchObject({ type: "step-finish", reason: "stop" })
+      }),
+    ),
+  )
 })
 
 describe("Session.messages", () => {
@@ -573,6 +698,25 @@ describe("Session.messages", () => {
       expect(error).toBeInstanceOf(NotFoundError)
       expect(error.message).toBe(`Session not found: ${fake}`)
     }),
+  )
+
+  it.instance("normalizes legacy rows before returning all session messages", () =>
+    withSession(({ session, sessionID }) =>
+      Effect.gen(function* () {
+        const ids = yield* addLegacyTurn(sessionID)
+        const result = yield* session.messages({ sessionID })
+        const decode = Schema.decodeUnknownSync(MessageV2.WithParts)
+
+        result.forEach((item) => decode(item))
+        expect(result.map((item) => item.info.id)).toEqual([ids.userID, ids.assistantID])
+        expect(result[0].info).toMatchObject({
+          agent: "build",
+          model: { providerID: "opencode", modelID: "grok-code" },
+        })
+        expect(result[1].info).toMatchObject({ agent: "build", parentID: ids.userID })
+        expect(result[1].parts[0]).toMatchObject({ type: "step-finish", reason: "stop" })
+      }),
+    ),
   )
 })
 

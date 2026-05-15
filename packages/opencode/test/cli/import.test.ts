@@ -3,8 +3,6 @@ import type { Message, Part } from "@opencode-ai/sdk/v2"
 import { Schema } from "effect"
 import { MessageV2 } from "@/session/message-v2"
 import {
-  normalizeMessageInfoForImport,
-  normalizePartForImport,
   parseShareUrl,
   shouldAttachShareAuthHeaders,
   transformShareData,
@@ -87,11 +85,11 @@ test("normalizes legacy messages missing agent before decoding", () => {
   ]
   const decode = Schema.decodeUnknownSync(MessageV2.Info)
 
-  expect(decode(normalizeMessageInfoForImport(messages[0].info, messages, 0))).toMatchObject({
+  expect(decode(MessageV2.normalizeInfoForRead(messages[0].info, messages, 0))).toMatchObject({
     agent: "build",
     model: { providerID: "opencode", modelID: "grok-code" },
   })
-  expect(decode(normalizeMessageInfoForImport(messages[1].info, messages, 1))).toMatchObject({
+  expect(decode(MessageV2.normalizeInfoForRead(messages[1].info, messages, 1))).toMatchObject({
     agent: "build",
     parentID: "msg_01J5Y5H0AH4Q4NXJ6P4C3P5V2M",
   })
@@ -102,7 +100,7 @@ test("normalizes legacy step finish parts missing reason before decoding", () =>
 
   expect(
     decode(
-      normalizePartForImport({
+      MessageV2.normalizePartForRead({
         type: "step-finish",
         cost: 0,
         tokens: { input: 1, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },

@@ -585,17 +585,49 @@ const info = (row: typeof MessageTable.$inferSelect) =>
   }) as Info
 
 const part = (row: typeof PartTable.$inferSelect) =>
-  ({
+  normalizePartForRead({
     ...row.data,
     id: row.id,
     sessionID: row.session_id,
     messageID: row.message_id,
   }) as Part
 
+export function normalizeInfoForRead(input: unknown, messages: Array<{ info: unknown }> = [], index = 0) {
+  const record = toRecord(input)
+  const context = findMessageContext(messages, index)
+
+  if (record.role === "user") {
+    return {
+      ...record,
+      agent: typeof record.agent === "string" ? record.agent : context.agent,
+      model: isUserModel(record.model) ? record.model : context.model,
+    }
+  }
+
+  if (record.role === "assistant" && (typeof record.agent !== "string" || typeof record.parentID !== "string")) {
+    return {
+      ...record,
+      agent:
+        typeof record.agent === "string" ? record.agent : typeof record.mode === "string" ? record.mode : context.agent,
+      ...(typeof record.parentID === "string" || !context.parentID ? {} : { parentID: context.parentID }),
+    }
+  }
+
+  return input
+}
+
+export function normalizePartForRead(input: unknown) {
+  const record = toRecord(input)
+  if (record.type === "step-finish" && typeof record.reason !== "string") {
+    return { ...record, reason: "stop" }
+  }
+  return input
+}
+
 const older = (row: Cursor) =>
   or(lt(MessageTable.time_created, row.time), and(eq(MessageTable.time_created, row.time), lt(MessageTable.id, row.id)))
 
-function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
+function hydrate(rows: (typeof MessageTable.$inferSelect)[], contextRows?: (typeof MessageTable.$inferSelect)[]) {
   const ids = rows.map((row) => row.id)
   const partByMessage = new Map<string, Part[]>()
   if (ids.length > 0) {
@@ -615,10 +647,51 @@ function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
     }
   }
 
+  const context = (contextRows ?? rows).map((row) => ({ row, info: info(row) }))
   return rows.map((row) => ({
-    info: info(row),
+    info: normalizeInfoForRead(
+      info(row),
+      context,
+      context.findIndex((item) => item.row.id === row.id),
+    ) as Info,
     parts: partByMessage.get(row.id) ?? [],
   }))
+}
+
+function findMessageContext(messages: Array<{ info: unknown }>, index: number) {
+  const message = messages
+    .slice(index + 1)
+    .concat(messages.slice(0, index).reverse())
+    .map((item) => toRecord(item.info))
+    .find((item) => item.role === "assistant")
+
+  return {
+    agent:
+      typeof message?.agent === "string" ? message.agent : typeof message?.mode === "string" ? message.mode : "build",
+    model: isUserModel(message?.model)
+      ? message.model
+      : typeof message?.providerID === "string" && typeof message?.modelID === "string"
+        ? {
+            providerID: message.providerID,
+            modelID: message.modelID,
+            ...(typeof message.variant === "string" ? { variant: message.variant } : {}),
+          }
+        : undefined,
+    parentID: messages
+      .slice(0, index)
+      .reverse()
+      .map((item) => toRecord(item.info))
+      .find((item) => item.role === "user" && typeof item.id === "string")?.id,
+  }
+}
+
+function toRecord(value: unknown) {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+}
+
+function isUserModel(value: unknown): value is { providerID: string; modelID: string; variant?: string } {
+  const record = toRecord(value)
+  return typeof record.providerID === "string" && typeof record.modelID === "string"
 }
 
 function providerMeta(metadata: Record<string, any> | undefined) {
@@ -950,7 +1023,7 @@ export const page = Effect.fn("MessageV2.page")(function* (input: {
 
   const more = rows.length > input.limit
   const slice = more ? rows.slice(0, input.limit) : rows
-  const items = hydrate(slice)
+  const items = hydrate(slice, needsMessageContext(slice) ? messageContextRows(input.sessionID) : undefined)
   items.reverse()
   const tail = slice.at(-1)
   return {
@@ -984,31 +1057,49 @@ export function parts(message_id: MessageID) {
   const rows = Database.use((db) =>
     db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.id).all(),
   )
-  return rows.map(
-    (row) =>
-      ({
-        ...row.data,
-        id: row.id,
-        sessionID: row.session_id,
-        messageID: row.message_id,
-      }) as Part,
-  )
+  return rows.map(part)
 }
 
 export const get = Effect.fn("MessageV2.get")(function* (input: { sessionID: SessionID; messageID: MessageID }) {
-  const row = Database.use((db) =>
+  const rows = Database.use((db) =>
     db
       .select()
       .from(MessageTable)
-      .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
-      .get(),
+      .where(eq(MessageTable.session_id, input.sessionID))
+      .orderBy(MessageTable.time_created, MessageTable.id)
+      .all(),
   )
+  const row = rows.find((item) => item.id === input.messageID)
   if (!row) return yield* new NotFoundError({ message: `Message not found: ${input.messageID}` })
   return {
-    info: info(row),
+    info: normalizeInfoForRead(
+      info(row),
+      rows.map((item) => ({ info: info(item) })),
+      rows.findIndex((item) => item.id === row.id),
+    ) as Info,
     parts: parts(input.messageID),
   }
 })
+
+function needsMessageContext(rows: (typeof MessageTable.$inferSelect)[]) {
+  return rows.some((row) => {
+    const data = toRecord(row.data)
+    if (data.role === "user") return typeof data.agent !== "string" || !isUserModel(data.model)
+    if (data.role === "assistant") return typeof data.agent !== "string" || typeof data.parentID !== "string"
+    return false
+  })
+}
+
+function messageContextRows(sessionID: SessionID) {
+  return Database.use((db) =>
+    db
+      .select()
+      .from(MessageTable)
+      .where(eq(MessageTable.session_id, sessionID))
+      .orderBy(MessageTable.time_created, MessageTable.id)
+      .all(),
+  )
+}
 
 export function filterCompacted(msgs: Iterable<WithParts>) {
   const result = [] as WithParts[]
