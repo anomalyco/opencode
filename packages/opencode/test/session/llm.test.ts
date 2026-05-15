@@ -20,7 +20,7 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import { AppRuntime } from "../../src/effect/app-runtime"
 
 async function getModel(providerID: ProviderID, modelID: ModelID, ctx: InstanceContext) {
-    const effect = Effect.gen(function* () {
+  const effect = Effect.gen(function* () {
     const provider = yield* Provider.Service
     return yield* provider.getModel(providerID, modelID)
   })
@@ -30,7 +30,7 @@ async function getModel(providerID: ProviderID, modelID: ModelID, ctx: InstanceC
 const llm = makeRuntime(LLM.Service, LLM.defaultLayer)
 
 async function drain(input: LLM.StreamInput, ctx: InstanceContext) {
-    return llm.runPromise((svc) => {
+  return llm.runPromise((svc) => {
     const effect = svc.stream(input).pipe(Stream.runDrain)
     return effect.pipe(Effect.provideService(InstanceRef, ctx))
   })
@@ -384,15 +384,18 @@ describe("session.llm.stream", () => {
           model: { providerID: ProviderID.make(providerID), modelID: resolved.id, variant: "high" },
         } satisfies MessageV2.User
 
-        await drain({
-          user,
-          sessionID,
-          model: resolved,
-          agent,
-          system: ["You are a helpful assistant."],
-          messages: [{ role: "user", content: "Hello" }],
-          tools: {},
-        }, ctx)
+        await drain(
+          {
+            user,
+            sessionID,
+            model: resolved,
+            agent,
+            system: ["You are a helpful assistant."],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+          },
+          ctx,
+        )
 
         const capture = await request
         const body = capture.body
@@ -560,22 +563,25 @@ describe("session.llm.stream", () => {
           tools: { question: true },
         } satisfies MessageV2.User
 
-        await drain({
-          user,
-          sessionID,
-          model: resolved,
-          agent,
-          permission: [{ permission: "question", pattern: "*", action: "allow" }],
-          system: ["You are a helpful assistant."],
-          messages: [{ role: "user", content: "Hello" }],
-          tools: {
-            question: tool({
-              description: "Ask a question",
-              inputSchema: z.object({}),
-              execute: async () => ({ output: "" }),
-            }),
+        await drain(
+          {
+            user,
+            sessionID,
+            model: resolved,
+            agent,
+            permission: [{ permission: "question", pattern: "*", action: "allow" }],
+            system: ["You are a helpful assistant."],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {
+              question: tool({
+                description: "Ask a question",
+                inputSchema: z.object({}),
+                execute: async () => ({ output: "" }),
+              }),
+            },
           },
-        }, ctx)
+          ctx,
+        )
 
         const capture = await request
         const tools = capture.body.tools as Array<{ function?: { name?: string } }> | undefined
@@ -674,15 +680,18 @@ describe("session.llm.stream", () => {
           model: { providerID: ProviderID.make("openai"), modelID: resolved.id, variant: "high" },
         } satisfies MessageV2.User
 
-        await drain({
-          user,
-          sessionID,
-          model: resolved,
-          agent,
-          system: ["You are a helpful assistant."],
-          messages: [{ role: "user", content: "Hello" }],
-          tools: {},
-        }, ctx)
+        await drain(
+          {
+            user,
+            sessionID,
+            model: resolved,
+            agent,
+            system: ["You are a helpful assistant."],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+          },
+          ctx,
+        )
 
         const capture = await request
         const body = capture.body
@@ -789,28 +798,31 @@ describe("session.llm.stream", () => {
           model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
         } satisfies MessageV2.User
 
-        await drain({
-          user,
-          sessionID,
-          model: resolved,
-          agent,
-          system: ["You are a helpful assistant."],
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: "Describe this image" },
-                {
-                  type: "file",
-                  mediaType: "image/png",
-                  filename: "large-image.png",
-                  data: image,
-                },
-              ],
-            },
-          ] as ModelMessage[],
-          tools: {},
-        }, ctx)
+        await drain(
+          {
+            user,
+            sessionID,
+            model: resolved,
+            agent,
+            system: ["You are a helpful assistant."],
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: "Describe this image" },
+                  {
+                    type: "file",
+                    mediaType: "image/png",
+                    filename: "large-image.png",
+                    data: image,
+                  },
+                ],
+              },
+            ] as ModelMessage[],
+            tools: {},
+          },
+          ctx,
+        )
 
         const capture = await request
         expect(capture.url.pathname.endsWith("/responses")).toBe(true)
@@ -910,15 +922,18 @@ describe("session.llm.stream", () => {
           model: { providerID: ProviderID.make("minimax"), modelID: ModelID.make("MiniMax-M2.5") },
         } satisfies MessageV2.User
 
-        await drain({
-          user,
-          sessionID,
-          model: resolved,
-          agent,
-          system: ["You are a helpful assistant."],
-          messages: [{ role: "user", content: "Hello" }],
-          tools: {},
-        }, ctx)
+        await drain(
+          {
+            user,
+            sessionID,
+            model: resolved,
+            agent,
+            system: ["You are a helpful assistant."],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+          },
+          ctx,
+        )
 
         const capture = await request
         const body = capture.body
@@ -1113,31 +1128,34 @@ describe("session.llm.stream", () => {
           },
         ] as any[]
 
-        await drain({
-          user,
-          sessionID,
-          model: resolved,
-          agent,
-          system: [],
-          messages: await MessageV2.toModelMessages(input as any, resolved),
-          tools: {
-            read: tool({
-              description: "Stub read tool",
-              inputSchema: z.object({
-                filePath: z.string(),
+        await drain(
+          {
+            user,
+            sessionID,
+            model: resolved,
+            agent,
+            system: [],
+            messages: await MessageV2.toModelMessages(input as any, resolved),
+            tools: {
+              read: tool({
+                description: "Stub read tool",
+                inputSchema: z.object({
+                  filePath: z.string(),
+                }),
+                execute: async () => ({ output: "stub" }),
               }),
-              execute: async () => ({ output: "stub" }),
-            }),
-            glob: tool({
-              description: "Stub glob tool",
-              inputSchema: z.object({
-                pattern: z.string(),
-                path: z.string().optional(),
+              glob: tool({
+                description: "Stub glob tool",
+                inputSchema: z.object({
+                  pattern: z.string(),
+                  path: z.string().optional(),
+                }),
+                execute: async () => ({ output: "stub" }),
               }),
-              execute: async () => ({ output: "stub" }),
-            }),
+            },
           },
-        }, ctx)
+          ctx,
+        )
 
         const capture = await request
         const body = capture.body
@@ -1269,15 +1287,18 @@ describe("session.llm.stream", () => {
           model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
         } satisfies MessageV2.User
 
-        await drain({
-          user,
-          sessionID,
-          model: resolved,
-          agent,
-          system: ["You are a helpful assistant."],
-          messages: [{ role: "user", content: "Hello" }],
-          tools: {},
-        }, ctx)
+        await drain(
+          {
+            user,
+            sessionID,
+            model: resolved,
+            agent,
+            system: ["You are a helpful assistant."],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+          },
+          ctx,
+        )
 
         const capture = await request
         const body = capture.body
