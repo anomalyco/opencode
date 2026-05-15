@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { pathToFileURL } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import { Effect, Layer, Result, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
@@ -272,7 +272,7 @@ describe("tool.registry", () => {
       yield* Effect.promise(() => fs.mkdir(path.join(plugin, "dist"), { recursive: true }))
       yield* Effect.promise(() => fs.mkdir(customTools, { recursive: true }))
       yield* Effect.promise(() =>
-        fs.cp(path.resolve(import.meta.dir, "../../node_modules/zod"), path.join(opencode, "node_modules", "zod"), {
+        fs.cp(path.dirname(fileURLToPath(import.meta.resolve("zod"))), path.join(opencode, "node_modules", "zod"), {
           dereference: true,
           recursive: true,
         }),
