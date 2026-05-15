@@ -64,8 +64,22 @@ export function isNonBlank(v: string | undefined): v is string {
 // silently serve a stale SDK. Plugin authors must keep stateful closures out
 // of `provider.options` outside the per-call `fetch` convention.
 //
+// UNSUPPORTED INPUT TYPES (silent collisions or throws — do not place these
+// in `provider.options`):
+//   - `Map`, `Set`, `WeakMap`, `WeakSet` — `JSON.stringify` returns `"{}"`,
+//     so two distinct instances collide on the same hash.
+//   - `RegExp` — also serializes to `"{}"`, same collision.
+//   - `Symbol` — silently dropped by `JSON.stringify` (becomes `undefined`).
+//   - Circular references — `JSON.stringify` throws `TypeError`, propagated
+//     as a defect through `getLanguage`/`resolveSDK`.
+//   - `Buffer` / `Uint8Array` — serialized as `{0:n,1:n,...}`; large but
+//     distinct, so correct but inefficient.
+//   - `Date`, `URL` — handled correctly via their `toJSON()` (ISO string,
+//     `href`).
+//
 // TODO(hash): swap for `effect/Hash` + `Equal.equals` with WeakMap-tracked
-// function identity to fix the named-collision risk.
+// function identity to fix the named-collision risk and the unsupported
+// types above.
 export function hashIdentity(parts: Record<string, unknown>): string {
   return Hash.fast(
     JSON.stringify(parts, (_key, value) => {
