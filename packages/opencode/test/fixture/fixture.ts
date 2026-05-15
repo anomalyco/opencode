@@ -17,8 +17,9 @@ import { InstanceStore } from "../../src/project/instance-store"
 import { TestLLMServer } from "../lib/llm-server"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
+export const testInstanceStoreLayer = InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap))
 const testInstanceRuntime = ManagedRuntime.make(
-  InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap), Layer.provideMerge(Observability.layer)),
+  testInstanceStoreLayer.pipe(Layer.provideMerge(Observability.layer)),
 )
 
 const runTestInstanceStore = <A>(fn: (store: InstanceStore.Interface) => Effect.Effect<A>) =>
@@ -165,6 +166,16 @@ export const provideInstance =
       }),
     )
 
+export const provideInstanceEffect =
+  (directory: string) =>
+  <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R | InstanceStore.Service> =>
+    InstanceStore.Service.use((store) => store.provide({ directory }, self))
+
+export const reloadInstance = (input: InstanceStore.LoadInput) =>
+  InstanceStore.Service.use((store) => store.reload(input))
+
+export const disposeAllInstancesEffect = InstanceStore.Service.use((store) => store.disposeAll())
+
 export function provideTmpdirInstance<A, E, R>(
   self: (path: string) => Effect.Effect<A, E, R>,
   options?: { git?: boolean; config?: Partial<Config.Info> },
@@ -195,11 +206,9 @@ export const withTmpdirInstance =
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped(options)
-      return yield* InstanceStore.Service.use((store) =>
-        store.provide({ directory }, self.pipe(Effect.provideService(TestInstance, { directory }))),
-      )
+      return yield* self.pipe(Effect.provideService(TestInstance, { directory }), provideInstanceEffect(directory))
     }).pipe(
-      Effect.provide(InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap))),
+      Effect.provide(testInstanceStoreLayer),
       Effect.provide(CrossSpawnSpawner.defaultLayer),
     )
 
