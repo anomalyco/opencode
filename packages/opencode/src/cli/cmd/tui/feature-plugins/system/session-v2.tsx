@@ -5,6 +5,7 @@ import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { useTheme } from "@tui/context/theme"
 import { useLocal } from "@tui/context/local"
+import { reasoningTitle, useThinkingMode } from "@tui/context/thinking"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { TextAttributes, type BoxRenderable, type SyntaxStyle } from "@opentui/core"
 import { useBindings } from "../../keymap"
@@ -317,7 +318,11 @@ function AssistantMessage(props: {
               <AssistantText part={part as SessionMessageAssistantText} syntax={props.syntax} />
             </Match>
             <Match when={part.type === "reasoning"}>
-              <AssistantReasoning part={part as SessionMessageAssistantReasoning} subtleSyntax={props.subtleSyntax} />
+              <AssistantReasoning
+                part={part as SessionMessageAssistantReasoning}
+                subtleSyntax={props.subtleSyntax}
+                completedAt={() => props.message.time.completed}
+              />
             </Match>
             <Match when={part.type === "tool"}>
               <AssistantTool part={part as SessionMessageAssistantTool} sessionID={props.sessionID} />
@@ -378,30 +383,64 @@ function AssistantText(props: { part: SessionMessageAssistantText; syntax: Synta
   )
 }
 
-function AssistantReasoning(props: { part: SessionMessageAssistantReasoning; subtleSyntax: SyntaxStyle }) {
+function AssistantReasoning(props: {
+  part: SessionMessageAssistantReasoning
+  subtleSyntax: SyntaxStyle
+  completedAt: () => number | undefined
+}) {
   const { theme } = useTheme()
+  const thinking = useThinkingMode()
+  const [expanded, setExpanded] = createSignal(false)
   const content = createMemo(() => props.part.text.replace("[REDACTED]", "").trim())
+  const inMinimal = createMemo(() => thinking.mode() === "minimal")
+  // v2 reasoning parts have no per-part `time.end` (see SessionMessageAssistantReasoning
+  // in the v2 SDK); we settle on parent-message completion instead.
+  const isDone = createMemo(() => props.completedAt() !== undefined)
+  const title = createMemo(() => reasoningTitle(content()))
+
+  const toggle = () => {
+    if (!inMinimal()) return
+    setExpanded((prev) => !prev)
+  }
+
   return (
-    <Show when={content()}>
-      <box
-        paddingLeft={2}
-        marginTop={1}
-        flexDirection="column"
-        border={["left"]}
-        customBorderChars={SplitBorder.customBorderChars}
-        borderColor={theme.backgroundElement}
-        flexShrink={0}
-      >
-        <code
-          filetype="markdown"
-          drawUnstyledText={false}
-          streaming={true}
-          syntaxStyle={props.subtleSyntax}
-          content={"_Thinking:_ " + content()}
-          conceal={true}
-          fg={theme.textMuted}
-        />
-      </box>
+    <Show when={content() && thinking.mode() !== "hide"}>
+      <Switch>
+        <Match when={!inMinimal() || expanded()}>
+          <box
+            paddingLeft={2}
+            marginTop={1}
+            flexDirection="column"
+            border={["left"]}
+            customBorderChars={SplitBorder.customBorderChars}
+            borderColor={theme.backgroundElement}
+            flexShrink={0}
+            onMouseUp={toggle}
+          >
+            <code
+              filetype="markdown"
+              drawUnstyledText={false}
+              streaming={true}
+              syntaxStyle={props.subtleSyntax}
+              content={(inMinimal() ? "▼ " : "") + "_Thinking:_ " + content()}
+              conceal={true}
+              fg={theme.textMuted}
+            />
+          </box>
+        </Match>
+        <Match when={isDone()}>
+          <box paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
+            <text fg={theme.textMuted} wrapMode="none">
+              {title() ? "▶ Thought: " + title() : "▶ Thought"}
+            </text>
+          </box>
+        </Match>
+        <Match when={true}>
+          <box paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
+            <Spinner color={theme.textMuted}>{title() ? "Thinking: " + title() : "Thinking"}</Spinner>
+          </box>
+        </Match>
+      </Switch>
     </Show>
   )
 }
