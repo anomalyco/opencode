@@ -210,3 +210,137 @@ it.effect("subagent inherits parent session deny rules as hard runtime ceilings"
     expect(Permission.evaluate("bash", "git status", effective).action).toBe("deny")
   }),
 )
+
+it.effect("subagent with explicit edit:allow overrides parent edit:deny", () =>
+  Effect.sync(() => {
+    const restrictedParent = testAgent({
+      name: "restricted-parent",
+      mode: "primary",
+      permission: {
+        edit: "deny",
+        bash: "deny",
+        read: "allow",
+        task: {
+          "*": "deny",
+          capableChild: "allow",
+        },
+      },
+    })
+    const capableChild = testAgent({
+      name: "capable-child",
+      mode: "subagent",
+      permission: {
+        edit: "allow",
+        write: "allow",
+        bash: "allow",
+        read: "allow",
+        task: "deny",
+      },
+    })
+
+    const effective = Permission.merge(
+      capableChild.permission,
+      deriveSubagentSessionPermission({
+        parentSessionPermission: [],
+        parentAgent: restrictedParent,
+        subagent: capableChild,
+      }),
+    )
+
+    // Child explicitly allows edit — parent deny should not override
+    expect(Permission.evaluate("edit", "/some/file.ts", effective).action).toBe("allow")
+    expect(Permission.disabled(["edit", "write", "apply_patch"], effective)).toEqual(new Set())
+  }),
+)
+
+it.effect("subagent without explicit edit permission inherits parent edit:deny", () =>
+  Effect.sync(() => {
+    const restrictedParent = testAgent({
+      name: "restricted-parent",
+      mode: "primary",
+      permission: {
+        edit: "deny",
+        read: "allow",
+        task: {
+          "*": "deny",
+          silentChild: "allow",
+        },
+      },
+    })
+    const silentChild = testAgent({
+      name: "silent-child",
+      mode: "subagent",
+      permission: {
+        read: "allow",
+        bash: "allow",
+        task: "deny",
+      },
+    })
+
+    const effective = Permission.merge(
+      silentChild.permission,
+      deriveSubagentSessionPermission({
+        parentSessionPermission: [],
+        parentAgent: restrictedParent,
+        subagent: silentChild,
+      }),
+    )
+
+    // Child has no explicit edit declaration — parent deny should be inherited
+    expect(Permission.evaluate("edit", "/some/file.ts", effective).action).toBe("deny")
+    expect(Permission.disabled(["edit", "write", "apply_patch"], effective)).toEqual(
+      new Set(["edit", "write", "apply_patch"]),
+    )
+  }),
+)
+
+it.effect("[orchestrator-pattern] parent edit:deny does not override subagent explicit edit:allow", () =>
+  Effect.sync(() => {
+    const orchestrator = testAgent({
+      name: "orchestrator",
+      mode: "primary",
+      permission: {
+        edit: "deny",
+        bash: "deny",
+        read: "allow",
+        glob: "allow",
+        grep: "allow",
+        task: {
+          "*": "deny",
+          editor: "allow",
+        },
+        todowrite: "allow",
+        question: "allow",
+        webfetch: "allow",
+      },
+    })
+    const editor = testAgent({
+      name: "editor",
+      mode: "subagent",
+      permission: {
+        edit: "allow",
+        write: "allow",
+        bash: "allow",
+        read: "allow",
+        glob: "allow",
+        grep: "allow",
+        task: "deny",
+        todowrite: "allow",
+      },
+    })
+
+    const effective = Permission.merge(
+      editor.permission,
+      deriveSubagentSessionPermission({
+        parentSessionPermission: [],
+        parentAgent: orchestrator,
+        subagent: editor,
+      }),
+    )
+
+    // Editor should have edit available because it explicitly allows it
+    expect(Permission.evaluate("edit", "/some/file.ts", effective).action).toBe("allow")
+    // edit/write/apply_patch tools should NOT be in disabled set
+    expect(Permission.disabled(["edit", "write", "apply_patch"], effective)).toEqual(new Set())
+  }),
+)
