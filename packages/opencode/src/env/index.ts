@@ -15,6 +15,13 @@ import { Context, Effect, Layer } from "effect"
  *   `process.env`. Tests that mutate env state must serialize within a file
  *   and rely on `test/preload.ts` afterEach baseline restore for cross-file
  *   safety.
+ * - NOT per-instance isolated: `set`/`remove` write to the process-wide
+ *   `process.env`. In multi-instance hosts (e.g. desktop app where one
+ *   sidecar process serves several workspace contexts) two workspaces
+ *   authenticating to the same provider with different credentials will
+ *   clobber each other — last write wins. KNOWN LIMITATION; the existing
+ *   call sites that persist auth-derived values through `Env.set` are
+ *   marked with `TODO(multi-instance)` for a future Auth-routing migration.
  */
 type State = Record<string, string | undefined>
 

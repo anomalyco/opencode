@@ -308,13 +308,15 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const envBearerToken = env["AWS_BEARER_TOKEN_BEDROCK"]
       const awsBearerToken = envBearerToken ?? (auth?.type === "api" ? auth.key : undefined)
       if (!envBearerToken && awsBearerToken) {
+        // TODO(multi-instance): writes to process-wide process.env via Env.set;
+        // see env/index.ts docstring on multi-workspace credential clobbering.
         yield* dep.set("AWS_BEARER_TOKEN_BEDROCK", awsBearerToken)
       }
 
       const awsWebIdentityTokenFile = env["AWS_WEB_IDENTITY_TOKEN_FILE"]
 
       const containerCreds = Boolean(
-        process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI,
+        env["AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"] || env["AWS_CONTAINER_CREDENTIALS_FULL_URI"],
       )
 
       if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
@@ -552,6 +554,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         return { autoload: false, dynamicEnv: false }
       }
       if (!envAICoreServiceKey) {
+        // TODO(multi-instance): writes to process-wide process.env via Env.set;
+        // see env/index.ts docstring on multi-workspace credential clobbering.
         yield* dep.set("AICORE_SERVICE_KEY", envServiceKey)
       }
       const deploymentId = env["AICORE_DEPLOYMENT_ID"]
@@ -1856,10 +1860,29 @@ export const layer = Layer.effect(
     const getLanguage = Effect.fn("Provider.getLanguage")(function* (model: Model) {
       const s = yield* InstanceState.get(state)
       const envs = yield* env.all()
-      const key = `${model.providerID}/${model.id}`
-      if (s.models.has(key)) return s.models.get(key)!
+      const all = currentProviders(s, envs)
+      const provider = all[model.providerID]
+      if (!provider) {
+        const suggestions = fuzzysort
+          .go(model.providerID, Object.keys({ ...s.catalog, ...all }), { limit: 3, threshold: -10000 })
+          .map((m) => m.target)
+        return yield* new ModelNotFoundError({ providerID: model.providerID, modelID: model.id, suggestions })
+      }
+      // Mirror s.sdk's Hash.fast keying (see resolveSDK) so the cached
+      // LanguageModel invalidates whenever the underlying SDK rebuilds —
+      // env key rotation, multi-env credential changes, env-templated
+      // baseURL mutations, and option changes all flow through the same
+      // invariant.
+      const cacheKey = Hash.fast(
+        JSON.stringify({
+          providerID: model.providerID,
+          modelID: model.id,
+          key: provider.key,
+          options: { ...provider.options, ...model.options },
+        }),
+      )
+      if (s.models.has(cacheKey)) return s.models.get(cacheKey)!
 
-      const provider = currentProviders(s, envs)[model.providerID]
       return yield* EffectPromise.refineRejection(
         async () => {
           const sdk = await resolveSDK(model, s, provider, envs)
@@ -1869,7 +1892,7 @@ export const layer = Layer.effect(
                 ...model.options,
               })
             : sdk.languageModel(model.api.id)
-          s.models.set(key, language)
+          s.models.set(cacheKey, language)
           return language
         },
         (cause) =>

@@ -3267,3 +3267,46 @@ test("late-detected env provider has variants populated (parity with env-at-boot
     },
   })
 })
+
+test("getLanguage rejects when env removed between getModel and getLanguage", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      set("ANTHROPIC_API_KEY", "key")
+      const model = await getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"))
+      remove("ANTHROPIC_API_KEY")
+      await expect(getLanguage(model)).rejects.toThrow()
+    },
+  })
+})
+
+test("getLanguage rebuilds language model after env key rotation", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      set("ANTHROPIC_API_KEY", "first-key")
+      const model = await getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"))
+      const lang1 = await getLanguage(model)
+      set("ANTHROPIC_API_KEY", "rotated-key")
+      const lang2 = await getLanguage(model)
+      expect(lang1).not.toBe(lang2)
+      remove("ANTHROPIC_API_KEY")
+    },
+  })
+})
