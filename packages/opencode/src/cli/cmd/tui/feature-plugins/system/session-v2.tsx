@@ -1,4 +1,5 @@
-import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { InternalTuiPlugin } from "../../plugin/internal"
 import { useSyncV2 } from "@tui/context/sync-v2"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
@@ -59,6 +60,8 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
     bindings: [
       {
         key: "escape",
+        desc: "Back to session",
+        group: "Session",
         cmd() {
           props.api.route.navigate("session", { sessionID: props.sessionID })
         },
@@ -435,9 +438,6 @@ function AssistantTool(props: { part: SessionMessageAssistantTool; sessionID: st
       <Match when={props.part.name === "webfetch"}>
         <WebFetch {...toolprops} />
       </Match>
-      <Match when={props.part.name === "codesearch"}>
-        <CodeSearch {...toolprops} />
-      </Match>
       <Match when={props.part.name === "websearch"}>
         <WebSearch {...toolprops} />
       </Match>
@@ -766,15 +766,6 @@ function WebFetch(props: ToolProps) {
   return (
     <InlineTool icon="%" pending="Fetching from the web..." complete={toolComplete(props.part)} part={props.part}>
       WebFetch {stringValue(props.input.url) ?? pendingInput(props.part)}
-    </InlineTool>
-  )
-}
-
-function CodeSearch(props: ToolProps) {
-  return (
-    <InlineTool icon="◇" pending="Searching code..." complete={toolComplete(props.part)} part={props.part}>
-      Exa Code Search "{stringValue(props.input.query) ?? pendingInput(props.part)}"{" "}
-      <Show when={numberValue(props.metadata.results)}>{(results) => <>({results()} results)</>}</Show>
     </InlineTool>
   )
 }
@@ -1144,7 +1135,7 @@ const tui: TuiPlugin = async (api) => {
   })
 }
 
-const plugin: TuiPluginModule & { id: string } = {
+const plugin: InternalTuiPlugin = {
   id,
   tui,
 }

@@ -1,15 +1,9 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import type { KeyEvent, Renderable } from "@opentui/core"
-import type { Binding } from "@opentui/keymap"
-import { resolveBindingSections, type BindingSectionsConfig } from "@opentui/keymap/extras"
 import { OpencodeClient, type Provider } from "@opencode-ai/sdk/v2"
 import { TuiConfig, type Resolved } from "@/cli/cmd/tui/config/tui"
 import { formatBindings } from "@/cli/cmd/run/keymap.shared"
-import { KeymapSectionNames, keymapBindingDefaults, type KeymapSection } from "@/cli/cmd/tui/config/tui-schema"
-import { ConfigKeybinds } from "@/config/keybinds"
 import { resolveDiffStyle, resolveFooterKeybinds, resolveModelInfo } from "@/cli/cmd/run/runtime.boot"
-
-type RunBinding = Binding<Renderable, KeyEvent>
+import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 function model(id: string, providerID: string, context: number, variants?: Record<string, Record<string, never>>) {
   return {
@@ -62,55 +56,37 @@ function model(id: string, providerID: string, context: number, variants?: Recor
   }
 }
 
-function bindings(...keys: string[]) {
-  return keys.map((key) => ({ key }))
-}
-
 function config(input?: {
   leader?: string
   leaderTimeout?: number
   diff_style?: "auto" | "stacked"
   bindings?: Partial<{
-    commandList: RunBinding[]
-    variantCycle: RunBinding[]
-    interrupt: RunBinding[]
-    historyPrevious: RunBinding[]
-    historyNext: RunBinding[]
-    inputClear: RunBinding[]
-    inputSubmit: RunBinding[]
-    inputNewline: RunBinding[]
+    commandList: string[]
+    variantCycle: string[]
+    interrupt: string[]
+    historyPrevious: string[]
+    historyNext: string[]
+    inputClear: string[]
+    inputSubmit: string[]
+    inputNewline: string[]
   }>
 }): Resolved {
   const bind = input?.bindings
-  const sections = {
-    global: Object.fromEntries([
-      ...(bind?.commandList ? [["command.palette.show", bind.commandList] as const] : []),
-      ...(bind?.variantCycle ? [["variant.cycle", bind.variantCycle] as const] : []),
-    ]),
-    prompt: Object.fromEntries([
-      ...(bind?.interrupt ? [["session.interrupt", bind.interrupt] as const] : []),
-      ...(bind?.historyPrevious ? [["prompt.history.previous", bind.historyPrevious] as const] : []),
-      ...(bind?.historyNext ? [["prompt.history.next", bind.historyNext] as const] : []),
-      ...(bind?.inputClear ? [["prompt.clear", bind.inputClear] as const] : []),
-    ]),
-    input: Object.fromEntries([
-      ...(bind?.inputSubmit ? [["input.submit", bind.inputSubmit] as const] : []),
-      ...(bind?.inputNewline ? [["input.newline", bind.inputNewline] as const] : []),
-    ]),
-  } satisfies BindingSectionsConfig<Renderable, KeyEvent>
-
-  return {
+  return createTuiResolvedConfig({
     diff_style: input?.diff_style,
-    keybinds: ConfigKeybinds.Keybinds.parse({}),
-    keymap: {
-      leader: input?.leader ?? "ctrl+x",
-      leader_timeout: input?.leaderTimeout ?? 2000,
-      ...resolveBindingSections<Renderable, KeyEvent, typeof sections, KeymapSection>(sections, {
-        sections: KeymapSectionNames,
-        bindingDefaults: keymapBindingDefaults,
-      }),
+    leader_timeout: input?.leaderTimeout,
+    keybinds: {
+      ...(input?.leader && { leader: input.leader }),
+      ...(bind?.commandList && { command_list: bind.commandList }),
+      ...(bind?.variantCycle && { variant_cycle: bind.variantCycle }),
+      ...(bind?.interrupt && { session_interrupt: bind.interrupt }),
+      ...(bind?.historyPrevious && { history_previous: bind.historyPrevious }),
+      ...(bind?.historyNext && { history_next: bind.historyNext }),
+      ...(bind?.inputClear && { input_clear: bind.inputClear }),
+      ...(bind?.inputSubmit && { input_submit: bind.inputSubmit }),
+      ...(bind?.inputNewline && { input_newline: bind.inputNewline }),
     },
-  }
+  })
 }
 
 describe("run runtime boot", () => {
@@ -118,19 +94,19 @@ describe("run runtime boot", () => {
     mock.restore()
   })
 
-  test("reads footer keybinds from resolved keymap config", async () => {
+  test("reads footer keybinds from resolved keybind config", async () => {
     spyOn(TuiConfig, "get").mockResolvedValue(
       config({
         leader: "ctrl+g",
         bindings: {
-          commandList: bindings("ctrl+p"),
-          variantCycle: bindings("ctrl+t", "alt+t"),
-          interrupt: bindings("ctrl+c"),
-          historyPrevious: bindings("k"),
-          historyNext: bindings("j"),
-          inputClear: bindings("ctrl+l"),
-          inputSubmit: bindings("ctrl+s"),
-          inputNewline: bindings("alt+return"),
+          commandList: ["ctrl+p"],
+          variantCycle: ["ctrl+t", "alt+t"],
+          interrupt: ["ctrl+c"],
+          historyPrevious: ["k"],
+          historyNext: ["j"],
+          inputClear: ["ctrl+l"],
+          inputSubmit: ["ctrl+s"],
+          inputNewline: ["alt+return"],
         },
       }),
     )

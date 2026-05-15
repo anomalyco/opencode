@@ -17,13 +17,14 @@ import { pathToFileURL } from "url"
 import { Effect } from "effect"
 import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { ServerAuth } from "@/server/auth"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
 const runtimeTask = import("./run/runtime")
@@ -80,6 +81,10 @@ function block(info: Inline, output?: string) {
   if (!output?.trim()) return
   UI.println(output)
   UI.empty()
+}
+
+function formatRunError(error: unknown) {
+  return FormatError(error) ?? FormatUnknownError(error)
 }
 
 async function tool(part: ToolPart) {
@@ -230,6 +235,7 @@ export const RunCommand = effectCmd({
       }),
   handler: Effect.fn("Cli.run")(function* (args) {
     const agentSvc = yield* Agent.Service
+    const flags = yield* RuntimeFlags.Service
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
       const thinking = args.interactive ? (args.thinking ?? true) : (args.thinking ?? false)
@@ -441,7 +447,7 @@ export const RunCommand = effectCmd({
       async function share(sdk: OpencodeClient, sessionID: string) {
         const cfg = await sdk.config.get()
         if (!cfg.data) return
-        if (cfg.data.share !== "auto" && !Flag.OPENCODE_AUTO_SHARE && !args.share) return
+        if (cfg.data.share !== "auto" && !flags.autoShare && !args.share) return
         const res = await sdk.session.share({ sessionID }).catch((error) => {
           if (error instanceof Error && error.message.includes("disabled")) {
             UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
@@ -719,6 +725,7 @@ export const RunCommand = effectCmd({
               }
             }
           }
+          return error
         }
         const cwd = args.attach ? (directory ?? sess.directory ?? (await current(sdk))) : (directory ?? root)
         const client = args.attach ? attachSDK(cwd) : sdk
@@ -736,7 +743,7 @@ export const RunCommand = effectCmd({
           })
 
           if (args.command) {
-            await client.session.command({
+            const result = await client.session.command({
               sessionID,
               agent,
               model: args.model,
@@ -744,17 +751,25 @@ export const RunCommand = effectCmd({
               arguments: message,
               variant: args.variant,
             })
+            if (result.error) {
+              if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
+              process.exitCode = 1
+            }
             return
           }
 
           const model = pick(args.model)
-          await client.session.prompt({
+          const result = await client.session.prompt({
             sessionID,
             agent,
             model,
             variant: args.variant,
             parts: [...files, { type: "text", text: message }],
           })
+          if (result.error) {
+            if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
+            process.exitCode = 1
+          }
           return
         }
 
