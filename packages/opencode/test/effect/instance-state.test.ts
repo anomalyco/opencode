@@ -1,24 +1,26 @@
-import { afterEach, expect } from "bun:test"
+import { expect } from "bun:test"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { $ } from "bun"
 import { Context, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { disposeAllInstances, provideInstance, reloadTestInstance, tmpdirScoped } from "../fixture/fixture"
+import {
+  disposeAllInstancesEffect,
+  provideInstanceEffect,
+  reloadInstance,
+  testInstanceStoreLayer,
+  tmpdirScoped,
+} from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(CrossSpawnSpawner.defaultLayer)
+const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, testInstanceStoreLayer))
 
 const access = <A, E>(state: InstanceState.InstanceState<A, E>, dir: string) =>
-  InstanceState.get(state).pipe(provideInstance(dir))
+  InstanceState.get(state).pipe(provideInstanceEffect(dir))
 
 const tmpdirGitScoped = Effect.gen(function* () {
   const dir = yield* tmpdirScoped({ git: true })
   yield* Effect.promise(() => $`git commit --allow-empty --amend -m ${`root commit ${dir}`}`.cwd(dir).quiet())
   return dir
-})
-
-afterEach(async () => {
-  await disposeAllInstances()
 })
 
 it.live("InstanceState caches values per directory", () =>
@@ -68,7 +70,7 @@ it.live("InstanceState invalidates on reload", () =>
     )
 
     const a = yield* access(state, dir)
-    yield* Effect.promise(() => reloadTestInstance({ directory: dir }))
+    yield* reloadInstance({ directory: dir })
     const b = yield* access(state, dir)
 
     expect(a).not.toBe(b)
@@ -93,7 +95,7 @@ it.live("InstanceState invalidates on disposeAll", () =>
 
     yield* access(state, one)
     yield* access(state, two)
-    yield* Effect.promise(disposeAllInstances)
+    yield* disposeAllInstancesEffect
 
     expect(seen.sort()).toEqual([one, two].sort())
   }),
@@ -125,8 +127,8 @@ it.live("InstanceState.get reads the current directory lazily", () =>
     }
 
     yield* Effect.gen(function* () {
-      const a = yield* Test.use((svc) => svc.get()).pipe(provideInstance(one))
-      const b = yield* Test.use((svc) => svc.get()).pipe(provideInstance(two))
+      const a = yield* Test.use((svc) => svc.get()).pipe(provideInstanceEffect(one))
+      const b = yield* Test.use((svc) => svc.get()).pipe(provideInstanceEffect(two))
 
       expect(a).toBe(one)
       expect(b).toBe(two)
@@ -177,7 +179,7 @@ it.live("InstanceState preserves directory across async boundaries", () =>
 
     yield* Effect.gen(function* () {
       const [a, b, c] = yield* Effect.all(
-        [one, two, three].map((dir) => Test.use((svc) => svc.get()).pipe(provideInstance(dir))),
+        [one, two, three].map((dir) => Test.use((svc) => svc.get()).pipe(provideInstanceEffect(dir))),
         { concurrency: "unbounded" },
       )
 
@@ -224,7 +226,7 @@ it.live("InstanceState survives high-contention concurrent access", () =>
 
     yield* Effect.gen(function* () {
       const results = yield* Effect.all(
-        dirs.map((dir) => Test.use((svc) => svc.get()).pipe(provideInstance(dir))),
+        dirs.map((dir) => Test.use((svc) => svc.get()).pipe(provideInstanceEffect(dir))),
         { concurrency: "unbounded" },
       )
 
@@ -263,19 +265,19 @@ it.live("InstanceState correct after interleaved init and dispose", () =>
     }
 
     yield* Effect.gen(function* () {
-      const a = yield* Test.use((svc) => svc.get()).pipe(provideInstance(one))
+      const a = yield* Test.use((svc) => svc.get()).pipe(provideInstanceEffect(one))
       expect(a).toBe(one)
 
       const [, b] = yield* Effect.all(
         [
-          Effect.promise(() => reloadTestInstance({ directory: one })),
-          Test.use((svc) => svc.get()).pipe(provideInstance(two)),
+          reloadInstance({ directory: one }),
+          Test.use((svc) => svc.get()).pipe(provideInstanceEffect(two)),
         ],
         { concurrency: "unbounded" },
       )
       expect(b).toBe(two)
 
-      const c = yield* Test.use((svc) => svc.get()).pipe(provideInstance(one))
+      const c = yield* Test.use((svc) => svc.get()).pipe(provideInstanceEffect(one))
       expect(c).toBe(one)
     }).pipe(Effect.provide(Test.layer))
   }),
@@ -343,9 +345,9 @@ it.live("InstanceState survives deferred resume from the same instance context",
 
     yield* Effect.gen(function* () {
       const gate = yield* Deferred.make<void>()
-      const fiber = yield* Test.use((svc) => svc.get(gate)).pipe(provideInstance(dir), Effect.forkScoped)
+      const fiber = yield* Test.use((svc) => svc.get(gate)).pipe(provideInstanceEffect(dir), Effect.forkScoped)
 
-      yield* Deferred.succeed(gate, undefined).pipe(provideInstance(dir))
+      yield* Deferred.succeed(gate, undefined).pipe(provideInstanceEffect(dir))
       const exit = yield* Fiber.await(fiber)
 
       expect(Exit.isSuccess(exit)).toBe(true)
@@ -380,7 +382,7 @@ it.live("InstanceState survives deferred resume outside ALS when InstanceRef is 
 
     yield* Effect.gen(function* () {
       const gate = yield* Deferred.make<void>()
-      const fiber = yield* Test.use((svc) => svc.get(gate)).pipe(provideInstance(dir), Effect.forkScoped)
+      const fiber = yield* Test.use((svc) => svc.get(gate)).pipe(provideInstanceEffect(dir), Effect.forkScoped)
 
       yield* Deferred.succeed(gate, undefined)
       const exit = yield* Fiber.await(fiber)
