@@ -1,0 +1,5 @@
+google-genai>=1.0.0
+# Pillow floor bumped above the last known RCE-class CVE affecting this skill.
+# 10.3.0 clears: PYSEC-2023-175, GHSA-j7hp-h8jx-5ppr (libwebp OOB),
+# GHSA-3f63-hfp8-52jq (arbitrary code execution), GHSA-44wm-f244-xhp3.
+Pillow>=10.3.0

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
+  "agents": {
+    "hephaestus": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "oracle": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "librarian": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "explore": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "multimodal-looker": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "prometheus": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "metis": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "momus": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "atlas": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "sisyphus": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "sisyphus-junior": {
+      "model": "enterprise-llm/your-model-name"
+    }
+  },
+  "categories": {
+    "visual-engineering": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "ultrabrain": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "deep": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "artistry": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "quick": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "unspecified-low": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "unspecified-high": {
+      "model": "enterprise-llm/your-model-name"
+    },
+    "writing": {
+      "model": "enterprise-llm/your-model-name"
+    }
+  }
+}
