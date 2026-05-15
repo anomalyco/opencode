@@ -222,6 +222,18 @@ describe("tool.edit", () => {
       }),
     )
 
+    it.instance("treats replaceAll replacement as literal file content", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "file.txt")
+        yield* put(filepath, "foo foo")
+
+        yield* run({ filePath: filepath, oldString: "foo", newString: "$&", replaceAll: true })
+
+        expect(yield* load(filepath)).toBe("$& $&")
+      }),
+    )
+
     it.instance("emits change event for existing files", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance

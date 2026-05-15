@@ -694,7 +694,7 @@ export function replace(content: string, oldString: string, newString: string, r
       if (index === -1) continue
       notFound = false
       if (replaceAll) {
-        return content.replaceAll(search, newString)
+        return content.replaceAll(search, () => newString)
       }
       const lastIndex = content.lastIndexOf(search)
       if (index !== lastIndex) continue
