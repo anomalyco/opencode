@@ -721,6 +721,88 @@ Cloudflare Workers AI lets you run AI models on Cloudflare's global network dire
 
 ---
 
+### DigitalOcean
+
+DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inference/) provides access to open models like GPT-OSS, Llama, Qwen, and DeepSeek, plus custom [Inference Routers](https://docs.digitalocean.com/products/genai-platform/concepts/inference-routers/) that route each request to the cheapest, fastest, or best-fit model for a task.
+
+OpenCode supports two authentication methods:
+
+- **OAuth (Recommended)** — Sign in to your DigitalOcean account; OpenCode auto-creates a Model Access Key and discovers your available Models & Inference Routers.
+- **Model Access Key** — Paste an existing key from the DigitalOcean console.
+
+#### OAuth (Recommended)
+
+1. Run the `/connect` command and search for **DigitalOcean**.
+
+   ```txt
+   /connect
+   ```
+
+2. Select **Login with DigitalOcean**.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ Login with DigitalOcean
+   │ Paste Model Access Key
+   └
+   ```
+
+3. Your browser opens to authorize OpenCode. Sign in and approve.
+
+   :::note
+   OpenCode creates a Model Access Key named `opencode-oauth-<timestamp>` in your DigitalOcean account. You can rotate or revoke it from the **Model Access Keys** page in the "Manage" section of the DigitalOcean console under Inference.
+   :::
+
+4. Run the `/models` command. Your Inference Routers appear as the format `router:` in the model selection.
+
+   ```txt
+   /models
+   ```
+
+5. To pick up newly created Inference Routers, re-run `/connect` and select **DigitalOcean** again.
+
+#### Using a Model Access Key
+
+If you'd rather paste a key directly:
+
+1. Head over to the **Manage** page in the Inference section of the [DigitalOcean console](https://cloud.digitalocean.com/) and create a new key.
+
+2. Run the `/connect` command and select **DigitalOcean**, then **Paste Model Access Key**.
+
+   ```txt
+   ┌ Enter your DigitalOcean Model Access Key
+   │
+   │
+   └ enter
+   ```
+
+   :::note
+   Inference Routers are not auto-discovered with this method. To surface them in the model picker, sign in via OAuth instead.
+   :::
+
+3. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+#### Environment Variable
+
+Alternatively, set your Model Access Key as an environment variable.
+
+```bash frame="none"
+export DIGITALOCEAN_ACCESS_TOKEN=your-model-access-key
+```
+
+#### Inference Routers
+
+Inference Routers let you define a routing policy across multiple models — picking the cheapest, fastest, or most appropriate model per request based on the task. After OAuth, OpenCode surfaces each router as `router:<router-name>` in the model picker.
+
+Selecting a router model is a drop-in replacement for any other model — OpenCode forwards your request and DigitalOcean picks the underlying model based on your router's policy. Learn more about [Inference Routers](https://docs.digitalocean.com/products/inference/how-to/use-inference-router/)
+
+---
+
 ### FrogBot
 
 1. Head over to the [FrogBot dashboard](https://app.frogbot.ai/signup), create an account, and generate an API key.

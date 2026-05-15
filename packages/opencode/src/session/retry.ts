@@ -2,16 +2,19 @@ import type { NamedError } from "@opencode-ai/core/util/error"
 import { Cause, Clock, Duration, Effect, Schedule } from "effect"
 import { MessageV2 } from "./message-v2"
 import { iife } from "@/util/iife"
+import { isRecord } from "@/util/record"
 
 export type Err = ReturnType<NamedError["toObject"]>
 
 export const GO_UPSELL_MESSAGE = "Free usage exceeded, subscribe to Go"
-export const PAYG_UPSELL_MESSAGE = "Go usage exceeded, enable PAYG"
 export const GO_UPSELL_URL = "https://opencode.ai/go"
+export type RetryReason = "free_tier_limit" | "account_rate_limit" | (string & {})
 
 export type Retryable = {
   message: string
   action?: {
+    reason: RetryReason
+    provider: string
     title: string
     message: string
     label: string
@@ -61,7 +64,7 @@ export function delay(attempt: number, error?: MessageV2.APIError) {
   return cap(Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS))
 }
 
-export function retryable(error: Err) {
+export function retryable(error: Err, provider: string) {
   // context overflow errors should not be retried
   if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
   if (MessageV2.APIError.isInstance(error)) {
@@ -73,6 +76,8 @@ export function retryable(error: Err) {
       return {
         message: GO_UPSELL_MESSAGE,
         action: {
+          reason: "free_tier_limit",
+          provider,
           title: "Free limit reached",
           message: "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
           label: "subscribe",
@@ -83,11 +88,11 @@ export function retryable(error: Err) {
     if (error.data.responseBody?.includes("GoUsageLimitError")) {
       const body = parseJSON(error.data.responseBody)
       const workspace = str(body?.metadata?.workspace)
-      const limit = str(body?.metadata?.limit)
-      const resetAt = num(body?.metadata?.resetAt)
+      const limitName = str(body?.metadata?.limitName)
+      const retryAfter = num(error.data.responseHeaders?.["retry-after"])
       const resetIn = iife(() => {
-        if (resetAt === undefined) return ""
-        const seconds = Math.max(0, Math.ceil(resetAt))
+        if (retryAfter === undefined) return ""
+        const seconds = Math.max(0, Math.ceil(retryAfter))
         const days = Math.floor(seconds / 86_400)
         const hours = Math.floor((seconds % 86_400) / 3_600)
         const minutes = Math.ceil((seconds % 3_600) / 60)
@@ -97,16 +102,19 @@ export function retryable(error: Err) {
         if (hours > 0) return minutes > 0 ? `${unit(hours, "hour")} ${unit(minutes, "minute")}` : unit(hours, "hour")
         return minutes > 0 ? unit(minutes, "minute") : "less than a minute"
       })
+
+      const message = `${limitName ? `${limitName} usage limit` : "Usage limit"} reached. It will reset in ${resetIn}. To continue using this model now, enable usage from your available balance`
+
+      const link = `https://opencode.ai/workspace/${workspace}/go`
       return {
-        message: PAYG_UPSELL_MESSAGE,
+        message: `${message} - ${link}`,
         action: {
+          reason: "account_rate_limit",
+          provider,
           title: "Go limit reached",
-          message:
-            limit && resetIn
-              ? `You hit your ${limit} limit. It will reset in ${resetIn}. You can also enable pay-as-you-go.`
-              : "Enable pay-as-you-go to keep using Go models after your subscription quota is used.",
-          label: "enable PAYG",
-          ...(workspace ? { link: `https://opencode.ai/workspace/${workspace}/go` } : {}),
+          message,
+          label: "open settings",
+          link,
         },
       }
     }
@@ -114,7 +122,7 @@ export function retryable(error: Err) {
   }
 
   // Check for rate limit patterns in plain text error messages
-  const msg = error.data?.message
+  const msg = isRecord(error.data) ? error.data.message : undefined
   if (typeof msg === "string") {
     const lower = msg.toLowerCase()
     if (
@@ -126,7 +134,7 @@ export function retryable(error: Err) {
     }
   }
 
-  const json = parseJSON(error.data?.message)
+  const json = parseJSON(msg)
   if (!json || typeof json !== "object") return undefined
   const code = typeof json.code === "string" ? json.code : ""
 
@@ -165,13 +173,14 @@ function parseJSON(value: unknown) {
 }
 
 export function policy(opts: {
+  provider: string
   parse: (error: unknown) => Err
   set: (input: { attempt: number; message: string; action?: Retryable["action"]; next: number }) => Effect.Effect<void>
 }) {
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
       const error = opts.parse(meta.input)
-      const retry = retryable(error)
+      const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
       return Effect.gen(function* () {
         const wait = delay(meta.attempt, MessageV2.APIError.isInstance(error) ? error : undefined)

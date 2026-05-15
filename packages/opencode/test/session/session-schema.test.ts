@@ -12,6 +12,8 @@ const info = {
   directory: "/tmp/opencode",
   parentID: undefined,
   summary: undefined,
+  cost: 0,
+  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   share: undefined,
   title: "Test session",
   version: "1.0.0",
