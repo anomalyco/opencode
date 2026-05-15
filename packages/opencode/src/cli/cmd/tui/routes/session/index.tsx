@@ -1576,11 +1576,10 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
           </box>
         </Match>
         <Match when={true}>
-          {/* Streaming: ▶ at the start, label, trailing animated spinner. */}
+          {/* Streaming: leading animated spinner, no disclosure arrow yet — it
+              snaps in once reasoning settles, signalling "done, click to expand". */}
           <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
-            <Spinner color={theme.textMuted} trailing>
-              {"▶ " + (title() ? "Thinking: " + title() : "Thinking")}
-            </Spinner>
+            <Spinner color={theme.textMuted}>{title() ? "Thinking: " + title() : "Thinking"}</Spinner>
           </box>
         </Match>
       </Switch>

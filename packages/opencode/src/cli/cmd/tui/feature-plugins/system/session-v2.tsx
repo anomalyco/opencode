@@ -437,9 +437,7 @@ function AssistantReasoning(props: {
         </Match>
         <Match when={true}>
           <box paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
-            <Spinner color={theme.textMuted} trailing>
-              {"▶ " + (title() ? "Thinking: " + title() : "Thinking")}
-            </Spinner>
+            <Spinner color={theme.textMuted}>{title() ? "Thinking: " + title() : "Thinking"}</Spinner>
           </box>
         </Match>
       </Switch>
