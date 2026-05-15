@@ -164,7 +164,22 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
-function makeHttp(input?: { processor?: "blocking" }) {
+let fakeCompactionCreateCount = 0
+const fakeOverflowCompaction = Layer.succeed(
+  SessionCompaction.Service,
+  SessionCompaction.Service.of({
+    isOverflow: () => Effect.succeed(true),
+    prune: () => Effect.void,
+    process: () => Effect.succeed("stop" as const),
+    create: () =>
+      Effect.sync(() => {
+        fakeCompactionCreateCount++
+        throw new Error("fake compaction create called")
+      }),
+  }),
+)
+
+function makeHttp(input?: { processor?: "blocking"; compaction?: Layer.Layer<SessionCompaction.Service> }) {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
@@ -210,11 +225,13 @@ function makeHttp(input?: { processor?: "blocking" }) {
           Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
           Layer.provideMerge(deps),
         )
-  const compact = SessionCompaction.layer.pipe(
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-    Layer.provideMerge(proc),
-    Layer.provideMerge(deps),
-  )
+  const compact =
+    input?.compaction ??
+    SessionCompaction.layer.pipe(
+      Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+      Layer.provideMerge(proc),
+      Layer.provideMerge(deps),
+    )
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionPrompt.layer.pipe(
@@ -237,6 +254,7 @@ function makeHttp(input?: { processor?: "blocking" }) {
 
 const it = testEffect(makeHttp())
 const race = testEffect(makeHttp({ processor: "blocking" }))
+const overflow = testEffect(makeHttp({ compaction: fakeOverflowCompaction }))
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 
 // Config that registers a custom "test" provider with a "test-model" model
@@ -471,6 +489,35 @@ it.instance("loop calls LLM and returns assistant message", () =>
     expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
     expect(yield* llm.hits).toHaveLength(1)
   }),
+)
+
+overflow.instance(
+  "loop creates compaction before exiting when the last finished assistant overflowed",
+  () =>
+    Effect.gen(function* () {
+      fakeCompactionCreateCount = 0
+      yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Overflow finished" })
+      const { assistant } = yield* seed(chat.id, { finish: "stop" })
+
+      yield* sessions.updateMessage({
+        ...assistant,
+        tokens: {
+          total: 120_000,
+          input: 120_000,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+      })
+
+      const exit = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(fakeCompactionCreateCount).toBe(1)
+    }),
+  { git: true },
 )
 
 it.instance("prompt emits v2 prompted and synthetic events", () =>

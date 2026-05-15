@@ -1265,6 +1265,19 @@ export const layer = Layer.effect(
           const hasToolCalls =
             lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
 
+          if (lastFinished && lastFinished.summary !== true) {
+            const modelForCompaction = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID).pipe(
+              Effect.exit,
+            )
+            if (
+              Exit.isSuccess(modelForCompaction) &&
+              (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model: modelForCompaction.value }))
+            ) {
+              yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+              continue
+            }
+          }
+
           if (
             lastAssistant?.finish &&
             !["tool-calls"].includes(lastAssistant.finish) &&
@@ -1301,15 +1314,6 @@ export const layer = Layer.effect(
               overflow: task.overflow,
             })
             if (result === "stop") break
-            continue
-          }
-
-          if (
-            lastFinished &&
-            lastFinished.summary !== true &&
-            (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
-          ) {
-            yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
             continue
           }
 
