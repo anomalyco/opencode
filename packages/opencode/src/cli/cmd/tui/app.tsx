@@ -136,7 +136,7 @@ export function tuiRendererConfig(_config: TuiConfig.Resolved): CliRendererConfi
     targetFps: 60,
     gatherStats: false,
     exitOnCtrlC: false,
-    useKittyKeyboard: {},
+    useKittyKeyboard: process.env.TERM_PROGRAM === "vscode" ? (false as any) : {},
     autoFocus: false,
     openConsoleOnError: false,
     useMouse: mouseEnabled,

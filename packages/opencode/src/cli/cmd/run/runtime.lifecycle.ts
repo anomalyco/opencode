@@ -179,7 +179,8 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
           autoFocus: false,
           openConsoleOnError: false,
           exitOnCtrlC: false,
-          useKittyKeyboard: { events: process.platform === "win32" },
+          useKittyKeyboard:
+            process.env.TERM_PROGRAM === "vscode" ? (false as any) : { events: process.platform === "win32" },
           screenMode: "split-footer",
           footerHeight: FOOTER_HEIGHT,
           externalOutputMode: "capture-stdout",
