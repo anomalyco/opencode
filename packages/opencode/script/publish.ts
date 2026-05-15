@@ -32,22 +32,32 @@ console.log("binaries", binaries)
 const version = Object.values(binaries)[0]
 
 await $`mkdir -p ./dist/${pkg.name}`
-await $`cp -r ./bin ./dist/${pkg.name}/bin`
+await $`mkdir -p ./dist/${pkg.name}/bin`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE").text())
+await Bun.file(`./dist/${pkg.name}/bin/${pkg.name}.exe`).write(
+  [
+    "#!/usr/bin/env node",
+    "console.error('The opencode native binary was not installed. Run `node postinstall.mjs` from the opencode-ai package directory to finish setup.')",
+    "process.exit(1)",
+    "",
+  ].join("\n"),
+)
 
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
       name: pkg.name + "-ai",
       bin: {
-        [pkg.name]: `./bin/${pkg.name}`,
+        [pkg.name]: `./bin/${pkg.name}.exe`,
       },
       scripts: {
-        postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
+        postinstall: "node ./postinstall.mjs",
       },
       version: version,
       license: pkg.license,
+      os: ["darwin", "linux", "win32"],
+      cpu: ["arm64", "x64"],
       optionalDependencies: binaries,
     },
     null,
