@@ -71,7 +71,7 @@ function listedAdapter(directory: string, type: string): WorkspaceAdapter {
     },
     async create() {},
     async remove() {},
-    list() {
+    list(context) {
       return [
         {
           type,
@@ -79,7 +79,7 @@ function listedAdapter(directory: string, type: string): WorkspaceAdapter {
           branch: "listed/main",
           directory,
           extra: { listed: true },
-          projectID: Instance.project.id,
+          projectID: context?.instance?.project.id ?? Instance.project.id,
         },
       ]
     },

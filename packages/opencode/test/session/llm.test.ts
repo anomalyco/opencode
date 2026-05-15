@@ -4,8 +4,10 @@ import { tool, type ModelMessage } from "ai"
 import { Cause, Effect, Exit, Stream } from "effect"
 import z from "zod"
 import { makeRuntime } from "../../src/effect/run-service"
+import { InstanceRef } from "../../src/effect/instance-ref"
 import { LLM } from "../../src/session/llm"
 import { Instance } from "../../src/project/instance"
+import type { InstanceContext } from "../../src/project/instance-context"
 import { WithInstance } from "../../src/project/with-instance"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
@@ -18,19 +20,23 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { AppRuntime } from "../../src/effect/app-runtime"
 
-async function getModel(providerID: ProviderID, modelID: ModelID) {
-  return AppRuntime.runPromise(
-    Effect.gen(function* () {
-      const provider = yield* Provider.Service
-      return yield* provider.getModel(providerID, modelID)
-    }),
-  )
+async function getModel(providerID: ProviderID, modelID: ModelID, ctx?: InstanceContext) {
+  const instance = ctx ?? Instance.current
+  const effect = Effect.gen(function* () {
+    const provider = yield* Provider.Service
+    return yield* provider.getModel(providerID, modelID)
+  })
+  return AppRuntime.runPromise(effect.pipe(Effect.provideService(InstanceRef, instance)))
 }
 
 const llm = makeRuntime(LLM.Service, LLM.defaultLayer)
 
-async function drain(input: LLM.StreamInput) {
-  return llm.runPromise((svc) => svc.stream(input).pipe(Stream.runDrain))
+async function drain(input: LLM.StreamInput, ctx?: InstanceContext) {
+  const instance = ctx ?? Instance.current
+  return llm.runPromise((svc) => {
+    const effect = svc.stream(input).pipe(Stream.runDrain)
+    return effect.pipe(Effect.provideService(InstanceRef, instance))
+  })
 }
 
 describe("session.llm.hasToolCalls", () => {
@@ -360,8 +366,8 @@ describe("session.llm.stream", () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
+      fn: async (ctx) => {
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id), ctx)
         const sessionID = SessionID.make("session-test-1")
         const agent = {
           name: "test",
@@ -447,8 +453,8 @@ describe("session.llm.stream", () => {
 
     await WithInstance.provide({
       directory: tmp.path,
-      fn: async () => {
-        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
+      fn: async (ctx) => {
+        const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id), ctx)
         const sessionID = SessionID.make("session-test-service-abort")
         const agent = {
           name: "test",
@@ -478,7 +484,7 @@ describe("session.llm.stream", () => {
                 messages: [{ role: "user", content: "Hello" }],
                 tools: {},
               })
-              .pipe(Stream.runDrain),
+              .pipe(Stream.runDrain, Effect.provideService(InstanceRef, ctx)),
           { signal: ctrl.signal },
         )
 
