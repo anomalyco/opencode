@@ -585,6 +585,213 @@ it.live(
 )
 
 it.live(
+  "patch from subdirectory captures changes inside the subdirectory",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrapScoped()
+    const subdir = `${tmp.path}/src`
+    yield* mkdirp(subdir)
+    yield* write(`${subdir}/date.txt`, "ORIGINAL")
+    yield* exec(tmp.path, ["git", "add", "."])
+    yield* exec(tmp.path, ["git", "commit", "-m", "add src"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${subdir}/date.txt`, "MODIFIED")
+      const patch = yield* snapshot.patch(before!)
+      expect(patch.files).toContain(fwd(subdir, "date.txt"))
+      yield* snapshot.revert([patch])
+      expect(yield* readText(`${subdir}/date.txt`)).toBe("ORIGINAL")
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
+it.live(
+  "patch from subdirectory captures changes outside the subdirectory",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrapScoped()
+    const subdir = `${tmp.path}/src`
+    yield* mkdirp(subdir)
+    yield* write(`${subdir}/inside.txt`, "INSIDE")
+    yield* write(`${tmp.path}/outside.txt`, "OUTSIDE")
+    yield* exec(tmp.path, ["git", "add", "."])
+    yield* exec(tmp.path, ["git", "commit", "-m", "init"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${tmp.path}/outside.txt`, "OUTSIDE-MODIFIED")
+      yield* write(`${tmp.path}/new-outside.txt`, "NEW")
+      const patch = yield* snapshot.patch(before!)
+      expect(patch.files).toContain(fwd(tmp.path, "outside.txt"))
+      expect(patch.files).toContain(fwd(tmp.path, "new-outside.txt"))
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
+it.live(
+  "diff and diffFull from subdirectory include the whole worktree with content",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrapScoped()
+    const subdir = `${tmp.path}/pkg/inner`
+    yield* mkdirp(subdir)
+    yield* write(`${tmp.path}/root.txt`, "root-before\n")
+    yield* write(`${subdir}/inner.txt`, "inner-before\n")
+    yield* exec(tmp.path, ["git", "add", "."])
+    yield* exec(tmp.path, ["git", "commit", "-m", "init"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${tmp.path}/root.txt`, "root-after\n")
+      yield* write(`${subdir}/inner.txt`, "inner-after\n")
+      const after = yield* snapshot.track()
+      expect(after).toBeTruthy()
+      const diff = yield* snapshot.diff(before!)
+      expect(diff).toContain("root.txt")
+      expect(diff).toContain("inner.txt")
+      const diffs = yield* snapshot.diffFull(before!, after!)
+      const inner = diffs.find((d) => d.file === "pkg/inner/inner.txt")
+      expect(inner).toBeDefined()
+      expect(inner!.status).toBe("modified")
+      expect(inner!.additions).toBeGreaterThan(0)
+      expect(inner!.deletions).toBeGreaterThan(0)
+      expect(inner!.patch).toContain("-inner-before")
+      expect(inner!.patch).toContain("+inner-after")
+      const root = diffs.find((d) => d.file === "root.txt")
+      expect(root).toBeDefined()
+      expect(root!.patch).toContain("-root-before")
+      expect(root!.patch).toContain("+root-after")
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
+it.live(
+  "gitignore is honored when running from a subdirectory",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrapScoped()
+    const subdir = `${tmp.path}/src`
+    yield* mkdirp(subdir)
+    yield* write(`${tmp.path}/.gitignore`, "*.ignored\nbuild/\n")
+    yield* write(`${subdir}/keep.txt`, "KEEP")
+    yield* exec(tmp.path, ["git", "add", "."])
+    yield* exec(tmp.path, ["git", "commit", "-m", "init"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${subdir}/keep.txt`, "MODIFIED")
+      yield* write(`${subdir}/scratch.ignored`, "SHOULD-BE-IGNORED")
+      yield* mkdirp(`${tmp.path}/build`)
+      yield* write(`${tmp.path}/build/out.js`, "SHOULD-BE-IGNORED")
+      const patch = yield* snapshot.patch(before!)
+      expect(patch.files).toContain(fwd(subdir, "keep.txt"))
+      expect(patch.files).not.toContain(fwd(subdir, "scratch.ignored"))
+      expect(patch.files).not.toContain(fwd(tmp.path, "build/out.js"))
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
+it.live(
+  "large files inside the subdirectory are skipped when running from a subdirectory",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrapScoped()
+    const subdir = `${tmp.path}/src`
+    yield* mkdirp(subdir)
+    yield* write(`${subdir}/seed.txt`, "seed")
+    yield* exec(tmp.path, ["git", "add", "."])
+    yield* exec(tmp.path, ["git", "commit", "-m", "init"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${subdir}/huge.bin`, new Uint8Array(2 * 1024 * 1024 + 1))
+      yield* write(`${tmp.path}/small.txt`, "small at root")
+      const patch = yield* snapshot.patch(before!)
+      expect(patch.files).toContain(fwd(tmp.path, "small.txt"))
+      expect(patch.files).not.toContain(fwd(subdir, "huge.bin"))
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
+it.live(
+  "files staged then later gitignored are dropped when running from a subdirectory",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrapScoped()
+    const subdir = `${tmp.path}/src`
+    yield* mkdirp(subdir)
+    yield* write(`${subdir}/seed.txt`, "seed")
+    yield* exec(tmp.path, ["git", "add", "."])
+    yield* exec(tmp.path, ["git", "commit", "-m", "init"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      yield* write(`${subdir}/later-ignored.txt`, "initial content")
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${subdir}/later-ignored.txt`, "modified content")
+      yield* write(`${tmp.path}/.gitignore`, "src/later-ignored.txt\n")
+      yield* write(`${subdir}/still-tracked.txt`, "new tracked file")
+      const patch = yield* snapshot.patch(before!)
+      expect(patch.files).not.toContain(fwd(subdir, "later-ignored.txt"))
+      expect(patch.files).toContain(fwd(tmp.path, ".gitignore"))
+      expect(patch.files).toContain(fwd(subdir, "still-tracked.txt"))
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
+it.live(
+  "snapshot operations work from a subdirectory of a linked worktree",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrapScoped()
+    const worktreePath = `${tmp.path}-worktree`
+    yield* exec(tmp.path, ["git", "worktree", "add", worktreePath, "HEAD"])
+    yield* Effect.addFinalizer(() => cleanupWorktree(tmp.path, worktreePath))
+    const subdir = `${worktreePath}/src`
+    yield* mkdirp(subdir)
+    yield* write(`${subdir}/inner.txt`, "ORIGINAL")
+    yield* exec(worktreePath, ["git", "add", "."])
+    yield* exec(worktreePath, ["git", "commit", "-m", "add src in linked worktree"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${subdir}/inner.txt`, "MODIFIED")
+      yield* write(`${worktreePath}/root.txt`, "ROOT-NEW")
+      const patch = yield* snapshot.patch(before!)
+      expect(patch.files).toContain(fwd(subdir, "inner.txt"))
+      expect(patch.files).toContain(fwd(worktreePath, "root.txt"))
+      yield* snapshot.revert([patch])
+      expect(yield* readText(`${subdir}/inner.txt`)).toBe("ORIGINAL")
+      expect(yield* exists(`${worktreePath}/root.txt`)).toBe(false)
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
+it.live(
+  "restore from subdirectory rewrites files across the worktree",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrapScoped()
+    const subdir = `${tmp.path}/src`
+    yield* mkdirp(subdir)
+    yield* write(`${tmp.path}/root.txt`, "ROOT-ORIGINAL")
+    yield* write(`${subdir}/inner.txt`, "INNER-ORIGINAL")
+    yield* exec(tmp.path, ["git", "add", "."])
+    yield* exec(tmp.path, ["git", "commit", "-m", "init"])
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${tmp.path}/root.txt`, "ROOT-MODIFIED")
+      yield* write(`${subdir}/inner.txt`, "INNER-MODIFIED")
+      yield* write(`${subdir}/added.txt`, "ADDED")
+      yield* snapshot.restore(before!)
+      expect(yield* readText(`${tmp.path}/root.txt`)).toBe("ROOT-ORIGINAL")
+      expect(yield* readText(`${subdir}/inner.txt`)).toBe("INNER-ORIGINAL")
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
+it.live(
   "patch detects changes in secondary worktree",
   Effect.gen(function* () {
     const tmp = yield* bootstrapScoped()
