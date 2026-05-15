@@ -100,7 +100,11 @@ const providerHttpErrorsQuery = () => {
         name: "FAILED",
         column: failedProviderHttpStatus.name,
         filterCombination: "AND",
-        filters: [...filters, { column: "event_type", op: "=", value: "llm.error" }, { column: "llm.error.code", op: "!=", value: "404" }],
+        filters: [
+          ...filters,
+          { column: "event_type", op: "=", value: "llm.error" },
+          { column: "llm.error.code", op: "!=", value: "404" },
+        ],
       },
     ],
     formulas: [
