@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test"
 
-import { hashIdentity } from "@/provider/provider"
+import { hashIdentity } from "@/provider/overlay"
 
 test("hashIdentity: stable for plain objects", () => {
   const a = hashIdentity({ providerID: "x", npm: "@ai-sdk/x", options: { apiKey: "k" } })

@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test"
 
-import { resolveEnvOverlay, currentProviders } from "@/provider/provider"
+import { resolveEnvOverlay, currentProviders } from "@/provider/overlay"
 import type { Provider } from "@/provider/provider"
 import { ProviderID } from "@/provider/schema"
 
