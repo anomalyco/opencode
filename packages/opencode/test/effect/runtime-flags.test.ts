@@ -88,6 +88,7 @@ describe("RuntimeFlags", () => {
       expect(flags.enableExa).toBe(false)
       expect(flags.experimentalIconDiscovery).toBe(false)
       expect(flags.experimentalOxfmt).toBe(false)
+      expect(flags.outputTokenMax).toBeUndefined()
       expect(flags.bashDefaultTimeoutMs).toBe(1_000)
       expect(flags.enableExperimentalModels).toBe(false)
       expect(flags.client).toBe("cli")
@@ -183,6 +184,35 @@ describe("RuntimeFlags", () => {
     )
   }
 
+  for (const input of [
+    { name: "absent", config: {}, expected: undefined },
+    {
+      name: "valid positive integer",
+      config: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: "1234" },
+      expected: 1234,
+    },
+    {
+      name: "invalid string",
+      config: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: "nope" },
+      expected: undefined,
+    },
+    { name: "zero", config: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: "0" }, expected: undefined },
+    { name: "negative", config: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: "-1" }, expected: undefined },
+    {
+      name: "non-integer",
+      config: { OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: "1.5" },
+      expected: undefined,
+    },
+  ]) {
+    it.effect(`parses outputTokenMax from config: ${input.name}`, () =>
+      Effect.gen(function* () {
+        const flags = yield* readFlags.pipe(Effect.provide(fromConfig(input.config)))
+
+        expect(flags.outputTokenMax).toBe(input.expected)
+      }),
+    )
+  }
+
   it.effect("layer ignores the active ConfigProvider for omitted test overrides", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(
@@ -209,6 +239,7 @@ describe("RuntimeFlags", () => {
       expect(flags.enableExa).toBe(false)
       expect(flags.experimentalIconDiscovery).toBe(false)
       expect(flags.experimentalOxfmt).toBe(false)
+      expect(flags.outputTokenMax).toBeUndefined()
       expect(flags.bashDefaultTimeoutMs).toBeUndefined()
       expect(flags.client).toBe("cli")
     }),
