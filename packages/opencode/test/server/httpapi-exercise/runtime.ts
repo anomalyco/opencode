@@ -1,6 +1,6 @@
 export type Runtime = {
   PublicApi: (typeof import("../../../src/server/routes/instance/httpapi/public"))["PublicApi"]
-  ExperimentalHttpApiServer: (typeof import("../../../src/server/routes/instance/httpapi/server"))["ExperimentalHttpApiServer"]
+  HttpApiApp: (typeof import("../../../src/server/routes/instance/httpapi/server"))["HttpApiApp"]
   AppLayer: (typeof import("../../../src/effect/app-runtime"))["AppLayer"]
   InstanceRef: (typeof import("../../../src/effect/instance-ref"))["InstanceRef"]
   Instance: (typeof import("../../../src/project/instance"))["Instance"]
@@ -34,7 +34,7 @@ export function runtime() {
     const db = await import("../../fixture/db")
     return {
       PublicApi: publicApi.PublicApi,
-      ExperimentalHttpApiServer: httpApiServer.ExperimentalHttpApiServer,
+      HttpApiApp: httpApiServer.HttpApiApp,
       AppLayer: appRuntime.AppLayer,
       InstanceRef: instanceRef.InstanceRef,
       Instance: instance.Instance,

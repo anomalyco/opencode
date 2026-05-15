@@ -1,7 +1,7 @@
 import { and, Database, inArray } from "@opencode-ai/console-core/drizzle/index.js"
 import { ModelTpsRateLimitTable } from "@opencode-ai/console-core/schema/ip.sql.js"
 
-type Result = Record<string, Record<number, { qualify: number; unqualify: number }>>
+type Result = Record<string, { interval: number; qualify: number; unqualify: number }[]>
 
 export default {
   async fetch(request: Request) {
@@ -9,7 +9,6 @@ export default {
 
     const body = (await request.json()) as { ids: string[] }
     const ids = body.ids
-
     if (ids.length === 0) return Response.json({} satisfies Result)
 
     const toInterval = (date: Date) =>
@@ -26,18 +25,19 @@ export default {
       tx
         .select()
         .from(ModelTpsRateLimitTable)
-        .where(and(inArray(ModelTpsRateLimitTable.id, body.ids), inArray(ModelTpsRateLimitTable.interval, intervals))),
+        .where(and(inArray(ModelTpsRateLimitTable.id, ids), inArray(ModelTpsRateLimitTable.interval, intervals))),
     )
 
+    const rowsByKey = new Map(rows.map((row) => [`${row.id}:${row.interval}`, row]))
     const result: Result = Object.fromEntries(
-      body.ids.map((id) => [
+      ids.map((id) => [
         id,
-        Object.fromEntries(intervals.map((interval) => [interval, { qualify: 0, unqualify: 0 }])),
+        intervals.map((interval) => {
+          const row = rowsByKey.get(`${id}:${interval}`)
+          return { interval, qualify: row?.qualify ?? 0, unqualify: row?.unqualify ?? 0 }
+        }),
       ]),
     )
-    for (const row of rows) {
-      result[row.id][row.interval] = { qualify: row.qualify, unqualify: row.unqualify }
-    }
     return Response.json(result)
   },
 }

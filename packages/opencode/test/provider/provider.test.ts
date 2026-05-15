@@ -7,18 +7,34 @@ import { Global } from "@opencode-ai/core/global"
 import { Instance } from "../../src/project/instance"
 import { WithInstance } from "../../src/project/with-instance"
 import { Plugin } from "../../src/plugin/index"
-import { ModelsDev } from "@/provider/models"
+import { ModelsDev } from "@opencode-ai/core/models"
 import { Provider } from "@/provider/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "@/util/filesystem"
 import { Env } from "../../src/env"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { makeRuntime } from "../../src/effect/run-service"
 import { testEffect } from "../lib/effect"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Config } from "@/config/config"
+import { Auth } from "@/auth"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const env = makeRuntime(Env.Service, Env.defaultLayer)
 const set = (k: string, v: string) => env.runSync((svc) => svc.set(k, v))
+const remove = (k: string) => env.runSync((svc) => svc.remove(k))
+
+const providerLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
+  Provider.layer.pipe(
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Env.defaultLayer),
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(Plugin.defaultLayer),
+    Layer.provide(ModelsDev.defaultLayer),
+    Layer.provide(RuntimeFlags.layer(flags)),
+  )
 
 async function run<A, E>(fn: (provider: Provider.Interface) => Effect.Effect<A, E, never>) {
   return AppRuntime.runPromise(
@@ -72,6 +88,29 @@ function paid(providers: Awaited<ReturnType<typeof list>>) {
 }
 
 const it = testEffect(Provider.defaultLayer)
+const experimentalModels = testEffect(providerLayer({ enableExperimentalModels: true }))
+
+const alphaProviderConfig = {
+  provider: {
+    "custom-provider": {
+      name: "Custom Provider",
+      npm: "@ai-sdk/openai-compatible",
+      api: "https://api.custom.com/v1",
+      models: {
+        "active-model": {
+          name: "Active Model",
+        },
+        "alpha-model": {
+          name: "Alpha Model",
+          status: "alpha" as const,
+        },
+      },
+      options: {
+        apiKey: "custom-key",
+      },
+    },
+  },
+}
 
 test("provider loaded from env variable", async () => {
   await using tmp = await tmpdir({
@@ -303,6 +342,26 @@ test("custom provider with npm package", async () => {
     },
   })
 })
+
+it.instance(
+  "filters alpha provider models by default",
+  Effect.gen(function* () {
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    expect(providers[ProviderID.make("custom-provider")].models["active-model"]).toBeDefined()
+    expect(providers[ProviderID.make("custom-provider")].models["alpha-model"]).toBeUndefined()
+  }),
+  { config: alphaProviderConfig },
+)
+
+experimentalModels.instance(
+  "includes alpha provider models when experimental models are enabled",
+  Effect.gen(function* () {
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    expect(providers[ProviderID.make("custom-provider")].models["active-model"]).toBeDefined()
+    expect(providers[ProviderID.make("custom-provider")].models["alpha-model"]).toBeDefined()
+  }),
+  { config: alphaProviderConfig },
+)
 
 test("custom DeepSeek openai-compatible model defaults interleaved reasoning field", async () => {
   await using tmp = await tmpdir({
@@ -1024,6 +1083,27 @@ test("getSmallModel respects config small_model override", async () => {
   })
 })
 
+test("getSmallModel ignores invalid config small_model", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          small_model: "anthropic/not-a-real-model",
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      set("ANTHROPIC_API_KEY", "test-api-key")
+      expect(await getSmallModel(ProviderID.anthropic)).toBeUndefined()
+    },
+  })
+})
+
 test("provider.sort prioritizes preferred models", () => {
   const models = [
     { id: "random-model", name: "Random" },
@@ -1571,8 +1651,8 @@ test("ModelNotFoundError includes suggestions for typos", async () => {
         await getModel(ProviderID.anthropic, ModelID.make("claude-sonet-4")) // typo: sonet instead of sonnet
         expect(true).toBe(false) // Should not reach here
       } catch (e: any) {
-        expect(e.data.suggestions).toBeDefined()
-        expect(e.data.suggestions.length).toBeGreaterThan(0)
+        expect(e.suggestions).toBeDefined()
+        expect(e.suggestions.length).toBeGreaterThan(0)
       }
     },
   })
@@ -1597,8 +1677,34 @@ test("ModelNotFoundError for provider includes suggestions", async () => {
         await getModel(ProviderID.make("antropic"), ModelID.make("claude-sonnet-4")) // typo: antropic
         expect(true).toBe(false) // Should not reach here
       } catch (e: any) {
-        expect(e.data.suggestions).toBeDefined()
-        expect(e.data.suggestions).toContain("anthropic")
+        expect(e.suggestions).toBeDefined()
+        expect(e.suggestions).toContain("anthropic")
+      }
+    },
+  })
+})
+
+test("ModelNotFoundError suggests catalog models for unloaded providers", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      remove("OPENCODE_API_KEY")
+      try {
+        await getModel(ProviderID.opencode, ModelID.make("claude-haiku-fake-model"))
+        throw new Error("expected model lookup to fail")
+      } catch (e) {
+        if (!Provider.ModelNotFoundError.isInstance(e)) throw e
+        expect(e.suggestions).toContain("claude-haiku-4-5")
       }
     },
   })
@@ -1758,6 +1864,100 @@ test("provider options are deeply merged", async () => {
       expect(providers[ProviderID.anthropic].options.headers["X-Custom"]).toBe("custom-value")
       // anthropic custom loader adds its own headers, they should coexist
       expect(providers[ProviderID.anthropic].options.headers["anthropic-beta"]).toBeDefined()
+    },
+  })
+})
+
+test("hosted nvidia provider adds billing origin header", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            nvidia: {
+              options: {
+                apiKey: "test-api-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      expect(providers[ProviderID.make("nvidia")].options.headers).toEqual({
+        "HTTP-Referer": "https://opencode.ai/",
+        "X-Title": "opencode",
+        "X-BILLING-INVOKE-ORIGIN": "OpenCode",
+      })
+    },
+  })
+})
+
+test("custom nvidia baseURL adds billing origin header", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            nvidia: {
+              options: {
+                apiKey: "test-api-key",
+                baseURL: "http://localhost:8000/v1",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      expect(providers[ProviderID.make("nvidia")].options.headers).toEqual({
+        "HTTP-Referer": "https://opencode.ai/",
+        "X-Title": "opencode",
+        "X-BILLING-INVOKE-ORIGIN": "OpenCode",
+      })
+    },
+  })
+})
+
+test("explicit nvidia billing origin header is preserved", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            nvidia: {
+              options: {
+                apiKey: "test-api-key",
+                baseURL: "http://localhost:8000/v1",
+                headers: {
+                  "X-BILLING-INVOKE-ORIGIN": "CustomOrigin",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await WithInstance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await list()
+      expect(providers[ProviderID.make("nvidia")].options.headers["X-BILLING-INVOKE-ORIGIN"]).toBe("CustomOrigin")
     },
   })
 })

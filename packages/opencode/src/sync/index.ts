@@ -1,3 +1,7 @@
+// Legacy sync event system. It should stay unaware of core EventV2 execution;
+// the only temporary V2 coupling here is exposing versioned core event schemas
+// in effectPayloads() so existing HTTP/SDK schema generation remains stable.
+// Remove that registry read when event schemas are generated from core directly.
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
 import { GlobalBus } from "@/bus/global"
@@ -9,6 +13,7 @@ import type { WorkspaceID } from "@/control-plane/schema"
 import { EventID } from "./schema"
 import { Context, Effect, Layer, Schema as EffectSchema } from "effect"
 import type { DeepMutable } from "@opencode-ai/core/schema"
+import { EventV2 } from "@opencode-ai/core/event"
 import { serviceUse } from "@/effect/service-use"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -209,7 +214,7 @@ export const defaultLayer = layer.pipe(Layer.provide(RuntimeFlags.defaultLayer))
 export const use = serviceUse(Service)
 
 export const registry = new Map<string, Definition>()
-let projectors: Map<Definition, ProjectorFunc> | undefined
+let projectors: Map<string, ProjectorFunc> | undefined
 const versions = new Map<string, number>()
 let frozen = false
 let convertEvent: ConvertEvent
@@ -221,7 +226,17 @@ export function reset() {
 }
 
 export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; convertEvent?: ConvertEvent }) {
-  projectors = new Map(input.projectors)
+  projectors = new Map(input.projectors.map(([def, func]) => [versionedType(def.type, def.version), func]))
+  for (let entry of EventV2.registry.values()) {
+    if (!entry.version || !entry.aggregate) continue
+    register({
+      type: entry.type,
+      version: entry.version,
+      aggregate: entry.aggregate,
+      properties: entry.data,
+      schema: entry.data,
+    })
+  }
 
   // Install all the latest event defs to the bus. We only ever emit
   // latest versions from code, and keep around old versions for
@@ -229,7 +244,6 @@ export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; co
   // simplifies the bus to only use unversioned latest events
   for (let [type, version] of versions.entries()) {
     let def = registry.get(versionedType(type, version))!
-
     BusEvent.define(def.type, def.properties)
   }
 
@@ -269,9 +283,7 @@ export function define<
     properties: (input.busSchema ?? input.schema) as BusSchema,
   }
 
-  versions.set(def.type, Math.max(def.version, versions.get(def.type) || 0))
-
-  registry.set(versionedType(def.type, def.version), def)
+  register(def)
 
   return def
 }
@@ -283,6 +295,11 @@ export function project<Def extends Definition>(
   return [def, func as ProjectorFunc]
 }
 
+function register(def: Definition) {
+  versions.set(def.type, Math.max(def.version, versions.get(def.type) || 0))
+  registry.set(versionedType(def.type, def.version), def)
+}
+
 function process<Def extends Definition>(
   def: Def,
   event: Event<Def>,
@@ -292,9 +309,10 @@ function process<Def extends Definition>(
     throw new Error("No projectors available. Call `SyncEvent.init` to install projectors")
   }
 
-  const projector = projectors.get(def)
+  const projector = projectors.get(versionedType(def.type, def.version))
   if (!projector) {
-    throw new Error(`Projector not found for event: ${def.type}`)
+    if (!def.type.includes("next")) throw new Error(`Projector not found for event: ${def.type}`)
+    return
   }
 
   Database.transaction((tx) => {
@@ -355,19 +373,38 @@ function process<Def extends Definition>(
 }
 
 export function effectPayloads() {
-  return registry
-    .entries()
-    .map(([type, def]) =>
-      EffectSchema.Struct({
-        type: EffectSchema.Literal("sync"),
-        name: EffectSchema.Literal(type),
-        id: EffectSchema.String,
-        seq: EffectSchema.Finite,
-        aggregateID: EffectSchema.Literal(def.aggregate),
-        data: def.schema,
-      }).annotate({ identifier: `SyncEvent.${type}` }),
-    )
-    .toArray()
+  return [
+    ...registry
+      .entries()
+      .map(([type, def]) =>
+        EffectSchema.Struct({
+          type: EffectSchema.Literal("sync"),
+          name: EffectSchema.Literal(type),
+          id: EffectSchema.String,
+          seq: EffectSchema.Finite,
+          aggregateID: EffectSchema.Literal(def.aggregate),
+          data: def.schema,
+        }).annotate({ identifier: `SyncEvent.${type}` }),
+      )
+      .toArray(),
+    ...EventV2.registry
+      .values()
+      .filter(
+        (definition) =>
+          definition.version !== undefined && !registry.has(versionedType(definition.type, definition.version)),
+      )
+      .map((definition) =>
+        EffectSchema.Struct({
+          type: EffectSchema.Literal("sync"),
+          name: EffectSchema.Literal(versionedType(definition.type, definition.version!)),
+          id: EffectSchema.String,
+          seq: EffectSchema.Finite,
+          aggregateID: EffectSchema.Literal(definition.aggregate!),
+          data: definition.data,
+        }).annotate({ identifier: `SyncEvent.${definition.type}` }),
+      )
+      .toArray(),
+  ]
 }
 
 export * as SyncEvent from "."
