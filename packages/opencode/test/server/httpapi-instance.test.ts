@@ -8,7 +8,7 @@ import { WorkspaceID } from "../../src/control-plane/schema"
 import { ControlPaths } from "../../src/server/routes/instance/httpapi/groups/control"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
-import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
+import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { HEADER as FenceHeader } from "../../src/server/shared/fence"
 import { resetDatabase } from "../fixture/db"
 import { tmpdirScoped } from "../fixture/fixture"
@@ -37,7 +37,7 @@ const testStateLayer = Layer.effectDiscard(
 // 127.0.0.1:0 and a fetch-based HttpClient that prepends the server URL. This
 // keeps the test wired directly through the same route layer production uses.
 const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
-  ExperimentalHttpApiServer.routes,
+  HttpApiApp.routes,
   { disableListenLog: true, disableLogger: true },
 )
 
@@ -122,7 +122,7 @@ describe("instance HttpApi", () => {
       const dir = yield* tmpdirScoped({ git: true })
       const request = (path: string, init?: RequestInit) =>
         Effect.promise(() =>
-          ExperimentalHttpApiServer.webHandler().handler(
+          HttpApiApp.webHandler().handler(
             new Request(`http://localhost${path}`, {
               ...init,
               headers: { "x-opencode-directory": dir, "content-type": "application/json", ...init?.headers },

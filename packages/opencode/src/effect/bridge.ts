@@ -1,6 +1,7 @@
 import { Effect, Exit, Fiber } from "effect"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
-import { Instance, type InstanceContext } from "@/project/instance"
+import { Instance } from "@/project/instance"
+import type { InstanceContext } from "@/project/instance-context"
 import type { WorkspaceID } from "@/control-plane/schema"
 import { LocalContext } from "@/util/local-context"
 import { InstanceRef, WorkspaceRef } from "./instance-ref"
