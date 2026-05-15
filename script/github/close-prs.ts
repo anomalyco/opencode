@@ -256,10 +256,6 @@ async function graphql(input: { query: string; variables: Record<string, string 
 }
 
 async function closePullRequest(pr: CleanupCandidate) {
-  await githubRequest(`/repos/${repo.owner}/${repo.name}/issues/${pr.number}/labels`, {
-    method: "POST",
-    body: JSON.stringify({ labels: [cleanupLabel] }),
-  })
   await githubRequest(`/repos/${repo.owner}/${repo.name}/issues/${pr.number}/comments`, {
     method: "POST",
     body: JSON.stringify({ body: message }),
@@ -267,6 +263,10 @@ async function closePullRequest(pr: CleanupCandidate) {
   await githubRequest(`/repos/${repo.owner}/${repo.name}/pulls/${pr.number}`, {
     method: "PATCH",
     body: JSON.stringify({ state: "closed" }),
+  })
+  await githubRequest(`/repos/${repo.owner}/${repo.name}/issues/${pr.number}/labels`, {
+    method: "POST",
+    body: JSON.stringify({ labels: [cleanupLabel] }),
   })
   console.log(`Closed #${pr.number} positive=${pr.positiveReactions} ${pr.url}`)
 }
@@ -312,10 +312,12 @@ async function githubRequest(path: string, init: RequestInit, attempt = 0): Prom
       ? Math.max(0, Number(reset) * 1000 - Date.now()) + 1_000
       : body.toLowerCase().includes("secondary rate limit")
         ? 300_000
-        : 0
+        : response.status >= 500
+          ? Math.min(300_000, 10_000 * 2 ** attempt)
+          : 0
 
-  if ((response.status === 403 || response.status === 429) && retryMs > 0 && attempt < 10) {
-    console.warn(`GitHub rate limit hit; sleeping ${Math.ceil(retryMs / 1000)}s before retry ${attempt + 1}`)
+  if ((response.status === 403 || response.status === 429 || response.status >= 500) && retryMs > 0 && attempt < 10) {
+    console.warn(`GitHub request failed; sleeping ${Math.ceil(retryMs / 1000)}s before retry ${attempt + 1}`)
     await sleep(retryMs)
     return githubRequest(path, init, attempt + 1)
   }
