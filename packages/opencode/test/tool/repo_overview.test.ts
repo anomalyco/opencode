@@ -97,6 +97,21 @@ describe("tool.repo_overview", () => {
     ),
   )
 
+  it.live("resolves relative paths from the instance directory", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        yield* fs.writeWithDirs(path.join(dir, "nested", "README.md"), "# Nested\n")
+
+        const tool = yield* init()
+        const result = yield* tool.execute({ path: "nested" }, ctx)
+
+        expect(result.metadata.path).toBe(path.join(dir, "nested"))
+        expect(result.output).toContain("README.md")
+      }),
+    ),
+  )
+
   it.live("resolves a cached repository from repository shorthand", () =>
     provideTmpdirInstance((_dir) =>
       Effect.gen(function* () {

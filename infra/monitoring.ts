@@ -73,6 +73,7 @@ const modelHttpErrorsQuery = (product: "go" | "zen") => {
 const providerHttpErrorsQuery = (product: "go" | "zen") => {
   const filters = [
     { column: "provider", op: "exists" },
+    { column: "provider", op: "!=", value: "fireworks-go-glm-5.1" },
     { column: "user_agent", op: "contains", value: "opencode" },
     { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
   ]

@@ -16,6 +16,12 @@ const experimentalTyIt = testEffect(
     CrossSpawnSpawner.defaultLayer,
   ),
 )
+const disabledDownloadIt = testEffect(
+  Layer.mergeAll(
+    LSP.layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(RuntimeFlags.layer({ disableLspDownload: true }))),
+    CrossSpawnSpawner.defaultLayer,
+  ),
+)
 
 describe("lsp.spawn", () => {
   it.live("does not spawn builtin LSP for files outside instance", () =>
@@ -159,6 +165,30 @@ describe("lsp.spawn", () => {
               expect(pyright).toHaveBeenCalledTimes(0)
             } finally {
               ty.mockRestore()
+              pyright.mockRestore()
+            }
+          }),
+        ),
+      { config: { lsp: true } },
+    ),
+  )
+
+  disabledDownloadIt.live("passes disableLspDownload to builtin LSP spawn", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        LSP.Service.use((lsp) =>
+          Effect.gen(function* () {
+            const pyright = spyOn(LSPServer.Pyright, "spawn").mockResolvedValue(undefined)
+
+            try {
+              yield* lsp.hover({
+                file: path.join(dir, "src", "inside.py"),
+                line: 0,
+                character: 0,
+              })
+              expect(pyright).toHaveBeenCalledTimes(1)
+              expect(pyright.mock.calls[0]?.[2]).toMatchObject({ disableLspDownload: true })
+            } finally {
               pyright.mockRestore()
             }
           }),
