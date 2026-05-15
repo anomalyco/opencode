@@ -381,8 +381,8 @@ export function Session() {
     )
   })
 
-  // Helper: Find next visible user message boundary in direction
-  const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
+  // Helper: Find next visible message boundary in direction
+  const findNextVisibleMessage = (direction: "next" | "prev", role?: "user"): string | null => {
     const children = scroll.getChildren()
     const messagesList = messages()
     const scrollTop = scroll.y
@@ -393,6 +393,7 @@ export function Session() {
         if (!c.id) return false
         const message = messagesList.find((m) => m.id === c.id)
         if (!message) return false
+        if (role && message.role !== role) return false
 
         // Check if message has valid non-synthetic, non-ignored text parts
         const parts = sync.data.part[message.id]
@@ -412,6 +413,8 @@ export function Session() {
     return [...visibleMessages].reverse().find((c) => c.y < scrollTop - 10)?.id ?? null
   }
 
+  const findNextVisibleUserMessage = (direction: "next" | "prev") => findNextVisibleMessage(direction, "user")
+
   // Helper: Scroll to message in direction or fallback to page scroll
   const scrollToMessage = (direction: "next" | "prev", dialog: ReturnType<typeof useDialog>) => {
     const targetID = findNextVisibleMessage(direction)
@@ -421,6 +424,15 @@ export function Session() {
       dialog.clear()
       return
     }
+
+    const child = scroll.getChildren().find((c) => c.id === targetID)
+    if (child) scroll.scrollBy(child.y - scroll.y - 1)
+    dialog.clear()
+  }
+
+  const scrollToUserMessage = (direction: "next" | "prev", dialog: ReturnType<typeof useDialog>) => {
+    const targetID = findNextVisibleUserMessage(direction)
+    if (!targetID) return
 
     const child = scroll.getChildren().find((c) => c.id === targetID)
     if (child) scroll.scrollBy(child.y - scroll.y - 1)
@@ -864,7 +876,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       enabled: navigationMode(),
-      run: () => command.run("session.message.next"),
+      run: () => scrollToUserMessage("next", dialog),
     },
     {
       title: "Navigation mode previous message",
@@ -872,7 +884,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       enabled: navigationMode(),
-      run: () => command.run("session.message.previous"),
+      run: () => scrollToUserMessage("prev", dialog),
     },
     {
       title: "Page up",
