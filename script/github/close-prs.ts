@@ -9,7 +9,6 @@ const defaultSleepMs = 20_000
 const defaultPrintLimit = 50
 const positiveReactions = new Set(["THUMBS_UP", "HEART", "HOORAY", "ROCKET"])
 const cleanupLabel = "automated-pr-cleanup"
-const cleanupMarker = "<!-- opencode-pr-cleanup -->"
 
 const { values } = parseArgs({
   args: Bun.argv.slice(2),
@@ -94,11 +93,6 @@ type PullRequest = {
       name: string
     }>
   }
-  comments: {
-    nodes: Array<{
-      body: string
-    }>
-  }
 }
 
 type GraphqlResponse = {
@@ -127,9 +121,7 @@ type CleanupCandidate = PullRequest & {
   positiveReactions: number
 }
 
-const message = `${cleanupMarker}
-
-Automated PR Cleanup
+const message = `Automated PR Cleanup
 
 Thank you for contributing to opencode.
 
@@ -222,11 +214,6 @@ async function fetchOpenPullRequests() {
               labels(first: 100) {
                 nodes {
                   name
-                }
-              }
-              comments(last: 10) {
-                nodes {
-                  body
                 }
               }
             }
@@ -343,12 +330,7 @@ function positiveReactionCount(pr: PullRequest) {
 }
 
 function hasPriorCleanup(pr: PullRequest) {
-  return (
-    pr.labels.nodes.some((label) => label.name === cleanupLabel) ||
-    pr.comments.nodes.some(
-      (comment) => comment.body.includes(cleanupMarker) || comment.body.includes("Automated PR Cleanup"),
-    )
-  )
+  return pr.labels.nodes.some((label) => label.name === cleanupLabel)
 }
 
 function requireRepo(value: string | undefined) {
