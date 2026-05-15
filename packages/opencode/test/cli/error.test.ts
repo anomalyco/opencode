@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { AccountTransportError } from "../../src/account/schema"
 import { FormatError } from "../../src/cli/error"
-import { UI } from "../../src/cli/ui"
+import { CancelledError } from "../../src/cli/cancelled-error"
 
 describe("cli.error", () => {
   test("formats legacy and tagged config errors the same way", () => {
@@ -90,6 +90,6 @@ describe("cli.error", () => {
   })
 
   test("formats cancelled UI errors as empty output", () => {
-    expect(FormatError(new UI.CancelledError())).toBe("")
+    expect(FormatError(new CancelledError())).toBe("")
   })
 })

@@ -1,41 +1,12 @@
-import type { Argv, InferredOptionTypes } from "yargs"
 import { Config } from "@/config/config"
 import { Effect } from "effect"
+import type { NetworkOptions } from "./network-options"
 
-const options = {
-  port: {
-    type: "number" as const,
-    describe: "port to listen on",
-    default: 0,
-  },
-  hostname: {
-    type: "string" as const,
-    describe: "hostname to listen on",
-    default: "127.0.0.1",
-  },
-  mdns: {
-    type: "boolean" as const,
-    describe: "enable mDNS service discovery (defaults hostname to 0.0.0.0)",
-    default: false,
-  },
-  "mdns-domain": {
-    type: "string" as const,
-    describe: "custom domain name for mDNS service (default: opencode.local)",
-    default: "opencode.local",
-  },
-  cors: {
-    type: "string" as const,
-    array: true,
-    describe: "additional domains to allow for CORS",
-    default: [] as string[],
-  },
-}
+// Re-export the synchronous spec from its dedicated light module so existing
+// callers continue working unchanged while `src/index.ts` can import the spec
+// without pulling Effect.
+export { networkOptions, withNetworkOptions, type NetworkOptions } from "./network-options"
 
-export type NetworkOptions = InferredOptionTypes<typeof options>
-
-export function withNetworkOptions<T>(yargs: Argv<T>) {
-  return yargs.options(options)
-}
 export const resolveNetworkOptions = Effect.fn("Cli.resolveNetworkOptions")(function* (args: NetworkOptions) {
   const config = yield* Config.Service.use((cfg) => cfg.getGlobal())
   return resolveNetworkOptionsNoConfig(args, config)

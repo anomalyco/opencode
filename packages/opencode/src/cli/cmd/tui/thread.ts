@@ -7,7 +7,8 @@ import { UI } from "@/cli/ui"
 import * as Log from "@opencode-ai/core/util/log"
 import { errorMessage } from "@/util/error"
 import { withTimeout } from "@/util/timeout"
-import { withNetworkOptions, resolveNetworkOptionsNoConfig } from "@/cli/network"
+import { resolveNetworkOptionsNoConfig } from "@/cli/network"
+import { TuiThreadSpec } from "./thread-spec"
 import { Filesystem } from "@/util/filesystem"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
@@ -29,21 +30,24 @@ declare global {
 type RpcClient = ReturnType<typeof Rpc.client<typeof rpc>>
 
 function createWorkerFetch(client: RpcClient): typeof fetch {
-  const fn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const request = new Request(input, init)
-    const body = request.body ? await request.text() : undefined
-    const result = await client.call("fetch", {
-      url: request.url,
-      method: request.method,
-      headers: Object.fromEntries(request.headers.entries()),
-      body,
-    })
-    return new Response(result.body, {
-      status: result.status,
-      headers: result.headers,
-    })
-  }
-  return fn as typeof fetch
+  const fn = Object.assign(
+    async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const request = new Request(input, init)
+      const body = request.body ? await request.text() : undefined
+      const result = await client.call("fetch", {
+        url: request.url,
+        method: request.method,
+        headers: Object.fromEntries(request.headers.entries()),
+        body,
+      })
+      return new Response(result.body, {
+        status: result.status,
+        headers: result.headers,
+      })
+    },
+    { preconnect: fetch.preconnect },
+  )
+  return fn
 }
 
 function createEventSource(client: RpcClient): EventSource {
@@ -77,41 +81,7 @@ export function resolveThreadDirectory(project?: string, envPWD = process.env.PW
 }
 
 export const TuiThreadCommand = cmd({
-  command: "$0 [project]",
-  describe: "start opencode tui",
-  builder: (yargs) =>
-    withNetworkOptions(yargs)
-      .positional("project", {
-        type: "string",
-        describe: "path to start opencode in",
-      })
-      .option("model", {
-        type: "string",
-        alias: ["m"],
-        describe: "model to use in the format of provider/model",
-      })
-      .option("continue", {
-        alias: ["c"],
-        describe: "continue the last session",
-        type: "boolean",
-      })
-      .option("session", {
-        alias: ["s"],
-        type: "string",
-        describe: "session id to continue",
-      })
-      .option("fork", {
-        type: "boolean",
-        describe: "fork the session when continuing (use with --continue or --session)",
-      })
-      .option("prompt", {
-        type: "string",
-        describe: "prompt to use",
-      })
-      .option("agent", {
-        type: "string",
-        describe: "agent to use",
-      }),
+  ...TuiThreadSpec,
   handler: async (args) => {
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
     // (Important when running under `bun run` wrappers on Windows.)

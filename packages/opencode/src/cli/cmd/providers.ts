@@ -2,6 +2,7 @@ import { Auth } from "../../auth"
 import { cmd } from "./cmd"
 import { CliError, effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
+import { CancelledError } from "../cancelled-error"
 import * as Prompt from "../effect/prompt"
 import { ModelsDev } from "@opencode-ai/core/models"
 
@@ -20,7 +21,7 @@ import { Effect, Option } from "effect"
 type PluginAuth = NonNullable<Hooks["auth"]>
 
 const promptValue = <Value>(value: Option.Option<Value>) => {
-  if (Option.isNone(value)) return Effect.die(new UI.CancelledError())
+  if (Option.isNone(value)) return Effect.die(new CancelledError())
   return Effect.succeed(value.value)
 }
 

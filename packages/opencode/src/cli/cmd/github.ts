@@ -17,6 +17,7 @@ import type {
   PullRequestEvent,
 } from "@octokit/webhooks-types"
 import { UI } from "../ui"
+import { CancelledError } from "../cancelled-error"
 import { cmd } from "./cmd"
 import { effectCmd } from "../effect-cmd"
 import { ModelsDev } from "@opencode-ai/core/models"
@@ -248,7 +249,7 @@ export const GithubInstallCommand = effectCmd({
           const project = ctx.project
           if (project.vcs !== "git") {
             prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
-            throw new UI.CancelledError()
+            throw new CancelledError()
           }
 
           // Get repo info
@@ -258,7 +259,7 @@ export const GithubInstallCommand = effectCmd({
           const parsed = parseGitHubRemote(info)
           if (!parsed) {
             prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
-            throw new UI.CancelledError()
+            throw new CancelledError()
           }
           return { owner: parsed.owner, repo: parsed.repo, root: ctx.worktree }
         }
@@ -288,7 +289,7 @@ export const GithubInstallCommand = effectCmd({
             ),
           })
 
-          if (prompts.isCancel(provider)) throw new UI.CancelledError()
+          if (prompts.isCancel(provider)) throw new CancelledError()
 
           return provider
         }
@@ -310,7 +311,7 @@ export const GithubInstallCommand = effectCmd({
             ),
           })
 
-          if (prompts.isCancel(model)) throw new UI.CancelledError()
+          if (prompts.isCancel(model)) throw new CancelledError()
           return model
         }
 
@@ -349,7 +350,7 @@ export const GithubInstallCommand = effectCmd({
               s.stop(
                 `Failed to detect GitHub app installation. Make sure to install the app for the \`${app.owner}/${app.repo}\` repository.`,
               )
-              throw new UI.CancelledError()
+              throw new CancelledError()
             }
 
             retries++

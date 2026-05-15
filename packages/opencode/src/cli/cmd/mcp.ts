@@ -6,6 +6,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
+import { CancelledError } from "../cancelled-error"
 import { MCP } from "../../mcp"
 import { McpAuth } from "../../mcp/auth"
 import { McpOAuthProvider } from "../../mcp/oauth-provider"
@@ -220,7 +221,7 @@ export const McpAuthCommand = effectCmd({
           options,
         }),
       )
-      if (prompts.isCancel(selected)) throw new UI.CancelledError()
+      if (prompts.isCancel(selected)) throw new CancelledError()
       serverName = selected
     }
 
@@ -380,7 +381,7 @@ export const McpLogoutCommand = effectCmd({
           }),
         }),
       )
-      if (prompts.isCancel(selected)) throw new UI.CancelledError()
+      if (prompts.isCancel(selected)) throw new CancelledError()
       serverName = selected
     }
 
@@ -468,7 +469,7 @@ export const McpAddCommand = effectCmd({
             },
           ],
         })
-        if (prompts.isCancel(scopeResult)) throw new UI.CancelledError()
+        if (prompts.isCancel(scopeResult)) throw new CancelledError()
         configPath = scopeResult
       }
 
@@ -476,7 +477,7 @@ export const McpAddCommand = effectCmd({
         message: "Enter MCP server name",
         validate: (x) => (x && x.length > 0 ? undefined : "Required"),
       })
-      if (prompts.isCancel(name)) throw new UI.CancelledError()
+      if (prompts.isCancel(name)) throw new CancelledError()
 
       const type = await prompts.select({
         message: "Select MCP server type",
@@ -493,7 +494,7 @@ export const McpAddCommand = effectCmd({
           },
         ],
       })
-      if (prompts.isCancel(type)) throw new UI.CancelledError()
+      if (prompts.isCancel(type)) throw new CancelledError()
 
       if (type === "local") {
         const command = await prompts.text({
@@ -501,7 +502,7 @@ export const McpAddCommand = effectCmd({
           placeholder: "e.g., opencode x @modelcontextprotocol/server-filesystem",
           validate: (x) => (x && x.length > 0 ? undefined : "Required"),
         })
-        if (prompts.isCancel(command)) throw new UI.CancelledError()
+        if (prompts.isCancel(command)) throw new CancelledError()
 
         const mcpConfig: ConfigMCP.Info = {
           type: "local",
@@ -525,13 +526,13 @@ export const McpAddCommand = effectCmd({
             return isValid ? undefined : "Invalid URL"
           },
         })
-        if (prompts.isCancel(url)) throw new UI.CancelledError()
+        if (prompts.isCancel(url)) throw new CancelledError()
 
         const useOAuth = await prompts.confirm({
           message: "Does this server require OAuth authentication?",
           initialValue: false,
         })
-        if (prompts.isCancel(useOAuth)) throw new UI.CancelledError()
+        if (prompts.isCancel(useOAuth)) throw new CancelledError()
 
         let mcpConfig: ConfigMCP.Info
 
@@ -540,27 +541,27 @@ export const McpAddCommand = effectCmd({
             message: "Do you have a pre-registered client ID?",
             initialValue: false,
           })
-          if (prompts.isCancel(hasClientId)) throw new UI.CancelledError()
+          if (prompts.isCancel(hasClientId)) throw new CancelledError()
 
           if (hasClientId) {
             const clientId = await prompts.text({
               message: "Enter client ID",
               validate: (x) => (x && x.length > 0 ? undefined : "Required"),
             })
-            if (prompts.isCancel(clientId)) throw new UI.CancelledError()
+            if (prompts.isCancel(clientId)) throw new CancelledError()
 
             const hasSecret = await prompts.confirm({
               message: "Do you have a client secret?",
               initialValue: false,
             })
-            if (prompts.isCancel(hasSecret)) throw new UI.CancelledError()
+            if (prompts.isCancel(hasSecret)) throw new CancelledError()
 
             let clientSecret: string | undefined
             if (hasSecret) {
               const secret = await prompts.password({
                 message: "Enter client secret",
               })
-              if (prompts.isCancel(secret)) throw new UI.CancelledError()
+              if (prompts.isCancel(secret)) throw new CancelledError()
               clientSecret = secret
             }
 

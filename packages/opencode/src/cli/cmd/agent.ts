@@ -1,6 +1,7 @@
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
+import { CancelledError } from "../cancelled-error"
 import { Global } from "@opencode-ai/core/global"
 import { Agent } from "../../agent/agent"
 import { Provider } from "@/provider/provider"
@@ -103,7 +104,7 @@ const AgentCreateCommand = effectCmd({
               },
             ],
           })
-          if (prompts.isCancel(scopeResult)) throw new UI.CancelledError()
+          if (prompts.isCancel(scopeResult)) throw new CancelledError()
           scope = scopeResult
         }
         targetPath = path.join(scope === "global" ? Global.Path.config : path.join(ctx.worktree, ".opencode"), "agents")
@@ -119,7 +120,7 @@ const AgentCreateCommand = effectCmd({
           placeholder: "What should this agent do?",
           validate: (x) => (x && x.length > 0 ? undefined : "Required"),
         })
-        if (prompts.isCancel(query)) throw new UI.CancelledError()
+        if (prompts.isCancel(query)) throw new CancelledError()
         description = query
       }
 
@@ -130,7 +131,7 @@ const AgentCreateCommand = effectCmd({
       const generated = await Effect.runPromise(agentSvc.generate({ description, model })).catch((error) => {
         spinner.stop(`LLM failed to generate agent: ${error.message}`, 1)
         if (isFullyNonInteractive) process.exit(1)
-        throw new UI.CancelledError()
+        throw new CancelledError()
       })
       spinner.stop(`Agent ${generated.identifier} generated`)
 
@@ -147,7 +148,7 @@ const AgentCreateCommand = effectCmd({
           })),
           initialValues: AVAILABLE_PERMISSIONS,
         })
-        if (prompts.isCancel(result)) throw new UI.CancelledError()
+        if (prompts.isCancel(result)) throw new CancelledError()
         selected = result
       }
 
@@ -177,7 +178,7 @@ const AgentCreateCommand = effectCmd({
           ],
           initialValue: "all" as const,
         })
-        if (prompts.isCancel(modeResult)) throw new UI.CancelledError()
+        if (prompts.isCancel(modeResult)) throw new CancelledError()
         mode = modeResult
       }
 
@@ -214,7 +215,7 @@ const AgentCreateCommand = effectCmd({
           process.exit(1)
         }
         prompts.log.error(`Agent file already exists: ${filePath}`)
-        throw new UI.CancelledError()
+        throw new CancelledError()
       }
 
       await Filesystem.write(filePath, content)
