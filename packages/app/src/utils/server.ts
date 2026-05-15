@@ -8,9 +8,9 @@ export function authTokenFromCredentials(input: { username?: string; password: s
 
 export function authFromToken(token: string | null) {
   const decoded = decode64(token ?? undefined)
-  if (!decoded) return
+  if (!decoded) return undefined
   const separator = decoded.indexOf(":")
-  if (separator === -1) return
+  if (separator === -1) return undefined
   return {
     username: decoded.slice(0, separator) || "opencode",
     password: decoded.slice(separator + 1),
@@ -20,13 +20,13 @@ export function authFromToken(token: string | null) {
 export function authFromUrl(input: string) {
   try {
     const url = new URL(input)
-    if (!url.password) return
+    if (!url.password) return undefined
     return {
       username: url.username ? decodeURIComponent(url.username) : "opencode",
       password: decodeURIComponent(url.password),
     }
   } catch {
-    return
+    return undefined
   }
 }
 
@@ -37,7 +37,7 @@ export function createSdkForServer({
   server: ServerConnection.HttpBase
 }) {
   const auth = (() => {
-    if (!server.password) return
+    if (!server.password) return undefined
     return {
       Authorization: `Basic ${authTokenFromCredentials({ username: server.username, password: server.password })}`,
     }
