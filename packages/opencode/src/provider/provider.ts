@@ -1234,7 +1234,7 @@ export const layer = Layer.effect(
           if (!p || !models) continue
 
           const providerID = ProviderID.make(p.id)
-          if (disabled.has(providerID)) continue
+          if (!isProviderAllowed(providerID)) continue
 
           const provider = database[providerID]
           if (!provider) continue
@@ -1353,7 +1353,7 @@ export const layer = Layer.effect(
         const envs = yield* env.all()
         for (const [id, provider] of Object.entries(database)) {
           const providerID = ProviderID.make(id)
-          if (disabled.has(providerID)) continue
+          if (!isProviderAllowed(providerID)) continue
           const apiKey = provider.env.map((item) => envs[item]).find(Boolean)
           if (!apiKey) continue
           mergeProvider(providerID, {
@@ -1366,7 +1366,7 @@ export const layer = Layer.effect(
         const auths = yield* auth.all().pipe(Effect.orDie)
         for (const [id, provider] of Object.entries(auths)) {
           const providerID = ProviderID.make(id)
-          if (disabled.has(providerID)) continue
+          if (!isProviderAllowed(providerID)) continue
           if (provider.type === "api") {
             mergeProvider(providerID, {
               source: "api",
@@ -1379,7 +1379,7 @@ export const layer = Layer.effect(
         for (const plugin of plugins) {
           if (!plugin.auth) continue
           const providerID = ProviderID.make(plugin.auth.provider)
-          if (disabled.has(providerID)) continue
+          if (!isProviderAllowed(providerID)) continue
 
           const stored = yield* auth.get(providerID).pipe(Effect.orDie)
           if (!stored) continue
@@ -1398,7 +1398,7 @@ export const layer = Layer.effect(
 
         for (const [id, fn] of Object.entries(custom(dep))) {
           const providerID = ProviderID.make(id)
-          if (disabled.has(providerID)) continue
+          if (!isProviderAllowed(providerID)) continue
           const data = database[providerID]
           if (!data) {
             log.error("Provider does not exist in model list " + providerID)
