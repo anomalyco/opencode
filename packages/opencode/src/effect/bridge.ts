@@ -1,9 +1,6 @@
 import { Context, Effect, Exit, Fiber } from "effect"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
-import { Instance } from "@/project/instance"
-import type { InstanceContext } from "@/project/instance-context"
 import type { WorkspaceID } from "@/control-plane/schema"
-import { LocalContext } from "@/util/local-context"
 import { InstanceRef, WorkspaceRef } from "./instance-ref"
 import { attachWith } from "./run-service"
 
@@ -14,27 +11,14 @@ export interface Shape {
   readonly bind: <Args extends readonly unknown[], Result>(fn: (...args: Args) => Result) => (...args: Args) => Result
 }
 
-function restore<R>(instance: InstanceContext | undefined, workspace: WorkspaceID | undefined, fn: () => R): R {
-  if (instance && workspace !== undefined) {
-    return WorkspaceContext.restore(workspace, () => Instance.restore(instance, fn))
-  }
-  if (instance) return Instance.restore(instance, fn)
+function restoreWorkspace<R>(workspace: WorkspaceID | undefined, fn: () => R): R {
   if (workspace !== undefined) return WorkspaceContext.restore(workspace, fn)
   return fn()
 }
 
 function captureSync() {
   const fiber = Fiber.getCurrent()
-  const value = fiber ? Context.getReferenceUnsafe(fiber.context, InstanceRef) : undefined
-  const instance =
-    value ??
-    (() => {
-      try {
-        return Instance.current
-      } catch (err) {
-        if (!(err instanceof LocalContext.NotFound)) throw err
-      }
-    })()
+  const instance = fiber ? Context.getReferenceUnsafe(fiber.context, InstanceRef) : undefined
   const workspace =
     (fiber ? Context.getReferenceUnsafe(fiber.context, WorkspaceRef) : undefined) ?? WorkspaceContext.workspaceID
   return { instance, workspace }
@@ -42,47 +26,43 @@ function captureSync() {
 
 export const bind = <Args extends readonly unknown[], Result>(fn: (...args: Args) => Result) => {
   const captured = captureSync()
-  return (...args: Args) => restore(captured.instance, captured.workspace, () => fn(...args))
+  return (...args: Args) =>
+    restoreWorkspace(captured.workspace, () =>
+      Effect.runSync(attachWith(Effect.sync(() => fn(...args)), captured)),
+    )
 }
 
 /**
- * Bridge from Effect into a Promise-returning JS callback while installing
- * legacy `Instance.context` and `WorkspaceContext` AsyncLocalStorage for
- * the duration of the callback. Effect's `InstanceRef`/`WorkspaceRef` do
- * not propagate across async/await boundaries inside `Effect.promise(() =>
- * async fn)` callbacks that re-enter Effect via `AppRuntime.runPromise`,
- * but Node's AsyncLocalStorage does. Use this whenever an Effect crosses
- * into JS that may itself spawn new Effect runtimes (workspace adapters,
- * legacy plugins, etc.).
+ * Bridge from Effect into a Promise-returning JS callback while preserving
+ * `WorkspaceContext` AsyncLocalStorage for callback code that still reads it.
+ * `InstanceRef` is captured for effects run through the returned bridge APIs;
+ * plain JS callbacks that need it should receive the ref explicitly.
  *
- * Mirrors `Effect.promise` but restores legacy ALS first.
+ * Mirrors `Effect.promise` but restores workspace ALS first.
  */
 export const fromPromise = <T>(fn: () => Promise<T> | T): Effect.Effect<T> =>
   Effect.gen(function* () {
-    const instance = yield* InstanceRef
     const workspace = yield* WorkspaceRef
-    return yield* Effect.promise(() => Promise.resolve(restore(instance, workspace, () => fn())))
+    return yield* Effect.promise(() => Promise.resolve(restoreWorkspace(workspace, () => fn())))
   })
 
 export function make(): Effect.Effect<Shape> {
   return Effect.gen(function* () {
     const ctx = yield* Effect.context()
-    const value = yield* InstanceRef
     const captured = captureSync()
-    const instance = value ?? captured.instance
+    const instance = (yield* InstanceRef) ?? captured.instance
     const workspace = (yield* WorkspaceRef) ?? captured.workspace
-    const attach = <A, E, R>(effect: Effect.Effect<A, E, R>) => attachWith(effect, { instance, workspace })
     const wrap = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-      attach(effect).pipe(Effect.provide(ctx)) as Effect.Effect<A, E, never>
+      attachWith(effect.pipe(Effect.provide(ctx)) as Effect.Effect<A, E, never>, { instance, workspace })
 
     return {
       promise: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        restore(instance, workspace, () => Effect.runPromise(wrap(effect))),
+        restoreWorkspace(workspace, () => Effect.runPromise(wrap(effect))),
       fork: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        restore(instance, workspace, () => Effect.runFork(wrap(effect))),
+        restoreWorkspace(workspace, () => Effect.runFork(wrap(effect))),
       run: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         Effect.callback<A, E>((resume) => {
-          restore(instance, workspace, () =>
+          restoreWorkspace(workspace, () =>
             Effect.runPromiseExit(wrap(effect)).then((exit) =>
               resume(Exit.isSuccess(exit) ? Effect.succeed(exit.value) : Effect.failCause(exit.cause)),
             ),
@@ -91,7 +71,7 @@ export function make(): Effect.Effect<Shape> {
       bind:
         <Args extends readonly unknown[], Result>(fn: (...args: Args) => Result) =>
         (...args: Args) =>
-          restore(instance, workspace, () => fn(...args)),
+          restoreWorkspace(workspace, () => Effect.runSync(wrap(Effect.sync(() => fn(...args))))),
     } satisfies Shape
   })
 }
