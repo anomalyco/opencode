@@ -4,7 +4,7 @@
   position: relative;
   z-index: 10;
   border-radius: 12px;
-  overflow: clip;
+  overflow: hidden;
 }
 
 [data-dock-surface="tray"] {

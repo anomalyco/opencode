@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Markdown } from "@opencode-ai/ui/markdown"
 import { showToast } from "@/utils/toast"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
@@ -77,6 +78,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     customOn: cached?.customOn ?? ([] as boolean[]),
     editing: false,
     focus: 0,
+    minimized: false,
   })
 
   let root: HTMLDivElement | undefined
@@ -163,7 +165,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     focusFrame = requestAnimationFrame(() => {
       focusFrame = undefined
       const el = next === options().length ? customRef : optsRef[next]
-      el?.focus()
+      el?.focus({ preventScroll: true })
     })
   }
 
@@ -429,9 +431,20 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       kind="question"
       ref={(el) => (root = el)}
       onKeyDown={nav}
+      minimized={store.minimized}
       header={
         <>
-          <div data-slot="question-header-title">{summary()}</div>
+          <div
+            data-slot="question-header-title"
+            role="button"
+            onClick={() => setStore("minimized", !store.minimized)}
+          >
+            {summary()}
+            <Icon
+              name="chevron-down"
+              style={{ transform: store.minimized ? "rotate(0deg)" : "rotate(180deg)", transition: "transform 0.2s ease" }}
+            />
+          </div>
           <div data-slot="question-progress">
             <For each={questions()}>
               {(_, i) => (
@@ -473,9 +486,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
         </>
       }
     >
-      <div data-slot="question-text" class="overflow-auto">
-        {question()?.question}
-      </div>
+      <div data-slot="question-text" class="overflow-auto"><Markdown text={question()?.question ?? ""} /></div>
       <Show when={multi()} fallback={<div data-slot="question-hint">{language.t("ui.question.singleHint")}</div>}>
         <div data-slot="question-hint">{language.t("ui.question.multiHint")}</div>
       </Show>

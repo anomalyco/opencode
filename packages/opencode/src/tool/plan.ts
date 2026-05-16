@@ -26,12 +26,21 @@ export const PlanExitTool = Tool.define(
         Effect.gen(function* () {
           const instance = yield* InstanceState.context
           const info = yield* session.get(ctx.sessionID)
-          const plan = path.relative(instance.worktree, Session.plan(info, instance))
+          const abs = Session.plan(info, instance)
+          const plan = path.relative(instance.worktree, abs)
+          const content = yield* Effect.promise(() => Bun.file(abs).text().catch(() => ""))
+          if (!content.trim()) {
+            return {
+              title: "Plan is empty",
+              output: `The plan file at ${plan} is empty. Please write the plan first before calling plan_exit.`,
+              metadata: {},
+            }
+          }
           const answers = yield* question.ask({
             sessionID: ctx.sessionID,
             questions: [
               {
-                question: `Plan at ${plan} is complete. Would you like to switch to the build agent and start implementing?`,
+                question: `Plan at ${plan} is complete. Would you like to switch to the build agent and start implementing?\n\n---\n\n${content}`,
                 header: "Build Agent",
                 custom: false,
                 options: [
