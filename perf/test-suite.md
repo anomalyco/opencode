@@ -103,11 +103,12 @@ Targeted 3-run baselines:
 | `test/provider/provider.test.ts`          | 8.323, 7.543, 7.474    |  7.543 | Large serial file.                                                           |
 | `test/server/httpapi-cors.test.ts`        | 2.621, 1.682, 1.518    |  1.682 | Not a standalone top target; initial 14s was mixed-scope noise/order effect. |
 
-Final full-suite sanity check:
+Full-suite sanity checks:
 
-| Command              |   Result |
-| -------------------- | -------: |
-| `bun run bench:test` | 225.069s |
+| Command              |   Result | Notes                                  |
+| -------------------- | -------: | -------------------------------------- |
+| `bun run bench:test` | 225.069s | Before continuing prompt/session work. |
+| `bun run bench:test` | 186.729s | After prompt, processor, and PTY wins. |
 
 ## Dead Ends
 
