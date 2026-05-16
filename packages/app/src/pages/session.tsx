@@ -536,12 +536,6 @@ export default function Page() {
 
   createComputed((prev) => {
     const key = sessionKey()
-    if (key !== prev) {
-      setStore("deferRender", true)
-      requestAnimationFrame(() => {
-        setTimeout(() => setStore("deferRender", false), 0)
-      })
-    }
     return key
   }, sessionKey())
 
@@ -1124,7 +1118,7 @@ export default function Page() {
     loadingClass: string
     emptyClass: string
   }) => (
-    <Show when={!store.deferRender}>
+    <Show when={true}>
       <SessionReviewTab
         title={changesTitle()}
         empty={reviewEmpty(input)}
@@ -1882,7 +1876,7 @@ export default function Page() {
 
           <SessionComposerRegion
             state={composer}
-            ready={!store.deferRender && messagesReady()}
+            ready={messagesReady()}
             centered={centered()}
             inputRef={(el) => {
               inputRef = el

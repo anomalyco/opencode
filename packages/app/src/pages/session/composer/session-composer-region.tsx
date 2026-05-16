@@ -99,7 +99,6 @@ export function SessionComposerRegion(props: {
   createEffect(() => {
     route.sessionKey()
     const ready = props.ready
-    const delay = 140
 
     clear()
     setStore("ready", false)
@@ -107,10 +106,7 @@ export function SessionComposerRegion(props: {
 
     frame = requestAnimationFrame(() => {
       frame = undefined
-      timer = window.setTimeout(() => {
-        setStore("ready", true)
-        timer = undefined
-      }, delay)
+      setStore("ready", true)
     })
   })
 
