@@ -226,3 +226,28 @@ describe("ConfigMarkdown: frontmatter has weird model id", async () => {
     expect(result.content.trim()).toBe("Strictly follow da rules")
   })
 })
+
+describe("ConfigMarkdown: subagent with unquoted colon in description (#25315)", async () => {
+  const result = await ConfigMarkdown.parse(import.meta.dir + "/fixtures/subagent-colon-description.md")
+
+  test("should parse without throwing", () => {
+    expect(result).toBeDefined()
+    expect(result.data).toBeDefined()
+  })
+
+  test("should preserve description with unquoted colon", () => {
+    expect(result.data["description"]).toBe("Reviews changes: returns a verdict.")
+  })
+
+  test("should preserve mode: subagent", () => {
+    expect(result.data["mode"]).toBe("subagent")
+  })
+
+  test("should preserve hidden: true", () => {
+    expect(result.data["hidden"]).toBe(true)
+  })
+
+  test("should extract prompt content", () => {
+    expect(result.content.trim()).toBe("Agent prompt text.")
+  })
+})
