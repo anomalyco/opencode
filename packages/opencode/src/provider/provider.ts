@@ -24,6 +24,13 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import * as ProviderTransform from "./transform"
+import {
+  enrichNimRequest,
+  fetchWithNimDefense,
+  isNimProvider,
+  normalizeNimResponse,
+  normalizeNvidiaModelId,
+} from "./nim-defense"
 import { ModelID, ProviderID } from "./schema"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -1596,11 +1603,46 @@ export const layer = Layer.effect(
             }
           }
 
-          const res = await fetchFn(input, {
-            ...opts,
-            // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
-            timeout: false,
-          })
+          // NVIDIA NIM: enrich request body with reasoning model kwargs
+          const isNim = isNimProvider(model.providerID, model.api.npm, options["baseURL"] as string | undefined)
+          if (isNim && opts.body && opts.method === "POST") {
+            const body = JSON.parse(opts.body as string)
+            const enriched = enrichNimRequest(body, model.api.id, (msg) => log.warn(msg))
+            // Two important fixes for NIM:
+            // 1. Deduplicate nvidia/ prefix in model ID
+            if (enriched.model) enriched.model = normalizeNvidiaModelId(enriched.model as string)
+            // 2. Inject chat_template_kwargs at the root of the fetch body
+            opts.body = JSON.stringify(enriched)
+          }
+
+          const innerFetch = () =>
+            fetchFn(input, {
+              ...opts,
+              // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+              timeout: false,
+            })
+
+          const res = isNim
+            ? await fetchWithNimDefense(innerFetch, model.api.id, {
+                signal: combined ?? undefined,
+              })
+            : await innerFetch()
+
+          // NVIDIA NIM: normalize non-streaming responses
+          if (isNim) {
+            // Detect streaming: prefer ReadableStream check over content-type
+            const isStreaming = res.body instanceof ReadableStream ||
+              (res.headers.get("content-type") || "").includes("text/event-stream")
+            if (!isStreaming) {
+              const normalized = normalizeNimResponse(await res.clone().json())
+              return new Response(JSON.stringify(normalized), {
+                status: res.status,
+                statusText: res.statusText,
+                headers: new Headers(res.headers),
+              })
+            }
+            // Streaming responses pass through unchanged
+          }
 
           if (!chunkAbortCtl) return res
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)
