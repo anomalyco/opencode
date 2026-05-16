@@ -646,6 +646,8 @@ export const dict = {
   "common.learnMore": "Learn more",
   "common.rename": "Rename",
   "common.reset": "Reset",
+  "common.pin": "Pin",
+  "common.unpin": "Unpin",
   "common.archive": "Archive",
   "common.delete": "Delete",
   "common.close": "Close",

@@ -18,6 +18,7 @@ import { useGlobalSync, useQueryOptions } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { pathKey } from "@/utils/path-key"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
+import { sortByPinned } from "@/context/pin-store"
 import { sortedRootSessions } from "./helpers"
 import { useIsFetching } from "@tanstack/solid-query"
 
@@ -256,11 +257,11 @@ const WorkspaceSessionList = (props: {
     <Show when={props.loading()}>
       <SessionSkeleton />
     </Show>
-    <For each={props.sessions()}>
+    <For each={sortByPinned(props.sessions())}>
       {(session) => (
         <SessionItem
           session={session}
-          list={props.sessions()}
+          list={sortByPinned(props.sessions())}
           navList={props.ctx.navList}
           slug={props.slug()}
           mobile={props.mobile}

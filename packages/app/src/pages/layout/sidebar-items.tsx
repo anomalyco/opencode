@@ -1,13 +1,15 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { Avatar } from "@opencode-ai/ui/avatar"
+import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { A, useParams } from "@solidjs/router"
-import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, For, type Accessor, type JSX, Match, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
@@ -16,6 +18,7 @@ import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { childSessionOnPath, hasProjectPermissions } from "./helpers"
+import { isPinned, togglePin } from "@/context/pin-store"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
@@ -93,6 +96,7 @@ export type SessionItemProps = {
   clearHoverProjectSoon: () => void
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
+  onRename?: (session: Session) => void
 }
 
 const SessionRow = (props: {
@@ -109,43 +113,67 @@ const SessionRow = (props: {
   sidebarOpened: Accessor<boolean>
   warmPress: () => void
   warmFocus: () => void
+  isPinned: Accessor<boolean>
+  onTogglePin: () => void
+  onRename: () => void
 }): JSX.Element => {
+  const language = useLanguage()
   const title = () => sessionTitle(props.session.title)
 
   return (
-    <A
-      href={`/${props.slug}/session/${props.session.id}`}
-      class={`flex items-center gap-2 min-w-0 w-full text-left focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
-      onPointerDown={props.warmPress}
-      onFocus={props.warmFocus}
-      onClick={() => {
-        if (props.sidebarOpened()) return
-        props.clearHoverProjectSoon()
-      }}
-    >
-      <Show when={props.isWorking() || props.hasPermissions() || props.hasError() || props.unseenCount() > 0}>
-        <div
-          class="shrink-0 size-6 flex items-center justify-center"
-          style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
+    <ContextMenu>
+      <ContextMenu.Trigger as="span" class="contents">
+        <A
+          href={`/${props.slug}/session/${props.session.id}`}
+          class={`flex items-center gap-2 min-w-0 w-full text-left focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
+          onPointerDown={props.warmPress}
+          onFocus={props.warmFocus}
+          onClick={() => {
+            if (props.sidebarOpened()) return
+            props.clearHoverProjectSoon()
+          }}
+          onContextMenu={(e) => e.preventDefault()}
         >
-          <Switch>
-            <Match when={props.isWorking()}>
-              <Spinner class="size-[15px]" />
-            </Match>
-            <Match when={props.hasPermissions()}>
-              <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-            </Match>
-            <Match when={props.hasError()}>
-              <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-            </Match>
-            <Match when={props.unseenCount() > 0}>
-              <div class="size-1.5 rounded-full bg-text-interactive-base" />
-            </Match>
-          </Switch>
-        </div>
-      </Show>
-      <span class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{title()}</span>
-    </A>
+          <Show when={props.isWorking() || props.hasPermissions() || props.hasError() || props.unseenCount() > 0}>
+            <div
+              class="shrink-0 size-6 flex items-center justify-center"
+              style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
+            >
+              <Switch>
+                <Match when={props.isWorking()}>
+                  <Spinner class="size-[15px]" />
+                </Match>
+                <Match when={props.hasPermissions()}>
+                  <div class="size-1.5 rounded-full bg-surface-warning-strong" />
+                </Match>
+                <Match when={props.hasError()}>
+                  <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
+                </Match>
+                <Match when={props.unseenCount() > 0}>
+                  <div class="size-1.5 rounded-full bg-text-interactive-base" />
+                </Match>
+              </Switch>
+            </div>
+          </Show>
+          <Show when={props.isPinned()}>
+            <Icon name="pin" size="small" class="text-icon-base shrink-0" />
+          </Show>
+          <span class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{title()}</span>
+        </A>
+      </ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Content>
+          <ContextMenu.Item onSelect={props.onRename}>
+            <ContextMenu.ItemLabel>{language.t("common.rename")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <ContextMenu.Item onSelect={props.onTogglePin}>
+            <ContextMenu.ItemLabel>
+              {props.isPinned() ? language.t("common.unpin") : language.t("common.pin")}
+            </ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu.Portal>
+    </ContextMenu>
   )
 }
 
@@ -156,6 +184,19 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const notification = useNotification()
   const permission = usePermission()
   const globalSync = useGlobalSync()
+  const globalSDK = useGlobalSDK()
+  const sessionIsPinned = createMemo(() => isPinned(props.session.id))
+  const onTogglePin = () => togglePin(props.session.id)
+  const onRename = async () => {
+    const newTitle = window.prompt(language.t("common.rename"), sessionTitle(props.session.title))
+    if (newTitle && newTitle !== props.session.title) {
+      await globalSDK.client.session.update({
+        directory: props.session.directory,
+        sessionID: props.session.id,
+        title: newTitle,
+      })
+    }
+  }
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
   const [sessionStore] = globalSync.child(props.session.directory)
@@ -178,13 +219,13 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
 
   const warm = (span: number, priority: "high" | "low") => {
     const nav = props.navList?.()
-    const list = nav?.some((item) => item.id === props.session.id && item.directory === props.session.directory)
+    const list = nav?.some((item: Session) => item.id === props.session.id && item.directory === props.session.directory)
       ? nav
       : props.list
 
     props.prefetchSession(props.session, priority)
 
-    const idx = list.findIndex((item) => item.id === props.session.id && item.directory === props.session.directory)
+    const idx = list.findIndex((item: Session) => item.id === props.session.id && item.directory === props.session.directory)
     if (idx === -1) return
 
     for (let step = 1; step <= span; step++) {
@@ -211,6 +252,9 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       sidebarOpened={layout.sidebar.opened}
       warmPress={() => warm(2, "high")}
       warmFocus={() => warm(2, "high")}
+      isPinned={sessionIsPinned}
+      onTogglePin={onTogglePin}
+      onRename={onRename}
     />
   )
 
