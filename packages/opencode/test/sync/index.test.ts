@@ -13,7 +13,10 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const it = testEffect(
   Layer.mergeAll(
-    SyncEvent.layer.pipe(Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: true }))),
+    SyncEvent.layer.pipe(
+      Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: true })),
+      Layer.provideMerge(Bus.layer),
+    ),
     CrossSpawnSpawner.defaultLayer,
   ),
 )
@@ -114,7 +117,8 @@ describe("SyncEvent", () => {
           const received = new Promise<void>((done) => {
             resolve = done
           })
-          const dispose = Bus.subscribeAll((event) => {
+          const bus = yield* Bus.Service
+          const dispose = yield* bus.subscribeAllCallback((event) => {
             events.push(event)
             resolve()
           })
