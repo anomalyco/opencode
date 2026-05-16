@@ -1,62 +1,62 @@
 ---
 title: "에이전트 스킬"
-description: "SKILL.md 정의를 통해 재사용 가능한 동작을 정의합니다."
+description: "SKILL.md 정의를 통해 재사용 가능한 동작 정의"
 ---
 
-Agent Skill let opencode discover reusable instruction from your repo 또는 홈 디렉토리.
-Skills are loaded on-demand via native `skill` tool-agents see available skills and can loaded full content when needed.
+에이전트 스킬을 사용하면 OpenCode가 저장소나 홈 디렉터리에서 재사용 가능한 지침을 찾을 수 있습니다.
+스킬은 네이티브 `skill` 도구를 통해 필요 시 로드됩니다. 에이전트는 사용 가능한 스킬을 확인하고 필요할 때 스킬의 전체 콘텐츠를 로드할 수 있습니다.
 
 ---
 
-## 파일 위치
+## 파일 배치
 
-기술 이름 당 하나의 폴더를 만들고 내부 `SKILL.md`를 넣어.
-opencode 이 위치를 검색:
+스킬 이름당 하나의 폴더를 생성하고 그 안에 `SKILL.md`를 배치하세요.
+OpenCode는 다음 위치를 검색합니다:
 
-- 프로젝트 구성: `.opencode/skills/<name>/SKILL.md`
-- 글로벌 구성: `~/.config/opencode/skills/<name>/SKILL.md`
-- 프로젝트 클로드 호환 : `.claude/skills/<name>/SKILL.md`
-- 글로벌 클로드 호환 : `~/.claude/skills/<name>/SKILL.md`
-- 프로젝트 에이전트 호환 : `.agents/skills/<name>/SKILL.md`
-- 글로벌 에이전트 호환 : `~/.agents/skills/<name>/SKILL.md`
+- 프로젝트 설정: `.opencode/skills/<name>/SKILL.md`
+- 전역 설정: `~/.config/opencode/skills/<name>/SKILL.md`
+- 프로젝트 Claude 호환: `.claude/skills/<name>/SKILL.md`
+- 전역 Claude 호환: `~/.claude/skills/<name>/SKILL.md`
+- 프로젝트 에이전트 호환: `.agents/skills/<name>/SKILL.md`
+- 전역 에이전트 호환: `~/.agents/skills/<name>/SKILL.md`
 
 ---
 
 ## 검색 이해
 
-Project-local paths의 경우, opencode는 git worktree에 도달 할 때까지 현재 작업 디렉토리에서 걷습니다.
-그것은 `skills/*/SKILL.md`에 있는 어떤 어울리는 `.opencode/` 및 어떤 어울리는 `.claude/skills/*/SKILL.md` 또는 `.agents/skills/*/SKILL.md`를 방법 적재합니다.
+프로젝트 로컬 경로의 경우, OpenCode는 현재 작업 디렉터리에서 git worktree에 도달할 때까지 상위 디렉터리로 탐색합니다.
+`.opencode/` 경로에서 `skills/*/SKILL.md`와 일치하는 것을 로드하거나 `.claude/skills/*/SKILL.md` 또는 `.agents/skills/*/SKILL.md`와 매칭되는 것을 로드합니다.
 
-세계적인 정의는 또한 `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` 및 `~/.agents/skills/*/SKILL.md`에서 적재됩니다.
+전역 정의는 `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md`, `~/.agents/skills/*/SKILL.md`에서도 로드됩니다.
 
 ---
 
-## Frontmatter 작성
+## 프런트매터 작성
 
-각 `SKILL.md`는 YAML frontmatter로 시작해야 합니다.
-이 필드는 인식됩니다:
+각 `SKILL.md`는 YAML 프런트매터로 시작해야 합니다.
+다음 필드만 인식됩니다:
 
 - `name` (필수)
 - `description` (필수)
-- (선택) `license`
-- (선택) `compatibility`
-- `metadata` (선택 사항, 문자열에 문자열 맵)
+- `license` (선택 사항)
+- `compatibility` (선택 사항)
+- `metadata` (선택 사항, 문자열-문자열 맵)
 
-알려진 frontmatter 필드는 무시됩니다.
+알 수 없는 프런트매터 필드는 무시됩니다.
 
 ---
 
-## 유효한 이름
+## 이름 유효성 검사
 
-`name`는 해야 합니다:
+`name`은 다음 조건을 만족해야 합니다:
 
-- 1–64자
-- 단 하나 hyphen 분리기를 가진 더 낮은 케이스 alphanumeric가 있으십시오
-- `-`로 시작 또는 끝 아닙니다
-- 연속 `--` 포함하지
-- `SKILL.md`를 포함하는 디렉토리 이름을 일치
+- 1~64자
+- 단일 하이픈 구분자를 사용한 소문자 영숫자
+- `-`로 시작하거나 끝나지 않음
+- 연속된 `--`를 포함하지 않음
+- `SKILL.md`를 포함하는 디렉터리 이름과 일치
 
-동등한 regex:
+동등한 정규식:
 
 ```text
 ^[a-z0-9]+(-[a-z0-9]+)*$
@@ -66,19 +66,19 @@ Project-local paths의 경우, opencode는 git worktree에 도달 할 때까지 
 
 ## 길이 규칙 준수
 
-`description`는 1-1024 특성이어야 합니다.
-제대로 선택하기 위해 에이전트에 대해 충분히 유지하십시오.
+`description`은 1~1024자여야 합니다.
+에이전트가 올바르게 선택할 수 있을 만큼 구체적으로 작성하세요.
 
 ---
 
-## 사용 예제
+## 예시 사용
 
-이처럼 `.opencode/skills/git-release/SKILL.md` 만들기:
+`.opencode/skills/git-release/SKILL.md`를 다음과 같이 생성하세요:
 
 ```markdown
 ---
 name: git-release
-description: Create consistent releases and changelogs
+description: 일관된 릴리스 및 변경 로그 생성
 license: MIT
 compatibility: opencode
 metadata:
@@ -86,35 +86,35 @@ metadata:
   workflow: github
 ---
 
-## What I do
+## 수행 작업
 
-- Draft release notes from merged PRs
-- Propose a version bump
-- Provide a copy-pasteable `gh release create` command
+- 병합된 PR에서 릴리스 노트 초안 작성
+- 버전 업데이트 제안
+- 복사-붙여넣기 가능한 `gh release create` 명령어 제공
 
-## When to use me
+## 사용 시기
 
-Use this when you are preparing a tagged release.
-Ask clarifying questions if the target versioning scheme is unclear.
+태그가 지정된 릴리스를 준비할 때 사용하세요.
+타겟 버전 관리 체계가 명확하지 않은 경우 확인 질문을 하세요.
 ```
 
 ---
 
 ## 도구 설명 인식
 
-opencode는 `skill` 도구 설명에서 사용할 수있는 기술을 나열합니다.
-각 항목에는 기술 이름 및 설명이 포함됩니다.
+OpenCode는 `skill` 도구 설명에서 사용 가능한 스킬을 나열합니다.
+각 항목에는 스킬 이름과 설명이 포함됩니다:
 
 ```xml
 <available_skills>
   <skill>
     <name>git-release</name>
-    <description>Create consistent releases and changelogs</description>
+    <description>일관된 릴리스 및 변경 로그 생성</description>
   </skill>
 </available_skills>
 ```
 
-에이전트는 도구를 호출하여 기술을로드 :
+에이전트는 도구를 호출하여 스킬을 로드합니다:
 
 ```
 skill({ name: "git-release" })
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## 권한 구성
 
-기술 에이전트가 `opencode.json`의 패턴 기반 권한을 사용하여 액세스 할 수있는 제어 :
+`opencode.json`에서 패턴 기반 권한을 사용하여 에이전트가 접근할 수 있는 스킬을 제어하세요:
 
 ```json
 {
@@ -139,21 +139,21 @@ skill({ name: "git-release" })
 }
 ```
 
-| 권한    | 동작                              |
-| ------- | --------------------------------- |
-| `allow` | 기술이 즉시 로드됨                |
-| `deny`  | 에이전트에서 기술 숨김, 접근 거부 |
-| `ask`   | 로드 전에 사용자에게 승인 요청    |
+| 권한 | 동작 |
+| ---------- | ----------------------------------------- |
+| `allow` | 스킬 즉시 로드 |
+| `deny` | 에이전트에서 스킬 숨김, 접근 거부 |
+| `ask` | 로드 전 사용자 승인 요청 |
 
-패턴 지원 와일드 카드: `internal-*` 경기 `internal-docs`, `internal-tools`, 등.
+패턴은 와일드카드를 지원합니다: `internal-*`는 `internal-docs`, `internal-tools` 등과 일치합니다.
 
 ---
 
 ## 에이전트별 재정의
 
-글로벌 디폴트보다 특정 에이전트 다른 권한을 부여합니다.
+전역 기본값과 달리 특정 에이전트에 다른 권한을 부여하세요.
 
-**사용자 지정 에이전트 ** ( 에이전트 frontmatter):
+**사용자 정의 에이전트의 경우** (에이전트 프런트매터에서):
 
 ```yaml
 ---
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-** 내장 에이전트 ** (`opencode.json`에서):
+**내장 에이전트의 경우** (`opencode.json`에서):
 
 ```json
 {
@@ -183,9 +183,9 @@ permission:
 
 ## 스킬 도구 비활성화
 
-그들을 사용하지 않는 에이전트을위한 완전히 비활성화 된 기술 :
+사용해서는 안 되는 에이전트에 대해 스킬을 완전히 비활성화하세요:
 
-**사용자 지정 에이전트**:
+**사용자 정의 에이전트의 경우**:
 
 ```yaml
 ---
@@ -194,7 +194,7 @@ tools:
 ---
 ```
 
-** 내장 에이전트 **:
+**내장 에이전트의 경우**:
 
 ```json
 {
@@ -208,15 +208,15 @@ tools:
 }
 ```
 
-비활성화 할 때, `<available_skills>` 섹션은 완전히 부유합니다.
+비활성화되면 `<available_skills>` 섹션이 완전히 생략됩니다.
 
 ---
 
-## 로딩 문제 해결
+## 로드시 발생하는 문제 해결 방법
 
-기술이 나타나지 않는 경우:
+스킬이 표시되지 않는 경우:
 
-1. `SKILL.md`는 모든 모자에서 spelled
-2. `name`와 `description`를 포함하는 검사
-3. 기술 이름은 모든 위치에서 독특합니다.
-4. `deny`를 가진 허가를 검사하십시오 에이전트에서 숨겨집니다
+1. `SKILL.md`가 SKILL 문자가 모두 대문자로 철자되었는지 확인
+2. 프런트매터에 `name`과 `description`이 포함되었는지 확인
+3. 모든 경로에서 스킬 이름이 고유한지 확인
+4. 권한 확인 - `deny`가 설정된 스킬은 에이전트에서 숨김 처리됩니다.
