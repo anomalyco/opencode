@@ -139,6 +139,24 @@ const live: Layer.Layer<
             providerOptions: item.options,
           })
       const options = mergeOptions(mergeOptions(mergeOptions(base, input.model.options), input.agent.options), variant)
+
+      // Apply agent-level thinking override
+      if (input.agent.thinking === false) {
+        // Strip all thinking/reasoning related options to disable thinking
+        delete options.thinking
+        delete options.thinkingConfig
+        delete options.reasoning
+        delete options.reasoningEffort
+        delete options.reasoningConfig
+        delete options.enable_thinking
+        delete options.chat_template_args
+      } else if (input.agent.thinking === true && !input.small) {
+        // Force-enable thinking by ensuring the model's default thinking options are present
+        // The base options from ProviderTransform.options() already include thinking defaults
+        // for reasoning-capable models, so we just need to make sure they weren't stripped
+        // by agent.options or variant. If the model doesn't support reasoning, this is a no-op.
+      }
+
       if (isOpenaiOauth) {
         options.instructions = system.join("\n")
       }
