@@ -120,7 +120,6 @@ const SessionRow = (props: {
   const language = useLanguage()
   const title = () => sessionTitle(props.session.title)
   const [hasSelection, setHasSelection] = createSignal(false)
-  let titleRef: HTMLSpanElement | undefined
 
   onMount(() => {
     const handler = () => {
@@ -132,9 +131,9 @@ const SessionRow = (props: {
   })
 
   const onSelectAll = () => {
-    const el = titleRef
+    const el = document.querySelector(`[data-session-id="${props.session.id}"] [data-title]`)
     if (!el) return
-    setTimeout(() => {
+    requestAnimationFrame(() => {
       const range = document.createRange()
       range.selectNodeContents(el)
       const sel = window.getSelection()
@@ -143,7 +142,7 @@ const SessionRow = (props: {
         sel.addRange(range)
         setHasSelection(true)
       }
-    }, 0)
+    })
   }
 
   const onCopy = () => {
@@ -196,7 +195,7 @@ const SessionRow = (props: {
           <Show when={props.isPinned()}>
             <Icon name="pin" size="small" class="text-icon-base shrink-0" />
           </Show>
-          <span ref={titleRef} class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{title()}</span>
+          <span data-title class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{title()}</span>
         </A>
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
