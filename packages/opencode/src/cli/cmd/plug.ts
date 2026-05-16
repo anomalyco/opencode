@@ -4,7 +4,7 @@ import { Effect } from "effect"
 import { ConfigPaths } from "@/config/paths"
 import { Global } from "@opencode-ai/core/global"
 import { installPlugin, patchPluginConfig, readPluginManifest } from "../../plugin/install"
-import { resolvePluginTarget } from "../../plugin/shared"
+import { resolvePluginTarget, type ResolvePluginTargetOptions } from "../../plugin/shared"
 import { errorMessage } from "../../util/error"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
@@ -24,7 +24,7 @@ export type PlugDeps = {
     info: (msg: string) => void
     success: (msg: string) => void
   }
-  resolve: (spec: string) => Promise<string>
+  resolve: (spec: string, options?: ResolvePluginTargetOptions) => Promise<string>
   readText: (file: string) => Promise<string>
   write: (file: string, text: string) => Promise<void>
   exists: (file: string) => Promise<boolean>
@@ -51,7 +51,7 @@ const defaultPlugDeps: PlugDeps = {
     info: (msg) => log.info(msg),
     success: (msg) => log.success(msg),
   },
-  resolve: (spec) => resolvePluginTarget(spec),
+  resolve: (spec, options) => resolvePluginTarget(spec, options),
   readText: (file) => Filesystem.readText(file),
   write: async (file, text) => {
     await Filesystem.write(file, text)

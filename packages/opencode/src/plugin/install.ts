@@ -13,7 +13,14 @@ import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { isRecord } from "@/util/record"
 
-import { parsePluginSpecifier, readPackageThemes, readPluginPackage, resolvePluginTarget } from "./shared"
+import {
+  parsePluginSpecifier,
+  readPackageThemes,
+  readPluginPackage,
+  resolvePluginTarget,
+  type ResolvePluginTargetOptions,
+  shouldRefreshPluginTarget,
+} from "./shared"
 
 type Mode = "noop" | "add" | "replace"
 type Kind = "server" | "tui"
@@ -24,7 +31,7 @@ export type Target = {
 }
 
 export type InstallDeps = {
-  resolve: (spec: string) => Promise<string>
+  resolve: (spec: string, options?: ResolvePluginTargetOptions) => Promise<string>
 }
 
 export type PatchDeps = {
@@ -76,7 +83,7 @@ type PatchOne = Ok<{ item: PatchItem }> | PatchErr
 export type PatchResult = Ok<{ dir: string; items: PatchItem[] }> | (PatchErr & { dir: string })
 
 const defaultInstallDeps: InstallDeps = {
-  resolve: (spec) => resolvePluginTarget(spec),
+  resolve: (spec, options) => resolvePluginTarget(spec, options),
 }
 
 const defaultPatchDeps: PatchDeps = {
@@ -257,7 +264,7 @@ function patchPluginList(
 }
 
 export async function installPlugin(spec: string, dep: InstallDeps = defaultInstallDeps): Promise<InstallResult> {
-  const target = await dep.resolve(spec).then(
+  const target = await dep.resolve(spec, { refresh: shouldRefreshPluginTarget(spec) }).then(
     (item) => ({
       ok: true as const,
       item,

@@ -43,6 +43,12 @@ describe("Npm.sanitize", () => {
 })
 
 describe("Npm.add", () => {
+  const add = (spec: string, cache: string, options?: Npm.AddOptions) =>
+    Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec, options)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+
   test("reifies when package cache directory exists without the package installed", async () => {
     await using tmp = await tmpdir()
     await fs.mkdir(path.join(tmp.path, "fixture-provider"))
@@ -55,12 +61,56 @@ describe("Npm.add", () => {
     const spec = `fixture-provider@file:${path.join(tmp.path, "fixture-provider")}`
     await fs.mkdir(path.join(tmp.path, "cache", "packages", Npm.sanitize(spec)), { recursive: true })
 
-    const entry = await Effect.gen(function* () {
-      const npm = yield* Npm.Service
-      return yield* npm.add(spec)
-    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+    const entry = await add(spec, path.join(tmp.path, "cache"))
 
     expect(Option.isSome(entry.entrypoint)).toBe(true)
+  })
+
+  test("refreshes an existing package cache when requested", async () => {
+    await using tmp = await tmpdir()
+    const cache = path.join(tmp.path, "cache")
+    const oldSource = path.join(tmp.path, "fixture-provider-old")
+    const source = path.join(tmp.path, "fixture-provider-new")
+    const spec = `fixture-provider@file:${source}`
+    const dir = path.join(cache, "packages", Npm.sanitize(spec))
+    const cached = path.join(cache, "packages", Npm.sanitize(spec), "node_modules", "fixture-provider")
+
+    await fs.mkdir(oldSource, { recursive: true })
+    await writePackage(oldSource, {
+      name: "fixture-provider",
+      version: "1.0.0",
+      main: "index.js",
+    })
+    await Bun.write(path.join(oldSource, "index.js"), "export const fixture = false\n")
+    await fs.mkdir(source, { recursive: true })
+    await writePackage(source, {
+      name: "fixture-provider",
+      version: "2.0.0",
+      main: "index.js",
+    })
+    await Bun.write(path.join(source, "index.js"), "export const fixture = true\n")
+    await fs.mkdir(dir, { recursive: true })
+    await writePackage(dir, {
+      dependencies: {
+        "fixture-provider": `file:${oldSource}`,
+      },
+    })
+    await fs.mkdir(cached, { recursive: true })
+    await writePackage(cached, {
+      name: "fixture-provider",
+      version: "1.0.0",
+      main: "index.js",
+    })
+    await Bun.write(path.join(cached, "index.js"), "export const cached = true\n")
+
+    await add(spec, cache)
+    expect(JSON.parse(await Bun.file(path.join(cached, "package.json")).text()).version).toBe("1.0.0")
+
+    await add(spec, cache, { refresh: true })
+    expect(JSON.parse(await Bun.file(path.join(cached, "package.json")).text()).version).toBe("2.0.0")
+    expect(JSON.parse(await Bun.file(path.join(dir, "package.json")).text()).dependencies["fixture-provider"]).toContain(
+      "fixture-provider-new",
+    )
   })
 })
 

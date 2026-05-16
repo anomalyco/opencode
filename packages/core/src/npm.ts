@@ -23,8 +23,12 @@ export interface EntryPoint {
   readonly entrypoint: Option.Option<string>
 }
 
+export interface AddOptions {
+  readonly refresh?: boolean
+}
+
 export interface Interface {
-  readonly add: (pkg: string) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
+  readonly add: (pkg: string, options?: AddOptions) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
   readonly install: (
     dir: string,
     input?: {
@@ -112,7 +116,7 @@ export const layer = Layer.effect(
         }),
       )
 
-    const add = Effect.fn("Npm.add")(function* (pkg: string) {
+    const add = Effect.fn("Npm.add")(function* (pkg: string, options?: AddOptions) {
       const dir = directory(pkg)
       const name = (() => {
         try {
@@ -122,7 +126,7 @@ export const layer = Layer.effect(
         }
       })()
 
-      if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
+      if (!options?.refresh && (yield* afs.existsSafe(path.join(dir, "node_modules", name)))) {
         return resolveEntryPoint(name, path.join(dir, "node_modules", name))
       }
 

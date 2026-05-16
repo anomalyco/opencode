@@ -35,6 +35,7 @@ export function parsePluginSpecifier(spec: string) {
 
 export type PluginSource = "file" | "npm"
 export type PluginKind = "server" | "tui"
+export type ResolvePluginTargetOptions = Npm.AddOptions
 type PluginMode = "strict" | "detect"
 
 export type PluginPackage = {
@@ -204,11 +205,23 @@ export async function checkPluginCompatibility(target: string, opencodeVersion: 
   }
 }
 
-export async function resolvePluginTarget(spec: string) {
+export function shouldRefreshPluginTarget(spec: string) {
+  if (isPathPluginSpec(spec)) return false
+  const hit = parse(spec)
+  if (hit?.type === "alias") {
+    const sub = (hit as npa.AliasResult).subSpec
+    return !sub?.rawSpec || sub.rawSpec === "*" || !semver.valid(sub.rawSpec)
+  }
+  if (!hit?.name) return true
+  if (hit.raw === hit.name) return true
+  return !semver.valid(hit.rawSpec)
+}
+
+export async function resolvePluginTarget(spec: string, options?: ResolvePluginTargetOptions) {
   if (isPathPluginSpec(spec)) return resolvePathPluginTarget(spec)
   const hit = parse(spec)
   const pkg = hit?.name && hit.raw === hit.name ? `${hit.name}@latest` : spec
-  const result = await Npm.add(pkg)
+  const result = await Npm.add(pkg, options)
   return result.directory
 }
 

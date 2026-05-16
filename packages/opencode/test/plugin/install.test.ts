@@ -128,6 +128,52 @@ describe("plugin.install.task", () => {
     expect(tui.plugin).toEqual(["acme@1.2.3"])
   })
 
+  test("refreshes package cache for mutable package installs", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, ["tui"])
+    const dep = deps(path.join(tmp.path, "global"), target)
+    const refresh = new Array<boolean | undefined>()
+    const run = createPlugTask(
+      {
+        mod: "acme",
+      },
+      {
+        ...dep,
+        resolve: async (_spec, options) => {
+          refresh.push(options?.refresh)
+          return target
+        },
+      },
+    )
+
+    const ok = await run(ctx(tmp.path))
+    expect(ok).toBe(true)
+    expect(refresh).toEqual([true])
+  })
+
+  test("keeps package cache for exact version installs", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, ["tui"])
+    const dep = deps(path.join(tmp.path, "global"), target)
+    const refresh = new Array<boolean | undefined>()
+    const run = createPlugTask(
+      {
+        mod: "acme@1.2.3",
+      },
+      {
+        ...dep,
+        resolve: async (_spec, options) => {
+          refresh.push(options?.refresh)
+          return target
+        },
+      },
+    )
+
+    const ok = await run(ctx(tmp.path))
+    expect(ok).toBe(true)
+    expect(refresh).toEqual([false])
+  })
+
   test("writes default options from exports config metadata", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, ["server", "tui"], {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { parsePluginSpecifier } from "../../src/plugin/shared"
+import { parsePluginSpecifier, shouldRefreshPluginTarget } from "../../src/plugin/shared"
 
 describe("parsePluginSpecifier", () => {
   test("parses standard npm package without version", () => {
@@ -84,5 +84,23 @@ describe("parsePluginSpecifier", () => {
       pkg: "@opencode/acme",
       version: "latest",
     })
+  })
+})
+
+describe("shouldRefreshPluginTarget", () => {
+  test("refreshes mutable package specs", () => {
+    expect(shouldRefreshPluginTarget("acme")).toBe(true)
+    expect(shouldRefreshPluginTarget("acme@latest")).toBe(true)
+    expect(shouldRefreshPluginTarget("acme@^1.0.0")).toBe(true)
+    expect(shouldRefreshPluginTarget("acme@git+https://github.com/opencode/acme.git")).toBe(true)
+    expect(shouldRefreshPluginTarget("npm:@opencode/acme")).toBe(true)
+  })
+
+  test("keeps cache for exact package versions and paths", () => {
+    expect(shouldRefreshPluginTarget("acme@1.0.0")).toBe(false)
+    expect(shouldRefreshPluginTarget("@opencode/acme@1.0.0")).toBe(false)
+    expect(shouldRefreshPluginTarget("acme@npm:@opencode/acme@1.0.0")).toBe(false)
+    expect(shouldRefreshPluginTarget("npm:@opencode/acme@1.0.0")).toBe(false)
+    expect(shouldRefreshPluginTarget("./plugin")).toBe(false)
   })
 })
