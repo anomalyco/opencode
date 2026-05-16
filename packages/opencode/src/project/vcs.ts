@@ -6,8 +6,6 @@ import { InstanceState } from "@/effect/instance-state"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
 import * as Log from "@opencode-ai/core/util/log"
-import { zod, zodObject } from "@opencode-ai/core/effect-zod"
-import { NonNegativeInt, withStatics } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "vcs" })
 const PATCH_CONTEXT_LINES = 2_147_483_647
@@ -208,7 +206,7 @@ const track = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, ref:
   return yield* diffAgainstRef(git, cwd, ref)
 })
 
-export const Mode = Schema.Literals(["git", "branch"]).pipe(withStatics((s) => ({ zod: zod(s) })))
+export const Mode = Schema.Literals(["git", "branch"])
 export type Mode = Schema.Schema.Type<typeof Mode>
 
 export const Event = {
@@ -223,9 +221,7 @@ export const Event = {
 export const Info = Schema.Struct({
   branch: Schema.optional(Schema.String),
   default_branch: Schema.optional(Schema.String),
-})
-  .annotate({ identifier: "VcsInfo" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "VcsInfo" })
 export type Info = Schema.Schema.Type<typeof Info>
 
 export const FileDiff = Schema.Struct({
@@ -237,9 +233,7 @@ export const FileDiff = Schema.Struct({
   additions: Schema.Finite,
   deletions: Schema.Finite,
   status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
-})
-  .annotate({ identifier: "VcsFileDiff" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "VcsFileDiff" })
 export type FileDiff = Schema.Schema.Type<typeof FileDiff>
 
 export const FileStatus = Schema.Struct({
@@ -247,19 +241,17 @@ export const FileStatus = Schema.Struct({
   additions: Schema.Finite,
   deletions: Schema.Finite,
   status: Schema.Literals(["added", "deleted", "modified"]),
-})
-  .annotate({ identifier: "VcsFileStatus" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "VcsFileStatus" })
 export type FileStatus = Schema.Schema.Type<typeof FileStatus>
 
 export const ApplyInput = Schema.Struct({
   patch: Schema.String,
-}).pipe(withStatics((s) => ({ zod: zod(s), zodObject: zodObject(s) })))
+})
 export type ApplyInput = Schema.Schema.Type<typeof ApplyInput>
 
 export const ApplyResult = Schema.Struct({
   applied: Schema.Boolean,
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type ApplyResult = Schema.Schema.Type<typeof ApplyResult>
 
 export class PatchApplyError extends Schema.TaggedErrorClass<PatchApplyError>()("VcsPatchApplyError", {

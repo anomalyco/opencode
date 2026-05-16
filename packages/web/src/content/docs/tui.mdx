@@ -41,6 +41,12 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 The content of the file is added to the conversation automatically.
 
+Configured references also appear in `@` autocomplete. Type `@alias` to add the reference root as context, or type `@alias/` to autocomplete files inside that reference.
+
+```text "@docs/README.md"
+Compare our setup with @docs/README.md
+```
+
 ---
 
 ## Bash commands
@@ -363,7 +369,17 @@ You can customize TUI behavior through `tui.json` (or `tui.jsonc`).
     "enabled": false
   },
   "diff_style": "auto",
-  "mouse": true
+  "mouse": true,
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "error": "./sounds/error.mp3"
+    }
+  }
 }
 ```
 
@@ -380,8 +396,20 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `0.001`, supports decimal values). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
+- `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
+
+### Attention
+
+The TUI can request attention for questions, permissions, session errors, and completed sessions. Enable it with `attention.enabled`; built-in events play sounds when triggered, and non-subagent events request desktop notifications only when the terminal is blurred.
+
+- `enabled` - Enable all attention notifications and sounds. Defaults to `false`.
+- `notifications` - Allow terminal-mediated desktop notifications when attention is enabled. Defaults to `true`.
+- `sound` - Allow attention sounds when attention is enabled. Defaults to `true`.
+- `volume` - Default sound volume from `0` to `1`. Defaults to `0.4`.
+- `sound_pack` - Sound pack ID to use. Defaults to `opencode.default`.
+- `sounds` - Override sound files for `default`, `question`, `permission`, `error`, `done`, or `subagent_done`. Paths can be absolute, `file://` URLs, or relative to `tui.json`.
 
 ---
 
