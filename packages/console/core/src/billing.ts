@@ -279,11 +279,10 @@ export namespace Billing {
       successUrl: z.string(),
       cancelUrl: z.string(),
       method: z.enum(["alipay", "upi"]).optional(),
-      inviteCode: z.string().optional(),
     }),
     async (input) => {
       const user = Actor.assert("user")
-      const { successUrl, cancelUrl, method, inviteCode } = input
+      const { successUrl, cancelUrl, method } = input
 
       const email = (await User.getAuthEmail(user.properties.userID))!
       const billing = await Billing.get()
@@ -365,7 +364,6 @@ export namespace Billing {
               userEmail: email,
               coupon,
               type: "lite",
-              ...(inviteCode ? { inviteCode } : {}),
             },
           },
         })

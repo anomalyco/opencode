@@ -1,6 +1,6 @@
-import { action, useParams, useAction, useSubmission, json, query, createAsync, useLocation } from "@solidjs/router"
+import { action, useParams, useAction, useSubmission, json, query, createAsync } from "@solidjs/router"
 import { createStore } from "solid-js/store"
-import { createMemo, createSignal, For, onMount, Show } from "solid-js"
+import { createMemo, For, Show } from "solid-js"
 import { Modal } from "~/component/modal"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Database, eq, and, isNull } from "@opencode-ai/console-core/drizzle/index.js"
@@ -16,8 +16,6 @@ import { useLanguage } from "~/context/language"
 import { formError } from "~/lib/form-error"
 
 import { IconAlipay, IconUpi } from "~/component/icon"
-
-const INVITE_STORAGE_KEY = "opencode.go.invite"
 
 export const queryLiteSubscription = query(async (workspaceID: string) => {
   "use server"
@@ -84,12 +82,12 @@ export function formatResetTime(seconds: number, i18n: ReturnType<typeof useI18n
 }
 
 const createLiteCheckoutUrl = action(
-  async (workspaceID: string, successUrl: string, cancelUrl: string, method?: "alipay" | "upi", inviteCode?: string) => {
+  async (workspaceID: string, successUrl: string, cancelUrl: string, method?: "alipay" | "upi") => {
     "use server"
     return json(
       await withActor(
         () =>
-          Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl, method, inviteCode })
+          Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl, method })
             .then((data) => ({ error: undefined, data }))
             .catch((e) => ({
               error: e.message as string,
@@ -144,14 +142,11 @@ const setLiteUseBalance = action(async (form: FormData) => {
 
 export function LiteSection() {
   const params = useParams()
-  const location = useLocation()
   const i18n = useI18n()
   const language = useLanguage()
   const billingInfo = createAsync(() => queryBillingInfo(params.id!))
   const isBlack = createMemo(() => billingInfo()?.subscriptionID || billingInfo()?.timeSubscriptionBooked)
   const lite = createAsync(() => queryLiteSubscription(params.id!))
-  const [storedInviteCode, setStoredInviteCode] = createSignal<string>()
-  const inviteCode = createMemo(() => new URLSearchParams(location.search).get("invite") ?? storedInviteCode())
   const sessionAction = useAction(createSessionUrl)
   const sessionSubmission = useSubmission(createSessionUrl)
   const checkoutAction = useAction(createLiteCheckoutUrl)
@@ -163,13 +158,6 @@ export function LiteSection() {
   })
 
   const busy = createMemo(() => !!store.loading)
-
-  onMount(() => {
-    const code = inviteCode() ?? window.localStorage.getItem(INVITE_STORAGE_KEY) ?? undefined
-    if (!code) return
-    window.localStorage.setItem(INVITE_STORAGE_KEY, code)
-    setStoredInviteCode(code)
-  })
 
   async function onClickSession() {
     setStore("loading", "session")
@@ -183,7 +171,7 @@ export function LiteSection() {
 
   async function onClickSubscribe(method?: "alipay" | "upi") {
     setStore("loading", method ?? "checkout")
-    const result = await checkoutAction(params.id!, window.location.href, window.location.href, method, inviteCode())
+    const result = await checkoutAction(params.id!, window.location.href, window.location.href, method)
     if (result.data) {
       window.location.href = result.data
       return

@@ -112,7 +112,6 @@ export async function POST(input: APIEvent) {
         const userID = body.data.object.metadata?.userID
         const userEmail = body.data.object.metadata?.userEmail
         const coupon = body.data.object.metadata?.coupon
-        const inviteCode = body.data.object.metadata?.inviteCode
         const customerID = body.data.object.customer as string
         const invoiceID = body.data.object.latest_invoice as string
         const subscriptionID = body.data.object.id as string
@@ -174,10 +173,9 @@ export async function POST(input: APIEvent) {
             }
           })
 
-          await Referral.createFromLiteSubscription({
+          await Referral.completeFromLiteSubscription({
             workspaceID,
             userID,
-            inviteCode,
           }).catch((error) => {
             console.error("Referral sync failed", error)
           })

@@ -37,8 +37,6 @@ const models = [
   { name: "DeepSeek V4 Flash", provider: "DeepSeek" },
 ]
 
-const INVITE_STORAGE_KEY = "opencode.go.invite"
-
 function LimitsGraph(props: { href: string }) {
   let root!: HTMLElement
   const [visible, setVisible] = createSignal(false)
@@ -229,15 +227,10 @@ export default function Home() {
   const location = useLocation()
   const workspaceID = createAsync(() => checkLoggedIn())
   const inviteCode = createMemo(() => new URLSearchParams(location.search).get("invite") ?? undefined)
-  onMount(() => {
-    const code = inviteCode()
-    if (!code) return
-    window.localStorage.setItem(INVITE_STORAGE_KEY, code)
-  })
   const subscribeUrl = createMemo(() => {
     const invite = inviteCode() ? `?invite=${encodeURIComponent(inviteCode()!)}` : ""
     if (workspaceID()) return `/workspace/${workspaceID()}/go${invite}`
-    return "/auth"
+    return `/auth${invite}`
   })
   const i18n = useI18n()
   const language = useLanguage()

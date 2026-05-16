@@ -336,6 +336,18 @@
       &[data-slot="referral-source"] {
         color: var(--color-text-secondary);
         font-family: var(--font-sans);
+
+        span,
+        [data-slot="pending-note"] {
+          display: block;
+        }
+
+        [data-slot="pending-note"] {
+          margin-top: var(--space-1);
+          color: var(--color-text-muted);
+          line-height: 1.4;
+          white-space: normal;
+        }
       }
 
       &[data-slot="referral-action"] {
@@ -353,6 +365,17 @@
       &[data-status="applied"] {
         td:not([data-slot="referral-action"]) {
           opacity: 0.68;
+        }
+      }
+
+      &[data-status="pending"] {
+        td[data-slot="referral-amount"],
+        td[data-slot="referral-date"] {
+          color: var(--color-text-muted);
+        }
+
+        td[data-slot="referral-source"] {
+          color: var(--color-text);
         }
       }
 

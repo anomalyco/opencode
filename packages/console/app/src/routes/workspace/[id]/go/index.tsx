@@ -30,7 +30,11 @@ export default function () {
       <div data-slot="sections">
         <LiteSection />
         <Show when={referral()} fallback={<section>{i18n.t("workspace.lite.loading")}</section>}>
-          {(summary) => <GoReferralSection workspaceID={params.id!} summary={summary()} />}
+          {(summary) => (
+            <Show when={summary().hasActiveGo}>
+              <GoReferralSection workspaceID={params.id!} summary={summary()} />
+            </Show>
+          )}
         </Show>
       </div>
     </div>

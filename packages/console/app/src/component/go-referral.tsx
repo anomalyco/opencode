@@ -19,6 +19,7 @@ export type GoReferralReward = {
   id: string
   amount: number
   source: "inviter" | "invitee"
+  status: "pending" | "available" | "applied"
   timeCreated: string | Date
   timeApplied: string | Date | null
 }
@@ -179,9 +180,22 @@ function formatDate(value: string | Date, locale: string) {
   return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value))
 }
 
-function rewardSourceKey(source: GoReferralReward["source"]) {
-  if (source === "invitee") return "workspace.referral.reward.source.invitee" as const
+function rewardSourceKey(reward: GoReferralReward) {
+  if (reward.status === "pending" && reward.source === "invitee")
+    return "workspace.referral.reward.source.pendingInvitee" as const
+  if (reward.status === "pending") return "workspace.referral.reward.source.pendingInviter" as const
+  if (reward.source === "invitee") return "workspace.referral.reward.source.invitee" as const
   return "workspace.referral.reward.source.inviter" as const
+}
+
+function rewardPendingKey(source: GoReferralReward["source"]) {
+  if (source === "invitee") return "workspace.referral.reward.pending.invitee" as const
+  return "workspace.referral.reward.pending.inviter" as const
+}
+
+function rewardPendingStatusKey(source: GoReferralReward["source"]) {
+  if (source === "invitee") return "workspace.referral.reward.status.pendingInvitee" as const
+  return "workspace.referral.reward.status.pendingInviter" as const
 }
 
 function CopyInviteLink(props: { summary: GoReferralSummary }) {
@@ -236,6 +250,7 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
     } satisfies GoReferralUsagePreview
   })
   const appliedCount = createMemo(() => props.summary.rewards.filter((reward) => reward.timeApplied).length)
+  const earnedCount = createMemo(() => props.summary.rewards.filter((reward) => reward.status !== "pending").length)
 
   createEffect(() => {
     const reward = selected()
@@ -295,7 +310,7 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
         <p>
           {i18n.t("workspace.referral.rewards.subtitle", {
             applied: appliedCount(),
-            total: props.summary.rewards.length,
+            total: earnedCount(),
           })}
         </p>
       </div>
@@ -309,32 +324,40 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
               <tr>
                 <th>{i18n.t("workspace.referral.table.reward")}</th>
                 <th>{i18n.t("workspace.referral.table.referral")}</th>
-                <th>{i18n.t("workspace.referral.table.earned")}</th>
+                <th>{i18n.t("workspace.referral.table.date")}</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               <For each={props.summary.rewards}>
                 {(reward) => {
-                  const applied = createMemo(() => !!reward.timeApplied)
+                  const applied = createMemo(() => reward.status === "applied")
+                  const pending = createMemo(() => reward.status === "pending")
                   const earnedAt = createMemo(() => formatDate(reward.timeCreated, language.tag(language.locale())))
                   return (
-                    <tr data-status={applied() ? "applied" : "available"}>
+                    <tr data-status={reward.status} data-source={reward.source}>
                       <td data-slot="referral-amount">{formatCurrency(reward.amount)}</td>
-                      <td data-slot="referral-source">{i18n.t(rewardSourceKey(reward.source))}</td>
+                      <td data-slot="referral-source">
+                        <span>{i18n.t(rewardSourceKey(reward))}</span>
+                        <Show when={pending()}>
+                          <span data-slot="pending-note">{i18n.t(rewardPendingKey(reward.source))}</span>
+                        </Show>
+                      </td>
                       <td data-slot="referral-date" title={earnedAt()}>
                         {earnedAt()}
                       </td>
                       <td data-slot="referral-action">
                         <button
                           type="button"
-                          disabled={applied() || !props.summary.hasActiveGo || submission.pending}
+                          disabled={reward.status !== "available" || !props.summary.hasActiveGo || submission.pending}
                           onClick={() => setSelected(reward)}
                         >
                           <Show when={!applied()} fallback={i18n.t("workspace.referral.reward.status.applied")}>
-                            {props.summary.hasActiveGo
-                              ? i18n.t("workspace.referral.apply.action")
-                              : i18n.t("workspace.referral.apply.noGo")}
+                            {pending()
+                              ? i18n.t(rewardPendingStatusKey(reward.source))
+                              : props.summary.hasActiveGo
+                                ? i18n.t("workspace.referral.apply.action")
+                                : i18n.t("workspace.referral.apply.noGo")}
                           </Show>
                         </button>
                       </td>

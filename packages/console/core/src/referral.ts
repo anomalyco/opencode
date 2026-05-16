@@ -56,11 +56,13 @@ export namespace Referral {
 
   export const summary = fn(z.void(), async () => {
     const workspaceID = Actor.workspace()
+    const accountID = Actor.account()
     const code = await ensureCode(workspaceID)
     const rows = await Database.use(async (tx) => {
       const rewards = await tx
         .select({
           id: ReferralRewardTable.id,
+          referralID: ReferralRewardTable.referralID,
           workspaceID: ReferralRewardTable.workspaceID,
           referralWorkspaceID: ReferralTable.workspaceID,
           amount: ReferralRewardTable.amount,
@@ -79,9 +81,26 @@ export namespace Referral {
         .orderBy(desc(ReferralRewardTable.timeCreated))
 
       const invites = await tx
-        .select({ id: ReferralTable.id })
+        .select({ id: ReferralTable.id, timeCreated: ReferralTable.timeCreated })
         .from(ReferralTable)
         .where(and(eq(ReferralTable.workspaceID, workspaceID), isNull(ReferralTable.timeDeleted)))
+
+      const inviteeReferrals = await tx
+        .select({ id: ReferralTable.id, timeCreated: ReferralTable.timeCreated })
+        .from(ReferralTable)
+        .where(and(eq(ReferralTable.inviteeAccountID, accountID), isNull(ReferralTable.timeDeleted)))
+
+      const inviteeRewards = await tx
+        .select({ referralID: ReferralRewardTable.referralID })
+        .from(ReferralRewardTable)
+        .innerJoin(ReferralTable, eq(ReferralTable.id, ReferralRewardTable.referralID))
+        .where(
+          and(
+            eq(ReferralTable.inviteeAccountID, accountID),
+            isNull(ReferralRewardTable.timeDeleted),
+            isNull(ReferralTable.timeDeleted),
+          ),
+        )
 
       const lite = await tx
         .select({ id: LiteTable.id })
@@ -89,17 +108,41 @@ export namespace Referral {
         .where(and(eq(LiteTable.workspaceID, workspaceID), isNull(LiteTable.timeDeleted)))
         .then((result) => result[0])
 
-      return { invites, lite, rewards }
+      return { inviteeReferrals, inviteeRewards, invites, lite, rewards }
     })
 
+    const rewardReferralIDs = new Set(rows.rewards.map((reward) => reward.referralID))
+    const inviteeRewardReferralIDs = new Set(rows.inviteeRewards.map((reward) => reward.referralID))
     const rewards = rows.rewards.map((reward) => ({
       id: reward.id,
       source: reward.workspaceID === reward.referralWorkspaceID ? ("inviter" as const) : ("invitee" as const),
+      status: reward.timeApplied ? ("applied" as const) : ("available" as const),
       amount: microCentsToCents(reward.amount),
       timeCreated: reward.timeCreated,
       timeApplied: reward.timeApplied,
     }))
-
+    const pending = [
+      ...rows.invites
+        .filter((referral) => !rewardReferralIDs.has(referral.id))
+        .map((referral) => ({
+          id: `${referral.id}:inviter`,
+          source: "inviter" as const,
+          status: "pending" as const,
+          amount: microCentsToCents(REWARD_AMOUNT),
+          timeCreated: referral.timeCreated,
+          timeApplied: null,
+        })),
+      ...rows.inviteeReferrals
+        .filter((referral) => !inviteeRewardReferralIDs.has(referral.id))
+        .map((referral) => ({
+          id: `${referral.id}:invitee`,
+          source: "invitee" as const,
+          status: "pending" as const,
+          amount: microCentsToCents(REWARD_AMOUNT),
+          timeCreated: referral.timeCreated,
+          timeApplied: null,
+        })),
+    ].sort((a, b) => new Date(b.timeCreated).getTime() - new Date(a.timeCreated).getTime())
     return {
       inviteCode: code.code,
       validInviteCount: rows.invites.length,
@@ -109,7 +152,9 @@ export namespace Referral {
       totalApplied: rewards
         .filter((reward) => reward.timeApplied)
         .reduce((total, reward) => total + reward.amount, 0),
-      rewards,
+      rewards: [...pending, ...rewards].sort(
+        (a, b) => new Date(b.timeCreated).getTime() - new Date(a.timeCreated).getTime(),
+      ),
     }
   })
 
@@ -184,9 +229,8 @@ export namespace Referral {
     })
   })
 
-  export async function createFromLiteSubscription(input: {
-    workspaceID: string
-    userID: string
+  export async function createFromAccount(input: {
+    accountID: string
     inviteCode?: string
   }) {
     const inviteCode = normalizeCode(input.inviteCode)
@@ -200,19 +244,10 @@ export namespace Referral {
         .then((rows) => rows[0])
       if (!code) return { status: "invalid-code" as const }
 
-      const invitee = await tx
-        .select({ accountID: UserTable.accountID })
-        .from(UserTable)
-        .where(
-          and(eq(UserTable.workspaceID, input.workspaceID), eq(UserTable.id, input.userID), isNull(UserTable.timeDeleted)),
-        )
-        .then((rows) => rows[0])
-      if (!invitee?.accountID) return { status: "missing-account" as const }
-
       const existingReferral = await tx
         .select({ id: ReferralTable.id })
         .from(ReferralTable)
-        .where(and(eq(ReferralTable.inviteeAccountID, invitee.accountID), isNull(ReferralTable.timeDeleted)))
+        .where(and(eq(ReferralTable.inviteeAccountID, input.accountID), isNull(ReferralTable.timeDeleted)))
         .then((rows) => rows[0])
       if (existingReferral) return { status: "already-redeemed" as const }
 
@@ -222,19 +257,12 @@ export namespace Referral {
         .where(
           and(
             eq(UserTable.workspaceID, code.workspaceID),
-            eq(UserTable.accountID, invitee.accountID),
+            eq(UserTable.accountID, input.accountID),
             isNull(UserTable.timeDeleted),
           ),
         )
         .then((rows) => rows[0])
       if (selfReferral) return { status: "self-referral" as const }
-
-      const existingGo = await tx
-        .select({ workspaceID: LiteTable.workspaceID })
-        .from(LiteTable)
-        .innerJoin(UserTable, and(eq(UserTable.workspaceID, LiteTable.workspaceID), eq(UserTable.id, LiteTable.userID)))
-        .where(and(eq(UserTable.accountID, invitee.accountID), isNull(UserTable.timeDeleted), isNull(LiteTable.timeDeleted)))
-      if (existingGo.some((row) => row.workspaceID !== input.workspaceID)) return { status: "already-subscribed" as const }
 
       const referralID = Identifier.create("referral")
       await tx
@@ -242,7 +270,7 @@ export namespace Referral {
         .values({
           workspaceID: code.workspaceID,
           id: referralID,
-          inviteeAccountID: invitee.accountID,
+          inviteeAccountID: input.accountID,
         })
         .onDuplicateKeyUpdate({
           set: {
@@ -253,10 +281,41 @@ export namespace Referral {
       const referral = await tx
         .select({ id: ReferralTable.id, workspaceID: ReferralTable.workspaceID })
         .from(ReferralTable)
-        .where(and(eq(ReferralTable.inviteeAccountID, invitee.accountID), isNull(ReferralTable.timeDeleted)))
+        .where(and(eq(ReferralTable.inviteeAccountID, input.accountID), isNull(ReferralTable.timeDeleted)))
         .then((rows) => rows[0])
       if (!referral) return { status: "duplicate" as const }
       if (referral.id !== referralID) return { status: "already-redeemed" as const }
+
+      return { status: "created" as const }
+    })
+  }
+
+  export async function completeFromLiteSubscription(input: {
+    workspaceID: string
+    userID: string
+  }) {
+    return Database.transaction(async (tx) => {
+      const invitee = await tx
+        .select({ accountID: UserTable.accountID })
+        .from(UserTable)
+        .where(
+          and(eq(UserTable.workspaceID, input.workspaceID), eq(UserTable.id, input.userID), isNull(UserTable.timeDeleted)),
+        )
+        .then((rows) => rows[0])
+      if (!invitee?.accountID) return { status: "missing-account" as const }
+
+      const referral = await tx
+        .select({ id: ReferralTable.id, workspaceID: ReferralTable.workspaceID })
+        .from(ReferralTable)
+        .where(and(eq(ReferralTable.inviteeAccountID, invitee.accountID), isNull(ReferralTable.timeDeleted)))
+        .then((rows) => rows[0])
+      if (!referral) return { status: "missing-referral" as const }
+
+      const existingRewards = await tx
+        .select({ id: ReferralRewardTable.id })
+        .from(ReferralRewardTable)
+        .where(and(eq(ReferralRewardTable.referralID, referral.id), isNull(ReferralRewardTable.timeDeleted)))
+      if (existingRewards.length > 0) return { status: "already-completed" as const }
 
       await tx
         .insert(ReferralRewardTable)
