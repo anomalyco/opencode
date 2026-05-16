@@ -60,6 +60,7 @@ Repeated setup work, long sleeps/timeouts, serial integration tests, filesystem/
 | `config.test` waits after dependencies even though `.gitignore` is written synchronously                  | Removed obsolete 1000ms sleep from writable `OPENCODE_CONFIG_DIR` test                         | 10.270s   | 9.433s  | keep     | Median from 5 targeted runs because one run was noisy; simpler test and no fixed sleep.                                    |
 | SDK parity helpers create git repos for tests that only need files/config/session state                   | Changed `withProject` default to no git; explicit git init test still opts into no-git fixture | 8.011s    | 5.180s  | keep     | Median from 5 targeted runs because first run was cold/noisy.                                                              |
 | Provider plugin filter test waits on plugin dependency readiness setup                                    | Marked local plugin dependencies ready using the existing fixture helper                       | 7.543s    | 6.366s  | keep     | Median from 3 targeted runs; matches neighboring plugin provider test setup.                                               |
+| HTTP provider tests generate local plugins without dependency-ready fixture state                         | Marked generated `.opencode` plugin fixtures dependency-ready                                  | 7.905s    | 2.980s  | keep     | Median from 3 targeted runs; avoids unrelated plugin dependency setup in route tests.                                      |
 
 ## Profiling Results
 

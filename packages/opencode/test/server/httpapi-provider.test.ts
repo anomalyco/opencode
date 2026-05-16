@@ -118,6 +118,7 @@ function requestCallback(input: {
 function writeProviderAuthPlugin(dir: string) {
   return Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
+    yield* markPluginDependenciesReady(path.join(dir, ".opencode"))
 
     yield* fs.writeWithDirs(
       path.join(dir, ".opencode", "plugin", "provider-oauth-parity.ts"),
@@ -152,6 +153,7 @@ function writeProviderAuthPlugin(dir: string) {
 function writeProviderAuthValidationPlugin(dir: string) {
   return Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
+    yield* markPluginDependenciesReady(path.join(dir, ".opencode"))
 
     yield* fs.writeWithDirs(
       path.join(dir, ".opencode", "plugin", "provider-oauth-validation.ts"),
@@ -193,6 +195,7 @@ function writeProviderAuthValidationPlugin(dir: string) {
 function writeFunctionOptionsPlugin(dir: string) {
   return Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
+    yield* markPluginDependenciesReady(path.join(dir, ".opencode"))
 
     yield* fs.writeWithDirs(
       path.join(dir, ".opencode", "plugin", "provider-function-options.ts"),
@@ -224,6 +227,7 @@ function writeFunctionOptionsPlugin(dir: string) {
 function writeProviderModelsMutationPlugin(dir: string) {
   return Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
+    yield* markPluginDependenciesReady(path.join(dir, ".opencode"))
 
     yield* fs.writeWithDirs(
       path.join(dir, ".opencode", "plugin", "provider-models-mutation.ts"),
@@ -251,6 +255,18 @@ function writeProviderModelsMutationPlugin(dir: string) {
       ].join("\n"),
     )
   })
+}
+
+function markPluginDependenciesReady(dir: string) {
+  return AppFileSystem.Service.use((fs) =>
+    Effect.all([
+      fs.writeWithDirs(path.join(dir, "node_modules", ".keep"), ""),
+      fs.writeWithDirs(
+        path.join(dir, "package-lock.json"),
+        JSON.stringify({ packages: { "": { dependencies: { "@opencode-ai/plugin": "0.0.0" } } } }),
+      ),
+    ]).pipe(Effect.asVoid),
+  )
 }
 
 function setEnvScoped(key: string, value: string) {
