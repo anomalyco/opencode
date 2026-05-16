@@ -6,7 +6,7 @@ export const WorkspaceTable = mysqlTable(
   {
     id: ulid("id").notNull().primaryKey(),
     slug: varchar("slug", { length: 255 }),
-    referralCode: varchar("referral_code", { length: 16 }),
+    referralCode: varchar("referral_code", { length: 10 }),
     name: varchar("name", { length: 255 }).notNull(),
     ...timestamps,
   },

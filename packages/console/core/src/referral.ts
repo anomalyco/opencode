@@ -15,7 +15,7 @@ import { fn } from "./util/fn"
 
 export namespace Referral {
   export const REWARD_AMOUNT = centsToMicroCents(500)
-  const CODE_LENGTH = 16
+  const CODE_LENGTH = 10
 
   function normalizeCode(code?: string) {
     return code?.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, CODE_LENGTH)

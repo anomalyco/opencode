@@ -2,7 +2,7 @@ const INVITE_COOKIE = "opencode.go.invite"
 const INVITE_MAX_AGE = 60 * 60 * 24 * 30
 
 export function normalizeInviteCode(code?: string | null) {
-  return code?.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16)
+  return code?.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10)
 }
 
 export function inviteCookie(code: string) {
