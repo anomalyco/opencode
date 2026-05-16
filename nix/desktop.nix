@@ -3,6 +3,7 @@
   stdenv,
   bun,
   nodejs,
+  darwin,
   electron_41,
   makeWrapper,
   writableTmpDirAsHomeHook,
@@ -28,6 +29,17 @@ stdenv.mkDerivation (finalAttrs: {
     writableTmpDirAsHomeHook
   ] ++ lib.optionals stdenv.hostPlatform.isLinux [
     autoPatchelfHook
+  ] ++ lib.optionals stdenv.hostPlatform.isDarwin [
+    # `--config.mac.identity=null` below skips signing entirely. macOS refuses
+    # to launch unsigned binaries with `code signature invalid`, so re-sign
+    # ad-hoc. This hook walks every output and runs `codesign -f -s -` on each
+    # Mach-O via sigtool's `signIfRequired`, matching the pattern used by
+    # bitwarden-desktop for the same scenario (electron-builder source build
+    # whose binaries are modified by the build). The bundle seal produced by
+    # `codesign --deep` (Contents/_CodeSignature/CodeResources) is not required
+    # here — Gatekeeper does not enforce it for ad-hoc signatures on binaries
+    # without the quarantine xattr, which is always the case under /nix/store.
+    darwin.autoSignDarwinBinariesHook
   ];
 
   buildInputs = lib.optionals stdenv.hostPlatform.isLinux [
@@ -93,12 +105,6 @@ stdenv.mkDerivation (finalAttrs: {
     + ''
       runHook postInstall
     '';
-
-  # --config.mac.identity=null above skips signing; macOS refuses to
-  # launch unsigned binaries — re-sign ad-hoc here.
-  postFixup = lib.optionalString stdenv.hostPlatform.isDarwin ''
-    /usr/bin/codesign --force --deep --sign - "$out/Applications/OpenCode.app"
-  '';
 
   autoPatchelfIgnoreMissingDeps = [
     "libc.musl-x86_64.so.1"
