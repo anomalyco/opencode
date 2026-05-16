@@ -65,6 +65,7 @@ Repeated setup work, long sleeps/timeouts, serial integration tests, filesystem/
 | Skill tool test initializes git even though it only reads local skill files                               | Removed `git: true` from the temporary directory fixture                                       | 2.320s    | 1.425s  | keep     | Single targeted rerun; still exercises skill discovery, permission request, and bundled file output.                       |
 | Prompt shell semantics tests initialize git though they only assert shell/session behavior                | Removed `git: true` from shell-focused prompt fixtures while preserving config setup           | 26.930s   | 23.400s | keep     | Three targeted reruns passed after the change: 23.80s, 23.55s, 23.40s.                                                     |
 | Remaining prompt behavior tests mostly do not require repository state                                    | Removed git setup from loop/cancel/reference/error fixtures; kept it for `#` filename lookup   | 23.400s   | 16.590s | keep     | Targeted prompt file passes; `#` filename test failed without git and was restored.                                        |
+| Session processor effect tests do not require repository state                                            | Removed git setup from all processor-effect temp server fixtures                               | 12.500s   | 9.230s  | keep     | Two targeted reruns passed after the change: 9.61s, 9.23s.                                                                 |
 
 ## Profiling Results
 
