@@ -450,7 +450,8 @@ export default function Page() {
   const messagesReady = createMemo(() => {
     const id = params.id
     if (!id) return true
-    return sync.data.message[id] !== undefined
+    // Ready if messages are loaded OR the session exists in the list (show immediately, load in background)
+    return sync.data.message[id] !== undefined || sync.session.get(id) !== undefined
   })
   const historyMore = createMemo(() => {
     const id = params.id

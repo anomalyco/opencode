@@ -1021,6 +1021,11 @@ export function MessageTimeline(props: {
                   </Button>
                 </div>
               </Show>
+              <Show when={props.renderedUserMessages.length === 0 && props.historyLoading}>
+                <div class="flex items-center justify-center py-12">
+                  <Spinner />
+                </div>
+              </Show>
               <For each={rendered()}>
                 {(messageID) => {
                   const active = createMemo(() => activeMessageID() === messageID)
