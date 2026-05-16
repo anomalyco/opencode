@@ -79,9 +79,12 @@ export class Unauthorized extends Schema.TaggedErrorClass<Unauthorized>()(
   { httpApiStatus: 401 },
 ) {}
 
-export class Authorization extends HttpApiMiddleware.Service<Authorization, {
-  provides: CurrentUser
-}>()("app/Authorization", {
+export class Authorization extends HttpApiMiddleware.Service<
+  Authorization,
+  {
+    provides: CurrentUser
+  }
+>()("app/Authorization", {
   security: { bearer: HttpApiSecurity.bearer },
   error: Unauthorized,
 }) {}

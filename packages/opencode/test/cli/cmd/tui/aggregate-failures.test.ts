@@ -76,9 +76,7 @@ describe("aggregateFailures", () => {
     ])
 
     expect(err!.message).toContain("4 of 5 requests failed: same config problem")
-    expect(err!.message).toContain(
-      "Affected startup requests: config.providers, provider.list, app.agents, config.get",
-    )
+    expect(err!.message).toContain("Affected startup requests: config.providers, provider.list, app.agents, config.get")
     expect(err!.message.match(/same config problem/g)?.length).toBe(1)
   })
 
