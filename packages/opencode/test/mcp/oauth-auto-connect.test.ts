@@ -225,6 +225,33 @@ mcpTest.instance("state() returns existing state when one is saved", () =>
   }),
 )
 
+mcpTest.instance("invalidateCredentials() removes entries that only retain serverUrl", () =>
+  Effect.gen(function* () {
+    const auth = yield* McpAuth.Service
+    const provider = new McpOAuthProvider(
+      "test-stale-server-url",
+      "https://example.com/mcp",
+      {},
+      { onRedirect: async () => {} },
+      auth,
+    )
+
+    yield* Effect.promise(() =>
+      provider.saveTokens({
+        access_token: "token",
+        token_type: "Bearer",
+      }),
+    )
+
+    expect((yield* auth.get("test-stale-server-url"))?.serverUrl).toBe("https://example.com/mcp")
+
+    yield* Effect.promise(() => provider.invalidateCredentials("tokens"))
+
+    expect(yield* auth.get("test-stale-server-url")).toBeUndefined()
+    expect((yield* auth.all())["test-stale-server-url"]).toBeUndefined()
+  }),
+)
+
 mcpTest.instance(
   "authenticate() fails clearly when transport reconnects without stored tokens",
   () =>

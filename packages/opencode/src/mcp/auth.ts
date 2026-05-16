@@ -35,7 +35,7 @@ const filepath = path.join(Global.Path.data, "mcp-auth.json")
 
 function normalizeEntry(entry: Entry | undefined) {
   if (!entry) return
-  if (entry.tokens || entry.clientInfo || entry.codeVerifier || entry.oauthState || entry.serverUrl) return entry
+  if (entry.tokens || entry.clientInfo || entry.codeVerifier || entry.oauthState) return entry
 }
 
 export interface Interface {
