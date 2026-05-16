@@ -699,6 +699,9 @@ export function Markdown(
       if (key && input.hash) {
         const hit = cache.get(key)
         if (hit && hit.hash === input.hash) {
+          if (!hit.html) {
+            console.warn(`[blank-diag] markdown cache hit with empty html: key=${key} text=${input.markdown.length}`)
+          }
           touch(key, hit)
           mark("cache-hit", {
             key: input.cacheKey ?? input.key,
@@ -710,8 +713,9 @@ export function Markdown(
         }
       }
 
+      const PARSE_TIMEOUT_MS = 8_000
       const time = performance.now()
-      const rendered =
+      const renderPromise =
         input.mode === "plain"
           ? fallback(input.normalized)
           : await (
@@ -726,6 +730,23 @@ export function Markdown(
               console.error("markdown render failed", err)
               return fallback(input.normalized)
             })
+
+      let rendered: string
+      if (input.mode === "plain") {
+        rendered = renderPromise
+      } else {
+        rendered = await Promise.race([
+          renderPromise,
+          new Promise<string>((resolve) =>
+            setTimeout(() => {
+              console.warn(
+                `[blank-diag] markdown parse timeout: key=${input.cacheKey ?? input.key ?? ""} mode=${input.mode} text=${input.markdown.length} timeout=${PARSE_TIMEOUT_MS}`,
+              )
+              resolve(fallback(input.normalized))
+            }, PARSE_TIMEOUT_MS),
+          ),
+        ])
+      }
 
       const safe = input.mode === "plain" ? rendered : sanitize(rendered)
       mark("parse", {
@@ -875,7 +896,7 @@ export function Markdown(
     if (!content) {
       if (local.text.length > 0) {
         console.warn(
-          `[blank-diag] markdown empty html with non-empty text: key=${local.cacheKey ?? ""} text=${local.text.length} stage=${stage()} eager=${eager()} visible=${visible()} mode=${mode()} streaming=${!!local.streaming} time=${performance.now().toFixed(1)}`,
+          `[blank-diag] markdown empty html with non-empty text: key=${local.cacheKey ?? ""} text=${local.text.length} stage=${stage()} eager=${eager()} visible=${visible()} mode=${mode()} streaming=${!!local.streaming} loading=${html.loading} error=${html.error?.message ?? "none"} time=${performance.now().toFixed(1)}`,
         )
       }
       container.innerHTML = ""

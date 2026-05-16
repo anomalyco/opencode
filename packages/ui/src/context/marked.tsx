@@ -543,34 +543,49 @@ async function highlightCodeBlocks(html: string): Promise<string> {
   const matches = [...html.matchAll(codeBlockRegex)]
   if (matches.length === 0) return html
 
-  const highlighter = await getSharedHighlighter({
-    themes: ["OpenCode"],
-    langs: [],
-    preferredHighlighter: "shiki-wasm",
-  })
+  const timeoutMs = 6_000
+  try {
+    const result = await Promise.race([
+      (async () => {
+        const highlighter = await getSharedHighlighter({
+          themes: ["OpenCode"],
+          langs: [],
+          preferredHighlighter: "shiki-wasm",
+        })
 
-  let result = html
-  for (const match of matches) {
-    const [fullMatch, lang, escapedCode] = match
-    const code = unescapeHtmlEntities(escapedCode)
+        let output = html
+        for (const match of matches) {
+          const [fullMatch, lang, escapedCode] = match
+          const code = unescapeHtmlEntities(escapedCode)
 
-    let language = lang || "text"
-    if (!(language in bundledLanguages)) {
-      language = "text"
-    }
-    if (!highlighter.getLoadedLanguages().includes(language)) {
-      await highlighter.loadLanguage(language as BundledLanguage)
-    }
+          let language = lang || "text"
+          if (!(language in bundledLanguages)) {
+            language = "text"
+          }
+          if (!highlighter.getLoadedLanguages().includes(language)) {
+            await highlighter.loadLanguage(language as BundledLanguage)
+          }
 
-    const highlighted = highlighter.codeToHtml(code, {
-      lang: language,
-      theme: "OpenCode",
-      tabindex: false,
-    })
-    result = result.replace(fullMatch, () => highlighted)
+          const highlighted = highlighter.codeToHtml(code, {
+            lang: language,
+            theme: "OpenCode",
+            tabindex: false,
+          })
+          output = output.replace(fullMatch, () => highlighted)
+        }
+        return output
+      })(),
+      new Promise<string>((resolve) =>
+        setTimeout(() => {
+          console.warn(`[blank-diag] highlightCodeBlocks timeout after ${timeoutMs}ms, returning unhighlighted HTML`)
+          resolve(html)
+        }, timeoutMs),
+      ),
+    ])
+    return result
+  } catch {
+    return html
   }
-
-  return result
 }
 
 export type NativeMarkdownParser = (markdown: string) => Promise<string>
@@ -581,21 +596,39 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
     const output = props.mathOutput ?? "htmlAndMathml"
     const native = props.nativeParser
 
+    const highlightTimeoutMs = 6_000
+    const plainCode = (code: string, lang?: string) => {
+      const escaped = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      return `<pre><code${lang ? ` class="language-${lang}"` : ""}>${escaped}</code></pre>`
+    }
+
     const highlight = async (code: string, lang?: string) => {
-      const highlighter = await getSharedHighlighter({
-        themes: ["OpenCode"],
-        langs: [],
-        preferredHighlighter: "shiki-wasm",
-      })
-      const value = lang && lang in bundledLanguages ? lang : "text"
-      if (!highlighter.getLoadedLanguages().includes(value)) {
-        await highlighter.loadLanguage(value as BundledLanguage)
+      try {
+        const result = await Promise.race([
+          (async () => {
+            const highlighter = await getSharedHighlighter({
+              themes: ["OpenCode"],
+              langs: [],
+              preferredHighlighter: "shiki-wasm",
+            })
+            const value = lang && lang in bundledLanguages ? lang : "text"
+            if (!highlighter.getLoadedLanguages().includes(value)) {
+              await highlighter.loadLanguage(value as BundledLanguage)
+            }
+            return highlighter.codeToHtml(code, {
+              lang: value,
+              theme: "OpenCode",
+              tabindex: false,
+            })
+          })(),
+          new Promise<string>((resolve) =>
+            setTimeout(() => resolve(plainCode(code, lang)), highlightTimeoutMs),
+          ),
+        ])
+        return result
+      } catch {
+        return plainCode(code, lang)
       }
-      return highlighter.codeToHtml(code, {
-        lang: value,
-        theme: "OpenCode",
-        tabindex: false,
-      })
     }
 
     const linkRenderer = {
