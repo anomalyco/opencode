@@ -186,6 +186,7 @@ export const TaskTool = Tool.define(
             ...(next.permission.some((rule) => rule.permission === "todowrite") ? {} : { todowrite: false }),
             ...(next.permission.some((rule) => rule.permission === id) ? {} : { task: false }),
             ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((item) => [item, false])),
+            plan_exit: false,
           },
           parts,
         })
