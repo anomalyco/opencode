@@ -134,6 +134,7 @@ const sessionBindingCommands = [
   "session.toggle.actions",
   "session.toggle.scrollbar",
   "session.toggle.generic_tool_output",
+  "session.toggle.yolo",
   "session.page.up",
   "session.page.down",
   "session.line.up",
@@ -226,6 +227,7 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [yoloMode, setYoloMode] = kv.signal("yolo_mode", false)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -727,6 +729,23 @@ export function Session() {
       category: "Session",
       run: () => {
         setShowGenericToolOutput((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: yoloMode() ? "Disable YOLO mode" : "Enable YOLO mode",
+      value: "session.toggle.yolo",
+      category: "Session",
+      slash: {
+        name: "yolo",
+      },
+      run: () => {
+        const next = !yoloMode()
+        setYoloMode(next)
+        toast.show({
+          message: next ? "YOLO mode enabled — permissions will be auto-approved" : "YOLO mode disabled",
+          variant: next ? "warning" : "success",
+        })
         dialog.clear()
       },
     },
