@@ -12,11 +12,11 @@ import * as Process from "../../../../util/process"
 const writeWithStdin = (cmd: string[], text: string): Promise<void> =>
   Effect.runPromise(
     AppProcess.Service.use((svc) => svc.run(ChildProcess.make(cmd[0]!, cmd.slice(1)), { stdin: text })).pipe(
+      Effect.flatMap(AppProcess.requireSuccess),
       Effect.provide(AppProcess.defaultLayer),
-      Effect.catch(() => Effect.void),
       Effect.asVoid,
     ),
-  ).catch(() => undefined)
+  )
 
 // Lazy load which and clipboardy to avoid expensive execa/which/isexe chain at startup
 const getWhich = lazy(async () => {
@@ -130,7 +130,7 @@ const getCopyMethod = lazy(async () => {
     console.log("clipboard: using osascript")
     return async (text: string) => {
       const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
-      await Process.run(["osascript", "-e", `set the clipboard to "${escaped}"`], { nothrow: true })
+      await Process.run(["osascript", "-e", `set the clipboard to "${escaped}"`])
     }
   }
 
@@ -168,7 +168,7 @@ const getCopyMethod = lazy(async () => {
   console.log("clipboard: no native support")
   return async (text: string) => {
     const clipboardy = await getClipboardy()
-    await clipboardy.write(text).catch(() => {})
+    await clipboardy.write(text)
   }
 })
 
