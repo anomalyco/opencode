@@ -259,6 +259,32 @@ const lateToolEnv = Layer.mergeAll(
 )
 const itLateTool = testEffect(lateToolEnv)
 
+const interruptedToolInputLlm = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.concat(
+        Stream.make(
+          { type: "start" } satisfies LLM.Event,
+          { type: "start-step", request: {}, warnings: [] } satisfies LLM.Event,
+          { type: "tool-input-start", id: "call-1", toolName: "bash" } satisfies LLM.Event,
+        ),
+        Stream.fail(new Error("InstanceRef not provided")),
+      ),
+  }),
+)
+const interruptedToolInputEnv = Layer.mergeAll(
+  TestLLMServer.layer,
+  SessionProcessor.layer.pipe(
+    Layer.provide(interruptedToolInputLlm),
+    Layer.provide(summary),
+    Layer.provide(Image.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provideMerge(deps),
+  ),
+)
+const itInterruptedToolInput = testEffect(interruptedToolInputEnv)
+
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
   const session = yield* Session.Service
@@ -370,6 +396,53 @@ itLateTool.live("session.processor waits for late tool results before cleanup", 
         expect(tool?.state.status).toBe("completed")
         if (tool?.state.status !== "completed") return
         expect(tool.state.output).toBe("done")
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
+itInterruptedToolInput.live("session.processor does not wait forever for interrupted pending tool input", () =>
+  provideTmpdirServer(
+    ({ dir }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "run tool")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle
+          .process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies MessageV2.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "run tool" }],
+            tools: {},
+          })
+          .pipe(Effect.timeout("1 second"))
+        const tool = MessageV2.parts(msg.id).find((part): part is MessageV2.ToolPart => part.type === "tool")
+
+        expect(value).toBe("stop")
+        expect(tool?.state.status).toBe("error")
+        if (tool?.state.status !== "error") return
+        expect(tool.state.input).toEqual({})
+        expect(tool.state.error).toBe("Tool execution aborted")
+        expect(tool.state.metadata?.interrupted).toBe(true)
       }),
     { git: true, config: (url) => providerCfg(url) },
   ),

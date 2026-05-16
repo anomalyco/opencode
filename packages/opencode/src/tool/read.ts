@@ -1,15 +1,18 @@
-import { Effect, Option, Schema, Scope, Stream } from "effect"
+import { Cause, Effect, Option, Schema, Scope, Stream } from "effect"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import * as path from "path"
 import * as Tool from "./tool"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { LSP } from "@/lsp/lsp"
+import { InstanceRef } from "@/effect/instance-ref"
 import DESCRIPTION from "./read.txt"
 import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
 import { Reference } from "@/reference/reference"
+import * as Log from "@opencode-ai/core/util/log"
+import type { InstanceContext } from "@/project/instance-context"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -18,6 +21,7 @@ const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 const SAMPLE_BYTES = 4096
 const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
+const log = Log.create({ service: "tool.read" })
 
 class ReadStop extends Schema.TaggedErrorClass<ReadStop>()("ReadStop", {}) {}
 
@@ -86,8 +90,16 @@ export const ReadTool = Tool.define(
       ).pipe(Effect.map((items: string[]) => items.sort((a, b) => a.localeCompare(b))))
     })
 
-    const warm = Effect.fn("ReadTool.warm")(function* (filepath: string) {
-      yield* lsp.touchFile(filepath).pipe(Effect.ignore, Effect.forkIn(scope))
+    const warm = Effect.fn("ReadTool.warm")(function* (filepath: string, instance: InstanceContext) {
+      yield* lsp
+        .touchFile(filepath)
+        .pipe(
+          Effect.provideService(InstanceRef, instance),
+          Effect.catchCause((cause) =>
+            Effect.sync(() => log.warn("lsp warmup failed", { file: filepath, cause: Cause.pretty(cause) })),
+          ),
+          Effect.forkIn(scope),
+        )
     })
 
     const readSample = Effect.fn("ReadTool.readSample")(function* (
@@ -314,7 +326,7 @@ export const ReadTool = Tool.define(
       }
       output += "\n</content>"
 
-      yield* warm(filepath)
+      yield* warm(filepath, instance)
 
       if (loaded.length > 0) {
         output += `\n\n<system-reminder>\n${loaded.map((item) => item.content).join("\n\n")}\n</system-reminder>`
