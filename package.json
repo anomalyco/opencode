@@ -128,9 +128,9 @@
     "electron"
   ],
   "overrides": {
-    "@opentui/core": "catalog:",
-    "@opentui/keymap": "catalog:",
-    "@opentui/solid": "catalog:",
+    "@opentui/core": "0.0.0-20260516-a1c54573",
+    "@opentui/keymap": "0.0.0-20260516-a1c54573",
+    "@opentui/solid": "0.0.0-20260516-a1c54573",
     "@types/bun": "catalog:",
     "@types/node": "catalog:"
   },

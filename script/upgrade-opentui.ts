@@ -79,6 +79,21 @@ const editCatalog = (obj: unknown) => {
     .some(Boolean)
 }
 
+const editOverrides = (obj: unknown) => {
+  if (!obj || typeof obj !== "object") return false
+  const map = obj as Record<string, unknown>
+  return keys
+    .map((key) => {
+      const cur = map[key]
+      if (typeof cur !== "string") return false
+      const next = snapshot ? ver : "catalog:"
+      if (next === cur) return false
+      map[key] = next
+      return true
+    })
+    .some(Boolean)
+}
+
 const out = (
   await Promise.all(
     files.map(async (rel) => {
@@ -87,6 +102,7 @@ const out = (
       const json = JSON.parse(txt)
       const hit = [
         editCatalog(json.workspaces?.catalog),
+        editOverrides(json.overrides),
         editDeps(json.dependencies, "dep"),
         editDeps(json.devDependencies, "dep"),
         editDeps(json.peerDependencies, "peer"),
