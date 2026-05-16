@@ -19,8 +19,8 @@ export const ReferralRewardTable = mysqlTable(
   "referral_reward",
   {
     workspaceID: ulid("workspace_id").notNull(),
-    ...timestamps,
     referralID: ulid("referral_id").notNull(),
+    ...timestamps,
     amount: bigint("amount", { mode: "number" }).notNull(),
     timeApplied: utc("time_applied"),
   },
