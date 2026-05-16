@@ -873,6 +873,11 @@ export function Markdown(
     })
 
     if (!content) {
+      if (local.text.length > 0) {
+        console.warn(
+          `[blank-diag] markdown empty html with non-empty text: key=${local.cacheKey ?? ""} text=${local.text.length} stage=${stage()} eager=${eager()} visible=${visible()} mode=${mode()} streaming=${!!local.streaming} time=${performance.now().toFixed(1)}`,
+        )
+      }
       container.innerHTML = ""
       delete container.dataset.html
       return
