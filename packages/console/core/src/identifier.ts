@@ -13,7 +13,6 @@ export namespace Identifier {
     payment: "pay",
     provider: "prv",
     referral: "ref",
-    referralReward: "rrw",
     subscription: "sub",
     usage: "usg",
     user: "usr",

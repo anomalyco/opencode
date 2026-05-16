@@ -70,9 +70,9 @@ export const queryGoReferral = query(async (workspaceID: string) => {
   }, workspaceID)
 }, "go.referral.get")
 
-export const queryGoReferralUsagePreview = query(async (workspaceID: string, rewardID?: string) => {
+export const queryGoReferralUsagePreview = query(async (workspaceID: string, referralID?: string) => {
   "use server"
-  if (!rewardID) return null
+  if (!referralID) return null
   return withActor(async () => {
     const row = await Database.use((tx) =>
       tx
@@ -91,7 +91,7 @@ export const queryGoReferralUsagePreview = query(async (workspaceID: string, rew
         .where(
           and(
             eq(ReferralRewardTable.workspaceID, workspaceID),
-            eq(ReferralRewardTable.id, rewardID),
+            eq(ReferralRewardTable.referralID, referralID),
             isNull(ReferralRewardTable.timeApplied),
             isNull(ReferralRewardTable.timeDeleted),
             isNull(LiteTable.timeDeleted),
@@ -145,12 +145,12 @@ export const queryGoReferralUsagePreview = query(async (workspaceID: string, rew
   }, workspaceID)
 }, "go.referral.usagePreview")
 
-export const applyGoReferralReward = action(async (workspaceID: string, rewardID: string) => {
+export const applyGoReferralReward = action(async (workspaceID: string, referralID: string) => {
   "use server"
   return json(
     await withActor(
       () =>
-        Referral.applyReward({ rewardID })
+        Referral.applyReward({ referralID })
           .then((data) => ({ error: undefined, data }))
           .catch((e) => ({ error: e.message as string, data: undefined })),
       workspaceID,

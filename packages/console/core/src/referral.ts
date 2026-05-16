@@ -61,7 +61,6 @@ export namespace Referral {
     const rows = await Database.use(async (tx) => {
       const rewards = await tx
         .select({
-          id: ReferralRewardTable.id,
           referralID: ReferralRewardTable.referralID,
           workspaceID: ReferralRewardTable.workspaceID,
           referralWorkspaceID: ReferralTable.workspaceID,
@@ -114,7 +113,7 @@ export namespace Referral {
     const rewardReferralIDs = new Set(rows.rewards.map((reward) => reward.referralID))
     const inviteeRewardReferralIDs = new Set(rows.inviteeRewards.map((reward) => reward.referralID))
     const rewards = rows.rewards.map((reward) => ({
-      id: reward.id,
+      id: reward.referralID,
       source: reward.workspaceID === reward.referralWorkspaceID ? ("inviter" as const) : ("invitee" as const),
       status: reward.timeApplied ? ("applied" as const) : ("available" as const),
       amount: microCentsToCents(reward.amount),
@@ -158,17 +157,17 @@ export namespace Referral {
     }
   })
 
-  export const applyReward = fn(z.object({ rewardID: z.string() }), async (input) => {
+  export const applyReward = fn(z.object({ referralID: z.string() }), async (input) => {
     const workspaceID = Actor.workspace()
 
     return Database.transaction(async (tx) => {
       const reward = await tx
-        .select({ id: ReferralRewardTable.id, amount: ReferralRewardTable.amount, timeApplied: ReferralRewardTable.timeApplied })
+        .select({ amount: ReferralRewardTable.amount, timeApplied: ReferralRewardTable.timeApplied })
         .from(ReferralRewardTable)
         .where(
           and(
             eq(ReferralRewardTable.workspaceID, workspaceID),
-            eq(ReferralRewardTable.id, input.rewardID),
+            eq(ReferralRewardTable.referralID, input.referralID),
             isNull(ReferralRewardTable.timeDeleted),
           ),
         )
@@ -191,7 +190,7 @@ export namespace Referral {
         .where(
           and(
             eq(ReferralRewardTable.workspaceID, workspaceID),
-            eq(ReferralRewardTable.id, input.rewardID),
+            eq(ReferralRewardTable.referralID, input.referralID),
             isNull(ReferralRewardTable.timeApplied),
             isNull(ReferralRewardTable.timeDeleted),
           ),
@@ -312,7 +311,7 @@ export namespace Referral {
       if (!referral) return { status: "missing-referral" as const }
 
       const existingRewards = await tx
-        .select({ id: ReferralRewardTable.id })
+        .select({ referralID: ReferralRewardTable.referralID })
         .from(ReferralRewardTable)
         .where(and(eq(ReferralRewardTable.referralID, referral.id), isNull(ReferralRewardTable.timeDeleted)))
       if (existingRewards.length > 0) return { status: "already-completed" as const }
@@ -322,13 +321,11 @@ export namespace Referral {
         .values([
           {
             workspaceID: referral.workspaceID,
-            id: Identifier.create("referralReward"),
             referralID: referral.id,
             amount: REWARD_AMOUNT,
           },
           {
             workspaceID: input.workspaceID,
-            id: Identifier.create("referralReward"),
             referralID: referral.id,
             amount: REWARD_AMOUNT,
           },
