@@ -108,6 +108,18 @@ function errorTool(parts: MessageV2.Part[]) {
   return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
 }
 
+function requestMessages(hit: { body: Record<string, unknown> }) {
+  const messages = hit.body.messages
+  return Array.isArray(messages) ? (messages as Array<Record<string, unknown>>) : []
+}
+
+function findUserMessageIndex(messages: Array<Record<string, unknown>>, text: string) {
+  return messages.findIndex((message) => {
+    if (message.role !== "user") return false
+    return JSON.stringify(message.content).includes(text)
+  })
+}
+
 const mcp = Layer.succeed(
   MCP.Service,
   MCP.Service.of({
@@ -589,6 +601,62 @@ it.instance(
 
       expect(yield* llm.hits).toHaveLength(2)
       expect(yield* llm.pending).toBe(0)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "keeps plan/build system reminders anchored to the original user turn across later serializations",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Reminder stability",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "plan",
+        noReply: true,
+        parts: [{ type: "text", text: "Draft the plan" }],
+      })
+      yield* llm.text("plan done")
+      yield* prompt.loop({ sessionID: session.id })
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "Continue" }],
+      })
+      yield* llm.text("build one")
+      yield* prompt.loop({ sessionID: session.id })
+
+      const firstBuild = yield* llm.hits
+      const firstBuildMessages = requestMessages(firstBuild.at(-1)!)
+      const continueIndex = findUserMessageIndex(firstBuildMessages, "Continue")
+      expect(continueIndex).toBeGreaterThanOrEqual(0)
+      expect(JSON.stringify(firstBuildMessages[continueIndex])).toContain("<system-reminder>")
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "Next step" }],
+      })
+      yield* llm.text("build two")
+      yield* prompt.loop({ sessionID: session.id })
+
+      const secondBuild = yield* llm.hits
+      const secondBuildMessages = requestMessages(secondBuild.at(-1)!)
+      expect(continueIndex).toBeGreaterThanOrEqual(0)
+      expect(JSON.stringify(secondBuildMessages[continueIndex])).toBe(JSON.stringify(firstBuildMessages[continueIndex]))
+      expect(JSON.stringify(secondBuildMessages.slice(0, continueIndex + 1))).toBe(
+        JSON.stringify(firstBuildMessages.slice(0, continueIndex + 1)),
+      )
     }),
   { git: true },
 )

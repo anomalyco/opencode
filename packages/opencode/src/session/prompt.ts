@@ -387,63 +387,100 @@ export const layer = Layer.effect(
       agent: Agent.Info
       session: Session.Info
     }) {
-      const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
-      if (!userMessage) return input.messages
-
-      if (!flags.experimentalPlanMode) {
-        if (input.agent.name === "plan") {
-          userMessage.parts.push({
-            id: PartID.ascending(),
-            messageID: userMessage.info.id,
-            sessionID: userMessage.info.sessionID,
-            type: "text",
-            text: PROMPT_PLAN,
-            synthetic: true,
-          })
-        }
-        const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
-        if (wasPlan && input.agent.name === "build") {
-          userMessage.parts.push({
-            id: PartID.ascending(),
-            messageID: userMessage.info.id,
-            sessionID: userMessage.info.sessionID,
-            type: "text",
-            text: BUILD_SWITCH,
-            synthetic: true,
-          })
-        }
-        return input.messages
+      const cloneWithReminder = (
+        messages: MessageV2.WithParts[],
+        targetMessageID: string,
+        text: string,
+      ): MessageV2.WithParts[] => {
+        let updated = false
+        const next = messages.map((message) => {
+          if (message.info.id !== targetMessageID) return message
+          if (message.parts.some((part) => part.type === "text" && part.synthetic && part.text === text)) return message
+          updated = true
+          return {
+            ...message,
+            parts: [
+              ...message.parts,
+              {
+                id: PartID.ascending(),
+                messageID: message.info.id,
+                sessionID: message.info.sessionID,
+                type: "text",
+                text,
+                synthetic: true,
+              } satisfies MessageV2.Part,
+            ],
+          }
+        })
+        return updated ? next : messages
       }
 
-      const assistantMessage = input.messages.findLast((msg) => msg.info.role === "assistant")
-      if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
+      const latestAssistant = (predicate: (assistant: MessageV2.WithParts) => boolean) => {
+        let match: MessageV2.WithParts | undefined
+        for (const message of input.messages) {
+          if (message.info.role !== "assistant") continue
+          if (!predicate(message)) continue
+          if (!match || message.info.id > match.info.id) match = message
+        }
+        return match
+      }
+
+      const stableUserFor = (boundary: MessageV2.WithParts | undefined) => {
+        let target: MessageV2.WithParts | undefined
+        for (const message of input.messages) {
+          if (message.info.role !== "user") continue
+          if (boundary && message.info.id <= boundary.info.id) continue
+          if (!target || message.info.id < target.info.id) target = message
+        }
+        return target
+      }
+
+      if (input.agent.name === "build") {
+        const boundary = latestAssistant((assistant) => assistant.info.agent === "plan")
+        const userMessage = stableUserFor(boundary)
+        if (!boundary || !userMessage) return input.messages
+        if (!flags.experimentalPlanMode) return cloneWithReminder(input.messages, userMessage.info.id, BUILD_SWITCH)
+
         const ctx = yield* InstanceState.context
         const plan = Session.plan(input.session, ctx)
         if (!(yield* fsys.existsSafe(plan))) return input.messages
+        const text = `${BUILD_SWITCH}\n\nA plan file exists at ${plan}. You should execute on the plan defined within it`
+        if (userMessage.parts.some((part) => part.type === "text" && part.synthetic && part.text === text)) {
+          return input.messages
+        }
         const part = yield* sessions.updatePart({
           id: PartID.ascending(),
           messageID: userMessage.info.id,
           sessionID: userMessage.info.sessionID,
           type: "text",
-          text: `${BUILD_SWITCH}\n\nA plan file exists at ${plan}. You should execute on the plan defined within it`,
+          text,
           synthetic: true,
         })
-        userMessage.parts.push(part)
-        return input.messages
+        return cloneWithReminder(input.messages, userMessage.info.id, text).map((message) =>
+          message.info.id === userMessage.info.id
+            ? {
+                ...message,
+                parts: [...message.parts.filter((part) => part.type !== "text" || part.text !== text), part],
+              }
+            : message,
+        )
       }
 
-      if (input.agent.name !== "plan" || assistantMessage?.info.agent === "plan") return input.messages
+      if (input.agent.name !== "plan") return input.messages
+
+      const boundary = latestAssistant((assistant) => assistant.info.agent !== "plan")
+      const userMessage = stableUserFor(boundary)
+      if (!userMessage) return input.messages
+
+      if (!flags.experimentalPlanMode) {
+        return cloneWithReminder(input.messages, userMessage.info.id, PROMPT_PLAN)
+      }
 
       const ctx = yield* InstanceState.context
       const plan = Session.plan(input.session, ctx)
       const exists = yield* fsys.existsSafe(plan)
       if (!exists) yield* fsys.ensureDir(path.dirname(plan)).pipe(Effect.catch(Effect.die))
-      const part = yield* sessions.updatePart({
-        id: PartID.ascending(),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: `<system-reminder>
+      const text = `<system-reminder>
 Plan mode is active. The user indicated that they do not want you to execute yet -- you MUST NOT make any edits (with the exception of the plan file mentioned below), run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supersedes any other instructions you have received.
 
 ## Plan File Info:
@@ -512,11 +549,26 @@ This is critical - your turn should only end with either asking the user a quest
 **Important:** Use question tool to clarify requirements/approach, use plan_exit to request plan approval. Do NOT use question tool to ask "Is this plan okay?" - that's what plan_exit does.
 
 NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
-</system-reminder>`,
+</system-reminder>`
+      if (userMessage.parts.some((part) => part.type === "text" && part.synthetic && part.text === text)) {
+        return input.messages
+      }
+      const part = yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: userMessage.info.id,
+        sessionID: userMessage.info.sessionID,
+        type: "text",
+        text,
         synthetic: true,
       })
-      userMessage.parts.push(part)
-      return input.messages
+      return cloneWithReminder(input.messages, userMessage.info.id, text).map((message) =>
+        message.info.id === userMessage.info.id
+          ? {
+              ...message,
+              parts: [...message.parts.filter((part) => part.type !== "text" || part.text !== text), part],
+            }
+          : message,
+      )
     })
 
     const resolveTools = Effect.fn("SessionPrompt.resolveTools")(function* (input: {
@@ -1790,21 +1842,27 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               yield* summary.summarize({ sessionID, messageID: lastUser.id }).pipe(Effect.ignore, Effect.forkIn(scope))
 
             if (step > 1 && lastFinished) {
-              for (const m of msgs) {
-                if (m.info.role !== "user" || m.info.id <= lastFinished.id) continue
-                for (const p of m.parts) {
-                  if (p.type !== "text" || p.ignored || p.synthetic) continue
-                  if (!p.text.trim()) continue
-                  p.text = [
-                    "<system-reminder>",
-                    "The user sent the following message:",
-                    p.text,
-                    "",
-                    "Please address this message and continue with your tasks.",
-                    "</system-reminder>",
-                  ].join("\n")
-                }
-              }
+              msgs = msgs.map((message) => {
+                if (message.info.role !== "user" || message.info.id <= lastFinished.id) return message
+                let changed = false
+                const parts = message.parts.map((part) => {
+                  if (part.type !== "text" || part.ignored || part.synthetic) return part
+                  if (!part.text.trim()) return part
+                  changed = true
+                  return {
+                    ...part,
+                    text: [
+                      "<system-reminder>",
+                      "The user sent the following message:",
+                      part.text,
+                      "",
+                      "Please address this message and continue with your tasks.",
+                      "</system-reminder>",
+                    ].join("\n"),
+                  }
+                })
+                return changed ? { ...message, parts } : message
+              })
             }
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
