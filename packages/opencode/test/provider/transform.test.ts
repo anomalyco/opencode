@@ -1613,6 +1613,187 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[1].content).toHaveLength(1)
   })
 
+  // llama.cpp's OAI-compatible /v1/chat/completions rejects requests with
+  // role:"assistant" as the last message while enable_thinking is set, citing
+  // "Assistant response prefill is incompatible with enable_thinking"
+  // (llama.cpp#20861, llama.cpp#21889, mastra-ai#15234). The empty trailing
+  // assistant is produced upstream when message-v2 emits an assistant
+  // UIMessage that only carries [step-start, reasoning("")] which then becomes
+  // content:"" via convertToModelMessages.
+  describe("openai-compatible empty content filtering", () => {
+    const llamaModel = {
+      ...anthropicModel,
+      id: "local/llama-cpp",
+      providerID: "local",
+      api: {
+        id: "qwen3-coder",
+        url: "http://localhost:8080",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    } as any
+
+    test("filters empty string assistant content and empty text parts", () => {
+      const msgs = [
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: "" },
+        {
+          role: "assistant",
+          content: [
+            { type: "text", text: "" },
+            { type: "text", text: "Answer" },
+          ],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, llamaModel, {})
+
+      expect(result).toHaveLength(2)
+      expect(result[0].content).toBe("Hello")
+      expect(result[1].content).toHaveLength(1)
+      expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
+    })
+
+    test("drops trailing assistant whose only part is empty reasoning", () => {
+      const msgs = [
+        { role: "user", content: "Hello" },
+        {
+          role: "assistant",
+          content: [{ type: "reasoning", text: "" }],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, llamaModel, {})
+
+      expect(result).toHaveLength(1)
+      expect(result[0].role).toBe("user")
+    })
+
+    test("does not preserve empty reasoning even with provider options (no opaque token concept)", () => {
+      // openai-compatible has no signature/redactedData round-trip requirement,
+      // so empty reasoning with providerOptions still gets filtered.
+      const msgs = [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "reasoning",
+              text: "",
+              providerOptions: { openaiCompatible: { signature: "ignored" } },
+            },
+            { type: "text", text: "Answer" },
+          ],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, llamaModel, {})
+
+      expect(result).toHaveLength(1)
+      expect(result[0].content).toHaveLength(1)
+      expect(result[0].content[0]).toEqual({ type: "text", text: "Answer" })
+    })
+
+    test("keeps tool-call parts even when text/reasoning parts are empty", () => {
+      const msgs = [
+        {
+          role: "assistant",
+          content: [
+            { type: "reasoning", text: "" },
+            { type: "tool-call", toolCallId: "1", toolName: "bash", input: { command: "ls" } },
+          ],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, llamaModel, {})
+
+      expect(result).toHaveLength(1)
+      expect(result[0].content).toHaveLength(1)
+      expect(result[0].content[0]).toMatchObject({ type: "tool-call", toolCallId: "1" })
+    })
+
+    test("preserves non-empty reasoning content", () => {
+      const msgs = [
+        {
+          role: "assistant",
+          content: [
+            { type: "reasoning", text: "thinking..." },
+            { type: "text", text: "Answer" },
+          ],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, llamaModel, {})
+
+      expect(result).toHaveLength(1)
+      expect(result[0].content).toHaveLength(2)
+    })
+  })
+
+  test("preserves empty reasoning with anthropic signature token (round-trip)", () => {
+    // Regression guard for the shared helper: an empty reasoning text MUST be
+    // kept when it carries an opaque signature, because Anthropic requires the
+    // encrypted-reasoning round-trip even when the visible text is empty.
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "",
+            providerOptions: { anthropic: { signature: "sig_abc" } },
+          },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(2)
+    expect(result[0].content[0]).toMatchObject({
+      type: "reasoning",
+      providerOptions: { anthropic: { signature: "sig_abc" } },
+    })
+  })
+
+  test("preserves empty reasoning with bedrock redactedData token (round-trip)", () => {
+    // Mirror of the anthropic round-trip guard for the Bedrock branch of the
+    // shared helper: redactedData carries Bedrock's encrypted reasoning blob
+    // and MUST survive even when the visible text is empty.
+    const bedrockModel = {
+      ...anthropicModel,
+      id: "amazon-bedrock/anthropic.claude-opus-4-6",
+      providerID: "amazon-bedrock",
+      api: {
+        id: "anthropic.claude-opus-4-6",
+        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+    }
+
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "",
+            providerOptions: { bedrock: { redactedData: "blob_xyz" } },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {}) as any[]
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toMatchObject({
+      type: "reasoning",
+      providerOptions: { bedrock: { redactedData: "blob_xyz" } },
+    })
+  })
+
   test("splits anthropic assistant messages when text trails tool calls", () => {
     const msgs = [
       {
@@ -3809,3 +3990,4 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
   })
 })
+

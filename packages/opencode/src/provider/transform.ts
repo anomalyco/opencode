@@ -54,6 +54,103 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
+// ---------------------------------------------------------------------------
+// Empty-content filtering
+//
+// Some upstream APIs reject assistant turns whose content is empty. The three
+// providers below all hit this, for related but distinct reasons:
+//
+//   - @ai-sdk/anthropic         Anthropic's Messages API hard-rejects content
+//                               blocks with empty text.
+//   - @ai-sdk/amazon-bedrock    Same Anthropic surface, routed through Bedrock;
+//                               same rejection behaviour.
+//   - @ai-sdk/openai-compatible llama.cpp's /v1/chat/completions returns 400
+//                               "Assistant response prefill is incompatible
+//                               with enable_thinking" whenever the last
+//                               message is role:assistant while thinking is
+//                               enabled. The trailing-assistant turn is often
+//                               empty: message-v2 can emit an assistant
+//                               UIMessage whose only parts are [step-start,
+//                               reasoning("")], and convertToModelMessages
+//                               then collapses that to content:"". Upstream
+//                               tracking: llama.cpp#20861, llama.cpp#21889,
+//                               mastra-ai#15234.
+//
+// All three want the same shape of filter; previously the file carried two
+// near-identical map().filter() chains (anthropic + bedrock) that diverged
+// only by the providerOptions key used to look up the reasoning round-trip
+// token. They are unified here into a single helper driven by two tables:
+//
+//   EMPTY_CONTENT_FILTER_NPM   - which provider packages need filtering at all
+//   REASONING_SIGNATURE_KEY    - per-provider providerOptions key under which
+//                                the opaque reasoning token lives (if any)
+// ---------------------------------------------------------------------------
+
+// Provider packages whose API rejects assistant messages with empty content.
+// Membership here turns on the filter in normalizeMessages; absence is a
+// no-op (e.g. plain @ai-sdk/openai is unaffected).
+const EMPTY_CONTENT_FILTER_NPM = new Set<string>([
+  "@ai-sdk/anthropic",
+  "@ai-sdk/amazon-bedrock",
+  "@ai-sdk/openai-compatible",
+])
+
+// providerOptions key that carries the opaque reasoning round-trip token for
+// providers that emit one. Anthropic/Bedrock return `signature` or
+// `redactedData` on reasoning parts that represent encrypted thinking; the
+// visible text may be empty but the token MUST be echoed back on the next
+// request or the API rejects the conversation. Providers not listed (e.g.
+// openai-compatible / llama.cpp) have no such concept, so empty reasoning is
+// simply dropped for them.
+const REASONING_SIGNATURE_KEY: Record<string, string> = {
+  "@ai-sdk/anthropic": "anthropic",
+  "@ai-sdk/amazon-bedrock": "bedrock",
+}
+
+// Removes content the configured providers will reject:
+//   - assistant messages whose content is the empty string
+//   - empty text parts inside array content
+//   - empty reasoning parts inside array content, UNLESS a round-trip token
+//     is present (see REASONING_SIGNATURE_KEY)
+//   - the whole message if no parts survive
+//
+// Implementation note: single-pass for/of with direct push, replacing the
+// previous .map(msg -> maybeUndefined).filter(notUndefined) idiom. That cut
+// two array allocations and one full iteration per call; on long sessions
+// this runs once per request on every message in the conversation.
+//
+// `signatureKey` selects which providerOptions namespace to consult for the
+// reasoning round-trip token; omit it for providers without that concept and
+// empty reasoning parts will be dropped unconditionally.
+function filterEmptyContent(msgs: ModelMessage[], signatureKey?: string): ModelMessage[] {
+  const out: ModelMessage[] = []
+  for (const msg of msgs) {
+    if (typeof msg.content === "string") {
+      if (msg.content !== "") out.push(msg)
+      continue
+    }
+    if (!Array.isArray(msg.content)) {
+      out.push(msg)
+      continue
+    }
+    const filtered = msg.content.filter((part) => {
+      if (part.type === "text") return part.text !== ""
+      if (part.type === "reasoning") {
+        if (part.text.trim().length > 0) return true
+        if (!signatureKey) return false
+        const opts = part.providerOptions?.[signatureKey] as
+          | { signature?: unknown; redactedData?: unknown }
+          | undefined
+        return opts?.signature != null || opts?.redactedData != null
+      }
+      return true
+    })
+    if (filtered.length === 0) continue
+    out.push({ ...msg, content: filtered } as ModelMessage)
+  }
+  return out
+}
+
 // TODO: fix this stupid inefficient dogshit function
 function normalizeMessages(
   msgs: ModelMessage[],
@@ -122,62 +219,20 @@ function normalizeMessages(
     }
   })
 
-  // Anthropic rejects messages with empty content - filter out empty string messages
-  // and remove empty text/reasoning parts from array content
-  if (model.api.npm === "@ai-sdk/anthropic") {
-    msgs = msgs
-      .map((msg) => {
-        if (typeof msg.content === "string") {
-          if (msg.content === "") return undefined
-          return msg
-        }
-        if (!Array.isArray(msg.content)) return msg
-        const filtered = msg.content.filter((part) => {
-          if (part.type === "text") {
-            return part.text !== ""
-          }
-          if (part.type === "reasoning") {
-            return (
-              part.text.trim().length > 0 ||
-              part.providerOptions?.anthropic?.signature != null ||
-              part.providerOptions?.anthropic?.redactedData != null
-            )
-          }
-          return true
-        })
-        if (filtered.length === 0) return undefined
-        return { ...msg, content: filtered }
-      })
-      .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
+  // Drop empty assistant content for providers whose API rejects it.
+  // Rationale, provider list, and signature-roundtrip rules are documented
+  // above the filterEmptyContent helper.
+  if (EMPTY_CONTENT_FILTER_NPM.has(model.api.npm)) {
+    msgs = filterEmptyContent(msgs, REASONING_SIGNATURE_KEY[model.api.npm])
   }
-
-  // Bedrock specific transforms
-  if (model.api.npm === "@ai-sdk/amazon-bedrock") {
-    msgs = msgs
-      .map((msg) => {
-        if (typeof msg.content === "string") {
-          if (msg.content === "") return undefined
-          return msg
-        }
-        if (!Array.isArray(msg.content)) return msg
-        const filtered = msg.content.filter((part) => {
-          if (part.type === "text") {
-            return part.text !== ""
-          }
-          if (part.type === "reasoning") {
-            return (
-              part.text.trim().length > 0 ||
-              part.providerOptions?.bedrock?.signature != null ||
-              part.providerOptions?.bedrock?.redactedData != null
-            )
-          }
-          return true
-        })
-        if (filtered.length === 0) return undefined
-        return { ...msg, content: filtered }
-      })
-      .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
-  }
+  // Note: non-empty trailing-assistant turns are NOT rewritten here. The only
+  // known opencode-internal source of intentional prefill is the MAX_STEPS
+  // injection in `session/prompt.ts`, which now consults `canAcceptTrailingAssistant`
+  // directly and emits a user-role message for non-prefill models. Trailing
+  // assistants that arrive from message history (e.g. interrupted streams,
+  // host-plugin replies) are out of scope for transform.ts — fixing them by
+  // wrapping in a `<previous-assistant-turn>` envelope would also rewrite
+  // legitimate assistant tool-call turns and lose providerOptions metadata.
 
   if (model.api.id.includes("claude")) {
     const scrub = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "_")
