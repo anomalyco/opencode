@@ -59,6 +59,7 @@ Repeated setup work, long sleeps/timeouts, serial integration tests, filesystem/
 | `workspace.waitForSync` timeout test waits the full production timeout                                    | Added optional timeout parameter defaulting to production timeout; timeout test uses 25ms      | 12.949s   | 8.305s  | keep     | Median from 3 targeted runs; production callers keep the 5000ms default.                                                   |
 | `config.test` waits after dependencies even though `.gitignore` is written synchronously                  | Removed obsolete 1000ms sleep from writable `OPENCODE_CONFIG_DIR` test                         | 10.270s   | 9.433s  | keep     | Median from 5 targeted runs because one run was noisy; simpler test and no fixed sleep.                                    |
 | SDK parity helpers create git repos for tests that only need files/config/session state                   | Changed `withProject` default to no git; explicit git init test still opts into no-git fixture | 8.011s    | 5.180s  | keep     | Median from 5 targeted runs because first run was cold/noisy.                                                              |
+| Provider plugin filter test waits on plugin dependency readiness setup                                    | Marked local plugin dependencies ready using the existing fixture helper                       | 7.543s    | 6.366s  | keep     | Median from 3 targeted runs; matches neighboring plugin provider test setup.                                               |
 
 ## Profiling Results
 
