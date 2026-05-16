@@ -45,6 +45,9 @@ const AgentSchema = Schema.StructWithRest(
       description: "Maximum number of agentic iterations before forcing text-only response",
     }),
     maxSteps: Schema.optional(PositiveInt).annotate({ description: "@deprecated Use 'steps' field instead." }),
+    thinking: Schema.optional(Schema.Boolean).annotate({
+      description: "Override thinking/reasoning mode for this agent (true=force on, false=force off, undefined=use model default)",
+    }),
     permission: Schema.optional(ConfigPermission.Info),
   }),
   [Schema.Record(Schema.String, Schema.Any)],
@@ -63,6 +66,7 @@ const KNOWN_KEYS = new Set([
   "color",
   "steps",
   "maxSteps",
+  "thinking",
   "options",
   "permission",
   "disable",
