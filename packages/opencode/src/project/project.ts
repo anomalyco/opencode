@@ -1,4 +1,3 @@
-import z from "zod"
 import { and } from "drizzle-orm"
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
@@ -18,9 +17,9 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { NonNegativeInt, optionalOmitUndefined, withStatics } from "@opencode-ai/core/schema"
+import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { serviceUse } from "@/effect/service-use"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "project" })
 
@@ -53,9 +52,7 @@ export const Info = Schema.Struct({
   commands: optionalOmitUndefined(ProjectCommands),
   time: ProjectTime,
   sandboxes: Schema.Array(Schema.String),
-})
-  .annotate({ identifier: "Project" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Project" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const Event = {
@@ -89,21 +86,19 @@ export function fromRow(row: Row): Info {
   }
 }
 
-export const UpdateInput = z.object({
-  projectID: ProjectID.zod,
-  name: z.string().optional(),
-  icon: zod(ProjectIcon).optional(),
-  commands: zod(ProjectCommands).optional(),
+export const UpdateInput = Schema.Struct({
+  projectID: ProjectID,
+  name: Schema.optional(Schema.String),
+  icon: Schema.optional(ProjectIcon),
+  commands: Schema.optional(ProjectCommands),
 })
-export type UpdateInput = z.infer<typeof UpdateInput>
+export type UpdateInput = Types.DeepMutable<Schema.Schema.Type<typeof UpdateInput>>
 
 export const UpdatePayload = Schema.Struct({
   name: Schema.optional(Schema.String),
   icon: Schema.optional(ProjectIcon),
   commands: Schema.optional(ProjectCommands),
-})
-  .annotate({ identifier: "ProjectUpdateInput" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "ProjectUpdateInput" })
 export type UpdatePayload = Types.DeepMutable<Schema.Schema.Type<typeof UpdatePayload>>
 
 // ---------------------------------------------------------------------------
@@ -136,7 +131,7 @@ type GitResult = { code: number; text: string; stderr: string }
 export const layer: Layer.Layer<
   Service,
   never,
-  AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Bus.Service
+  AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Bus.Service | RuntimeFlags.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -144,6 +139,7 @@ export const layer: Layer.Layer<
     const pathSvc = yield* Path.Path
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const bus = yield* Bus.Service
+    const flags = yield* RuntimeFlags.Service
 
     const git = Effect.fnUntraced(
       function* (args: string[], opts?: { cwd?: string }) {
@@ -288,7 +284,7 @@ export const layer: Layer.Layer<
             time: { created: Date.now(), updated: Date.now() },
           }
 
-      if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
+      if (flags.experimentalIconDiscovery) yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
 
       const result: Info = {
         ...existing,
@@ -511,6 +507,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(CrossSpawnSpawner.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(NodePath.layer),
+  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 export const use = serviceUse(Service)
