@@ -35,8 +35,9 @@ async function drainResponse(response: Response): Promise<void> {
   } catch {}
 }
 
-function parseRetryAfterMs(response: Response): number | undefined {
+async function parseRetryAfterMs(response: Response, providerID: string): Promise<number | undefined> {
   const value = response.headers.get("retry-after") ?? response.headers.get("Retry-After")
+  if (!value && providerID === "openai") return parseOpenAIRetryAfterMs(response)
   if (!value) return undefined
 
   const seconds = Number(value)
@@ -45,6 +46,22 @@ function parseRetryAfterMs(response: Response): number | undefined {
   const dateMs = Date.parse(value)
   if (!Number.isNaN(dateMs)) return Math.max(0, dateMs - Date.now())
 
+  return undefined
+}
+
+async function parseOpenAIRetryAfterMs(response: Response): Promise<number | undefined> {
+  try {
+    const body = (await response.clone().json()) as {
+      error?: { type?: string; resets_at?: number; resets_in_seconds?: number }
+    }
+    if (body.error?.type !== "usage_limit_reached") return undefined
+    if (body.error.resets_at && body.error.resets_at * 1000 > Date.now()) {
+      return body.error.resets_at * 1000 - Date.now()
+    }
+    if (body.error.resets_in_seconds && body.error.resets_in_seconds > 0) {
+      return body.error.resets_in_seconds * 1000
+    }
+  } catch {}
   return undefined
 }
 
@@ -106,6 +123,20 @@ function isAuthExpiredStatus(status: number): boolean {
 
 function sessionRecordKey(providerID: string, namespace: string, sessionID: string): string {
   return `${providerID}:${namespace}:${sessionID}`
+}
+
+async function pickBestWeeklyQuotaCandidate(providerID: string, namespace: string, recordIDs: string[]) {
+  const quota = await Promise.all(
+    recordIDs.map(async (recordID) => ({
+      recordID,
+      score: await Auth.OAuthPool.fetchWeeklyQuotaScore(providerID, namespace, recordID),
+    })),
+  )
+  const ranked = quota
+    .filter((item): item is { recordID: string; score: number } => item.score !== null)
+    .sort((a, b) => b.score - a.score)
+
+  return ranked[0]?.recordID ?? recordIDs[0]
 }
 
 // Timeout for auto-relogin operation (2 minutes)
@@ -212,7 +243,19 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
     const sessionID = getSessionID()
     const sessionKey = sessionID ? sessionRecordKey(opts.providerID, namespace, sessionID) : undefined
     const pinnedID = sessionKey ? sessionRecordByProvider.get(sessionKey) : undefined
-    const preferredID = pinnedID && recordByID.has(pinnedID) ? pinnedID : activeID
+    const isAvailable = (id: string, now: number) => {
+      const cooldownUntil = recordByID.get(id)?.health.cooldownUntil
+      return !cooldownUntil || cooldownUntil <= now
+    }
+    const now = Date.now()
+    const availableCandidates = orderedCandidates.filter((id) => isAvailable(id, now))
+    const priorityCandidates = availableCandidates.length ? availableCandidates : orderedCandidates
+    const preferredID = sessionKey
+      ? pinnedID && recordByID.has(pinnedID) && isAvailable(pinnedID, now)
+        ? pinnedID
+        : await pickBestWeeklyQuotaCandidate(opts.providerID, namespace, priorityCandidates)
+      : activeID
+    if (sessionKey && preferredID) sessionRecordByProvider.set(sessionKey, preferredID)
     const candidates = preferredID
       ? [preferredID, ...orderedCandidates.filter((id) => id !== preferredID)]
       : orderedCandidates
@@ -236,23 +279,11 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
     const refreshed = new Set<string>()
     let lastError: unknown
 
-    const isAvailable = (id: string, now: number) => {
-      const cooldownUntil = recordByID.get(id)?.health.cooldownUntil
-      return !cooldownUntil || cooldownUntil <= now
-    }
     const pickNextCandidate = (now: number) =>
       candidates.find((id) => {
         if (attempted.has(id)) return false
         return isAvailable(id, now)
       }) ?? candidates.find((id) => !attempted.has(id))
-
-    if (sessionKey && (!pinnedID || !recordByID.has(pinnedID) || !isAvailable(pinnedID, Date.now()))) {
-      const nextID = pickNextCandidate(Date.now())
-      if (nextID) {
-        sessionRecordByProvider.set(sessionKey, nextID)
-        if (!pinnedID) await Auth.OAuthPool.moveToBack(opts.providerID, namespace, nextID)
-      }
-    }
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const now = Date.now()
@@ -356,7 +387,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
       }
 
       if (response.status === 429) {
-        const cooldownMs = parseRetryAfterMs(response) ?? rateLimitCooldownMs
+        const cooldownMs = (await parseRetryAfterMs(response, opts.providerID)) ?? rateLimitCooldownMs
         await Auth.OAuthPool.recordOutcome({
           providerID: opts.providerID,
           recordID: nextID,
@@ -405,7 +436,7 @@ export function createOAuthRotatingFetch<TFetch extends (input: any, init?: any)
           }
 
           if (retry.status === 429) {
-            const cooldownMs = parseRetryAfterMs(retry) ?? rateLimitCooldownMs
+            const cooldownMs = (await parseRetryAfterMs(retry, opts.providerID)) ?? rateLimitCooldownMs
             await Auth.OAuthPool.recordOutcome({
               providerID: opts.providerID,
               recordID: nextID,

@@ -277,4 +277,141 @@ export namespace OAuthPool {
       clearTimeout(timeout)
     }
   }
+
+  export async function fetchWeeklyQuotaScore(
+    providerID: string,
+    namespace = "default",
+    recordID?: string,
+  ): Promise<number | null> {
+    if (providerID === "anthropic") {
+      const usage = await fetchAnthropicUsage(providerID, namespace, recordID)
+      const utilization = usage?.sevenDaySonnet?.utilization ?? usage?.sevenDay?.utilization
+      return utilization === undefined ? null : 100 - utilization
+    }
+
+    const record = await getRecord(providerID, namespace, recordID)
+    if (!record?.access) return null
+
+    if (providerID === "openai") return fetchOpenAIWeeklyQuotaScore(record.access, record.accountId)
+    if (providerID === "google") return fetchGoogleWeeklyQuotaScore(record.access)
+    return null
+  }
+}
+
+async function getRecord(providerID: string, namespace: string, recordID?: string) {
+  const store = await loadStoreFile()
+  const provider = store.providers[providerID]
+  if (!provider || provider.type !== "oauth") return undefined
+
+  const ordered = recordIDsForNamespace(provider, namespace)
+  const now = Date.now()
+  const activeID =
+    recordID ??
+    provider.active[namespace] ??
+    ordered.find((id) => {
+      const rec = provider.records.find((r) => r.id === id)
+      return !rec?.health.cooldownUntil || rec.health.cooldownUntil <= now
+    }) ??
+    ordered[0]
+  return provider.records.find((r) => r.id === activeID && r.namespace === namespace)
+}
+
+async function fetchOpenAIWeeklyQuotaScore(access: string, accountId?: string): Promise<number | null> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 5000)
+
+  try {
+    const headers = new Headers({ Authorization: `Bearer ${access}` })
+    if (accountId) headers.set("ChatGPT-Account-Id", accountId)
+    const response = await fetch("https://chatgpt.com/backend-api/wham/usage", { headers, signal: controller.signal })
+    if (!response.ok) return null
+    return scoreOpenAIUsage(await response.json())
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function fetchGoogleWeeklyQuotaScore(access: string): Promise<number | null> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 5000)
+
+  try {
+    const response = await fetch("https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${access}`,
+        "Content-Type": "application/json",
+        "User-Agent": "google-api-nodejs-client/9.15.1",
+      },
+      body: JSON.stringify({
+        metadata: {
+          ideType: "ANTIGRAVITY",
+          platform: "PLATFORM_UNSPECIFIED",
+          pluginType: "GEMINI",
+        },
+      }),
+      signal: controller.signal,
+    })
+    if (!response.ok) return null
+    return scoreGoogleLoadCodeAssist(await response.json())
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function scoreOpenAIUsage(value: unknown): number | null {
+  const numbers = collectNumbers(value)
+  return (
+    bestNumber(numbers, (path) => path.includes("weekly") && path.includes("limit") && !path.includes("used")) ??
+    bestNumber(numbers, (path) => path.includes("weekly") && path.includes("remaining")) ??
+    inverseBestNumber(numbers, (path) => path.includes("weekly") && (path.includes("used") || path.includes("usage")))
+  )
+}
+
+function scoreGoogleLoadCodeAssist(value: unknown): number | null {
+  if (!value || typeof value !== "object") return null
+  const paidTier = (value as { paidTier?: unknown }).paidTier
+  if (!paidTier || typeof paidTier !== "object") return null
+  const availableCredits = (paidTier as { availableCredits?: unknown }).availableCredits
+  if (!Array.isArray(availableCredits)) return 0
+
+  for (const credit of availableCredits) {
+    if (!credit || typeof credit !== "object") continue
+    const item = credit as Record<string, unknown>
+    if (String(item.creditType ?? "").toLowerCase() !== "google_one_ai") continue
+    const creditAmount = parseQuotaNumber(item.creditAmount)
+    const minCreditAmount = parseQuotaNumber(item.minimumCreditAmountForUsage)
+    if (creditAmount === undefined || minCreditAmount === undefined) continue
+    return creditAmount - minCreditAmount
+  }
+
+  return null
+}
+
+function parseQuotaNumber(value: unknown): number | undefined {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value.trim()) : Number.NaN
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function collectNumbers(value: unknown, path: string[] = []): Array<{ path: string[]; value: number }> {
+  if (typeof value === "number" && Number.isFinite(value)) return [{ path, value }]
+  if (!value || typeof value !== "object") return []
+  if (Array.isArray(value)) return value.flatMap((item, index) => collectNumbers(item, path.concat(String(index))))
+  return Object.entries(value).flatMap(([key, item]) => collectNumbers(item, path.concat(key.toLowerCase())))
+}
+
+function bestNumber(numbers: Array<{ path: string[]; value: number }>, match: (path: string) => boolean) {
+  return numbers
+    .filter((item) => match(item.path.join(".")))
+    .map((item) => item.value)
+    .sort((a, b) => b - a)[0]
+}
+
+function inverseBestNumber(numbers: Array<{ path: string[]; value: number }>, match: (path: string) => boolean) {
+  const value = bestNumber(numbers, match)
+  return value === undefined ? undefined : -value
 }
