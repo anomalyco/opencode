@@ -6,14 +6,14 @@ import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
-import { Instance } from "../../src/project/instance"
-import { WithInstance } from "../../src/project/with-instance"
+import { InstanceRef } from "../../src/effect/instance-ref"
+import type { InstanceContext } from "../../src/project/instance-context"
 import { Auth } from "../../src/auth"
 import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Env } from "../../src/env"
-import { provideTestInstance, provideTmpdirInstance } from "../fixture/fixture"
+import { provideTestInstance, provideTmpdirInstance, withTestInstance } from "../fixture/fixture"
 import { tmpdir } from "../fixture/fixture"
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -61,9 +61,20 @@ const layer = Config.layer.pipe(
 
 const it = testEffect(layer)
 
-const load = () => Effect.runPromise(Config.Service.use((svc) => svc.get()).pipe(Effect.scoped, Effect.provide(layer)))
-const save = (config: Config.Info) =>
-  Effect.runPromise(Config.Service.use((svc) => svc.update(config)).pipe(Effect.scoped, Effect.provide(layer)))
+const provideCurrentInstance = <A, E, R>(effect: Effect.Effect<A, E, R>, ctx: InstanceContext) =>
+  effect.pipe(Effect.provideService(InstanceRef, ctx))
+
+const load = (ctx: InstanceContext) =>
+  Effect.runPromise(
+    Config.Service.use((svc) => provideCurrentInstance(svc.get(), ctx)).pipe(Effect.scoped, Effect.provide(layer)),
+  )
+const save = (config: Config.Info, ctx: InstanceContext) =>
+  Effect.runPromise(
+    Config.Service.use((svc) => provideCurrentInstance(svc.update(config), ctx)).pipe(
+      Effect.scoped,
+      Effect.provide(layer),
+    ),
+  )
 const saveGlobal = (config: Config.Info) =>
   Effect.runPromise(
     Config.Service.use((svc) => svc.updateGlobal(config)).pipe(
@@ -76,10 +87,20 @@ const clear = async (wait = false) => {
   await Effect.runPromise(Config.Service.use((svc) => svc.invalidate()).pipe(Effect.scoped, Effect.provide(layer)))
   if (wait) await InstanceRuntime.disposeAllInstances()
 }
-const listDirs = () =>
-  Effect.runPromise(Config.Service.use((svc) => svc.directories()).pipe(Effect.scoped, Effect.provide(layer)))
-const ready = () =>
-  Effect.runPromise(Config.Service.use((svc) => svc.waitForDependencies()).pipe(Effect.scoped, Effect.provide(layer)))
+const listDirs = (ctx: InstanceContext) =>
+  Effect.runPromise(
+    Config.Service.use((svc) => provideCurrentInstance(svc.directories(), ctx)).pipe(
+      Effect.scoped,
+      Effect.provide(layer),
+    ),
+  )
+const ready = (ctx: InstanceContext) =>
+  Effect.runPromise(
+    Config.Service.use((svc) => provideCurrentInstance(svc.waitForDependencies(), ctx)).pipe(
+      Effect.scoped,
+      Effect.provide(layer),
+    ),
+  )
 
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
@@ -114,13 +135,13 @@ async function check(map: (dir: string) => string) {
       $schema: "https://opencode.ai/config.json",
       snapshot: false,
     })
-    await WithInstance.provide({
+    await withTestInstance({
       directory: map(tmp.path),
-      fn: async () => {
-        const cfg = await load()
+      fn: async (ctx) => {
+        const cfg = await load(ctx)
         expect(cfg.snapshot).toBe(true)
-        expect(Instance.directory).toBe(Filesystem.resolve(tmp.path))
-        expect(Instance.project.id).not.toBe(ProjectID.global)
+        expect(ctx.directory).toBe(Filesystem.resolve(tmp.path))
+        expect(ctx.project.id).not.toBe(ProjectID.global)
       },
     })
   } finally {
@@ -132,13 +153,61 @@ async function check(map: (dir: string) => string) {
 
 test("loads config with defaults when no files exist", async () => {
   await using tmp = await tmpdir()
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.username).toBeDefined()
     },
   })
+})
+
+test("creates global jsonc config with schema when no global configs exist", async () => {
+  await using tmp = await tmpdir()
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = tmp.path
+  await clear(true)
+
+  try {
+    await withTestInstance({
+      directory: tmp.path,
+      fn: async (ctx) => {
+        await load(ctx)
+      },
+    })
+
+    const content = await Filesystem.readText(path.join(tmp.path, "opencode.jsonc"))
+    expect(content).toContain('"$schema": "https://opencode.ai/config.json"')
+  } finally {
+    ;(Global.Path as { config: string }).config = prev
+    await clear(true)
+  }
+})
+
+test("does not create global config when OPENCODE_CONFIG_DIR is set", async () => {
+  await using tmp = await tmpdir()
+  await using custom = await tmpdir()
+  const prevConfig = Global.Path.config
+  const prevEnv = process.env.OPENCODE_CONFIG_DIR
+  ;(Global.Path as { config: string }).config = tmp.path
+  process.env.OPENCODE_CONFIG_DIR = custom.path
+  await clear(true)
+
+  try {
+    await withTestInstance({
+      directory: tmp.path,
+      fn: async (ctx) => {
+        await load(ctx)
+      },
+    })
+
+    expect(await Filesystem.exists(path.join(tmp.path, "opencode.jsonc"))).toBe(false)
+  } finally {
+    ;(Global.Path as { config: string }).config = prevConfig
+    if (prevEnv === undefined) delete process.env.OPENCODE_CONFIG_DIR
+    else process.env.OPENCODE_CONFIG_DIR = prevEnv
+    await clear(true)
+  }
 })
 
 test("loads JSON config file", async () => {
@@ -151,10 +220,10 @@ test("loads JSON config file", async () => {
       })
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.model).toBe("test/model")
       expect(config.username).toBe("testuser")
     },
@@ -170,10 +239,10 @@ test("loads shell config field", async () => {
       })
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.shell).toBe("bash")
     },
   })
@@ -192,10 +261,10 @@ test("updates config and preserves empty shell sentinel", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      await save({ shell: "" })
+    fn: async (ctx) => {
+      await save({ shell: "" }, ctx)
 
       const writtenConfig = await Filesystem.readJson<{ shell?: string }>(path.join(tmp.path, "config.json"))
       expect(writtenConfig.shell).toBe("")
@@ -251,7 +320,7 @@ test("updates global config and omits empty shell key in jsonc", async () => {
 
     const file = path.join(tmp.path, "opencode.jsonc")
     const writtenConfig = await Filesystem.readText(file)
-    const parsed = ConfigParse.schema(Config.Info.zod, ConfigParse.jsonc(writtenConfig, file), file)
+    const parsed = ConfigParse.schema(Config.Info, ConfigParse.jsonc(writtenConfig, file), file)
     expect(writtenConfig).not.toContain('"shell"')
     expect(parsed.shell).toBeUndefined()
     expect(parsed.model).toBe("test/model")
@@ -270,10 +339,10 @@ test("loads formatter boolean config", async () => {
       })
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.formatter).toBe(true)
     },
   })
@@ -288,10 +357,10 @@ test("loads lsp boolean config", async () => {
       })
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.lsp).toBe(true)
     },
   })
@@ -325,10 +394,10 @@ test("ignores legacy tui keys in opencode config", async () => {
       })
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.model).toBe("test/model")
       expect((config as Record<string, unknown>).theme).toBeUndefined()
       expect((config as Record<string, unknown>).tui).toBeUndefined()
@@ -350,10 +419,10 @@ test("loads JSONC config file", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.model).toBe("test/model")
       expect(config.username).toBe("testuser")
     },
@@ -378,10 +447,10 @@ test("jsonc overrides json in the same directory", async () => {
       })
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.model).toBe("base")
       expect(config.username).toBe("base")
     },
@@ -401,10 +470,10 @@ test("handles environment variable substitution", async () => {
         })
       },
     })
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
-      fn: async () => {
-        const config = await load()
+      fn: async (ctx) => {
+        const config = await load(ctx)
         expect(config.username).toBe("test-user")
       },
     })
@@ -433,10 +502,10 @@ test("preserves env variables when adding $schema to config", async () => {
         )
       },
     })
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
-      fn: async () => {
-        const config = await load()
+      fn: async (ctx) => {
+        const config = await load(ctx)
         expect(config.username).toBe("secret_value")
 
         // Read the file to verify the env variable was preserved
@@ -530,10 +599,10 @@ test("handles file inclusion substitution", async () => {
       })
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.username).toBe("test-user")
     },
   })
@@ -549,10 +618,10 @@ test("handles file inclusion with replacement tokens", async () => {
       })
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.username).toBe("const out = await Bun.$`echo hi`")
     },
   })
@@ -569,9 +638,9 @@ test("validates config schema and throws on invalid fields", async () => {
   })
   await provideTestInstance({
     directory: tmp.path,
-    fn: async () => {
+    fn: async (ctx) => {
       // Strict schema should throw an error for invalid fields
-      await expect(load()).rejects.toThrow()
+      await expect(load(ctx)).rejects.toThrow()
     },
   })
 })
@@ -584,8 +653,8 @@ test("throws error for invalid JSON", async () => {
   })
   await provideTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      await expect(load()).rejects.toThrow()
+    fn: async (ctx) => {
+      await expect(load(ctx)).rejects.toThrow()
     },
   })
 })
@@ -605,10 +674,10 @@ test("handles agent configuration", async () => {
       })
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.agent?.["test_agent"]).toEqual(
         expect.objectContaining({
           model: "test/model",
@@ -636,10 +705,10 @@ test("treats agent variant as model-scoped setting (not provider option)", async
     },
   })
 
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       const agent = config.agent?.["test_agent"]
 
       expect(agent?.variant).toBe("xhigh")
@@ -666,10 +735,10 @@ test("handles command configuration", async () => {
       })
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.command?.["test_command"]).toEqual({
         template: "test template",
         description: "test command",
@@ -691,10 +760,10 @@ test("migrates autoshare to share field", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.share).toBe("auto")
       expect(config.autoshare).toBe(true)
     },
@@ -718,10 +787,10 @@ test("migrates mode field to agent field", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.agent?.["test_mode"]).toEqual({
         model: "test/model",
         temperature: 0.5,
@@ -750,10 +819,10 @@ Test agent prompt`,
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.agent?.["test"]).toEqual(
         expect.objectContaining({
           name: "test",
@@ -783,10 +852,10 @@ Ordered permissions`,
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(Object.keys(config.agent?.ordered?.permission ?? {})).toEqual(["bash", "*", "edit"])
     },
   })
@@ -821,10 +890,10 @@ Nested agent prompt`,
     },
   })
 
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
 
       expect(config.agent?.["helper"]).toMatchObject({
         name: "helper",
@@ -870,10 +939,10 @@ Nested command template`,
     },
   })
 
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
 
       expect(config.command?.["hello"]).toEqual({
         description: "Test command",
@@ -915,10 +984,10 @@ Nested command template`,
     },
   })
 
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
 
       expect(config.command?.["hello"]).toEqual({
         description: "Test command",
@@ -935,11 +1004,11 @@ Nested command template`,
 
 test("updates config and writes to file", async () => {
   await using tmp = await tmpdir()
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
+    fn: async (ctx) => {
       const newConfig = { model: "updated/model" }
-      await save(newConfig as any)
+      await save(newConfig as any, ctx)
 
       const writtenConfig = await Filesystem.readJson<{ model: string }>(path.join(tmp.path, "config.json"))
       expect(writtenConfig.model).toBe("updated/model")
@@ -949,10 +1018,10 @@ test("updates config and writes to file", async () => {
 
 test("gets config directories", async () => {
   await using tmp = await tmpdir()
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const dirs = await listDirs()
+    fn: async (ctx) => {
+      const dirs = await listDirs(ctx)
       expect(dirs.length).toBeGreaterThanOrEqual(1)
     },
   })
@@ -979,10 +1048,10 @@ test("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR", as
   process.env.OPENCODE_CONFIG_DIR = tmp.extra
 
   try {
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
-      fn: async () => {
-        await load()
+      fn: async (ctx) => {
+        await load(ctx)
       },
     })
   } finally {
@@ -1014,12 +1083,20 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
   )
 
   try {
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
-      fn: async () => {
-        await Effect.runPromise(Config.Service.use((svc) => svc.get()).pipe(Effect.scoped, Effect.provide(testLayer)))
+      fn: async (ctx) => {
         await Effect.runPromise(
-          Config.Service.use((svc) => svc.waitForDependencies()).pipe(Effect.scoped, Effect.provide(testLayer)),
+          Config.Service.use((svc) => svc.get().pipe(Effect.provideService(InstanceRef, ctx))).pipe(
+            Effect.scoped,
+            Effect.provide(testLayer),
+          ),
+        )
+        await Effect.runPromise(
+          Config.Service.use((svc) => svc.waitForDependencies().pipe(Effect.provideService(InstanceRef, ctx))).pipe(
+            Effect.scoped,
+            Effect.provide(testLayer),
+          ),
         )
       },
     })
@@ -1075,8 +1152,8 @@ test("resolves scoped npm plugins in config", async () => {
 
   await provideTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       const pluginEntries = config.plugin ?? []
       expect(pluginEntries).toContain("@scope/plugin")
     },
@@ -1113,8 +1190,8 @@ test("merges plugin arrays from global and local configs", async () => {
 
   await provideTestInstance({
     directory: path.join(tmp.path, "project"),
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       const plugins = config.plugin ?? []
 
       // Should contain both global and local plugins
@@ -1147,10 +1224,10 @@ Helper subagent prompt`,
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.agent?.["helper"]).toMatchObject({
         name: "helper",
         model: "test/model",
@@ -1186,10 +1263,10 @@ test("merges instructions arrays from global and local configs", async () => {
     },
   })
 
-  await WithInstance.provide({
+  await withTestInstance({
     directory: path.join(tmp.path, "project"),
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       const instructions = config.instructions ?? []
 
       expect(instructions).toContain("global-instructions.md")
@@ -1225,10 +1302,10 @@ test("deduplicates duplicate instructions from global and local configs", async 
     },
   })
 
-  await WithInstance.provide({
+  await withTestInstance({
     directory: path.join(tmp.path, "project"),
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       const instructions = config.instructions ?? []
 
       expect(instructions).toContain("global-only.md")
@@ -1272,8 +1349,8 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
 
   await provideTestInstance({
     directory: path.join(tmp.path, "project"),
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       const plugins = config.plugin ?? []
 
       // Should contain all unique plugins
@@ -1321,8 +1398,8 @@ test("keeps plugin origins aligned with merged plugin list", async () => {
 
   await provideTestInstance({
     directory: path.join(tmp.path, "project"),
-    fn: async () => {
-      const cfg = await load()
+    fn: async (ctx) => {
+      const cfg = await load(ctx)
       const plugins = cfg.plugin ?? []
       const origins = cfg.plugin_origins ?? []
       const names = plugins.map((item) => ConfigPlugin.pluginSpecifier(item))
@@ -1360,10 +1437,10 @@ test("migrates legacy tools config to permissions - allow", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.agent?.["test"]?.permission).toEqual({
         bash: "allow",
         read: "allow",
@@ -1391,10 +1468,10 @@ test("migrates legacy tools config to permissions - deny", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.agent?.["test"]?.permission).toEqual({
         bash: "deny",
         webfetch: "deny",
@@ -1421,10 +1498,10 @@ test("migrates legacy write tool to edit permission", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.agent?.["test"]?.permission).toEqual({
         edit: "allow",
       })
@@ -1453,10 +1530,10 @@ test("managed settings override user settings", async () => {
     share: "disabled",
   })
 
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.model).toBe("managed/model")
       expect(config.share).toBe("disabled")
       expect(config.username).toBe("testuser")
@@ -1481,10 +1558,10 @@ test("managed settings override project settings", async () => {
     disabled_providers: ["openai"],
   })
 
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.autoupdate).toBe(false)
       expect(config.disabled_providers).toEqual(["openai"])
     },
@@ -1501,10 +1578,10 @@ test("missing managed settings file is not an error", async () => {
     },
   })
 
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.model).toBe("user/model")
     },
   })
@@ -1528,10 +1605,10 @@ test("migrates legacy edit tool to edit permission", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.agent?.["test"]?.permission).toEqual({
         edit: "deny",
       })
@@ -1557,10 +1634,10 @@ test("migrates legacy patch tool to edit permission", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.agent?.["test"]?.permission).toEqual({
         edit: "allow",
       })
@@ -1589,10 +1666,10 @@ test("migrates mixed legacy tools config", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.agent?.["test"]?.permission).toEqual({
         bash: "allow",
         edit: "allow",
@@ -1624,10 +1701,10 @@ test("merges legacy tools with existing permission config", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.agent?.["test"]?.permission).toEqual({
         glob: "allow",
         bash: "allow",
@@ -1661,10 +1738,10 @@ test("permission config preserves user key order", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(Object.keys(config.permission!)).toEqual([
         "*",
         "edit",
@@ -1681,8 +1758,8 @@ test("permission config preserves user key order", async () => {
   })
 })
 
-test("Effect config parser preserves permission order while rejecting unknown top-level keys", () => {
-  const config = ConfigParse.effectSchema(
+test("config parser preserves permission order while rejecting unknown top-level keys", () => {
+  const config = ConfigParse.schema(
     Config.Info,
     {
       permission: {
@@ -1696,7 +1773,7 @@ test("Effect config parser preserves permission order while rejecting unknown to
 
   expect(Object.keys(config.permission!)).toEqual(["bash", "*", "edit"])
   try {
-    ConfigParse.effectSchema(Config.Info, { invalid_field: true }, "test")
+    ConfigParse.schema(Config.Info, { invalid_field: true }, "test")
     throw new Error("expected config parse to fail")
   } catch (err) {
     const error = err as { data?: { issues?: Array<{ code?: string; keys?: string[]; path?: string[] }> } }
@@ -1744,10 +1821,10 @@ test("project config can override MCP server enabled status", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       // jira should be enabled (overridden by project config)
       expect(config.mcp?.jira).toEqual({
         type: "remote",
@@ -1800,10 +1877,10 @@ test("MCP config deep merges preserving base config properties", async () => {
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.mcp?.myserver).toEqual({
         type: "remote",
         url: "https://myserver.example.com/mcp",
@@ -1851,10 +1928,10 @@ test("local .opencode config can override MCP from project config", async () => 
       )
     },
   })
-  await WithInstance.provide({
+  await withTestInstance({
     directory: tmp.path,
-    fn: async () => {
-      const config = await load()
+    fn: async (ctx) => {
+      const config = await load(ctx)
       expect(config.mcp?.docs?.enabled).toBe(true)
     },
   })
@@ -2187,8 +2264,8 @@ describe("deduplicatePluginOrigins", () => {
 
     await provideTestInstance({
       directory: path.join(tmp.path, "project"),
-      fn: async () => {
-        const config = await load()
+      fn: async (ctx) => {
+        const config = await load(ctx)
         const plugins = config.plugin ?? []
 
         expect(plugins.some((p) => ConfigPlugin.pluginSpecifier(p) === "my-plugin@1.0.0")).toBe(true)
@@ -2217,10 +2294,10 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
           )
         },
       })
-      await WithInstance.provide({
+      await withTestInstance({
         directory: tmp.path,
-        fn: async () => {
-          const config = await load()
+        fn: async (ctx) => {
+          const config = await load(ctx)
           // Project config should NOT be loaded - model should be default, not "project/model"
           expect(config.model).not.toBe("project/model")
           expect(config.username).not.toBe("project-user")
@@ -2248,10 +2325,10 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
           await Filesystem.write(path.join(opencodeDir, "test-cmd.md"), "# Test Command\nThis is a test command.")
         },
       })
-      await WithInstance.provide({
+      await withTestInstance({
         directory: tmp.path,
-        fn: async () => {
-          const directories = await listDirs()
+        fn: async (ctx) => {
+          const directories = await listDirs(ctx)
           // Project .opencode should NOT be in directories list
           const hasProjectOpencode = directories.some((d) => d.startsWith(tmp.path))
           expect(hasProjectOpencode).toBe(false)
@@ -2272,11 +2349,11 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
 
     try {
       await using tmp = await tmpdir()
-      await WithInstance.provide({
+      await withTestInstance({
         directory: tmp.path,
-        fn: async () => {
+        fn: async (ctx) => {
           // Should still get default config (from global or defaults)
-          const config = await load()
+          const config = await load(ctx)
           expect(config).toBeDefined()
           expect(config.username).toBeDefined()
         },
@@ -2314,12 +2391,12 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
         },
       })
 
-      await WithInstance.provide({
+      await withTestInstance({
         directory: tmp.path,
-        fn: async () => {
+        fn: async (ctx) => {
           // The relative instruction should be skipped without error
           // We're mainly verifying this doesn't throw and the config loads
-          const config = await load()
+          const config = await load(ctx)
           expect(config).toBeDefined()
           // The instruction should have been skipped (warning logged)
           // We can't easily test the warning was logged, but we verify
@@ -2374,10 +2451,10 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
       process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
       process.env["OPENCODE_CONFIG_DIR"] = configDirTmp.path
 
-      await WithInstance.provide({
+      await withTestInstance({
         directory: projectTmp.path,
-        fn: async () => {
-          const config = await load()
+        fn: async (ctx) => {
+          const config = await load(ctx)
           // Should load from OPENCODE_CONFIG_DIR, not project
           expect(config.model).toBe("configdir/model")
         },
@@ -2409,10 +2486,10 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
 
     try {
       await using tmp = await tmpdir()
-      await WithInstance.provide({
+      await withTestInstance({
         directory: tmp.path,
-        fn: async () => {
-          const config = await load()
+        fn: async (ctx) => {
+          const config = await load(ctx)
           expect(config.username).toBe("test_api_key_12345")
         },
       })
@@ -2443,10 +2520,10 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
           })
         },
       })
-      await WithInstance.provide({
+      await withTestInstance({
         directory: tmp.path,
-        fn: async () => {
-          const config = await load()
+        fn: async (ctx) => {
+          const config = await load(ctx)
           expect(config.username).toBe("secret_key_from_file")
         },
       })
@@ -2463,7 +2540,7 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
 // parseManagedPlist unit tests — pure function, no OS interaction
 
 test("parseManagedPlist strips MDM metadata keys", async () => {
-  const config = ConfigParse.effectSchema(
+  const config = ConfigParse.schema(
     Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
@@ -2491,7 +2568,7 @@ test("parseManagedPlist strips MDM metadata keys", async () => {
 })
 
 test("parseManagedPlist parses server settings", async () => {
-  const config = ConfigParse.effectSchema(
+  const config = ConfigParse.schema(
     Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
@@ -2511,7 +2588,7 @@ test("parseManagedPlist parses server settings", async () => {
 })
 
 test("parseManagedPlist parses permission rules", async () => {
-  const config = ConfigParse.effectSchema(
+  const config = ConfigParse.schema(
     Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
@@ -2541,7 +2618,7 @@ test("parseManagedPlist parses permission rules", async () => {
 })
 
 test("parseManagedPlist parses enabled_providers", async () => {
-  const config = ConfigParse.effectSchema(
+  const config = ConfigParse.schema(
     Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(
@@ -2558,7 +2635,7 @@ test("parseManagedPlist parses enabled_providers", async () => {
 })
 
 test("parseManagedPlist handles empty config", async () => {
-  const config = ConfigParse.effectSchema(
+  const config = ConfigParse.schema(
     Config.Info,
     ConfigParse.jsonc(
       await ConfigManaged.parseManagedPlist(JSON.stringify({ $schema: "https://opencode.ai/config.json" })),

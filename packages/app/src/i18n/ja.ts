@@ -275,6 +275,7 @@ export const dict = {
   "mcp.status.connected": "接続済み",
   "mcp.status.failed": "失敗",
   "mcp.status.needs_auth": "認証が必要",
+  "mcp.auth.clickToAuthenticate": "クリックして認証",
   "mcp.status.disabled": "無効",
   "dialog.fork.empty": "フォーク元のメッセージがありません",
   "dialog.directory.search.placeholder": "フォルダを検索",

@@ -1,9 +1,6 @@
-import { Provider } from "@/provider/provider"
-import { Session } from "@/session/session"
-import { NotFoundError } from "@/storage/storage"
-import { iife } from "@/util/iife"
 import { NamedError } from "@opencode-ai/core/util/error"
 import * as Log from "@opencode-ai/core/util/log"
+import { ConfigError } from "@/config/error"
 import { Cause, Effect } from "effect"
 import { HttpRouter, HttpServerError, HttpServerRespondable, HttpServerResponse } from "effect/unstable/http"
 
@@ -22,33 +19,19 @@ export const errorLayer = HttpRouter.middleware<{ handles: unknown }>()((effect)
       if (!defect) return Effect.failCause(cause)
 
       const error = defect.defect
-      log.error("failed", { error, cause: Cause.pretty(cause) })
+      if (
+        error instanceof NamedError &&
+        (ConfigError.InvalidError.isInstance(error) || ConfigError.JsonError.isInstance(error))
+      ) {
+        return Effect.succeed(HttpServerResponse.jsonUnsafe(error.toObject(), { status: 400 }))
+      }
 
-      if (error instanceof NamedError) {
-        return Effect.succeed(
-          HttpServerResponse.jsonUnsafe(error.toObject(), {
-            status: iife(() => {
-              if (error instanceof NotFoundError) return 404
-              if (error instanceof Provider.ModelNotFoundError) return 400
-              if (error.name === "ProviderAuthValidationFailed") return 400
-              if (error.name.startsWith("Worktree")) return 400
-              return 500
-            }),
-          }),
-        )
-      }
-      if (error instanceof Session.BusyError) {
-        return Effect.succeed(
-          HttpServerResponse.jsonUnsafe(new NamedError.Unknown({ message: error.message }).toObject(), {
-            status: 400,
-          }),
-        )
-      }
+      log.error("failed", { error, cause: Cause.pretty(cause) })
 
       return Effect.succeed(
         HttpServerResponse.jsonUnsafe(
           new NamedError.Unknown({
-            message: error instanceof Error && error.stack ? error.stack : String(error),
+            message: "Unexpected server error. Check server logs for details.",
           }).toObject(),
           { status: 500 },
         ),

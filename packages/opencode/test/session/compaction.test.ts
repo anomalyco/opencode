@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
 import { APICallError } from "ai"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { Bus } from "../../src/bus"
 import { Config } from "@/config/config"
@@ -28,6 +28,8 @@ import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { TestConfig } from "../fixture/config"
 import { SyncEvent } from "@/sync"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { EventV2Bridge } from "@/event-v2-bridge"
 
 void Log.init({ print: false })
 
@@ -211,7 +213,7 @@ function layer(result: "continue" | "compact") {
 }
 
 function cfg(compaction?: Config.Info["compaction"]) {
-  const base = Config.Info.zod.parse({})
+  const base = Schema.decodeUnknownSync(Config.Info)({}) as Config.Info
   return TestConfig.layer({
     get: () => Effect.succeed({ ...base, compaction }),
   })
@@ -225,6 +227,8 @@ const deps = Layer.mergeAll(
   Bus.layer,
   Config.defaultLayer,
   SyncEvent.defaultLayer,
+  RuntimeFlags.layer({ experimentalEventSystem: true }),
+  EventV2Bridge.defaultLayer,
 )
 
 const env = Layer.mergeAll(
@@ -257,6 +261,7 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
     ? SessionProcessorModule.SessionProcessor.layer.pipe(
         Layer.provide(summary),
         Layer.provide(Image.defaultLayer),
+        Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
         Layer.provide(status),
       )
     : layer(options?.result ?? "continue")
@@ -272,6 +277,8 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
     Layer.provide(bus),
     Layer.provide(options?.config ?? Config.defaultLayer),
     Layer.provide(SyncEvent.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provide(EventV2Bridge.defaultLayer),
   )
 }
 
@@ -926,12 +933,12 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
-    "does not persist tail_start_id for serialized recent turns",
+    "persists tail_start_id for retained recent turns",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
       const session = yield* ssn.create({})
       yield* createUserMessage(session.id, "first")
-      yield* createUserMessage(session.id, "second")
+      const keep = yield* createUserMessage(session.id, "second")
       yield* createUserMessage(session.id, "third")
       yield* createSummaryCompaction(session.id)
 
@@ -947,18 +954,18 @@ describe("session.compaction.process", () => {
 
       const part = yield* readCompactionPart(session.id)
       expect(part?.type).toBe("compaction")
-      expect(part?.tail_start_id).toBeUndefined()
+      expect(part?.tail_start_id).toBe(keep.id)
     }).pipe(withCompaction({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 10_000 }) })),
   )
 
   itCompaction.instance(
-    "does not persist tail_start_id when shrinking serialized tail",
+    "shrinks retained tail to fit preserve token budget",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
       const session = yield* ssn.create({})
       yield* createUserMessage(session.id, "first")
       yield* createUserMessage(session.id, "x".repeat(2_000))
-      yield* createUserMessage(session.id, "tiny")
+      const keep = yield* createUserMessage(session.id, "tiny")
       yield* createSummaryCompaction(session.id)
 
       const msgs = yield* ssn.messages({ sessionID: session.id })
@@ -973,7 +980,7 @@ describe("session.compaction.process", () => {
 
       const part = yield* readCompactionPart(session.id)
       expect(part?.type).toBe("compaction")
-      expect(part?.tail_start_id).toBeUndefined()
+      expect(part?.tail_start_id).toBe(keep.id)
     }).pipe(withCompaction({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 100 }) })),
   )
 
@@ -1005,7 +1012,7 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
-    "serializes retained tail media as text in the summary input",
+    "falls back to full summary when retained tail media exceeds preserve token budget",
     () => {
       const stub = llm()
       let captured = ""
@@ -1078,16 +1085,15 @@ describe("session.compaction.process", () => {
 
         const part = yield* readCompactionPart(session.id)
         expect(part?.type).toBe("compaction")
-        expect(part?.tail_start_id).toBeUndefined()
+        expect(part?.tail_start_id).toBe(keep.id)
         expect(captured).toContain("zzzz")
-        expect(captured).toContain("keep tail")
+        expect(captured).not.toContain("keep tail")
 
         const filtered = MessageV2.filterCompacted(MessageV2.stream(session.id))
-        expect(filtered.map((msg) => msg.info.id)).toEqual([parent!, expect.any(String)])
+        expect(filtered.map((msg) => msg.info.id).slice(0, 3)).toEqual([parent!, expect.any(String), keep.id])
         expect(filtered[1]?.info.role).toBe("assistant")
         expect(filtered[1]?.info.role === "assistant" ? filtered[1].info.summary : false).toBe(true)
         expect(filtered.map((msg) => msg.info.id)).not.toContain(large.id)
-        expect(filtered.map((msg) => msg.info.id)).not.toContain(keep.id)
       }).pipe(withCompaction({ llm: stub.layer, config: cfg({ tail_turns: 1, preserve_recent_tokens: 100 }) }))
     },
     { git: true },
@@ -1354,13 +1360,13 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
-    "summarizes the head while serializing recent tail into summary input",
+    "summarizes only the head while keeping recent tail out of summary input",
     () => {
       const stub = llm()
-      let captured: LLM.StreamInput["messages"] = []
+      let captured = ""
       stub.push(
         reply("summary", (input) => {
-          captured = input.messages
+          captured = JSON.stringify(input.messages)
         }),
       )
       return Effect.gen(function* () {
@@ -1381,15 +1387,10 @@ describe("session.compaction.process", () => {
           auto: false,
         })
 
-        const head = JSON.stringify(captured.slice(0, -1))
-        const prompt = JSON.stringify(captured.at(-1))
-        expect(head).toContain("older context")
-        expect(head).not.toContain("keep this turn")
-        expect(head).not.toContain("and this one too")
-        expect(prompt).toContain("keep this turn")
-        expect(prompt).toContain("and this one too")
-        expect(prompt).toContain("recent-conversation-tail")
-        expect(prompt).not.toContain("What did we do so far?")
+        expect(captured).toContain("older context")
+        expect(captured).not.toContain("keep this turn")
+        expect(captured).not.toContain("and this one too")
+        expect(captured).not.toContain("What did we do so far?")
       }).pipe(withCompaction({ llm: stub.layer }))
     },
     { git: true },
@@ -1437,7 +1438,7 @@ describe("session.compaction.process", () => {
     { git: true },
   )
 
-  itCompaction.instance("does not replay recent pre-compaction turns across repeated compactions", () => {
+  itCompaction.instance("keeps recent pre-compaction turns across repeated compactions", () => {
     const stub = llm()
     stub.push(reply("summary one"))
     stub.push(reply("summary two"))
@@ -1468,8 +1469,8 @@ describe("session.compaction.process", () => {
 
       expect(ids).not.toContain(u1.id)
       expect(ids).not.toContain(u2.id)
-      expect(ids).not.toContain(u3.id)
-      expect(ids).not.toContain(u4.id)
+      expect(ids).toContain(u3.id)
+      expect(ids).toContain(u4.id)
       expect(filtered.some((msg) => msg.info.role === "assistant" && msg.info.summary)).toBe(true)
       expect(
         filtered.some((msg) => msg.info.role === "user" && msg.parts.some((part) => part.type === "compaction")),
@@ -1478,7 +1479,7 @@ describe("session.compaction.process", () => {
   })
 
   itCompaction.instance(
-    "ignores previous summaries when sizing the serialized tail",
+    "ignores previous summaries when sizing the retained tail",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
       const test = yield* TestInstance
@@ -1517,7 +1518,7 @@ describe("session.compaction.process", () => {
 
       const part = yield* readCompactionPart(session.id)
       expect(part?.type).toBe("compaction")
-      expect(part?.tail_start_id).toBeUndefined()
+      expect(part?.tail_start_id).toBe(keep.id)
     }).pipe(withCompaction({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 500 }) })),
   )
 })
@@ -1762,6 +1763,101 @@ describe("SessionNs.getUsage", () => {
     })
 
     expect(result.cost).toBe(3 + 1.5)
+  })
+
+  test("uses matching context cost tier before over-200k fallback", () => {
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: {
+        input: 1,
+        output: 2,
+        cache: { read: 0.1, write: 0.5 },
+        tiers: [
+          {
+            input: 3,
+            output: 4,
+            cache: { read: 0.3, write: 1.5 },
+            tier: { type: "context", size: 200_000 },
+          },
+          {
+            input: 5,
+            output: 6,
+            cache: { read: 0.5, write: 2.5 },
+            tier: { type: "context", size: 500_000 },
+          },
+        ],
+        experimentalOver200K: {
+          input: 100,
+          output: 100,
+          cache: { read: 100, write: 100 },
+        },
+      },
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: {
+        inputTokens: 650_000,
+        outputTokens: 100_000,
+        totalTokens: 750_000,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: 100_000,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
+      },
+    })
+
+    expect(result.tokens.input).toBe(550_000)
+    expect(result.cost).toBe(2.75 + 0.6 + 0.05)
+  })
+
+  test("falls back to over-200k pricing when no cost tier matches", () => {
+    const model = createModel({
+      context: 1_000_000,
+      output: 32_000,
+      cost: {
+        input: 1,
+        output: 2,
+        cache: { read: 0.1, write: 0.5 },
+        tiers: [
+          {
+            input: 5,
+            output: 6,
+            cache: { read: 0.5, write: 2.5 },
+            tier: { type: "context", size: 500_000 },
+          },
+        ],
+        experimentalOver200K: {
+          input: 3,
+          output: 4,
+          cache: { read: 0.3, write: 1.5 },
+        },
+      },
+    })
+    const result = SessionNs.getUsage({
+      model,
+      usage: {
+        inputTokens: 300_000,
+        outputTokens: 100_000,
+        totalTokens: 400_000,
+        inputTokenDetails: {
+          noCacheTokens: undefined,
+          cacheReadTokens: undefined,
+          cacheWriteTokens: undefined,
+        },
+        outputTokenDetails: {
+          textTokens: undefined,
+          reasoningTokens: undefined,
+        },
+      },
+    })
+
+    expect(result.cost).toBe(0.9 + 0.4)
   })
 
   test.each(["@ai-sdk/anthropic", "@ai-sdk/amazon-bedrock", "@ai-sdk/google-vertex/anthropic"])(
