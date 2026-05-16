@@ -43,7 +43,23 @@ export const ExtraAgentServeCommand = cmd({
       config,
     })
     console.log(`extra-agent ${bridge.id} listening on http://${server.hostname ?? net.hostname}:${server.port ?? net.port}`)
+
+    let shuttingDown = false
+    const shutdown = async (sig: NodeJS.Signals) => {
+      if (shuttingDown) return
+      shuttingDown = true
+      console.log(`extra-agent ${bridge.id} received ${sig}, shutting down`)
+      try {
+        await server.stop()
+      } catch (err) {
+        console.error(`extra-agent ${bridge.id} stop failed:`, err)
+      }
+      process.exit(0)
+    }
+    process.on("SIGTERM", shutdown)
+    process.on("SIGINT", shutdown)
+    process.on("SIGHUP", shutdown)
+
     await new Promise(() => {})
-    await server.stop()
   },
 })

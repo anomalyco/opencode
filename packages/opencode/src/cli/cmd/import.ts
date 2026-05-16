@@ -1,8 +1,9 @@
 import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
 import { Session } from "@/session/session"
 import { MessageV2 } from "../../session/message-v2"
-import { CliError, effectCmd } from "../effect-cmd"
-import { Database } from "@/storage/db"
+import { cmd } from "./cmd"
+import { bootstrap } from "../bootstrap"
+import { Database, sql } from "../../storage/db"
 import { SessionTable, MessageTable, PartTable } from "../../session/session.sql"
 import { InstanceRef } from "@/effect/instance-ref"
 import { ShareNext } from "@/share/share-next"
@@ -207,14 +208,12 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
       const { id: partId, sessionID: _s, messageID, ...partData } = partInfo
       Database.use((db) =>
         db
-          .insert(PartTable)
-          .values({
-            id: partId,
-            message_id: messageID,
-            session_id: row.id,
-            data: partData,
+          .insert(SessionTable)
+          .values(row)
+          .onConflictDoUpdate({
+            target: SessionTable.id,
+            set: { project_id: row.project_id, time_updated: sql`${SessionTable.time_updated}` },
           })
-          .onConflictDoNothing()
           .run(),
       )
     }

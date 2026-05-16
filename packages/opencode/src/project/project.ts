@@ -1,6 +1,6 @@
-import { and } from "drizzle-orm"
-import { Database } from "@/storage/db"
-import { eq } from "drizzle-orm"
+import { createHash } from "node:crypto"
+import z from "zod"
+import { and, Database, eq, sql } from "../storage/db"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
 import * as Log from "@opencode-ai/core/util/log"
@@ -295,10 +295,19 @@ export const layer: Layer.Layer<
           })
 
           if (!dotgit) {
+            const dirId = ProjectID.make(
+              "dir:" + createHash("sha256").update(directory).digest("hex").slice(0, 16),
+            )
+            log.info("project.discover.nogit", {
+              directory,
+              projectId: dirId,
+              worktree: directory,
+              message: "No .git found, creating project from directory hash",
+            })
             return {
-              id: ProjectID.global,
-              worktree: "/",
-              sandbox: "/",
+              id: dirId,
+              worktree: directory,
+              sandbox: directory,
               vcs: fakeVcs,
             }
           }
@@ -472,7 +481,7 @@ export const layer: Layer.Layer<
           yield* db((d) =>
             d
               .update(SessionTable)
-              .set({ project_id: data.id })
+              .set({ project_id: data.id, time_updated: sql`${SessionTable.time_updated}` })
               .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
               .run(),
           )

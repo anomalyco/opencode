@@ -807,7 +807,6 @@ export namespace HermesBridge {
     }
 
     const app = new Hono()
-    return app
       .onError((err, c) => {
         const message = err instanceof Error ? err.message : String(err)
         log.error("request failed", { error: message })
@@ -1152,10 +1151,12 @@ export namespace HermesBridge {
           status: 400,
         })
       })
+
+    return { app, dispose: () => shim.stop() }
   }
 
   export function listen(opts: Opts) {
-    const app = createApp(opts)
+    const { app, dispose } = createApp(opts)
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
@@ -1170,6 +1171,17 @@ export namespace HermesBridge {
     }
     const server = opts.port === 0 ? (tryServe(4098) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
-    return server
+    return {
+      hostname: server.hostname,
+      port: server.port,
+      stop() {
+        try {
+          dispose()
+        } catch {
+          // ignore
+        }
+        return server.stop()
+      },
+    }
   }
 }

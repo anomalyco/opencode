@@ -270,7 +270,9 @@ export default function Page() {
   const messagesReady = createMemo(() => {
     const id = params.id
     if (!id) return true
-    return sync.data.message[id] !== undefined
+    const ready = sync.data.message[id] !== undefined
+    console.warn(`[flash-debug] messagesReady: id=${id} ready=${ready} time=${performance.now().toFixed(1)}`)
+    return ready
   })
   const historyMore = createMemo(() => {
     const id = params.id
@@ -1697,10 +1699,12 @@ export default function Page() {
     initialScrollFrame = undefined
     if (sessionKey() !== key) {
       initialScrollKey = undefined
+      if (scroller) scroller.style.visibility = ""
       return
     }
     if (hasScrollTarget() || hasScrollGesture()) {
       initialScrollKey = undefined
+      if (scroller) scroller.style.visibility = ""
       return
     }
 
@@ -1715,8 +1719,16 @@ export default function Page() {
     lockBottom(root, "initial-scroll:settle")
     scheduleScrollState(root)
 
+    // Reveal the scroller once scrollTop is at the bottom (gap resolved)
+    const gapAfter = Math.round(root.scrollHeight - root.clientHeight - root.scrollTop)
+    if (root.style.visibility === "hidden" && Math.abs(gapAfter) <= 1) {
+      root.style.visibility = ""
+      console.warn(`[flash-debug] settle:reveal key=${key} time=${performance.now().toFixed(1)}`)
+    }
+
     if (performance.now() >= until) {
       initialScrollKey = undefined
+      if (root.style.visibility === "hidden") root.style.visibility = ""
       return
     }
 
@@ -1743,6 +1755,13 @@ export default function Page() {
       // that resize, keep it pinned instead of letting the tail drift upward.
       if ((live() || settling()) && !hasScrollTarget() && !hasScrollGesture()) {
         lockBottom(root, "content:resize:lock-bottom")
+        if (root.style.visibility === "hidden") {
+          const gap = Math.round(root.scrollHeight - root.clientHeight - root.scrollTop)
+          if (Math.abs(gap) <= 1) {
+            root.style.visibility = ""
+            console.warn(`[flash-debug] content-resize:reveal time=${performance.now().toFixed(1)}`)
+          }
+        }
       }
       debug("content-resize:after", root)
       scheduleScrollState(root)
@@ -1832,14 +1851,40 @@ export default function Page() {
         // Synchronously scroll to bottom before the browser paints to prevent
         // the visible flash of the conversation top on session entry.
         if (!hasScrollTarget() && scroller) {
+          // Hide the scroller until scroll position is settled at the bottom.
+          // Content renders with scrollTop=0 initially because windowing disables
+          // during session switch, causing a visible flash of the middle content.
+          scroller.style.visibility = "hidden"
+          const before = { scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight }
           lockBottom(scroller, "initial-scroll:immediate")
+          const after = { scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight }
+          console.warn(
+            `[flash-debug] initial-scroll:immediate key=${key} before=${JSON.stringify(before)} after=${JSON.stringify(after)} time=${performance.now().toFixed(1)}`,
+          )
+          // If content doesn't overflow yet, keep hidden until settle resolves it
+          if (scroller.scrollHeight <= scroller.clientHeight) {
+            console.warn(`[flash-debug] initial-scroll:hidden (no overflow yet) key=${key}`)
+          } else {
+            // Content already overflows and lockBottom succeeded — reveal immediately
+            scroller.style.visibility = ""
+            console.warn(`[flash-debug] initial-scroll:revealed (overflow present) key=${key}`)
+          }
+        } else {
+          console.warn(
+            `[flash-debug] initial-scroll:SKIPPED key=${key} hasScrollTarget=${hasScrollTarget()} scroller=${!!scroller} time=${performance.now().toFixed(1)}`,
+          )
         }
 
         initialScrollFrame = requestAnimationFrame(() => {
+          const el1 = scroller
+          console.warn(
+            `[flash-debug] rAF-1 key=${key} scrollTop=${el1?.scrollTop} scrollHeight=${el1?.scrollHeight} clientHeight=${el1?.clientHeight} time=${performance.now().toFixed(1)}`,
+          )
           initialScrollFrame = requestAnimationFrame(() => {
             initialScrollFrame = undefined
             if (sessionKey() !== key) {
               initialScrollKey = undefined
+              if (scroller?.style.visibility === "hidden") scroller.style.visibility = ""
               return
             }
             if (hasScrollTarget()) {
@@ -1847,6 +1892,7 @@ export default function Page() {
                 `[session] initial bottom skipped: key=${key} hash=${location.hash || "none"} pending=${ui.pendingMessage || "none"} seeking=${ui.seekingMessageId || "none"} current=${store.messageId || "none"}`,
               )
               initialScrollKey = undefined
+              if (scroller?.style.visibility === "hidden") scroller.style.visibility = ""
               return
             }
             const el = scroller
@@ -1854,6 +1900,9 @@ export default function Page() {
               initialScrollKey = undefined
               return
             }
+            console.warn(
+              `[flash-debug] rAF-2 key=${key} scrollTop=${el.scrollTop} scrollHeight=${el.scrollHeight} clientHeight=${el.clientHeight} time=${performance.now().toFixed(1)}`,
+            )
             debug("initial:before", el, { key })
             setStore("messageId", undefined)
             enterLive()
@@ -1862,6 +1911,15 @@ export default function Page() {
             lockBottom(el, "initial-scroll:bottom")
             scheduleScrollState(el)
             debug("initial:after", el, { key })
+            // Reveal if lockBottom brought us to the bottom
+            const gapNow = Math.round(el.scrollHeight - el.clientHeight - el.scrollTop)
+            if (el.style.visibility === "hidden" && Math.abs(gapNow) <= 1) {
+              el.style.visibility = ""
+              console.warn(`[flash-debug] rAF-2:reveal key=${key} time=${performance.now().toFixed(1)}`)
+            }
+            console.warn(
+              `[flash-debug] rAF-2:done key=${key} scrollTop=${el.scrollTop} scrollHeight=${el.scrollHeight} time=${performance.now().toFixed(1)}`,
+            )
             initialScrollFrame = requestAnimationFrame(() => settle(key))
           })
         })
@@ -1930,6 +1988,9 @@ export default function Page() {
     scroller = el
     autoScroll.scrollRef(el)
     if (!el) return
+    console.warn(
+      `[flash-debug] setScrollRef: scrollHeight=${el.scrollHeight} clientHeight=${el.clientHeight} scrollTop=${el.scrollTop} key=${sessionKey()} ready=${messagesReady()} time=${performance.now().toFixed(1)}`,
+    )
     debug("scroll-ref", el)
     scheduleScrollState(el)
     fill()
