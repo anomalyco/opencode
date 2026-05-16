@@ -51,6 +51,28 @@ function resolveRunInput(value?: string, piped?: string): string | undefined {
   return value + "\n" + piped
 }
 
+export async function resolveRunDirectory(input: {
+  attach: boolean
+  directory: string | undefined
+  explicitDirectory: boolean
+  root: string
+  sessionDirectory: string | undefined
+  current: () => Promise<string>
+}) {
+  if (input.attach) return input.directory ?? input.sessionDirectory ?? input.current()
+  if (input.explicitDirectory) return input.directory ?? input.sessionDirectory ?? input.root
+  return input.sessionDirectory ?? input.directory ?? input.root
+}
+
+export function resolveRunFilePath(input: { attach: boolean; root: string; cwd: string; filePath: string }) {
+  return path.resolve(input.attach ? input.root : input.cwd, input.filePath)
+}
+
+export function resolveContinueListQuery(input: { attach: boolean; explicitDirectory: boolean }) {
+  if (input.attach || input.explicitDirectory) return undefined
+  return { scope: "project" as const }
+}
+
 type FilePart = {
   type: "file"
   url: string
@@ -302,13 +324,39 @@ export const RunCommand = effectCmd({
           headers: attachHeaders,
         })
       }
+      const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const { Server } = await import("@/server/server")
+        const request = new Request(input, init)
+        return Server.Default().app.fetch(request)
+      }) as typeof globalThis.fetch
+      const localSDK = (dir: string) =>
+        createOpencodeClient({
+          baseUrl: "http://opencode.internal",
+          fetch: fetchFn,
+          directory: dir,
+        })
+      const clientForDirectory = async (sdk: OpencodeClient, sessionDirectory: string | undefined) => {
+        const cwd = await resolveRunDirectory({
+          attach: !!args.attach,
+          directory,
+          explicitDirectory: !!args.dir,
+          root,
+          sessionDirectory,
+          current: () => current(sdk),
+        })
+        return {
+          cwd,
+          client: args.attach ? attachSDK(cwd) : cwd === directory ? sdk : localSDK(cwd),
+        }
+      }
 
-      const files: FilePart[] = []
-      if (args.file) {
+      async function resolveFiles(cwd: string) {
+        const files: FilePart[] = []
+        if (!args.file) return files
         const list = Array.isArray(args.file) ? args.file : [args.file]
 
         for (const filePath of list) {
-          const resolvedPath = path.resolve(args.attach ? root : (directory ?? root), filePath)
+          const resolvedPath = resolveRunFilePath({ attach: !!args.attach, root, cwd, filePath })
           if (!(await Filesystem.exists(resolvedPath))) {
             UI.error(`File not found: ${filePath}`)
             process.exit(1)
@@ -323,6 +371,7 @@ export const RunCommand = effectCmd({
             mime,
           })
         }
+        return files
       }
 
       const piped = process.stdin.isTTY ? undefined : await Bun.stdin.text()
@@ -379,7 +428,8 @@ export const RunCommand = effectCmd({
           }
 
           if (args.fork) {
-            const forked = await sdk.session.fork({
+            const target = await clientForDirectory(sdk, current.data.directory)
+            const forked = await target.client.session.fork({
               sessionID: args.session,
             })
             const id = forked.data?.id
@@ -390,7 +440,7 @@ export const RunCommand = effectCmd({
             return {
               id,
               title: forked.data?.title ?? current.data.title,
-              directory: forked.data?.directory ?? current.data.directory,
+              directory: forked.data?.directory ?? target.cwd,
             }
           }
 
@@ -401,10 +451,15 @@ export const RunCommand = effectCmd({
           }
         }
 
-        const base = args.continue ? (await sdk.session.list()).data?.find((item) => !item.parentID) : undefined
+        const base = args.continue
+          ? (await sdk.session.list(resolveContinueListQuery({ attach: !!args.attach, explicitDirectory: !!args.dir }))).data?.find(
+              (item) => !item.parentID,
+            )
+          : undefined
 
         if (base && args.fork) {
-          const forked = await sdk.session.fork({
+          const target = await clientForDirectory(sdk, base.directory)
+          const forked = await target.client.session.fork({
             sessionID: base.id,
           })
           const id = forked.data?.id
@@ -415,7 +470,7 @@ export const RunCommand = effectCmd({
           return {
             id,
             title: forked.data?.title ?? base.title,
-            directory: forked.data?.directory ?? base.directory,
+            directory: forked.data?.directory ?? target.cwd,
           }
         }
 
@@ -528,7 +583,7 @@ export const RunCommand = effectCmd({
         return name
       }
 
-      async function attachAgent(sdk: OpencodeClient) {
+      async function attachAgent(sdk: OpencodeClient, source: string | undefined) {
         if (!args.agent) return undefined
         const name = args.agent
 
@@ -541,7 +596,7 @@ export const RunCommand = effectCmd({
           UI.println(
             UI.Style.TEXT_WARNING_BOLD + "!",
             UI.Style.TEXT_NORMAL,
-            `failed to list agents from ${args.attach}. Falling back to default agent`,
+            `failed to list agents from ${source ?? "resolved directory"}. Falling back to default agent`,
           )
           return undefined
         }
@@ -568,10 +623,10 @@ export const RunCommand = effectCmd({
         return name
       }
 
-      async function pickAgent(sdk: OpencodeClient) {
+      async function pickAgent(sdk: OpencodeClient, cwd: string) {
         if (!args.agent) return undefined
-        if (args.attach) {
-          return attachAgent(sdk)
+        if (args.attach || cwd !== directory) {
+          return attachAgent(sdk, args.attach ?? cwd)
         }
 
         return localAgent()
@@ -727,11 +782,11 @@ export const RunCommand = effectCmd({
           }
           return error
         }
-        const cwd = args.attach ? (directory ?? sess.directory ?? (await current(sdk))) : (directory ?? root)
-        const client = args.attach ? attachSDK(cwd) : sdk
+        const { cwd, client } = await clientForDirectory(sdk, sess.directory)
+        const files = await resolveFiles(cwd)
 
         // Validate agent if specified
-        const agent = await pickAgent(client)
+        const agent = await pickAgent(client, cwd)
 
         await share(client, sessionID)
 
@@ -800,11 +855,7 @@ export const RunCommand = effectCmd({
       if (args.interactive && !args.attach && !args.session && !args.continue) {
         const model = pick(args.model)
         const { runInteractiveLocalMode } = await runtimeTask
-        const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-          const { Server } = await import("@/server/server")
-          const request = new Request(input, init)
-          return Server.Default().app.fetch(request)
-        }) as typeof globalThis.fetch
+        const files = await resolveFiles(directory ?? root)
 
         try {
           return await runInteractiveLocalMode({
@@ -832,11 +883,6 @@ export const RunCommand = effectCmd({
         return await execute(sdk)
       }
 
-      const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const { Server } = await import("@/server/server")
-        const request = new Request(input, init)
-        return Server.Default().app.fetch(request)
-      }) as typeof globalThis.fetch
       const sdk = createOpencodeClient({
         baseUrl: "http://opencode.internal",
         fetch: fetchFn,
