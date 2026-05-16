@@ -1,57 +1,13 @@
 import type { Config, McpStatus, Project } from "@opencode-ai/sdk/v2/client"
 import { getFilename } from "@opencode-ai/util/path"
+import { classifyPluginSource, classifySkillSource, localPath } from "@/utils/config-source"
 
 const stem = (value: string) => value.replace(/\.(?:ts|js|mjs|cjs|mts|cts)$/i, "")
 
-const file = (value: string) => {
-  if (!value.startsWith("file://")) return value
-  try {
-    const url = new URL(value)
-    const path = decodeURIComponent(url.pathname)
-    if (!url.hostname) return path
-    return `//${url.hostname}${path}`
-  } catch {
-    return value
-  }
-}
+const file = localPath
 
 const base = (value: string) => file(value).split(/[\\/]/).at(-1) ?? value
 const norm = (value: string) => file(value).replace(/\\/g, "/").replace(/\/+$/, "")
-
-const inside = (value: string, root?: string) => {
-  const a = norm(value)
-  const b = norm(root ?? "")
-  if (!b) return false
-  return a === b || a.startsWith(b + "/")
-}
-
-const owner = (value: string, list: Project[]) =>
-  list
-    .flatMap((item) =>
-      [item.worktree, ...(item.sandboxes ?? [])].filter((root) => inside(value, root)).map((root) => ({ item, root })),
-    )
-    .sort((a, b) => b.root.length - a.root.length)[0]
-
-export const project = (value: string) => {
-  const list = file(value).split(/[\\/]/).filter(Boolean)
-  const low = list.map((part) => part.toLowerCase())
-  const i = list.lastIndexOf(".opencode")
-  if (i > 0 && (low[i + 1] === "plugin" || low[i + 1] === "plugins")) return list[i - 1]
-
-  const config = low.lastIndexOf(".config")
-  if (config >= 0 && low[config + 1] === "opencode" && (low[config + 2] === "plugin" || low[config + 2] === "plugins"))
-    return "global"
-
-  const roam = low.lastIndexOf("roaming")
-  if (roam > 0 && low[roam - 1] === "appdata" && low[roam + 1] === "opencode" && (low[roam + 2] === "plugin" || low[roam + 2] === "plugins"))
-    return "global"
-
-  const local = low.lastIndexOf("local")
-  if (local > 0 && low[local - 1] === "appdata" && low[local + 1] === "opencode" && (low[local + 2] === "plugin" || low[local + 2] === "plugins"))
-    return "global"
-
-  return undefined
-}
 
 const plug = (value: string) => {
   const next = file(value)
@@ -61,28 +17,22 @@ const plug = (value: string) => {
   return value
 }
 
-export const item = (value: string) => {
+export const item = (value: string, projects: Project[] = []) => {
   const name = plug(value)
-  const group = project(value)
+  const source = classifyPluginSource(value, projects)
   return {
     name,
-    project: group && group !== name ? group : undefined,
+    project: source.project && source.project !== name ? source.project : undefined,
     value,
   }
 }
 
-const skillSource = (value: string) => {
-  const next = norm(value)
-  if (next.includes("/.claude/skills/")) return ".claude"
-  if (next.includes("/.agents/skills/")) return ".agents"
-}
-
 export const skill = (value: { name: string; location: string }, list: Project[]) => {
-  const hit = owner(value.location, list)
+  const source = classifySkillSource(value.location, list)
   return {
     name: value.name,
-    scope: hit ? "project" : "global",
-    source: hit?.item.name || (hit ? getFilename(hit.item.worktree) : skillSource(value.location)),
+    scope: source.scope === "project" ? "project" : "global",
+    source: source.project ?? (source.scope === "project" ? getFilename(source.root ?? "") : source.origin),
     value: value.location,
   }
 }

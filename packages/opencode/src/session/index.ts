@@ -372,7 +372,7 @@ export namespace Session {
     const { ShareNext } = await import("@/share/share-next")
     const share = await ShareNext.create(id)
 
-    SyncEvent.run(Event.Updated, { sessionID: id, info: { share: { url: share.url } } })
+    SyncEvent.run(Event.Updated, { sessionID: id, info: { share: { url: share.url }, time: { updated: Date.now() } } })
 
     return share
   })
@@ -382,7 +382,7 @@ export namespace Session {
     const { ShareNext } = await import("@/share/share-next")
     await ShareNext.remove(id)
 
-    SyncEvent.run(Event.Updated, { sessionID: id, info: { share: { url: null } } })
+    SyncEvent.run(Event.Updated, { sessionID: id, info: { share: { url: null }, time: { updated: Date.now() } } })
   })
 
   export const setTitle = fn(
@@ -391,7 +391,7 @@ export namespace Session {
       title: z.string(),
     }),
     async (input) => {
-      SyncEvent.run(Event.Updated, { sessionID: input.sessionID, info: { title: input.title } })
+      SyncEvent.run(Event.Updated, { sessionID: input.sessionID, info: { title: input.title, time: { updated: Date.now() } } })
     },
   )
 
@@ -401,7 +401,7 @@ export namespace Session {
       time: z.number().nullable().optional(),
     }),
     async (input) => {
-      SyncEvent.run(Event.Updated, { sessionID: input.sessionID, info: { time: { archived: input.time } } })
+      SyncEvent.run(Event.Updated, { sessionID: input.sessionID, info: { time: { archived: input.time, updated: Date.now() } } })
     },
   )
 

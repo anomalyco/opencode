@@ -11,6 +11,30 @@ describe("status popover data", () => {
     })
   })
 
+  test("reads plugin source from .agents project paths", () => {
+    expect(item("file:///Users/me/repo/.agents/plugins/foo.ts")).toEqual({
+      name: "foo",
+      project: "repo",
+      value: "file:///Users/me/repo/.agents/plugins/foo.ts",
+    })
+  })
+
+  test("prefers custom project names for plugins", () => {
+    const list = [
+      {
+        id: "p1",
+        name: "workspace-a",
+        worktree: "/Users/me/repo",
+      },
+    ] as Project[]
+
+    expect(item("file:///Users/me/repo/.agents/plugins/foo.ts", list)).toEqual({
+      name: "foo",
+      project: "workspace-a",
+      value: "file:///Users/me/repo/.agents/plugins/foo.ts",
+    })
+  })
+
   test("reads plugin source from global paths", () => {
     expect(item("file:///Users/me/.config/opencode/plugins/foo.ts")).toEqual({
       name: "foo",
@@ -40,7 +64,7 @@ describe("status popover data", () => {
     expect(skill({ name: "lint", location: "file:///Users/me/.config/opencode/skills/lint/SKILL.md" }, [])).toEqual({
       name: "lint",
       scope: "global",
-      source: undefined,
+      source: ".opencode",
       value: "file:///Users/me/.config/opencode/skills/lint/SKILL.md",
     })
   })

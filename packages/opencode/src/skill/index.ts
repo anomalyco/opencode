@@ -104,6 +104,7 @@ export namespace Skill {
   }
 
   const scan = async (state: State, root: string, pattern: string, opts?: { dot?: boolean; scope?: string }) => {
+    log.info("skill.scan.glob.start", { root, pattern, scope: opts?.scope })
     return Glob.scan(pattern, {
       cwd: root,
       absolute: true,
@@ -111,10 +112,13 @@ export namespace Skill {
       symlink: true,
       dot: opts?.dot,
     })
-      .then((matches) => Promise.all(matches.map((match) => add(state, match))))
+      .then((matches) => {
+        log.info("skill.scan.glob.matches", { root, pattern, count: matches.length, matches: matches.slice(0, 5) })
+        return Promise.all(matches.map((match) => add(state, match)))
+      })
       .catch((error) => {
         if (!opts?.scope) throw error
-        log.error(`failed to scan ${opts.scope} skills`, { dir: root, error })
+        log.error(`failed to scan ${opts.scope} skills`, { dir: root, pattern, error })
       })
   }
 
@@ -131,18 +135,31 @@ export namespace Skill {
         return
       }
 
+      log.info("skill.scan.start", {
+        directory,
+        worktree,
+        message: "Starting skill scan",
+      })
+
       if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
         for (const dir of EXTERNAL_DIRS) {
           const root = path.join(Global.Path.home, dir)
           if (!(await Filesystem.isDir(root))) continue
+          log.info("skill.scan.global", { root, pattern: EXTERNAL_SKILL_PATTERN })
           await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
         }
 
+        log.info("skill.scan.project.start", {
+          start: directory,
+          stop: worktree,
+          targets: EXTERNAL_DIRS,
+        })
         for await (const root of Filesystem.up({
           targets: EXTERNAL_DIRS,
           start: directory,
           stop: worktree,
         })) {
+          log.info("skill.scan.project.found", { root, pattern: EXTERNAL_SKILL_PATTERN })
           await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
         }
       }

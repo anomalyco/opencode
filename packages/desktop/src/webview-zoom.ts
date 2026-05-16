@@ -34,4 +34,15 @@ window.addEventListener("keydown", (event) => {
   applyZoom(clamp(newZoom))
 })
 
+// Prevent Backspace from triggering browser-style back navigation in the WebView.
+// Only block when the key is pressed outside an editable element (input, textarea, contenteditable).
+window.addEventListener("keydown", (event) => {
+  if (event.key !== "Backspace") return
+  const target = event.target as HTMLElement | null
+  if (!target) return
+  const tag = target.tagName
+  if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return
+  event.preventDefault()
+})
+
 export { webviewZoom }

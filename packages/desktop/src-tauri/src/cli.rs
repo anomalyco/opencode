@@ -43,6 +43,10 @@ impl CommandWrapper for WinCreationFlags {
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
 const SHELL_ENV_TIMEOUT: Duration = Duration::from_secs(5);
+#[cfg(unix)]
+const KILL_GRACE: Duration = Duration::from_secs(3);
+#[cfg(unix)]
+const SIGTERM: i32 = 15;
 const UNIX_SUPERVISOR: &str = r#"
 pid="$1"
 shift
@@ -579,7 +583,16 @@ pub fn spawn_command(
     );
 
     tokio::task::spawn(async move {
-        let mut kill_open = true;
+        #[derive(Clone, Copy)]
+        enum KillPhase {
+            Live,
+            #[cfg(unix)]
+            Graceful {
+                deadline: Instant,
+            },
+            Killed,
+        }
+        let mut kill_phase = KillPhase::Live;
         let status = loop {
             match child.try_wait() {
                 Ok(Some(status)) => break Ok(status),
@@ -587,12 +600,41 @@ pub fn spawn_command(
                 Err(err) => break Err(err),
             }
 
+            #[cfg(unix)]
+            if let KillPhase::Graceful { deadline } = kill_phase
+                && Instant::now() >= deadline
+            {
+                tracing::info!("SIGTERM grace expired, escalating to SIGKILL");
+                let _ = child.start_kill();
+                kill_phase = KillPhase::Killed;
+            }
+
             tokio::select! {
-                msg = kill_rx.recv(), if kill_open => {
+                msg = kill_rx.recv(), if matches!(kill_phase, KillPhase::Live) => {
                     if msg.is_some() {
-                        let _ = child.start_kill();
+                        #[cfg(unix)]
+                        {
+                            match child.signal(SIGTERM) {
+                                Ok(()) => {
+                                    kill_phase = KillPhase::Graceful {
+                                        deadline: Instant::now() + KILL_GRACE,
+                                    };
+                                }
+                                Err(err) => {
+                                    tracing::warn!(error = %err, "SIGTERM failed, falling back to SIGKILL");
+                                    let _ = child.start_kill();
+                                    kill_phase = KillPhase::Killed;
+                                }
+                            }
+                        }
+                        #[cfg(not(unix))]
+                        {
+                            let _ = child.start_kill();
+                            kill_phase = KillPhase::Killed;
+                        }
+                    } else {
+                        kill_phase = KillPhase::Killed;
                     }
-                    kill_open = false;
                 }
                 _ = tokio::time::sleep(Duration::from_millis(100)) => {}
             }
