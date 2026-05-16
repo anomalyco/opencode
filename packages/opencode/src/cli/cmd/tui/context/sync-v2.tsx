@@ -143,6 +143,14 @@ export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext(
               currentAssistant.snapshot = { ...currentAssistant.snapshot, end: event.properties.snapshot }
           })
           break
+        case "session.next.model.updated":
+          update(event.properties.sessionID, (draft) => {
+            const match =
+              activeAssistant(draft) ??
+              [...draft].reverse().find((m): m is SessionMessageAssistant => m.type === "assistant")
+            if (match) match.model = event.properties.model
+          })
+          break
         case "session.next.step.failed":
           update(event.properties.sessionID, (draft) => {
             const currentAssistant = activeAssistant(draft)

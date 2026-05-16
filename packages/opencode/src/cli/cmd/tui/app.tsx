@@ -846,6 +846,13 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     }
   })
 
+  event.on("llm.fallback.triggered", (evt) => {
+    toast.show({
+      message: `Falling back to ${evt.properties.modelID} (${evt.properties.reason})`,
+      variant: "warning",
+    })
+  })
+
   event.on("session.error", (evt) => {
     const error = evt.properties.error
     if (error && typeof error === "object" && error.name === "MessageAbortedError") return

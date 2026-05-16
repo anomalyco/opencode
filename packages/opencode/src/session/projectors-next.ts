@@ -140,6 +140,26 @@ export default [
       .run()
     update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.model.switched", data })
   }),
+  SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Model.Updated), (db, data, _event) => {
+    const row = db
+      .select()
+      .from(SessionMessageTable)
+      .where(and(eq(SessionMessageTable.session_id, data.sessionID), eq(SessionMessageTable.type, "assistant")))
+      .orderBy(desc(SessionMessageTable.id))
+      .limit(1)
+      .get()
+    if (row) {
+      const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
+      if (message.type === "assistant") {
+        message.model = data.model
+        const { id: _id, type: _type, ...updateData } = message
+        db.update(SessionMessageTable)
+          .set({ data: encodeMessageData(updateData) })
+          .where(eq(SessionMessageTable.id, row.id))
+          .run()
+      }
+    }
+  }),
   SyncEvent.project(EventV2Bridge.toSyncDefinition(SessionEvent.Prompted), (db, data, event) => {
     update(db, { id: SessionMessage.ID.make(event.id), type: "session.next.prompted", data })
   }),

@@ -14,9 +14,11 @@ import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
+import { FALLBACK_NOTICE_ID, FALLBACK_RESUME_ID, FALLBACK_USING_ID, FallbackUsed } from "./fallback"
+import { ModelID, ProviderID } from "@/provider/schema"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import * as Log from "@opencode-ai/core/util/log"
@@ -102,6 +104,7 @@ export const layer = Layer.effect(
     const image = yield* Image.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const providerSvc = yield* Provider.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -553,8 +556,16 @@ export const layer = Layer.effect(
             return
           }
 
-          case "text-start":
-            if (!ctx.assistantMessage.summary) {
+          case "text-start": {
+            const fallbackNotice =
+              value.id === FALLBACK_USING_ID
+                ? ("using" as const)
+                : value.id === FALLBACK_NOTICE_ID
+                  ? ("switch" as const)
+                  : value.id === FALLBACK_RESUME_ID
+                    ? ("resume" as const)
+                    : undefined
+            if (!ctx.assistantMessage.summary && !fallbackNotice) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
               if (flags.experimentalEventSystem) {
                 yield* events.publish(SessionEvent.Text.Started, {
@@ -571,9 +582,13 @@ export const layer = Layer.effect(
               text: "",
               time: { start: Date.now() },
               metadata: value.providerMetadata,
+              ...(fallbackNotice
+                ? { ignored: true as const, synthetic: true as const, fallbackNotice }
+                : {}),
             }
             yield* session.updatePart(ctx.currentText)
             return
+          }
 
           case "text-delta":
             if (!ctx.currentText) return
@@ -723,6 +738,40 @@ export const layer = Layer.effect(
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
+        // Subscribe to fallback events scoped to this process call. When the
+        // LLM layer switches to a fallback model, update the in-flight
+        // assistant message and publish Model.Updated so the projector +
+        // sync layers pick up the new model. The subscription is detached
+        // via Effect.ensuring after the stream finishes (success or failure).
+        const unsubscribeFallback = yield* bus.subscribeCallback(FallbackUsed, (evt) =>
+          Effect.runFork(
+            Effect.gen(function* () {
+              if (evt.properties.sessionID !== ctx.sessionID) return
+              ctx.assistantMessage.modelID = ModelID.make(evt.properties.modelID)
+              ctx.assistantMessage.providerID = ProviderID.make(evt.properties.providerID)
+              // Swap ctx.model so subsequent finish-step events bill at the
+              // new provider's pricing and the overflow check uses the new
+              // context limit. Failures are non-fatal — keep the old model.
+              const swapped = yield* providerSvc
+                .getModel(ProviderID.make(evt.properties.providerID), ModelID.make(evt.properties.modelID))
+                .pipe(Effect.option)
+              if (swapped._tag === "Some") ctx.model = swapped.value
+              yield* session.updateMessage(ctx.assistantMessage)
+              if (flags.experimentalEventSystem) {
+                yield* events.publish(SessionEvent.Model.Updated, {
+                  sessionID: ctx.sessionID,
+                  model: {
+                    id: ModelV2.ID.make(evt.properties.modelID),
+                    providerID: ProviderV2.ID.make(evt.properties.providerID),
+                    variant: ModelV2.VariantID.make(ctx.assistantMessage.variant ?? "default"),
+                  },
+                  timestamp: DateTime.makeUnsafe(Date.now()),
+                })
+              }
+            }),
+          ),
+        )
+
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
@@ -780,6 +829,7 @@ export const layer = Layer.effect(
             ),
             Effect.catch(halt),
             Effect.ensuring(cleanup()),
+            Effect.ensuring(Effect.sync(() => unsubscribeFallback())),
           )
 
           if (ctx.needsCompaction) return "compact"

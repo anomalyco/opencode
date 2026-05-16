@@ -12,6 +12,7 @@ export type RetryReason = "free_tier_limit" | "account_rate_limit" | (string & {
 
 export type Retryable = {
   message: string
+  quotaLimit?: boolean
   action?: {
     reason: RetryReason
     provider: string
@@ -118,7 +119,13 @@ export function retryable(error: Err, provider: string) {
         },
       }
     }
-    return { message: error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message }
+    const lowerMsg = error.data.message.toLowerCase()
+    const isQuotaLimit =
+      lowerMsg.includes("weekly") || lowerMsg.includes("monthly") || lowerMsg.includes("exceeded your")
+    return {
+      message: error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message,
+      ...(isQuotaLimit ? { quotaLimit: true } : {}),
+    }
   }
 
   // Check for rate limit patterns in plain text error messages

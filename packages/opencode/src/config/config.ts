@@ -165,6 +165,12 @@ export const Info = Schema.Struct({
   model: Schema.optional(ConfigModelID).annotate({
     description: "Model to use in the format of provider/model, eg anthropic/claude-2",
   }),
+  fallbacks: Schema.optional(Schema.mutable(Schema.Array(ConfigModelID))).annotate({
+    description: "Fallback models to try when the primary model fails, in provider/model format",
+  }),
+  cooldown_seconds: Schema.optional(Schema.Number.check(Schema.isGreaterThan(0))).annotate({
+    description: "Duration in seconds to put a provider/model in cooldown after a retryable error (default: 300)",
+  }),
   small_model: Schema.optional(ConfigModelID).annotate({
     description: "Small model to use for tasks like title generation in the format of provider/model",
   }),

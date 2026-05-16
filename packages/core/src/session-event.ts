@@ -210,6 +210,18 @@ export namespace Reasoning {
   export type Ended = typeof Ended.Type
 }
 
+export namespace Model {
+  export const Updated = EventV2.define({
+    type: "session.next.model.updated",
+    ...options,
+    schema: {
+      ...Base,
+      model: ModelV2.Ref,
+    },
+  })
+  export type Updated = typeof Updated.Type
+}
+
 export namespace Tool {
   export namespace Input {
     export const Started = EventV2.define({
@@ -366,6 +378,7 @@ export const All = Schema.Union(
   [
     AgentSwitched,
     ModelSwitched,
+    Model.Updated,
     Prompted,
     Synthetic,
     Shell.Started,

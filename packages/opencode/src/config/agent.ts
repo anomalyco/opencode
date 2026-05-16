@@ -46,6 +46,9 @@ const AgentSchema = Schema.StructWithRest(
     }),
     maxSteps: Schema.optional(PositiveInt).annotate({ description: "@deprecated Use 'steps' field instead." }),
     permission: Schema.optional(ConfigPermission.Info),
+    fallbacks: Schema.optional(Schema.mutable(Schema.Array(ConfigModelID))).annotate({
+      description: "Fallback models to try when the primary model fails, in provider/model format",
+    }),
   }),
   [Schema.Record(Schema.String, Schema.Any)],
 )
@@ -65,6 +68,7 @@ const KNOWN_KEYS = new Set([
   "maxSteps",
   "options",
   "permission",
+  "fallbacks",
   "disable",
   "tools",
 ])

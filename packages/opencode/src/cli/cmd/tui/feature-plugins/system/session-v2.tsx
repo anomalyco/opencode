@@ -365,7 +365,17 @@ function AssistantMessage(props: {
 }
 
 function AssistantText(props: { part: SessionMessageAssistantText; syntax: SyntaxStyle }) {
-  const { theme } = useTheme()
+  const { theme, subtleSyntax } = useTheme()
+  const fallbackNotice = props.part.fallbackNotice
+  const isFallback = fallbackNotice != null
+  const fg = fallbackNotice === "resume"
+    ? theme.success
+    : isFallback
+      ? theme.error
+      : props.part.ignored
+        ? theme.textMuted
+        : theme.text
+  const syntaxStyle = isFallback || props.part.ignored ? subtleSyntax() : props.syntax
   return (
     <Show when={props.part.text.trim()}>
       <box paddingLeft={3} marginTop={1} flexShrink={0} id="text">
@@ -373,10 +383,10 @@ function AssistantText(props: { part: SessionMessageAssistantText; syntax: Synta
           filetype="markdown"
           drawUnstyledText={false}
           streaming={true}
-          syntaxStyle={props.syntax}
+          syntaxStyle={syntaxStyle}
           content={props.part.text.trim()}
           conceal={true}
-          fg={theme.text}
+          fg={fg}
         />
       </box>
     </Show>

@@ -352,6 +352,12 @@ export const layer = Layer.effect(
       const msgs = onlySubtasks
         ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
         : yield* MessageV2.toModelMessagesEffect(context, mdl)
+      // Title fallback: only agent-specific. We deliberately do NOT inherit
+      // cfg.fallbacks here — that list is sized for the main chat model and
+      // typically contains heavy/expensive models, which is wrong for the
+      // small title-generation pass. Users wanting title fallback configure
+      // it explicitly on the title agent.
+      const titleFallbacks = ag.fallbacks?.length ? ag.fallbacks : undefined
       const text = yield* llm
         .stream({
           agent: ag,
@@ -362,6 +368,7 @@ export const layer = Layer.effect(
           model: mdl,
           sessionID: input.session.id,
           retries: 2,
+          fallbacks: titleFallbacks,
           messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
         })
         .pipe(
@@ -1818,6 +1825,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             const system = [...env, ...instructions, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            const cfgForFallbacks = yield* config.get()
+            const fallbacks =
+              agent.fallbacks?.length
+                ? agent.fallbacks
+                : cfgForFallbacks.fallbacks?.length
+                  ? cfgForFallbacks.fallbacks.map((f: string) => Provider.parseModel(f))
+                  : undefined
             const result = yield* handle.process({
               user: lastUser,
               agent,
@@ -1829,6 +1843,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               tools,
               model,
               toolChoice: format.type === "json_schema" ? "required" : undefined,
+              fallbacks,
             })
 
             if (structured !== undefined) {
