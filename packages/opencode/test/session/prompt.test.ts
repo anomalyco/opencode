@@ -846,7 +846,6 @@ it.instance(
       yield* Fiber.await(fiber)
       expect((yield* status.get(chat.id)).type).toBe("idle")
     }),
-  { git: true },
   3_000,
 )
 
@@ -875,7 +874,6 @@ it.instance(
         expect(exit.value.info.role).toBe("assistant")
       }
     }),
-  { git: true },
   3_000,
 )
 
@@ -1313,7 +1311,7 @@ unix(
       expect(tool.state.metadata.output).toContain("err")
       yield* run.assertNotBusy(chat.id)
     }),
-  { git: true, config: cfg },
+  { config: cfg },
 )
 
 unix(
@@ -1337,7 +1335,7 @@ unix(
       expect(tool.state.metadata.output).toContain(dir)
       yield* run.assertNotBusy(chat.id)
     }),
-  { git: true, config: cfg },
+  { config: cfg },
 )
 
 unix(
@@ -1359,7 +1357,7 @@ unix(
         expect(tool.state.output).toContain("configured")
       }),
     ),
-  { git: true, config: { ...cfg, shell: "bash" } },
+  { config: { ...cfg, shell: "bash" } },
   30_000,
 )
 
@@ -1384,7 +1382,7 @@ unix(
       expect(tool.state.metadata.output).toContain(parent)
       yield* run.assertNotBusy(chat.id)
     }),
-  { git: true, config: cfg },
+  { config: cfg },
 )
 
 unix(
@@ -1410,7 +1408,7 @@ unix(
       expect(tool.state.metadata.output).toContain("README.md")
       yield* run.assertNotBusy(chat.id)
     }),
-  { git: true, config: cfg },
+  { config: cfg },
 )
 
 unix(
@@ -1432,7 +1430,7 @@ unix(
       expect(tool.state.metadata.output).toContain("not found")
       yield* run.assertNotBusy(chat.id)
     }),
-  { git: true, config: cfg },
+  { config: cfg },
 )
 
 unix(
@@ -1460,7 +1458,7 @@ unix(
         expect(Exit.isSuccess(exit)).toBe(true)
       }),
     ),
-  { git: true, config: cfg },
+  { config: cfg },
   30_000,
 )
 
@@ -1497,7 +1495,6 @@ it.instance(
       }
       expect(yield* llm.calls).toBe(1)
     }),
-  { git: true },
   3_000,
 )
 
@@ -1536,7 +1533,6 @@ it.instance(
       }
       expect(yield* llm.calls).toBe(1)
     }),
-  { git: true },
   3_000,
 )
 
@@ -1570,7 +1566,6 @@ unix(
         expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("configured")
       }),
     ),
-  { git: true },
   30_000,
 )
 
@@ -1604,7 +1599,7 @@ unix(
         }
       }),
     ),
-  { git: true, config: cfg },
+  { config: cfg },
   30_000,
 )
 
@@ -1648,7 +1643,7 @@ unix(
         }
       }),
     ),
-  { git: true, config: cfg },
+  { config: cfg },
   30_000,
 )
 
@@ -1697,7 +1692,6 @@ unix(
       expect(tool.state.output).toMatch(/Full output saved to:\s+\S+/)
       expect(tool.state.output).not.toContain("Tool execution aborted")
     }),
-  { git: true },
   30_000,
 )
 
@@ -1724,7 +1718,7 @@ unix(
 
       yield* Fiber.await(sh)
     }),
-  { git: true, config: cfg },
+  { config: cfg },
   30_000,
 )
 
@@ -1750,7 +1744,7 @@ unix(
         yield* Fiber.await(a)
       }),
     ),
-  { git: true, config: cfg },
+  { config: cfg },
   30_000,
 )
 

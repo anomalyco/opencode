@@ -63,6 +63,7 @@ Repeated setup work, long sleeps/timeouts, serial integration tests, filesystem/
 | HTTP provider tests generate local plugins without dependency-ready fixture state                         | Marked generated `.opencode` plugin fixtures dependency-ready                                  | 7.905s    | 2.980s  | keep     | Median from 3 targeted runs; avoids unrelated plugin dependency setup in route tests.                                      |
 | TUI plugin lifecycle timeout coverage waits the full production cleanup timeout                           | Added optional runtime dispose timeout override and used 25ms in the timeout test              | 7.330s    | 1.507s  | keep     | Median from 3 targeted runs; production default remains 5000ms.                                                            |
 | Skill tool test initializes git even though it only reads local skill files                               | Removed `git: true` from the temporary directory fixture                                       | 2.320s    | 1.425s  | keep     | Single targeted rerun; still exercises skill discovery, permission request, and bundled file output.                       |
+| Prompt shell semantics tests initialize git though they only assert shell/session behavior                | Removed `git: true` from shell-focused prompt fixtures while preserving config setup           | 26.930s   | 23.400s | keep     | Three targeted reruns passed after the change: 23.80s, 23.55s, 23.40s.                                                     |
 
 ## Profiling Results
 
