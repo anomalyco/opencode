@@ -177,8 +177,6 @@ export async function POST(input: APIEvent) {
           await Referral.createFromLiteSubscription({
             workspaceID,
             userID,
-            customerID,
-            subscriptionID,
             inviteCode,
           }).catch((error) => {
             console.error("Referral sync failed", error)
