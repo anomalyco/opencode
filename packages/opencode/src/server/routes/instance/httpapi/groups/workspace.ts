@@ -2,9 +2,10 @@ import { Workspace } from "@/control-plane/workspace"
 import { WorkspaceAdapterEntry } from "@/control-plane/types"
 import { Schema, Struct } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { ApiVcsApplyError } from "./instance"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
+import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 const root = "/experimental/workspace"
@@ -12,11 +13,23 @@ export const CreatePayload = Schema.Struct(Struct.omit(Workspace.CreateInput.fie
 export const WarpPayload = Schema.Struct({
   id: Schema.NullOr(Workspace.Info.fields.id),
   sessionID: Workspace.SessionWarpInput.fields.sessionID,
+  copyChanges: Workspace.SessionWarpInput.fields.copyChanges,
 })
+
+export class ApiWorkspaceWarpError extends Schema.ErrorClass<ApiWorkspaceWarpError>("WorkspaceWarpError")(
+  {
+    name: Schema.Literal("WorkspaceWarpError"),
+    data: Schema.Struct({
+      message: Schema.String,
+    }),
+  },
+  { httpApiStatus: 400 },
+) {}
 
 export const WorkspacePaths = {
   adapters: `${root}/adapter`,
   list: root,
+  syncList: `${root}/sync-list`,
   status: `${root}/status`,
   remove: `${root}/:id`,
   warp: `${root}/warp`,
@@ -27,6 +40,7 @@ export const WorkspaceApi = HttpApi.make("workspace")
     HttpApiGroup.make("workspace")
       .add(
         HttpApiEndpoint.get("adapters", WorkspacePaths.adapters, {
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Array(WorkspaceAdapterEntry), "Workspace adapters"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -36,6 +50,7 @@ export const WorkspaceApi = HttpApi.make("workspace")
           }),
         ),
         HttpApiEndpoint.get("list", WorkspacePaths.list, {
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Array(Workspace.Info), "Workspaces"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -45,6 +60,7 @@ export const WorkspaceApi = HttpApi.make("workspace")
           }),
         ),
         HttpApiEndpoint.post("create", WorkspacePaths.list, {
+          query: WorkspaceRoutingQuery,
           payload: CreatePayload,
           success: described(Workspace.Info, "Workspace created"),
           error: HttpApiError.BadRequest,
@@ -55,7 +71,18 @@ export const WorkspaceApi = HttpApi.make("workspace")
             description: "Create a workspace for the current project.",
           }),
         ),
+        HttpApiEndpoint.post("syncList", WorkspacePaths.syncList, {
+          query: WorkspaceRoutingQuery,
+          success: described(HttpApiSchema.NoContent, "Workspace list synced"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.workspace.syncList",
+            summary: "Sync workspace list",
+            description: "Register missing workspaces returned by workspace adapters.",
+          }),
+        ),
         HttpApiEndpoint.get("status", WorkspacePaths.status, {
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Array(Workspace.ConnectionStatus), "Workspace status"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -66,6 +93,7 @@ export const WorkspaceApi = HttpApi.make("workspace")
         ),
         HttpApiEndpoint.delete("remove", WorkspacePaths.remove, {
           params: { id: Workspace.Info.fields.id },
+          query: WorkspaceRoutingQuery,
           success: described(Schema.UndefinedOr(Workspace.Info), "Workspace removed"),
           error: HttpApiError.BadRequest,
         }).annotateMerge(
@@ -76,9 +104,10 @@ export const WorkspaceApi = HttpApi.make("workspace")
           }),
         ),
         HttpApiEndpoint.post("warp", WorkspacePaths.warp, {
+          query: WorkspaceRoutingQuery,
           payload: WarpPayload,
           success: described(HttpApiSchema.NoContent, "Session warped"),
-          error: HttpApiError.BadRequest,
+          error: [ApiWorkspaceWarpError, ApiVcsApplyError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "experimental.workspace.warp",

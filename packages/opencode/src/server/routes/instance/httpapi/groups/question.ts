@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware } from "../middleware/workspace-routing"
+import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 const root = "/question"
@@ -19,6 +19,7 @@ export const QuestionApi = HttpApi.make("question")
     HttpApiGroup.make("question")
       .add(
         HttpApiEndpoint.get("list", root, {
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Array(Question.Request), "List of pending questions"),
         }).annotateMerge(
           OpenApi.annotations({
@@ -29,6 +30,7 @@ export const QuestionApi = HttpApi.make("question")
         ),
         HttpApiEndpoint.post("reply", `${root}/:requestID/reply`, {
           params: { requestID: QuestionID },
+          query: WorkspaceRoutingQuery,
           payload: ReplyPayload,
           success: described(Schema.Boolean, "Question answered successfully"),
           error: [HttpApiError.BadRequest, HttpApiError.NotFound],
@@ -41,6 +43,7 @@ export const QuestionApi = HttpApi.make("question")
         ),
         HttpApiEndpoint.post("reject", `${root}/:requestID/reject`, {
           params: { requestID: QuestionID },
+          query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "Question rejected successfully"),
           error: [HttpApiError.BadRequest, HttpApiError.NotFound],
         }).annotateMerge(

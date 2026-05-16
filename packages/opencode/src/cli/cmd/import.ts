@@ -7,7 +7,7 @@ import { SessionTable, MessageTable, PartTable } from "../../session/session.sql
 import { InstanceRef } from "@/effect/instance-ref"
 import { ShareNext } from "@/share/share-next"
 import { EOL } from "os"
-import { Filesystem } from "@/util/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Effect, Schema } from "effect"
 
 const decodeMessageInfo = Schema.decodeUnknownSync(MessageV2.Info)
@@ -95,6 +95,7 @@ export const ImportCommand = effectCmd({
 
 const runImport = Effect.fn("Cli.import.body")(function* (file: string, projectID: string) {
   const share = yield* ShareNext.Service
+  const fs = yield* AppFileSystem.Service
 
   let exportData: ExportData | undefined
 
@@ -149,9 +150,9 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, projectI
 
     exportData = transformed
   } else {
-    exportData = yield* Effect.promise(() =>
-      Filesystem.readJson<NonNullable<typeof exportData>>(file).catch(() => undefined),
-    )
+    exportData = (yield* fs.readJson(file).pipe(Effect.orElseSucceed(() => undefined))) as
+      | NonNullable<typeof exportData>
+      | undefined
     if (!exportData) {
       process.stdout.write(`File not found: ${file}`)
       process.stdout.write(EOL)

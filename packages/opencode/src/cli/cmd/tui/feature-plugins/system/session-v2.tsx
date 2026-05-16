@@ -1,13 +1,17 @@
-import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { InternalTuiPlugin } from "../../plugin/internal"
 import { useSyncV2 } from "@tui/context/sync-v2"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { useTheme } from "@tui/context/theme"
 import { useLocal } from "@tui/context/local"
-import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
+import { reasoningTitle, useThinkingMode } from "@tui/context/thinking"
+import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { TextAttributes, type BoxRenderable, type SyntaxStyle } from "@opentui/core"
+import { useBindings } from "../../keymap"
 import { Locale } from "@/util/locale"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
+import { webSearchProviderLabel } from "@/tool/websearch"
 import path from "path"
 import stripAnsi from "strip-ansi"
 import type {
@@ -53,12 +57,18 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
     void sync.session.message.sync(props.sessionID)
   })
 
-  useKeyboard((event) => {
-    if (event.name !== "escape") return
-    event.preventDefault()
-    event.stopPropagation()
-    props.api.route.navigate("session", { sessionID: props.sessionID })
-  })
+  useBindings(() => ({
+    bindings: [
+      {
+        key: "escape",
+        desc: "Back to session",
+        group: "Session",
+        cmd() {
+          props.api.route.navigate("session", { sessionID: props.sessionID })
+        },
+      },
+    ],
+  }))
 
   return (
     <box width={dimensions().width} height={dimensions().height} backgroundColor={theme.background}>
@@ -84,6 +94,7 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
                   <Match when={message.type === "assistant"}>
                     <AssistantMessage
                       message={message as SessionMessageAssistant}
+                      sessionID={props.sessionID}
                       last={lastAssistant()?.id === message.id}
                       syntax={syntax()}
                       subtleSyntax={subtleSyntax()}
@@ -281,6 +292,7 @@ function UnknownMessage(props: { message: SessionMessage }) {
 
 function AssistantMessage(props: {
   message: SessionMessageAssistant
+  sessionID: string
   last: boolean
   syntax: SyntaxStyle
   subtleSyntax: SyntaxStyle
@@ -306,10 +318,14 @@ function AssistantMessage(props: {
               <AssistantText part={part as SessionMessageAssistantText} syntax={props.syntax} />
             </Match>
             <Match when={part.type === "reasoning"}>
-              <AssistantReasoning part={part as SessionMessageAssistantReasoning} subtleSyntax={props.subtleSyntax} />
+              <AssistantReasoning
+                part={part as SessionMessageAssistantReasoning}
+                subtleSyntax={props.subtleSyntax}
+                completedAt={() => props.message.time.completed}
+              />
             </Match>
             <Match when={part.type === "tool"}>
-              <AssistantTool part={part as SessionMessageAssistantTool} />
+              <AssistantTool part={part as SessionMessageAssistantTool} sessionID={props.sessionID} />
             </Match>
           </Switch>
         )}
@@ -367,35 +383,69 @@ function AssistantText(props: { part: SessionMessageAssistantText; syntax: Synta
   )
 }
 
-function AssistantReasoning(props: { part: SessionMessageAssistantReasoning; subtleSyntax: SyntaxStyle }) {
+function AssistantReasoning(props: {
+  part: SessionMessageAssistantReasoning
+  subtleSyntax: SyntaxStyle
+  completedAt: () => number | undefined
+}) {
   const { theme } = useTheme()
+  const thinking = useThinkingMode()
+  const [expanded, setExpanded] = createSignal(false)
   const content = createMemo(() => props.part.text.replace("[REDACTED]", "").trim())
+  const inMinimal = createMemo(() => thinking.mode() === "hide")
+  // v2 reasoning parts have no per-part `time.end` (see SessionMessageAssistantReasoning
+  // in the v2 SDK); we settle on parent-message completion instead.
+  const isDone = createMemo(() => props.completedAt() !== undefined)
+  const title = createMemo(() => reasoningTitle(content()))
+
+  const toggle = () => {
+    if (!inMinimal()) return
+    setExpanded((prev) => !prev)
+  }
+
   return (
     <Show when={content()}>
-      <box
-        paddingLeft={2}
-        marginTop={1}
-        flexDirection="column"
-        border={["left"]}
-        customBorderChars={SplitBorder.customBorderChars}
-        borderColor={theme.backgroundElement}
-        flexShrink={0}
-      >
-        <code
-          filetype="markdown"
-          drawUnstyledText={false}
-          streaming={true}
-          syntaxStyle={props.subtleSyntax}
-          content={"_Thinking:_ " + content()}
-          conceal={true}
-          fg={theme.textMuted}
-        />
-      </box>
+      <Switch>
+        <Match when={!inMinimal() || expanded()}>
+          <box
+            paddingLeft={2}
+            marginTop={1}
+            flexDirection="column"
+            border={["left"]}
+            customBorderChars={SplitBorder.customBorderChars}
+            borderColor={theme.backgroundElement}
+            flexShrink={0}
+            onMouseUp={toggle}
+          >
+            <code
+              filetype="markdown"
+              drawUnstyledText={false}
+              streaming={true}
+              syntaxStyle={props.subtleSyntax}
+              content={(inMinimal() ? "▼ " : "") + "_Thinking:_ " + content()}
+              conceal={true}
+              fg={theme.textMuted}
+            />
+          </box>
+        </Match>
+        <Match when={isDone()}>
+          <box paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
+            <text fg={theme.textMuted} wrapMode="none">
+              {title() ? "▶ Thought: " + title() : "▶ Thought"}
+            </text>
+          </box>
+        </Match>
+        <Match when={true}>
+          <box paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
+            <Spinner color={theme.textMuted}>{title() ? "Thinking: " + title() : "Thinking"}</Spinner>
+          </box>
+        </Match>
+      </Switch>
     </Show>
   )
 }
 
-function AssistantTool(props: { part: SessionMessageAssistantTool }) {
+function AssistantTool(props: { part: SessionMessageAssistantTool; sessionID: string }) {
   const input = createMemo(() => toolInputRecord(props.part.state.input))
   const toolprops = {
     get input() {
@@ -407,6 +457,7 @@ function AssistantTool(props: { part: SessionMessageAssistantTool }) {
     get output() {
       return props.part.state.status === "pending" ? undefined : toolOutput(props.part.state.content)
     },
+    sessionID: props.sessionID,
     part: props.part,
   }
   return (
@@ -425,9 +476,6 @@ function AssistantTool(props: { part: SessionMessageAssistantTool }) {
       </Match>
       <Match when={props.part.name === "webfetch"}>
         <WebFetch {...toolprops} />
-      </Match>
-      <Match when={props.part.name === "codesearch"}>
-        <CodeSearch {...toolprops} />
       </Match>
       <Match when={props.part.name === "websearch"}>
         <WebSearch {...toolprops} />
@@ -464,6 +512,7 @@ type ToolProps = {
   input: Record<string, unknown>
   metadata: Record<string, unknown>
   output?: string
+  sessionID: string
   part: SessionMessageAssistantTool
 }
 
@@ -760,19 +809,11 @@ function WebFetch(props: ToolProps) {
   )
 }
 
-function CodeSearch(props: ToolProps) {
-  return (
-    <InlineTool icon="◇" pending="Searching code..." complete={toolComplete(props.part)} part={props.part}>
-      Exa Code Search "{stringValue(props.input.query) ?? pendingInput(props.part)}"{" "}
-      <Show when={numberValue(props.metadata.results)}>{(results) => <>({results()} results)</>}</Show>
-    </InlineTool>
-  )
-}
-
 function WebSearch(props: ToolProps) {
+  const label = createMemo(() => webSearchProviderLabel(props.metadata.provider))
   return (
     <InlineTool icon="◈" pending="Searching web..." complete={toolComplete(props.part)} part={props.part}>
-      Exa Web Search "{stringValue(props.input.query) ?? pendingInput(props.part)}"{" "}
+      {label()} "{stringValue(props.input.query) ?? pendingInput(props.part)}"{" "}
       <Show when={numberValue(props.metadata.numResults)}>{(results) => <>({results()} results)</>}</Show>
     </InlineTool>
   )
@@ -1113,24 +1154,27 @@ const tui: TuiPlugin = async (api) => {
     },
   ])
 
-  api.command.register(() => [
-    {
-      title: "View v2 session messages",
-      value: route,
-      category: "Debug",
-      suggested: api.route.current.name === "session",
-      enabled: api.route.current.name === "session",
-      onSelect() {
-        const sessionID = currentSessionID(api)
-        if (!sessionID) return
-        api.route.navigate(route, { sessionID })
-        api.ui.dialog.clear()
+  api.keymap.registerLayer({
+    commands: [
+      {
+        name: route,
+        title: "View v2 session messages",
+        category: "Debug",
+        namespace: "palette",
+        suggested: () => api.route.current.name === "session",
+        enabled: () => api.route.current.name === "session",
+        run() {
+          const sessionID = currentSessionID(api)
+          if (!sessionID) return
+          api.route.navigate(route, { sessionID })
+          api.ui.dialog.clear()
+        },
       },
-    },
-  ])
+    ],
+  })
 }
 
-const plugin: TuiPluginModule & { id: string } = {
+const plugin: InternalTuiPlugin = {
   id,
   tui,
 }

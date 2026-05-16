@@ -8,6 +8,7 @@ const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
 const rendererProtocol = "oc"
 const rendererHost = "renderer"
+const clipboardWritePermission = "clipboard-sanitized-write"
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -83,6 +84,7 @@ export function createMainWindow() {
     width: state.width,
     height: state.height,
     show: false,
+    autoHideMenuBar: true,
     title: "OpenCode",
     icon: iconPath(),
     backgroundColor,
@@ -106,6 +108,8 @@ export function createMainWindow() {
       sandbox: true,
     },
   })
+
+  allowClipboardWrite(win)
 
   win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
     const { requestHeaders } = details
@@ -139,6 +143,7 @@ export function createLoadingWindow() {
     resizable: false,
     center: true,
     show: true,
+    autoHideMenuBar: true,
     icon: iconPath(),
     backgroundColor,
     ...(process.platform === "darwin" ? { titleBarStyle: "hidden" as const } : {}),
@@ -156,6 +161,8 @@ export function createLoadingWindow() {
       sandbox: true,
     },
   })
+
+  allowClipboardWrite(win)
 
   loadWindow(win, "loading.html")
 
@@ -191,6 +198,31 @@ function loadWindow(win: BrowserWindow, html: string) {
 
   void win.loadURL(`${rendererProtocol}://${rendererHost}/${html}`)
 }
+
+function allowClipboardWrite(win: BrowserWindow) {
+  win.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    callback(
+      permission === clipboardWritePermission &&
+        isTrustedRendererUrl(details.requestingUrl) &&
+        webContents.id === win.webContents.id,
+    )
+  })
+  win.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+    if (permission !== clipboardWritePermission) return false
+    if (webContents && webContents.id !== win.webContents.id) return false
+    return isTrustedRendererUrl(details.requestingUrl) || isTrustedRendererUrl(requestingOrigin)
+  })
+}
+
+function isTrustedRendererUrl(value?: string) {
+  if (!value || !URL.canParse(value)) return false
+  const url = new URL(value)
+  if (url.protocol === `${rendererProtocol}:` && url.host === rendererHost) return true
+  const devUrl = process.env.ELECTRON_RENDERER_URL
+  if (!devUrl || !URL.canParse(devUrl)) return false
+  return url.origin === new URL(devUrl).origin
+}
+
 function wireZoom(win: BrowserWindow) {
   win.webContents.setZoomFactor(1)
   win.webContents.on("zoom-changed", () => {
