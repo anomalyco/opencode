@@ -1,8 +1,7 @@
-import { getAdapter } from "@/control-plane/adapters"
 import { WorkspaceID } from "@/control-plane/schema"
 import type { Target } from "@/control-plane/types"
 import { Workspace } from "@/control-plane/workspace"
-import { EffectBridge } from "@/effect/bridge"
+import { WorkspaceAdapterRuntime } from "@/control-plane/workspace-adapter-runtime"
 import { Session } from "@/session/session"
 import { HttpApiProxy } from "./proxy"
 import * as Fence from "@/server/shared/fence"
@@ -93,8 +92,7 @@ function missingWorkspaceResponse(id: WorkspaceID): HttpServerResponse.HttpServe
 }
 
 function resolveTarget(workspace: Workspace.Info): Effect.Effect<Target> {
-  const adapter = getAdapter(workspace.projectID, workspace.type)
-  return EffectBridge.fromPromise(() => adapter.target(workspace))
+  return WorkspaceAdapterRuntime.target(workspace)
 }
 
 function proxyRemote(
