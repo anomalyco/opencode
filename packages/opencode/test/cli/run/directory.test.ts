@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { resolveContinueListQuery, resolveRunDirectory, resolveRunFilePath } from "@/cli/cmd/run"
+import {
+  missingLocalSessionDirectory,
+  resolveContinueListQuery,
+  resolveContinueSession,
+  resolveRunDirectory,
+  resolveRunFilePath,
+} from "@/cli/cmd/run"
 
 describe("run directory resolution", () => {
   test("local resumed sessions use the stored session directory", async () => {
@@ -99,5 +105,55 @@ describe("run directory resolution", () => {
 
   test("attach continue keeps existing discovery behavior", () => {
     expect(resolveContinueListQuery({ attach: true, explicitDirectory: false })).toBeUndefined()
+  })
+
+  test("local resume detects stale stored session directory", async () => {
+    expect(
+      await missingLocalSessionDirectory({
+        attach: false,
+        explicitDirectory: false,
+        sessionDirectory: "/tmp/missing-session",
+        exists: async () => false,
+      }),
+    ).toBe(true)
+  })
+
+  test("explicit directory ignores stale stored session directory", async () => {
+    expect(
+      await missingLocalSessionDirectory({
+        attach: false,
+        explicitDirectory: true,
+        sessionDirectory: "/tmp/missing-session",
+        exists: async () => false,
+      }),
+    ).toBe(false)
+  })
+
+  test("local continue skips stale root sessions", async () => {
+    const session = await resolveContinueSession({
+      attach: false,
+      explicitDirectory: false,
+      sessions: [
+        { id: "stale", directory: "/tmp/stale" },
+        { id: "valid", directory: "/tmp/valid" },
+      ],
+      exists: async (directory) => directory === "/tmp/valid",
+    })
+
+    expect(session?.id).toBe("valid")
+  })
+
+  test("explicit directory keeps first continue session even when stored directory is stale", async () => {
+    const session = await resolveContinueSession({
+      attach: false,
+      explicitDirectory: true,
+      sessions: [
+        { id: "explicit", directory: "/tmp/stale" },
+        { id: "valid", directory: "/tmp/valid" },
+      ],
+      exists: async () => false,
+    })
+
+    expect(session?.id).toBe("explicit")
   })
 })

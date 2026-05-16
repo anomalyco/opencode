@@ -73,6 +73,29 @@ export function resolveContinueListQuery(input: { attach: boolean; explicitDirec
   return { scope: "project" as const }
 }
 
+export async function missingLocalSessionDirectory(input: {
+  attach: boolean
+  explicitDirectory: boolean
+  sessionDirectory: string | undefined
+  exists: (directory: string) => Promise<boolean>
+}) {
+  return !input.attach && !input.explicitDirectory && !!input.sessionDirectory && !(await input.exists(input.sessionDirectory))
+}
+
+export async function resolveContinueSession<T extends SessionInfo & { parentID?: string }>(input: {
+  attach: boolean
+  explicitDirectory: boolean
+  sessions: T[]
+  exists: (directory: string) => Promise<boolean>
+}) {
+  const roots = input.sessions.filter((item) => !item.parentID)
+  if (input.attach || input.explicitDirectory) return roots[0]
+
+  for (const item of roots) {
+    if (!(await missingLocalSessionDirectory({ ...input, sessionDirectory: item.directory }))) return item
+  }
+}
+
 type FilePart = {
   type: "file"
   url: string
@@ -426,6 +449,17 @@ export const RunCommand = effectCmd({
             UI.error("Session not found")
             process.exit(1)
           }
+          if (
+            await missingLocalSessionDirectory({
+              attach: !!args.attach,
+              explicitDirectory: !!args.dir,
+              sessionDirectory: current.data.directory,
+              exists: Filesystem.exists,
+            })
+          ) {
+            UI.error(`Session directory not found: ${current.data.directory}`)
+            process.exit(1)
+          }
 
           if (args.fork) {
             const target = await clientForDirectory(sdk, current.data.directory)
@@ -452,9 +486,12 @@ export const RunCommand = effectCmd({
         }
 
         const base = args.continue
-          ? (await sdk.session.list(resolveContinueListQuery({ attach: !!args.attach, explicitDirectory: !!args.dir }))).data?.find(
-              (item) => !item.parentID,
-            )
+          ? await resolveContinueSession({
+              attach: !!args.attach,
+              explicitDirectory: !!args.dir,
+              sessions: (await sdk.session.list(resolveContinueListQuery({ attach: !!args.attach, explicitDirectory: !!args.dir }))).data ?? [],
+              exists: Filesystem.exists,
+            })
           : undefined
 
         if (base && args.fork) {
