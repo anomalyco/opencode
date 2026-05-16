@@ -10,6 +10,7 @@ import { Plugin } from "../plugin"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
 import * as ModelsDev from "@opencode-ai/core/models"
 import { Auth } from "../auth"
+import { createOAuthRotatingFetch } from "@/auth/rotating-fetch"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { iife } from "@/util/iife"
@@ -1505,13 +1506,14 @@ export const layer = Layer.effect(
 
     const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
 
-    async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
+    async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>, cfg: Config.Info) {
       try {
         using _ = log.time("getSDK", {
           providerID: model.providerID,
         })
         const provider = s.providers[model.providerID]
         const options = { ...provider.options }
+        const oauthConfig = cfg.provider?.[model.providerID]?.oauth
 
         if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
           delete options.fetch
@@ -1555,6 +1557,7 @@ export const layer = Layer.effect(
             providerID: model.providerID,
             npm: model.api.npm,
             options,
+            oauthConfig,
           }),
         )
         const existing = s.sdk.get(key)
@@ -1564,7 +1567,7 @@ export const layer = Layer.effect(
         const chunkTimeout = options["chunkTimeout"]
         delete options["chunkTimeout"]
 
-        options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+        const fetchWithTimeout = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
           const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
@@ -1605,6 +1608,14 @@ export const layer = Layer.effect(
           if (!chunkAbortCtl) return res
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)
         }
+        options["fetch"] = createOAuthRotatingFetch(fetchWithTimeout, {
+          providerID: model.providerID,
+          maxAttempts: oauthConfig?.maxAttempts,
+          rateLimitCooldownMs: oauthConfig?.rateLimitCooldownMs,
+          authFailureCooldownMs: oauthConfig?.authFailureCooldownMs,
+          networkRetryAttempts: oauthConfig?.networkRetryAttempts,
+          toastDurationMs: oauthConfig?.toastDurationMs,
+        })
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
         if (bundledLoader) {
@@ -1679,13 +1690,14 @@ export const layer = Layer.effect(
     const getLanguage = Effect.fn("Provider.getLanguage")(function* (model: Model) {
       const s = yield* InstanceState.get(state)
       const envs = yield* env.all()
+      const cfg = yield* config.get()
       const key = `${model.providerID}/${model.id}`
       if (s.models.has(key)) return s.models.get(key)!
 
       const provider = s.providers[model.providerID]
       return yield* EffectPromise.refineRejection(
         async () => {
-          const sdk = await resolveSDK(model, s, envs)
+          const sdk = await resolveSDK(model, s, envs, cfg)
           const language = s.modelLoaders[model.providerID]
             ? await s.modelLoaders[model.providerID](sdk, model.api.id, {
                 ...provider.options,

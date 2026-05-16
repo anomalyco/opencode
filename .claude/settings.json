@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /Users/tranlight/Projects/opencode show dev:packages/opencode/src/server/routes/instance/httpapi/groups/provider.ts)",
+      "Bash(git -C /Users/tranlight/Projects/opencode show dev:packages/opencode/src/server/routes/instance/httpapi/handlers/provider.ts)",
+      "Bash(git -C /Users/tranlight/Projects/opencode show dev:packages/opencode/src/config/config.ts)",
+      "Bash(git -C /Users/tranlight/Projects/opencode show dev:packages/opencode/src/provider/provider.ts)",
+      "Bash(git -C /Users/tranlight/Projects/opencode show dev:packages/opencode/src/cli/cmd/auth.ts)",
+      "Bash(git -C /Users/tranlight/Projects/opencode show dev:packages/app/src/components/settings-providers.tsx)",
+      "Bash(git -C /Users/tranlight/Projects/opencode ls-tree dev packages/opencode/src/cli/)",
+      "Bash(git -C /Users/tranlight/Projects/opencode ls-tree dev packages/opencode/src/cli/cmd/)",
+      "Bash(git -C /Users/tranlight/Projects/opencode show dev:packages/opencode/src/server/routes/instance/httpapi/groups/v2/provider.ts)",
+      "Bash(git -C /Users/tranlight/Projects/opencode show dev:packages/opencode/src/config/provider.ts)",
+      "Bash(git -C /Users/tranlight/Projects/opencode show dev:packages/opencode/src/server/routes/instance/httpapi/api.ts)",
+      "Bash(git -C /Users/tranlight/Projects/opencode show dev:packages/opencode/src/server/routes/instance/httpapi/groups/metadata.ts)",
+      "Bash(git -C /Users/tranlight/Projects/opencode show dev:packages/opencode/src/server/routes/instance/httpapi/lifecycle.ts)",
+      "Bash(git -C /Users/tranlight/Projects/opencode show dev:packages/opencode/src/server/routes/instance/httpapi/server.ts)",
+      "Bash(bun run *)"
+    ]
+  }
+}

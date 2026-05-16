@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { PositiveInt } from "@opencode-ai/core/schema"
+import { NonNegativeInt, PositiveInt } from "@opencode-ai/core/schema"
 import { ModelStatus } from "@/provider/model-status"
 
 export const Model = Schema.Struct({
@@ -103,6 +103,25 @@ export const Info = Schema.Struct({
       }),
       [Schema.Record(Schema.String, Schema.Any)],
     ),
+  ),
+  oauth: Schema.optional(
+    Schema.Struct({
+      rateLimitCooldownMs: Schema.optional(
+        PositiveInt.annotate({ description: "Cooldown in milliseconds after a 429 response" }),
+      ),
+      authFailureCooldownMs: Schema.optional(
+        PositiveInt.annotate({ description: "Cooldown in milliseconds after a 401/403 response" }),
+      ),
+      networkRetryAttempts: Schema.optional(
+        NonNegativeInt.annotate({ description: "Number of network error retries" }),
+      ),
+      maxAttempts: Schema.optional(
+        PositiveInt.annotate({ description: "Maximum rotation attempts across OAuth accounts" }),
+      ),
+      toastDurationMs: Schema.optional(
+        PositiveInt.annotate({ description: "Toast display duration in milliseconds on failover" }),
+      ),
+    }).annotate({ description: "OAuth rotation and health-tracking configuration" }),
   ),
   models: Schema.optional(Schema.Record(Schema.String, Model)),
 }).annotate({ identifier: "ProviderConfig" })

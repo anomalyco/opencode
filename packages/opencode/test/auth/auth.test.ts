@@ -83,4 +83,82 @@ describe("Auth", () => {
       }),
     ),
   )
+
+  it.live("set creates multiple OAuth records and keeps the newest active", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const auth = yield* Auth.Service
+        yield* auth.set("multi-test", {
+          type: "oauth",
+          refresh: "refresh-1",
+          access: "access-1",
+          expires: Date.now() + 60_000,
+        })
+        yield* auth.set("multi-test", {
+          type: "oauth",
+          refresh: "refresh-2",
+          access: "access-2",
+          expires: Date.now() + 60_000,
+        })
+
+        const usage = yield* Effect.promise(() => Auth.OAuthPool.getUsage("multi-test"))
+        expect(usage.map((account) => account.label)).toEqual(["default", "Account 2"])
+        expect(usage.find((account) => account.isActive)?.label).toBe("Account 2")
+
+        const current = yield* auth.get("multi-test")
+        expect(current?.type).toBe("oauth")
+        if (current?.type === "oauth") expect(current.refresh).toBe("refresh-2")
+      }),
+    ),
+  )
+
+  it.live("OAuthPool.setActive switches the active record", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const auth = yield* Auth.Service
+        yield* auth.set("switch-test", {
+          type: "oauth",
+          refresh: "refresh-1",
+          access: "access-1",
+          expires: Date.now() + 60_000,
+        })
+        yield* auth.set("switch-test", {
+          type: "oauth",
+          refresh: "refresh-2",
+          access: "access-2",
+          expires: Date.now() + 60_000,
+        })
+
+        const usage = yield* Effect.promise(() => Auth.OAuthPool.getUsage("switch-test"))
+        const first = usage.find((account) => account.label === "default")!
+        const success = yield* Effect.promise(() => Auth.OAuthPool.setActive("switch-test", "default", first.id))
+        const current = yield* auth.get("switch-test")
+
+        expect(success).toBe(true)
+        expect(current?.type).toBe("oauth")
+        if (current?.type === "oauth") expect(current.refresh).toBe("refresh-1")
+      }),
+    ),
+  )
+
+  it.live("OAuthPool.removeRecord removes the provider after the final account", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const auth = yield* Auth.Service
+        yield* auth.set("remove-record-test", {
+          type: "oauth",
+          refresh: "refresh-1",
+          access: "access-1",
+          expires: Date.now() + 60_000,
+        })
+
+        const usage = yield* Effect.promise(() => Auth.OAuthPool.getUsage("remove-record-test"))
+        const result = yield* Effect.promise(() => Auth.OAuthPool.removeRecord("remove-record-test", usage[0]!.id))
+        const current = yield* auth.get("remove-record-test")
+
+        expect(result).toEqual({ removed: true, remaining: 0 })
+        expect(current).toBeUndefined()
+      }),
+    ),
+  )
 })

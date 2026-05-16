@@ -5,6 +5,12 @@ export type ClientOptions = {
 }
 
 export type Event =
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow1
+  | EventTuiSessionSelect
+  | EventServerConnected
+  | EventGlobalDisposed
   | EventServerInstanceDisposed
   | EventFileEdited
   | EventFileWatcherUpdated
@@ -15,16 +21,13 @@ export type Event =
   | EventPermissionReplied
   | EventSessionDiff
   | EventSessionError
+  | EventCredentialFailover1
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
   | EventTodoUpdated
   | EventSessionStatus
   | EventSessionIdle
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow1
-  | EventTuiSessionSelect
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
@@ -75,8 +78,6 @@ export type Event =
   | EventSessionNextCompactionStarted
   | EventSessionNextCompactionDelta
   | EventSessionNextCompactionEnded
-  | EventServerConnected
-  | EventGlobalDisposed
   | EventCatalogModelUpdated
 
 export type OAuth = {
@@ -103,6 +104,61 @@ export type WellKnownAuth = {
 }
 
 export type Auth = OAuth | ApiAuth | WellKnownAuth
+
+export type EventTuiPromptAppend = {
+  id: string
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  id: string
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  id: string
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    duration?: number
+  }
+}
+
+export type EventTuiSessionSelect = {
+  id: string
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+}
 
 export type PermissionRequest = {
   id: string
@@ -280,61 +336,6 @@ export type SessionStatus =
   | {
       type: "busy"
     }
-
-export type EventTuiPromptAppend = {
-  id: string
-  type: "tui.prompt.append"
-  properties: {
-    text: string
-  }
-}
-
-export type EventTuiCommandExecute = {
-  id: string
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.line.up"
-      | "session.line.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  id: string
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    duration?: number
-  }
-}
-
-export type EventTuiSessionSelect = {
-  id: string
-  type: "tui.session.select"
-  properties: {
-    /**
-     * Session ID to navigate to
-     */
-    sessionID: string
-  }
-}
 
 export type Project = {
   id: string
@@ -790,6 +791,12 @@ export type GlobalEvent = {
   project?: string
   workspace?: string
   payload:
+    | EventTuiPromptAppend
+    | EventTuiCommandExecute
+    | EventTuiToastShow
+    | EventTuiSessionSelect
+    | EventServerConnected
+    | EventGlobalDisposed
     | EventServerInstanceDisposed
     | EventFileEdited
     | EventFileWatcherUpdated
@@ -800,16 +807,13 @@ export type GlobalEvent = {
     | EventPermissionReplied
     | EventSessionDiff
     | EventSessionError
+    | EventCredentialFailover
     | EventQuestionAsked
     | EventQuestionReplied
     | EventQuestionRejected
     | EventTodoUpdated
     | EventSessionStatus
     | EventSessionIdle
-    | EventTuiPromptAppend
-    | EventTuiCommandExecute
-    | EventTuiToastShow
-    | EventTuiSessionSelect
     | EventMcpToolsChanged
     | EventMcpBrowserOpenFailed
     | EventCommandExecuted
@@ -860,8 +864,6 @@ export type GlobalEvent = {
     | EventSessionNextCompactionStarted
     | EventSessionNextCompactionDelta
     | EventSessionNextCompactionEnded
-    | EventServerConnected
-    | EventGlobalDisposed
     | EventCatalogModelUpdated
     | SyncEventMessageUpdated
     | SyncEventMessageRemoved
@@ -1034,6 +1036,31 @@ export type ProviderConfig = {
     timeout?: number | false
     chunkTimeout?: number
     [key: string]: unknown | string | boolean | number | false | number | undefined
+  }
+  /**
+   * OAuth rotation and health-tracking configuration
+   */
+  oauth?: {
+    /**
+     * Cooldown in milliseconds after a 429 response
+     */
+    rateLimitCooldownMs?: number
+    /**
+     * Cooldown in milliseconds after a 401/403 response
+     */
+    authFailureCooldownMs?: number
+    /**
+     * Number of network error retries
+     */
+    networkRetryAttempts?: number
+    /**
+     * Maximum rotation attempts across OAuth accounts
+     */
+    maxAttempts?: number
+    /**
+     * Toast display duration in milliseconds on failover
+     */
+    toastDurationMs?: number
   }
   models?: {
     [key: string]: {
@@ -2403,6 +2430,22 @@ export type SyncEventSessionNextCompactionEnded = {
   }
 }
 
+export type EventServerConnected = {
+  id: string
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventGlobalDisposed = {
+  id: string
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
 export type EventServerInstanceDisposed = {
   id: string
   type: "server.instance.disposed"
@@ -2495,6 +2538,18 @@ export type EventSessionError = {
       | StructuredOutputError
       | ContextOverflowError
       | ApiError
+  }
+}
+
+export type EventCredentialFailover = {
+  id: string
+  type: "credential.failover"
+  properties: {
+    providerID: string
+    fromRecordID: string
+    toRecordID?: string
+    statusCode: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    message: string
   }
 }
 
@@ -3129,22 +3184,6 @@ export type EventSessionNextCompactionEnded = {
   }
 }
 
-export type EventServerConnected = {
-  id: string
-  type: "server.connected"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type EventGlobalDisposed = {
-  id: string
-  type: "global.disposed"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
 export type ModelV2Info = {
   id: string
   apiID: string
@@ -3561,6 +3600,18 @@ export type EventTuiToastShow1 = {
     message: string
     variant: "info" | "success" | "warning" | "error"
     duration?: number
+  }
+}
+
+export type EventCredentialFailover1 = {
+  id: string
+  type: "credential.failover"
+  properties: {
+    providerID: string
+    fromRecordID: string
+    toRecordID?: string
+    statusCode: number | "NaN" | "Infinity" | "-Infinity"
+    message: string
   }
 }
 
@@ -5494,6 +5545,335 @@ export type ProviderOauthCallbackResponses = {
 }
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
+
+export type AuthRemoveAccountData = {
+  body?: {
+    providerID: string
+    recordID: string
+    namespace?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/auth/account"
+}
+
+export type AuthRemoveAccountErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthRemoveAccountError = AuthRemoveAccountErrors[keyof AuthRemoveAccountErrors]
+
+export type AuthRemoveAccountResponses = {
+  /**
+   * Account removed
+   */
+  200: {
+    removed: boolean
+    remaining: number
+  }
+}
+
+export type AuthRemoveAccountResponse = AuthRemoveAccountResponses[keyof AuthRemoveAccountResponses]
+
+export type AuthUpdateAccountData = {
+  body?: {
+    providerID: string
+    recordID: string
+    namespace?: string
+    label?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/auth/account"
+}
+
+export type AuthUpdateAccountErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthUpdateAccountError = AuthUpdateAccountErrors[keyof AuthUpdateAccountErrors]
+
+export type AuthUpdateAccountResponses = {
+  /**
+   * Account updated
+   */
+  200: {
+    success: boolean
+  }
+}
+
+export type AuthUpdateAccountResponse = AuthUpdateAccountResponses[keyof AuthUpdateAccountResponses]
+
+export type AuthSetActiveData = {
+  body?: {
+    providerID: string
+    recordID: string
+    namespace?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/auth/active"
+}
+
+export type AuthSetActiveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthSetActiveError = AuthSetActiveErrors[keyof AuthSetActiveErrors]
+
+export type AuthSetActiveResponses = {
+  /**
+   * Active account updated
+   */
+  200: {
+    success: boolean
+    anthropicUsage?: unknown
+  }
+}
+
+export type AuthSetActiveResponse = AuthSetActiveResponses[keyof AuthSetActiveResponses]
+
+export type AuthUsageData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/auth/usage"
+}
+
+export type AuthUsageErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthUsageError = AuthUsageErrors[keyof AuthUsageErrors]
+
+export type AuthUsageResponses = {
+  /**
+   * OAuth usage by provider
+   */
+  200: {
+    [key: string]: {
+      accounts: Array<{
+        id: string
+        label?: string
+        isActive: boolean
+        health: {
+          successCount: number
+          failureCount: number
+          lastStatusCode?: number
+          cooldownUntil?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        }
+      }>
+      anthropicUsage?: unknown
+    }
+  }
+}
+
+export type AuthUsageResponse = AuthUsageResponses[keyof AuthUsageResponses]
+
+export type ProviderBrowserSessionsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/auth/browser-session"
+}
+
+export type ProviderBrowserSessionsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderBrowserSessionsError = ProviderBrowserSessionsErrors[keyof ProviderBrowserSessionsErrors]
+
+export type ProviderBrowserSessionsResponses = {
+  /**
+   * Browser sessions
+   */
+  200: Array<{
+    recordId: string
+    enabled: boolean
+    profilePath: string
+    lastRefresh?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    lastError?: string
+    isConfigured: boolean
+    label?: string
+  }>
+}
+
+export type ProviderBrowserSessionsResponse = ProviderBrowserSessionsResponses[keyof ProviderBrowserSessionsResponses]
+
+export type ProviderBrowserSessionRemoveData = {
+  body?: never
+  path: {
+    recordId: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/auth/browser-session/{recordId}"
+}
+
+export type ProviderBrowserSessionRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderBrowserSessionRemoveError =
+  ProviderBrowserSessionRemoveErrors[keyof ProviderBrowserSessionRemoveErrors]
+
+export type ProviderBrowserSessionRemoveResponses = {
+  /**
+   * Browser session removal result
+   */
+  200: {
+    success: boolean
+    message: string
+  }
+}
+
+export type ProviderBrowserSessionRemoveResponse =
+  ProviderBrowserSessionRemoveResponses[keyof ProviderBrowserSessionRemoveResponses]
+
+export type ProviderBrowserSessionStatusData = {
+  body?: never
+  path: {
+    recordId: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/auth/browser-session/{recordId}"
+}
+
+export type ProviderBrowserSessionStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderBrowserSessionStatusError =
+  ProviderBrowserSessionStatusErrors[keyof ProviderBrowserSessionStatusErrors]
+
+export type ProviderBrowserSessionStatusResponses = {
+  /**
+   * Browser session status
+   */
+  200: {
+    recordId: string
+    enabled: boolean
+    profilePath: string
+    lastRefresh?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    lastError?: string
+    isConfigured: boolean
+    label?: string
+  }
+}
+
+export type ProviderBrowserSessionStatusResponse =
+  ProviderBrowserSessionStatusResponses[keyof ProviderBrowserSessionStatusResponses]
+
+export type ProviderBrowserSessionSetupData = {
+  body?: never
+  path: {
+    recordId: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/auth/browser-session/{recordId}/setup"
+}
+
+export type ProviderBrowserSessionSetupErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderBrowserSessionSetupError =
+  ProviderBrowserSessionSetupErrors[keyof ProviderBrowserSessionSetupErrors]
+
+export type ProviderBrowserSessionSetupResponses = {
+  /**
+   * Browser session setup result
+   */
+  200: {
+    success: boolean
+    message: string
+  }
+}
+
+export type ProviderBrowserSessionSetupResponse =
+  ProviderBrowserSessionSetupResponses[keyof ProviderBrowserSessionSetupResponses]
+
+export type ProviderBrowserSessionRefreshData = {
+  body?: never
+  path: {
+    recordId: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/auth/browser-session/{recordId}/refresh"
+}
+
+export type ProviderBrowserSessionRefreshErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderBrowserSessionRefreshError =
+  ProviderBrowserSessionRefreshErrors[keyof ProviderBrowserSessionRefreshErrors]
+
+export type ProviderBrowserSessionRefreshResponses = {
+  /**
+   * Browser refresh result
+   */
+  200: {
+    success: boolean
+    message: string
+  }
+}
+
+export type ProviderBrowserSessionRefreshResponse =
+  ProviderBrowserSessionRefreshResponses[keyof ProviderBrowserSessionRefreshResponses]
 
 export type SessionListData = {
   body?: never

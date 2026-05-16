@@ -9,10 +9,18 @@ import type {
   AppLogResponses,
   AppSkillsResponses,
   Auth as Auth3,
+  AuthRemoveAccountErrors,
+  AuthRemoveAccountResponses,
   AuthRemoveErrors,
   AuthRemoveResponses,
+  AuthSetActiveErrors,
+  AuthSetActiveResponses,
   AuthSetErrors,
   AuthSetResponses,
+  AuthUpdateAccountErrors,
+  AuthUpdateAccountResponses,
+  AuthUsageErrors,
+  AuthUsageResponses,
   CommandListResponses,
   Config as Config3,
   ConfigGetResponses,
@@ -95,6 +103,16 @@ import type {
   ProjectUpdateResponses,
   Prompt,
   ProviderAuthResponses,
+  ProviderBrowserSessionRefreshErrors,
+  ProviderBrowserSessionRefreshResponses,
+  ProviderBrowserSessionRemoveErrors,
+  ProviderBrowserSessionRemoveResponses,
+  ProviderBrowserSessionsErrors,
+  ProviderBrowserSessionSetupErrors,
+  ProviderBrowserSessionSetupResponses,
+  ProviderBrowserSessionsResponses,
+  ProviderBrowserSessionStatusErrors,
+  ProviderBrowserSessionStatusResponses,
   ProviderListResponses,
   ProviderOauthAuthorizeErrors,
   ProviderOauthAuthorizeResponses,
@@ -323,6 +341,161 @@ export class Auth extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Remove OAuth account
+   *
+   * Remove an OAuth account record from a provider.
+   */
+  public removeAccount<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      providerID?: string
+      recordID?: string
+      namespace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "providerID" },
+            { in: "body", key: "recordID" },
+            { in: "body", key: "namespace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<AuthRemoveAccountResponses, AuthRemoveAccountErrors, ThrowOnError>({
+      url: "/provider/auth/account",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Update OAuth account
+   *
+   * Update OAuth account metadata.
+   */
+  public updateAccount<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      providerID?: string
+      recordID?: string
+      namespace?: string
+      label?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "providerID" },
+            { in: "body", key: "recordID" },
+            { in: "body", key: "namespace" },
+            { in: "body", key: "label" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<AuthUpdateAccountResponses, AuthUpdateAccountErrors, ThrowOnError>({
+      url: "/provider/auth/account",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Set active OAuth account
+   *
+   * Set the active OAuth account for a provider.
+   */
+  public setActive<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      providerID?: string
+      recordID?: string
+      namespace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "providerID" },
+            { in: "body", key: "recordID" },
+            { in: "body", key: "namespace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<AuthSetActiveResponses, AuthSetActiveErrors, ThrowOnError>({
+      url: "/provider/auth/active",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get OAuth account usage
+   *
+   * Get OAuth account health and Anthropic usage details.
+   */
+  public usage<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AuthUsageResponses, AuthUsageErrors, ThrowOnError>({
+      url: "/provider/auth/usage",
+      ...options,
+      ...params,
     })
   }
 }
@@ -2884,6 +3057,193 @@ export class Oauth extends HeyApiClient {
   }
 }
 
+export class Session2 extends HeyApiClient {
+  /**
+   * Remove browser session
+   *
+   * Remove an OAuth browser session profile.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      recordId: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "recordId" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      ProviderBrowserSessionRemoveResponses,
+      ProviderBrowserSessionRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/provider/auth/browser-session/{recordId}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get browser session status
+   *
+   * Get OAuth browser session status for an account.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters: {
+      recordId: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "recordId" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ProviderBrowserSessionStatusResponses,
+      ProviderBrowserSessionStatusErrors,
+      ThrowOnError
+    >({
+      url: "/provider/auth/browser-session/{recordId}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Set up browser session
+   *
+   * Open a browser session and bind it to an OAuth account.
+   */
+  public setup<ThrowOnError extends boolean = false>(
+    parameters: {
+      recordId: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "recordId" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ProviderBrowserSessionSetupResponses,
+      ProviderBrowserSessionSetupErrors,
+      ThrowOnError
+    >({
+      url: "/provider/auth/browser-session/{recordId}/setup",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Refresh browser session
+   *
+   * Refresh OAuth tokens using a configured browser session.
+   */
+  public refresh<ThrowOnError extends boolean = false>(
+    parameters: {
+      recordId: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "recordId" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ProviderBrowserSessionRefreshResponses,
+      ProviderBrowserSessionRefreshErrors,
+      ThrowOnError
+    >({
+      url: "/provider/auth/browser-session/{recordId}/refresh",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Browser extends HeyApiClient {
+  /**
+   * List browser sessions
+   *
+   * List OAuth browser sessions for automatic token refresh.
+   */
+  public sessions<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ProviderBrowserSessionsResponses,
+      ProviderBrowserSessionsErrors,
+      ThrowOnError
+    >({
+      url: "/provider/auth/browser-session",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _session?: Session2
+  get session(): Session2 {
+    return (this._session ??= new Session2({ client: this.client }))
+  }
+}
+
 export class Provider extends HeyApiClient {
   /**
    * List providers
@@ -2949,9 +3309,14 @@ export class Provider extends HeyApiClient {
   get oauth(): Oauth {
     return (this._oauth ??= new Oauth({ client: this.client }))
   }
+
+  private _browser?: Browser
+  get browser(): Browser {
+    return (this._browser ??= new Browser({ client: this.client }))
+  }
 }
 
-export class Session2 extends HeyApiClient {
+export class Session3 extends HeyApiClient {
   /**
    * List sessions
    *
@@ -4158,7 +4523,7 @@ export class Sync extends HeyApiClient {
   }
 }
 
-export class Session3 extends HeyApiClient {
+export class Session4 extends HeyApiClient {
   /**
    * List v2 sessions
    *
@@ -4461,9 +4826,9 @@ export class Provider2 extends HeyApiClient {
 }
 
 export class V2 extends HeyApiClient {
-  private _session?: Session3
-  get session(): Session3 {
-    return (this._session ??= new Session3({ client: this.client }))
+  private _session?: Session4
+  get session(): Session4 {
+    return (this._session ??= new Session4({ client: this.client }))
   }
 
   private _model?: Model
@@ -5042,9 +5407,9 @@ export class OpencodeClient extends HeyApiClient {
     return (this._provider ??= new Provider({ client: this.client }))
   }
 
-  private _session?: Session2
-  get session(): Session2 {
-    return (this._session ??= new Session2({ client: this.client }))
+  private _session?: Session3
+  get session(): Session3 {
+    return (this._session ??= new Session3({ client: this.client }))
   }
 
   private _part?: Part
