@@ -725,6 +725,126 @@ describe("tool.task", () => {
     }),
   )
 
+  it.instance("execute body is text when subagent returns a text part with content", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const promptOps = stubOps({ text: "the actual result" })
+
+      const result = yield* def.execute(
+        {
+          description: "some task",
+          prompt: "do something",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps, bypassAgentCheck: true },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toContain("the actual result")
+    }),
+  )
+
+  it.instance("execute body is empty string when subagent returns an intentionally empty text part", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const promptOps = stubOps({ text: "" })
+
+      const result = yield* def.execute(
+        {
+          description: "some task",
+          prompt: "do something",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps, bypassAgentCheck: true },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      // intentional empty text part → body is empty string, no diagnostic block
+      expect(result.output).toContain("<task_result>\n\n</task_result>")
+      expect(result.output).not.toContain("Subagent completed without a text response.")
+    }),
+  )
+
+  it.instance("execute body is diagnostic block when subagent returns no text part", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      // promptOps whose prompt returns a WithParts with NO text parts
+      const promptOps: TaskPromptOps = {
+        cancel: () => Effect.void,
+        resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+        prompt: (input) =>
+          Effect.sync(() => {
+            const id = MessageID.ascending()
+            return {
+              info: {
+                id,
+                role: "assistant" as const,
+                parentID: input.messageID ?? MessageID.ascending(),
+                sessionID: input.sessionID,
+                mode: input.agent ?? "general",
+                agent: input.agent ?? "general",
+                cost: 0,
+                path: { cwd: "/tmp", root: "/tmp" },
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                modelID: input.model?.modelID ?? ref.modelID,
+                providerID: input.model?.providerID ?? ref.providerID,
+                time: { created: Date.now() },
+                finish: "tool-calls",
+              },
+              parts: [], // no text parts at all
+            } satisfies MessageV2.WithParts
+          }),
+        loop: (input) => Effect.succeed(reply({ sessionID: input.sessionID, parts: [] }, "done")),
+      }
+
+      const result = yield* def.execute(
+        {
+          description: "some task",
+          prompt: "do something",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps, bypassAgentCheck: true },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(result.output).toContain("Subagent completed without a text response.")
+      expect(result.output).toContain("finish: tool-calls")
+      expect(result.output).toContain("error: none")
+      expect(result.output).toContain("parts: none")
+    }),
+  )
+
   it.instance("cancelling a parent run recursively cancels descendant background tasks", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service

@@ -208,7 +208,19 @@ export const TaskTool = Tool.define(
           },
           parts,
         })
-        return result.parts.findLast((item) => item.type === "text")?.text ?? ""
+        const textPart = result.parts.findLast((item) => item.type === "text")
+        const info = result.info.role === "assistant" ? result.info : undefined
+
+        const body =
+          textPart?.text ??
+          [
+            "Subagent completed without a text response.",
+            `finish: ${info?.finish ?? "unknown"}`,
+            `error: ${info?.error ? JSON.stringify(info.error) : "none"}`,
+            `parts: ${result.parts.map((part) => part.type).join(", ") || "none"}`,
+          ].join("\n")
+
+        return body
       })
 
       const resumeWhenIdle: (input: { userID: MessageID; state: "completed" | "error" }) => Effect.Effect<void> =
