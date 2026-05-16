@@ -1,18 +1,29 @@
-import { getAdapter } from "@/control-plane/adapters"
 import { WorkspaceID } from "@/control-plane/schema"
 import type { Target } from "@/control-plane/types"
 import { Workspace } from "@/control-plane/workspace"
-import { EffectBridge } from "@/effect/bridge"
+import { WorkspaceAdapterRuntime } from "@/control-plane/workspace-adapter-runtime"
 import { Session } from "@/session/session"
 import { HttpApiProxy } from "./proxy"
 import * as Fence from "@/server/shared/fence"
 import { getWorkspaceRouteSessionID, isLocalWorkspaceRoute, workspaceProxyURL } from "@/server/shared/workspace-routing"
 import { NotFoundError } from "@/storage/storage"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Context, Data, Effect, Layer } from "effect"
+import { Context, Data, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
+
+// Query fields this middleware reads from the URL. Spread into every
+// endpoint query schema in groups that apply WorkspaceRoutingMiddleware,
+// otherwise HttpApi rejects requests carrying these params with 400.
+// HttpApiMiddleware in effect-smol cannot declare query params today —
+// remove this once upstream supports middleware-declared query schemas.
+export const WorkspaceRoutingQueryFields = {
+  directory: Schema.optional(Schema.String),
+  workspace: Schema.optional(Schema.String),
+}
+
+export const WorkspaceRoutingQuery = Schema.Struct(WorkspaceRoutingQueryFields)
 
 type RemoteTarget = Extract<Target, { type: "remote" }>
 
@@ -81,8 +92,7 @@ function missingWorkspaceResponse(id: WorkspaceID): HttpServerResponse.HttpServe
 }
 
 function resolveTarget(workspace: Workspace.Info): Effect.Effect<Target> {
-  const adapter = getAdapter(workspace.projectID, workspace.type)
-  return EffectBridge.fromPromise(() => adapter.target(workspace))
+  return WorkspaceAdapterRuntime.target(workspace)
 }
 
 function proxyRemote(

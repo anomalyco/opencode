@@ -1,29 +1,23 @@
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Cause, Effect } from "effect"
+import { Cause, Duration, Effect } from "effect"
 import { TestLLMServer } from "../../lib/llm-server"
 import type { Config } from "../../../src/config/config"
 import { ModelID, ProviderID } from "../../../src/provider/schema"
 import type { MessageV2 } from "../../../src/session/message-v2"
 import { MessageID, PartID } from "../../../src/session/schema"
-import { stable } from "./assertions"
 import { call, callAuthProbe } from "./backend"
 import { original } from "./environment"
 import { runtime } from "./runtime"
-import type {
-  ActiveScenario,
-  CallResult,
-  Options,
-  ProjectOptions,
-  Result,
-  Scenario,
-  ScenarioContext,
-  SeededContext,
-} from "./types"
+import type { ActiveScenario, Options, ProjectOptions, Result, Scenario, ScenarioContext, SeededContext } from "./types"
 
 export function runScenario(options: Options) {
   return (scenario: Scenario) => {
     if (scenario.kind === "todo") return Effect.succeed({ status: "skip", scenario } as Result)
     return runActive(options, scenario).pipe(
+      Effect.timeoutOrElse({
+        duration: options.scenarioTimeout,
+        orElse: () => Effect.die(new Error(`scenario timed out after ${Duration.format(options.scenarioTimeout)}`)),
+      }),
       Effect.as({ status: "pass", scenario } as Result),
       Effect.catchCause((cause) => Effect.succeed({ status: "fail" as const, scenario, message: Cause.pretty(cause) })),
       Effect.scoped,
@@ -34,84 +28,83 @@ export function runScenario(options: Options) {
 function runActive(options: Options, scenario: ActiveScenario) {
   if (options.mode === "auth") return runAuth(scenario)
 
-  if (options.mode === "parity" && scenario.mutates && scenario.compare !== "none") {
-    return Effect.gen(function* () {
-      const effect = yield* runBackend("effect", scenario)
-      const legacy = yield* runBackend("legacy", scenario)
-      yield* compare(scenario, effect, legacy)
-    })
-  }
-
-  return withContext(scenario, (ctx) =>
+  return withContext(options, scenario, "shared", (ctx) =>
     Effect.gen(function* () {
-      const effect = yield* call("effect", scenario, ctx)
-      yield* scenario.expect(ctx, ctx.state, effect)
-      if (options.mode === "parity" && scenario.compare !== "none") {
-        const legacy = yield* call("legacy", scenario, ctx)
-        yield* scenario.expect(ctx, ctx.state, legacy)
-        yield* compare(scenario, effect, legacy)
-      }
+      yield* trace(options, scenario, "request start")
+      const result = yield* call(scenario, ctx)
+      yield* trace(options, scenario, `response ${result.status}`)
+      yield* trace(options, scenario, "expect start")
+      yield* scenario.expect(ctx, ctx.state, result)
+      yield* trace(options, scenario, "expect done")
     }),
   )
 }
 
 function runAuth(scenario: ActiveScenario) {
   return Effect.gen(function* () {
-    const effect = yield* callAuthProbe("effect", scenario)
-    const legacy = yield* callAuthProbe("legacy", scenario)
+    const result = yield* callAuthProbe(scenario, "missing")
     if (scenario.auth === "protected") {
-      if (effect.status !== 401) throw new Error(`effect auth expected 401, got ${effect.status}`)
-      if (legacy.status !== 401) throw new Error(`legacy auth expected 401, got ${legacy.status}`)
+      if (result.status !== 401) throw new Error(`auth expected 401, got ${result.status}`)
+      const authed = yield* callAuthProbe(scenario, "valid")
+      if (authed.status === 401) throw new Error("auth rejected valid credentials")
       return
     }
 
-    if (effect.status === 401) throw new Error("effect auth expected public access, got 401")
-    if (legacy.status === 401) throw new Error("legacy auth expected public access, got 401")
+    if (result.status === 401) throw new Error("auth expected public access, got 401")
+    if (result.timedOut) throw new Error("auth expected public access, probe timed out")
   })
 }
 
-function runBackend(backend: "effect" | "legacy", scenario: ActiveScenario) {
-  return withContext(scenario, (ctx) =>
-    Effect.gen(function* () {
-      const result = yield* call(backend, scenario, ctx)
-      yield* scenario.expect(ctx, ctx.state, result)
-      return result
-    }),
-  )
-}
-
-function withContext<A, E>(scenario: ActiveScenario, use: (ctx: SeededContext<unknown>) => Effect.Effect<A, E>) {
+function withContext<A, E>(
+  options: Options,
+  scenario: ActiveScenario,
+  label: string,
+  use: (ctx: SeededContext<unknown>) => Effect.Effect<A, E>,
+) {
   return Effect.acquireRelease(
     Effect.gen(function* () {
+      yield* trace(options, scenario, `${label} context acquire start`)
       const llm = scenario.project?.llm ? yield* TestLLMServer : undefined
       const project = scenario.project
       const dir = project
         ? yield* Effect.promise(async () => (await runtime()).tmpdir(projectOptions(project, llm?.url)))
         : undefined
+      yield* trace(options, scenario, `${label} context acquire done`)
       return { dir, llm }
     }),
     (ctx) =>
-      Effect.promise(async () => {
-        await ctx.dir?.[Symbol.asyncDispose]()
-      }).pipe(Effect.ignore),
+      Effect.gen(function* () {
+        yield* trace(options, scenario, `${label} tmpdir cleanup start`)
+        yield* Effect.promise(async () => {
+          await ctx.dir?.[Symbol.asyncDispose]()
+        }).pipe(Effect.ignore)
+        yield* trace(options, scenario, `${label} tmpdir cleanup done`)
+      }),
   ).pipe(
     Effect.flatMap((context) =>
       Effect.gen(function* () {
+        yield* trace(options, scenario, `${label} runtime start`)
         const modules = yield* Effect.promise(() => runtime())
+        yield* trace(options, scenario, `${label} runtime done`)
         const path = context.dir?.path
         const instance = path
-          ? yield* modules.InstanceStore.Service.use((store) => store.load({ directory: path })).pipe(
-              Effect.provide(modules.AppLayer),
-              Effect.catchCause((cause) =>
-                Effect.sleep("100 millis").pipe(
-                  Effect.andThen(
-                    modules.InstanceStore.Service.use((store) => store.load({ directory: path })).pipe(
-                      Effect.provide(modules.AppLayer),
+          ? yield* trace(options, scenario, `${label} instance load start`).pipe(
+              Effect.andThen(
+                modules.InstanceStore.Service.use((store) => store.load({ directory: path })).pipe(
+                  Effect.provide(modules.AppLayer),
+                  Effect.catchCause((cause) =>
+                    Effect.sleep("100 millis").pipe(
+                      Effect.andThen(
+                        modules.InstanceStore.Service.use((store) => store.load({ directory: path })).pipe(
+                          Effect.provide(modules.AppLayer),
+                        ),
+                      ),
+                      Effect.catchCause(() => Effect.failCause(cause)),
                     ),
                   ),
-                  Effect.catchCause(() => Effect.failCause(cause)),
                 ),
               ),
+              Effect.tap(() => trace(options, scenario, `${label} instance load done`)),
             )
           : undefined
         const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -175,21 +168,34 @@ function withContext<A, E>(scenario: ActiveScenario, use: (ctx: SeededContext<un
               )
               return { info, part }
             }),
-          messages: (sessionID) => run(modules.Session.Service.use((svc) => svc.messages({ sessionID }))),
+          messages: (sessionID) =>
+            run(modules.Session.Service.use((svc) => svc.messages({ sessionID }).pipe(Effect.orDie))),
           todos: (sessionID, todos) => run(modules.Todo.Service.use((svc) => svc.update({ sessionID, todos }))),
-          worktree: (input) => run(modules.Worktree.Service.use((svc) => svc.create(input))),
+          worktree: (input) => run(modules.Worktree.Service.use((svc) => svc.create(input).pipe(Effect.orDie))),
           worktreeRemove: (directory) =>
             run(modules.Worktree.Service.use((svc) => svc.remove({ directory })).pipe(Effect.ignore)),
           llmText: (value) => Effect.suspend(() => llm().text(value)),
           llmWait: (count) => Effect.suspend(() => llm().wait(count)),
           tuiRequest: (request) => Effect.sync(() => modules.Tui.submitTuiRequest(request)),
         }
+        yield* trace(options, scenario, `${label} seed start`)
         const state = yield* scenario.seed(base)
-        return yield* use({ ...base, state })
+        yield* trace(options, scenario, `${label} seed done`)
+        yield* trace(options, scenario, `${label} use start`)
+        const result = yield* use({ ...base, state })
+        yield* trace(options, scenario, `${label} use done`)
+        return result
       }).pipe(Effect.ensuring(context.llm ? context.llm.reset : Effect.void)),
     ),
     Effect.ensuring(scenario.reset ? resetState : Effect.void),
   )
+}
+
+function trace(options: Options, scenario: ActiveScenario, phase: string) {
+  return Effect.sync(() => {
+    if (!options.trace) return
+    console.log(`[trace] ${scenario.name}: ${phase}`)
+  })
 }
 
 function projectOptions(
@@ -244,19 +250,8 @@ function fakeLlmConfig(url: string): Partial<Config.Info> {
   }
 }
 
-function compare(scenario: ActiveScenario, effect: CallResult, legacy: CallResult) {
-  return Effect.sync(() => {
-    if (effect.status !== legacy.status)
-      throw new Error(`legacy returned ${legacy.status}, effect returned ${effect.status}`)
-    if (scenario.compare === "status") return
-    if (stable(effect.body) !== stable(legacy.body))
-      throw new Error(`JSON parity mismatch\nlegacy: ${stable(legacy.body)}\neffect: ${stable(effect.body)}`)
-  })
-}
-
 const resetState = Effect.promise(async () => {
   const modules = await runtime()
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original.OPENCODE_EXPERIMENTAL_HTTPAPI
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
   Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
   await modules.disposeAllInstances()

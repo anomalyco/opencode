@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { PtyID } from "../../src/pty/schema"
-import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import * as Log from "@opencode-ai/core/util/log"
@@ -11,22 +9,19 @@ import { disposeAllInstances, tmpdir, tmpdirScoped } from "../fixture/fixture"
 import { Config, Effect, Layer, Queue, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
-import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
+import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { Pty } from "../../src/pty"
 import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 
-const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
 const testPty = process.platform === "win32" ? test.skip : test
 
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
     yield* Effect.promise(() => resetDatabase())
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
-        Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
         await resetDatabase()
       }),
     )
@@ -34,7 +29,7 @@ const testStateLayer = Layer.effectDiscard(
 )
 
 const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
-  ExperimentalHttpApiServer.routes,
+  HttpApiApp.routes,
   { disableListenLog: true, disableLogger: true },
 )
 
@@ -50,9 +45,8 @@ const effectIt = testEffect(
   ),
 )
 
-function app(experimental = true) {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = experimental
-  return experimental ? Server.Default().app : Server.Legacy().app
+function app() {
+  return Server.Default().app
 }
 
 function serverUrl() {
@@ -62,7 +56,6 @@ function serverUrl() {
 const directoryHeader = (dir: string) => HttpClientRequest.setHeader("x-opencode-directory", dir)
 
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
   await disposeAllInstances()
   await resetDatabase()
 })
@@ -119,18 +112,6 @@ describe("pty HttpApi bridge", () => {
 
     const missing = await app().request(PtyPaths.get.replace(":ptyID", info.id), { headers })
     expect(missing.status).toBe(404)
-  })
-
-  test("matches Hono missing PTY error body", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    const headers = { "x-opencode-directory": tmp.path }
-    const path = PtyPaths.get.replace(":ptyID", PtyID.ascending())
-
-    const hono = await app(false).request(path, { headers })
-    const httpapi = await app().request(path, { headers })
-
-    expect(httpapi.status).toBe(hono.status)
-    expect(await httpapi.json()).toEqual(await hono.json())
   })
 
   test("returns 404 for missing PTY websocket before upgrade", async () => {

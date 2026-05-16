@@ -32,7 +32,7 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
   const { theme } = useTheme()
 
   const [toDelete, setToDelete] = createSignal<number>()
-  const deleteHint = useCommandShortcut("dialog.action.delete")
+  const deleteHint = useCommandShortcut("stash.delete")
 
   const options = createMemo(() => {
     const entries = stash.list()
@@ -70,7 +70,7 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
       }}
       actions={[
         {
-          command: "dialog.action.delete",
+          command: "stash.delete",
           title: "delete",
           onTrigger: (option) => {
             if (toDelete() === option.value) {
