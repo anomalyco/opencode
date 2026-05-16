@@ -20,7 +20,7 @@ import { Parameters as Question } from "../../src/tool/question"
 import { Parameters as Read } from "../../src/tool/read"
 import { Parameters as Shell } from "../../src/tool/shell"
 import { Parameters as Skill } from "../../src/tool/skill"
-import { Parameters as Task } from "../../src/tool/task"
+import { Parameters as Task, sanitizeAgentTypeId } from "../../src/tool/task"
 import { Parameters as Todo } from "../../src/tool/todo"
 import { Parameters as WebFetch } from "../../src/tool/webfetch"
 import { Parameters as WebSearch } from "../../src/tool/websearch"
@@ -241,6 +241,25 @@ describe("tool parameters", () => {
     })
     test("rejects missing prompt", () => {
       expect(accepts(Task, { description: "d", subagent_type: "general" })).toBe(false)
+    })
+  })
+
+  describe("sanitizeAgentTypeId", () => {
+    test("strips leading zero-width space (U+200B) from subagent_type", () => {
+      // The string below has a U+200B prepended — matches the issue #24276 repro
+      expect(sanitizeAgentTypeId("​Sisyphus - Ultraworker")).toBe("Sisyphus - Ultraworker")
+    })
+    test("leaves a clean subagent_type string unchanged", () => {
+      expect(sanitizeAgentTypeId("Sisyphus - Ultraworker")).toBe("Sisyphus - Ultraworker")
+    })
+    test("trims leading and trailing whitespace", () => {
+      expect(sanitizeAgentTypeId("   Sisyphus - Ultraworker   ")).toBe("Sisyphus - Ultraworker")
+    })
+    test("strips all zero-width characters (U+200B, U+200C, U+200D, U+FEFF)", () => {
+      expect(sanitizeAgentTypeId("​‌‍﻿explore")).toBe("explore")
+    })
+    test("strips embedded zero-width characters mid-string", () => {
+      expect(sanitizeAgentTypeId("gene​ral")).toBe("general")
     })
   })
 
