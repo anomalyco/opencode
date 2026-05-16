@@ -7,7 +7,7 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { A, useParams } from "@solidjs/router"
-import { createMemo, createSignal, For, type Accessor, type JSX, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, For, onCleanup, onMount, type Accessor, type JSX, Match, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
@@ -119,6 +119,39 @@ const SessionRow = (props: {
 }): JSX.Element => {
   const language = useLanguage()
   const title = () => sessionTitle(props.session.title)
+  const [hasSelection, setHasSelection] = createSignal(false)
+  let titleRef: HTMLSpanElement | undefined
+
+  onMount(() => {
+    const handler = () => {
+      const sel = window.getSelection()
+      setHasSelection(!!sel && !sel.isCollapsed)
+    }
+    document.addEventListener("selectionchange", handler)
+    onCleanup(() => document.removeEventListener("selectionchange", handler))
+  })
+
+  const onSelectAll = () => {
+    if (titleRef) {
+      const range = document.createRange()
+      range.selectNodeContents(titleRef)
+      const sel = window.getSelection()
+      sel?.removeAllRanges()
+      sel?.addRange(range)
+      setHasSelection(true)
+    }
+  }
+
+  const onCopy = () => {
+    const sel = window.getSelection()
+    const text = sel?.toString()
+    if (text) navigator.clipboard.writeText(text)
+  }
+
+  const onCopyUrl = () => {
+    const url = `${window.location.origin}/${props.slug}/session/${props.session.id}`
+    navigator.clipboard.writeText(url)
+  }
 
   return (
     <ContextMenu>
@@ -158,11 +191,23 @@ const SessionRow = (props: {
           <Show when={props.isPinned()}>
             <Icon name="pin" size="small" class="text-icon-base shrink-0" />
           </Show>
-          <span class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{title()}</span>
+          <span ref={titleRef} class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{title()}</span>
         </A>
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content>
+          <ContextMenu.Item onSelect={onSelectAll}>
+            <ContextMenu.ItemLabel>{language.t("common.selectAll")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <Show when={hasSelection()}>
+            <ContextMenu.Item onSelect={onCopy}>
+              <ContextMenu.ItemLabel>{language.t("common.copy")}</ContextMenu.ItemLabel>
+            </ContextMenu.Item>
+          </Show>
+          <ContextMenu.Item onSelect={onCopyUrl}>
+            <ContextMenu.ItemLabel>{language.t("common.copyUrl")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <ContextMenu.Separator />
           <ContextMenu.Item onSelect={props.onRename}>
             <ContextMenu.ItemLabel>{language.t("common.rename")}</ContextMenu.ItemLabel>
           </ContextMenu.Item>

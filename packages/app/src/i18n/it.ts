@@ -62,6 +62,7 @@ export const dict: Record<string, string> = {
   "common.deselectAll": "Deseleziona tutto",
   "common.copy": "Copia",
   "common.copied": "Copiato!",
+  "common.copyUrl": "Copia URL",
   "common.paste": "Incolla",
   "common.cut": "Taglia",
   "common.undo": "Annulla",
