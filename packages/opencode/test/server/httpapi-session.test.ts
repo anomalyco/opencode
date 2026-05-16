@@ -552,6 +552,52 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "titles a default session from native goal commands",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "content-type": "application/json", "x-opencode-directory": test.directory }
+        const session = yield* createSession()
+        const path = pathFor(SessionPaths.goal, { sessionID: session.id })
+
+        expect(Session.isDefaultTitle(session.title)).toBe(true)
+
+        yield* requestJson<SessionGoal.Info>(path, {
+          headers,
+          method: "POST",
+          body: JSON.stringify({ objective: "refactor project title handling" }),
+        })
+        expect(
+          yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: session.id }), { headers }),
+        ).toMatchObject({ title: "refactor project title handling" })
+
+        yield* requestJson<SessionGoal.Info>(path, {
+          headers,
+          method: "PATCH",
+          body: JSON.stringify({ objective: "verify edited goal titles" }),
+        })
+        expect(
+          yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: session.id }), { headers }),
+        ).toMatchObject({ title: "verify edited goal titles" })
+
+        yield* requestJson<Session.Info>(pathFor(SessionPaths.update, { sessionID: session.id }), {
+          headers,
+          method: "PATCH",
+          body: JSON.stringify({ title: "manual title" }),
+        })
+        yield* requestJson<SessionGoal.Info>(path, {
+          headers,
+          method: "PATCH",
+          body: JSON.stringify({ objective: "do not override manual titles" }),
+        })
+        expect(
+          yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: session.id }), { headers }),
+        ).toMatchObject({ title: "manual title" })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "serves sessions with migrated summary diffs missing file details",
     () =>
       Effect.gen(function* () {
