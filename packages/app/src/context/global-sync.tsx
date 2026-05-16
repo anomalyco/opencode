@@ -540,10 +540,6 @@ function createGlobalSync() {
   async function bootstrapInstance(directory: string) {
     if (!directory) return
     if (isolated(directory)) {
-      trace("bootstrap.skip", {
-        directory,
-        why: "no-server-for-domain",
-      })
       return
     }
     const pending = booting.get(directory)
