@@ -962,6 +962,8 @@ function getSyntaxRules(theme: Theme) {
       style: {
         foreground: theme.markdownHeading,
         bold: true,
+        italic: true,
+        underline: true,
       },
     },
     {
