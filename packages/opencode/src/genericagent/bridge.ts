@@ -11,6 +11,20 @@ import { Identifier } from "@/id/id"
 import { NamedError } from "@opencode-ai/util/error"
 import shimSource from "./python/bridge_shim.py" with { type: "text" }
 
+// Cursor encode/decode for pagination (mirrors packages/opencode/src/session/message-v2.ts)
+const cursorEncode = (input: { id: string; time: number }) =>
+  Buffer.from(JSON.stringify(input)).toString("base64url")
+
+const cursorDecode = (input: string): { id: string; time: number } | undefined => {
+  try {
+    return JSON.parse(Buffer.from(input, "base64url").toString("utf8"))
+  } catch {
+    return undefined
+  }
+}
+
+
+
 type Opts = {
   hostname: string
   port: number
@@ -411,6 +425,16 @@ class ShimClient {
     }
   }
 
+  async snapshotLog(): Promise<void> {
+    await this.readyPromise
+    if (this.state.kind !== "ready") return
+    try {
+      await fetch(`http://127.0.0.1:${this.state.port}/snapshot`, { method: "POST" })
+    } catch (e) {
+      log.warn("shim snapshot failed", { error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
   async abort(sessionID: string): Promise<void> {
     const t0 = Date.now()
     const ctrl = this.aborts.get(sessionID)
@@ -475,28 +499,37 @@ class ShimClient {
 
   async listHistorySessions(): Promise<HistorySession[]> {
     await this.readyPromise
-    if (this.state.kind !== "ready") return []
+    if (this.state.kind !== "ready") {
+      return []
+    }
     try {
       const res = await fetch(`http://127.0.0.1:${this.state.port}/sessions`)
-      if (!res.ok) return []
+      if (!res.ok) {
+        return []
+      }
       const data = (await res.json()) as HistorySession[]
-      return Array.isArray(data) ? data : []
-    } catch (e) {
-      log.warn("shim listHistorySessions failed", { error: e instanceof Error ? e.message : String(e) })
+      const sessions = Array.isArray(data) ? data : []
+      return sessions
+    } catch {
       return []
     }
   }
 
   async getHistoryMessages(sessionId: string): Promise<HistoryMessage[]> {
     await this.readyPromise
-    if (this.state.kind !== "ready") return []
+    if (this.state.kind !== "ready") {
+      return []
+    }
     try {
-      const res = await fetch(`http://127.0.0.1:${this.state.port}/sessions/${encodeURIComponent(sessionId)}/messages`)
-      if (!res.ok) return []
+      const url = `http://127.0.0.1:${this.state.port}/sessions/${encodeURIComponent(sessionId)}/messages`
+      const res = await fetch(url)
+      if (!res.ok) {
+        return []
+      }
       const data = (await res.json()) as HistoryMessage[]
-      return Array.isArray(data) ? data : []
-    } catch (e) {
-      log.warn("shim getHistoryMessages failed", { sessionId, error: e instanceof Error ? e.message : String(e) })
+      const messages = Array.isArray(data) ? data : []
+      return messages
+    } catch {
       return []
     }
   }
@@ -790,10 +823,11 @@ export namespace GenericAgentBridge {
 
     void shim.listHistorySessions().then((historySessions) => {
       for (const session of historySessions) {
-        if (sessions.has(session.id)) continue
+        if (sessions.has(session.id)) {
+          continue
+        }
         sessions.set(session.id, historySessionInfo(session))
       }
-      log.info("genericagent history loaded", { count: historySessions.length })
     }).catch((e) => {
       log.warn("genericagent history initialization failed", { error: e instanceof Error ? e.message : String(e) })
     })
@@ -838,6 +872,7 @@ export namespace GenericAgentBridge {
             if (opts.cors?.includes(input)) return input
             return
           },
+          exposeHeaders: ["X-Next-Cursor", "Link"],
         }),
       )
       .get("/global/health", async (c) => {
@@ -954,7 +989,10 @@ export namespace GenericAgentBridge {
         const limitParam = c.req.query("limit")
         const limit = limitParam ? Number.parseInt(limitParam, 10) : undefined
         if (limit && limit > 0 && all.length > limit) {
-          return c.json(all.slice(0, limit))
+          const page = all.slice(0, limit)
+          const lastSession = page[page.length - 1]
+          c.header("X-Next-Cursor", String(lastSession.time.updated))
+          return c.json(page)
         }
         return c.json(all)
       })
@@ -972,7 +1010,10 @@ export namespace GenericAgentBridge {
         }
         sessions.set(id, info)
         messages.set(id, [])
-        if (!body.parentID) await shim.reset()
+        if (!body.parentID) {
+          await shim.snapshotLog()
+          await shim.reset()
+        }
         emit({ type: "session.created", properties: { info } })
         return c.json(info)
       })
@@ -1005,16 +1046,47 @@ export namespace GenericAgentBridge {
       .get("/session/:sessionID/children", (c) => c.json([]))
       .get("/session/:sessionID/message", async (c) => {
         const sessionID = c.req.param("sessionID")
+        const limitParam = c.req.query("limit")
+        const limit = limitParam ? Number.parseInt(limitParam, 10) : undefined
+        const before = c.req.query("before") ?? undefined
+
+        let allMessages: Message[]
         const existing = messages.get(sessionID)
-        if (existing) return c.json(existing)
+        if (existing) {
+          allMessages = existing
+        } else {
+          const session = sessions.get(sessionID)
+          if (!session) {
+            return c.json([])
+          }
+          const history = await shim.getHistoryMessages(sessionID)
+          allMessages = historyMessagesToBridge(sessionID, session.time.updated, history)
+          messages.set(sessionID, allMessages)
+        }
 
-        const session = sessions.get(sessionID)
-        if (!session) return c.json([])
+        const sorted = [...allMessages].sort((a, b) => (a.info.id < b.info.id ? -1 : a.info.id > b.info.id ? 1 : 0))
 
-        const history = await shim.getHistoryMessages(sessionID)
-        const restored = historyMessagesToBridge(sessionID, session.time.updated, history)
-        messages.set(sessionID, restored)
-        return c.json(restored)
+        let filtered = sorted
+        if (before) {
+          const cursor = cursorDecode(before)
+          if (cursor) {
+            filtered = sorted.filter((m) => m.info.id < cursor.id)
+          }
+        }
+
+        if (limit && limit > 0 && filtered.length > limit) {
+          const page = filtered.slice(0, limit)
+          const lastMessage = page[page.length - 1]
+          const nextCursor = cursorEncode({ id: lastMessage.info.id, time: lastMessage.info.time.created })
+          c.header("X-Next-Cursor", nextCursor)
+          const url = new URL(c.req.url)
+          url.searchParams.set("limit", String(limit))
+          url.searchParams.set("before", nextCursor)
+          c.header("Link", `<${url.toString()}>; rel="next"`)
+          return c.json(page)
+        }
+
+        return c.json(filtered)
       })
       .post("/session/:sessionID/restore", async (c) => {
         const sessionID = c.req.param("sessionID")
