@@ -109,8 +109,6 @@ export const dict: Record<string, string> = {
   "common.unblock": "Sblocca",
   "common.mute": "Silenzia",
   "common.unmute": "Riattiva audio",
-  "common.pin": "Fissa",
-  "common.unpin": "Rimuovi fissaggio",
   "common.favorite": "Preferito",
   "common.unfavorite": "Rimuovi preferito",
   "common.export": "Esporta",
