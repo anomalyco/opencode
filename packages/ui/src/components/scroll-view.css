@@ -51,15 +51,18 @@
 }
 
 .dark [data-slot="scroll-view-thumb"]::after,
-[data-theme="dark"] [data-slot="scroll-view-thumb"]::after {
-  background-color: var(--border-weak-base);
+[data-theme="dark"] [data-slot="scroll-view-thumb"]::after,
+[data-theme="arc"] [data-slot="scroll-view-thumb"]::after {
+  background-color: rgba(255, 255, 255, 0.18);
 }
 
 .dark [data-slot="scroll-view-thumb"]:hover::after,
 [data-theme="dark"] [data-slot="scroll-view-thumb"]:hover::after,
 .dark [data-slot="scroll-view-thumb"][data-dragging="true"]::after,
-[data-theme="dark"] [data-slot="scroll-view-thumb"][data-dragging="true"]::after {
-  background-color: var(--border-strong-base);
+[data-theme="dark"] [data-slot="scroll-view-thumb"][data-dragging="true"]::after,
+[data-theme="arc"] [data-slot="scroll-view-thumb"]:hover::after,
+[data-theme="arc"] [data-slot="scroll-view-thumb"][data-dragging="true"]::after {
+  background-color: rgba(255, 255, 255, 0.36);
 }
 
 [data-slot="scroll-view-thumb"][data-visible="true"] {
