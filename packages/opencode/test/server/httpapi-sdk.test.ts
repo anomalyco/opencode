@@ -265,7 +265,7 @@ function withProject<A, E, E2 = never>(
 ) {
   return Effect.gen(function* () {
     const directory = yield* tmpdirScoped({
-      git: options.git ?? true,
+      git: options.git ?? false,
       config: { formatter: false, lsp: false, ...options.config },
     })
     yield* options.setup?.(directory) ?? Effect.void
