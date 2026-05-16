@@ -21,11 +21,13 @@ import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import * as Log from "@opencode-ai/core/util/log"
 import { isRecord } from "@/util/record"
-import { SyncEvent } from "@/sync"
-import { SessionEvent } from "@/v2/session-event"
-import { Modelv2 } from "@/v2/model"
+import { EventV2 } from "@opencode-ai/core/event"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { SessionEvent } from "@opencode-ai/core/session-event"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const DOOM_LOOP_THRESHOLD = 3
 const log = Log.create({ service: "session.processor" })
@@ -83,22 +85,7 @@ type StreamEvent = Event
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
-export const layer: Layer.Layer<
-  Service,
-  never,
-  | Session.Service
-  | Config.Service
-  | Bus.Service
-  | Snapshot.Service
-  | Agent.Service
-  | LLM.Service
-  | Permission.Service
-  | Plugin.Service
-  | Image.Service
-  | SessionSummary.Service
-  | SessionStatus.Service
-  | SyncEvent.Service
-> = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const session = yield* Session.Service
@@ -113,7 +100,8 @@ export const layer: Layer.Layer<
     const scope = yield* Scope.Scope
     const status = yield* SessionStatus.Service
     const image = yield* Image.Service
-    const sync = yield* SyncEvent.Service
+    const events = yield* EventV2Bridge.Service
+    const flags = yield* RuntimeFlags.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -232,8 +220,8 @@ export const layer: Layer.Layer<
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
-              yield* sync.run(SessionEvent.Reasoning.Started.Sync, {
+            if (flags.experimentalEventSystem) {
+              yield* events.publish(SessionEvent.Reasoning.Started, {
                 sessionID: ctx.sessionID,
                 reasoningID: value.id,
                 timestamp: DateTime.makeUnsafe(Date.now()),
@@ -267,8 +255,8 @@ export const layer: Layer.Layer<
           case "reasoning-end":
             if (!(value.id in ctx.reasoningMap)) return
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
-              yield* sync.run(SessionEvent.Reasoning.Ended.Sync, {
+            if (flags.experimentalEventSystem) {
+              yield* events.publish(SessionEvent.Reasoning.Ended, {
                 sessionID: ctx.sessionID,
                 reasoningID: value.id,
                 text: ctx.reasoningMap[value.id].text,
@@ -288,8 +276,8 @@ export const layer: Layer.Layer<
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
-              yield* sync.run(SessionEvent.Tool.Input.Started.Sync, {
+            if (flags.experimentalEventSystem) {
+              yield* events.publish(SessionEvent.Tool.Input.Started, {
                 sessionID: ctx.sessionID,
                 callID: value.id,
                 name: value.toolName,
@@ -319,8 +307,8 @@ export const layer: Layer.Layer<
 
           case "tool-input-end": {
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
-              yield* sync.run(SessionEvent.Tool.Input.Ended.Sync, {
+            if (flags.experimentalEventSystem) {
+              yield* events.publish(SessionEvent.Tool.Input.Ended, {
                 sessionID: ctx.sessionID,
                 callID: value.id,
                 text: "",
@@ -336,8 +324,8 @@ export const layer: Layer.Layer<
             }
             const toolCall = yield* readToolCall(value.toolCallId)
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
-              yield* sync.run(SessionEvent.Tool.Called.Sync, {
+            if (flags.experimentalEventSystem) {
+              yield* events.publish(SessionEvent.Tool.Called, {
                 sessionID: ctx.sessionID,
                 callID: value.toolCallId,
                 tool: value.toolName,
@@ -404,7 +392,13 @@ export const layer: Layer.Layer<
             )
             const normalized = yield* Effect.forEach(toolAttachments, (attachment) =>
               attachment.mime.startsWith("image/")
-                ? image.normalize(attachment).pipe(Effect.exit)
+                ? image.normalize(attachment).pipe(
+                    Effect.catchIf(
+                      (error) => error instanceof Image.ResizerUnavailableError,
+                      () => Effect.succeed(attachment),
+                    ),
+                    Effect.exit,
+                  )
                 : Effect.succeed(Exit.succeed<MessageV2.FilePart>(attachment)),
             )
             const omitted = normalized.filter(Exit.isFailure).length
@@ -414,12 +408,12 @@ export const layer: Layer.Layer<
               output:
                 omitted === 0
                   ? value.output.output
-                  : `${value.output.output}\n\n[${omitted} image${omitted === 1 ? "" : "s"} omitted: could not be resized below the inline image size limit.]`,
+                  : `${value.output.output}\n\n[${omitted} image${omitted === 1 ? "" : "s"} omitted: could not be resized below the image size limit.]`,
               attachments: attachments?.length ? attachments : undefined,
             }
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
-              yield* sync.run(SessionEvent.Tool.Success.Sync, {
+            if (flags.experimentalEventSystem) {
+              yield* events.publish(SessionEvent.Tool.Success, {
                 sessionID: ctx.sessionID,
                 callID: value.toolCallId,
                 structured: output.metadata,
@@ -448,8 +442,8 @@ export const layer: Layer.Layer<
           case "tool-error": {
             const toolCall = yield* readToolCall(value.toolCallId)
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
-              yield* sync.run(SessionEvent.Tool.Failed.Sync, {
+            if (flags.experimentalEventSystem) {
+              yield* events.publish(SessionEvent.Tool.Failed, {
                 sessionID: ctx.sessionID,
                 callID: value.toolCallId,
                 error: {
@@ -473,14 +467,14 @@ export const layer: Layer.Layer<
             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
-                yield* sync.run(SessionEvent.Step.Started.Sync, {
+              if (flags.experimentalEventSystem) {
+                yield* events.publish(SessionEvent.Step.Started, {
                   sessionID: ctx.sessionID,
                   agent: input.assistantMessage.agent,
                   model: {
-                    id: Modelv2.ID.make(ctx.model.id),
-                    providerID: Modelv2.ProviderID.make(ctx.model.providerID),
-                    variant: Modelv2.VariantID.make(input.assistantMessage.variant ?? "default"),
+                    id: ModelV2.ID.make(ctx.model.id),
+                    providerID: ProviderV2.ID.make(ctx.model.providerID),
+                    variant: ModelV2.VariantID.make(input.assistantMessage.variant ?? "default"),
                   },
                   snapshot: ctx.snapshot,
                   timestamp: DateTime.makeUnsafe(Date.now()),
@@ -505,8 +499,8 @@ export const layer: Layer.Layer<
             })
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
-                yield* sync.run(SessionEvent.Step.Ended.Sync, {
+              if (flags.experimentalEventSystem) {
+                yield* events.publish(SessionEvent.Step.Ended, {
                   sessionID: ctx.sessionID,
                   finish: value.finishReason,
                   cost: usage.cost,
@@ -562,8 +556,8 @@ export const layer: Layer.Layer<
           case "text-start":
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
-                yield* sync.run(SessionEvent.Text.Started.Sync, {
+              if (flags.experimentalEventSystem) {
+                yield* events.publish(SessionEvent.Text.Started, {
                   sessionID: ctx.sessionID,
                   timestamp: DateTime.makeUnsafe(Date.now()),
                 })
@@ -609,8 +603,8 @@ export const layer: Layer.Layer<
             )).text
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
-                yield* sync.run(SessionEvent.Text.Ended.Sync, {
+              if (flags.experimentalEventSystem) {
+                yield* events.publish(SessionEvent.Text.Ended, {
                   sessionID: ctx.sessionID,
                   text: ctx.currentText.text,
                   timestamp: DateTime.makeUnsafe(Date.now()),
@@ -705,8 +699,8 @@ export const layer: Layer.Layer<
         }
         if (!ctx.assistantMessage.summary) {
           // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-          if (Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM) {
-            yield* sync.run(SessionEvent.Step.Failed.Sync, {
+          if (flags.experimentalEventSystem) {
+            yield* events.publish(SessionEvent.Step.Failed, {
               sessionID: ctx.sessionID,
               error: {
                 type: "unknown",
@@ -759,8 +753,8 @@ export const layer: Layer.Layer<
                 parse,
                 set: (info) => {
                   // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-                  const event = Flag.OPENCODE_EXPERIMENTAL_EVENT_SYSTEM
-                    ? sync.run(SessionEvent.Retried.Sync, {
+                  const event = flags.experimentalEventSystem
+                    ? events.publish(SessionEvent.Retried, {
                         sessionID: ctx.sessionID,
                         attempt: info.attempt,
                         error: {
@@ -821,7 +815,8 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Image.defaultLayer),
     Layer.provide(Bus.layer),
     Layer.provide(Config.defaultLayer),
-    Layer.provide(SyncEvent.defaultLayer),
+    Layer.provide(RuntimeFlags.defaultLayer),
+    Layer.provide(EventV2Bridge.defaultLayer),
   ),
 )
 

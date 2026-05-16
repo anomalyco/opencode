@@ -5,10 +5,10 @@ import type { Agent } from "./agent"
  * Build the `permission` ruleset for a subagent's session when it's spawned
  * via the task tool. Combines:
  *
- * 1. The parent **agent's** deny rules — Plan Mode and other agent-level
- *    restrictions live on the agent ruleset, not on the session, so a
+ * 1. The parent **agent's** edit-class deny rules — Plan Mode's file-edit
+ *    restriction lives on the agent ruleset, not on the session, so a
  *    subagent that only inherited the parent SESSION's permission would
- *    silently bypass them. (#26514)
+ *    silently bypass it. (#26514)
  * 2. The parent **session's** deny rules and external_directory rules —
  *    same forwarding the original code already did.
  * 3. Default `todowrite` and `task` denies if the subagent's own ruleset
@@ -21,7 +21,8 @@ export function deriveSubagentSessionPermission(input: {
 }): Permission.Ruleset {
   const canTask = input.subagent.permission.some((rule) => rule.permission === "task")
   const canTodo = input.subagent.permission.some((rule) => rule.permission === "todowrite")
-  const parentAgentDenies = input.parentAgent?.permission.filter((rule) => rule.action === "deny") ?? []
+  const parentAgentDenies =
+    input.parentAgent?.permission.filter((rule) => rule.action === "deny" && rule.permission === "edit") ?? []
   return [
     ...parentAgentDenies,
     ...input.parentSessionPermission.filter(

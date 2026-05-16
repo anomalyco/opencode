@@ -1,5 +1,6 @@
-import { test, expect, mock, beforeEach } from "bun:test"
-import { Effect } from "effect"
+import { expect, mock, beforeEach } from "bun:test"
+import { Effect, Layer } from "effect"
+import { testEffect } from "../lib/effect"
 
 // Mock UnauthorizedError to match the SDK's class
 class MockUnauthorizedError extends Error {
@@ -111,172 +112,125 @@ beforeEach(() => {
 
 // Import modules after mocking
 const { MCP } = await import("../../src/mcp/index")
-const { Instance } = await import("../../src/project/instance")
-const { WithInstance } = await import("../../src/project/with-instance")
-const { tmpdir } = await import("../fixture/fixture")
+const { Bus } = await import("../../src/bus")
+const { Config } = await import("../../src/config/config")
+const { McpAuth } = await import("../../src/mcp/auth")
+const { McpOAuthProvider } = await import("../../src/mcp/oauth-provider")
+const { AppFileSystem } = await import("@opencode-ai/core/filesystem")
+const { CrossSpawnSpawner } = await import("@opencode-ai/core/cross-spawn-spawner")
 
-test("first connect to OAuth server shows needs_auth instead of failed", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        `${dir}/opencode.json`,
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          mcp: {
-            "test-oauth": {
-              type: "remote",
-              url: "https://example.com/mcp",
-            },
-          },
-        }),
-      )
+const mcpTest = testEffect(
+  Layer.mergeAll(
+    MCP.layer.pipe(
+      Layer.provide(McpAuth.defaultLayer),
+      Layer.provideMerge(Bus.layer),
+      Layer.provide(Config.defaultLayer),
+      Layer.provide(CrossSpawnSpawner.defaultLayer),
+      Layer.provide(AppFileSystem.defaultLayer),
+    ),
+    McpAuth.defaultLayer,
+  ),
+)
+
+const config = (name: string) => ({
+  mcp: {
+    [name]: {
+      type: "remote" as const,
+      url: "https://example.com/mcp",
     },
-  })
-
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const result = await Effect.runPromise(
-        MCP.Service.use((mcp) =>
-          mcp.add("test-oauth", {
-            type: "remote",
-            url: "https://example.com/mcp",
-          }),
-        ).pipe(Effect.provide(MCP.defaultLayer)),
-      )
-
-      const serverStatus = result.status as Record<string, { status: string; error?: string }>
-
-      // The server should be detected as needing auth, NOT as failed.
-      // Before the fix, provider.state() would throw a plain Error
-      // ("No OAuth state saved for MCP server: test-oauth") which was
-      // not caught as UnauthorizedError, causing status to be "failed".
-      expect(serverStatus["test-oauth"]).toBeDefined()
-      expect(serverStatus["test-oauth"].status).toBe("needs_auth")
-    },
-  })
+  },
 })
 
-test("state() generates a new state when none is saved", async () => {
-  const { McpOAuthProvider } = await import("../../src/mcp/oauth-provider")
-  const { McpAuth } = await import("../../src/mcp/auth")
+mcpTest.instance(
+  "first connect to OAuth server shows needs_auth instead of failed",
+  () =>
+    MCP.Service.use((mcp) =>
+      Effect.gen(function* () {
+        const result = yield* mcp.add("test-oauth", {
+          type: "remote",
+          url: "https://example.com/mcp",
+        })
 
-  await using tmp = await tmpdir()
+        const serverStatus = result.status as Record<string, { status: string; error?: string }>
 
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const auth = await Effect.runPromise(
-        Effect.gen(function* () {
-          return yield* McpAuth.Service
-        }).pipe(Effect.provide(McpAuth.defaultLayer)),
-      )
-      const provider = new McpOAuthProvider(
-        "test-state-gen",
-        "https://example.com/mcp",
-        {},
-        { onRedirect: async () => {} },
-        auth,
-      )
+        // The server should be detected as needing auth, NOT as failed.
+        // Before the fix, provider.state() would throw a plain Error
+        // ("No OAuth state saved for MCP server: test-oauth") which was
+        // not caught as UnauthorizedError, causing status to be "failed".
+        expect(serverStatus["test-oauth"]).toBeDefined()
+        expect(serverStatus["test-oauth"].status).toBe("needs_auth")
+      }),
+    ),
+  { config: config("test-oauth") },
+)
 
-      const entryBefore = await Effect.runPromise(
-        McpAuth.Service.use((auth) => auth.get("test-state-gen")).pipe(Effect.provide(McpAuth.defaultLayer)),
-      )
-      expect(entryBefore?.oauthState).toBeUndefined()
+mcpTest.instance("state() generates a new state when none is saved", () =>
+  Effect.gen(function* () {
+    const auth = yield* McpAuth.Service
+    const provider = new McpOAuthProvider(
+      "test-state-gen",
+      "https://example.com/mcp",
+      {},
+      { onRedirect: async () => {} },
+      auth,
+    )
 
-      // state() should generate and return a new state, not throw
-      const state = await provider.state()
-      expect(typeof state).toBe("string")
-      expect(state.length).toBe(64) // 32 bytes as hex
+    const entryBefore = yield* McpAuth.Service.use((auth) => auth.get("test-state-gen"))
+    expect(entryBefore?.oauthState).toBeUndefined()
 
-      // The generated state should be persisted
-      const entryAfter = await Effect.runPromise(
-        McpAuth.Service.use((auth) => auth.get("test-state-gen")).pipe(Effect.provide(McpAuth.defaultLayer)),
-      )
-      expect(entryAfter?.oauthState).toBe(state)
-    },
-  })
-})
+    // state() should generate and return a new state, not throw
+    const state = yield* Effect.promise(() => provider.state())
+    expect(typeof state).toBe("string")
+    expect(state.length).toBe(64) // 32 bytes as hex
 
-test("state() returns existing state when one is saved", async () => {
-  const { McpOAuthProvider } = await import("../../src/mcp/oauth-provider")
-  const { McpAuth } = await import("../../src/mcp/auth")
+    // The generated state should be persisted
+    const entryAfter = yield* McpAuth.Service.use((auth) => auth.get("test-state-gen"))
+    expect(entryAfter?.oauthState).toBe(state)
+  }),
+)
 
-  await using tmp = await tmpdir()
+mcpTest.instance("state() returns existing state when one is saved", () =>
+  Effect.gen(function* () {
+    const auth = yield* McpAuth.Service
+    const provider = new McpOAuthProvider(
+      "test-state-existing",
+      "https://example.com/mcp",
+      {},
+      { onRedirect: async () => {} },
+      auth,
+    )
 
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const auth = await Effect.runPromise(
-        Effect.gen(function* () {
-          return yield* McpAuth.Service
-        }).pipe(Effect.provide(McpAuth.defaultLayer)),
-      )
-      const provider = new McpOAuthProvider(
-        "test-state-existing",
-        "https://example.com/mcp",
-        {},
-        { onRedirect: async () => {} },
-        auth,
-      )
+    // Pre-save a state
+    const existingState = "pre-saved-state-value"
+    yield* McpAuth.Service.use((auth) => auth.updateOAuthState("test-state-existing", existingState))
 
-      // Pre-save a state
-      const existingState = "pre-saved-state-value"
-      await Effect.runPromise(
-        McpAuth.Service.use((auth) => auth.updateOAuthState("test-state-existing", existingState)).pipe(
-          Effect.provide(McpAuth.defaultLayer),
-        ),
-      )
+    // state() should return the existing state
+    const state = yield* Effect.promise(() => provider.state())
+    expect(state).toBe(existingState)
+  }),
+)
 
-      // state() should return the existing state
-      const state = await provider.state()
-      expect(state).toBe(existingState)
-    },
-  })
-})
+mcpTest.instance(
+  "authenticate() stores a connected client when auth completes without redirect",
+  () =>
+    MCP.Service.use((mcp) =>
+      Effect.gen(function* () {
+        const added = yield* mcp.add("test-oauth-connect", {
+          type: "remote",
+          url: "https://example.com/mcp",
+        })
+        const before = added.status as Record<string, { status: string; error?: string }>
+        expect(before["test-oauth-connect"]?.status).toBe("needs_auth")
 
-test("authenticate() stores a connected client when auth completes without redirect", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        `${dir}/opencode.json`,
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          mcp: {
-            "test-oauth-connect": {
-              type: "remote",
-              url: "https://example.com/mcp",
-            },
-          },
-        }),
-      )
-    },
-  })
+        simulateAuthFlow = false
+        connectSucceedsImmediately = true
 
-  await WithInstance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      await Effect.runPromise(
-        MCP.Service.use((mcp) =>
-          Effect.gen(function* () {
-            const added = yield* mcp.add("test-oauth-connect", {
-              type: "remote",
-              url: "https://example.com/mcp",
-            })
-            const before = added.status as Record<string, { status: string; error?: string }>
-            expect(before["test-oauth-connect"]?.status).toBe("needs_auth")
+        const result = yield* mcp.authenticate("test-oauth-connect")
+        expect(result.status).toBe("connected")
 
-            simulateAuthFlow = false
-            connectSucceedsImmediately = true
-
-            const result = yield* mcp.authenticate("test-oauth-connect")
-            expect(result.status).toBe("connected")
-
-            const after = yield* mcp.status()
-            expect(after["test-oauth-connect"]?.status).toBe("connected")
-          }),
-        ).pipe(Effect.provide(MCP.defaultLayer)),
-      )
-    },
-  })
-})
+        const after = yield* mcp.status()
+        expect(after["test-oauth-connect"]?.status).toBe("connected")
+      }),
+    ),
+  { config: config("test-oauth-connect") },
+)

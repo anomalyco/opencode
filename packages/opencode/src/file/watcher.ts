@@ -2,10 +2,11 @@ import { Cause, Effect, Layer, Context, Schema } from "effect"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
-import { readdir } from "fs/promises"
+import { readdir, realpath } from "fs/promises"
 import path from "path"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
+import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Git } from "@/git"
@@ -88,13 +89,13 @@ export const layer = Layer.effect(
           if (!w) return
 
           log.info("watcher backend", { directory: ctx.directory, platform: process.platform, backend })
-
+          const bridge = yield* EffectBridge.make()
           const subs: ParcelWatcher.AsyncSubscription[] = []
           yield* Effect.addFinalizer(() =>
             Effect.promise(() => Promise.allSettled(subs.map((sub) => sub.unsubscribe()))),
           )
 
-          const cb: ParcelWatcher.SubscribeCallback = InstanceState.bind((err, evts) => {
+          const cb: ParcelWatcher.SubscribeCallback = bridge.bind((err, evts) => {
             if (err) return
             for (const evt of evts) {
               if (evt.type === "create") void Bus.publish(Event.Updated, { file: evt.path, event: "add" })
@@ -131,8 +132,14 @@ export const layer = Layer.effect(
             const result = yield* git.run(["rev-parse", "--git-dir"], {
               cwd: ctx.worktree,
             })
-            const vcsDir = result.exitCode === 0 ? path.resolve(ctx.worktree, result.text().trim()) : undefined
-            if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
+            const resolved = result.exitCode === 0 ? path.resolve(ctx.worktree, result.text().trim()) : undefined
+            const vcsDir = resolved ? yield* Effect.promise(() => realpath(resolved).catch(() => resolved)) : undefined
+            if (
+              vcsDir &&
+              !cfgIgnores.includes(".git") &&
+              !cfgIgnores.includes(vcsDir) &&
+              (!resolved || !cfgIgnores.includes(resolved))
+            ) {
               const ignore = (yield* Effect.promise(() => readdir(vcsDir).catch(() => []))).filter(
                 (entry) => entry !== "HEAD",
               )

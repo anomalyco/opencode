@@ -1496,12 +1496,7 @@ export default function Page() {
       return out
     })
 
-  const busy = (sessionID: string) => {
-    if ((sync.data.session_status[sessionID] ?? { type: "idle" as const }).type !== "idle") return true
-    return (sync.data.message[sessionID] ?? []).some(
-      (item) => item.role === "assistant" && typeof item.time.completed !== "number",
-    )
-  }
+  const busy = (sessionID: string) => sync.data.session_working(sessionID)
 
   const queuedFollowups = createMemo(() => {
     const id = params.id
