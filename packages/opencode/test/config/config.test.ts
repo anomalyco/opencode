@@ -1101,9 +1101,6 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
       },
     })
 
-    // TODO: this is a hack to wait for backgruounded gitignore
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
     expect(await Filesystem.exists(path.join(tmp.extra, ".gitignore"))).toBe(true)
     expect(await Filesystem.readText(path.join(tmp.extra, ".gitignore"))).toContain("package-lock.json")
   } finally {

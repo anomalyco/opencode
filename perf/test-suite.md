@@ -57,6 +57,7 @@ Repeated setup work, long sleeps/timeouts, serial integration tests, filesystem/
 | Plugin install concurrency test spends time spawning more workers than needed to exercise lock contention | Reduced worker counts from 12/10/8 to 6/6/5; kept `holdMs: 30`                            | 7.800s    | 6.204s  | keep     | Median from 3 targeted runs; still covers concurrent cross-process writes to server, server+tui, and existing json config. |
 | `httpapi-listen` PTY route tests pay for git repositories they do not assert on                           | Removed `git: true` from temp dirs while keeping config setup                             | 10.554s   | 7.818s  | keep     | Median from 3 targeted runs; HTTP routes, tickets, websocket upgrade, restart, and no-auth paths still pass.               |
 | `workspace.waitForSync` timeout test waits the full production timeout                                    | Added optional timeout parameter defaulting to production timeout; timeout test uses 25ms | 12.949s   | 8.305s  | keep     | Median from 3 targeted runs; production callers keep the 5000ms default.                                                   |
+| `config.test` waits after dependencies even though `.gitignore` is written synchronously                  | Removed obsolete 1000ms sleep from writable `OPENCODE_CONFIG_DIR` test                    | 10.270s   | 9.433s  | keep     | Median from 5 targeted runs because one run was noisy; simpler test and no fixed sleep.                                    |
 
 ## Profiling Results
 
