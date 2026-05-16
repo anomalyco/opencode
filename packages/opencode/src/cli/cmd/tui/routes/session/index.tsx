@@ -1996,10 +1996,13 @@ function WebSearch(props: ToolProps<typeof WebSearchTool>) {
 function Task(props: ToolProps<typeof TaskTool>) {
   const { navigate } = useRoute()
   const sync = useSync()
+  const [sessionMissing, setSessionMissing] = createSignal(false)
 
   onMount(() => {
     if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)
-      void sync.session.sync(props.metadata.sessionId).catch(() => {})
+      sync.session.sync(props.metadata.sessionId).catch(() => {
+        setSessionMissing(true)
+      })
   })
 
   const messages = createMemo(() => sync.data.message[props.metadata.sessionId ?? ""] ?? [])
@@ -2045,10 +2048,6 @@ function Task(props: ToolProps<typeof TaskTool>) {
     return content.join("\n")
   })
 
-  const childExists = createMemo(() =>
-    props.metadata.sessionId ? sync.data.session.some((s) => s.id === props.metadata.sessionId) : false,
-  )
-
   return (
     <InlineTool
       icon="│"
@@ -2056,11 +2055,14 @@ function Task(props: ToolProps<typeof TaskTool>) {
       complete={props.input.description}
       pending="Delegating..."
       part={props.part}
-      onClick={() => {
-        if (props.metadata.sessionId && childExists()) {
-          navigate({ type: "session", sessionID: props.metadata.sessionId })
-        }
-      }}
+      onClick={
+        props.metadata.sessionId && !sessionMissing()
+          ? () => {
+              const sessionID = props.metadata.sessionId
+              if (sessionID) navigate({ type: "session", sessionID })
+            }
+          : undefined
+      }
     >
       {content()}
     </InlineTool>
