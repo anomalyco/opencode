@@ -65,7 +65,7 @@ const modelHttpErrorsQuery = (product: "go" | "zen") => {
         filters,
       },
     ],
-    formulas: [{ name: "ERROR", expression: "IF(GTE($TOTAL, 100), DIV($FAILED, $TOTAL), 0)" }],
+    formulas: [{ name: "ERROR", expression: "IF(GTE($TOTAL, 200), DIV($FAILED, $TOTAL), 0)" }],
     timeRange: 900,
   }).json
 }
