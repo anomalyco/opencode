@@ -3,6 +3,7 @@ import { mkdir, unlink } from "fs/promises"
 import path from "path"
 
 import { disposeAllInstances, tmpdir, withTestInstance } from "../fixture/fixture"
+import { markPluginDependenciesReady } from "../fixture/plugin"
 import { Global } from "@opencode-ai/core/global"
 import type { InstanceContext } from "../../src/project/instance-context"
 import { Plugin } from "../../src/plugin/index"
@@ -94,14 +95,6 @@ async function getSmallModel(providerID: ProviderID, ctx: InstanceContext) {
 
 async function defaultModel(ctx: InstanceContext) {
   return run(ctx, (provider) => provider.defaultModel())
-}
-
-async function markPluginDependenciesReady(dir: string) {
-  await mkdir(path.join(dir, "node_modules"), { recursive: true })
-  await Bun.write(
-    path.join(dir, "package-lock.json"),
-    JSON.stringify({ packages: { "": { dependencies: { "@opencode-ai/plugin": "0.0.0" } } } }),
-  )
 }
 
 function paid(providers: Awaited<ReturnType<typeof list>>) {

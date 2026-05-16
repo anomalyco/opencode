@@ -14,9 +14,11 @@ for (const file of await files) {
     stderr: "pipe",
     env: Bun.env,
   })
-  const output = await new Response(proc.stdout).text()
-  const error = await new Response(proc.stderr).text()
-  const exitCode = await proc.exited
+  const [output, error, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
   const seconds = (performance.now() - start) / 1000
   results.push({ file, seconds, exitCode })
   console.log(`${exitCode === 0 ? "PASS" : "FAIL"} ${seconds.toFixed(3)}s ${file}`)
