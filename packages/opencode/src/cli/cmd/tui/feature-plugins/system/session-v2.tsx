@@ -392,7 +392,7 @@ function AssistantReasoning(props: {
   const thinking = useThinkingMode()
   const [expanded, setExpanded] = createSignal(false)
   const content = createMemo(() => props.part.text.replace("[REDACTED]", "").trim())
-  const inMinimal = createMemo(() => thinking.mode() === "minimal")
+  const inMinimal = createMemo(() => thinking.mode() === "hide")
   // v2 reasoning parts have no per-part `time.end` (see SessionMessageAssistantReasoning
   // in the v2 SDK); we settle on parent-message completion instead.
   const isDone = createMemo(() => props.completedAt() !== undefined)
@@ -404,7 +404,7 @@ function AssistantReasoning(props: {
   }
 
   return (
-    <Show when={content() && thinking.mode() !== "hide"}>
+    <Show when={content()}>
       <Switch>
         <Match when={!inMinimal() || expanded()}>
           <box

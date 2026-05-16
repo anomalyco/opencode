@@ -457,7 +457,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const exists = sessionStore.pinned.includes(sessionID)
             const next = exists
               ? sessionStore.pinned.filter((x) => x !== sessionID)
-              : [sessionID, ...sessionStore.pinned]
+              : [...sessionStore.pinned, sessionID]
             setSessionStore("pinned", next)
             save()
           })
