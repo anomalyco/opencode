@@ -3809,3 +3809,74 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
   })
 })
+
+// canAcceptTrailingAssistant drives:
+//   - prompt.ts:1828 MAX_STEPS message role (assistant vs. user)
+//   - any future caller that wants to know whether trailing-assistant is safe
+//
+// The matrix below uses one representative per thinking-model family rather
+// than one test per concrete model. Adding a new family later means adding
+// one row, not maintaining N copies. See models.dev Model.prefill comment
+// for the full per-family list.
+describe("ProviderTransform.canAcceptTrailingAssistant", () => {
+  const baseCaps = {
+    temperature: true,
+    attachment: false,
+    toolcall: true,
+    input: { text: true, audio: false, image: false, video: false, pdf: false },
+    output: { text: true, audio: false, image: false, video: false, pdf: false },
+    interleaved: false,
+  }
+  const make = (npm: string, reasoning: boolean, prefill?: boolean) =>
+    ({
+      id: ModelID.make("test/model"),
+      providerID: ProviderID.make("test"),
+      name: "test",
+      api: { id: "test", url: "http://localhost", npm },
+      capabilities: { ...baseCaps, reasoning, ...(prefill === undefined ? {} : { prefill }) },
+      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      limit: { context: 1, output: 1 },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "",
+    }) as any
+
+  test("explicit prefill=false wins over any inference", () => {
+    expect(ProviderTransform.canAcceptTrailingAssistant(make("@ai-sdk/anthropic", true, false))).toBe(false)
+  })
+
+  test("explicit prefill=true wins over openai-compatible+reasoning auto-false", () => {
+    expect(ProviderTransform.canAcceptTrailingAssistant(make("@ai-sdk/openai-compatible", true, true))).toBe(true)
+  })
+
+  describe("auto-inference (no explicit capability)", () => {
+    // Representatives of the thinking-on-default class — every 2025-2026
+    // open-weight thinking family hits this regardless of model ID.
+    test("openai-compatible + reasoning -> false (Qwen3/3.5/3.6, DeepSeek-R1, GLM-thinking, Kimi-K2, MiniMax-M2, QwQ class)", () => {
+      expect(ProviderTransform.canAcceptTrailingAssistant(make("@ai-sdk/openai-compatible", true))).toBe(false)
+    })
+
+    test("openai-compatible WITHOUT reasoning -> true (Qwen3-Coder, Qwen2.5 class)", () => {
+      expect(ProviderTransform.canAcceptTrailingAssistant(make("@ai-sdk/openai-compatible", false))).toBe(true)
+    })
+
+    // Non-openai-compatible packages have native handling for thinking;
+    // prefill is generally safe (and Anthropic relies on it).
+    test("anthropic + reasoning -> true (prefill is a Claude feature)", () => {
+      expect(ProviderTransform.canAcceptTrailingAssistant(make("@ai-sdk/anthropic", true))).toBe(true)
+    })
+
+    test("openai (not -compatible) + reasoning -> true", () => {
+      expect(ProviderTransform.canAcceptTrailingAssistant(make("@ai-sdk/openai", true))).toBe(true)
+    })
+
+    test("google + reasoning -> true", () => {
+      expect(ProviderTransform.canAcceptTrailingAssistant(make("@ai-sdk/google", true))).toBe(true)
+    })
+
+    test("bedrock + reasoning -> true (uses Anthropic surface)", () => {
+      expect(ProviderTransform.canAcceptTrailingAssistant(make("@ai-sdk/amazon-bedrock", true))).toBe(true)
+    })
+  })
+})

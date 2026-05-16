@@ -21,6 +21,27 @@ export function sanitizeSurrogates(content: string) {
   return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
 }
 
+// Whether the model accepts an assistant message as the LAST turn in a
+// request ("prefill" / "response continuation").
+//
+// Anthropic and Bedrock-Anthropic accept it (and rely on it for tool-use
+// continuation). Most OpenAI-compatible servers do not when reasoning is
+// enabled, because the chat template branches on `enable_thinking` and rejects
+// a trailing assistant. See the per-family list in models.dev Model.prefill.
+//
+// Precedence:
+//   1. Explicit `model.capabilities.prefill` (from models.dev / user config) wins.
+//   2. Else: openai-compatible + reasoning-capable models default to false,
+//      because every known 2025-2026 open-weight thinking family hits the
+//      template incompat (Qwen3/3.5/3.6 hybrid + Thinking variants, QwQ,
+//      DeepSeek-R1, GLM-4.6/4.7-thinking, Kimi-K2-Thinking, MiniMax-M2).
+//   3. Else: true.
+export function canAcceptTrailingAssistant(model: Provider.Model): boolean {
+  if (model.capabilities.prefill !== undefined) return model.capabilities.prefill
+  if (model.api.npm === "@ai-sdk/openai-compatible" && model.capabilities.reasoning) return false
+  return true
+}
+
 // Maps npm package to the key the AI SDK expects for providerOptions
 function sdkKey(npm: string): string | undefined {
   switch (npm) {

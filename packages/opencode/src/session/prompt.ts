@@ -1825,7 +1825,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               sessionID,
               parentSessionID: session.parentID,
               system,
-              messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
+              // On the final step we inject the MAX_STEPS instruction so the
+              // model wraps up instead of calling more tools. Anthropic-style
+              // providers accept this as an assistant-prefill ("response
+              // continuation"); thinking-on-by-default templates (most
+              // openai-compatible local servers — Qwen3 hybrid/3.5/3.6,
+              // DeepSeek-R1, GLM-thinking, etc.) reject any trailing-assistant
+              // outright. For those, deliver the same instruction as a user
+              // message so it reaches the model without tripping the template.
+              messages: [
+                ...modelMsgs,
+                ...(isLastStep
+                  ? [
+                      {
+                        role: ProviderTransform.canAcceptTrailingAssistant(model) ? ("assistant" as const) : ("user" as const),
+                        content: MAX_STEPS,
+                      },
+                    ]
+                  : []),
+              ],
               tools,
               model,
               toolChoice: format.type === "json_schema" ? "required" : undefined,

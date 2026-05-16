@@ -24,6 +24,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { isRecord } from "@/util/record"
 import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import * as ProviderTransform from "./transform"
+import { CapabilityProbe } from "./capability-probe"
 import { ModelID, ProviderID } from "./schema"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -870,6 +871,12 @@ const ProviderCapabilities = Schema.Struct({
   input: ProviderModalities,
   output: ProviderModalities,
   interleaved: ProviderInterleaved,
+  // Trailing-assistant ("prefill") support. See models.dev Model.prefill for
+  // the per-family rationale. Undefined = true (backwards-compatible default).
+  // Read via `canAcceptTrailingAssistant(model)` rather than checking this
+  // field directly, so the undefined-default and provider-level inference
+  // live in one place.
+  prefill: Schema.optional(Schema.Boolean),
 })
 
 const ProviderCacheCost = Schema.Struct({
@@ -1083,6 +1090,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
         pdf: model.modalities?.output?.includes("pdf") ?? false,
       },
       interleaved: model.interleaved ?? false,
+      prefill: model.prefill,
     },
     release_date: model.release_date ?? "",
     variants: {},
@@ -1267,6 +1275,21 @@ export const layer = Layer.effect(
             models: existing?.models ?? {},
           }
 
+          // Auto-detect prefill/reasoning by probing the live OpenAI-compatible
+          // server (llama.cpp `/props` endpoint). The probe inspects the active
+          // chat template for the `enable_thinking` branch that produces the
+          // trailing-assistant 400. Fail-silent for non-llama.cpp upstreams,
+          // cached per base URL. See CapabilityProbe for details.
+          const providerNpm = provider.npm ?? modelsDev[providerID]?.npm
+          const probeBaseURL =
+            providerNpm === "@ai-sdk/openai-compatible" || !providerNpm
+              ? (parsed.options as { baseURL?: unknown })?.baseURL
+              : undefined
+          const probed: CapabilityProbe.ProbedCapabilities =
+            typeof probeBaseURL === "string" && probeBaseURL
+              ? yield* Effect.promise(() => CapabilityProbe.probe(probeBaseURL))
+              : {}
+
           for (const [modelID, model] of Object.entries(provider.models ?? {})) {
             const existingModel = parsed.models[model.id ?? modelID]
             const apiID = model.id ?? existingModel?.api.id ?? modelID
@@ -1293,7 +1316,7 @@ export const layer = Layer.effect(
               providerID: ProviderID.make(providerID),
               capabilities: {
                 temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
-                reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
+                reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? probed.reasoning ?? false,
                 attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
                 toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
                 input: {
@@ -1319,6 +1342,7 @@ export const layer = Layer.effect(
                   (!existingModel && apiNpm === "@ai-sdk/openai-compatible" && apiID.includes("deepseek")
                     ? { field: "reasoning_content" }
                     : false),
+                prefill: model.prefill ?? existingModel?.capabilities.prefill ?? probed.prefill,
               },
               cost: {
                 input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
