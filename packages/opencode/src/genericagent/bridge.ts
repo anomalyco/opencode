@@ -730,7 +730,7 @@ function trimSessionTitle(title: string): string {
 }
 
 function historySessionInfo(session: HistorySession): SessionInfo {
-  const timestamp = session.mtime * 1000
+  const timestamp = Math.round(session.mtime * 1000)
   return {
     id: session.id,
     slug: session.id,
@@ -793,6 +793,7 @@ export namespace GenericAgentBridge {
         if (sessions.has(session.id)) continue
         sessions.set(session.id, historySessionInfo(session))
       }
+      log.info("genericagent history loaded", { count: historySessions.length })
     }).catch((e) => {
       log.warn("genericagent history initialization failed", { error: e instanceof Error ? e.message : String(e) })
     })

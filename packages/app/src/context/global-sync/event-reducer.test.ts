@@ -250,8 +250,8 @@ describe("applyDirectoryEvent", () => {
   })
 
   test("cleans caches for trimmed sessions on session.created", () => {
-    const dropped = rootSession({ id: "ses_b" })
-    const kept = rootSession({ id: "ses_a" })
+    const dropped = rootSession({ id: "ses_a" })
+    const kept = rootSession({ id: "ses_b" })
     const message = userMessage("msg_1", dropped.id)
     const todos: string[] = []
     const [store, setStore] = createStore(
