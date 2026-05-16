@@ -153,6 +153,10 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   })
 }
 
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {})
+}
+
 if (root instanceof HTMLElement) {
   const auth = authFromToken(new URLSearchParams(location.search).get("auth_token"))
   clearAuthToken()

@@ -52,9 +52,18 @@ function notFound() {
   return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
 }
 
+// Vite content-hashed filenames contain a hash segment (e.g. index-abc123.js)
+const HASHED_ASSET_REGEX = /[-.][\da-f]{8,}\.\w+$/
+
+function cacheControl(file: string) {
+  if (FSUtil.mimeType(file).startsWith("text/html")) return "no-cache"
+  if (HASHED_ASSET_REGEX.test(file)) return "public, max-age=31536000, immutable"
+  return "public, max-age=3600"
+}
+
 function embeddedUIResponse(file: string, body: Uint8Array) {
   const mime = FSUtil.mimeType(file)
-  const headers = new Headers({ "content-type": mime })
+  const headers = new Headers({ "content-type": mime, "cache-control": cacheControl(file) })
   if (mime.startsWith("text/html")) {
     headers.set("content-security-policy", cspForHtml(new TextDecoder().decode(body)))
   }
