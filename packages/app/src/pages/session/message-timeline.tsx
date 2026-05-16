@@ -707,41 +707,24 @@ export function MessageTimeline(props: {
     }
   })
 
-  // Defer virtualization disable when streaming starts so the new message can
-  // paint before all history turns get mounted into the DOM.
+  // Windowing stays active during streaming — tailWindow keeps the active reply
+  // visible while reducing DOM pressure from history turns.
   const [deferredWorking, setDeferredWorking] = createSignal(isWorking())
   createEffect(
     on(isWorking, (working) => {
       if (!working) {
-        const wasDeferred = deferredWorking()
         setDeferredWorking(false)
-        console.warn(
-          `[blank-diag] isWorking→false: deferredWorking was=${wasDeferred} eligible=${eligible().enabled} canWindow will=${!sessionSwitching() && eligible().enabled} visible=${visibleRendered().length} rendered=${rendered().length} time=${performance.now().toFixed(1)}`,
-        )
         return
       }
-      // Let the optimistic message paint first, then disable windowing
-      const eligibleNow = eligible().enabled
-      const canWindowDuringDelay = !deferredWorking() && !sessionSwitching() && eligibleNow
-      console.warn(
-        `[blank-diag] isWorking→true: deferredWorking=${deferredWorking()} eligible=${eligibleNow} canWindowDuringDelay=${canWindowDuringDelay} visible=${visibleRendered().length} rendered=${rendered().length} time=${performance.now().toFixed(1)}`,
-      )
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          const prev = visibleRendered().length
           setDeferredWorking(true)
-          const next = visibleRendered().length
-          if (prev !== next) {
-            console.warn(
-              `[blank-diag] deferredWorking→true: visibleRendered ${prev}→${next} rendered=${rendered().length} canWindow=${canWindow()} time=${performance.now().toFixed(1)}`,
-            )
-          }
         })
       })
     }),
   )
 
-  const canWindow = createMemo(() => !deferredWorking() && !sessionSwitching() && eligible().enabled)
+  const canWindow = createMemo(() => !sessionSwitching() && eligible().enabled)
 
   let prevCanWindow: boolean | undefined
   createEffect(() => {
