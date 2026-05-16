@@ -337,12 +337,11 @@
         color: var(--color-text-secondary);
         font-family: var(--font-sans);
 
-        span,
-        [data-slot="pending-note"] {
+        span {
           display: block;
         }
 
-        [data-slot="pending-note"] {
+        [data-slot="referral-email"] {
           margin-top: var(--space-1);
           color: var(--color-text-muted);
           line-height: 1.4;

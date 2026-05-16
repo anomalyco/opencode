@@ -5,6 +5,7 @@ import { Actor } from "./actor"
 import { Identifier } from "./identifier"
 import { LiteTable } from "./schema/billing.sql"
 import { ReferralRewardTable, ReferralTable } from "./schema/referral.sql"
+import { AuthTable } from "./schema/auth.sql"
 import { UserTable } from "./schema/user.sql"
 import { WorkspaceTable } from "./schema/workspace.sql"
 import { LiteData } from "./lite"
@@ -64,12 +65,14 @@ export namespace Referral {
           referralID: ReferralRewardTable.referralID,
           workspaceID: ReferralRewardTable.workspaceID,
           referralWorkspaceID: ReferralTable.workspaceID,
+          inviteeEmail: AuthTable.subject,
           amount: ReferralRewardTable.amount,
           timeCreated: ReferralRewardTable.timeCreated,
           timeApplied: ReferralRewardTable.timeApplied,
         })
         .from(ReferralRewardTable)
         .innerJoin(ReferralTable, eq(ReferralTable.id, ReferralRewardTable.referralID))
+        .innerJoin(AuthTable, and(eq(AuthTable.accountID, ReferralTable.inviteeAccountID), eq(AuthTable.provider, "email")))
         .where(
           and(
             eq(ReferralRewardTable.workspaceID, workspaceID),
@@ -80,13 +83,15 @@ export namespace Referral {
         .orderBy(desc(ReferralRewardTable.timeCreated))
 
       const invites = await tx
-        .select({ id: ReferralTable.id, timeCreated: ReferralTable.timeCreated })
+        .select({ id: ReferralTable.id, inviteeEmail: AuthTable.subject, timeCreated: ReferralTable.timeCreated })
         .from(ReferralTable)
+        .innerJoin(AuthTable, and(eq(AuthTable.accountID, ReferralTable.inviteeAccountID), eq(AuthTable.provider, "email")))
         .where(and(eq(ReferralTable.workspaceID, workspaceID), isNull(ReferralTable.timeDeleted)))
 
       const inviteeReferrals = await tx
-        .select({ id: ReferralTable.id, timeCreated: ReferralTable.timeCreated })
+        .select({ id: ReferralTable.id, inviteeEmail: AuthTable.subject, timeCreated: ReferralTable.timeCreated })
         .from(ReferralTable)
+        .innerJoin(AuthTable, and(eq(AuthTable.accountID, ReferralTable.inviteeAccountID), eq(AuthTable.provider, "email")))
         .where(and(eq(ReferralTable.inviteeAccountID, accountID), isNull(ReferralTable.timeDeleted)))
 
       const inviteeRewards = await tx
@@ -116,6 +121,7 @@ export namespace Referral {
       id: reward.referralID,
       source: reward.workspaceID === reward.referralWorkspaceID ? ("inviter" as const) : ("invitee" as const),
       status: reward.timeApplied ? ("applied" as const) : ("available" as const),
+      email: reward.inviteeEmail,
       amount: microCentsToCents(reward.amount),
       timeCreated: reward.timeCreated,
       timeApplied: reward.timeApplied,
@@ -127,6 +133,7 @@ export namespace Referral {
           id: `${referral.id}:inviter`,
           source: "inviter" as const,
           status: "pending" as const,
+          email: referral.inviteeEmail,
           amount: microCentsToCents(REWARD_AMOUNT),
           timeCreated: referral.timeCreated,
           timeApplied: null,
@@ -137,6 +144,7 @@ export namespace Referral {
           id: `${referral.id}:invitee`,
           source: "invitee" as const,
           status: "pending" as const,
+          email: referral.inviteeEmail,
           amount: microCentsToCents(REWARD_AMOUNT),
           timeCreated: referral.timeCreated,
           timeApplied: null,

@@ -18,6 +18,7 @@ import "./go-referral.css"
 export type GoReferralReward = {
   id: string
   amount: number
+  email: string
   source: "inviter" | "invitee"
   status: "pending" | "available" | "applied"
   timeCreated: string | Date
@@ -180,17 +181,12 @@ function formatDate(value: string | Date, locale: string) {
   return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value))
 }
 
-function rewardSourceKey(reward: GoReferralReward) {
+function rewardTitleKey(reward: GoReferralReward) {
   if (reward.status === "pending" && reward.source === "invitee")
     return "workspace.referral.reward.source.pendingInvitee" as const
   if (reward.status === "pending") return "workspace.referral.reward.source.pendingInviter" as const
-  if (reward.source === "invitee") return "workspace.referral.reward.source.invitee" as const
-  return "workspace.referral.reward.source.inviter" as const
-}
-
-function rewardPendingKey(source: GoReferralReward["source"]) {
-  if (source === "invitee") return "workspace.referral.reward.pending.invitee" as const
-  return "workspace.referral.reward.pending.inviter" as const
+  if (reward.status === "applied") return "workspace.referral.reward.source.applied" as const
+  return "workspace.referral.reward.source.available" as const
 }
 
 function rewardPendingStatusKey(source: GoReferralReward["source"]) {
@@ -338,10 +334,8 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
                     <tr data-status={reward.status} data-source={reward.source}>
                       <td data-slot="referral-amount">{formatCurrency(reward.amount)}</td>
                       <td data-slot="referral-source">
-                        <span>{i18n.t(rewardSourceKey(reward))}</span>
-                        <Show when={pending()}>
-                          <span data-slot="pending-note">{i18n.t(rewardPendingKey(reward.source))}</span>
-                        </Show>
+                        <span>{i18n.t(rewardTitleKey(reward))}</span>
+                        <span data-slot="referral-email">{reward.email}</span>
                       </td>
                       <td data-slot="referral-date" title={earnedAt()}>
                         {earnedAt()}
