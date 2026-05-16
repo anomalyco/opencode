@@ -1,4 +1,5 @@
 import { Provider } from "@/provider/provider"
+import { ProviderConcurrency } from "@/provider/concurrency"
 import * as Log from "@opencode-ai/core/util/log"
 import { Context, Effect, Layer, Record } from "effect"
 import * as Stream from "effect/Stream"
@@ -62,7 +63,13 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/LL
 const live: Layer.Layer<
   Service,
   never,
-  Auth.Service | Config.Service | Provider.Service | Plugin.Service | Permission.Service | RuntimeFlags.Service
+  | Auth.Service
+  | Config.Service
+  | Provider.Service
+  | Plugin.Service
+  | Permission.Service
+  | RuntimeFlags.Service
+  | ProviderConcurrency.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -72,6 +79,7 @@ const live: Layer.Layer<
     const plugin = yield* Plugin.Service
     const perm = yield* Permission.Service
     const flags = yield* RuntimeFlags.Service
+    const providerConcurrency = yield* ProviderConcurrency.Service
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
       const l = log
@@ -413,6 +421,9 @@ const live: Layer.Layer<
               (ctrl) => Effect.sync(() => ctrl.abort()),
             )
 
+            const item = yield* provider.getProvider(input.model.providerID)
+            yield* providerConcurrency.acquire(input.model.providerID, item.options?.maxConcurrency)
+
             const result = yield* run({ ...input, abort: ctrl.signal })
 
             return Stream.fromAsyncIterable(result.fullStream, (e) => (e instanceof Error ? e : new Error(String(e))))
@@ -424,7 +435,7 @@ const live: Layer.Layer<
   }),
 )
 
-export const layer = live.pipe(Layer.provide(Permission.defaultLayer))
+export const layer = live.pipe(Layer.provide(Permission.defaultLayer), Layer.provide(ProviderConcurrency.defaultLayer))
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(

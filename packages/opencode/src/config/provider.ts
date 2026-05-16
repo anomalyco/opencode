@@ -100,6 +100,10 @@ export const Info = Schema.Struct({
           description:
             "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
         }),
+        maxConcurrency: Schema.optional(PositiveInt).annotate({
+          description:
+            "Maximum number of concurrent requests to this provider. Set to 1 to force sequential requests. Omit to disable the limit.",
+        }),
       }),
       [Schema.Record(Schema.String, Schema.Any)],
     ),
