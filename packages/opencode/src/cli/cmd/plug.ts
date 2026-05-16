@@ -1,3 +1,4 @@
+import { EOL } from "os"
 import { intro, log, outro, spinner } from "@clack/prompts"
 import { Effect } from "effect"
 
@@ -44,8 +45,21 @@ export type PlugCtx = {
   directory: string
 }
 
+export function createPlugSpinner(
+  options: {
+    isTTY?: boolean
+    write?: (msg: string) => void
+  } = {},
+): Spin {
+  if (options.isTTY ?? process.stdout.isTTY) return spinner()
+  return {
+    start: (msg) => (options.write ?? process.stderr.write.bind(process.stderr))(`${msg}${EOL}`),
+    stop: (msg) => (options.write ?? process.stderr.write.bind(process.stderr))(`${msg}${EOL}`),
+  }
+}
+
 const defaultPlugDeps: PlugDeps = {
-  spinner: () => spinner(),
+  spinner: () => createPlugSpinner(),
   log: {
     error: (msg) => log.error(msg),
     info: (msg) => log.info(msg),
