@@ -15,7 +15,7 @@ function uid() {
   return SessionID.make(crypto.randomUUID())
 }
 
-function seed(opts: { id: SessionID; dir: string; project: ProjectID }) {
+function seed(opts: { id: SessionID; dir: string; project: ProjectID; created?: number; updated?: number }) {
   const now = Date.now()
   Database.use((db) =>
     db
@@ -27,8 +27,8 @@ function seed(opts: { id: SessionID; dir: string; project: ProjectID }) {
         directory: opts.dir,
         title: "test",
         version: "0.0.0-test",
-        time_created: now,
-        time_updated: now,
+        time_created: opts.created ?? now,
+        time_updated: opts.updated ?? now,
       })
       .run(),
   )
@@ -74,6 +74,31 @@ describe("migrateFromGlobal", () => {
     const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
     expect(row).toBeDefined()
     expect(row!.project_id).toBe(real.id)
+  })
+
+  test("preserves session updated time while migrating project ID", async () => {
+    await using tmp = await tmpdir()
+    await $`git init`.cwd(tmp.path).quiet()
+    await $`git config user.name "Test"`.cwd(tmp.path).quiet()
+    await $`git config user.email "test@opencode.test"`.cwd(tmp.path).quiet()
+    const { project: pre } = await Project.fromDirectory(tmp.path)
+    expect(pre.id).toBe(ProjectID.global)
+
+    const id = uid()
+    const created = new Date("2026-01-30T00:00:00.000Z").getTime()
+    const updated = new Date("2026-01-30T00:30:00.000Z").getTime()
+    seed({ id, dir: tmp.path, project: ProjectID.global, created, updated })
+
+    await $`git commit --allow-empty -m "root"`.cwd(tmp.path).quiet()
+
+    const { project: real } = await Project.fromDirectory(tmp.path)
+    expect(real.id).not.toBe(ProjectID.global)
+
+    const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
+    expect(row).toBeDefined()
+    expect(row!.project_id).toBe(real.id)
+    expect(row!.time_created).toBe(created)
+    expect(row!.time_updated).toBe(updated)
   })
 
   test("migrates global sessions even when project row already exists", async () => {

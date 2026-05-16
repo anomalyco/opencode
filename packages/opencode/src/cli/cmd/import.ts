@@ -4,7 +4,7 @@ import { Session } from "../../session"
 import { MessageV2 } from "../../session/message-v2"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
-import { Database } from "../../storage/db"
+import { Database, sql } from "../../storage/db"
 import { SessionTable, MessageTable, PartTable } from "../../session/session.sql"
 import { Instance } from "../../project/instance"
 import { ShareNext } from "../../share/share-next"
@@ -162,7 +162,10 @@ export const ImportCommand = cmd({
         db
           .insert(SessionTable)
           .values(row)
-          .onConflictDoUpdate({ target: SessionTable.id, set: { project_id: row.project_id } })
+          .onConflictDoUpdate({
+            target: SessionTable.id,
+            set: { project_id: row.project_id, time_updated: sql`${SessionTable.time_updated}` },
+          })
           .run(),
       )
 

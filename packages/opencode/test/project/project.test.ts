@@ -88,10 +88,14 @@ describe("Project.fromDirectory", () => {
     expect(await Bun.file(opencodeFile).exists()).toBe(true)
   })
 
-  test("returns global for non-git directory", async () => {
+  test("derives stable project ID from non-git directory", async () => {
     await using tmp = await tmpdir()
-    const { project } = await Project.fromDirectory(tmp.path)
-    expect(project.id).toBe(ProjectID.global)
+    const { project: a } = await Project.fromDirectory(tmp.path)
+    const { project: b } = await Project.fromDirectory(tmp.path)
+    expect(a.id).not.toBe(ProjectID.global)
+    expect(b.id).toBe(a.id)
+    expect(a.worktree).toBe(tmp.path)
+    expect(a.vcs).toBeUndefined()
   })
 
   test("derives stable project ID from root commit", async () => {
