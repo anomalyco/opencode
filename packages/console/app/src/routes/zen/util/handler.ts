@@ -123,7 +123,7 @@ export async function handler(
       ? createIpRateLimiter(modelInfo.id, modelInfo.rateLimit, ip, input.request)
       : createKeyRateLimiter(modelInfo.id, modelInfo.rateLimit, zenApiKey, input.request)
     await rateLimiter?.check()
-    const stickyTracker = createStickyTracker(modelInfo.stickyProvider, sessionId)
+    const stickyTracker = createStickyTracker(modelInfo.id, modelInfo.stickyProvider, sessionId)
     const stickyProvider = await stickyTracker?.get()
     const authInfo = await authenticate(modelInfo, zenApiKey)
     const billingSource = validateBilling(authInfo, modelInfo)
@@ -216,7 +216,7 @@ export async function handler(
         // ie. 400 error is usually provider error like malformed request
         res.status !== 400 &&
         // ie. openai 404 error: Item with id 'msg_0ead8b004a3b165d0069436a6b6834819896da85b63b196a3f' not found.
-        res.status !== 404 &&
+        !(modelInfo.id.startsWith("gpt-") && res.status === 404) &&
         // ie. cannot change codex model providers mid-session
         modelInfo.stickyProvider !== "strict" &&
         modelInfo.fallbackProvider &&
@@ -238,7 +238,7 @@ export async function handler(
     dataDumper?.provideRequest(reqBody)
 
     // Store sticky provider
-    await stickyTracker?.set(providerInfo.id)
+    if (res.status === 200) await stickyTracker?.set(providerInfo.id)
 
     // Temporarily change 404 to 400 status code b/c solid start automatically override 404 response
     const resStatus = res.status === 404 ? 400 : res.status
@@ -299,7 +299,6 @@ export async function handler(
         let buffer = ""
         let responseLength = 0
         let timestampFirstByte = 0
-        let timestampLastByte = 0
 
         function pump(): Promise<void> {
           return (
@@ -321,6 +320,7 @@ export async function handler(
                   await modelTpsLimiter?.track(
                     providerInfo.id,
                     providerInfo.model,
+                    providerInfo.tpsGoal,
                     timestampFirstByte,
                     timestampLastByte,
                     usageInfo,
@@ -526,7 +526,7 @@ export async function handler(
           })
           .filter((provider) => {
             if (!provider.tpsGoal) return true
-            const isLowTps = modelTpsLimits?.[`${provider.id}/${provider.model}`] ?? false
+            const isLowTps = modelTpsLimits?.[`${provider.id}/${provider.model}/${provider.tpsGoal}`] ?? false
             return !isLowTps
           })
           .map((provider) => {

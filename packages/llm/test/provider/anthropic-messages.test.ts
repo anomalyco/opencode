@@ -124,7 +124,7 @@ describe("Anthropic Messages route", () => {
         providerMetadata: { anthropic: { signature: "sig_1" } },
       })
       expect(response.events.at(-1)).toMatchObject({
-        type: "request-finish",
+        type: "finish",
         reason: "stop",
         providerMetadata: { anthropic: { stopSequence: "\n\nHuman:" } },
       })
@@ -182,7 +182,7 @@ describe("Anthropic Messages route", () => {
         },
         { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
         {
-          type: "request-finish",
+          type: "finish",
           reason: "tool-calls",
           providerMetadata: undefined,
           usage,
@@ -275,7 +275,7 @@ describe("Anthropic Messages route", () => {
         providerMetadata: { anthropic: { blockType: "web_search_tool_result" } },
       })
       expect(response.text).toBe("Found it.")
-      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "stop" })
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
     }),
   )
 

@@ -1,7 +1,7 @@
 import { sqliteTable, text, integer, index, primaryKey, real } from "drizzle-orm/sqlite-core"
 import { ProjectTable } from "../project/project.sql"
 import type { MessageV2 } from "./message-v2"
-import type { SessionMessage } from "../v2/session-message"
+import type { SessionMessage } from "@opencode-ai/core/session-message"
 import type { Snapshot } from "../snapshot"
 import type { Permission } from "../permission"
 import type { ProjectID } from "../project/schema"
