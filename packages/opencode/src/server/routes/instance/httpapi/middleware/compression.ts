@@ -13,11 +13,12 @@ const STREAMING_POST_REGEX = /^\/session\/[^/]+\/(?:message|prompt_async)$/
 
 const THRESHOLD_BYTES = 1024
 
-type Encoding = "gzip" | "deflate"
+type Encoding = "zstd" | "gzip" | "deflate"
 
 function pickEncoding(acceptEncoding: string | undefined): Encoding | undefined {
   if (!acceptEncoding) return undefined
   const lower = acceptEncoding.toLowerCase()
+  if (lower.includes("zstd")) return "zstd"
   if (lower.includes("gzip")) return "gzip"
   if (lower.includes("deflate")) return "deflate"
   return undefined
@@ -54,7 +55,12 @@ export const compressionLayer = HttpRouter.middleware<{ handles: unknown }>()((e
     const encoding = pickEncoding(request.headers["accept-encoding"])
     if (!encoding) return response
 
-    const compressed = encoding === "gzip" ? gzipSync(body.body) : deflateSync(body.body)
+    const compressed =
+      encoding === "zstd"
+        ? Bun.zstdCompressSync(body.body)
+        : encoding === "gzip"
+          ? gzipSync(body.body)
+          : deflateSync(body.body)
     return HttpServerResponse.setHeader(
       HttpServerResponse.setBody(response, HttpBody.uint8Array(compressed, contentType)),
       "content-encoding",
