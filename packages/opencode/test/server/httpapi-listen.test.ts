@@ -169,7 +169,7 @@ async function openPtySocket(listener: Awaited<ReturnType<typeof startListener>>
 
 describe("HttpApi Server.listen", () => {
   testPty("serves HTTP routes and upgrades PTY websocket through Server.listen", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     const listener = await startListener()
     let stopped = false
     try {
@@ -330,7 +330,7 @@ describe("HttpApi Server.listen", () => {
   })
 
   testPty("rejects unsafe PTY ticket mint and connect requests", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     const listener = await startListener()
     try {
       const info = await createCat(listener, tmp.path)
@@ -367,7 +367,7 @@ describe("HttpApi Server.listen", () => {
   //   2. Mint with the project directory succeeds; the resulting ticket
   //      consumes cleanly when the WS upgrade carries the same directory.
   testPty("PTY connect token requires matching directory across mint and connect", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     const listener = await startListener()
     try {
       const info = await createCat(listener, tmp.path)
@@ -402,7 +402,7 @@ describe("HttpApi Server.listen", () => {
   })
 
   testPty("keeps PTY websocket tickets optional when server auth is disabled", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     const listener = await startNoAuthListener()
     try {
       const info = await createCat(listener, tmp.path)

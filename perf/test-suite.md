@@ -55,6 +55,7 @@ Repeated setup work, long sleeps/timeouts, serial integration tests, filesystem/
 | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | --------- | ------- | -------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Repeated full-suite runs are too expensive for discovery                                                  | Switched full-suite benchmark to one run and added per-file profiler | ~250s/run | pending | keep     | Bun has no slowest-test reporter in this version; profile files directly.                                                  |
 | Plugin install concurrency test spends time spawning more workers than needed to exercise lock contention | Reduced worker counts from 12/10/8 to 6/6/5; kept `holdMs: 30`       | 7.800s    | 6.204s  | keep     | Median from 3 targeted runs; still covers concurrent cross-process writes to server, server+tui, and existing json config. |
+| `httpapi-listen` PTY route tests pay for git repositories they do not assert on                           | Removed `git: true` from temp dirs while keeping config setup        | 10.554s   | 7.818s  | keep     | Median from 3 targeted runs; HTTP routes, tickets, websocket upgrade, restart, and no-auth paths still pass.               |
 
 ## Profiling Results
 
