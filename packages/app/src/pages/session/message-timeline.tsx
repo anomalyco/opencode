@@ -592,10 +592,16 @@ export function MessageTimeline(props: {
   createEffect(
     on(sessionID, (newID, prevID) => {
       if (prevID !== undefined && newID !== prevID) {
+        console.warn(
+          `[flash-debug] sessionSwitching: prev=${prevID} new=${newID} time=${performance.now().toFixed(1)}`,
+        )
         setSessionSwitching(true)
         // Re-enable windowing after a delay to allow messages to render and collect height data
         makeTimer(
           () => {
+            console.warn(
+              `[flash-debug] sessionSwitching:done id=${newID} time=${performance.now().toFixed(1)}`,
+            )
             setSessionSwitching(false)
           },
           500,
@@ -674,13 +680,29 @@ export function MessageTimeline(props: {
   createEffect(
     on(isWorking, (working) => {
       if (!working) {
+        const wasDeferred = deferredWorking()
         setDeferredWorking(false)
+        console.warn(
+          `[blank-diag] isWorking→false: deferredWorking was=${wasDeferred} eligible=${eligible().enabled} canWindow will=${!sessionSwitching() && eligible().enabled} visible=${visibleRendered().length} rendered=${rendered().length} time=${performance.now().toFixed(1)}`,
+        )
         return
       }
       // Let the optimistic message paint first, then disable windowing
+      const eligibleNow = eligible().enabled
+      const canWindowDuringDelay = !deferredWorking() && !sessionSwitching() && eligibleNow
+      console.warn(
+        `[blank-diag] isWorking→true: deferredWorking=${deferredWorking()} eligible=${eligibleNow} canWindowDuringDelay=${canWindowDuringDelay} visible=${visibleRendered().length} rendered=${rendered().length} time=${performance.now().toFixed(1)}`,
+      )
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
+          const prev = visibleRendered().length
           setDeferredWorking(true)
+          const next = visibleRendered().length
+          if (prev !== next) {
+            console.warn(
+              `[blank-diag] deferredWorking→true: visibleRendered ${prev}→${next} rendered=${rendered().length} canWindow=${canWindow()} time=${performance.now().toFixed(1)}`,
+            )
+          }
         })
       })
     }),
@@ -961,7 +983,11 @@ export function MessageTimeline(props: {
     const pinned = streaming && !props.seekingMessageId && !!before && before.gap <= 16
     const jumping = props.jumpToBottomIntent()
 
-
+    if (isWorking() && !streaming && !seek) {
+      console.warn(
+        `[blank-diag] applyWindow during working (user scrolled): live=${props.live} canWindow=${canWindow()} deferredWorking=${deferredWorking()} gesture=${props.hasScrollGesture()} scrollTop=${before?.top ?? "none"} gap=${before?.gap ?? "none"} window=[${windowed.start},${windowed.end}] visible=${visibleRendered().length} rendered=${rendered().length} time=${performance.now().toFixed(1)}`,
+      )
+    }
     const viewportAnchor = (pinned || jumping) ? undefined : captureWindowAnchor()
     const targetId = props.currentMessageId ?? activeMessageID() ?? viewportAnchor?.id
     const targetAnchor = captureMessageAnchor(targetId)
@@ -1121,6 +1147,20 @@ export function MessageTimeline(props: {
     const ids = rendered()
     if (!canWindow()) return ids
     return ids.slice(windowed.start, Math.min(ids.length, windowed.end))
+  })
+
+  let prevVisibleCount = 0
+  createEffect(() => {
+    const count = visibleRendered().length
+    const total = rendered().length
+    if (prevVisibleCount !== 0 && count !== prevVisibleCount && isWorking()) {
+      const root = viewport
+      const data = root ? snap(root) : undefined
+      console.warn(
+        `[blank-diag] visibleRendered changed during streaming: ${prevVisibleCount}→${count} total=${total} canWindow=${canWindow()} deferredWorking=${deferredWorking()} live=${props.live} window=[${windowed.start},${windowed.end}] scrollTop=${data?.top ?? "none"} gap=${data?.gap ?? "none"} gesture=${props.hasScrollGesture()} time=${performance.now().toFixed(1)}`,
+      )
+    }
+    prevVisibleCount = count
   })
 
   const turnStage = (id: string): MarkdownStage => {
@@ -2135,6 +2175,9 @@ export function MessageTimeline(props: {
           viewportRef={(el) => {
             viewport = el
             props.setScrollRef(el)
+            console.warn(
+              `[flash-debug] MessageTimeline:viewportRef mounted scrollHeight=${el.scrollHeight} clientHeight=${el.clientHeight} scrollTop=${el.scrollTop} time=${performance.now().toFixed(1)}`,
+            )
             scheduleWindow()
           }}
           onWheel={(e) => {
@@ -2178,6 +2221,12 @@ export function MessageTimeline(props: {
             props.onScheduleScrollState(e.currentTarget)
             audit("scroll")
             const gesture = props.hasScrollGesture()
+            if (gesture && isWorking() && !props.live && (windowed.top > 0 || windowed.bottom > 0)) {
+              const data = snap(root)
+              console.warn(
+                `[blank-diag] scroll during streaming with spacers: canWindow=${canWindow()} shouldWin=${shouldWin} visible=${visibleRendered().length} rendered=${rendered().length} scrollTop=${data.top} gap=${data.gap} spacerTop=${windowed.top} spacerBottom=${windowed.bottom} window=[${windowed.start},${windowed.end}]`,
+              )
+            }
             // Programmatic scroll corrections also emit scroll events. Only let
             // real user gestures drive the auto-scroll state machine, otherwise
             // streaming or anchor correction gets misclassified as manual exit
