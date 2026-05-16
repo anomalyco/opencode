@@ -100,4 +100,6 @@ Targeted 3-run baselines:
 
 ## Dead Ends
 
-None yet.
+| Hypothesis                                                             | Change Tried                                                                             | Before |  After | Decision | Notes                                                                                         |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | -----: | -----: | -------- | --------------------------------------------------------------------------------------------- |
+| `file/index.test.ts` pays unnecessary per-test global instance cleanup | Removed `afterEach(disposeAllInstances)` while keeping the explicit disposal test import | 5.262s | 5.089s | discard  | Improvement was within noise and the cleanup is a safety guard for many instance-state tests. |
