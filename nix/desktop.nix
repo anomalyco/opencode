@@ -14,7 +14,12 @@ let
 in
 stdenv.mkDerivation (finalAttrs: {
   pname = "opencode-desktop";
-  inherit (opencode) version src node_modules;
+  inherit (opencode)
+    version
+    src
+    node_modules
+    patches
+    ;
 
   nativeBuildInputs = [
     bun
@@ -88,6 +93,12 @@ stdenv.mkDerivation (finalAttrs: {
     + ''
       runHook postInstall
     '';
+
+  # --config.mac.identity=null above skips signing; macOS refuses to
+  # launch unsigned binaries — re-sign ad-hoc here.
+  postFixup = lib.optionalString stdenv.hostPlatform.isDarwin ''
+    /usr/bin/codesign --force --deep --sign - "$out/Applications/OpenCode.app"
+  '';
 
   autoPatchelfIgnoreMissingDeps = [
     "libc.musl-x86_64.so.1"
