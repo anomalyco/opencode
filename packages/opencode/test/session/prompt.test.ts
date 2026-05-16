@@ -323,6 +323,18 @@ const waitForBusy = (sessionID: SessionID, duration: Duration.Input = "2 seconds
     duration,
   )
 
+// Busy status is the deterministic signal that shell cancellation will hit a registered runner.
+const waitForBusy = (sessionID: SessionID, duration: Duration.Input = "2 seconds") =>
+  pollWithTimeout(
+    Effect.gen(function* () {
+      const status = yield* SessionStatus.Service
+      const s = yield* status.get(sessionID)
+      return s.type === "busy" ? (true as const) : undefined
+    }),
+    `session ${sessionID} never became busy`,
+    duration,
+  )
+
 const hasBash = Effect.sync(() => Bun.which("bash") !== null)
 
 const deferredAsPromise = <A>(deferred: Deferred.Deferred<A>): PromiseLike<A> => ({
@@ -1069,6 +1081,7 @@ it.instance(
         expect(exitA.value.info.id).toBe(exitB.value.info.id)
       }
     }),
+  { git: true },
   3_000,
 )
 
@@ -1452,6 +1465,7 @@ it.instance(
       }
       expect(yield* llm.calls).toBe(1)
     }),
+  { git: true },
   3_000,
 )
 
@@ -1490,6 +1504,7 @@ it.instance(
       }
       expect(yield* llm.calls).toBe(1)
     }),
+  { git: true },
   3_000,
 )
 
@@ -1556,7 +1571,7 @@ unix(
         }
       }),
     ),
-  { config: cfg },
+  { git: true, config: cfg },
   30_000,
 )
 
@@ -1600,7 +1615,7 @@ unix(
         }
       }),
     ),
-  { config: cfg },
+  { git: true, config: cfg },
   30_000,
 )
 
@@ -1649,6 +1664,7 @@ unix(
       expect(tool.state.output).toMatch(/Full output saved to:\s+\S+/)
       expect(tool.state.output).not.toContain("Tool execution aborted")
     }),
+  { git: true },
   30_000,
 )
 
@@ -1675,7 +1691,7 @@ unix(
 
       yield* Fiber.await(sh)
     }),
-  { config: cfg },
+  { git: true, config: cfg },
   30_000,
 )
 
@@ -1701,7 +1717,7 @@ unix(
         yield* Fiber.await(a)
       }),
     ),
-  { config: cfg },
+  { git: true, config: cfg },
   30_000,
 )
 

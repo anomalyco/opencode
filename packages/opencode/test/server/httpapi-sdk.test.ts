@@ -516,7 +516,7 @@ describe("HttpApi SDK", () => {
   )
 
   serverPathParity("matches generated SDK instance read routes", (serverPath) =>
-    withStandardProject(serverPath, ({ sdk, directory }) =>
+    withProject(serverPath, { git: true, setup: writeStandardFiles }, ({ sdk, directory }) =>
       Effect.gen(function* () {
         const project = yield* capture(() => sdk.project.current())
         const projects = yield* capture(() => sdk.project.list())
@@ -561,6 +561,7 @@ describe("HttpApi SDK", () => {
           foundFile: JSON.stringify(findFiles.data).includes("hello.txt"),
           foundText: JSON.stringify(findText.data ?? null).includes("sdk-parity"),
           listedFile: JSON.stringify(files.data).includes("hello.txt"),
+          vcs: { hasBranch: typeof record(vcs.data).branch === "string" },
         }
       }),
     ),
@@ -887,7 +888,7 @@ describe("HttpApi SDK", () => {
   )
 
   serverPathParity("matches generated SDK project git initialization", (serverPath) =>
-    withProject(serverPath, { git: false }, ({ sdk, directory }) =>
+    withProject(serverPath, {}, ({ sdk, directory }) =>
       Effect.gen(function* () {
         const before = yield* capture(() => sdk.project.current())
         const init = yield* capture(() => sdk.project.initGit())

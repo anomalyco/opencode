@@ -2,6 +2,15 @@ const warmups = Number(Bun.env.BENCH_WARMUPS ?? 0)
 const runs = Number(Bun.env.BENCH_RUNS ?? 1)
 const timings: number[] = []
 
+if (!Number.isInteger(warmups) || warmups < 0) {
+  console.error("BENCH_WARMUPS must be a non-negative integer")
+  process.exit(1)
+}
+if (!Number.isInteger(runs) || runs < 1) {
+  console.error("BENCH_RUNS must be a positive integer")
+  process.exit(1)
+}
+
 for (const index of Array.from({ length: warmups + runs }, (_, index) => index)) {
   const measured = index >= warmups
   const label = measured ? `run ${index - warmups + 1}/${runs}` : `warmup ${index + 1}/${warmups}`
