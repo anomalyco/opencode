@@ -532,6 +532,8 @@ export const dict = {
   "common.learnMore": "Dowiedz się więcej",
   "common.rename": "Zmień nazwę",
   "common.reset": "Resetuj",
+  "common.pin": "Pin",
+  "common.unpin": "Unpin",
   "common.archive": "Archiwizuj",
   "common.delete": "Usuń",
   "common.close": "Zamknij",

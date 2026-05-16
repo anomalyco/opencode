@@ -588,6 +588,8 @@ export const dict = {
   "common.learnMore": "เรียนรู้เพิ่มเติม",
   "common.rename": "เปลี่ยนชื่อ",
   "common.reset": "รีเซ็ต",
+  "common.pin": "Pin",
+  "common.unpin": "Unpin",
   "common.archive": "จัดเก็บ",
   "common.delete": "ลบ",
   "common.close": "ปิด",

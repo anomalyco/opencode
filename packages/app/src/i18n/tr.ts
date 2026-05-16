@@ -600,6 +600,8 @@ export const dict = {
   "common.learnMore": "Daha fazla bilgi",
   "common.rename": "Yeniden adlandır",
   "common.reset": "Sıfırla",
+  "common.pin": "Pin",
+  "common.unpin": "Unpin",
   "common.archive": "Arşivle",
   "common.delete": "Sil",
   "common.close": "Kapat",

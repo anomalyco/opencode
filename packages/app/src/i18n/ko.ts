@@ -528,6 +528,8 @@ export const dict = {
   "common.learnMore": "더 알아보기",
   "common.rename": "이름 바꾸기",
   "common.reset": "초기화",
+  "common.pin": "Pin",
+  "common.unpin": "Unpin",
   "common.archive": "보관",
   "common.delete": "삭제",
   "common.close": "닫기",

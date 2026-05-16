@@ -527,6 +527,8 @@ export const dict = {
   "common.learnMore": "اعرف المزيد",
   "common.rename": "إعادة تسمية",
   "common.reset": "إعادة تعيين",
+  "common.pin": "Pin",
+  "common.unpin": "Unpin",
   "common.archive": "أرشفة",
   "common.delete": "حذف",
   "common.close": "إغلاق",

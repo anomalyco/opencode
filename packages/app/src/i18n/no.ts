@@ -597,6 +597,8 @@ export const dict = {
   "common.learnMore": "Lær mer",
   "common.rename": "Gi nytt navn",
   "common.reset": "Tilbakestill",
+  "common.pin": "Pin",
+  "common.unpin": "Unpin",
   "common.archive": "Arkiver",
   "common.delete": "Slett",
   "common.close": "Lukk",

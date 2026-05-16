@@ -587,6 +587,8 @@ export const dict = {
   "common.learnMore": "了解更多",
   "common.rename": "重命名",
   "common.reset": "重置",
+  "common.pin": "Pin",
+  "common.unpin": "Unpin",
   "common.archive": "归档",
   "common.delete": "删除",
   "common.close": "关闭",

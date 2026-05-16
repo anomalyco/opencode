@@ -594,6 +594,8 @@ export const dict = {
   "common.learnMore": "Saznaj više",
   "common.rename": "Preimenuj",
   "common.reset": "Resetuj",
+  "common.pin": "Pin",
+  "common.unpin": "Unpin",
   "common.archive": "Arhiviraj",
   "common.delete": "Izbriši",
   "common.close": "Zatvori",
