@@ -447,11 +447,16 @@ export function MessageTimeline(props: {
   const estimateTurnHeight = (id: string) => {
     const runtime = turnHeights.get(id)
     const sid = sessionID()
-    const cached = sid
-      ? (readHeightCache(sid, id, "full") ?? readHeightCache(sid, id, "structure") ?? readHeightCache(sid, id, "lite"))
-      : undefined
-    // Use the larger of runtime and cache — runtime may hold a partial measurement
-    // (KaTeX not yet rendered) while cache holds the correct full-render height.
+    const stage = stageOf(id)
+    let cached: number | undefined
+    if (sid) {
+      cached = readHeightCache(sid, id, stage)
+      if (cached === undefined && stage === "full") {
+        cached = readHeightCache(sid, id, "structure") ?? readHeightCache(sid, id, "lite")
+      } else if (cached === undefined && stage === "structure") {
+        cached = readHeightCache(sid, id, "lite")
+      }
+    }
     if (runtime !== undefined && cached !== undefined) return Math.max(runtime, cached)
     if (runtime !== undefined) return runtime
     if (cached !== undefined) return cached
@@ -514,9 +519,6 @@ export function MessageTimeline(props: {
   }
   const census = () => {
     const enabled = mddebug()
-    if (enabled && !mdWasDebug) {
-      console.debug("[markdown:dom] enabled")
-    }
     mdWasDebug = enabled
     if (!enabled) {
       lagMax = 0
@@ -537,9 +539,6 @@ export function MessageTimeline(props: {
     const text = root.textContent?.length ?? 0
     const data = snap(root)
 
-    console.debug(
-      `[markdown:dom] id=${sessionID() || "none"} turns=${turns} visible=${visibleRendered().length} rendered=${rendered().length} window=[${windowed.start},${windowed.end}] markdown=${markdown} full=${full} structure=${structure} lite=${lite} katex=${katex} nodes=${nodes} text=${text} measured=${turnHeights.size} upgraded=${upgraded.size} scrollTop=${data.top} scrollHeight=${data.height} clientHeight=${data.client} spacerTop=${Math.round(windowed.top)} spacerBottom=${Math.round(windowed.bottom)} listHeight=${list ? Math.round(list.getBoundingClientRect().height) : "none"} lagMax=${Math.round(lagMax)} took=${Math.round(performance.now() - start)}`,
-    )
     lagMax = 0
   }
   const sampleLag = () => {
@@ -700,9 +699,6 @@ export function MessageTimeline(props: {
     if (prevCanWindow !== undefined && prevCanWindow !== active) {
       const root = viewport
       const data = root ? snap(root) : undefined
-      console.warn(
-        `[jump-diag] canWindow toggled: ${prevCanWindow} → ${active} id=${id || "none"} working=${isWorking()} switching=${sessionSwitching()} eligible=${eligible().enabled} scrollTop=${data?.top ?? "none"} gap=${data?.gap ?? "none"} window=[${windowed.start},${windowed.end}]`,
-      )
     }
     prevCanWindow = active
 
@@ -790,12 +786,26 @@ export function MessageTimeline(props: {
       covered += slot(ids[end]!, end, ids.length)
     }
 
-    return {
+    const result = {
       start: end,
       end: ids.length,
       top: offset(ids, end),
       bottom: 0,
     }
+
+    if (result.top > root.clientHeight * 5) {
+      const measuredCount = ids.filter((id) => turnHeights.has(id)).length
+      if (measuredCount < ids.length * 0.5) {
+        return {
+          start: 0,
+          end: ids.length,
+          top: 0,
+          bottom: 0,
+        }
+      }
+    }
+
+    return result
   }
 
   const buildWindow = () => {
@@ -867,6 +877,22 @@ export function MessageTimeline(props: {
       top: offset,
       bottom: Math.max(0, totalHeight() - tail),
     }
+
+    if (next.bottom > clientHeight * 5) {
+      const measuredCount = ids.filter((id) => turnHeights.has(id)).length
+      if (measuredCount < ids.length * 0.5) {
+        console.warn(
+          `[buildWindow] oversized bottom spacer: bottom=${Math.round(next.bottom)} clientH=${clientHeight} measured=${measuredCount}/${ids.length} — falling back to full render`,
+        )
+        return {
+          start: 0,
+          end: ids.length,
+          top: 0,
+          bottom: 0,
+        }
+      }
+    }
+
     return next
   }
 
@@ -983,9 +1009,6 @@ export function MessageTimeline(props: {
     const base = props.seekingMessageId ? buildTargetWindow(props.seekingMessageId) : buildWindow()
     const next = syncWindow(base, (pinned || jumping) ? undefined : targetId)
     const same = sameWindow(next)
-    console.debug(
-      `[jump-diag] applyWindow: streaming=${streaming} pinned=${pinned} jumping=${jumping} same=${same} seek=${seek || "none"} anchor=${scrollAnchor?.id || "none"} anchorTop=${scrollAnchor ? Math.round(scrollAnchor.top) : "none"} before=[${windowed.start},${windowed.end}] next=[${next.start},${next.end}] spacerTop=${Math.round(windowed.top)}→${Math.round(next.top)} spacerBottom=${Math.round(windowed.bottom)}→${Math.round(next.bottom)} scrollTop=${before?.top ?? "none"} gap=${before?.gap ?? "none"} gesture=${props.hasScrollGesture()}`,
-    )
     if (seek) {
       trace(
         "apply-window",
@@ -1060,11 +1083,9 @@ export function MessageTimeline(props: {
     }
 
     if (!scrollAnchor) {
-      console.debug(`[jump-diag] applyWindow: no anchor, skipping correction`)
       return
     }
     if (preserve) {
-      console.debug(`[jump-diag] applyWindow: preserve (gesture active), skipping correction`)
       return
     }
 
@@ -1084,9 +1105,6 @@ export function MessageTimeline(props: {
             const prevTop = root.scrollTop
             root.scrollTop += delta
             const after = snap(root)
-            console.debug(
-              `[jump-diag] anchor-correct: anchor=${scrollAnchor.id} delta=${Math.round(delta)} prevTop=${Math.round(prevTop)} afterTop=${after.top} expectedTop=${Math.round(scrollAnchor.top)} actualTop=${Math.round(top)}`,
-            )
 
             if (seek)
               trace(
@@ -1097,9 +1115,6 @@ export function MessageTimeline(props: {
             props.onScheduleScrollState(root)
           }
         } else {
-          console.warn(
-            `[jump-diag] anchor-MISSING: anchor=${scrollAnchor.id} window=[${windowed.start},${windowed.end}] — scroll jump likely!`,
-          )
           if (seek) trace("anchor-missing", seek, `anchor=${scrollAnchor.id}`)
         }
       }
@@ -2333,9 +2348,6 @@ export function MessageTimeline(props: {
       // (KaTeX, syntax highlighting) hasn't rendered yet — ResizeObserver
       // will fire again once rendering completes with the correct height.
       if (prev !== undefined && !visible(node) && next < prev - HEIGHT_SHIFT_WARN) {
-        console.debug(
-          `[jump-diag] measure-ignored-shrink: id=${item.messageID} index=${item.index} prev=${Math.round(prev)} next=${Math.round(next)} delta=${Math.round(next - prev)} window=[${windowed.start},${windowed.end}]`,
-        )
         if (seek()) {
           trace(
             "measure-ignored-shrink",
@@ -2365,17 +2377,11 @@ export function MessageTimeline(props: {
           // Turn is above or partially above the viewport center
           if (rect.top < box.top + box.height / 2) {
             root.scrollTop += delta
-            console.debug(
-              `[jump-diag] measure-scroll-compensate: id=${item.messageID} index=${item.index} delta=${delta} scrollTop+=${delta}`,
-            )
           }
         }
       }
 
       if (prev !== undefined && Math.abs(delta) > HEIGHT_SHIFT_WARN) {
-        console.warn(
-          `[jump-diag] measure-large-shift: id=${item.messageID} index=${item.index} prev=${Math.round(prev)} next=${Math.round(next)} delta=${delta} stage=${bucket} visible=${visible(node)} near=${near()} active=${active()} window=[${windowed.start},${windowed.end}]`,
-        )
         if (seek()) {
           trace("measure-target", item.messageID, `prev=${Math.round(prev)} next=${Math.round(next)} delta=${delta}`)
         }

@@ -153,6 +153,34 @@ def _reset_history(agent) -> None:
             pass
 
 
+def _snapshot_agent_log(agent) -> str | None:
+    import time as _time
+    log_path = getattr(agent, "log_path", None)
+    if not log_path or not os.path.isfile(log_path):
+        return None
+    try:
+        with open(log_path, encoding="utf-8", errors="replace") as fh:
+            content = fh.read()
+    except Exception:
+        return None
+    if not content.strip():
+        return None
+    log_dir = os.path.dirname(log_path)
+    os.makedirs(log_dir, exist_ok=True)
+    stamp = _time.strftime("%Y%m%d_%H%M%S")
+    snapshot = os.path.join(
+        log_dir, f"model_responses_snapshot_{os.getpid()}_{stamp}_{_time.time_ns() % 1_000_000_000:09d}.txt"
+    )
+    try:
+        with open(snapshot, "w", encoding="utf-8", errors="replace") as fh:
+            fh.write(content)
+        with open(log_path, "w", encoding="utf-8", errors="replace"):
+            pass
+    except Exception:
+        return None
+    return snapshot
+
+
 _SESSION_MESSAGES_RE = re.compile(r"^/sessions/([^/]+)/messages$")
 _SESSION_RESTORE_RE = re.compile(r"^/sessions/([^/]+)/restore$")
 
@@ -291,6 +319,14 @@ class Handler(BaseHTTPRequestHandler):
             if agent is not None:
                 _reset_history(agent)
             self._write_json(200, {"ok": True})
+            return
+        if self.path == "/snapshot":
+            agent = _agent()
+            if agent is None:
+                self._write_json(503, {"ok": False, "error": "agent_not_loaded"})
+                return
+            snapshot = _snapshot_agent_log(agent)
+            self._write_json(200, {"ok": True, "snapshot": snapshot})
             return
         if self.path == "/llm":
             agent = _agent()

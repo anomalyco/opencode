@@ -195,8 +195,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       return globalSync.child(directory)
     }
     const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
-    const initialMessagePageSize = 80
-    const historyMessagePageSize = 200
+const initialMessagePageSize = 80
+     const historyMessagePageSize = 200
     const inflight = new Map<string, Promise<void>>()
     const inflightDiff = new Map<string, Promise<void>>()
     const inflightTodo = new Map<string, Promise<void>>()
@@ -311,6 +311,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       limit: number
       before?: string
     }) => {
+      const directory = sdk.directory
       const messages = await retry(() =>
         input.client.session.messages({ sessionID: input.sessionID, limit: input.limit, before: input.before }),
       )
@@ -318,12 +319,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       const session = items.map((x) => x.info).sort((a, b) => cmp(a.id, b.id))
       const part = items.map((message) => ({ id: message.info.id, part: sortParts(message.parts) }))
       const cursor = messages.response.headers.get("x-next-cursor") ?? undefined
-      return {
+      const result = {
         session,
         part,
         cursor,
         complete: !cursor,
       }
+      return result
     }
 
     const tracked = (directory: string, sessionID: string) => seen.get(directory)?.has(sessionID) ?? false
@@ -364,6 +366,23 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const [store] = globalSync.child(input.directory, { bootstrap: false })
           const cached = input.mode === "prepend" ? (store.message[input.sessionID] ?? []) : []
           const message = input.mode === "prepend" ? merge(cached, next.session) : next.session
+          batch(() => {
+            input.setStore("message", input.sessionID, reconcile(message, { key: "id" }))
+            for (const p of next.part) {
+              const filtered = p.part.filter((x) => !SKIP_PARTS.has(x.type))
+              if (filtered.length) input.setStore("part", p.id, filtered)
+            }
+            if ((meta.show[key] ?? 0) > message.length) setMeta("show", key, message.length)
+            setMeta("cursor", key, next.cursor)
+            setMeta("complete", key, next.complete)
+            setSessionPrefetch({
+              directory: input.directory,
+              sessionID: input.sessionID,
+              count: message.length,
+              cursor: next.cursor,
+              complete: next.complete,
+            })
+          })
           batch(() => {
             input.setStore("message", input.sessionID, reconcile(message, { key: "id" }))
             for (const p of next.part) {
