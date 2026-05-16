@@ -5,16 +5,14 @@ import * as LSPClient from "./client"
 import path from "path"
 import { pathToFileURL, fileURLToPath } from "url"
 import * as LSPServer from "./server"
-import z from "zod"
 import { Config } from "@/config/config"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Process } from "@/util/process"
 import { spawn as lspspawn } from "./launch"
 import { Effect, Layer, Context, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { containsPath } from "@/project/instance-context"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
-import { ZodOverride } from "@opencode-ai/core/effect-zod"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "lsp" })
 
@@ -56,9 +54,7 @@ export const Status = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   root: Schema.String,
-  status: Schema.Literals(["connected", "error"]).annotate({
-    [ZodOverride]: z.union([z.literal("connected"), z.literal("error")]),
-  }),
+  status: Schema.Literals(["connected", "error"]),
 }).annotate({ identifier: "LSPStatus" })
 export type Status = typeof Status.Type
 
@@ -102,8 +98,8 @@ const kinds = [
   SymbolKind.Enum,
 ]
 
-const filterExperimentalServers = (servers: Record<string, LSPServer.Info>) => {
-  if (Flag.OPENCODE_EXPERIMENTAL_LSP_TY) {
+const filterExperimentalServers = (servers: Record<string, LSPServer.Info>, flags: RuntimeFlags.Info) => {
+  if (flags.experimentalLspTy) {
     if (servers["pyright"]) {
       log.info("LSP server pyright is disabled because OPENCODE_EXPERIMENTAL_LSP_TY is enabled")
       delete servers["pyright"]
@@ -147,6 +143,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
+    const flags = yield* RuntimeFlags.Service
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("LSP.state")(function* (ctx) {
@@ -161,7 +158,7 @@ export const layer = Layer.effect(
             servers[server.id] = server
           }
 
-          filterExperimentalServers(servers)
+          filterExperimentalServers(servers, flags)
 
           if (cfg.lsp !== true) {
             for (const [name, item] of Object.entries(cfg.lsp)) {
@@ -221,7 +218,7 @@ export const layer = Layer.effect(
 
         async function schedule(server: LSPServer.Info, root: string, key: string) {
           const handle = await server
-            .spawn(root, ctx)
+            .spawn(root, ctx, flags)
             .then((value) => {
               if (!value) s.broken.add(key)
               return value
@@ -240,6 +237,7 @@ export const layer = Layer.effect(
             server: handle,
             root,
             directory: ctx.directory,
+            instance: ctx,
           }).catch(async (err) => {
             s.broken.add(key)
             await Process.stop(handle.process)
@@ -502,7 +500,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer))
 
 export * as Diagnostic from "./diagnostic"
 

@@ -124,7 +124,7 @@ describe("Anthropic Messages route", () => {
         providerMetadata: { anthropic: { signature: "sig_1" } },
       })
       expect(response.events.at(-1)).toMatchObject({
-        type: "request-finish",
+        type: "finish",
         reason: "stop",
         providerMetadata: { anthropic: { stopSequence: "\n\nHuman:" } },
       })
@@ -146,24 +146,46 @@ describe("Anthropic Messages route", () => {
           tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
+      const usage = new Usage({
+        inputTokens: 5,
+        outputTokens: 1,
+        nonCachedInputTokens: 5,
+        cacheReadInputTokens: undefined,
+        cacheWriteInputTokens: undefined,
+        totalTokens: 6,
+        providerMetadata: { anthropic: { input_tokens: 5, output_tokens: 1 } },
+      })
 
       expect(response.toolCalls).toEqual([
-        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { query: "weather" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
       ])
       expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        { type: "tool-input-start", id: "call_1", name: "lookup" },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
-        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata: undefined },
         {
-          type: "request-finish",
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { query: "weather" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+        { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
+        {
+          type: "finish",
           reason: "tool-calls",
-          usage: new Usage({
-            inputTokens: 5,
-            outputTokens: 1,
-            nonCachedInputTokens: 5,
-            totalTokens: 6,
-            providerMetadata: { anthropic: { input_tokens: 5, output_tokens: 1 } },
-          }),
+          providerMetadata: undefined,
+          usage,
         },
       ])
     }),
@@ -253,7 +275,7 @@ describe("Anthropic Messages route", () => {
         providerMetadata: { anthropic: { blockType: "web_search_tool_result" } },
       })
       expect(response.text).toBe("Found it.")
-      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "stop" })
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
     }),
   )
 
