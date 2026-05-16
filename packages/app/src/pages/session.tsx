@@ -1994,6 +1994,25 @@ export default function Page() {
     debug("scroll-ref", el)
     scheduleScrollState(el)
     fill()
+
+    // The initial-scroll effect (below) depends on !!scroller, but scroller is
+    // a plain variable — not reactive. If messagesReady() fired before the DOM
+    // mounted, the effect exited early and never re-runs. Compensate here by
+    // triggering the initial scroll when the ref arrives late.
+    const key = sessionKey()
+    if (key && messagesReady() && initialScrollKey !== key) {
+      initialScrollKey = key
+      if (initialScrollFrame !== undefined) cancelAnimationFrame(initialScrollFrame)
+      if (!hasScrollTarget()) {
+        el.style.visibility = "hidden"
+        lockBottom(el, "initial-scroll:ref-late")
+        if (el.scrollHeight > el.clientHeight) {
+          el.style.visibility = ""
+        }
+      }
+      until = performance.now() + settleMs
+      initialScrollFrame = requestAnimationFrame(() => settle(key))
+    }
   }
 
   const markUserScroll = () => {
