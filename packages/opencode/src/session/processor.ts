@@ -661,11 +661,12 @@ export const layer = Layer.effect(
         }
         ctx.reasoningMap = {}
 
-        yield* Effect.forEach(
-          Object.values(ctx.toolcalls),
-          (call) => Deferred.await(call.done).pipe(Effect.timeout("250 millis"), Effect.ignore),
-          { concurrency: "unbounded" },
-        )
+        if (!aborted) {
+          yield* Effect.forEach(Object.values(ctx.toolcalls), (call) => Deferred.await(call.done), {
+            concurrency: "unbounded",
+            discard: true,
+          })
+        }
 
         for (const toolCallID of Object.keys(ctx.toolcalls)) {
           const match = yield* readToolCall(toolCallID)
