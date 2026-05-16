@@ -65,16 +65,15 @@ const modelHttpErrorsQuery = (product: "go" | "zen") => {
         filters,
       },
     ],
-    formulas: [{ name: "ERROR", expression: "IF(GTE($TOTAL, 100), DIV($FAILED, $TOTAL), 0)" }],
+    formulas: [{ name: "ERROR", expression: "IF(GTE($TOTAL, 200), DIV($FAILED, $TOTAL), 0)" }],
     timeRange: 900,
   }).json
 }
 
-const providerHttpErrorsQuery = (product: "go" | "zen") => {
+const providerHttpErrorsQuery = () => {
   const filters = [
     { column: "provider", op: "exists" },
     { column: "user_agent", op: "contains", value: "opencode" },
-    { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
   ]
   const successHttpStatus = calculatedField({
     name: "is_success_http_status",
@@ -101,11 +100,15 @@ const providerHttpErrorsQuery = (product: "go" | "zen") => {
         name: "FAILED",
         column: failedProviderHttpStatus.name,
         filterCombination: "AND",
-        filters: [...filters, { column: "event_type", op: "=", value: "llm.error" }],
+        filters: [
+          ...filters,
+          { column: "event_type", op: "=", value: "llm.error" },
+          { column: "llm.error.code", op: "!=", value: "404" },
+        ],
       },
     ],
     formulas: [
-      { name: "ERROR", expression: "IF(GTE(SUM($SUCCESS, $FAILED), 50), DIV($FAILED, SUM($SUCCESS, $FAILED)), 0)" },
+      { name: "ERROR", expression: "IF(GTE(SUM($SUCCESS, $FAILED), 200), DIV($FAILED, SUM($SUCCESS, $FAILED)), 0)" },
     ],
     timeRange: 900,
   }).json
@@ -215,29 +218,10 @@ new honeycomb.Trigger("LowModelTpsZen", {
   ],
 })
 
-new honeycomb.Trigger("IncreasedProviderHttpErrorsGo", {
-  name: "Increased Provider HTTP Errors [Go]",
+new honeycomb.Trigger("IncreasedProviderHttpErrors", {
+  name: "Increased Provider HTTP Errors",
   description,
-  queryJson: providerHttpErrorsQuery("go"),
-  alertType: "on_change",
-  frequency: 300,
-  thresholds: [{ op: ">=", value: 0.7, exceededLimit: 1 }],
-  recipients: [
-    {
-      id: webhookRecipient.id,
-      notificationDetails: [
-        {
-          variables: [{ name: "type", value: "provider_http_errors" }],
-        },
-      ],
-    },
-  ],
-})
-
-new honeycomb.Trigger("IncreasedProviderHttpErrorsZen", {
-  name: "Increased Provider HTTP Errors [Zen]",
-  description,
-  queryJson: providerHttpErrorsQuery("zen"),
+  queryJson: providerHttpErrorsQuery(),
   alertType: "on_change",
   frequency: 300,
   thresholds: [{ op: ">=", value: 0.7, exceededLimit: 1 }],

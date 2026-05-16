@@ -139,7 +139,18 @@ async function initGitRepo(dir: string) {
   await $`git commit -m "base"`.cwd(dir).quiet()
 }
 
-const runWorkspace = <A, E>(effect: Effect.Effect<A, E, Workspace.Service>) => AppRuntime.runPromise(effect)
+function currentInstance() {
+  try {
+    return context.use()
+  } catch {
+    return undefined
+  }
+}
+
+const runWorkspace = <A, E>(effect: Effect.Effect<A, E, Workspace.Service>) => {
+  const ctx = currentInstance()
+  return AppRuntime.runPromise(ctx ? effect.pipe(Effect.provideService(InstanceRef, ctx)) : effect)
+}
 const createWorkspace = (input: Workspace.CreateInput) =>
   runWorkspace(Workspace.Service.use((workspace) => workspace.create(input)))
 const warpWorkspaceSession = (input: Workspace.SessionWarpInput) =>
@@ -917,7 +928,9 @@ describe("workspace CRUD", () => {
       const previous = workspaceInfo(projectID, previousType)
       insertWorkspace(previous)
       registerAdapter(projectID, previousType, localAdapter(workspaceTmp.path, { createDir: false }).adapter)
-      const session = await AppRuntime.runPromise(SessionNs.Service.use((svc) => svc.create({})))
+      const session = await AppRuntime.runPromise(
+        SessionNs.Service.use((svc) => svc.create({})).pipe(Effect.provideService(InstanceRef, instance)),
+      )
       attachSessionToWorkspace(session.id, previous.id)
 
       const workspaceCtx = await AppRuntime.runPromise(
