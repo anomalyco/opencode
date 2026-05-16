@@ -132,20 +132,25 @@ const SessionRow = (props: {
   })
 
   const onSelectAll = () => {
-    if (titleRef) {
+    const el = titleRef
+    if (!el) return
+    setTimeout(() => {
       const range = document.createRange()
-      range.selectNodeContents(titleRef)
+      range.selectNodeContents(el)
       const sel = window.getSelection()
-      sel?.removeAllRanges()
-      sel?.addRange(range)
-      setHasSelection(true)
-    }
+      if (sel) {
+        sel.removeAllRanges()
+        sel.addRange(range)
+        setHasSelection(true)
+      }
+    }, 0)
   }
 
   const onCopy = () => {
     const sel = window.getSelection()
     const text = sel?.toString()
     if (text) navigator.clipboard.writeText(text)
+    else navigator.clipboard.writeText(title() ?? "")
   }
 
   const onCopyUrl = () => {
