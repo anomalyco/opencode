@@ -1143,6 +1143,16 @@ export class Agent implements ACPAgent {
         name: "compact",
         description: "compact the session",
       })
+    if (!names.has("model"))
+      availableCommands.push({
+        name: "model",
+        description: "change AI model",
+      })
+    if (!names.has("mode"))
+      availableCommands.push({
+        name: "mode",
+        description: "change session mode",
+      })
 
     const mcpServers: Record<string, ConfigMCP.Info> = {}
     for (const server of params.mcpServers) {
@@ -1489,6 +1499,16 @@ export class Agent implements ACPAgent {
           },
           { throwOnError: true },
         )
+        break
+      case "model":
+        if (cmd.args) {
+          await this.setSessionConfigOption({ sessionId: sessionID, configId: "model", value: cmd.args })
+        }
+        break
+      case "mode":
+        if (cmd.args) {
+          await this.setSessionConfigOption({ sessionId: sessionID, configId: "mode", value: cmd.args })
+        }
         break
     }
 
