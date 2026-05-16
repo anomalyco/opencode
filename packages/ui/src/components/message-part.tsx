@@ -1634,23 +1634,21 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
-            <LazyAction>
-              <Tooltip
-                value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-                placement="top"
-                gutter={4}
-                lazyMount
-              >
-                <IconButton
-                  icon={copied() ? "check" : "copy"}
-                  size="normal"
-                  variant="ghost"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={handleCopy}
-                  aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-                />
-              </Tooltip>
-            </LazyAction>
+            <Tooltip
+              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+              placement="top"
+              gutter={4}
+              lazyMount
+            >
+              <IconButton
+                icon={copied() ? "check" : "copy"}
+                size="normal"
+                variant="ghost"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleCopy}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+              />
+            </Tooltip>
             <Show when={meta()}>
               <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
                 {meta()}
