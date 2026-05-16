@@ -480,11 +480,16 @@ export function MessageTimeline(props: {
   const estimateTurnHeight = (id: string) => {
     const runtime = turnHeights.get(id)
     const sid = sessionID()
-    const cached = sid
-      ? (readHeightCache(sid, id, "full") ?? readHeightCache(sid, id, "structure") ?? readHeightCache(sid, id, "lite"))
-      : undefined
-    // Use the larger of runtime and cache — runtime may hold a partial measurement
-    // (KaTeX not yet rendered) while cache holds the correct full-render height.
+    const stage = stageOf(id)
+    let cached: number | undefined
+    if (sid) {
+      cached = readHeightCache(sid, id, stage)
+      if (cached === undefined && stage === "full") {
+        cached = readHeightCache(sid, id, "structure") ?? readHeightCache(sid, id, "lite")
+      } else if (cached === undefined && stage === "structure") {
+        cached = readHeightCache(sid, id, "lite")
+      }
+    }
     if (runtime !== undefined && cached !== undefined) return Math.max(runtime, cached)
     if (runtime !== undefined) return runtime
     if (cached !== undefined) return cached
@@ -814,12 +819,26 @@ export function MessageTimeline(props: {
       covered += slot(ids[end]!, end, ids.length)
     }
 
-    return {
+    const result = {
       start: end,
       end: ids.length,
       top: offset(ids, end),
       bottom: 0,
     }
+
+    if (result.top > root.clientHeight * 5) {
+      const measuredCount = ids.filter((id) => turnHeights.has(id)).length
+      if (measuredCount < ids.length * 0.5) {
+        return {
+          start: 0,
+          end: ids.length,
+          top: 0,
+          bottom: 0,
+        }
+      }
+    }
+
+    return result
   }
 
   const buildWindow = () => {
@@ -891,6 +910,22 @@ export function MessageTimeline(props: {
       top: offset,
       bottom: Math.max(0, totalHeight() - tail),
     }
+
+    if (next.bottom > clientHeight * 5) {
+      const measuredCount = ids.filter((id) => turnHeights.has(id)).length
+      if (measuredCount < ids.length * 0.5) {
+        console.warn(
+          `[buildWindow] oversized bottom spacer: bottom=${Math.round(next.bottom)} clientH=${clientHeight} measured=${measuredCount}/${ids.length} — falling back to full render`,
+        )
+        return {
+          start: 0,
+          end: ids.length,
+          top: 0,
+          bottom: 0,
+        }
+      }
+    }
+
     return next
   }
 
