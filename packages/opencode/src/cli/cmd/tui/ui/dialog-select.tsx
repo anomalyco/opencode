@@ -38,6 +38,11 @@ export interface DialogSelectProps<T> {
     disabled?: boolean
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
+  footerHints?: {
+    title: string
+    label: string
+    side?: "left" | "right"
+  }[]
   bindings?: readonly Binding<Renderable, KeyEvent>[]
   current?: T
 }
@@ -334,11 +339,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
   props.ref?.(ref)
 
-  const visibleActions = createMemo(() =>
-    actions()
+  const visibleActions = createMemo(() => [
+    ...actions()
       .map((item) => ({ ...item, label: actionLabels().get(item.command) ?? "" }))
       .filter((item) => !item.disabled && item.label),
-  )
+    ...(props.footerHints ?? []),
+  ])
   const left = createMemo(() => visibleActions().filter((item) => item.side !== "right"))
   const right = createMemo(() => visibleActions().filter((item) => item.side === "right"))
 

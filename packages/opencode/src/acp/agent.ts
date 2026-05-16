@@ -39,29 +39,19 @@ import { Filesystem } from "@/util/filesystem"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
+import { ACPRuntime } from "./runtime"
 import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
-import { Agent as AgentModule } from "../agent/agent"
-import { AppRuntime } from "@/effect/app-runtime"
-import { InstanceRef } from "@/effect/instance-ref"
-import { InstanceRuntime } from "@/project/instance-runtime"
 import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
 import { Config } from "@/config/config"
 import { ConfigMCP } from "@/config/mcp"
 import { Todo } from "@/session/todo"
-import { Effect, Result, Schema } from "effect"
+import { Result, Schema } from "effect"
 import { LoadAPIKeyError } from "ai"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-
-const defaultAgentInfo = async (directory: string) => {
-  const ctx = await InstanceRuntime.load({ directory })
-  return AppRuntime.runPromise(
-    AgentModule.Service.use((svc) => svc.defaultInfo()).pipe(Effect.provideService(InstanceRef, ctx)),
-  )
-}
 import { ShellID } from "@/tool/shell/id"
 
 type ModeOption = { id: string; name: string; description?: string }
@@ -1103,7 +1093,7 @@ export class Agent implements ACPAgent {
 
     const currentModeId = await (async () => {
       if (!availableModes.length) return undefined
-      const defaultAgent = await defaultAgentInfo(directory)
+      const defaultAgent = await ACPRuntime.defaultAgentInfo(directory)
       const resolvedModeId = availableModes.find((mode) => mode.name === defaultAgent.name)?.id ?? availableModes[0].id
       this.sessionManager.setMode(sessionId, resolvedModeId)
       return resolvedModeId
@@ -1337,7 +1327,7 @@ export class Agent implements ACPAgent {
     if (!current) {
       this.sessionManager.setModel(session.id, model)
     }
-    const agent = session.modeId ?? (await defaultAgentInfo(directory)).name
+    const agent = session.modeId ?? (await ACPRuntime.defaultAgentInfo(directory)).name
 
     const parts: Array<
       | { type: "text"; text: string; synthetic?: boolean; ignored?: boolean }

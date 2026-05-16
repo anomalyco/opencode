@@ -7,13 +7,12 @@ import { makeRuntime } from "../../src/effect/run-service"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { LLM } from "../../src/session/llm"
 import type { InstanceContext } from "../../src/project/instance-context"
-import { WithInstance } from "../../src/project/with-instance"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelsDev } from "@opencode-ai/core/models"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "@/util/filesystem"
-import { tmpdir } from "../fixture/fixture"
+import { tmpdir, withTestInstance } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -361,7 +360,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id), ctx)
@@ -451,7 +450,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id), ctx)
@@ -541,7 +540,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id), ctx)
@@ -658,7 +657,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         const resolved = await getModel(ProviderID.openai, ModelID.make(model.id), ctx)
@@ -777,7 +776,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         const resolved = await getModel(ProviderID.openai, ModelID.make(model.id), ctx)
@@ -899,7 +898,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id), ctx)
@@ -1020,7 +1019,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         const resolved = await getModel(ProviderID.make("anthropic"), ModelID.make(model.id), ctx)
@@ -1264,7 +1263,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await WithInstance.provide({
+    await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id), ctx)
