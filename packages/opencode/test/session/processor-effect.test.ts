@@ -24,6 +24,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { raw, reply, TestLLMServer } from "../lib/llm-server"
+import { FallbackUsed } from "../../src/session/fallback"
 import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -55,6 +56,18 @@ const cfg = {
         "test-model": {
           id: "test-model",
           name: "Test Model",
+          attachment: false,
+          reasoning: false,
+          temperature: false,
+          tool_call: true,
+          release_date: "2025-01-01",
+          limit: { context: 100000, output: 10000 },
+          cost: { input: 0, output: 0 },
+          options: {},
+        },
+        "fallback-model": {
+          id: "fallback-model",
+          name: "Fallback Model",
           attachment: false,
           reasoning: false,
           temperature: false,
@@ -849,6 +862,114 @@ it.live("session.processor effect tests mark interruptions aborted without manua
           expect(stored.info.error?.name).toBe("MessageAbortedError")
         }
         expect(state).toMatchObject({ type: "idle" })
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
+// ---------------------------------------------------------------------------
+// Fallback integration: FallbackUsed bus event must update the assistant
+// message model so subsessions / title / main session all see the right
+// provider/model after a stream-level switch. Regression test for the
+// `usedFallback`-mutation bug from PR #26292.
+// ---------------------------------------------------------------------------
+
+it.live("session.processor stream error with fallbacks switches model on the message", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const bus = yield* Bus.Service
+
+        // Primary errors mid-stream; fallback returns a clean text response.
+        yield* llm.push(reply().streamError("boom").item())
+        yield* llm.text("recovered")
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "fallback please")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+
+        const used: string[] = []
+        const off = yield* bus.subscribeCallback(FallbackUsed, (evt) => {
+          used.push(`${evt.properties.providerID}/${evt.properties.modelID}`)
+        })
+
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "fallback please" }],
+          tools: {},
+          fallbacks: [{ providerID: ref.providerID, modelID: ModelID.make("fallback-model") }],
+        })
+
+        off()
+
+        expect(value).toBe("continue")
+        // Primary failed, fallback succeeded → 2 upstream calls.
+        expect(yield* llm.calls).toBe(2)
+        // FallbackUsed fired exactly once and points to the fallback model.
+        expect(used).toEqual([`${ref.providerID}/fallback-model`])
+        // Processor subscription updated the in-memory assistant message.
+        expect(handle.message.modelID).toBe("fallback-model")
+        expect(handle.message.providerID).toBe(ref.providerID)
+        // Persisted message also reflects the new model.
+        const stored = yield* MessageV2.get({ sessionID: chat.id, messageID: msg.id })
+        if (stored.info.role === "assistant") {
+          expect(stored.info.modelID).toBe("fallback-model")
+        }
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor stream error without fallbacks halts without switching model", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        yield* llm.push(reply().streamError("boom").item())
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "no fallback")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "no fallback" }],
+          tools: {},
+        })
+        expect(value).toBe("stop")
+        // Model on the message stays at primary; no switching happened.
+        expect(handle.message.modelID).toBe(ref.modelID)
+        expect(handle.message.error).toBeDefined()
       }),
     { git: true, config: (url) => providerCfg(url) },
   ),
