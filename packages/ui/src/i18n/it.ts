@@ -126,4 +126,7 @@ export const dict: Record<string, string> = {
   "common.deselectAll": "Deseleziona tutto",
   "common.pin": "Fissa",
   "common.unpin": "Rimuovi",
+  "ui.permission.deny": "Nega",
+  "ui.permission.allowAlways": "Consenti sempre",
+  "ui.permission.allowOnce": "Consenti una volta",
 }

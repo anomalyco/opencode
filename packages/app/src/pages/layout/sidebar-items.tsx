@@ -131,9 +131,9 @@ const SessionRow = (props: {
   })
 
   const onSelectAll = () => {
-    const el = document.querySelector(`[data-session-id="${props.session.id}"] [data-title]`)
+    const el = document.querySelector(`[data-session-id="${props.session.id}"] [data-title]`) as HTMLElement | null
     if (!el) return
-    requestAnimationFrame(() => {
+    setTimeout(() => {
       const range = document.createRange()
       range.selectNodeContents(el)
       const sel = window.getSelection()
@@ -142,7 +142,8 @@ const SessionRow = (props: {
         sel.addRange(range)
         setHasSelection(true)
       }
-    })
+      el.focus({ preventScroll: true })
+    }, 50)
   }
 
   const onCopy = () => {
@@ -195,7 +196,7 @@ const SessionRow = (props: {
           <Show when={props.isPinned()}>
             <Icon name="pin" size="small" class="text-icon-base shrink-0" />
           </Show>
-          <span data-title class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{title()}</span>
+          <span data-title tabindex="-1" class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{title()}</span>
         </A>
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
