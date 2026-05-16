@@ -130,7 +130,7 @@ function init() {
           >
             <Kobalte.Portal>
               <Kobalte.Overlay data-component="dialog-overlay" onClick={close} />
-              {runWithOwner(owner, element)}
+              {element()}
             </Kobalte.Portal>
           </Kobalte>
         )
