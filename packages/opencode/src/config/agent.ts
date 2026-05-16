@@ -93,7 +93,8 @@ const normalize = (agent: Schema.Schema.Type<typeof AgentSchema>): Schema.Schema
   globalThis.Object.assign(permission, agent.permission)
 
   const steps = agent.steps ?? agent.maxSteps
-  return { ...agent, options, permission, ...(steps !== undefined ? { steps } : {}) }
+  const description = "description" in agent ? agent.description : undefined
+  return { ...agent, options, permission, description, ...(steps !== undefined ? { steps } : {}) }
 }
 
 export const Info = AgentSchema.pipe(
@@ -131,7 +132,11 @@ export async function load(dir: string) {
       ...md.data,
       prompt: md.content.trim(),
     }
-    result[config.name] = ConfigParse.schema(Info, config, item)
+    const parsed = ConfigParse.schema(Info, config, item)
+    if ("description" in config && !parsed.description) {
+      parsed.description = config.description
+    }
+    result[config.name] = parsed
   }
   return result
 }
