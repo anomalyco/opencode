@@ -57,6 +57,25 @@ export const Model = Schema.Struct({
       }),
     ]),
   ),
+  // Whether the model's chat template accepts an assistant turn as the LAST
+  // message (a.k.a. "prefill" / "response continuation").
+  //
+  // Default (undefined) is treated as `true` for backwards compatibility.
+  //
+  // Set to `false` for thinking-on-by-default models whose chat template
+  // rejects trailing-assistant when thinking is enabled. Affected families
+  // (non-exhaustive, 2025-2026):
+  //   - Qwen3 hybrid (all sizes), Qwen3-Thinking-2507, Qwen3-VL,
+  //     Qwen3.5, Qwen3.6, QwQ-32B  ->  llama.cpp "Assistant response prefill
+  //     is incompatible with enable_thinking" (ggml-org/llama.cpp#20861,
+  //     #21889; mastra-ai/mastra#15234)
+  //   - DeepSeek-R1 / R1-0528 / V4  (vllm-project/vllm#12999)
+  //   - GLM-4.6 / 4.7 thinking      (ggml-org/llama.cpp#15401)
+  //   - Kimi-K2-Thinking, MiniMax-M2
+  //
+  // Qwen3-Coder, Qwen3-Instruct-2507, Qwen2.5 keep `true` — their templates
+  // do not branch on `enable_thinking`, so prefill is safe.
+  prefill: Schema.optional(Schema.Boolean),
   cost: Schema.optional(Cost),
   limit: Schema.Struct({
     context: Schema.Finite,

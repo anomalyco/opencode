@@ -19,6 +19,15 @@ export const Model = Schema.Struct({
       }),
     ]),
   ),
+  prefill: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Whether the model accepts an assistant turn as the last message. " +
+      "Set false for thinking-on-by-default templates whose chat template " +
+      "rejects trailing-assistant (Qwen3 hybrid/3.5/3.6, QwQ, DeepSeek-R1, " +
+      "GLM-4.6/4.7 thinking, Kimi-K2-Thinking, MiniMax-M2). Defaults to " +
+      "true for non-openai-compatible providers, false for openai-compatible " +
+      "with reasoning enabled.",
+  }),
   cost: Schema.optional(
     Schema.Struct({
       input: Schema.Finite,
