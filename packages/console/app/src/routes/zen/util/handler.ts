@@ -949,7 +949,6 @@ export async function handler(
     usageInfo: UsageInfo,
     costInfo: CostInfo,
   ) {
-    console.log('tracking usage')
     const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
       usageInfo
     const { totalCostInCent, inputCost, outputCost, cacheReadCost, cacheWrite5mCost, cacheWrite1hCost } = costInfo
