@@ -24,10 +24,6 @@ Small follow-ups that do not fit neatly into the main facade, route, tool, or sc
 - [ ] `cli/cmd/tui/config/tui.ts` - switch TUI config loading from async `ConfigPaths.*` wrappers to the `ConfigPaths.Service` once that service exists.
 - [ ] `cli/cmd/tui/config/tui-migrate.ts` - decide whether to leave this as a plain async module using wrapper functions or effectify it fully after `ConfigPaths.Service` lands.
 
-## Instance cleanup
-
-- [ ] `project/instance.ts` - keep shrinking the legacy ALS / Promise cache after the remaining `Instance.*` callers move over.
-
 ## Notes
 
 - Prefer small, semantics-preserving config migrations. Config precedence, legacy key migration, and plugin origin tracking are easy to break accidentally.
