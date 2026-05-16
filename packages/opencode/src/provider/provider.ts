@@ -149,16 +149,6 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
-    "kimi-for-coding": () =>
-      Effect.succeed({
-        autoload: false,
-        options: {
-          headers: {
-            // Kimi's /coding gateway 429s requests from non-whitelisted User-Agents
-            "User-Agent": "KimiCLI/1.5",
-          },
-        },
-      }),
     opencode: Effect.fnUntraced(function* (input: Info) {
       const env = yield* dep.env()
       const hasKey = iife(() => {
@@ -989,7 +979,9 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
       npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
     },
     status: model.status ?? "active",
-    headers: {},
+    // Kimi's /coding gateway 429s non-whitelisted User-Agents; model.headers
+    // is spread after the default opencode UA in llm.ts so it takes precedence
+    headers: provider.id === "kimi-for-coding" ? { "User-Agent": "KimiCLI/1.5" } : {},
     options: {},
     cost: cost(model.cost),
     limit: {
