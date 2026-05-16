@@ -19,6 +19,21 @@ export type WindowConfig = {
   updaterEnabled: boolean
 }
 
+export type OpenbarProviderUsage = {
+  type: "pay-as-you-go" | "quota-based"
+  cost?: number
+  resetsAt?: string
+  remaining?: number | "unlimited"
+  entitlement?: number | "unlimited"
+  usagePercentage?: number
+  overagePermitted?: boolean
+  accounts?: Array<Record<string, unknown>>
+} & Record<string, unknown>
+
+export type OpenbarStatusResult =
+  | { ok: true; data: Record<string, OpenbarProviderUsage> }
+  | { ok: false; error: string }
+
 export type ElectronAPI = {
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
@@ -76,4 +91,5 @@ export type ElectronAPI = {
   checkUpdate: () => Promise<{ updateAvailable: boolean; version?: string }>
   installUpdate: () => Promise<void>
   setBackgroundColor: (color: string) => Promise<void>
+  openbarStatus: () => Promise<OpenbarStatusResult>
 }

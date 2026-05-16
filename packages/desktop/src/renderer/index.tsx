@@ -266,6 +266,10 @@ const createPlatform = (): Platform => {
         type: "image/png",
       })
     },
+
+    async openbarStatus() {
+      return window.api.openbarStatus()
+    },
   }
 }
 

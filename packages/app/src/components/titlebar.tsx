@@ -6,6 +6,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { useTheme } from "@opencode-ai/ui/theme/context"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -13,6 +14,7 @@ import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
+import { DialogOpenbarUsage } from "./dialog-openbar-usage"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -49,6 +51,9 @@ export function Titlebar() {
   const navigate = useNavigate()
   const location = useLocation()
   const params = useParams()
+  const dialog = useDialog()
+
+  const openUsage = () => dialog.show(() => <DialogOpenbarUsage />)
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
@@ -120,6 +125,13 @@ export function Titlebar() {
       category: language.t("command.category.view"),
       keybind: "mod+]",
       onSelect: forward,
+    },
+    {
+      id: "openbar.showUsage",
+      title: "Show Provider Token Usage",
+      category: language.t("command.category.view"),
+      keybind: "mod+shift+u",
+      onSelect: openUsage,
     },
   ])
 
@@ -325,6 +337,18 @@ export function Titlebar() {
           onMouseDown={drag}
         >
           <div id="opencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />
+          <Show when={platform.platform === "desktop"}>
+            <Tooltip placement="bottom" value="Provider Token Usage" openDelay={500}>
+              <Button
+                variant="ghost"
+                class="titlebar-icon w-8 h-6 p-0 box-border"
+                onClick={openUsage}
+                aria-label="Show provider token usage"
+              >
+                <Icon size="small" name="status-active" />
+              </Button>
+            </Tooltip>
+          </Show>
           <Show when={windows()}>
             {!tauriApi() && <div class="shrink-0" style={{ width: windowsControlsWidth() }} />}
             <div data-tauri-decorum-tb class="flex flex-row" />

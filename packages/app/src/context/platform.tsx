@@ -87,7 +87,25 @@ export type Platform = {
 
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
+
+  /** Fetch token usage from OpenBar GUI (`opencodebar status --json`). Desktop only. */
+  openbarStatus?(): Promise<OpenbarStatusResult>
 }
+
+export type OpenbarProviderUsage = {
+  type: "pay-as-you-go" | "quota-based"
+  cost?: number
+  resetsAt?: string
+  remaining?: number | "unlimited"
+  entitlement?: number | "unlimited"
+  usagePercentage?: number
+  overagePermitted?: boolean
+  accounts?: Array<Record<string, unknown>>
+} & Record<string, unknown>
+
+export type OpenbarStatusResult =
+  | { ok: true; data: Record<string, OpenbarProviderUsage> }
+  | { ok: false; error: string }
 
 export type DisplayBackend = "auto" | "wayland"
 

@@ -82,6 +82,16 @@ brew install --cask opencode-desktop
 scoop bucket add extras; scoop install extras/opencode-desktop
 ```
 
+#### 🔭 OpenLens — provider usage at a glance
+
+The desktop app integrates with [**OpenLens**](https://github.com/8-BitBirdman/OpenLens), an opt-in macOS companion that surfaces live quota, cost, and reset info for every AI provider you're authenticated with.
+
+Once OpenLens is installed, press **⌘⇧U** (or click the 📊 icon in the titlebar) to see Claude, Codex, Copilot, Gemini, OpenRouter, OpenCode Zen, and more — all in one dialog. No tab-juggling, no surprise quota hits.
+
+Grab the latest signed `.dmg` from [OpenLens releases](https://github.com/8-BitBirdman/OpenLens/releases/latest), or build from source per the repo's README.
+
+Without OpenLens installed, the button stays hidden behaviour-wise: opencode itself runs unchanged. See the [integration architecture](https://github.com/8-BitBirdman/OpenLens/blob/main/docs/INTEGRATION.md) for how the two halves talk.
+
 #### Installation Directory
 
 The install script respects the following priority order for the installation path:

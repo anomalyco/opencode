@@ -1,6 +1,36 @@
 import { execFile } from "node:child_process"
+import { promisify } from "node:util"
 import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
+
+const execFileAsync = promisify(execFile)
+
+// Common install locations for the `opencodebar` CLI shipped by openbar-gui.
+const OPENBAR_FALLBACK_PATHS = [
+  "/usr/local/bin/opencodebar",
+  "/opt/homebrew/bin/opencodebar",
+  `${process.env.HOME ?? ""}/.local/bin/opencodebar`,
+]
+
+async function runOpenbar(args: string[], timeoutMs = 15000): Promise<string> {
+  const candidates = ["opencodebar", ...OPENBAR_FALLBACK_PATHS]
+  let lastError: unknown
+  for (const bin of candidates) {
+    try {
+      const { stdout } = await execFileAsync(bin, args, {
+        timeout: timeoutMs,
+        maxBuffer: 8 * 1024 * 1024,
+        env: { ...process.env, PATH: `${process.env.PATH ?? ""}:/usr/local/bin:/opt/homebrew/bin` },
+      })
+      return stdout
+    } catch (err) {
+      lastError = err
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("opencodebar CLI not found. Install OpenBar GUI from https://github.com/opgginc/opencode-bar")
+}
 
 import type {
   InitStep,
@@ -197,6 +227,23 @@ export function registerIpcHandlers(deps: Deps) {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
     setTitlebar(win, theme)
+  })
+
+  // OpenBar GUI (https://github.com/opgginc/opencode-bar) integration.
+  // Shells out to its `opencodebar` CLI to surface provider token usage.
+  ipcMain.handle("openbar-status", async () => {
+    try {
+      const stdout = await runOpenbar(["status", "--json"])
+      const parsed: unknown = JSON.parse(stdout)
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return { ok: false as const, error: "Unexpected response from opencodebar CLI" }
+      }
+      const data: Record<string, unknown> = Object.fromEntries(Object.entries(parsed))
+      return { ok: true as const, data }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return { ok: false as const, error: message }
+    }
   })
 }
 
