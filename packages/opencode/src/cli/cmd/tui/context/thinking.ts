@@ -1,10 +1,9 @@
 import { createMemo, type Setter } from "solid-js"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { useKV } from "./kv"
 
-export type ThinkingMode = "show" | "minimal" | "hide"
+export type ThinkingMode = "show" | "hide"
 
-const MODES: readonly ThinkingMode[] = ["show", "minimal", "hide"] as const
+const MODES: readonly ThinkingMode[] = ["show", "hide"] as const
 
 // OpenAI's Responses API surfaces reasoning summaries that start with a bolded
 // title line: "**Inspecting PR workflow**\n\n<body>". GitHub Copilot routes
@@ -20,7 +19,7 @@ export function isThinkingMode(value: unknown): value is ThinkingMode {
   return typeof value === "string" && (MODES as readonly string[]).includes(value)
 }
 
-// Cycle order matches the slash command: show → minimal → hide → show.
+// Cycle order matches the slash command: show → hide → show.
 export function nextThinkingMode(current: ThinkingMode): ThinkingMode {
   const idx = MODES.indexOf(current)
   return MODES[(idx + 1) % MODES.length] ?? "show"
@@ -33,7 +32,7 @@ export function useThinkingMode() {
   // The KVProvider only renders children once kv.ready, so reads here are safe.
   const hadStored = kv.get("thinking_mode") !== undefined
   const legacy = kv.get("thinking_visibility")
-  const [stored, setStored] = kv.signal<ThinkingMode>("thinking_mode", "minimal")
+  const [stored, setStored] = kv.signal<ThinkingMode>("thinking_mode", "hide")
 
   // The kv signal exposes its setter typed as `Setter<T>` which carries Solid's
   // overload set; passing an updater fn through a property access loses the
@@ -47,21 +46,21 @@ export function useThinkingMode() {
 
   // Preserve previous experience for users who had explicitly toggled the
   // legacy `thinking_visibility` boolean. First-time users (no legacy key)
-  // get the new "minimal" default.
+  // get the new "hide" default (collapsed thinking).
   if (!hadStored) {
     if (legacy === true) set("show")
     else if (legacy === false) set("hide")
   }
 
+  if ((stored() as string) === "minimal") set("hide")
+
   const mode = createMemo<ThinkingMode>(() => {
-    if (Flag.OPENCODE_EXPERIMENTAL_MINIMAL_THINKING) return "minimal"
     const value = stored()
-    return isThinkingMode(value) ? value : "minimal"
+    return isThinkingMode(value) ? value : "hide"
   })
 
   return {
     mode,
     set,
-    locked: () => Flag.OPENCODE_EXPERIMENTAL_MINIMAL_THINKING === true,
   }
 }

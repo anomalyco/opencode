@@ -218,7 +218,7 @@ export function Session() {
   const [conceal, setConceal] = createSignal(true)
   const thinking = useThinkingMode()
   const thinkingMode = thinking.mode
-  const showThinking = createMemo(() => thinkingMode() !== "hide")
+  const showThinking = createMemo(() => true)
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
   const [showAssistantMetadata, _setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
@@ -689,9 +689,8 @@ export function Session() {
     {
       title: (() => {
         const next = nextThinkingMode(thinkingMode())
-        if (next === "minimal") return "Switch thinking to minimal"
-        if (next === "hide") return "Hide thinking"
-        return "Show thinking"
+        if (next === "hide") return "Collapse thinking"
+        return "Expand thinking"
       })(),
       value: "session.toggle.thinking",
       category: "Session",
@@ -700,16 +699,6 @@ export function Session() {
         aliases: ["toggle-thinking"],
       },
       run: () => {
-        // Env override forces minimal for the process. Updating KV here would
-        // silently diverge from what's rendered; tell the user instead.
-        if (thinking.locked()) {
-          toast.show({
-            message: "Thinking mode is locked to minimal by OPENCODE_EXPERIMENTAL_MINIMAL_THINKING",
-            variant: "info",
-          })
-          dialog.clear()
-          return
-        }
         thinking.set(nextThinkingMode(thinkingMode()))
         dialog.clear()
       },
@@ -1512,7 +1501,7 @@ const PART_MAPPING = {
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme, subtleSyntax } = useTheme()
   const ctx = use()
-  // Collapsed by default in minimal mode: a single line throughout, so the
+  // Collapsed by default in hide mode: a single line throughout, so the
   // layout never shifts. Click to open the full markdown block, click to close.
   const [expanded, setExpanded] = createSignal(false)
 
@@ -1523,7 +1512,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   // Reasoning is finalized when the server sets `time.end` (see processor.ts).
   // Flips independently of the parent message completing.
   const isDone = createMemo(() => props.part.time.end !== undefined)
-  const inMinimal = createMemo(() => ctx.thinkingMode() === "minimal")
+  const inMinimal = createMemo(() => ctx.thinkingMode() === "hide")
   const duration = createMemo(() => {
     const end = props.part.time.end
     return end === undefined ? 0 : Math.max(0, end - props.part.time.start)
@@ -1539,10 +1528,10 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   }
 
   return (
-    <Show when={content() && ctx.thinkingMode() !== "hide"}>
+    <Show when={content()}>
       <Switch>
         <Match when={!inMinimal() || expanded()}>
-          {/* Full markdown block: `show` mode, or `minimal` after the user opens it. */}
+          {/* Full markdown block: `show` mode, or `hide` after the user opens it. */}
           <box
             id={"text-" + props.part.id}
             paddingLeft={2}
@@ -1558,7 +1547,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
               drawUnstyledText={false}
               streaming={true}
               syntaxStyle={subtleSyntax()}
-              content={(inMinimal() ? "▼ " : "") + "_Thinking:_ " + content()}
+              content={(inMinimal() ? "▼ " : "") + (isDone() ? "_Thought:_ " : "_Thinking:_ ") + content()}
               conceal={ctx.conceal()}
               fg={theme.textMuted}
             />
