@@ -55,13 +55,9 @@ jobs:
         settings:
           - name: linux
             host: blacksmith-4vcpu-ubuntu-2404
-            playwright: bunx playwright install --with-deps
           - name: windows
             host: blacksmith-4vcpu-windows-2025
-            playwright: bunx playwright install
     runs-on: ${{ matrix.settings.host }}
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: 0
     defaults:
       run:
         shell: bash
@@ -74,23 +70,8 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Install Playwright browsers
-        working-directory: packages/app
-        run: ${{ matrix.settings.playwright }}
-
       - name: Run app e2e tests
         run: bun --cwd packages/app test:e2e:local
         env:
           CI: true
         timeout-minutes: 30
-
-      - name: Upload Playwright artifacts
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-${{ matrix.settings.name }}-${{ github.run_attempt }}
-          if-no-files-found: ignore
-          retention-days: 7
-          path: |
-            packages/app/e2e/test-results
-            packages/app/e2e/playwright-report

@@ -1,5 +1,5 @@
 /**
- * Host-side guard before starting Univer Testcontainers / Playwright with `PLAYWRIGHT_E2E_INFRA=univer`.
+ * Host-side guard before starting Univer Testcontainers (e.g. `OPENCODE_E2E_INFRA` includes `univer` in `e2e-local.ts`).
  * univer-compat validates `wos-session` via WorkOS — same keys must exist on the host that spawns Docker.
  */
 export function assertHostWorkosForUniverE2e(): void {

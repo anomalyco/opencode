@@ -22,6 +22,15 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "e2e/workos-auth.ts", "e2e/global-setup.ts", "e2e/assert-univer-workos-env.ts", "package.json"],
+  "include": [
+    "src",
+    "e2e/workos-auth.ts",
+    "e2e/assert-univer-workos-env.ts",
+    "e2e/utils.ts",
+    "e2e/selectors.ts",
+    "e2e/actions.ts",
+    "test",
+    "package.json"
+  ],
   "exclude": ["dist", "ts-dist"]
 }

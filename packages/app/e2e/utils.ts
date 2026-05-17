@@ -40,8 +40,8 @@ export async function getCurrentProject() {
   const listSdk = createOpencodeClient({ baseUrl: serverUrl, throwOnError: true })
 
   // List projects and use the first one, or create if none
-  const projectsResult = await listSdk.project.list({ limit: 1 })
-  const projects = projectsResult.data ?? []
+  const projectsResult = await listSdk.project.list()
+  const projects = (projectsResult.data ?? []).filter((p) => !!p?.id)
 
   if (projects.length > 0) {
     const project = projects[0]
@@ -59,11 +59,11 @@ export async function getCurrentProject() {
 export async function createProject(name: string) {
   const sdk = createOpencodeClient({ baseUrl: serverUrl, throwOnError: true })
   const result = await sdk.project.create({ name })
-  if (!result.data?.id) throw new Error("Failed to create project")
+  if (!result.data?.project?.id) throw new Error("Failed to create project")
 
   return {
-    id: result.data.id,
-    directory: result.data.id,
+    id: result.data.project.id,
+    directory: result.data.project.id,
   }
 }
 

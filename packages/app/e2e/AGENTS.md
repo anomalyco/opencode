@@ -1,198 +1,32 @@
-# E2E Testing Guide
+# Browser E2E Testing Guide (Vitest + Selenium WebDriver)
 
-## Build/Lint/Test Commands
+## Commands
 
 ```bash
-# Run all e2e tests
+# Run all browser e2e tests (Vitest)
 bun test:e2e
 
-# Run specific test file
-bun test:e2e -- app/home.spec.ts
+# Same as above (alias)
+bun run test:e2e:wd
 
-# Run single test by title
-bun test:e2e -- -g "home renders and shows core entrypoints"
+# Watch mode
+bun run test:e2e:wd:watch
 
-# Run tests with UI mode (for debugging)
-bun test:e2e:ui
+# Single file
+bun run vitest run test/browser/e2e/app/home.test.ts
 
-# Run tests locally with full server setup
+# Full Docker-backed stack + Vitest
 bun test:e2e:local
 
-# View test report
-bun test:e2e:report
-
-# Typecheck
 bun typecheck
 ```
 
-## Test Structure
+## Layout
 
-All tests live in `packages/app/e2e/`:
+- Specs: `packages/app/test/browser/**/*.test.ts`
+- Shared WD helpers: `packages/app/test/browser/support/`
+- SDK / selectors / URLs: `packages/app/e2e/actions.ts`, `selectors.ts`, `utils.ts`, `workos-auth.ts`
 
-```
-e2e/
-├── fixtures.ts       # Test fixtures (test, expect, gotoSession, sdk)
-├── actions.ts        # Reusable action helpers
-├── selectors.ts      # DOM selectors
-├── utils.ts          # Utilities (serverUrl, modKey, path helpers)
-└── [feature]/
-    └── *.spec.ts     # Test files
-```
+Use `useAppWebDriver()` for `driver`, `sdk`, `gotoSession`, `origin`, `project`. Requires `PLAYWRIGHT_BASE_URL` and API env vars (`e2e/utils.ts`).
 
-## Test Patterns
-
-### Basic Test Structure
-
-```typescript
-import { test, expect } from "../fixtures"
-import { promptSelector } from "../selectors"
-import { withSession } from "../actions"
-
-test("test description", async ({ page, sdk, gotoSession }) => {
-  await gotoSession() // or gotoSession(sessionID)
-
-  // Your test code
-  await expect(page.locator(promptSelector)).toBeVisible()
-})
-```
-
-### Using Fixtures
-
-- `page` - Playwright page
-- `sdk` - OpenCode SDK client for API calls
-- `gotoSession(sessionID?)` - Navigate to session
-- `withAuth(page, fn)` — use **real WorkOS** in tests: `authenticateWithPassword` (same as `bun run staging:test-session` in `packages/opencode`) mints a sealed `wos-session` and sets the cookie for `PLAYWRIGHT_BASE_URL`, then removes it in `finally`. Set `E2E_WORKOS_EMAIL` / `E2E_WORKOS_PASSWORD` (or `STAGING_TEST_*`) plus `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, and `COOKIE_PASSWORD`. Re-exported from `fixtures.ts`.
-
-### Helper Functions
-
-**Actions** (`actions.ts`):
-
-- `openPalette(page)` - Open command palette
-- `openSettings(page)` - Open settings dialog
-- `closeDialog(page, dialog)` - Close any dialog
-- `openSidebar(page)` / `closeSidebar(page)` - Toggle sidebar
-- `waitTerminalReady(page, { term? })` - Wait for a mounted terminal to connect and finish rendering output
-- `runTerminal(page, { cmd, token, term?, timeout? })` - Type into the terminal via the browser and wait for rendered output
-- `withSession(sdk, title, callback)` - Create temp session
-- `withProject(...)` - Create temp project/workspace
-- `sessionIDFromUrl(url)` - Read session ID from URL
-- `slugFromUrl(url)` - Read workspace slug from URL
-- `waitSlug(page, skip?)` - Wait for resolved workspace slug
-- `trackSession(sessionID, directory?)` - Register session for fixture cleanup
-- `trackDirectory(directory)` - Register directory for fixture cleanup
-- `clickListItem(container, filter)` - Click list item by key/text
-
-**Selectors** (`selectors.ts`):
-
-- `promptSelector` - Prompt input
-- `terminalSelector` - Terminal panel
-- `sessionItemSelector(id)` - Session in sidebar
-- `listItemSelector` - Generic list items
-
-**Utils** (`utils.ts`):
-
-- `modKey` - Meta (Mac) or Control (Linux/Win)
-- `serverUrl` - Backend server URL
-- `sessionPath(dir, id?)` - Build session URL
-
-## Code Style Guidelines
-
-### Imports
-
-Always import from `../fixtures`, not `@playwright/test`:
-
-```typescript
-// ✅ Good
-import { test, expect } from "../fixtures"
-
-// ❌ Bad
-import { test, expect } from "@playwright/test"
-```
-
-### Naming Conventions
-
-- Test files: `feature-name.spec.ts`
-- Test names: lowercase, descriptive: `"sidebar can be toggled"`
-- Variables: camelCase
-- Constants: SCREAMING_SNAKE_CASE
-
-### Error Handling
-
-Tests should clean up after themselves. Prefer fixture-managed cleanup:
-
-```typescript
-test("test with cleanup", async ({ page, sdk, gotoSession }) => {
-  await withSession(sdk, "test session", async (session) => {
-    await gotoSession(session.id)
-    // Test code...
-  }) // Auto-deletes session
-})
-```
-
-- Prefer `withSession(...)` for temp sessions
-- In `withProject(...)` tests that create sessions or extra workspaces, call `trackSession(sessionID, directory?)` and `trackDirectory(directory)`
-- This lets fixture teardown abort, wait for idle, and clean up safely under CI concurrency
-- Avoid calling `sdk.session.delete(...)` directly
-
-### Timeouts
-
-Default: 60s per test, 10s per assertion. Override when needed:
-
-```typescript
-test.setTimeout(120_000) // For long LLM operations
-test("slow test", async () => {
-  await expect.poll(() => check(), { timeout: 90_000 }).toBe(true)
-})
-```
-
-### Selectors
-
-Use `data-component`, `data-action`, or semantic roles:
-
-```typescript
-// ✅ Good
-await page.locator('[data-component="prompt-input"]').click()
-await page.getByRole("button", { name: "Open settings" }).click()
-
-// ❌ Bad
-await page.locator(".css-class-name").click()
-await page.locator("#id-name").click()
-```
-
-### Keyboard Shortcuts
-
-Use `modKey` for cross-platform compatibility:
-
-```typescript
-import { modKey } from "../utils"
-
-await page.keyboard.press(`${modKey}+B`) // Toggle sidebar
-await page.keyboard.press(`${modKey}+Comma`) // Open settings
-```
-
-### Terminal Tests
-
-- In terminal tests, type through the browser. Do not write to the PTY through the SDK.
-- Use `waitTerminalReady(page, { term? })` and `runTerminal(page, { cmd, token, term?, timeout? })` from `actions.ts`.
-- These helpers use the fixture-enabled test-only terminal driver and wait for output after the terminal writer settles.
-- Avoid `waitForTimeout` and custom DOM or `data-*` readiness checks.
-
-## Writing New Tests
-
-1. Choose appropriate folder or create new one
-2. Import from `../fixtures`
-3. Use helper functions from `../actions` and `../selectors`
-4. When validating routing, use shared helpers from `../actions`. Workspace URL slugs can be canonicalized on Windows, so assert against canonical or resolved workspace slugs.
-5. Clean up any created resources
-6. Use specific selectors (avoid CSS classes)
-7. Test one feature per test file
-
-## Local Development
-
-For UI debugging, use:
-
-```bash
-bun test:e2e:ui
-```
-
-This opens Playwright's interactive UI for step-through debugging.
+Import SDK helpers from `e2e/actions.ts` (`withSession`, `cleanupSession`, `seedSessionQuestion`, `seedProjectsWebDriver`, …). Do **not** import removed Playwright `fixtures.ts`.

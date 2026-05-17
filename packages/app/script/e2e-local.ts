@@ -3,16 +3,14 @@ import os from "node:os"
 import path from "node:path"
 import { e2eEmit, e2eEmitElapsed } from "../e2e/emit"
 import { assertHostWorkosForUniverE2e } from "../e2e/assert-univer-workos-env"
-import { parseOpencodeE2eInfra } from "./e2e-infra"
-import { startE2eDockerDeps, startOpencodeE2eContainer } from "./e2e-testcontainers"
+import { parseOpencodeE2eInfra, startE2eDockerDeps, startOpencodeE2eContainer } from "./e2e-testcontainers"
 
 /**
  * E2E Test Runner.
  *
- * Infra: `OPENCODE_E2E_INFRA` (default `postgres,ollama`). See `./e2e-infra.ts`.
+ * Infra: `OPENCODE_E2E_INFRA` (default `postgres,ollama`). See `parseOpencodeE2eInfra` in `./e2e-testcontainers.ts`.
  * **Docker-backed:** Postgres, optional in-docker Ollama, optional MinIO + univer-compat + OpenCode **API in Bun Testcontainers**
- * (migrate → `seed-e2e` → `Server.listen`). Playwright + Vite stay on the host.
- * If `ollama` is omitted, OpenCode still needs a model: it uses **host** Ollama at `http://host.docker.internal:11434` and maps `host-gateway` for Linux.
+ * (migrate → `seed-e2e` → `Server.listen`). **Vitest + WebDriver** (`vitest run test/browser`) runs on the host.
  */
 
 const appDir = process.cwd()
@@ -155,7 +153,6 @@ if (univer) {
   containerEnv.VERITLY_HEALTH_UNIVER_URL = univer.clusterUniverHttpOrigin
 }
 
-// Strip host relay URLs: in Docker they resolve to container loopback and break `/readyz` (relay health).
 delete containerEnv.VITE_UNIVER_SDK_WS
 delete containerEnv.VERITLY_HEALTH_RELAY_URL
 
@@ -170,17 +167,12 @@ const runnerEnv: Record<string, string | undefined> = {
   PLAYWRIGHT_PORT: String(webPort),
 }
 
-/** Univer HTTP env is already on `runnerEnv` via `serverEnvBase` + `univer.env`. Do not set `PLAYWRIGHT_E2E_INFRA=univer` here — that would spawn a second MinIO+compat inside Playwright's webServer and often time out. */
-
-let runner: ReturnType<typeof Bun.spawn> | undefined
 let opencodeBox: Awaited<ReturnType<typeof startOpencodeE2eContainer>> | undefined
 let cleaned = false
 
 const cleanup = async () => {
   if (cleaned) return
   cleaned = true
-
-  if (runner && runner.exitCode === null) runner.kill("SIGTERM")
 
   if (opencodeBox !== undefined) await opencodeBox.stop()
   if (!keepSandbox) await fs.rm(sandbox, { recursive: true, force: true })
@@ -209,16 +201,17 @@ try {
   await waitForServer(`http://127.0.0.1:${serverPort}`)
   e2eEmit("[runner] OpenCode server is ready")
 
-  const pw = ["test:e2e", ...extraArgs]
-  phase(`Spawning: bun ${pw.join(" ")}`)
-  runner = Bun.spawn(["bun", ...pw], {
+  const vitestTargets = extraArgs.length > 0 ? extraArgs : ["test/browser"]
+  const vitestCli = ["run", ...vitestTargets]
+  phase(`Spawning: bun x vitest ${vitestCli.join(" ")}`)
+  const wdRunner = Bun.spawn(["bun", "x", "vitest", ...vitestCli], {
     cwd: appDir,
     env: runnerEnv,
     stdout: "inherit",
     stderr: "inherit",
   })
-  code = await runner.exited
-  phase(`Playwright finished (exit ${code}).`)
+  code = await wdRunner.exited
+  phase(`Vitest browser finished (exit ${code}).`)
 } catch (error) {
   console.error(error)
   code = 1

@@ -1,6 +1,5 @@
 import path from "node:path"
-import { parseOpencodeE2eInfra } from "./e2e-infra"
-import { startE2eDockerDeps } from "./e2e-testcontainers"
+import { parseOpencodeE2eInfra, startE2eDockerDeps } from "./e2e-testcontainers"
 
 /**
  * Verifies Testcontainers + optional Univer stack **without** Playwright or OpenCode.

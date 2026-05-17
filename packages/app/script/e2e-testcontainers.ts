@@ -1,8 +1,37 @@
+/**
+ * All Docker-backed E2E **composition** for this package: Postgres, optional Ollama, optional MinIO + univer-compat,
+ * and the OpenCode API Testcontainer. Spec files stay thin; **lifecycle** (start deps → bind ports → seed → run Vitest browser tests → tear down)
+ * lives in `script/e2e-local.ts` because the runner must wire `DATABASE_URL`, API port, and Univer URLs before WebDriver starts.
+ *
+ * **Runner contract:** use `bun ./script/e2e-local.ts -- …vitest paths` with `OPENCODE_E2E_INFRA` (default `postgres,ollama`;
+ * add `univer` for MinIO + compat on the same Docker network as OpenCode).
+ */
 import path from "node:path"
 import { S3Client } from "bun"
 import { GenericContainer, Network, Wait, type StartedNetwork, type StartedTestContainer } from "testcontainers"
-import type { E2eInfraLayer } from "./e2e-infra"
 import { e2eEmit, e2eEmitElapsed } from "../e2e/emit"
+
+export type E2eInfraLayer = "postgres" | "ollama" | "univer"
+
+const KNOWN: readonly E2eInfraLayer[] = ["postgres", "ollama", "univer"]
+
+/** Which Docker layers `e2e-local.ts` / `startE2eDockerDeps` should start (`OPENCODE_E2E_INFRA`, comma-separated). */
+export function parseOpencodeE2eInfra(): ReadonlySet<E2eInfraLayer> {
+  const raw = process.env.OPENCODE_E2E_INFRA?.trim()
+  const defaults = "postgres,ollama"
+  const src = raw ? raw : defaults
+  const out = new Set<E2eInfraLayer>()
+  for (const token of src.split(",")) {
+    const p = token.trim()
+    if (!p) continue
+    if (!KNOWN.includes(p as E2eInfraLayer)) {
+      throw new Error(`unknown OPENCODE_E2E_INFRA layer "${p}" (allowed: ${KNOWN.join(", ")})`)
+    }
+    out.add(p as E2eInfraLayer)
+  }
+  if (out.size === 0) throw new Error("OPENCODE_E2E_INFRA resolved to no layers")
+  return out
+}
 
 const pgUser = "veritly"
 const pgPass = "veritly"
