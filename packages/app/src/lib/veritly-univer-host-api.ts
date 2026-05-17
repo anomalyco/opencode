@@ -23,23 +23,55 @@ async function pollImportUnit(base: string, taskID: string) {
   throw new Error("import task timed out")
 }
 
-/** Upload xlsx bytes → universer exchange import → unit id (same wire as `univer-compat` tests). */
+export type UniverPersistedUnitRow = { id: string; name: string }
+
+/** Lists persisted sheet units for the signed-in user (S3-backed bundles on the compat server). */
+export async function listPersistedUniverUnits(base: string): Promise<UniverPersistedUnitRow[]> {
+  const b = base.replace(/\/$/, "")
+  const r = await fetch(`${b}/universer-api/veritly/units`, { credentials: "include" })
+  if (!r.ok) throw new Error(`veritly units ${r.status}`)
+  const j = (await r.json()) as { units?: unknown }
+  const rows = j.units
+  if (!Array.isArray(rows)) throw new Error("veritly units response missing units")
+  const out: UniverPersistedUnitRow[] = []
+  for (const x of rows) {
+    if (!x || typeof x !== "object") continue
+    const id = Reflect.get(x, "id")
+    const name = Reflect.get(x, "name")
+    if (typeof id !== "string" || !id) continue
+    out.push({ id, name: typeof name === "string" && name ? name : id })
+  }
+  return out
+}
+
+/** Upload xlsx: presign PUT to private bucket, then universer exchange import → unit id. */
 export async function primitiveImportXlsx(base: string, file: File) {
   const buf = new Uint8Array(await file.arrayBuffer())
-  const q = `?size=${buf.byteLength}&source=1&flate=false`
-  const up = await fetch(`${base}/universer-api/stream/file/upload${q}`, {
+  const rawCt = file.type.trim()
+  const ct =
+    rawCt !== ""
+      ? rawCt
+      : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  const pr = await fetch(`${base}/universer-api/stream/file/presign-upload`, {
     method: "POST",
     credentials: "include",
-    headers: {
-      "Content-Type":
-        file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    },
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ size: buf.byteLength, contentType: ct }),
+  })
+  if (!pr.ok) throw new Error(`presign upload failed: ${pr.status}`)
+  const presign = (await pr.json()) as { FileId?: string; uploadUrl?: string; headers?: Record<string, string> }
+  const uploadUrl = presign.uploadUrl
+  const fid = presign.FileId
+  const hdrs = presign.headers
+  if (!uploadUrl || !fid) throw new Error("presign response missing uploadUrl or FileId")
+  if (!hdrs) throw new Error("presign response missing headers")
+  const up = await fetch(uploadUrl, {
+    method: "PUT",
+    credentials: "omit",
+    headers: hdrs,
     body: buf,
   })
-  if (!up.ok) throw new Error(`file upload failed: ${up.status}`)
-  const uploaded = (await up.json()) as { FileId?: string }
-  const fid = uploaded.FileId
-  if (!fid) throw new Error("upload returned no FileId")
+  if (!up.ok) throw new Error(`object storage PUT failed: ${up.status}`)
 
   const ir = await fetch(`${base}/universer-api/exchange/2/import`, {
     method: "POST",

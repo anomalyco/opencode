@@ -8,7 +8,7 @@ declare module "*.py?raw" {
 interface ImportMetaEnv {
   /** Hosted API origin for the main OpenCode HTTP API. */
   readonly VITE_OPENCODE_SERVER_URL?: string
-  /** Univer universer / exchange HTTP (`/universer-api/*`). */
+  /** Univer universer / exchange HTTP (`/universer-api/*`). Use `same-origin` + Vite `DEV_UNIVER_COMPAT_URL` so the WorkOS cookie is sent same-origin. */
   readonly VITE_UNIVER_BACKEND_URL?: string
   /** Univer Pro `license.txt` body (same string as backend `configs/license.txt`). */
   readonly VITE_UNIVER_LICENSE?: string

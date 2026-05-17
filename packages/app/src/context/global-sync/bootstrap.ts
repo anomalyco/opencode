@@ -34,6 +34,8 @@ type GlobalStore = {
 
 export async function bootstrapGlobal(input: {
   globalSDK: OpencodeClient
+  /** Provider routes need server `Instance`; only call after we have a project id (sends `x-opencode-project`). */
+  scoped: (projectId: string) => OpencodeClient
   baseUrl: string
   connectErrorTitle: string
   connectErrorDescription: string
@@ -71,7 +73,7 @@ export async function bootstrapGlobal(input: {
     return
   }
 
-  const tasks = [
+  const core = await Promise.allSettled([
     retry(() =>
       input.globalSDK.global.config.get().then((x) => {
         input.setGlobalStore("config", x.data!)
@@ -84,21 +86,38 @@ export async function bootstrapGlobal(input: {
           .slice()
           .sort((a, b) => cmp(a.id, b.id))
         input.setGlobalStore("project", projects)
+        return projects
       }),
     ),
-    retry(() =>
-      input.globalSDK.provider.list().then((x) => {
-        input.setGlobalStore("provider", normalizeProviderList(x.data!))
-      }),
-    ),
-    retry(() =>
-      input.globalSDK.provider.auth().then((x) => {
-        input.setGlobalStore("provider_auth", x.data ?? {})
-      }),
-    ),
-  ]
+  ])
 
-  const results = await Promise.allSettled(tasks)
+  const rows =
+    core[1]?.status === "fulfilled" ? (core[1].value as Project[]) : ([] as Project[])
+
+  // the way this works is we run the "heavy" client when we have a project
+  // cuz it makes a bunch of requests with the project in context
+  // initially you don't have projects, so we just show a create button
+  const extra =
+    rows.length > 0
+      ? await Promise.allSettled((() => {
+          const id = rows[0].id
+          const sdk = input.scoped(id)
+          return [
+            retry(() =>
+              sdk.provider.list().then((x) => {
+                input.setGlobalStore("provider", normalizeProviderList(x.data!))
+              }),
+            ),
+            retry(() =>
+              sdk.provider.auth().then((x) => {
+                input.setGlobalStore("provider_auth", x.data ?? {})
+              }),
+            ),
+          ]
+        })())
+      : []
+
+  const results = [...core, ...extra]
   const errors = results.filter((r): r is PromiseRejectedResult => r.status === "rejected").map((r) => r.reason)
   if (errors.length) {
     const message = formatServerError(errors[0], input.translate)

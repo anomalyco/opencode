@@ -1,8 +1,10 @@
+import { auth } from "./setup-compat-auth"
 import { describe, expect, test } from "bun:test"
 import ExcelJS from "exceljs"
 import { createCompatApp } from "../src/app"
 import { Store } from "../src/store"
-import { MemoryExchangeFiles } from "./helpers/memory-exchange-files"
+import { MemoryExchangeFiles } from "../src/memory-exchange-files"
+import { exchangePresignPut } from "./helpers/exchange-presign-upload"
 import { xlsxToWorkbookJson } from "../src/xlsx-import"
 
 async function sample() {
@@ -47,25 +49,14 @@ describe("exchange import keeps styles in stored snapshot JSON", () => {
   test("upload + import task + GET rev exposes workbook.styles", async () => {
     const mem = new MemoryExchangeFiles()
     const store = new Store(mem, 1)
-    const app = createCompatApp(store)
+    const app = createCompatApp(store, auth)
     const buf = await sample()
-    const up = await app.request(
-      `http://127.0.0.1/universer-api/stream/file/upload?size=${buf.length}&source=1&flate=false`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        },
-        body: buf,
-      },
-    )
-    expect(up.status).toBe(200)
-    const upBody = (await up.json()) as { FileId: string }
+    const fileId = await exchangePresignPut(app, buf)
     const ir = await app.request("http://127.0.0.1/universer-api/exchange/2/import", {
       method: "POST",
       headers: { "Content-Type": "application/json;charset=UTF-8" },
       body: JSON.stringify({
-        fileID: upBody.FileId,
+        fileID: fileId,
         outputType: 1,
         minSheetColumnCount: 1,
         minSheetRowCount: 1,
@@ -102,19 +93,9 @@ describe("exchange import keeps styles in stored snapshot JSON", () => {
   test("hydrate new Store from memory blob still has styles", async () => {
     const mem = new MemoryExchangeFiles()
     const s0 = new Store(mem, 1)
-    const app0 = createCompatApp(s0)
+    const app0 = createCompatApp(s0, auth)
     const buf = await sample()
-    const up = await app0.request(
-      `http://127.0.0.1/universer-api/stream/file/upload?size=${buf.length}&source=1&flate=false`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        },
-        body: buf,
-      },
-    )
-    const fid = ((await up.json()) as { FileId: string }).FileId
+    const fid = await exchangePresignPut(app0, buf)
     const ir = await app0.request("http://127.0.0.1/universer-api/exchange/2/import", {
       method: "POST",
       headers: { "Content-Type": "application/json;charset=UTF-8" },
@@ -128,7 +109,7 @@ describe("exchange import keeps styles in stored snapshot JSON", () => {
     const unitID = t1.import.unitID
 
     const s1 = new Store(mem, 1)
-    const app1 = createCompatApp(s1)
+    const app1 = createCompatApp(s1, auth)
     const load = await app1.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`)
     expect(load.status).toBe(200)
     const j = (await load.json()) as { snapshot: { workbook: { styles: Record<string, unknown> } } }
@@ -150,7 +131,7 @@ function setRangeMut(unit: string, sheet: string, v: unknown, t: number) {
 
 describe("comb new_changes and snapshot changeset", () => {
   test("POST comb new_changes applies set-range-values and GET rev shows cell", async () => {
-    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1))
+    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), auth)
     const cr = await app.request("http://127.0.0.1/universer-api/snapshot/2/unit/-/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -193,7 +174,7 @@ describe("comb new_changes and snapshot changeset", () => {
   })
 
   test("unknown mutation id returns 422", async () => {
-    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1))
+    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), auth)
     const cr = await app.request("http://127.0.0.1/universer-api/snapshot/2/unit/-/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -219,7 +200,7 @@ describe("comb new_changes and snapshot changeset", () => {
   })
 
   test("POST snapshot changeset applies set-range-values", async () => {
-    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1))
+    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), auth)
     const cr = await app.request("http://127.0.0.1/universer-api/snapshot/2/unit/-/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -253,7 +234,7 @@ describe("comb new_changes and snapshot changeset", () => {
   })
 
   test("empty mutations still bump revision (no cell change)", async () => {
-    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1))
+    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), auth)
     const cr = await app.request("http://127.0.0.1/universer-api/snapshot/2/unit/-/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

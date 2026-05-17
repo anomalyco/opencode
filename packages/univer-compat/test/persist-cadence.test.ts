@@ -1,12 +1,13 @@
+import { auth } from "./setup-compat-auth"
 import { describe, expect, test } from "bun:test"
 import { createCompatApp } from "../src/app"
 import { Store } from "../src/store"
-import { MemoryExchangeFiles } from "./helpers/memory-exchange-files"
+import { MemoryExchangeFiles } from "../src/memory-exchange-files"
 
 class CountingMem extends MemoryExchangeFiles {
   puts = 0
   override async put(id: string, body: Uint8Array) {
-    if (id.startsWith("veritly/unit/")) this.puts += 1
+    if (id.includes("/sheets/veritly/unit/")) this.puts += 1
     await super.put(id, body)
   }
 }
@@ -15,7 +16,7 @@ describe("maybePersistUnit cadence", () => {
   test("persistEveryRev=3 writes unit bundle on create, rev 1, rev 3 only", async () => {
     const mem = new CountingMem()
     const store = new Store(mem, 3)
-    const app = createCompatApp(store)
+    const app = createCompatApp(store, auth)
     const cr = await app.request("http://127.0.0.1/universer-api/snapshot/2/unit/-/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

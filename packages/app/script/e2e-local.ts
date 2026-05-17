@@ -1,6 +1,7 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { e2eEmit, e2eEmitElapsed } from "../e2e/emit"
 import { parseOpencodeE2eInfra } from "./e2e-infra"
 import { startE2eDockerDeps, startOpencodeE2eContainer } from "./e2e-testcontainers"
 
@@ -8,12 +9,19 @@ import { startE2eDockerDeps, startOpencodeE2eContainer } from "./e2e-testcontain
  * E2E Test Runner.
  *
  * Infra: `OPENCODE_E2E_INFRA` (default `postgres,ollama`). See `./e2e-infra.ts`.
- * **Docker-backed:** Postgres, Ollama, MinIO, optional univer-compat + OpenCode **API in Bun Testcontainers**
+ * **Docker-backed:** Postgres, optional in-docker Ollama, optional MinIO + univer-compat + OpenCode **API in Bun Testcontainers**
  * (migrate → `seed-e2e` → `Server.listen`). Playwright + Vite stay on the host.
+ * If `ollama` is omitted, OpenCode still needs a model: it uses **host** Ollama at `http://host.docker.internal:11434` and maps `host-gateway` for Linux.
  */
 
 const appDir = process.cwd()
 const repoDir = path.resolve(appDir, "../..")
+const scriptT0 = Date.now()
+
+function phase(msg: string) {
+  e2eEmitElapsed(scriptT0, "runner", msg)
+}
+
 const infra = parseOpencodeE2eInfra()
 
 const extraArgs = (() => {
@@ -25,14 +33,27 @@ const extraArgs = (() => {
 async function waitForServer(url: string, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs
   const probe = `${url.replace(/\/+$/, "")}/readyz`
+  let last = ""
+  let lastLog = 0
   while (Date.now() < deadline) {
     try {
       const res = await fetch(probe)
-      if (res.ok) return
-    } catch {}
+      if (res.ok) {
+        phase(`/readyz OK (${probe})`)
+        return
+      }
+      last = `HTTP ${res.status}`
+    } catch (e) {
+      last = e instanceof Error ? e.message : "fetch failed"
+    }
+    const now = Date.now()
+    if (now - lastLog > 2500) {
+      phase(`still polling /readyz on host — ${last || "no response yet"} (${probe})`)
+      lastLog = now
+    }
     await new Promise((r) => setTimeout(r, 100))
   }
-  throw new Error(`Server not ready at ${probe} after ${timeoutMs}ms`)
+  throw new Error(`Server not ready at ${probe} after ${timeoutMs}ms (last: ${last})`)
 }
 
 async function port(): Promise<number> {
@@ -48,16 +69,17 @@ async function port(): Promise<number> {
   return raw
 }
 
-console.log("[E2E] Starting Docker-backed E2E dependencies (see e2e-testcontainers.ts)…")
+e2eEmit("[runner] Starting Docker-backed E2E dependencies (see e2e-testcontainers.ts)…")
 const deps = await startE2eDockerDeps(infra, repoDir)
-if (!deps.ollamaInternalBaseUrl) {
-  await deps.stop()
-  throw new Error(
-    "e2e-local runs OpenCode inside Docker; OPENCODE_E2E_INFRA must include `ollama` so opencode.json can use the in-network model base (http://ollama:11434).",
+phase("Docker deps up (Postgres ± Ollama ± Univer).")
+const ollamaInDocker = deps.ollamaInternalBaseUrl
+if (!ollamaInDocker) {
+  e2eEmit(
+    "[runner] OPENCODE_E2E_INFRA has no `ollama`; OpenCode uses host Ollama at http://host.docker.internal:11434/v1 (pull llama3.2:1b on the host, or add `ollama` to infra for in-Docker Ollama).",
   )
 }
 const univer = deps.univer
-if (univer) console.log(`[E2E] univer-compat at ${univer.origin}`)
+if (univer) e2eEmit(`[runner] univer-compat at ${univer.origin}`)
 
 const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-e2e-"))
 const keepSandbox = process.env.OPENCODE_E2E_KEEP_SANDBOX === "1"
@@ -66,7 +88,8 @@ const xdgConfigDir = path.join(sandbox, "config")
 const opencodeConfigDir = path.join(xdgConfigDir, "opencode")
 await fs.mkdir(opencodeConfigDir, { recursive: true })
 
-const ollamaOpenaiBase = `${deps.ollamaInternalBaseUrl.replace(/\/+$/, "")}/v1`
+const ollamaRoot = ollamaInDocker ? ollamaInDocker.replace(/\/+$/, "") : "http://host.docker.internal:11434"
+const ollamaOpenaiBase = `${ollamaRoot}/v1`
 
 const opencodeConfig = {
   model: "openai/llama3.2:1b",
@@ -94,10 +117,12 @@ await fs.writeFile(
   path.join(opencodeConfigDir, "opencode.json"),
   JSON.stringify(opencodeConfig, null, 2),
 )
+phase("Wrote sandbox opencode.json.")
 
 const serverPort = await port()
 const webPort = await port()
 const appOrigin = `http://127.0.0.1:${webPort}`
+phase(`Picked ports: API ${serverPort}, Vite ${webPort}.`)
 
 const serverEnvBase: Record<string, string | undefined> = {
   ...process.env,
@@ -131,6 +156,10 @@ if (univer) {
   containerEnv.VERITLY_HEALTH_UNIVER_URL = univer.clusterUniverHttpOrigin
 }
 
+// Strip host relay URLs: in Docker they resolve to container loopback and break `/readyz` (relay health).
+delete containerEnv.VITE_UNIVER_SDK_WS
+delete containerEnv.VERITLY_HEALTH_RELAY_URL
+
 const runnerEnv: Record<string, string | undefined> = {
   ...serverEnvBase,
   DATABASE_URL: deps.databaseUrl,
@@ -142,9 +171,7 @@ const runnerEnv: Record<string, string | undefined> = {
   PLAYWRIGHT_PORT: String(webPort),
 }
 
-if (univer) {
-  runnerEnv.PLAYWRIGHT_E2E_INFRA = "univer"
-}
+/** Univer HTTP env is already on `runnerEnv` via `serverEnvBase` + `univer.env`. Do not set `PLAYWRIGHT_E2E_INFRA=univer` here — that would spawn a second MinIO+compat inside Playwright's webServer and often time out. */
 
 let runner: ReturnType<typeof Bun.spawn> | undefined
 let opencodeBox: Awaited<ReturnType<typeof startOpencodeE2eContainer>> | undefined
@@ -168,25 +195,31 @@ process.once("SIGTERM", () => cleanup().then(() => process.exit(143)))
 let code = 1
 
 try {
-  console.log("[E2E] Starting OpenCode container (db:migrate → seed-e2e → server)…")
+  phase("OpenCode Testcontainer: start() next (blocks on migrate + seed + in-container GET /readyz 200, timeout 300s).")
   opencodeBox = await startOpencodeE2eContainer({
     repoRoot: repoDir,
     network: deps.network,
     hostApiPort: serverPort,
     configHostDir: xdgConfigDir,
     env: containerEnv,
+    hostOllama: !ollamaInDocker,
   })
+  phase("OpenCode Testcontainer start() returned (Testcontainers HTTP wait satisfied).")
 
+  phase("Host polling /readyz (redundant sanity check).")
   await waitForServer(`http://127.0.0.1:${serverPort}`)
-  console.log("[E2E] OpenCode server is ready")
+  e2eEmit("[runner] OpenCode server is ready")
 
-  runner = Bun.spawn(["bun", "test:e2e", ...extraArgs], {
+  const pw = ["test:e2e", ...extraArgs]
+  phase(`Spawning: bun ${pw.join(" ")}`)
+  runner = Bun.spawn(["bun", ...pw], {
     cwd: appDir,
     env: runnerEnv,
     stdout: "inherit",
     stderr: "inherit",
   })
   code = await runner.exited
+  phase(`Playwright finished (exit ${code}).`)
 } catch (error) {
   console.error(error)
   code = 1

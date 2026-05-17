@@ -1,4 +1,5 @@
 import { Database } from "@/storage/db.pg"
+import { runPostgresMigrations } from "@/storage/migrate-pg"
 import { Log } from "@/util/log"
 import { Server } from "./server"
 
@@ -32,6 +33,7 @@ if (!process.env.DATABASE_URL?.startsWith("postgresql://")) {
 }
 
 await Database.initialize()
+await runPostgresMigrations()
 
 const server = Server.listen({
   hostname: host,

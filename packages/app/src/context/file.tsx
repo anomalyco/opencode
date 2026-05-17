@@ -11,7 +11,9 @@ import type { FileContent, FileNode } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { isUniverOfficePath, officeMimeType } from "@/lib/office-path"
-import { pullSlot, pushSlot, type SheetUnitSlot } from "@/lib/spreadsheet-unit-persist"
+import { listSlotPathsForScope, pullSlot, pushSlot, type SheetUnitSlot } from "@/lib/spreadsheet-unit-persist"
+import { listPersistedUniverUnits } from "@/lib/veritly-univer-host-api"
+import { univerBackendOrigin } from "@/lib/univer-backend-origin"
 import { createPathHelpers } from "./file/path"
 import {
   approxBytes,
@@ -304,6 +306,76 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       })
       void tree.listDir(path.dirname(normalized), { force: true })
     }
+
+    const universerBase = (): string => {
+      const o = univerBackendOrigin()
+      if (o) return o.replace(/\/$/, "")
+      if (typeof globalThis.location === "undefined") return ""
+      return globalThis.location.origin.replace(/\/$/, "")
+    }
+
+    const seedOfficeVirtualRow = (
+      dir: string,
+      fp: string,
+      base: { unitId: string; unitKind: SheetUnitSlot["kind"] },
+      label: string,
+      dirty: Set<string>,
+    ) => {
+      if (virtualOfficeFiles.has(fp)) return
+      pushSlot(dir, fp, base.unitId, base.unitKind)
+      ensure(fp)
+      const mime = officeMimeType(fp)
+      const body = {
+        type: "binary" as const,
+        encoding: "base64" as const,
+        content: "",
+        mimeType: mime,
+        unitId: base.unitId,
+        unitKind: base.unitKind,
+      }
+      setLoaded(fp, body)
+      touchFileContent(fp, approxBytes(body as unknown as FileContent))
+      evictContent(new Set([fp]))
+      virtualOfficeFiles.set(fp, {
+        path: fp,
+        name: label,
+        type: "file",
+        absolute: fp,
+        ignored: false,
+      })
+      dirty.add(path.normalizeDir(path.dirname(fp)))
+    }
+
+    createEffect(() => {
+      const dir = scope()
+      if (!dir) return
+      const baseUrl = universerBase()
+      if (!baseUrl) return
+      void listPersistedUniverUnits(baseUrl)
+        .then((units) => {
+          if (scope() !== dir) return
+          const dirty = new Set<string>()
+          const known = new Set<string>()
+          for (const fp of listSlotPathsForScope(dir)) {
+            const slot = pullSlot(dir, fp)
+            if (!slot) continue
+            known.add(slot.id)
+            seedOfficeVirtualRow(dir, path.normalize(fp), { unitId: slot.id, unitKind: slot.kind }, getFilename(fp), dirty)
+          }
+          for (const row of units) {
+            if (known.has(row.id)) continue
+            const fp = path.normalize(`univer-${row.id}.xlsx`)
+            const stem = row.name.replace(/[/\\]/g, "-").trim() || row.id
+            const label = stem.toLowerCase().endsWith(".xlsx") ? stem : `${stem}.xlsx`
+            seedOfficeVirtualRow(dir, fp, { unitId: row.id, unitKind: "sheet" }, label, dirty)
+          }
+          for (const d of dirty) void tree.listDir(d, { force: true })
+        })
+        .catch((err: unknown) => {
+          console.error("[veritly] listPersistedUniverUnits failed", err)
+          throw err
+        })
+    })
 
     const mkdir = async (dirpath: string) => {
       void dirpath

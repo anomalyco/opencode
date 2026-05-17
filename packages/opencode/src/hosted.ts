@@ -35,8 +35,9 @@ if (!process.env.DATABASE_URL?.startsWith("postgresql://")) {
 
 log.info("using postgresql", { url: process.env.DATABASE_URL })
 const { Database } = await import("./storage/db.pg")
+const { runPostgresMigrations } = await import("./storage/migrate-pg")
 await Database.initialize()
-// Migrations are run manually via: bun run db:migrate
+await runPostgresMigrations()
 
 const hostname = process.env.OPENCODE_SERVER_HOSTNAME ?? "0.0.0.0"
 const port = Number(process.env.PORT ?? "3000")

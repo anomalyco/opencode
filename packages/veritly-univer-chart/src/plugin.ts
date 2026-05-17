@@ -30,7 +30,8 @@ export class VeritlyLiveChartPlugin extends Plugin {
 
   private registered = false
 
-  constructor(@Inject(Injector) protected readonly _injector: Injector) {
+  /** First arg is plugin options from `PluginService`; Redi injects after custom args. */
+  constructor(_opts: unknown, @Inject(Injector) protected readonly _injector: Injector) {
     super()
   }
 

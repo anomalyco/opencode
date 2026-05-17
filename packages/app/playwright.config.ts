@@ -1,10 +1,6 @@
 import fs from "node:fs"
-import path from "node:path"
-import { fileURLToPath } from "node:url"
 import { defineConfig, devices } from "@playwright/test"
 import { playwrightWebserverUsesUniver } from "./script/e2e-infra"
-
-const configDir = path.dirname(fileURLToPath(import.meta.url))
 
 const portRaw = process.env.PLAYWRIGHT_PORT
 let port = 3000
@@ -31,11 +27,9 @@ const command = univerWeb
   : `bun run dev:e2e -- --host 0.0.0.0 --port ${port}`
 /** Default false: port 4096 is often a stray OpenCode dev server; reusing it serves API JSON, not Vite. Set `PLAYWRIGHT_REUSE=1` to reuse. */
 const reuse = process.env.PLAYWRIGHT_REUSE === "1"
-const defaultAuth = path.join(configDir, "../../my-auth.json")
-const authRaw = process.env.PLAYWRIGHT_AUTH_FILE
-const storageStateFile =
-  authRaw !== undefined && authRaw.trim() !== "" ? authRaw.trim() : defaultAuth
-const storageState = fs.existsSync(storageStateFile) ? storageStateFile : undefined
+/** Optional saved storage (cookies, etc.). Not used by default — e2e signs in via `applyE2eWorkosSession` in `fixtures.ts`. */
+const authFile = process.env.PLAYWRIGHT_AUTH_FILE?.trim()
+const storageState = authFile && fs.existsSync(authFile) ? authFile : undefined
 
 export default defineConfig({
   testDir: "./e2e",
@@ -63,6 +57,9 @@ export default defineConfig({
       OTEL_LOG_LEVEL: "none",
       VERITLY_OTLP_EXPORT_DEBUG: "0",
       VITE_PUBLIC_OTEL_LOG_LEVEL: "none",
+      ...(process.env.PLAYWRIGHT_UNIVER_HEADER_AUTH?.trim() === "1"
+        ? { PLAYWRIGHT_UNIVER_HEADER_AUTH: "1" }
+        : {}),
       ...(process.env.VITE_UNIVER_BACKEND_URL?.trim()
         ? { VITE_UNIVER_BACKEND_URL: process.env.VITE_UNIVER_BACKEND_URL.trim() }
         : {}),

@@ -9,7 +9,7 @@ import {
   WORKOS_SESSION_COOKIE_NAME,
 } from "@veritly/auth-shared"
 import { Log } from "../../util/log"
-import { isOpencodeWorkosEnabled } from "../workos-env"
+import { opencodeSessionResolver } from "../session-resolver"
 
 const log = Log.create({ service: "auth" })
 const COOKIE_NAME = WORKOS_SESSION_COOKIE_NAME
@@ -127,25 +127,11 @@ export const AuthRoutes = new Hono()
     }
   })
   .get("/session", async (c) => {
-    const e2e = process.env["OPENCODE_E2E_USER_ID"]?.trim()
-    if (e2e) return c.json({ user: { id: e2e } })
-
-    if (!isOpencodeWorkosEnabled()) {
-      return c.json({ user: null })
-    }
-
-    const sessionData = getCookie(c, COOKIE_NAME)
-    if (!sessionData) {
-      return c.json({ user: null })
-    }
+    const auth = opencodeSessionResolver()
+    if (!auth) return c.json({ user: null })
 
     try {
-      const cookiePassword = requireCookiePassword(process.env["COOKIE_PASSWORD"])
-      const result = await validateWorkosSession({
-        workos: getWorkOS(),
-        sessionData,
-        cookiePassword,
-      })
+      const result = await auth.resolve(c.req.raw)
 
       if (!result.ok) {
         deleteCookie(c, COOKIE_NAME, { ...cookieBase(), path: "/" })
@@ -184,19 +170,13 @@ export async function getSessionUser(): Promise<User | null> {
 }
 
 export async function getRequestUser(c: Pick<Context, "req">): Promise<User | null> {
-  const sessionData = getCookie(c as Context, COOKIE_NAME)
-  if (!sessionData) return null
+  const auth = opencodeSessionResolver()
+  if (!auth) return null
 
   try {
-    const cookiePassword = requireCookiePassword(process.env["COOKIE_PASSWORD"])
-    const result = await validateWorkosSession({
-      workos: getWorkOS(),
-      sessionData,
-      cookiePassword,
-    })
-
+    const result = await auth.resolve((c.req as Context["req"]).raw)
     if (!result.ok) return null
-    return result.user
+    return result.user as User
   } catch {
     return null
   }

@@ -1,16 +1,19 @@
 import { BlobMissing, type ExchangeFileBackend } from "./exchange-files"
+import { MemoryExchangeFiles } from "./memory-exchange-files"
 import { applyMutationsToSnapshotJson } from "./apply-mutations"
 import { bumpSnapshotRevOnly, defaultWorkbook, migrateWorkbookInSnapshotRoot } from "./workbook"
 import { isSnapshotSave, mutationsFromChangeset } from "./changeset"
 import { xlsxToWorkbookJson } from "./xlsx-import"
+import { exchangeUploadKey, unitBundleKey, unitBundlesPrefix } from "./object-keys"
+import { requireRequestUserId } from "./request-user"
 
 function plain(o: unknown): o is Record<string, unknown> {
   return o !== null && typeof o === "object" && !Array.isArray(o)
 }
 
-/** Durable unit bundle in S3 — distinct from exchange upload keys (`FileId` UUID blobs). */
-export function unitStateKey(unitID: string) {
-  return `veritly/unit/${unitID}.json`
+/** @deprecated use `unitBundleKey` from `./object-keys` */
+export function unitStateKey(userId: string, unitID: string) {
+  return unitBundleKey(userId, unitID)
 }
 
 export type Unit = {
@@ -74,7 +77,7 @@ function snapshotRowAtOrBefore(rs: SnapshotRow[], rev: number) {
 
 /**
  * Holds unit state in RAM for the process lifetime: every revision appends a full `snapshot` JSON string
- * plus changeset rows. Hydrate loads the entire `veritly/unit/<unitID>.json` bundle from S3. Persist cadence
+ * plus changeset rows. Hydrate loads the per-user unit bundle from S3 (`unitBundleKey`). Persist cadence
  * (`maybePersistUnit`) does not trim RAM — only how often the bundle is written to object storage.
  */
 export class Store {
@@ -85,6 +88,10 @@ export class Store {
 
   private readonly hydrateLocks = new Map<string, Promise<void>>()
 
+  private hydrateLockKey(unitID: string) {
+    return `${requireRequestUserId()}:${unitID}`
+  }
+
   constructor(
     private readonly blob: ExchangeFileBackend,
     readonly persistEveryRev: number,
@@ -92,6 +99,28 @@ export class Store {
     if (!Number.isFinite(persistEveryRev) || persistEveryRev < 1) {
       throw new Error("persistEveryRev must be a finite integer >= 1")
     }
+  }
+
+  memoryExchange(): MemoryExchangeFiles | undefined {
+    const b = this.blob
+    return b instanceof MemoryExchangeFiles ? b : undefined
+  }
+
+  async beginPresignedExchangeUpload(contentType: string, size: number) {
+    const max = 32 << 20
+    if (!Number.isFinite(size) || size < 0 || size > max) throw new Error("invalid size")
+    const id = crypto.randomUUID()
+    const k = exchangeUploadKey(requireRequestUserId(), id)
+    const ttl = 300
+    const owner = requireRequestUserId()
+    const signed = await this.blob.presignedPut(k, contentType, ttl, owner)
+    return { FileId: id, url: signed.url, headers: signed.headers }
+  }
+
+  async presignedGetExchangeFile(fileID: string, ttlSec: number) {
+    const k = exchangeUploadKey(requireRequestUserId(), fileID)
+    const owner = requireRequestUserId()
+    return this.blob.presignedGet(k, ttlSec, owner)
   }
 
   /** Write unit bundle to S3 when `always`, else on rev 1 or every `persistEveryRev` (crash window between writes). */
@@ -104,29 +133,64 @@ export class Store {
   }
 
   async saveFile(id: string, b: Uint8Array) {
-    await this.blob.put(id, b)
+    await this.blob.put(exchangeUploadKey(requireRequestUserId(), id), b)
   }
 
   async fileExists(id: string) {
-    return this.blob.exists(id)
+    return this.blob.exists(exchangeUploadKey(requireRequestUserId(), id))
   }
 
   async fileBytes(fileID: string) {
     try {
-      return await this.blob.get(fileID)
+      return await this.blob.get(exchangeUploadKey(requireRequestUserId(), fileID))
     } catch (e: unknown) {
       if (e instanceof BlobMissing) throw new Missing()
       throw e
     }
   }
 
+  /** List persisted sheet units for the current user (S3 list + one GET per unit for display name). */
+  async listPersistedSheetUnits(): Promise<{ id: string; name: string }[]> {
+    const uid = requireRequestUserId()
+    const prefix = unitBundlesPrefix(uid)
+    const keys = await this.blob.listKeysWithPrefix(prefix)
+    const ids: string[] = []
+    for (const k of keys) {
+      if (!k.startsWith(prefix)) continue
+      if (!k.endsWith(".json")) continue
+      const tail = k.slice(prefix.length)
+      const id = tail.replace(/\.json$/u, "")
+      if (!id || id.includes("/")) continue
+      ids.push(id)
+    }
+    const pairs = await Promise.all(
+      ids.map(async (id): Promise<{ id: string; name: string } | undefined> => {
+        let raw: Uint8Array
+        try {
+          raw = await this.blob.get(unitBundleKey(uid, id))
+        } catch (e: unknown) {
+          if (e instanceof BlobMissing) return undefined
+          throw e
+        }
+        const bundle = JSON.parse(new TextDecoder().decode(raw)) as PersistedUnitBundle
+        const u = bundle.unit
+        if (!u || u.id !== id) return undefined
+        const n = u.name
+        return { id, name: typeof n === "string" && n.trim() ? n.trim() : id }
+      }),
+    )
+    const rows = pairs.filter((x): x is { id: string; name: string } => Boolean(x))
+    return rows.sort((a, b) => a.name.localeCompare(b.name))
+  }
+
   /** Load unit + snapshots + changesets from object storage when RAM was cleared (compat restart). */
   async hydrateUnit(unitID: string) {
     if (this.units.has(unitID)) return
-    let p = this.hydrateLocks.get(unitID)
+    const lk = this.hydrateLockKey(unitID)
+    let p = this.hydrateLocks.get(lk)
     if (!p) {
-      p = this.hydrateUnitOnce(unitID).finally(() => this.hydrateLocks.delete(unitID))
-      this.hydrateLocks.set(unitID, p)
+      p = this.hydrateUnitOnce(unitID).finally(() => this.hydrateLocks.delete(lk))
+      this.hydrateLocks.set(lk, p)
     }
     await p
   }
@@ -135,7 +199,7 @@ export class Store {
     if (this.units.has(unitID)) return
     let raw: Uint8Array
     try {
-      raw = await this.blob.get(unitStateKey(unitID))
+      raw = await this.blob.get(unitBundleKey(requireRequestUserId(), unitID))
     } catch (e: unknown) {
       if (e instanceof BlobMissing) return
       throw e
@@ -158,7 +222,10 @@ export class Store {
       snapshots: snaps,
       changesets: this.changesets.get(unitID) ?? [],
     }
-    await this.blob.put(unitStateKey(unitID), new TextEncoder().encode(JSON.stringify(bundle)))
+    await this.blob.put(
+      unitBundleKey(requireRequestUserId(), unitID),
+      new TextEncoder().encode(JSON.stringify(bundle)),
+    )
   }
 
   createUnit(name: string, creator: string, typ: number) {

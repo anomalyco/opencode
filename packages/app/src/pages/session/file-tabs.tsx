@@ -84,7 +84,7 @@ export function FileTabContent(props: { tab: string }) {
 
   const path = createMemo(() => file.pathFromTab(props.tab))
   const markdown = createMemo(() => /\.mdx?$/i.test(path() ?? ""))
-  const spreadsheet = createMemo(() => /\.(xlsx?|xlsm|xlsb|csv|ods)$/i.test(path() ?? ""))
+  const spreadsheet = createMemo(() => /\.(xlsx|xlsm|xls|xlsb|csv|ods)$/i.test(path() ?? ""))
   const [markdownView, setMarkdownView] = createSignal<"source" | "preview">("preview")
   const state = createMemo(() => {
     const p = path()

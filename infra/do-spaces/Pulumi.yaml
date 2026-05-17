@@ -1,0 +1,6 @@
+name: veritly-do-spaces
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+description: Private DigitalOcean Spaces bucket for univer-compat (browser uploads via presigned PUT)

@@ -44,6 +44,10 @@ try {
   process.exit(0)
 } catch (e) {
   console.error("[E2E smoke] Failed:", e)
-  await down().catch(() => {})
+  try {
+    await down()
+  } catch (downErr) {
+    console.error("[E2E smoke] down failed after error:", downErr)
+  }
   process.exit(1)
 }

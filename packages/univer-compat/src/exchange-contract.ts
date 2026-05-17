@@ -13,7 +13,7 @@ export const universerRoutes = [
   "POST /universer-api/authz/-/object/-/allowed",
   "POST /universer-api/authz/-/object/-/batch_allowed",
   "GET /universer-api/authz/list-collaborators",
-  "POST /universer-api/stream/file/upload",
+  "POST /universer-api/stream/file/presign-upload",
   "GET /universer-api/file/:fileID/sign-url",
   "POST /universer-api/exchange/:type/import",
   "POST /universer-api/exchange/:type/export",
@@ -35,7 +35,7 @@ export const universerRoutes = [
 
 export const exchangeMultipartVsJson = {
   upload:
-    "multipart form field `file` OR raw body with Content-Type sheet mime and query `?size=&source=&flate=` (size must match body length)",
+    "POST JSON `{ size, contentType? }` → `{ FileId, uploadUrl, headers }`; client PUTs bytes to `uploadUrl` (presigned S3 or same-origin memory token). Max 32 MiB.",
   import: "JSON POST body includes at least `{ fileID }` (extra keys ignored by compat)",
   taskPoll: "GET returns `{ error, taskID, status, import: { outputType, unitID, jsonID } }`",
 } as const

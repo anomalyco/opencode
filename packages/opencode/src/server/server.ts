@@ -6,7 +6,7 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { streamSSE } from "hono/streaming"
 import { proxy } from "hono/proxy"
-import { getCookie, setCookie } from "hono/cookie"
+import { setCookie } from "hono/cookie"
 import z from "zod"
 import { Provider } from "../provider/provider"
 import { NamedError } from "@opencode-ai/util/error"
@@ -37,14 +37,25 @@ import { initVeritlyTracer, veritlyHonoOtelMiddleware } from "@veritly/telemetry
 import path from "path"
 import { apiHealthReport, isPublicHealthPath } from "./health"
 import { AuthRoutes, getCookieOptions, type SessionUser } from "./routes/auth"
-import { isOpencodeWorkosEnabled } from "./workos-env"
 import { resolveInstanceProject } from "./resolve-instance-project"
-import {
-  createWorkOSClient,
-  requireCookiePassword,
-  validateWorkosSession,
-  WORKOS_SESSION_COOKIE_NAME,
-} from "@veritly/auth-shared"
+import { WORKOS_SESSION_COOKIE_NAME } from "@veritly/auth-shared"
+import { opencodeSessionResolver } from "./session-resolver"
+
+function pathKey(path: string) {
+  return path.split("?")[0].replace(/\/+$/, "") || "/"
+}
+
+/**
+ * Routes that must not run `Instance.provide` / `resolveInstanceProject` (chicken-and-egg with PG only).
+ * `/provider/*` still needs `Instance` — `Config.get` and `ProviderAuth.methods` use `Instance.state`.
+ */
+function skipInstanceBind(path: string, method: string) {
+  const p = pathKey(path)
+  if (p === "/log") return true
+  if (method === "GET" && p === "/project") return true
+  if (method === "POST" && p === "/project/create") return true
+  return false
+}
 
 // This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -89,7 +100,7 @@ export namespace Server {
   export const Default = lazy(() => createApp({}))
 
   export const createApp = (opts: { cors?: string[] }): Hono => {
-    const app = new Hono()
+    const app = new Hono({ strict: false })
     return app
       .use("*", veritlyHonoOtelMiddleware("veritly-opencode"))
       .onError((err, c) => {
@@ -152,36 +163,17 @@ export namespace Server {
         )
           return next()
 
-        const workosConfigured = isOpencodeWorkosEnabled()
-        if (!workosConfigured) {
+        const auth = opencodeSessionResolver()
+        if (!auth) {
           const password = Flag.OPENCODE_SERVER_PASSWORD
           if (!password) return next()
           return next()
         }
-        if (process.env["OPENCODE_E2E_USER_ID"]) return next()
-
-        const sessionData = getCookie(c, WORKOS_SESSION_COOKIE_NAME)
-        if (!sessionData) {
-          return c.json({ error: "Unauthorized" }, 401)
-        }
 
         try {
-          const cookiePassword = requireCookiePassword(process.env["COOKIE_PASSWORD"])
-          const apiKey = process.env["WORKOS_API_KEY"]
-          const clientId = process.env["WORKOS_CLIENT_ID"]
+          const result = await auth.resolve(c.req.raw)
+          if (!result.ok) return c.json({ error: result.message }, 401)
 
-          if (!apiKey || !clientId) {
-            return c.json({ error: "WorkOS not configured" }, 500)
-          }
-
-          const workos = createWorkOSClient({ apiKey, clientId })
-          const result = await validateWorkosSession({ workos, sessionData, cookiePassword })
-
-          if (!result.ok) {
-            return c.json({ error: "Invalid session" }, 401)
-          }
-
-          // If session was refreshed, update the cookie with new session data
           if (result.refreshedSessionData) {
             setCookie(c, WORKOS_SESSION_COOKIE_NAME, result.refreshedSessionData, getCookieOptions())
           }
@@ -273,7 +265,7 @@ export namespace Server {
         },
       )
       .use(async (c, next) => {
-        if (c.req.path === "/log") return next()
+        if (skipInstanceBind(c.req.path, c.req.method)) return next()
         const resolved = await resolveInstanceProject(c)
         if (resolved instanceof Response) return resolved
         const project = resolved

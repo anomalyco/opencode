@@ -78,7 +78,7 @@ export async function startFullStack(): Promise<FullStackContext> {
 
   // Build server from Dockerfile (or use a simpler approach with bun directly)
   // For now, we'll use a node/bun base image with the code mounted
-  const server = await new GenericContainer("oven/bun:1.1")
+  const server = await new GenericContainer("oven/bun:1.3.10")
     .withExposedPorts(4096)
     .withEnvironment({
       DATABASE_URL: dbUrl,

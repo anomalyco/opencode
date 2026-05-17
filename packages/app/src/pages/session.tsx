@@ -1196,7 +1196,12 @@ export default function Page() {
   }
 
   const halt = (sessionID: string) =>
-    busy(sessionID) ? sdk.client.session.abort({ sessionID }).catch(() => {}) : Promise.resolve()
+    busy(sessionID)
+      ? sdk.client.session.abort({ sessionID }).catch((err: unknown) => {
+          console.error("[session] halt abort failed", err)
+          throw err
+        })
+      : Promise.resolve()
 
   const fork = (input: { sessionID: string; messageID: string }) => {
     const value = draft(input.messageID)

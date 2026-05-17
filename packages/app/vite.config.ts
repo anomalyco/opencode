@@ -57,6 +57,16 @@ const axiomOtlpProxy = (axiomHost: string) => ({
   },
 })
 
+function devUniverProxy(upstream: string) {
+  const t = upstream.replace(/\/+$/, "")
+  return {
+    "/universer-api": {
+      target: t,
+      changeOrigin: true,
+    },
+  } as const
+}
+
 function devApiProxy(target: string) {
   const t = target.replace(/\/+$/, "")
   const origin = new URL(t).origin
@@ -88,6 +98,8 @@ export default defineConfig(({ mode }) => {
   const axiomHost = (env.VITE_PUBLIC_AXIOM_URL || "https://api.axiom.co").replace(/\/+$/, "")
   /** Forward `/api/*` (HTTP + WebSocket) to hosted edge so `VITE_UNIVER_SDK_WS=/api/...` is same-origin in dev. */
   const devProxyTarget = env.DEV_PROXY_TARGET?.trim()
+  const univerSameOrigin = env.VITE_UNIVER_BACKEND_URL?.trim().toLowerCase() === "same-origin"
+  const devUniverCompatUrl = (env.DEV_UNIVER_COMPAT_URL?.trim() || "http://127.0.0.1:8787").replace(/\/+$/, "")
   /** Named tunnel hostname (e.g. `local-4444.veritly.co.uk`). Without HMR `wss`+443, the dev client tries `ws://localhost:<port>` from an `https://` page → mixed-content blocked. Bun servers on other ports do not inject `@vite/client`. */
   const tunnelPublicHost = env.VERITLY_TUNNEL_PUBLIC_HOST?.trim()
 
@@ -113,12 +125,14 @@ export default defineConfig(({ mode }) => {
       proxy: {
         ...axiomOtlpProxy(axiomHost),
         ...(devProxyTarget ? devApiProxy(devProxyTarget) : {}),
+        ...(univerSameOrigin ? devUniverProxy(devUniverCompatUrl) : {}),
       },
     },
     preview: {
       proxy: {
         ...axiomOtlpProxy(axiomHost),
         ...(devProxyTarget ? devApiProxy(devProxyTarget) : {}),
+        ...(univerSameOrigin ? devUniverProxy(devUniverCompatUrl) : {}),
       },
     },
     build: {

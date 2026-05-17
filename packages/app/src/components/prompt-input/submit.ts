@@ -72,11 +72,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const [, setStore] = globalSync.child(sdk.directory)
     setStore("todo", sessionID, [])
 
-    return sdk.client.session
-      .abort({
-        sessionID,
-      })
-      .catch(() => {})
+    return sdk.client.session.abort({ sessionID }).catch((err: unknown) => {
+      console.error("[session] prompt submit abort failed", err)
+      throw err
+    })
   }
 
   const restoreCommentItems = (items: CommentItem[]) => {

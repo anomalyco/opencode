@@ -25,6 +25,7 @@ services:
     environment:
       MINIO_ROOT_USER: veritlyminio
       MINIO_ROOT_PASSWORD: veritlyminio_dev
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
     volumes:
       - minio_data:/data
 

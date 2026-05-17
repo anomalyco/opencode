@@ -3,6 +3,7 @@
  *
  * **Runner (this repo’s `e2e-local.ts`):** `OPENCODE_E2E_INFRA` — comma-separated layers.
  * Default when unset: `postgres,ollama` (same behavior as the original local E2E runner).
+ * Omitting `ollama` is allowed: `e2e-local` points OpenCode-in-Docker at host Ollama (`host.docker.internal:11434`) instead of starting the Ollama container.
  *
  * **Playwright webServer only:** `PLAYWRIGHT_E2E_INFRA` — which extra processes Vite should wrap.
  * Example: `univer` → use `dev-e2e-with-univer.ts` (MinIO Testcontainers + compat + Vite); all MinIO/compat wiring is in `e2e-testcontainers.ts`.

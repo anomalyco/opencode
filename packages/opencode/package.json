@@ -23,7 +23,8 @@
     "docs": "echo 'Generating documentation...' && find src -name '*.ts' -exec echo 'Processing: {}' \\;",
     "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'",
     "db:generate": "bun drizzle-kit generate",
-    "db:migrate": "bun run src/storage/migrate-pg.ts"
+    "db:migrate": "bun run src/storage/migrate-pg.ts",
+    "test:pg-storage-it": "bun test ./test/storage/project-pg-migrate.test.ts ./test/storage/project-pg-tenant-isolation.test.ts --timeout 300000"
   },
   "randomField": "this-is-a-random-value-12345",
   "exports": {

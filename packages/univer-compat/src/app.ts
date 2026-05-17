@@ -6,6 +6,10 @@ import { buildRealSnapshotEnvelope } from "./workbook"
 import { Conflict, MergeFailed, Missing, Store } from "./store"
 import { jsonResponse } from "./json-response"
 
+import { requireRequestUserId } from "./request-user"
+import type { SessionResolver } from "@veritly/auth-shared"
+import { univerCompatAuthMiddleware } from "./auth-middleware"
+
 function corsHeaders(req: Request) {
   const h = new Headers()
   const origin = req.headers.get("Origin") ?? ""
@@ -14,10 +18,14 @@ function corsHeaders(req: Request) {
     h.set("Access-Control-Allow-Credentials", "true")
   }
   h.set("Vary", "Origin, Access-Control-Request-Headers")
-  h.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+  h.set("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS")
   const reqHeaders = (req.headers.get("Access-Control-Request-Headers") ?? "").trim()
   if (reqHeaders) h.set("Access-Control-Allow-Headers", reqHeaders)
-  else h.set("Access-Control-Allow-Headers", "Content-Type,Authorization,x-veritly-project-id,x-api-key,x-univer-host")
+  else
+    h.set(
+      "Access-Control-Allow-Headers",
+      "Content-Type,Authorization,Cookie,x-veritly-project-id,x-api-key,x-univer-host,x-veritly-univer-test-user",
+    )
   return h
 }
 
@@ -48,7 +56,7 @@ function parseIntPath(s: string) {
   return n
 }
 
-export function createCompatApp(store: Store) {
+export function createCompatApp(store: Store, auth: SessionResolver) {
   const app = new Hono()
 
   app.use("*", async (c, next) => {
@@ -57,6 +65,8 @@ export function createCompatApp(store: Store) {
     if (c.req.method === "OPTIONS") return c.body(null, 204)
     await next()
   })
+
+  app.use("*", univerCompatAuthMiddleware(auth))
 
   app.get("/healthz", (c) => c.json({ ok: true }))
   app.get("/health", (c) => c.json({ ok: true }))
@@ -121,46 +131,71 @@ export function createCompatApp(store: Store) {
     }),
   )
 
-  app.post("/universer-api/stream/file/upload", async (c) => {
-    const ct = (c.req.header("Content-Type") ?? "").toLowerCase()
-    let buf: Uint8Array
-    if (ct.includes("multipart/form-data")) {
-      const form = await c.req.formData()
-      const f = form.get("file")
-      if (!(f instanceof File)) return c.json({ error: "missing file" }, 400)
-      buf = new Uint8Array(await f.arrayBuffer())
-    } else {
-      const maxBody = 32 << 20
-      const sizeParam = c.req.query("size")
-      let maxRead = maxBody
-      let expect = 0
-      if (sizeParam) {
-        const n = Number.parseInt(sizeParam, 10)
-        if (Number.isNaN(n) || n < 0) return c.json({ error: "invalid size" }, 400)
-        if (n > maxBody) return c.json({ error: "size too large" }, 400)
-        expect = n
-        maxRead = n + 1
-      }
-      const raw = c.req.raw.body
-      if (!raw) return c.json({ error: "empty body" }, 400)
-      const b = new Uint8Array(await new Response(raw).arrayBuffer())
-      if (b.byteLength > maxRead) return c.json({ error: "body too large" }, 400)
-      if (expect > 0 && b.byteLength !== expect) return c.json({ error: "body length does not match size" }, 400)
-      buf = b
-    }
-    const id = crypto.randomUUID()
-    await store.saveFile(id, buf)
-    return c.json({ FileId: id })
+  app.get("/universer-api/veritly/units", async (c) => {
+    const units = await store.listPersistedSheetUnits()
+    return c.json({ error: okErr(), units })
   })
+
+  app.post("/universer-api/stream/file/presign-upload", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { size?: unknown; contentType?: unknown }
+    const size = body.size
+    if (typeof size !== "number" || !Number.isFinite(size)) return c.json({ error: "invalid size" }, 400)
+    const rawCt = body.contentType
+    const ct =
+      typeof rawCt === "string" && rawCt.trim()
+        ? rawCt.trim()
+        : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    let out: { FileId: string; url: string; headers: Record<string, string> }
+    try {
+      out = await store.beginPresignedExchangeUpload(ct, size)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg === "invalid size") return c.json({ error: msg }, 400)
+      throw e
+    }
+    const origin = new URL(c.req.url).origin
+    const uploadUrl = out.url.startsWith("http") ? out.url : `${origin}${out.url}`
+    return c.json({
+      error: okErr(),
+      FileId: out.FileId,
+      uploadUrl,
+      headers: out.headers,
+    })
+  })
+
+  const mem = store.memoryExchange()
+  if (mem) {
+    app.put("/universer-api/_memory_exchange_put/:token", async (c) => {
+      const raw = await c.req.arrayBuffer()
+      try {
+        mem.finishPresignedPut(c.req.param("token"), requireRequestUserId(), new Uint8Array(raw))
+      } catch {
+        return c.json({ error: "invalid presign" }, 400)
+      }
+      return c.body(null, 204)
+    })
+    app.get("/universer-api/_memory_exchange_get/:token", async (c) => {
+      const key = mem.consumePresignedGetToken(c.req.param("token"), requireRequestUserId())
+      if (!key) return c.json({ error: "not found" }, 404)
+      const bytes = await mem.get(key)
+      return new Response(Buffer.from(bytes), {
+        status: 200,
+        headers: { "Content-Type": "application/octet-stream" },
+      })
+    })
+  }
 
   app.get("/universer-api/file/:fileID/sign-url", async (c) => {
     const id = c.req.param("fileID")
     if (!(await store.fileExists(id))) {
       return c.json({ error: { code: 404, message: "file not found" } }, 404)
     }
+    const signed = await store.presignedGetExchangeFile(id, 300)
+    const origin = new URL(c.req.url).origin
+    const url = signed.url.startsWith("http") ? signed.url : `${origin}${signed.url}`
     return c.json({
       error: okErr(),
-      url: `file:///compat/${id}`,
+      url,
     })
   })
 

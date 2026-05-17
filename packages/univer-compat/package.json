@@ -13,9 +13,13 @@
     "typecheck": "tsgo --noEmit -p .",
     "test": "bun test ./test",
     "test:s3-it": "UNIVER_COMPAT_S3_IT=1 bun test ./test/s3-persist.integration.test.ts --timeout 180000",
+    "test:presign-s3-it": "UNIVER_COMPAT_PRESIGN_S3_IT=1 bun test ./test/presign-auth-s3.integration.test.ts --timeout 180000",
     "serve": "bun --env-file=../../.env.development ./script/serve.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.993.0",
+    "@aws-sdk/s3-request-presigner": "3.993.0",
+    "@veritly/auth-shared": "workspace:*",
     "exceljs": "4.4.0",
     "hono": "catalog:",
     "ot-json1": "1.0.2",

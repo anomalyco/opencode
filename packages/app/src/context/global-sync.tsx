@@ -316,6 +316,7 @@ function createGlobalSync() {
   async function bootstrap() {
     await bootstrapGlobal({
       globalSDK: globalSDK.client,
+      scoped: (id) => globalSDK.createClient({ projectId: id }),
       baseUrl: globalSDK.url,
       connectErrorTitle: language.t("dialog.server.add.error"),
       connectErrorDescription: language.t("error.globalSync.connectFailed", {

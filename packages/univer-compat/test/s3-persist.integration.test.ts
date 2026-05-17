@@ -1,14 +1,19 @@
+import { auth, user } from "./setup-compat-auth"
 import { afterAll, describe, expect, test } from "bun:test"
 import { S3Client } from "bun"
+import { S3Client as AwsJsS3Client } from "@aws-sdk/client-s3"
 import { GenericContainer, Network, Wait, type StartedNetwork, type StartedTestContainer } from "testcontainers"
 import { createCompatApp } from "../src/app"
 import { S3ExchangeFiles } from "../src/exchange-files"
-import { Store, unitStateKey } from "../src/store"
+import { unitBundleKey } from "../src/object-keys"
+import { runWithRequestUserAsync } from "../src/request-user"
+import { Store } from "../src/store"
 
 const access = "veritlyminio"
 const secret = "veritlyminio_dev"
 const region = "us-east-1"
 const bucket = "veritly-compat-it"
+const minioServerImage = "minio/minio:RELEASE.2025-09-07T16-13-09Z"
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
@@ -49,7 +54,7 @@ describe.skipIf(process.env.UNIVER_COMPAT_S3_IT !== "1")("S3 persist + hydrate (
 
   test("persistEveryRev=3: stale hydrate until boundary write", async () => {
     net = await new Network().start()
-    minio = await new GenericContainer("minio/minio:latest")
+    minio = await new GenericContainer(minioServerImage)
       .withExposedPorts(9000)
       .withEnvironment({
         MINIO_ROOT_USER: access,
@@ -58,8 +63,8 @@ describe.skipIf(process.env.UNIVER_COMPAT_S3_IT !== "1")("S3 persist + hydrate (
       .withNetwork(net)
       .withNetworkAliases("minio")
       .withCommand(["server", "/data", "--address", ":9000", "--console-address", ":9001"])
-      .withWaitStrategy(Wait.forLogMessage("API:"))
-      .withStartupTimeout(60_000)
+      .withWaitStrategy(Wait.forLogMessage(/MinIO Object Storage Server/))
+      .withStartupTimeout(180_000)
       .start()
 
     init = await new GenericContainer("minio/mc:latest")
@@ -74,9 +79,15 @@ describe.skipIf(process.env.UNIVER_COMPAT_S3_IT !== "1")("S3 persist + hydrate (
 
     endpoint = `http://${minio.getHost()}:${minio.getMappedPort(9000)}`
     client = await minioReady(endpoint)
-    const blob = new S3ExchangeFiles(client)
+    const signer = new AwsJsS3Client({
+      region,
+      endpoint,
+      credentials: { accessKeyId: access, secretAccessKey: secret },
+      forcePathStyle: true,
+    })
+    const blob = new S3ExchangeFiles(client, signer, bucket)
     const s1 = new Store(blob, 3)
-    const app1 = createCompatApp(s1)
+    const app1 = createCompatApp(s1, auth)
 
     const cr = await app1.request("http://127.0.0.1/universer-api/snapshot/2/unit/-/create", {
       method: "POST",
@@ -119,8 +130,8 @@ describe.skipIf(process.env.UNIVER_COMPAT_S3_IT !== "1")("S3 persist + hydrate (
     expect((await mut(20, 2, 1)).status).toBe(200)
 
     const s2 = new Store(blob, 3)
-    const app2 = createCompatApp(s2)
-    await s2.hydrateUnit(unitID)
+    const app2 = createCompatApp(s2, auth)
+    await runWithRequestUserAsync(user, () => s2.hydrateUnit(unitID))
     const stale = await app2.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`)
     const staleBody = (await stale.json()) as {
       snapshot: { workbook: { sheets: Record<string, { cellData?: Record<string, Record<string, { v?: unknown }>> }> } }
@@ -129,7 +140,7 @@ describe.skipIf(process.env.UNIVER_COMPAT_S3_IT !== "1")("S3 persist + hydrate (
 
     expect((await mut(30, 2, 2)).status).toBe(200)
 
-    const raw = new TextDecoder().decode(await client.file(unitStateKey(unitID)).bytes())
+    const raw = new TextDecoder().decode(await client.file(unitBundleKey(user, unitID)).bytes())
     const bundle = JSON.parse(raw) as {
       unit: { revision: number }
       snapshots: Array<{ revision: number; snapshot: string }>

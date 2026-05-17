@@ -48,6 +48,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await seedStorage(page, { projectId: project.id })
 
     const gotoSession = async (sessionID?: string) => {
+      await applyE2eWorkosSession(page)
       await page.goto(sessionPath(project.id, sessionID))
       await expect(page.locator(promptSelector)).toBeVisible()
     }
@@ -71,6 +72,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       const sessions = new Set<string>()
 
       const gotoSession = async (sessionID?: string) => {
+        await applyE2eWorkosSession(page)
         await page.goto(sessionPath(project.id, sessionID))
         await expect(page.locator(promptSelector)).toBeVisible()
         const current = sessionIDFromUrl(page.url())

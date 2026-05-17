@@ -1,8 +1,10 @@
+import { auth } from "./setup-compat-auth"
 import { describe, expect, test } from "bun:test"
 import * as XLSX from "xlsx"
 import { createCompatApp } from "../src/app"
 import { Store } from "../src/store"
-import { MemoryExchangeFiles } from "./helpers/memory-exchange-files"
+import { MemoryExchangeFiles } from "../src/memory-exchange-files"
+import { exchangePresignPut } from "./helpers/exchange-presign-upload"
 
 function minimalXlsx() {
   const wb = XLSX.utils.book_new()
@@ -14,24 +16,13 @@ function minimalXlsx() {
 describe("univer-compat exchange + snapshot", () => {
   test("upload raw then exchange matches universer shape", async () => {
     const store = new Store(new MemoryExchangeFiles(), 1)
-    const app = createCompatApp(store)
+    const app = createCompatApp(store, auth)
     const xlsx = minimalXlsx()
-    const up = await app.request(
-      `http://127.0.0.1/universer-api/stream/file/upload?size=${xlsx.length}&source=1&flate=false`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        },
-        body: xlsx,
-      },
-    )
-    expect(up.status).toBe(200)
-    const upBody = (await up.json()) as { FileId: string }
-    expect(upBody.FileId.length).toBeGreaterThan(0)
+    const fid = await exchangePresignPut(app, xlsx)
+    expect(fid.length).toBeGreaterThan(0)
 
     const payload = JSON.stringify({
-      fileID: upBody.FileId,
+      fileID: fid,
       outputType: 1,
       minSheetColumnCount: 1,
       minSheetRowCount: 1,
@@ -60,7 +51,7 @@ describe("univer-compat exchange + snapshot", () => {
 
   test("snapshot create + save", async () => {
     const store = new Store(new MemoryExchangeFiles(), 1)
-    const app = createCompatApp(store)
+    const app = createCompatApp(store, auth)
     const cr = await app.request("http://127.0.0.1/universer-api/snapshot/2/unit/-/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -85,7 +76,7 @@ describe("univer-compat exchange + snapshot", () => {
   test("persisted unit hydrates after new Store (compat restart)", async () => {
     const mem = new MemoryExchangeFiles()
     const s0 = new Store(mem, 1)
-    const app0 = createCompatApp(s0)
+    const app0 = createCompatApp(s0, auth)
     const cr = await app0.request("http://127.0.0.1/universer-api/snapshot/2/unit/-/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -106,7 +97,7 @@ describe("univer-compat exchange + snapshot", () => {
     expect(sb.status).toBe(200)
 
     const s1 = new Store(mem, 1)
-    const app1 = createCompatApp(s1)
+    const app1 = createCompatApp(s1, auth)
     const load = await app1.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${created.unitID}/rev/0`)
     expect(load.status).toBe(200)
     const body = (await load.json()) as { latestRevision?: number }
@@ -114,7 +105,7 @@ describe("univer-compat exchange + snapshot", () => {
   })
 
   test("formula license limit endpoints", async () => {
-    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1))
+    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), auth)
     const st = await app.request("http://127.0.0.1/universer-api/license/formula/limit/status")
     expect(st.status).toBe(200)
     const j = (await st.json()) as { limitInfo: { granted: boolean } }

@@ -1,0 +1,16 @@
+{
+  "name": "veritly-do-spaces",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "preview": "pulumi preview",
+    "up": "pulumi up"
+  },
+  "dependencies": {
+    "@pulumi/digitalocean": "4.55.0",
+    "@pulumi/pulumi": "3.153.0"
+  },
+  "devDependencies": {
+    "typescript": "5.8.2"
+  }
+}

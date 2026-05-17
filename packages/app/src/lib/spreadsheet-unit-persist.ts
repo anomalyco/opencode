@@ -1,5 +1,17 @@
 const marker = "veritly.sheetUnit.v1:"
 
+export function listSlotPathsForScope(scope: string): string[] {
+  if (typeof localStorage === "undefined") return []
+  const p = `${marker}${scope}\n`
+  const out: string[] = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i)
+    if (!k || !k.startsWith(p)) continue
+    out.push(k.slice(p.length))
+  }
+  return out
+}
+
 function slot(scope: string, fp: string) {
   return `${marker}${scope}\n${fp}`
 }

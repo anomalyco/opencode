@@ -21,7 +21,7 @@ function isPostgres() {
  * - Else `?directory=<id>` (SDK / web UI: route `/:dir` is the project id and is sent as `directory`)
  * - Else first project for the tenant (Postgres).
  *
- * Invalid request URL: `new URL` throws. Empty `?project=` / `?directory=`, unknown id, or no tenant project: HTTP 400 via HTTPException (never silently pick the wrong project).
+ * Empty `?project=` / `?directory=`, unknown id, or no tenant project: HTTP 400 via HTTPException (never silently pick the wrong project).
  */
 export async function resolveInstanceProject(c: Context): Promise<R> {
   if (!isPostgres()) {
@@ -34,7 +34,7 @@ export async function resolveInstanceProject(c: Context): Promise<R> {
     return trimmed
   }
 
-  const url = new URL(c.req.url)
+  const url = new URL(c.req.url, "http://127.0.0.1")
 
   const read = (key: string) => {
     const raw = c.req.query(key)

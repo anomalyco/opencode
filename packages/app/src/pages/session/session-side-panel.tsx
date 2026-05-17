@@ -560,6 +560,7 @@ export function SessionSidePanel(props: {
                         class="pt-3"
                         droppable={true}
                         emptyActions={true}
+                        onFileClick={(node) => openTab(file.tab(node.path))}
                         onUpload={async (files) => {
                           for (const f of files) {
                             const arrayBuffer = await f.arrayBuffer()

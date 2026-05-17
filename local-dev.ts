@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { execSync, spawn, spawnSync } from "node:child_process"
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 
 const root = import.meta.dir
@@ -40,15 +40,6 @@ function kill(pid: number) {
   } catch {}
 }
 
-function alive(pid: number) {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
-}
-
 function pids(port: number) {
   try {
     return execSync(`lsof -ti:${port}`, { stdio: "pipe" })
@@ -85,6 +76,23 @@ function ensureInfra() {
   console.log("Infrastructure started successfully")
 }
 
+async function runDbMigrate() {
+  const dbUrl = process.env.DATABASE_URL?.trim()
+  if (!dbUrl) {
+    console.error("Missing DATABASE_URL; cannot run db:migrate")
+    process.exit(1)
+  }
+  if (!dbUrl.startsWith("postgresql://") && !dbUrl.startsWith("postgres://")) {
+    return
+  }
+  const base = resolve(root, "packages/opencode/src/storage")
+  const { Database } = await import(resolve(base, "db.pg"))
+  const { runPostgresMigrations } = await import(resolve(base, "migrate-pg.ts"))
+  await Database.initialize()
+  await runPostgresMigrations()
+  console.log("PostgreSQL migrations applied (db:migrate)")
+}
+
 function argv(entry: string, args: string[]) {
   process.argv = [process.argv[0] ?? "bun", entry, ...args]
 }
@@ -119,38 +127,23 @@ function defaultUniverBackendUrl() {
   return `http://${compatListenHost()}:${compatListenPort()}`
 }
 
-function startFrontend() {
+async function startFrontend() {
   const port = num("DEV_FRONTEND_PORT")
-  const pid = resolve(state, "frontend.pid")
-  const log = resolve(state, "frontend.log")
   const app = resolve(root, "packages/app")
-  const out = openSync(log, "a")
   const backHost = env("DEV_BACKEND_HOST")
   const backPort = env("DEV_BACKEND_PORT")
+  const frontHost = env("DEV_FRONTEND_HOST")
 
-  clear(port, pid)
+  clear(port)
 
-  const child = spawn("bun", ["run", resolve(app, "script/dev.ts"), ...rest], {
-    cwd: app,
-    detached: true,
-    stdio: ["ignore", out, out],
-    env: {
-      ...process.env,
-      DEV_FRONTEND_HOST: env("DEV_FRONTEND_HOST"),
-      DEV_FRONTEND_PORT: String(port),
-      VITE_OPENCODE_SERVER_HOST: backHost,
-      VITE_OPENCODE_SERVER_PORT: backPort,
-      VITE_OPENCODE_SERVER_URL: process.env.VITE_OPENCODE_SERVER_URL?.trim() || `http://${backHost}:${backPort}`,
-      VITE_UNIVER_BACKEND_URL: defaultUniverBackendUrl(),
-    },
+  await boot(resolve(app, "script/dev.ts"), [...rest], {
+    DEV_FRONTEND_HOST: frontHost,
+    DEV_FRONTEND_PORT: String(port),
+    VITE_OPENCODE_SERVER_HOST: backHost,
+    VITE_OPENCODE_SERVER_PORT: backPort,
+    VITE_OPENCODE_SERVER_URL: process.env.VITE_OPENCODE_SERVER_URL?.trim() || `http://${backHost}:${backPort}`,
+    VITE_UNIVER_BACKEND_URL: defaultUniverBackendUrl(),
   })
-
-  closeSync(out)
-  child.unref()
-  writeFileSync(pid, `${child.pid}\n`)
-  console.log(`Frontend started in background on http://${env("DEV_FRONTEND_HOST")}:${port}`)
-  console.log(`PID: ${child.pid}`)
-  console.log(`Log: ${log}`)
 }
 
 const svc = {
@@ -167,7 +160,7 @@ const svc = {
     })
   },
   frontend: async () => {
-    startFrontend()
+    await startFrontend()
   },
   relay: async () => {
     const port = String(num("UNIVER_SDK_PORT"))
@@ -197,6 +190,7 @@ if (name === "all") {
     process.exit(1)
   }
   ensureInfra()
+  await runDbMigrate()
   const self = import.meta.path
   const bun = process.execPath
   const order = ["backend", "relay", "compat", "frontend"] as const
@@ -276,14 +270,6 @@ if (!(name in svc)) {
 
 if (!skipInfra) {
   ensureInfra()
+  await runDbMigrate()
 }
 await svc[name as keyof typeof svc]()
-
-if (name === "frontend") {
-  const pid = resolve(state, "frontend.pid")
-  const value = Number(readFileSync(pid, "utf8").trim())
-  if (!alive(value)) {
-    console.error("Frontend exited immediately. Check the log for details.")
-    process.exit(1)
-  }
-}

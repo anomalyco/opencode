@@ -122,7 +122,7 @@ export async function startRelayContainer(): Promise<RelayTestContext> {
   const repoRoot = path.resolve(__dirname, "../../../..")
 
   // Use Bun image and mount relay code
-  const container = await new GenericContainer("oven/bun:1.1")
+  const container = await new GenericContainer("oven/bun:1.3.10")
     .withExposedPorts(8080)
     .withBindMounts([
       {
