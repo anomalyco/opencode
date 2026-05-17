@@ -9,6 +9,21 @@ import { DialogVariant } from "./dialog-variant"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 
+type ModelSelection = { providerID: string; modelID: string }
+
+export function shouldOpenVariantDialog(
+  model: ModelSelection,
+  variant: {
+    list(model?: ModelSelection): string[]
+    selected(model?: ModelSelection): string | undefined
+  },
+) {
+  const list = variant.list(model)
+  const cur = variant.selected(model)
+  if (cur === "default" || (cur && list.includes(cur))) return false
+  return list.length > 0
+}
+
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const sync = useSync()
@@ -131,14 +146,9 @@ export function DialogModel(props: { providerID?: string }) {
   })
 
   function onSelect(providerID: string, modelID: string) {
-    local.model.set({ providerID, modelID }, { recent: true })
-    const list = local.model.variant.list()
-    const cur = local.model.variant.selected()
-    if (cur === "default" || (cur && list.includes(cur))) {
-      dialog.clear()
-      return
-    }
-    if (list.length > 0) {
+    const model = { providerID, modelID }
+    local.model.set(model, { recent: true })
+    if (shouldOpenVariantDialog(model, local.model.variant)) {
       dialog.replace(() => <DialogVariant />)
       return
     }

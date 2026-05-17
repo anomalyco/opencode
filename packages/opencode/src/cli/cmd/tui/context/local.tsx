@@ -23,6 +23,11 @@ export function parseModel(model: string) {
   }
 }
 
+type SelectedModel = {
+  providerID: string
+  modelID: string
+}
+
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
@@ -336,20 +341,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         variant: {
-          selected() {
-            const m = currentModel()
+          selected(model?: SelectedModel) {
+            const m = model ?? currentModel()
             if (!m) return undefined
             const key = `${m.providerID}/${m.modelID}`
             return modelStore.variant[key]
           },
-          current() {
-            const v = this.selected()
+          current(model?: SelectedModel) {
+            const v = this.selected(model)
             if (!v) return undefined
-            if (!this.list().includes(v)) return undefined
+            if (!this.list(model).includes(v)) return undefined
             return v
           },
-          list() {
-            const m = currentModel()
+          list(model?: SelectedModel) {
+            const m = model ?? currentModel()
             if (!m) return []
             const provider = sync.data.provider.find((x) => x.id === m.providerID)
             const info = provider?.models[m.modelID]
