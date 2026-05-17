@@ -46,10 +46,24 @@ const modelHttpErrorsQuery = (product: "go" | "zen") => {
   ]
   const failedHttpStatus = calculatedField({
     name: "is_failed_http_status",
-    expression:
-      product === "go"
-        ? `IF(AND(GTE($status, "400"), NOT(EQUALS($status, "401")), NOT(EQUALS($status, "429"))), 1, 0)`
-        : `IF(AND(EQUALS($status, "429"), $isFreeTier), 0, AND(GTE($status, "400"), NOT(EQUALS($status, "401"))), 1, 0)`,
+    expression: `
+IF(
+  AND(
+    GTE($status, "400"),
+    NOT(EQUALS($status, "401")),
+    NOT(
+      AND(
+        EQUALS($status, "429"),
+        OR(
+          EQUALS($error.type, "GoUsageLimitError"),
+          EQUALS($error.type, "FreeUsageLimitError")
+        )
+      )
+    )
+  ),
+  1,
+  0
+)`,
   })
 
   return honeycomb.getQuerySpecificationOutput({
