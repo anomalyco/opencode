@@ -8,6 +8,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
+import { useSync } from "@/context/sync"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 
@@ -60,6 +61,7 @@ function Option(props: {
 
 export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit: () => void }> = (props) => {
   const sdk = useSDK()
+  const sync = useSync()
   const language = useLanguage()
 
   const questions = createMemo(() => props.request.questions)
@@ -212,6 +214,9 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     onSuccess: () => {
       replied = true
       cache.delete(props.request.id)
+      sync.set("question", props.request.sessionID, (current: QuestionRequest[] = []) =>
+        current.filter((question) => question.id !== props.request.id),
+      )
     },
     onError: fail,
   }))
@@ -224,6 +229,9 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     onSuccess: () => {
       replied = true
       cache.delete(props.request.id)
+      sync.set("question", props.request.sessionID, (current: QuestionRequest[] = []) =>
+        current.filter((question) => question.id !== props.request.id),
+      )
     },
     onError: fail,
   }))
