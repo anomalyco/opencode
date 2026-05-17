@@ -96,12 +96,6 @@ const money = new Intl.NumberFormat("en-US", {
 
 const DRAFT_RETENTION_MIN_CHARS = 20
 
-function fmtCtxK(n: number): string {
-  if (n >= 1024 && n % 1024 === 0) return `${n / 1024}k`
-  if (n >= 1000) return `${Math.round(n / 1024)}k`
-  return `${n}`
-}
-
 function randomIndex(count: number) {
   if (count <= 0) return 0
   return Math.floor(Math.random() * count)
@@ -352,13 +346,9 @@ export function Prompt(props: PromptProps) {
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     if (tokens <= 0) return
 
-    const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
-    const ctx = model?.limit.context ?? 0
-    const pct = ctx > 0 ? `${Math.round((tokens / ctx) * 100)}%` : undefined
-    const ctxK = ctx > 0 ? fmtCtxK(ctx) : undefined
     const cost = session?.cost ?? 0
     return {
-      context: pct ? `${Locale.number(tokens)} / ${ctxK} (${pct})` : Locale.number(tokens),
+      context: Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
     }
   })
