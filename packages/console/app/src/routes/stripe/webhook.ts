@@ -161,7 +161,9 @@ export async function POST(input: APIEvent) {
             })
 
             if (userEmail) {
-              if (coupon === LiteData.firstMonth100Coupon) {
+              if (coupon === LiteData.firstMonth50Coupon) {
+                await Billing.redeemCoupon(userEmail, "GO1MONTH50")
+              } else if (coupon === LiteData.firstMonth100Coupon) {
                 await Billing.redeemCoupon(userEmail, "GOFREEMONTH")
               } else if (coupon === LiteData.threeMonths100Coupon) {
                 await Billing.redeemCoupon(userEmail, "GO3MONTHS100")
