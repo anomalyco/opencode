@@ -24,6 +24,12 @@ const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
 const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
 const SKILL_PATTERN = "**/SKILL.md"
 
+// Default hosted skill registry — fetched automatically on first run and
+// cached locally. Ships native-skill stubs for Claude Code, Codex, and other
+// AI CLI tools so they appear in <available_skills> out of the box.
+// Set OPENCODE_DISABLE_DEFAULT_SKILLS=1 to opt out.
+const DEFAULT_SKILL_URLS = ["https://antoinedc.github.io/bui-skills"]
+
 // Built-in skill that ships with opencode. The model's intuition for what an
 // opencode.json should look like is often wrong, and opencode hard-fails on
 // invalid config, so users hit cryptic startup errors. Loading this skill
@@ -167,6 +173,7 @@ const discoverSkills = Effect.fnUntraced(function* (
   global: Global.Interface,
   disableExternalSkills: boolean,
   disableClaudeCodeSkills: boolean,
+  disableDefaultSkills: boolean,
   directory: string,
   worktree: string,
 ) {
@@ -209,7 +216,14 @@ const discoverSkills = Effect.fnUntraced(function* (
     yield* scan(state, dir, SKILL_PATTERN)
   }
 
-  for (const url of cfg.skills?.urls ?? []) {
+  // Default skill URLs ship with the binary and are fetched automatically.
+  // User-configured URLs are appended after, so they take precedence on name
+  // collisions (last write wins in the state map).
+  const allUrls = [
+    ...(disableDefaultSkills ? [] : DEFAULT_SKILL_URLS),
+    ...(cfg.skills?.urls ?? []),
+  ]
+  for (const url of allUrls) {
     const pulledDirs = yield* discovery.pull(url)
     for (const dir of pulledDirs) {
       yield* scan(state, dir, SKILL_PATTERN)
@@ -251,6 +265,7 @@ export const layer = Layer.effect(
           global,
           flags.disableExternalSkills,
           flags.disableClaudeCodeSkills,
+          flags.disableDefaultSkills,
           ctx.directory,
           ctx.worktree,
         )
