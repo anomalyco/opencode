@@ -912,6 +912,44 @@ Nested agent prompt`,
   })
 })
 
+test("loads many agents when unquoted hex colors parse as null", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const agentsDir = path.join(dir, ".opencode", "agents")
+      await fs.mkdir(agentsDir, { recursive: true })
+
+      for (let i = 0; i < 184; i++) {
+        const name = `agent-${String(i).padStart(3, "0")}`
+        await Filesystem.write(
+          path.join(agentsDir, `${name}.md`),
+          `---
+name: ${name}
+description: Test agent
+mode: subagent
+color: #9B59B6
+---
+Agent prompt`,
+        )
+      }
+    },
+  })
+
+  await withTestInstance({
+    directory: tmp.path,
+    fn: async (ctx) => {
+      const config = await load(ctx)
+
+      expect(Object.keys(config.agent ?? {}).filter((name) => name.startsWith("agent-"))).toHaveLength(184)
+      expect(config.agent?.["agent-183"]).toMatchObject({
+        name: "agent-183",
+        mode: "subagent",
+        prompt: "Agent prompt",
+      })
+      expect(config.agent?.["agent-183"]?.color).toBeUndefined()
+    },
+  })
+})
+
 test("loads commands from .opencode/command (singular)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

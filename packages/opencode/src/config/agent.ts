@@ -38,7 +38,7 @@ const AgentSchema = Schema.StructWithRest(
       description: "Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)",
     }),
     options: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-    color: Schema.optional(Color).annotate({
+    color: Schema.optional(Schema.NullOr(Color)).annotate({
       description: "Hex color code (e.g., #FF5733) or theme color (e.g., primary)",
     }),
     steps: Schema.optional(PositiveInt).annotate({
@@ -93,7 +93,9 @@ const normalize = (agent: Schema.Schema.Type<typeof AgentSchema>): Schema.Schema
   globalThis.Object.assign(permission, agent.permission)
 
   const steps = agent.steps ?? agent.maxSteps
-  return { ...agent, options, permission, ...(steps !== undefined ? { steps } : {}) }
+  const result = { ...agent, options, permission, ...(steps !== undefined ? { steps } : {}) }
+  if (result.color === null) delete result.color
+  return result
 }
 
 export const Info = AgentSchema.pipe(
