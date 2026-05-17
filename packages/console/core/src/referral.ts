@@ -360,13 +360,7 @@ export namespace Referral {
         .then((rows) => rows[0])
       if (!referral) return { status: "missing-referral" as const }
 
-      const existingRewards = await tx
-        .select({ referralID: ReferralRewardTable.referralID })
-        .from(ReferralRewardTable)
-        .where(and(eq(ReferralRewardTable.referralID, referral.id), isNull(ReferralRewardTable.timeDeleted)))
-      if (existingRewards.length > 0) return { status: "already-completed" as const }
-
-      await tx
+      const result = await tx
         .insert(ReferralRewardTable)
         .values([
           {
@@ -386,6 +380,7 @@ export namespace Referral {
           },
         })
 
+      if (result.rowsAffected === 0) return { status: "already-completed" as const }
       return { status: "created" as const }
     })
   }
