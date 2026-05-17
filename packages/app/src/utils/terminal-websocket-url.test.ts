@@ -64,4 +64,17 @@ describe("terminalWebSocketURL", () => {
 
     expect(url.searchParams.get("auth_token")).toBe(btoa("kit:"))
   })
+
+  test("omits query auth when password is undefined", () => {
+    const url = terminalWebSocketURL({
+      url: "https://app.example.test",
+      id: "pty_test",
+      directory: "/tmp/project",
+      cursor: 10,
+      sameOrigin: false,
+      username: "kit",
+    })
+
+    expect(url.searchParams.has("auth_token")).toBe(false)
+  })
 })

@@ -20,7 +20,7 @@ export function authFromToken(token: string | null) {
 export function authFromUrl(input: string) {
   try {
     const url = new URL(input)
-    if (!url.username && !url.password) return undefined
+    if (!url.username && url.password === "") return undefined
     return {
       username: url.username ? decodeURIComponent(url.username) : "opencode",
       password: decodeURIComponent(url.password),
