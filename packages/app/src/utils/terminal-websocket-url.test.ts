@@ -49,4 +49,19 @@ describe("terminalWebSocketURL", () => {
     expect(url.protocol).toBe("wss:")
     expect(url.searchParams.get("auth_token")).toBe(btoa("opencode:secret"))
   })
+
+  test("uses query auth for username-only startup credentials", () => {
+    const url = terminalWebSocketURL({
+      url: "https://app.example.test",
+      id: "pty_test",
+      directory: "/tmp/project",
+      cursor: 10,
+      sameOrigin: true,
+      username: "kit",
+      password: "",
+      authToken: true,
+    })
+
+    expect(url.searchParams.get("auth_token")).toBe(btoa("kit:"))
+  })
 })

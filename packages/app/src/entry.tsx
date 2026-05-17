@@ -112,11 +112,14 @@ const getDefaultUrl = () => {
   return getCurrentUrl()
 }
 
-const clearAuthToken = () => {
-  const params = new URLSearchParams(location.search)
-  if (!params.has("auth_token")) return
-  params.delete("auth_token")
-  history.replaceState(null, "", location.pathname + (params.size ? `?${params}` : "") + location.hash)
+const clearStartupAuth = () => {
+  const url = new URL(location.href)
+  const changed = url.searchParams.has("auth_token") || !!url.username || !!url.password
+  if (!changed) return
+  url.searchParams.delete("auth_token")
+  url.username = ""
+  url.password = ""
+  history.replaceState(null, "", url.pathname + url.search + url.hash)
 }
 
 const platform: Platform = {
@@ -155,7 +158,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
 
 if (root instanceof HTMLElement) {
   const auth = authFromToken(new URLSearchParams(location.search).get("auth_token")) ?? authFromUrl(location.href)
-  clearAuthToken()
+  clearStartupAuth()
   const server: ServerConnection.Http = {
     type: "http",
     authToken: !!auth,
