@@ -9,7 +9,7 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
 import { Database } from "@/storage/db"
 import { NotFoundError } from "@/storage/storage"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { and } from "drizzle-orm"
 import { gte } from "drizzle-orm"
 import { isNull } from "drizzle-orm"
@@ -44,6 +44,17 @@ const log = Log.create({ service: "session" })
 
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
+
+// Normalize directory paths for cross-platform consistency.
+// On Windows, \ and / are both valid path separators, but sessions may be
+// stored with either depending on the caller (CLI vs web dialog). Normalize to
+// / so SQL equality checks work regardless of input source.
+const normalizeDirectory = (path: string): string => {
+  if (path.length > 1 && (path[1] === ":" || path.startsWith("\\\\"))) {
+    return path.replaceAll("\\", "/")
+  }
+  return path
+}
 
 function createDefaultTitle(isChild = false) {
   return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
@@ -536,7 +547,7 @@ export const layer: Layer.Layer<
         slug: Slug.create(),
         version: InstallationVersion,
         projectID: ctx.project.id,
-        directory: input.directory,
+        directory: normalizeDirectory(input.directory),
         path: input.path,
         workspaceID: input.workspaceID,
         parentID: input.parentID,
@@ -904,13 +915,13 @@ function* listByProject(
 
       conditions.push(
         input.directory
-          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, input.directory))!)!
+          ? or(...conds, and(isNull(SessionTable.path), sql`replace(${SessionTable.directory}, ${"\\"}, ${"/"}) = ${normalizeDirectory(input.directory)}`)!)!
           : or(...conds)!,
       )
     }
   } else if (input.scope !== "project" && !input.experimentalWorkspaces) {
     if (input.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push(sql`replace(${SessionTable.directory}, ${"\\"}, ${"/"}) = ${normalizeDirectory(input.directory)}`)
     }
   }
   if (input.roots) {
@@ -951,7 +962,7 @@ export function* listGlobal(input?: {
   const conditions: SQL[] = []
 
   if (input?.directory) {
-    conditions.push(eq(SessionTable.directory, input.directory))
+    conditions.push(sql`replace(${SessionTable.directory}, ${"\\"}, ${"/"}) = ${normalizeDirectory(input.directory)}`)
   }
   if (input?.roots) {
     conditions.push(isNull(SessionTable.parent_id))
