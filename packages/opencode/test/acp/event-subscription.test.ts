@@ -330,6 +330,36 @@ function createFakeAgent() {
 }
 
 describe("acp.agent event subscription", () => {
+  test("registers built-in ACP commands when the command list is empty", async () => {
+    await using tmp = await tmpdir()
+    await provideTestInstance({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, sessionUpdates, stop } = createFakeAgent()
+
+        const sessionId = await agent.newSession({ cwd: tmp.path, mcpServers: [] } as any).then((x) => x.sessionId)
+        const update = await pollUntil(
+          () =>
+            sessionUpdates.find(
+              (entry) => entry.sessionId === sessionId && entry.update.sessionUpdate === "available_commands_update",
+            ),
+          "available_commands_update was not sent",
+        )
+
+        expect(update.update).toMatchObject({
+          sessionUpdate: "available_commands_update",
+          availableCommands: [
+            { name: "compact", description: "compact the session" },
+            { name: "model", description: "switch model" },
+            { name: "mode", description: "switch mode" },
+          ],
+        })
+
+        stop()
+      },
+    })
+  })
+
   test("routes message.part.delta by the event sessionID (no cross-session pollution)", async () => {
     await using tmp = await tmpdir()
     await provideTestInstance({

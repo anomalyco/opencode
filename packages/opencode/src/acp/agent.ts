@@ -1138,11 +1138,13 @@ export class Agent implements ACPAgent {
       description: command.description ?? "",
     }))
     const names = new Set(availableCommands.map((c) => c.name))
-    if (!names.has("compact"))
-      availableCommands.push({
-        name: "compact",
-        description: "compact the session",
-      })
+    for (const command of [
+      { name: "compact", description: "compact the session" },
+      { name: "model", description: "switch model" },
+      { name: "mode", description: "switch mode" },
+    ]) {
+      if (!names.has(command.name)) availableCommands.push(command)
+    }
 
     const mcpServers: Record<string, ConfigMCP.Info> = {}
     for (const server of params.mcpServers) {
