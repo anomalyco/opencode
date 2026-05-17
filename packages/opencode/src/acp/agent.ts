@@ -56,9 +56,20 @@ import { ShellID } from "@/tool/shell/id"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
+export type CommandOption = { name: string; description: string }
 const decodeTodos = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Array(Todo.Info)))
 
 const DEFAULT_VARIANT_VALUE = "default"
+
+export function addCommandFallbacks(commands: CommandOption[]) {
+  const names = new Set(commands.map((c) => c.name))
+  const fallbacks: CommandOption[] = [
+    { name: "compact", description: "compact the session" },
+    { name: "model", description: "change the session model" },
+    { name: "mode", description: "change the session mode" },
+  ]
+  commands.push(...fallbacks.filter((command) => !names.has(command.name)))
+}
 
 const log = Log.create({ service: "acp-agent" })
 
@@ -1137,12 +1148,7 @@ export class Agent implements ACPAgent {
       name: command.name,
       description: command.description ?? "",
     }))
-    const names = new Set(availableCommands.map((c) => c.name))
-    if (!names.has("compact"))
-      availableCommands.push({
-        name: "compact",
-        description: "compact the session",
-      })
+    addCommandFallbacks(availableCommands)
 
     const mcpServers: Record<string, ConfigMCP.Info> = {}
     for (const server of params.mcpServers) {
