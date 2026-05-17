@@ -868,6 +868,39 @@ Nested command template`,
   }),
 )
 
+it.instance("loads commands from .agents/commands", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* AppFileSystem.use.writeWithDirs(
+      path.join(test.directory, ".agents", "commands", "hello.md"),
+      `---
+description: Test command
+---
+Hello from agents commands`,
+    )
+
+    yield* AppFileSystem.use.writeWithDirs(
+      path.join(test.directory, ".agents", "commands", "nested", "child.md"),
+      `---
+description: Nested command
+---
+Nested command template`,
+    )
+
+    const config = yield* Config.use.get()
+
+    expect(config.command?.["hello"]).toEqual({
+      description: "Test command",
+      template: "Hello from agents commands",
+    })
+
+    expect(config.command?.["nested/child"]).toEqual({
+      description: "Nested command",
+      template: "Nested command template",
+    })
+  }),
+)
+
 it.instance("updates config and writes to file", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance

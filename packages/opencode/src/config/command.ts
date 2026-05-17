@@ -23,6 +23,15 @@ export type Info = Schema.Schema.Type<typeof Info>
 
 const decodeInfo = Schema.decodeUnknownExit(Info)
 
+const patterns = [
+  ".opencode/command/",
+  ".opencode/commands/",
+  ".agents/commands/",
+  ".agents/command/",
+  "command/",
+  "commands/",
+]
+
 export async function load(dir: string) {
   const result: Record<string, Info> = {}
   for (const item of await Glob.scan("{command,commands}/**/*.md", {
@@ -37,7 +46,7 @@ export async function load(dir: string) {
     })
     if (!md) continue
 
-    const name = configEntryNameFromPath(path.relative(dir, item), ["command/", "commands/"])
+    const name = configEntryNameFromPath(path.relative(path.dirname(dir), item), patterns)
 
     const config = {
       name,

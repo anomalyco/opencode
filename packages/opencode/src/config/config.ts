@@ -610,12 +610,25 @@ export const layer = Layer.effect(
         result.plugin = result.plugin || []
 
         const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree)
+        const globalAgentsDir = path.join(Global.Path.home, ".agents")
+        const externalCommandDirs = [
+          ...(existsSync(globalAgentsDir) ? [globalAgentsDir] : []),
+          ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+            ? yield* fs.up({ targets: [".agents"], start: ctx.directory, stop: ctx.worktree }).pipe(
+                Effect.catch(() => Effect.succeed([] as string[])),
+              )
+            : []),
+        ]
 
         if (Flag.OPENCODE_CONFIG_DIR) {
           log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
         }
 
         const deps: Fiber.Fiber<void>[] = []
+
+        for (const dir of externalCommandDirs) {
+          result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => ConfigCommand.load(dir)))
+        }
 
         for (const dir of directories) {
           if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
