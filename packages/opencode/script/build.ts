@@ -244,6 +244,7 @@ for (const item of targets) {
       {
         name,
         version: Script.version,
+        preferUnplugged: true,
         os: [item.os],
         cpu: [item.arch],
       },

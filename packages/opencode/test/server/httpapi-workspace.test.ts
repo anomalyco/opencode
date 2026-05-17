@@ -13,7 +13,6 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
-import { Instance } from "../../src/project/instance"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
@@ -71,7 +70,7 @@ function listedAdapter(directory: string, type: string): WorkspaceAdapter {
     },
     async create() {},
     async remove() {},
-    list() {
+    list(context) {
       return [
         {
           type,
@@ -79,7 +78,7 @@ function listedAdapter(directory: string, type: string): WorkspaceAdapter {
           branch: "listed/main",
           directory,
           extra: { listed: true },
-          projectID: Instance.project.id,
+          projectID: context?.instance?.project.id ?? missingAdapterContext(),
         },
       ]
     },
@@ -90,6 +89,10 @@ function listedAdapter(directory: string, type: string): WorkspaceAdapter {
       }
     },
   }
+}
+
+function missingAdapterContext(): never {
+  throw new Error("missing workspace adapter context")
 }
 
 function remoteAdapter(directory: string, url: string, headers?: HeadersInit): WorkspaceAdapter {

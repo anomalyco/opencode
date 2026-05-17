@@ -10,8 +10,7 @@ import type { Proc } from "#pty"
 import * as Log from "@opencode-ai/core/util/log"
 import { PtyID } from "./schema"
 import { Effect, Layer, Context, Schema, Types } from "effect"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { NonNegativeInt, PositiveInt, withStatics } from "@opencode-ai/core/schema"
+import { NonNegativeInt, PositiveInt } from "@opencode-ai/core/schema"
 
 const log = Log.create({ service: "pty" })
 
@@ -62,9 +61,7 @@ export const Info = Schema.Struct({
   cwd: Schema.String,
   status: Schema.Literals(["running", "exited"]),
   pid: PositiveInt,
-})
-  .annotate({ identifier: "Pty" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+}).annotate({ identifier: "Pty" })
 
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
@@ -74,7 +71,7 @@ export const CreateInput = Schema.Struct({
   cwd: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
   env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 
 export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
 
@@ -86,7 +83,7 @@ export const UpdateInput = Schema.Struct({
       cols: PositiveInt,
     }),
   ),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 
 export type UpdateInput = Types.DeepMutable<Schema.Schema.Type<typeof UpdateInput>>
 

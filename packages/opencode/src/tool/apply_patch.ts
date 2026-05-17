@@ -119,7 +119,11 @@ export const ApplyPatchTool = Tool.define(
 
             // Apply the update chunks to get new content
             try {
-              const fileUpdate = Patch.deriveNewContentsFromChunks(filePath, hunk.chunks)
+              const fileUpdate = Patch.deriveNewContentsFromChunks(
+                filePath,
+                hunk.chunks,
+                Bom.join(source.text, source.bom),
+              )
               newContent = fileUpdate.content
               bom = fileUpdate.bom
             } catch (error) {
