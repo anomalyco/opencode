@@ -657,7 +657,7 @@ export function MessageTimeline(props: {
     code: boolean
     parts: boolean
     tools: boolean
-  } | undefined>((prev) => {
+  }>((prev) => {
     // Remove revision() dependency to prevent height changes from triggering eligibility recalculation
     const ids = rendered()
     const root = viewport
@@ -718,7 +718,7 @@ export function MessageTimeline(props: {
       parts,
       tools,
     }
-  }, undefined)
+  }, { enabled: false, count: false, total: false, tall: false, complex: false, sum: 0, peak: 0, score: 0, text: false, math: false, code: false, parts: false, tools: false })
 
   // Windowing stays active during streaming — tailWindow keeps the active reply
   // visible while reducing DOM pressure from history turns.
