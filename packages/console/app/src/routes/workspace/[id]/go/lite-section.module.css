@@ -215,45 +215,6 @@
 }
 
 .paymentMethodModal {
-  button {
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius-sm);
-    background-color: var(--color-bg);
-    color: var(--color-text);
-    font-size: var(--font-size-sm);
-    font-family: var(--font-sans);
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s ease;
-
-    &:hover:not(:disabled) {
-      background-color: var(--color-surface-hover);
-      border-color: var(--color-accent);
-    }
-
-    &:active {
-      transform: translateY(1px);
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      transform: none;
-    }
-
-    &[data-color="ghost"] {
-      background-color: transparent;
-      border-color: transparent;
-      color: var(--color-text-muted);
-
-      &:hover:not(:disabled) {
-        background-color: var(--color-surface-hover);
-        border-color: var(--color-border);
-        color: var(--color-text);
-      }
-    }
-  }
-
   [data-slot="modal-actions"] {
     display: flex;
     gap: var(--space-3);

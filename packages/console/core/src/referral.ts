@@ -1,5 +1,4 @@
 import { z } from "zod"
-import { ulid } from "ulid"
 import { and, desc, eq, isNull, sql, Database } from "./drizzle"
 import { Actor } from "./actor"
 import { Identifier } from "./identifier"
@@ -11,12 +10,15 @@ import { WorkspaceTable } from "./schema/workspace.sql"
 import { centsToMicroCents, microCentsToCents } from "./util/price"
 import { fn } from "./util/fn"
 import { Billing } from "./billing"
+import { LiteData } from "./lite"
+import { Subscription } from "./subscription"
+import { ulid } from "ulid"
 
 export namespace Referral {
   export const REWARD_AMOUNT = centsToMicroCents(500)
-  const CODE_LENGTH = 10
+  export const CODE_LENGTH = 10
 
-  function normalizeCode(code?: string) {
+  export function normalizeCode(code?: string | null) {
     return code?.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, CODE_LENGTH)
   }
 
@@ -24,7 +26,7 @@ export namespace Referral {
     return ulid().slice(-CODE_LENGTH)
   }
 
-  export async function ensureCode(workspaceID = Actor.workspace()) {
+  async function ensureCode(workspaceID = Actor.workspace()) {
     return Database.transaction(async (tx) => {
       const existing = await tx
         .select({ code: WorkspaceTable.referralCode })
@@ -148,7 +150,7 @@ export namespace Referral {
           timeCreated: referral.timeCreated,
           timeApplied: null,
         })),
-    ].sort((a, b) => new Date(b.timeCreated).getTime() - new Date(a.timeCreated).getTime())
+    ]
     return {
       inviteCode: code.code,
       validInviteCount: rows.invites.length,
@@ -201,6 +203,79 @@ export namespace Referral {
 
       return { applied: true, amount: microCentsToCents(reward.amount) }
     })
+  })
+
+  export const usagePreview = fn(z.object({ referralID: z.string() }), async (input) => {
+    const row = await Database.use((tx) =>
+      tx
+        .select({
+          rewardAmount: ReferralRewardTable.amount,
+          rollingUsage: LiteTable.rollingUsage,
+          weeklyUsage: LiteTable.weeklyUsage,
+          monthlyUsage: LiteTable.monthlyUsage,
+          timeRollingUpdated: LiteTable.timeRollingUpdated,
+          timeWeeklyUpdated: LiteTable.timeWeeklyUpdated,
+          timeMonthlyUpdated: LiteTable.timeMonthlyUpdated,
+          timeCreated: LiteTable.timeCreated,
+        })
+        .from(ReferralRewardTable)
+        .innerJoin(LiteTable, eq(LiteTable.workspaceID, ReferralRewardTable.workspaceID))
+        .where(
+          and(
+            eq(ReferralRewardTable.workspaceID, Actor.workspace()),
+            eq(ReferralRewardTable.referralID, input.referralID),
+            isNull(ReferralRewardTable.timeApplied),
+            isNull(ReferralRewardTable.timeDeleted),
+            isNull(LiteTable.timeDeleted),
+          ),
+        )
+        .then((rows) => rows[0]),
+    )
+    if (!row) return null
+
+    const limits = LiteData.getLimits()
+    return {
+      rollingUsage: usagePreviewItem(
+        Subscription.analyzeRollingUsage({
+          limit: limits.rollingLimit,
+          window: limits.rollingWindow,
+          usage: row.rollingUsage ?? 0,
+          timeUpdated: row.timeRollingUpdated ?? new Date(),
+        }),
+        Subscription.analyzeRollingUsage({
+          limit: limits.rollingLimit,
+          window: limits.rollingWindow,
+          usage: Math.max(0, (row.rollingUsage ?? 0) - row.rewardAmount),
+          timeUpdated: row.timeRollingUpdated ?? new Date(),
+        }),
+      ),
+      weeklyUsage: usagePreviewItem(
+        Subscription.analyzeWeeklyUsage({
+          limit: limits.weeklyLimit,
+          usage: row.weeklyUsage ?? 0,
+          timeUpdated: row.timeWeeklyUpdated ?? new Date(),
+        }),
+        Subscription.analyzeWeeklyUsage({
+          limit: limits.weeklyLimit,
+          usage: Math.max(0, (row.weeklyUsage ?? 0) - row.rewardAmount),
+          timeUpdated: row.timeWeeklyUpdated ?? new Date(),
+        }),
+      ),
+      monthlyUsage: usagePreviewItem(
+        Subscription.analyzeMonthlyUsage({
+          limit: limits.monthlyLimit,
+          usage: row.monthlyUsage ?? 0,
+          timeUpdated: row.timeMonthlyUpdated ?? new Date(),
+          timeSubscribed: row.timeCreated,
+        }),
+        Subscription.analyzeMonthlyUsage({
+          limit: limits.monthlyLimit,
+          usage: Math.max(0, (row.monthlyUsage ?? 0) - row.rewardAmount),
+          timeUpdated: row.timeMonthlyUpdated ?? new Date(),
+          timeSubscribed: row.timeCreated,
+        }),
+      ),
+    }
   })
 
   export async function createFromAccount(input: {
@@ -305,8 +380,24 @@ export namespace Referral {
             amount: REWARD_AMOUNT,
           },
         ])
+        .onDuplicateKeyUpdate({
+          set: {
+            amount: sql`${ReferralRewardTable.amount}`,
+          },
+        })
 
       return { status: "created" as const }
     })
+  }
+
+  function usagePreviewItem(
+    before: { usagePercent: number; resetInSec: number },
+    after: { usagePercent: number; resetInSec: number },
+  ) {
+    return {
+      beforePercent: before.usagePercent,
+      afterPercent: after.usagePercent,
+      resetInSec: after.resetInSec,
+    }
   }
 }

@@ -2,20 +2,16 @@ import { action, createAsync, json, query, useAction, useSubmission } from "@sol
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import { Referral } from "@opencode-ai/console-core/referral.js"
-import { Database, and, eq, isNull } from "@opencode-ai/console-core/drizzle/index.js"
-import { LiteData } from "@opencode-ai/console-core/lite.js"
-import { LiteTable } from "@opencode-ai/console-core/schema/billing.sql.js"
-import { ReferralRewardTable } from "@opencode-ai/console-core/schema/referral.sql.js"
-import { Subscription } from "@opencode-ai/console-core/subscription.js"
 import { withActor } from "~/context/auth.withActor"
 import { Modal } from "~/component/modal"
 import { IconCheck, IconCopy } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-import { formatResetTime, queryLiteSubscription } from "~/routes/workspace/[id]/go/lite-section"
+import { formatResetTime, liteResetTimeKeys } from "~/lib/format-reset-time"
+import { queryLiteSubscription } from "~/routes/workspace/[id]/go/lite-section"
 import "./go-referral.css"
 
-export type GoReferralReward = {
+type GoReferralReward = {
   id: string
   amount: number
   email: string
@@ -25,7 +21,7 @@ export type GoReferralReward = {
   timeApplied: string | Date | null
 }
 
-export type GoReferralSummary = {
+type GoReferralSummary = {
   inviteCode: string
   inviteUrl: string
   validInviteCount: number
@@ -34,12 +30,6 @@ export type GoReferralSummary = {
   totalEarned: number
   totalApplied: number
   rewards: GoReferralReward[]
-}
-
-type AnalyzedUsage = {
-  status: "ok" | "rate-limited"
-  resetInSec: number
-  usagePercent: number
 }
 
 type GoReferralUsagePreview = {
@@ -74,76 +64,7 @@ export const queryGoReferral = query(async (workspaceID: string) => {
 export const queryGoReferralUsagePreview = query(async (workspaceID: string, referralID?: string) => {
   "use server"
   if (!referralID) return null
-  return withActor(async () => {
-    const row = await Database.use((tx) =>
-      tx
-        .select({
-          rewardAmount: ReferralRewardTable.amount,
-          rollingUsage: LiteTable.rollingUsage,
-          weeklyUsage: LiteTable.weeklyUsage,
-          monthlyUsage: LiteTable.monthlyUsage,
-          timeRollingUpdated: LiteTable.timeRollingUpdated,
-          timeWeeklyUpdated: LiteTable.timeWeeklyUpdated,
-          timeMonthlyUpdated: LiteTable.timeMonthlyUpdated,
-          timeCreated: LiteTable.timeCreated,
-        })
-        .from(ReferralRewardTable)
-        .innerJoin(LiteTable, eq(LiteTable.workspaceID, ReferralRewardTable.workspaceID))
-        .where(
-          and(
-            eq(ReferralRewardTable.workspaceID, workspaceID),
-            eq(ReferralRewardTable.referralID, referralID),
-            isNull(ReferralRewardTable.timeApplied),
-            isNull(ReferralRewardTable.timeDeleted),
-            isNull(LiteTable.timeDeleted),
-          ),
-        )
-        .then((rows) => rows[0]),
-    )
-    if (!row) return null
-
-    const limits = LiteData.getLimits()
-    const rollingBefore = Subscription.analyzeRollingUsage({
-      limit: limits.rollingLimit,
-      window: limits.rollingWindow,
-      usage: row.rollingUsage ?? 0,
-      timeUpdated: row.timeRollingUpdated ?? new Date(),
-    })
-    const rollingAfter = Subscription.analyzeRollingUsage({
-      limit: limits.rollingLimit,
-      window: limits.rollingWindow,
-      usage: Math.max(0, (row.rollingUsage ?? 0) - row.rewardAmount),
-      timeUpdated: row.timeRollingUpdated ?? new Date(),
-    })
-    const weeklyBefore = Subscription.analyzeWeeklyUsage({
-      limit: limits.weeklyLimit,
-      usage: row.weeklyUsage ?? 0,
-      timeUpdated: row.timeWeeklyUpdated ?? new Date(),
-    })
-    const weeklyAfter = Subscription.analyzeWeeklyUsage({
-      limit: limits.weeklyLimit,
-      usage: Math.max(0, (row.weeklyUsage ?? 0) - row.rewardAmount),
-      timeUpdated: row.timeWeeklyUpdated ?? new Date(),
-    })
-    const monthlyBefore = Subscription.analyzeMonthlyUsage({
-      limit: limits.monthlyLimit,
-      usage: row.monthlyUsage ?? 0,
-      timeUpdated: row.timeMonthlyUpdated ?? new Date(),
-      timeSubscribed: row.timeCreated,
-    })
-    const monthlyAfter = Subscription.analyzeMonthlyUsage({
-      limit: limits.monthlyLimit,
-      usage: Math.max(0, (row.monthlyUsage ?? 0) - row.rewardAmount),
-      timeUpdated: row.timeMonthlyUpdated ?? new Date(),
-      timeSubscribed: row.timeCreated,
-    })
-
-    return {
-      rollingUsage: usagePreview(rollingBefore, rollingAfter),
-      weeklyUsage: usagePreview(weeklyBefore, weeklyAfter),
-      monthlyUsage: usagePreview(monthlyBefore, monthlyAfter),
-    } satisfies GoReferralUsagePreview
-  }, workspaceID)
+  return withActor(() => Referral.usagePreview({ referralID }), workspaceID)
 }, "go.referral.usagePreview")
 
 export const applyGoReferralReward = action(async (workspaceID: string, referralID: string) => {
@@ -160,16 +81,12 @@ export const applyGoReferralReward = action(async (workspaceID: string, referral
   )
 }, "go.referral.reward.apply")
 
-function usagePreview(before: AnalyzedUsage, after: AnalyzedUsage) {
+function currentUsagePreview(usage: { resetInSec: number; usagePercent: number }) {
   return {
-    beforePercent: before.usagePercent,
-    afterPercent: after.usagePercent,
-    resetInSec: after.resetInSec,
+    beforePercent: usage.usagePercent,
+    afterPercent: usage.usagePercent,
+    resetInSec: usage.resetInSec,
   }
-}
-
-function currentUsagePreview(usage: AnalyzedUsage) {
-  return usagePreview(usage, usage)
 }
 
 function formatCurrency(amount: number) {
@@ -299,7 +216,14 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
           </div>
         </div>
         <CopyInviteLink summary={props.summary} />
-        <InvitationInstructions rewardAmount={props.summary.rewardAmount} />
+        <div data-slot="instructions">
+          <ol>
+            <li>{i18n.t("workspace.referral.instructions.share")}</li>
+            <li>{i18n.t("workspace.referral.instructions.subscribe")}</li>
+            <li>{i18n.t("workspace.referral.instructions.claim")}</li>
+            <li>{i18n.t("workspace.referral.instructions.apply", { amount: formatCurrency(props.summary.rewardAmount) })}</li>
+          </ol>
+        </div>
       </div>
       <div data-slot="rewards-title">
         <h2>{i18n.t("workspace.referral.rewards.title")}</h2>
@@ -327,9 +251,9 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
             <tbody>
               <For each={props.summary.rewards}>
                 {(reward) => {
-                  const applied = createMemo(() => reward.status === "applied")
-                  const pending = createMemo(() => reward.status === "pending")
-                  const earnedAt = createMemo(() => formatDate(reward.timeCreated, language.tag(language.locale())))
+                  const applied = reward.status === "applied"
+                  const pending = reward.status === "pending"
+                  const earnedAt = () => formatDate(reward.timeCreated, language.tag(language.locale()))
                   return (
                     <tr data-status={reward.status} data-source={reward.source}>
                       <td data-slot="referral-amount">{formatCurrency(reward.amount)}</td>
@@ -346,8 +270,8 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
                           disabled={reward.status !== "available" || !props.summary.hasActiveGo || submission.pending}
                           onClick={() => setSelected(reward)}
                         >
-                          <Show when={!applied()} fallback={i18n.t("workspace.referral.reward.status.applied")}>
-                            {pending()
+                          <Show when={!applied} fallback={i18n.t("workspace.referral.reward.status.applied")}>
+                            {pending
                               ? i18n.t(rewardPendingStatusKey(reward.source))
                               : props.summary.hasActiveGo
                                 ? i18n.t("workspace.referral.apply.action")
@@ -424,23 +348,8 @@ function GoReferralUsagePreviewRow(props: { label: string; usage: GoReferralUsag
         <div data-slot="usage-preview-after" style={{ width: `${props.usage.afterPercent}%` }} />
       </div>
       <span data-slot="usage-preview-reset">
-        {i18n.t("workspace.lite.subscription.resetsIn")} {formatResetTime(props.usage.resetInSec, i18n)}
+        {i18n.t("workspace.lite.subscription.resetsIn")} {formatResetTime(props.usage.resetInSec, i18n, liteResetTimeKeys)}
       </span>
-    </div>
-  )
-}
-
-function InvitationInstructions(props: { rewardAmount: number }) {
-  const i18n = useI18n()
-
-  return (
-    <div data-slot="instructions">
-      <ol>
-        <li>{i18n.t("workspace.referral.instructions.share")}</li>
-        <li>{i18n.t("workspace.referral.instructions.subscribe")}</li>
-        <li>{i18n.t("workspace.referral.instructions.claim")}</li>
-        <li>{i18n.t("workspace.referral.instructions.apply", { amount: formatCurrency(props.rewardAmount) })}</li>
-      </ol>
     </div>
   )
 }
