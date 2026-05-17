@@ -212,9 +212,10 @@ export const layer = Layer.effect(
       const ctx = yield* InstanceState.context
       if (!containsPath(file, ctx)) return [] as LSPClient.Info[]
       const s = yield* InstanceState.get(state)
-      return yield* Effect.promise(async () => {
+      const next = yield* Effect.promise(async () => {
         const extension = path.parse(file).ext || file
         const result: LSPClient.Info[] = []
+        let updated = false
 
         async function schedule(server: LSPServer.Info, root: string, key: string) {
           const handle = await server
@@ -281,7 +282,7 @@ export const layer = Layer.effect(
           const task = schedule(server, root, root + server.id)
           s.spawning.set(root + server.id, task)
 
-          task.finally(() => {
+          void task.finally(() => {
             if (s.spawning.get(root + server.id) === task) {
               s.spawning.delete(root + server.id)
             }
@@ -291,11 +292,14 @@ export const layer = Layer.effect(
           if (!client) continue
 
           result.push(client)
-          Bus.publish(Event.Updated, {})
+          updated = true
         }
 
-        return result
+        return { result, updated }
       })
+
+      if (next.updated) yield* Effect.promise(() => Bus.publish(Event.Updated, {}))
+      return next.result
     })
 
     const run = Effect.fnUntraced(function* <T>(file: string, fn: (client: LSPClient.Info) => Promise<T>) {
