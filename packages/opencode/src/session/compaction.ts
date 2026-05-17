@@ -28,6 +28,8 @@ export const Event = SessionCompactionEvent
 export const PRUNE_MINIMUM = 20_000
 export const PRUNE_PROTECT = 40_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
+const RECENT_TAIL_AUDIT_MAX_CHARS = 4_000
+const RECENT_TAIL_AUDIT_PART_MAX_CHARS = 1_000
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const DEFAULT_TAIL_TURNS = 2
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
@@ -75,6 +77,39 @@ function completedCompactions(messages: SessionV1.WithParts[]) {
     if (userIndex === undefined) return []
     return [{ userIndex, assistantIndex, summary: summaryText(msg) }]
   })
+}
+
+function recentTailAudit(messages: SessionV1.WithParts[]) {
+  const text = messages
+    .flatMap((msg) => {
+      const parts = msg.parts
+        .flatMap(recentTailPartText)
+        .map((part) => truncate(part.trim(), RECENT_TAIL_AUDIT_PART_MAX_CHARS))
+        .filter(Boolean)
+      if (!parts.length) return []
+      return [`### ${msg.info.role}\n${parts.join("\n")}`]
+    })
+    .join("\n\n")
+  if (!text) return undefined
+  return [
+    "<recent-preserved-tail-audit>",
+    "Use this text-only view only to reconcile Done, In Progress, Blocked, and Next Steps. Do not copy it wholesale into the summary.",
+    truncate(text, RECENT_TAIL_AUDIT_MAX_CHARS),
+    "</recent-preserved-tail-audit>",
+  ].join("\n")
+}
+
+function recentTailPartText(part: SessionV1.Part) {
+  if (part.type === "text") return [part.text]
+  if (part.type !== "tool") return []
+  if (part.state.status === "completed") return [`tool:${part.tool}\n${part.state.title}\n${part.state.output}`]
+  if (part.state.status === "error") return [`tool:${part.tool} error\n${part.state.error}`]
+  return []
+}
+
+function truncate(text: string, max: number) {
+  if (text.length <= max) return text
+  return `${text.slice(0, max).trimEnd()}\n[truncated]`
 }
 
 function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model }) {
@@ -191,10 +226,10 @@ const layer = Layer.effect(
       model: Provider.Model
     }) {
       const limit = input.cfg.compaction?.tail_turns ?? DEFAULT_TAIL_TURNS
-      if (limit <= 0) return { head: input.messages, tail_start_id: undefined }
+      if (limit <= 0) return { head: input.messages, tail: [], tail_start_id: undefined }
       const budget = preserveRecentBudget({ cfg: input.cfg, model: input.model })
       const all = turns(input.messages)
-      if (!all.length) return { head: input.messages, tail_start_id: undefined }
+      if (!all.length) return { head: input.messages, tail: [], tail_start_id: undefined }
       const recent = all.slice(-limit)
       const sizes = yield* Effect.forEach(
         recent,
@@ -231,9 +266,10 @@ const layer = Layer.effect(
         break
       }
 
-      if (!keep || keep.start === 0) return { head: input.messages, tail_start_id: undefined }
+      if (!keep || keep.start === 0) return { head: input.messages, tail: [], tail_start_id: undefined }
       return {
         head: input.messages.slice(0, keep.start),
+        tail: input.messages.slice(keep.start),
         tail_start_id: keep.id,
       }
     })
@@ -345,7 +381,8 @@ const layer = Layer.effect(
         { sessionID: input.sessionID },
         { context: [], prompt: undefined },
       )
-      const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context: compacting.context })
+      const context = [recentTailAudit(selected.tail), ...compacting.context].filter((item): item is string => Boolean(item))
+      const nextPrompt = compacting.prompt ?? buildPrompt({ previousSummary, context })
       const msgs = structuredClone(selected.head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {

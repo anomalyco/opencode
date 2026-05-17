@@ -35,7 +35,7 @@ const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <te
 - [decision and why, or "(none)"]
 
 ## Next Steps
-- [ordered next actions or "(none)"]
+- [ordered unfinished future actions or "(none)"]
 
 ## Critical Context
 - [important technical facts, errors, open questions, or "(none)"]
@@ -48,6 +48,8 @@ Rules:
 - Keep every section, even when empty.
 - Use terse bullets, not prose paragraphs.
 - Preserve exact file paths, commands, error strings, and identifiers when known.
+- Next Steps must contain only unfinished future actions.
+- If recent preserved-tail audit says a task was completed, move it out of Next Steps.
 - Do not mention the summary process or that context was compacted.`
 
 type Entry = {
