@@ -7,14 +7,12 @@ import { Session } from "@/session/session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
-import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
-import type { SessionPrompt } from "../session/prompt"
-import { SessionStatus } from "@/session/status"
-import { Config } from "@/config/config"
-import { TuiEvent } from "@/cli/cmd/tui/event"
-import { Cause, Effect, Exit, Option, Schema, Scope } from "effect"
-import { EffectBridge } from "@/effect/bridge"
-import { RuntimeFlags } from "@/effect/runtime-flags"
+import { SessionPrompt } from "../session/prompt"
+import { iife } from "@/util/iife"
+import { defer } from "@/util/defer"
+import { Config } from "../config/config"
+import { Permission } from "@/permission"
+import { Truncate } from "./truncate"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -211,43 +209,37 @@ function backgroundMessage(input: {
             .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
         })
 
-      const continueIfIdle = Effect.fn("TaskTool.continueIfIdle")(function* (input: {
-        userID: MessageID
-        state: "completed" | "error"
-      }) {
-        yield* resumeWhenIdle(input).pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
-      })
+      const fullOutput = [
+        `task_id: ${session.id} (for resuming to continue this task if needed)`,
+        "",
+        "<task_result>",
+        text,
+        "</task_result>",
+      ].join("\n")
 
-      const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
-        state: "completed" | "error",
-        text: string,
-      ) {
-        const currentParent = yield* sessions.get(ctx.sessionID)
-        const message = yield* ops.prompt({
-          sessionID: ctx.sessionID,
-          noReply: true,
-          agent: currentParent.agent ?? ctx.agent,
-          parts: [
-            {
-              type: "text",
-              synthetic: true,
-              text: backgroundMessage({
-                sessionID: nextSession.id,
-                description: params.description,
-                state,
-                text,
-              }),
-            },
-          ],
-        })
-        yield* continueIfIdle({ userID: message.info.id, state })
-      })
+      // Apply task-specific truncation with higher limits (4000 lines / 100KB vs default 2000/50KB).
+      // Setting metadata.truncated skips the automatic Truncate.output() in tool.ts,
+      // preventing double-truncation.
+      const out = await Truncate.output(fullOutput, { maxLines: 4000, maxBytes: 100 * 1024 })
+      const output = out.truncated
+        ? [
+            `📁 Full task output: ${out.outputPath}`,
+            `Use the Read tool with offset/limit to access the full content.`,
+            "",
+            `--- Preview (${fullOutput.split("\n").length} total lines, ${Buffer.byteLength(fullOutput, "utf-8")} bytes) ---`,
+            out.content,
+          ].join("\n")
+        : out.content
 
-      const existing = yield* background.get(nextSession.id)
-      if (existing?.status === "running") {
-        return yield* Effect.fail(
-          new Error(`Task ${nextSession.id} is already running. Use task_status to check progress.`),
-        )
+      return {
+        title: params.description,
+        metadata: {
+          sessionId: session.id,
+          model,
+          truncated: out.truncated,
+          outputPath: out.truncated ? out.outputPath : undefined,
+        },
+        output,
       }
 
       if (runInBackground) {
