@@ -217,10 +217,12 @@ const discoverSkills = Effect.fnUntraced(function* (
   }
 
   // Default skill URLs ship with the binary and are fetched automatically.
+  // Suppressed when external skills are disabled (air-gapped / privacy mode)
+  // or when OPENCODE_DISABLE_DEFAULT_SKILLS=1 is set.
   // User-configured URLs are appended after, so they take precedence on name
   // collisions (last write wins in the state map).
   const allUrls = [
-    ...(disableDefaultSkills ? [] : DEFAULT_SKILL_URLS),
+    ...(!disableExternalSkills && !disableDefaultSkills ? DEFAULT_SKILL_URLS : []),
     ...(cfg.skills?.urls ?? []),
   ]
   for (const url of allUrls) {
