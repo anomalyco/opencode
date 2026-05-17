@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
-import { ConfigProvider, Effect, Layer } from "effect"
+import { ConfigProvider, Deferred, Effect, Layer } from "effect"
 import type * as Scope from "effect/Scope"
 import { HttpRouter } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process"
@@ -22,7 +22,7 @@ import { TestLLMServer } from "../lib/llm-server"
 import path from "path"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance, tmpdirScoped } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const it = testEffect(
@@ -667,6 +667,70 @@ describe("HttpApi SDK", () => {
           updatedText: firstPartText(updated.data),
           partCountAfterDelete: array(record(withoutPart.data).parts).length,
         }
+      }),
+    ),
+  )
+
+  // Regression: SyncEvent must publish on the same ProjectBus the /event handler
+// subscribes to, AND the /event stream must forward handler ALS/context into the
+// body-pump fiber. Drives the full SDK → /event → Session.updatePart → sync.run →
+// bus.publish → SDK subscriber path. Goes red if either the publisher uses a
+// different bus instance (Bug 2 / pre-#27825) or the stream loses context (Bug 1 /
+// pre-#27425).
+  serverPathParity("streams sync-backed part updates to /event subscribers", (serverPath) =>
+    withStandardProject(serverPath, ({ sdk, directory }) =>
+      Effect.gen(function* () {
+        const session = yield* capture(() => sdk.session.create({ title: "sync-backed part event" }))
+        const sessionID = String(record(session.data).id)
+        const seeded = yield* seedMessage(directory, sessionID)
+
+        const controller = new AbortController()
+        yield* Effect.addFinalizer(() => Effect.sync(() => controller.abort()))
+        const events = yield* call(() => sdk.event.subscribe(undefined, { signal: controller.signal }))
+        yield* Effect.addFinalizer(() =>
+          call(async () => void (await events.stream.return?.(undefined))).pipe(Effect.ignore),
+        )
+
+        const ready = yield* Deferred.make<void>()
+        const received = yield* Deferred.make<unknown>()
+
+        yield* call(async () => {
+          for await (const event of events.stream) {
+            const payload = record(event).payload ?? event
+            const type = record(payload).type
+            if (type === "server.connected") {
+              Deferred.doneUnsafe(ready, Effect.void)
+              continue
+            }
+            if (type === MessageV2.Event.PartUpdated.type) {
+              Deferred.doneUnsafe(received, Effect.succeed(payload))
+              return
+            }
+          }
+        }).pipe(Effect.forkScoped)
+
+        yield* awaitWithTimeout(Deferred.await(ready), "timed out waiting for /event server.connected", "2 seconds")
+
+        const updated = yield* capture(() =>
+          sdk.part.update({
+            sessionID,
+            messageID: seeded.message.id,
+            partID: seeded.part.id,
+            part: { ...seeded.part, text: "updated via sync" } as NonNullable<
+              Parameters<Sdk["part"]["update"]>[0]["part"]
+            >,
+          }),
+        )
+        expect(updated.status).toBe(200)
+
+        const event = yield* awaitWithTimeout(
+          Deferred.await(received),
+          "timed out waiting for message.part.updated bus payload over /event",
+          "5 seconds",
+        )
+        const properties = record(record(event).properties)
+        expect(record(properties.part)).toMatchObject({ id: seeded.part.id, type: "text" })
+        return { type: record(event).type, partType: record(properties.part).type }
       }),
     ),
   )

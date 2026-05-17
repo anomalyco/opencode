@@ -167,18 +167,21 @@ export const layer = Layer.effect(
           def: D,
           fn: (evt: { properties: any }) => Effect.Effect<void, unknown>,
         ) =>
-          bus.subscribe(def as never).pipe(
-            Stream.runForEach((evt) =>
-              fn(evt).pipe(
-                Effect.catchCause((cause) =>
-                  Effect.sync(() => {
-                    log.error("share subscriber failed", { type: def.type, cause })
-                  }),
+          Effect.gen(function* () {
+            const stream = yield* bus.subscribe(def as never)
+            yield* stream.pipe(
+              Stream.runForEach((evt) =>
+                fn(evt).pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.sync(() => {
+                      log.error("share subscriber failed", { type: def.type, cause })
+                    }),
+                  ),
                 ),
               ),
-            ),
-            Effect.forkScoped,
-          )
+              Effect.forkScoped,
+            )
+          })
 
         yield* watch(Session.Event.Updated, (evt) =>
           Effect.gen(function* () {
