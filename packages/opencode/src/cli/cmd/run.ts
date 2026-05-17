@@ -88,6 +88,80 @@ function formatRunError(error: unknown) {
   return FormatError(error) ?? FormatUnknownError(error)
 }
 
+type NonInteractiveLoopEvent = {
+  type: string
+  properties: Record<string, unknown>
+}
+
+export type NonInteractiveBackgroundWaitState = {
+  backgroundTasks: Set<string>
+  waitingForParentResume: boolean
+}
+
+export function createRunBackgroundWaitState(): NonInteractiveBackgroundWaitState {
+  return {
+    backgroundTasks: new Set(),
+    waitingForParentResume: false,
+  }
+}
+
+function backgroundSessionID(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object") return
+  if (Reflect.get(metadata, "background") !== true) return
+  const sessionID = Reflect.get(metadata, "sessionId")
+  return typeof sessionID === "string" && sessionID.length > 0 ? sessionID : undefined
+}
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined
+}
+
+export function shouldExitNonInteractiveLoop(
+  state: NonInteractiveBackgroundWaitState,
+  event: NonInteractiveLoopEvent,
+  parentSessionID: string,
+) {
+  if (event.type === "message.part.updated") {
+    const part = record(event.properties.part)
+    if (!part) return false
+    if (part.sessionID === parentSessionID && part.type === "tool" && part.tool === "task") {
+      const childSessionID = backgroundSessionID(record(part.state)?.metadata)
+      if (childSessionID) {
+        state.backgroundTasks.add(childSessionID)
+        state.waitingForParentResume = true
+      }
+      return false
+    }
+
+    if (part.sessionID === parentSessionID && state.backgroundTasks.size === 0) {
+      state.waitingForParentResume = false
+    }
+    return false
+  }
+
+  if (event.type === "message.updated" && event.properties.sessionID === parentSessionID) {
+    if (state.backgroundTasks.size === 0) state.waitingForParentResume = false
+    return false
+  }
+
+  if (event.type !== "session.status") return false
+
+  const status = record(event.properties.status)
+  if (event.properties.sessionID !== parentSessionID) {
+    if (event.properties.sessionID && status?.type === "idle") {
+      state.backgroundTasks.delete(String(event.properties.sessionID))
+    }
+    return false
+  }
+
+  if (status?.type !== "idle") {
+    if (state.backgroundTasks.size === 0) state.waitingForParentResume = false
+    return false
+  }
+
+  return state.backgroundTasks.size === 0 && !state.waitingForParentResume
+}
+
 async function tool(part: ToolPart) {
   try {
     const { toolInlineInfo } = await import("./run/tool")
@@ -610,9 +684,14 @@ export const RunCommand = effectCmd({
         // created, and replies issued from inside the loop must use that client.
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
+          const backgroundWait = createRunBackgroundWaitState()
           let error: string | undefined
 
           for await (const event of events.stream) {
+            if (shouldExitNonInteractiveLoop(backgroundWait, event, sessionID)) {
+              break
+            }
+
             if (
               event.type === "message.updated" &&
               event.properties.sessionID === sessionID &&
@@ -699,14 +778,6 @@ export const RunCommand = effectCmd({
               UI.error(err)
             }
 
-            if (
-              event.type === "session.status" &&
-              event.properties.sessionID === sessionID &&
-              event.properties.status.type === "idle"
-            ) {
-              break
-            }
-
             if (event.type === "permission.asked") {
               const permission = event.properties
               if (permission.sessionID !== sessionID) continue
@@ -741,10 +812,7 @@ export const RunCommand = effectCmd({
 
         if (!args.interactive) {
           const events = await client.event.subscribe()
-          loop(client, events).catch((e) => {
-            console.error(e)
-            process.exit(1)
-          })
+          const done = loop(client, events)
 
           if (args.command) {
             const result = await client.session.command({
@@ -758,7 +826,11 @@ export const RunCommand = effectCmd({
             if (result.error) {
               if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
               process.exitCode = 1
+              await done
+              return
             }
+            const error = await done
+            if (error) process.exitCode = 1
             return
           }
 
@@ -773,7 +845,11 @@ export const RunCommand = effectCmd({
           if (result.error) {
             if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
             process.exitCode = 1
+            await done
+            return
           }
+          const error = await done
+          if (error) process.exitCode = 1
           return
         }
 
