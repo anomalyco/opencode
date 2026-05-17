@@ -2,9 +2,13 @@
 
 > Fix scrollbar thumb always filling the entire track height, making it impossible to gauge scroll position in long conversations.
 
+## Background
+
+The TUI has a vertical scrollbar in the session view, hidden by default. To show it, open the command palette (`Ctrl+P`) and select **"Toggle Session Scrollbar"**.
+
 ## Problem
 
-The vertical scrollbar in the TUI session view always displayed its thumb filling the entire track height, regardless of content length. This made it impossible for users to visually determine their scroll position within long conversations.
+The vertical scrollbar's thumb always filled the entire track height, regardless of content length. This made it impossible for users to visually determine their scroll position within long conversations.
 
 ## Root Cause
 
@@ -84,7 +88,7 @@ The scrollbar thumb now correctly reflects the viewport-to-content ratio. For ex
 ## How to Verify
 
 1. Start the TUI with `bun dev` and open or create a session with a long conversation (scroll content significantly exceeds viewport height).
-2. Press `s` to toggle the scrollbar visible.
+2. Open the command palette (`Ctrl+P`) and select **"Toggle Session Scrollbar"** to make the scrollbar visible.
 3. Observe that the cyan thumb size is proportional to viewport/content ratio (small for very long conversations, larger for shorter ones).
 4. Scroll up/down and confirm the thumb position moves proportionally along the track.
 5. Verify the thumb never becomes invisibly small (minimum 10% of track or 3 cells).
