@@ -14,6 +14,7 @@ import { Storage } from "@/storage/storage"
 import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { BackgroundJob } from "@/background/job"
+import { sameDirectory } from "@/session/directory"
 
 void Log.init({ print: false })
 const it = testEffect(
@@ -37,6 +38,13 @@ afterEach(async () => {
 })
 
 describe("session.list", () => {
+  it.effect("treats slash-equivalent Windows directories as equal", () => {
+    if (process.platform !== "win32") return Effect.void
+    expect(sameDirectory("C:/repo/demo", "C:\\repo\\demo")).toBe(true)
+    expect(sameDirectory("C:/repo/demo", "C:/repo/other")).toBe(false)
+    return Effect.void
+  })
+
   it.instance(
     "does not filter by directory when directory is omitted",
     () =>
@@ -61,6 +69,26 @@ describe("session.list", () => {
         expect(ids).toContain(parent.id)
         expect(ids).toContain(current.id)
         expect(ids).toContain(sibling.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "matches slash-equivalent directory filters on Windows",
+    () =>
+      Effect.gen(function* () {
+        if (process.platform !== "win32") return
+        const test = yield* TestInstance
+        yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "opencode"), { recursive: true }))
+
+        const current = yield* withSession({ title: "current" }).pipe(
+          provideInstance(path.join(test.directory, "packages", "opencode")),
+        )
+
+        const ids = (yield* SessionNs.Service.use((session) =>
+          session.list({ directory: path.join(test.directory, "packages", "opencode").replaceAll("\\", "/") }),
+        )).map((session) => session.id)
+        expect(ids).toContain(current.id)
       }),
     { git: true },
   )
@@ -91,6 +119,35 @@ describe("session.list", () => {
         expect(ids).not.toContain(parent.id)
         expect(ids).toContain(current.id)
         expect(ids).not.toContain(sibling.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "matches legacy slash-stored directory rows on Windows",
+    () =>
+      Effect.gen(function* () {
+        if (process.platform !== "win32") return
+        const test = yield* TestInstance
+        yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "opencode", "src"), { recursive: true }))
+
+        const currentDir = path.join(test.directory, "packages", "opencode", "src")
+        const current = yield* withSession({ title: "legacy-current" }).pipe(provideInstance(currentDir))
+
+        yield* Effect.sync(() =>
+          Database.use((db) =>
+            db
+              .update(SessionTable)
+              .set({ path: null, directory: currentDir.replaceAll("\\", "/") })
+              .where(eq(SessionTable.id, current.id))
+              .run(),
+          ),
+        )
+
+        const ids = (yield* SessionNs.Service.use((session) =>
+          session.list({ directory: currentDir, path: "packages/opencode/src" }),
+        )).map((session) => session.id)
+        expect(ids).toContain(current.id)
       }),
     { git: true },
   )

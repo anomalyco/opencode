@@ -28,6 +28,7 @@ import { MessageV2 } from "./message-v2"
 import type { InstanceContext } from "../project/instance-context"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
+import { directoryVariants } from "./directory"
 import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
@@ -894,6 +895,7 @@ function* listByProject(
   },
 ) {
   const conditions = [eq(SessionTable.project_id, input.projectID)]
+  const directories = directoryVariants(input.directory)
 
   if (input.workspaceID) {
     conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
@@ -903,14 +905,14 @@ function* listByProject(
       const conds = [eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`)]
 
       conditions.push(
-        input.directory
-          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, input.directory))!)!
+        directories.length > 0
+          ? or(...conds, and(isNull(SessionTable.path), matchDirectory(SessionTable.directory, directories))!)!
           : or(...conds)!,
       )
     }
   } else if (input.scope !== "project" && !input.experimentalWorkspaces) {
-    if (input.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+    if (directories.length > 0) {
+      conditions.push(matchDirectory(SessionTable.directory, directories))
     }
   }
   if (input.roots) {
@@ -949,9 +951,10 @@ export function* listGlobal(input?: {
   archived?: boolean
 }) {
   const conditions: SQL[] = []
+  const directories = directoryVariants(input?.directory)
 
-  if (input?.directory) {
-    conditions.push(eq(SessionTable.directory, input.directory))
+  if (directories.length > 0) {
+    conditions.push(matchDirectory(SessionTable.directory, directories))
   }
   if (input?.roots) {
     conditions.push(isNull(SessionTable.parent_id))
@@ -1006,6 +1009,11 @@ export function* listGlobal(input?: {
     const project = projects.get(row.project_id) ?? null
     yield { ...fromRow(row), project }
   }
+}
+
+function matchDirectory(column: typeof SessionTable.directory, directories: string[]) {
+  if (directories.length === 1) return eq(column, directories[0]!)
+  return or(...directories.map((directory) => eq(column, directory)))!
 }
 
 export * as Session from "./session"
