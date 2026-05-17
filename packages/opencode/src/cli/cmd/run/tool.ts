@@ -272,6 +272,29 @@ export function toolPath(input?: string, opts: { home?: boolean } = {}): string 
   return abs.replaceAll("\\", "/")
 }
 
+function toolLocation(input?: string, opts: { home?: boolean } = {}): string {
+  const raw = input?.trim()
+  if (!raw) {
+    return ""
+  }
+
+  const formatted = toolPath(raw, opts)
+  if (!formatted || formatted === ".") {
+    return ""
+  }
+
+  return formatted
+}
+
+function appendLocation(title: string, input?: string, opts: { home?: boolean } = {}): string {
+  const location = toolLocation(input, opts)
+  if (!location || title.includes(location)) {
+    return title
+  }
+
+  return `${title} in ${location}`
+}
+
 function fallbackInline(ctx: ToolFrame): ToolInline {
   const title = text(ctx.state.title) || (Object.keys(ctx.input).length > 0 ? JSON.stringify(ctx.input) : "Unknown")
 
@@ -286,9 +309,9 @@ function count(n: number, label: string): string {
 }
 
 function runGlob(p: ToolProps<typeof GlobTool>): ToolInline {
-  const root = p.input.path ?? ""
   const title = `Glob "${p.input.pattern ?? ""}"`
-  const suffix = root ? `in ${toolPath(root)}` : ""
+  const location = toolLocation(p.input.path)
+  const suffix = location ? `in ${location}` : ""
   const matches = p.metadata.count
   const description = matches === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${count(matches, "match")}`
   return {
@@ -299,9 +322,9 @@ function runGlob(p: ToolProps<typeof GlobTool>): ToolInline {
 }
 
 function runGrep(p: ToolProps<typeof GrepTool>): ToolInline {
-  const root = p.input.path ?? ""
   const title = `Grep "${p.input.pattern ?? ""}"`
-  const suffix = root ? `in ${toolPath(root)}` : ""
+  const location = toolLocation(p.input.path)
+  const suffix = location ? `in ${location}` : ""
   const matches = p.metadata.matches
   const description = matches === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${count(matches, "match")}`
   return {
@@ -624,9 +647,7 @@ function snapQuestion(p: ToolProps<typeof QuestionTool>): ToolSnapshot {
 function scrollBashStart(p: ToolProps<typeof BashTool>): string {
   const cmd = p.input.command ?? ""
   const desc = p.input.description || "Shell"
-  const wd = p.input.workdir ?? ""
-  const dir = wd && wd !== "." ? toolPath(wd) : ""
-  const title = dir && !desc.includes(dir) ? `${desc} in ${dir}` : desc
+  const title = appendLocation(desc, p.input.workdir)
 
   if (!cmd) {
     return `# ${title}`
@@ -864,12 +885,7 @@ function scrollSkillStart(p: ToolProps<typeof SkillTool>): string {
 function scrollGlobStart(p: ToolProps<typeof GlobTool>): string {
   const pattern = p.input.pattern ?? ""
   const head = pattern ? `✱ Glob "${pattern}"` : "✱ Glob"
-  const dir = p.input.path ?? ""
-  if (!dir) {
-    return head
-  }
-
-  return `${head} in ${toolPath(dir)}`
+  return appendLocation(head, p.input.path)
 }
 
 function scrollGlobFinal(p: ToolProps<typeof GlobTool>): string {
@@ -879,12 +895,7 @@ function scrollGlobFinal(p: ToolProps<typeof GlobTool>): string {
 function scrollGrepStart(p: ToolProps<typeof GrepTool>): string {
   const pattern = p.input.pattern ?? ""
   const head = pattern ? `✱ Grep "${pattern}"` : "✱ Grep"
-  const dir = p.input.path ?? ""
-  if (!dir) {
-    return head
-  }
-
-  return `${head} in ${toolPath(dir)}`
+  return appendLocation(head, p.input.path)
 }
 
 function scrollListStart(p: ToolProps): string {
