@@ -228,7 +228,12 @@ export const layer = Layer.effect(
       tokens: MessageV2.Assistant["tokens"]
       model: Provider.Model
     }) {
-      return overflow({ cfg: yield* config.get(), tokens: input.tokens, model: input.model })
+      return overflow({
+        cfg: yield* config.get(),
+        tokens: input.tokens,
+        model: input.model,
+        outputTokenMax: flags.outputTokenMax,
+      })
     })
 
     const estimate = Effect.fn("SessionCompaction.estimate")(function* (input: {

@@ -1,5 +1,5 @@
 import { EffectBridge } from "@/effect/bridge"
-import type { InstanceContext } from "@/project/instance"
+import type { InstanceContext } from "@/project/instance-context"
 import { InstanceStore } from "@/project/instance-store"
 import * as Log from "@opencode-ai/core/util/log"
 import { Effect } from "effect"

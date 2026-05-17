@@ -24,6 +24,7 @@ import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@openc
 import { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { InstanceRef } from "@/effect/instance-ref"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
@@ -236,6 +237,7 @@ export const RunCommand = effectCmd({
   handler: Effect.fn("Cli.run")(function* (args) {
     const agentSvc = yield* Agent.Service
     const flags = yield* RuntimeFlags.Service
+    const localInstance = yield* InstanceRef
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
       const thinking = args.interactive ? (args.thinking ?? true) : (args.thinking ?? false)
@@ -508,7 +510,9 @@ export const RunCommand = effectCmd({
         if (!args.agent) return undefined
         const name = args.agent
 
-        const entry = await Effect.runPromise(agentSvc.get(name))
+        const entry = await Effect.runPromise(
+          agentSvc.get(name).pipe(Effect.provideService(InstanceRef, localInstance)),
+        )
         if (!entry) {
           UI.println(
             UI.Style.TEXT_WARNING_BOLD + "!",

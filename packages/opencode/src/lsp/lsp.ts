@@ -237,6 +237,7 @@ export const layer = Layer.effect(
             server: handle,
             root,
             directory: ctx.directory,
+            instance: ctx,
           }).catch(async (err) => {
             s.broken.add(key)
             await Process.stop(handle.process)
