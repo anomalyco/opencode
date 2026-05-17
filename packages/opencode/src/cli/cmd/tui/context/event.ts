@@ -16,7 +16,8 @@ export function useEvent() {
         return
       }
 
-      if (event.directory === "global" || event.project === project.project()) {
+      const currentProject = project.project()
+      if (event.directory === "global" || currentProject === undefined || event.project === currentProject) {
         handler(event.payload, { workspace: event.workspace })
       }
     })

@@ -65,7 +65,7 @@ function createSource() {
   }
 }
 
-async function mount() {
+async function mount(input: { syncProject?: boolean } = {}) {
   const source = createSource()
   const seen: Event[] = []
   const workspaces: Array<string | undefined> = []
@@ -87,7 +87,7 @@ async function mount() {
         <Probe
           onReady={async (ctx) => {
             project = ctx.project
-            await project.sync()
+            if (input.syncProject !== false) await project.sync()
             done()
           }}
           seen={seen}
@@ -174,6 +174,21 @@ describe("useEvent", () => {
       await wait(() => seen.length === 1)
 
       expect(seen).toEqual([update("1.2.3")])
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
+  test("delivers project events before the current project finishes loading", async () => {
+    const { app, emit, seen, workspaces } = await mount({ syncProject: false })
+
+    try {
+      emit(event(vcs("startup"), { directory: "/tmp/root", project: projectID, workspace: "ws_start" }))
+
+      await wait(() => seen.length === 1)
+
+      expect(seen).toEqual([vcs("startup")])
+      expect(workspaces).toEqual(["ws_start"])
     } finally {
       app.renderer.destroy()
     }
