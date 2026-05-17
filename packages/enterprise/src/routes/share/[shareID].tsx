@@ -321,7 +321,7 @@ export default function () {
                                       class="sticky top-0 shrink-0 py-2 pl-4"
                                       messages={messages()}
                                       current={activeMessage()}
-                                      size="compact"
+                                      size="normal"
                                       onMessageSelect={setActiveMessage}
                                     />
                                   </Show>
