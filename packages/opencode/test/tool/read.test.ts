@@ -45,19 +45,39 @@ const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     Layer.provide(RuntimeFlags.layer(flags)),
   )
 
-const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
+const readLayer = (flags: Partial<RuntimeFlags.Info> = {}, lspLayer = LSP.defaultLayer) =>
   Layer.mergeAll(
     Agent.defaultLayer,
     AppFileSystem.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
     Instruction.defaultLayer,
-    LSP.defaultLayer,
+    lspLayer,
     referenceLayer(flags),
     Truncate.defaultLayer,
   )
 
 const it = testEffect(readLayer())
 const scout = testEffect(readLayer({ experimentalScout: true }))
+const failingLsp = Layer.succeed(
+  LSP.Service,
+  LSP.Service.of({
+    init: () => Effect.void,
+    status: () => Effect.succeed([]),
+    hasClients: () => Effect.succeed(true),
+    touchFile: () => Effect.die(new Error("InstanceRef not provided")),
+    diagnostics: () => Effect.succeed({}),
+    hover: () => Effect.succeed(undefined),
+    definition: () => Effect.succeed([]),
+    references: () => Effect.succeed([]),
+    implementation: () => Effect.succeed([]),
+    documentSymbol: () => Effect.succeed([]),
+    workspaceSymbol: () => Effect.succeed([]),
+    prepareCallHierarchy: () => Effect.succeed([]),
+    incomingCalls: () => Effect.succeed([]),
+    outgoingCalls: () => Effect.succeed([]),
+  }),
+)
+const lspWarmupFailure = testEffect(readLayer({}, failingLsp))
 
 const init = Effect.fn("ReadToolTest.init")(function* () {
   const info = yield* ReadTool
@@ -149,6 +169,16 @@ const asks = () => {
 }
 
 describe("tool.read external_directory permission", () => {
+  lspWarmupFailure.live("returns file contents when best-effort LSP warmup defects", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "test.ts"), "export const value = 1\n")
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "test.ts") }).pipe(Effect.timeout("1 second"))
+      expect(result.output).toContain("export const value = 1")
+    }),
+  )
+
   it.live("allows reading absolute path inside project directory", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()

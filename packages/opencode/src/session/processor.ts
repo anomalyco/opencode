@@ -661,11 +661,21 @@ export const layer = Layer.effect(
         }
         ctx.reasoningMap = {}
 
-        yield* Effect.forEach(
-          Object.values(ctx.toolcalls),
-          (call) => Deferred.await(call.done).pipe(Effect.timeout("250 millis"), Effect.ignore),
-          { concurrency: "unbounded" },
-        )
+        // Only running tool calls can produce results. Pending calls are still
+        // streaming input; if the stream fails before `tool-call`, waiting here
+        // would block cleanup from marking them interrupted.
+        if (!aborted && !ctx.assistantMessage.error) {
+          yield* Effect.forEach(
+            Object.keys(ctx.toolcalls),
+            (toolCallID) =>
+              Effect.gen(function* () {
+                const match = yield* readToolCall(toolCallID)
+                if (match?.part.state.status !== "running") return
+                yield* Deferred.await(match.call.done)
+              }),
+            { concurrency: "unbounded", discard: true },
+          )
+        }
 
         for (const toolCallID of Object.keys(ctx.toolcalls)) {
           const match = yield* readToolCall(toolCallID)
