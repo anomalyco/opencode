@@ -575,6 +575,36 @@ describe("ProviderTransform.providerOptions", () => {
       groq: { reasoningFormat: "parsed" },
     })
   })
+
+  test("camel-cases openai-compatible provider id for provider options", () => {
+    const model = createModel({
+      providerID: "my-newapi",
+      api: {
+        id: "glm-4.7",
+        url: "https://api.example.com/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "high" })).toEqual({
+      myNewapi: { reasoningEffort: "high" },
+    })
+  })
+
+  test("keeps dotted openai-compatible provider id prefix for provider options", () => {
+    const model = createModel({
+      providerID: "example.com",
+      api: {
+        id: "custom-model",
+        url: "https://api.example.com/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { reasoningEffort: "high" })).toEqual({
+      example: { reasoningEffort: "high" },
+    })
+  })
 })
 
 describe("ProviderTransform.schema - gemini array items", () => {
