@@ -3,6 +3,7 @@ import { createSignal, Show, splitProps } from "solid-js"
 import type { ComponentProps } from "solid-js"
 import { useI18n } from "../context/i18n"
 import { IconButton } from "./icon-button"
+import { copyText } from "./text-field-copy"
 import { Tooltip } from "./tooltip"
 
 export interface TextFieldProps
@@ -69,7 +70,7 @@ export function TextField(props: TextFieldProps) {
 
   async function handleCopy() {
     const value = local.value ?? local.defaultValue ?? ""
-    await navigator.clipboard.writeText(value)
+    if (!(await copyText(value))) return
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
