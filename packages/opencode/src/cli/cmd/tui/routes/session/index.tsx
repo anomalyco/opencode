@@ -175,6 +175,31 @@ function use() {
   return ctx
 }
 
+function patchScrollbarProportionalThumb(scrollbox: ScrollBoxRenderable) {
+  const bar = scrollbox.verticalScrollBar as any
+  const slider = bar.slider
+
+  // upstream @opentui/core (<=0.2.12) Slider.set viewPortSize clamps to
+  // slider.max–min, but updateSliderFromScrollState sets slider.max AFTER
+  // viewPortSize is assigned, so viewPortSize gets clamped to ≈0.
+  const origUpdate = bar.updateSliderFromScrollState.bind(bar)
+  bar.updateSliderFromScrollState = function () {
+    origUpdate()
+    slider.viewPortSize = Math.max(1, bar._viewportSize)
+  }
+
+  // Enforce a visible minimum thumb size (≥10% of track or 3 cells)
+  const origThumb = slider.getVirtualThumbSize
+  slider.getVirtualThumbSize = function (this: any) {
+    const raw: number = origThumb.call(this)
+    const track =
+      this.orientation === "vertical" ? this.height * 2 : this.width * 2
+    if (track <= 0) return raw
+    const minSize = Math.max(6, Math.floor(track * 0.1))
+    return Math.max(minSize, Math.min(raw, track))
+  }
+}
+
 export function Session() {
   const route = useRouteData("session")
   const { navigate } = useRoute()
@@ -1111,34 +1136,7 @@ export function Session() {
               <scrollbox
                 ref={(r) => {
                   scroll = r
-                  const bar = r.verticalScrollBar as any
-                  const slider = bar.slider
-
-                  // Fix: upstream @opentui/core (<=0.2.12) Slider.set viewPortSize
-                  // clamps to slider.max–min, but updateSliderFromScrollState sets
-                  // slider.max AFTER viewPortSize is assigned, so viewPortSize gets
-                  // clamped to ≈0. Re-sync it after every state update.
-                  const origUpdate = bar.updateSliderFromScrollState.bind(bar)
-                  bar.updateSliderFromScrollState = function () {
-                    origUpdate()
-                    slider.viewPortSize = Math.max(1, bar._viewportSize)
-                  }
-
-                  // Enforce a visible minimum thumb size (≥10% of track or 3 cells)
-                  const origThumb = slider.getVirtualThumbSize
-                  slider.getVirtualThumbSize = function (this: any) {
-                    const raw: number = origThumb.call(this)
-                    const track =
-                      this.orientation === "vertical"
-                        ? this.height * 2
-                        : this.width * 2
-                    if (track <= 0) return raw
-                    return Math.max(
-                      Math.max(6, Math.floor(track * 0.1)),
-                      Math.min(raw, track),
-                    )
-                  }
-
+                  patchScrollbarProportionalThumb(r)
                 }}
                 viewportOptions={{
                   paddingRight: showScrollbar() ? 1 : 0,

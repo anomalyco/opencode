@@ -18,18 +18,25 @@ A bug in `@opentui/core` (<=0.2.12) within `ScrollBarRenderable.updateSliderFrom
 ## Fix Location
 
 **File:** `packages/opencode/src/cli/cmd/tui/routes/session/index.tsx`  
-**Lines:** 1111-1153 (the `<scrollbox>` component's `ref` callback and scrollbar options)
+**Helper function:** `patchScrollbarProportionalThumb()` (line 178, immediately above `Session` component)  
+**Invocation:** `ref` callback of `<scrollbox>` (line 1137)
 
 ## Fix Details
 
-Two monkey-patches are applied via the `ref` callback on the `<scrollbox>` component:
+The patching logic is encapsulated in a standalone helper function `patchScrollbarProportionalThumb(scrollbox)`, called from the scrollbox `ref` callback:
+
+```typescript
+ref={(r) => {
+  scroll = r
+  patchScrollbarProportionalThumb(r)
+}}
+```
+
+The helper applies two monkey-patches:
 
 ### Patch 1: Re-sync `viewPortSize` after state update
 
 ```typescript
-const bar = r.verticalScrollBar as any
-const slider = bar.slider
-
 const origUpdate = bar.updateSliderFromScrollState.bind(bar)
 bar.updateSliderFromScrollState = function () {
   origUpdate()
@@ -46,14 +53,10 @@ const origThumb = slider.getVirtualThumbSize
 slider.getVirtualThumbSize = function (this: any) {
   const raw: number = origThumb.call(this)
   const track =
-    this.orientation === "vertical"
-      ? this.height * 2
-      : this.width * 2
+    this.orientation === "vertical" ? this.height * 2 : this.width * 2
   if (track <= 0) return raw
-  return Math.max(
-    Math.max(6, Math.floor(track * 0.1)),
-    Math.min(raw, track),
-  )
+  const minSize = Math.max(6, Math.floor(track * 0.1))
+  return Math.max(minSize, Math.min(raw, track))
 }
 ```
 
