@@ -857,6 +857,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Session.defaultLayer),
     Layer.provide(Snapshot.defaultLayer),
     Layer.provide(Agent.defaultLayer),
+    Layer.provide(Provider.defaultLayer),
     Layer.provide(LLM.defaultLayer),
     Layer.provide(Permission.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
