@@ -643,7 +643,21 @@ export function MessageTimeline(props: {
     }),
   )
 
-  const eligible = createMemo((prev) => {
+  const eligible = createMemo<{
+    enabled: boolean
+    count: boolean
+    total: boolean
+    tall: boolean
+    complex: boolean
+    sum: number
+    peak: number
+    score: number
+    text: boolean
+    math: boolean
+    code: boolean
+    parts: boolean
+    tools: boolean
+  } | undefined>((prev) => {
     // Remove revision() dependency to prevent height changes from triggering eligibility recalculation
     const ids = rendered()
     const root = viewport
@@ -704,7 +718,7 @@ export function MessageTimeline(props: {
       parts,
       tools,
     }
-  })
+  }, undefined)
 
   // Windowing stays active during streaming — tailWindow keeps the active reply
   // visible while reducing DOM pressure from history turns.
