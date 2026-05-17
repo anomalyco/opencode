@@ -34,9 +34,9 @@ describe("applyMutationsToSnapshotJson", () => {
   test("non-empty unsupported mutations throws", () => {
     const id = crypto.randomUUID()
     const raw = JSON.stringify(defaultWorkbook(id, "n"))
-    expect(() =>
-      applyMutationsToSnapshotJson(raw, [{ id: "other.op", params: {} }], 1),
-    ).toThrow("no supported mutations applied")
+    expect(() => applyMutationsToSnapshotJson(raw, [{ id: "other.op", params: {} }], 1)).toThrow(
+      "no supported mutations applied",
+    )
   })
 
   test("applies sheet.mutation.set-drawing-apply into SHEET_DRAWING_PLUGIN resource", () => {

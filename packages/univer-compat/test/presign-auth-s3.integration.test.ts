@@ -3,12 +3,19 @@ import { S3Client } from "bun"
 import { S3Client as AwsJsS3Client } from "@aws-sdk/client-s3"
 import { GenericContainer, Network, Wait, type StartedTestContainer } from "testcontainers"
 import * as XLSX from "xlsx"
+import { headerSessionResolver } from "@veritly/auth-shared"
 import { createCompatApp } from "../src/app"
-import { headerTestCompatResolver } from "../src/compat-authenticator"
+import { assertSafeUserSegment } from "../src/object-keys"
 import { S3ExchangeFiles } from "../src/exchange-files"
 import { runWithRequestUserAsync } from "../src/request-user"
 import { Store } from "../src/store"
-import { hdr } from "./helpers/header-user"
+
+const tenantHdr = "x-e2e-univer-tenant"
+const testTenantResolver = headerSessionResolver(tenantHdr, assertSafeUserSegment)
+
+function hdr(user: string) {
+  return { [tenantHdr]: user }
+}
 
 const access = "veritlyminio"
 const secret = "veritlyminio_dev"
@@ -86,7 +93,7 @@ test.skipIf(process.env.UNIVER_COMPAT_PRESIGN_S3_IT !== "1")(
         forcePathStyle: true,
       })
       const blob = new S3ExchangeFiles(client, signer, bucket)
-      const app = createCompatApp(new Store(blob, 1), headerTestCompatResolver)
+      const app = createCompatApp(new Store(blob, 1), testTenantResolver)
 
       const buf = tinyXlsx()
       const ct = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

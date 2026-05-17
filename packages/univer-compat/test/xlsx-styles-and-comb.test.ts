@@ -103,7 +103,7 @@ describe("exchange import keeps styles in stored snapshot JSON", () => {
     })
     const tid = ((await ir.json()) as { taskID: string }).taskID
     await app0.request(`http://127.0.0.1/universer-api/exchange/task/${tid}`)
-    const t1 = await (await app0.request(`http://127.0.0.1/universer-api/exchange/task/${tid}`)).json() as {
+    const t1 = (await (await app0.request(`http://127.0.0.1/universer-api/exchange/task/${tid}`)).json()) as {
       import: { unitID: string }
     }
     const unitID = t1.import.unitID

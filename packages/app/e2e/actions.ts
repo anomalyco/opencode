@@ -159,7 +159,7 @@ export async function createTestProject(name = "E2E Test Project") {
   const sdk = createOpencodeClient({ baseUrl: serverUrl, throwOnError: true })
   const result = await sdk.project.create({ name })
   if (!result.data?.id) throw new Error("Failed to create test project")
-  
+
   // Return virtual directory path like /projects/<id> for backward compatibility
   return `/projects/${result.data.id}`
 }
@@ -339,10 +339,7 @@ export async function waitSessionIdle(sdk: ReturnType<typeof createSdk>, session
   await expect.poll(() => status(sdk, sessionID).then((x) => !x || x.type === "idle"), { timeout }).toBe(true)
 }
 
-export async function cleanupSession(input: {
-  sessionID: string
-  sdk: ReturnType<typeof createSdk>
-}) {
+export async function cleanupSession(input: { sessionID: string; sdk: ReturnType<typeof createSdk> }) {
   const sdk = input.sdk
   await waitSessionIdle(sdk, input.sessionID, 5_000).catch(() => undefined)
   const current = await status(sdk, input.sessionID).catch(() => undefined)

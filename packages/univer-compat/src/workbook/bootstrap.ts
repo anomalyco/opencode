@@ -1,11 +1,7 @@
 import { commitDrawingPluginInWorkbook } from "./drawing-plugin"
 import { parseWorkbookWire } from "./parse-wire"
 import { WORKBOOK_SCHEMA_VERSION } from "./schema-version/latest"
-import {
-  migrateWorkbookToLatest,
-  stampWorkbookSchemaVersion,
-  workbookBodyFromSnapshotRoot,
-} from "./schema-version/run"
+import { migrateWorkbookToLatest, stampWorkbookSchemaVersion, workbookBodyFromSnapshotRoot } from "./schema-version/run"
 
 function b64(s: string) {
   return Buffer.from(s, "utf8").toString("base64")

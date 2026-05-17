@@ -2,6 +2,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { e2eEmit, e2eEmitElapsed } from "../e2e/emit"
+import { assertHostWorkosForUniverE2e } from "../e2e/assert-univer-workos-env"
 import { parseOpencodeE2eInfra } from "./e2e-infra"
 import { startE2eDockerDeps, startOpencodeE2eContainer } from "./e2e-testcontainers"
 
@@ -23,6 +24,7 @@ function phase(msg: string) {
 }
 
 const infra = parseOpencodeE2eInfra()
+if (infra.has("univer")) assertHostWorkosForUniverE2e()
 
 const extraArgs = (() => {
   const args = process.argv.slice(2)
@@ -113,10 +115,7 @@ const opencodeConfig = {
   },
 }
 
-await fs.writeFile(
-  path.join(opencodeConfigDir, "opencode.json"),
-  JSON.stringify(opencodeConfig, null, 2),
-)
+await fs.writeFile(path.join(opencodeConfigDir, "opencode.json"), JSON.stringify(opencodeConfig, null, 2))
 phase("Wrote sandbox opencode.json.")
 
 const serverPort = await port()

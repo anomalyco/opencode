@@ -222,10 +222,7 @@ export class Store {
       snapshots: snaps,
       changesets: this.changesets.get(unitID) ?? [],
     }
-    await this.blob.put(
-      unitBundleKey(requireRequestUserId(), unitID),
-      new TextEncoder().encode(JSON.stringify(bundle)),
-    )
+    await this.blob.put(unitBundleKey(requireRequestUserId(), unitID), new TextEncoder().encode(JSON.stringify(bundle)))
   }
 
   createUnit(name: string, creator: string, typ: number) {

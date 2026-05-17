@@ -4,9 +4,13 @@ import { promptSelector } from "./selectors"
 import { createSdk, projectPath, sessionPath, getCurrentProject } from "./utils"
 import {
   applyE2eWorkosSession,
+  applyE2eWorkosSessionWith,
   clearE2eWorkosSession,
   e2eAppOrigin,
+  mintE2eSealedSessionForTenantB,
+  mintE2eSealedSessionFromCredentials,
   mintE2eSealedSessionFromWorkos,
+  tenantBEmail,
   withAuth,
 } from "./workos-auth"
 
@@ -39,11 +43,11 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     },
     { scope: "worker" },
   ],
-  
+
   sdk: async ({ project }, use) => {
     await use(createSdk(project))
   },
-  
+
   gotoSession: async ({ page, project }, use) => {
     await seedStorage(page, { projectId: project.id })
 
@@ -54,7 +58,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     }
     await use(gotoSession)
   },
-  
+
   withProject: async ({ page, sdk: workerSdk }, use) => {
     await use(async (callback) => {
       // Create a fresh database project for this test
@@ -114,4 +118,14 @@ async function seedStorage(page: Page, input: { projectId: string }) {
 }
 
 export { expect }
-export { applyE2eWorkosSession, clearE2eWorkosSession, e2eAppOrigin, mintE2eSealedSessionFromWorkos, withAuth }
+export {
+  applyE2eWorkosSession,
+  applyE2eWorkosSessionWith,
+  clearE2eWorkosSession,
+  e2eAppOrigin,
+  mintE2eSealedSessionForTenantB,
+  mintE2eSealedSessionFromCredentials,
+  mintE2eSealedSessionFromWorkos,
+  tenantBEmail,
+  withAuth,
+}

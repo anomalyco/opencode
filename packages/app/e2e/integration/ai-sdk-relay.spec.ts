@@ -4,7 +4,7 @@ import { cleanupSession } from "../actions"
 
 /**
  * E2E test for AI calling SDK through Playwright -> Python SDK -> Relay
- * 
+ *
  * This test verifies the full stack:
  * 1. AI generates code to call the SDK
  * 2. Code executes through Playwright
@@ -37,7 +37,7 @@ test("AI can call SDK through relay", async ({ page, sdk, project, gotoSession }
   await prompt.click()
   await page.keyboard.type(
     "Generate Python code that uses the opencode SDK to check if the browser is connected. " +
-    "The code should import the SDK, connect to the relay, and print the connection status."
+      "The code should import the SDK, connect to the relay, and print the connection status.",
   )
   await page.keyboard.press("Enter")
 
@@ -51,17 +51,16 @@ test("AI can call SDK through relay", async ({ page, sdk, project, gotoSession }
         async () => {
           const messages = await sdk.session.messages({ sessionID, limit: 50 }).then((r) => r.data ?? [])
           const assistantMessages = messages.filter((m) => m.info.role === "assistant")
-          
+
           // Look for code blocks or SDK-related content
           for (const msg of assistantMessages) {
             const textParts = msg.parts
               .filter((p) => p.type === "text")
               .map((p) => p.text)
               .join("\n")
-            
+
             // Check if AI generated SDK-related code
-            if (textParts.includes("import") && 
-                (textParts.includes("opencode") || textParts.includes("sdk"))) {
+            if (textParts.includes("import") && (textParts.includes("opencode") || textParts.includes("sdk"))) {
               console.log("[Test] ✓ AI generated SDK code")
               return textParts
             }
@@ -82,17 +81,15 @@ test("AI can call SDK through relay", async ({ page, sdk, project, gotoSession }
         async () => {
           const messages = await sdk.session.messages({ sessionID, limit: 50 }).then((r) => r.data ?? [])
           const assistantMessages = messages.filter((m) => m.info.role === "assistant")
-          
+
           for (const msg of assistantMessages) {
             const textParts = msg.parts
               .filter((p) => p.type === "text")
               .map((p) => p.text)
               .join("\n")
-            
+
             // Look for connection-related terms
-            if (textParts.includes("relay") || 
-                textParts.includes("browser") || 
-                textParts.includes("connect")) {
+            if (textParts.includes("relay") || textParts.includes("browser") || textParts.includes("connect")) {
               console.log("[Test] ✓ AI mentioned relay/browser connection")
               return textParts
             }
@@ -104,7 +101,6 @@ test("AI can call SDK through relay", async ({ page, sdk, project, gotoSession }
       .toMatch(/relay|browser|connect/i)
 
     console.log("✓ Test passed - AI generated SDK code for relay connection")
-
   } finally {
     page.off("pageerror", onPageError)
     await cleanupSession({ sdk, sessionID })

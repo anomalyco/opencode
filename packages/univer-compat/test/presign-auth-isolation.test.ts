@@ -1,10 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import * as XLSX from "xlsx"
+import { headerSessionResolver } from "@veritly/auth-shared"
 import { createCompatApp } from "../src/app"
-import { headerTestCompatResolver } from "../src/compat-authenticator"
+import { assertSafeUserSegment } from "../src/object-keys"
 import { MemoryExchangeFiles } from "../src/memory-exchange-files"
 import { Store } from "../src/store"
-import { hdr } from "./helpers/header-user"
+
+/** In-memory presign isolation only — not the Playwright / Docker WorkOS path (see app e2e). */
+const tenantHdr = "x-e2e-univer-tenant"
+const testTenantResolver = headerSessionResolver(tenantHdr, assertSafeUserSegment)
+
+function hdr(user: string) {
+  return { [tenantHdr]: user }
+}
 
 function minimalXlsx() {
   const wb = XLSX.utils.book_new()
@@ -41,9 +49,9 @@ async function putPresigned(
   return fetch(uploadUrl, { method: "PUT", headers: h, body: Buffer.from(buf) })
 }
 
-describe("presign + header test auth (no WorkOS, no OPENCODE_E2E)", () => {
+describe("presign + in-memory per-request tenant (auth-shared headerSessionResolver)", () => {
   test("missing identity header → 401 on presign-upload", async () => {
-    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), headerTestCompatResolver)
+    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), testTenantResolver)
     const r = await app.request("http://127.0.0.1/universer-api/stream/file/presign-upload", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -53,13 +61,13 @@ describe("presign + header test auth (no WorkOS, no OPENCODE_E2E)", () => {
   })
 
   test("invalid user segment in header → 400", async () => {
-    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), headerTestCompatResolver)
+    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), testTenantResolver)
     const r = await presignJson(app, "evil/user", 10)
     expect(r.status).toBe(400)
   })
 
   test("user-a presign + PUT + import; user-b cannot import a's fileId", async () => {
-    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), headerTestCompatResolver)
+    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), testTenantResolver)
     const buf = minimalXlsx()
     const pr = await presignJson(app, "tenant-alpha", buf.byteLength)
     expect(pr.status).toBe(200)
@@ -82,7 +90,7 @@ describe("presign + header test auth (no WorkOS, no OPENCODE_E2E)", () => {
   })
 
   test("user-b presign-upload succeeds; sign-url for a's file 404 for b", async () => {
-    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), headerTestCompatResolver)
+    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), testTenantResolver)
     const buf = minimalXlsx()
     const prA = await presignJson(app, "tenant-alpha", buf.byteLength)
     const a = (await prA.json()) as { FileId: string; uploadUrl: string; headers?: Record<string, string> }
@@ -100,7 +108,7 @@ describe("presign + header test auth (no WorkOS, no OPENCODE_E2E)", () => {
   })
 
   test("memory PUT route rejects wrong user header (token scoped to minting user)", async () => {
-    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), headerTestCompatResolver)
+    const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), testTenantResolver)
     const buf = minimalXlsx()
     const pr = await presignJson(app, "tenant-alpha", buf.byteLength)
     const j = (await pr.json()) as { uploadUrl: string; headers?: Record<string, string> }

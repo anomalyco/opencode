@@ -4,17 +4,16 @@ import { cleanupSession } from "../actions"
 
 /**
  * Comprehensive E2E tests for AI reply flow in stateless architecture.
- * 
+ *
  * Architecture:
  * - Projects are database entities with UUIDs
- * - URLs use /projects/<id>/session/<session-id> format  
+ * - URLs use /projects/<id>/session/<session-id> format
  * - No local filesystem persistence (files in S3 eventually)
  * - Session + prompt flow against local OpenCode API
  * - Sessions are stateless and belong to database projects
  */
 
 test.describe("AI Reply Flow - Stateless Architecture", () => {
-  
   test("complete flow - creates session, sends prompt, receives reply", async ({ page, sdk, project, gotoSession }) => {
     test.setTimeout(120_000)
 
@@ -51,30 +50,28 @@ test.describe("AI Reply Flow - Stateless Architecture", () => {
 
       // Poll for the AI reply via SDK
       console.log("[Test] Polling for AI reply...")
-      
+
       await expect
         .poll(
           async () => {
             const messagesResult = await sdk.session.messages({ sessionID, limit: 50 })
             const messages = messagesResult.data ?? []
-            
+
             const assistantMessages = messages.filter((m) => m.info.role === "assistant")
-            
+
             for (const msg of assistantMessages) {
-              const textParts = msg.parts
-                .filter((p) => p.type === "text")
-                .map((p) => p.text)
-              
+              const textParts = msg.parts.filter((p) => p.type === "text").map((p) => p.text)
+
               const combinedText = textParts.join("\n")
               if (combinedText.includes(token)) {
                 console.log("[Test] ✓ Found token in AI reply!")
                 return combinedText
               }
             }
-            
+
             return null
           },
-          { 
+          {
             timeout: 90_000,
             intervals: [1_000, 2_000, 2_000],
           },
@@ -82,7 +79,6 @@ test.describe("AI Reply Flow - Stateless Architecture", () => {
         .toContain(token)
 
       console.log("[Test] ✓ Test passed - received AI reply with expected token")
-
     } finally {
       page.off("pageerror", () => {})
       await cleanupSession({ sdk, sessionID })
@@ -105,7 +101,7 @@ test.describe("AI Reply Flow - Stateless Architecture", () => {
     if (!session1Result.data || !session2Result.data) throw new Error("Failed to create sessions")
     const session1 = session1Result.data
     const session2 = session2Result.data
-    
+
     console.log(`[Test] Created sessions: ${session1.id}, ${session2.id}`)
 
     try {
@@ -159,7 +155,6 @@ test.describe("AI Reply Flow - Stateless Architecture", () => {
         .toBe(true)
 
       console.log("[Test] ✓ Both sessions received replies")
-
     } finally {
       await cleanupSession({ sdk, sessionID: session1.id })
       await cleanupSession({ sdk, sessionID: session2.id })
@@ -176,10 +171,10 @@ test.describe("AI Reply Flow - Stateless Architecture", () => {
       const sessionResult = await sdk.session.create({ title: "Isolated Test" })
       if (!sessionResult.data) throw new Error("Failed to create session")
       const session = sessionResult.data
-      
+
       expect(session.id).toBeDefined()
       expect(session.projectID).toBe(project.id)
-      
+
       console.log(`[Test] ✓ Session created in isolated project: ${session.id}`)
 
       // The session will be cleaned up automatically by withProject

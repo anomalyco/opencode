@@ -1,12 +1,6 @@
 import path from "node:path"
 import { S3Client } from "bun"
-import {
-  GenericContainer,
-  Network,
-  Wait,
-  type StartedNetwork,
-  type StartedTestContainer,
-} from "testcontainers"
+import { GenericContainer, Network, Wait, type StartedNetwork, type StartedTestContainer } from "testcontainers"
 import type { E2eInfraLayer } from "./e2e-infra"
 import { e2eEmit, e2eEmitElapsed } from "../e2e/emit"
 
@@ -195,6 +189,23 @@ function stringEnv(src: Record<string, string | undefined>): Record<string, stri
   return out
 }
 
+/** univer-compat uses `workosSessionResolver`; container must receive the same WorkOS + seal password as the app. */
+function workosEnvForCompatContainer(): Record<string, string> {
+  const apiKey = process.env.WORKOS_API_KEY?.trim()
+  const clientId = process.env.WORKOS_CLIENT_ID?.trim()
+  const cookiePassword = process.env.COOKIE_PASSWORD?.trim()
+  if (!apiKey || !clientId || !cookiePassword) {
+    throw new Error(
+      "Univer Testcontainers: set WORKOS_API_KEY, WORKOS_CLIENT_ID, COOKIE_PASSWORD on the host (staging/test keys) so univer-compat can validate wos-session.",
+    )
+  }
+  return {
+    WORKOS_API_KEY: apiKey,
+    WORKOS_CLIENT_ID: clientId,
+    COOKIE_PASSWORD: cookiePassword,
+  }
+}
+
 /**
  * OpenCode API in Docker: migrate → seed-e2e → HTTP server (same network as Postgres / Ollama).
  * Host binds `hostApiPort` → container `:4096`.
@@ -339,7 +350,6 @@ export async function startUniverE2e(
     e2ePhase(t0, "MinIO S3 bucket responds to list.")
 
     e2eEmit("[e2e-tc] → Univer: starting univer-compat (Testcontainer, alias veritly-univer)…")
-    const headerAuth = process.env.PLAYWRIGHT_UNIVER_HEADER_AUTH?.trim() === "1"
     const compatEnv: Record<string, string> = {
       PORT: String(veritlyUniverInternalPort),
       LISTEN_HOST: "0.0.0.0",
@@ -349,8 +359,8 @@ export async function startUniverE2e(
       UNIVER_COMPAT_S3_SECRET_KEY: minioSecret,
       UNIVER_COMPAT_S3_BUCKET: bucket,
       UNIVER_COMPAT_PERSIST_EVERY_REV: "1",
+      ...workosEnvForCompatContainer(),
     }
-    if (!headerAuth) compatEnv.OPENCODE_E2E_USER_ID = "playwright-univer-e2e"
 
     compat = await new GenericContainer(e2eBunImage)
       .withNetwork(net)
@@ -359,7 +369,7 @@ export async function startUniverE2e(
       .withBindMounts([{ source: root, target: "/app", mode: "ro" }])
       .withWorkingDir("/app/packages/univer-compat")
       .withEnvironment(compatEnv)
-      .withCommand(headerAuth ? ["bun", "script/serve-header-test.ts"] : ["bun", "script/serve.ts"])
+      .withCommand(["bun", "script/serve.ts"])
       .withWaitStrategy(Wait.forHttp("/readyz", veritlyUniverInternalPort))
       .withStartupTimeout(120_000)
       .start()
@@ -369,16 +379,11 @@ export async function startUniverE2e(
     const origin = `http://127.0.0.1:${mapped}`
     const clusterUniverHttpOrigin = `http://veritly-univer:${veritlyUniverInternalPort}`
 
-    const viteUniverEnv: Record<string, string> = headerAuth
-      ? {
-          VITE_UNIVER_BACKEND_URL: "same-origin",
-          DEV_UNIVER_COMPAT_URL: origin,
-          VERITLY_HEALTH_UNIVER_URL: origin,
-        }
-      : {
-          VITE_UNIVER_BACKEND_URL: origin,
-          VERITLY_HEALTH_UNIVER_URL: origin,
-        }
+    const viteUniverEnv: Record<string, string> = {
+      VITE_UNIVER_BACKEND_URL: "same-origin",
+      DEV_UNIVER_COMPAT_URL: origin,
+      VERITLY_HEALTH_UNIVER_URL: origin,
+    }
 
     e2eEmit(`[e2e-tc] ✓ univer-compat ready (host: ${origin} cluster: ${clusterUniverHttpOrigin})`)
 
@@ -439,10 +444,7 @@ export type E2eDockerDeps = {
   stop(): Promise<void>
 }
 
-export async function startE2eDockerDeps(
-  infra: ReadonlySet<E2eInfraLayer>,
-  repoDir: string,
-): Promise<E2eDockerDeps> {
+export async function startE2eDockerDeps(infra: ReadonlySet<E2eInfraLayer>, repoDir: string): Promise<E2eDockerDeps> {
   const t0 = Date.now()
   const layers = [...infra].sort().join(",")
   e2eEmit(`[e2e-tc] startE2eDockerDeps layers: ${layers}`)

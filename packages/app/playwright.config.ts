@@ -1,6 +1,10 @@
 import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { defineConfig, devices } from "@playwright/test"
 import { playwrightWebserverUsesUniver } from "./script/e2e-infra"
+
+const configDir = path.dirname(fileURLToPath(import.meta.url))
 
 const portRaw = process.env.PLAYWRIGHT_PORT
 let port = 3000
@@ -34,6 +38,7 @@ const storageState = authFile && fs.existsSync(authFile) ? authFile : undefined
 export default defineConfig({
   testDir: "./e2e",
   outputDir: "./e2e/test-results",
+  globalSetup: path.join(configDir, "e2e", "global-setup.ts"),
   timeout: 60_000,
   expect: {
     timeout: 10_000,
@@ -57,9 +62,6 @@ export default defineConfig({
       OTEL_LOG_LEVEL: "none",
       VERITLY_OTLP_EXPORT_DEBUG: "0",
       VITE_PUBLIC_OTEL_LOG_LEVEL: "none",
-      ...(process.env.PLAYWRIGHT_UNIVER_HEADER_AUTH?.trim() === "1"
-        ? { PLAYWRIGHT_UNIVER_HEADER_AUTH: "1" }
-        : {}),
       ...(process.env.VITE_UNIVER_BACKEND_URL?.trim()
         ? { VITE_UNIVER_BACKEND_URL: process.env.VITE_UNIVER_BACKEND_URL.trim() }
         : {}),

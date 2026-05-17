@@ -57,7 +57,10 @@ function reparentMisplacedSheetRoot(doc: Record<string, unknown>, sheetIds: stri
   doc[sid] = { data, order }
 }
 
-function unwrapCompatUnitWrapper(doc: Record<string, unknown>, wb: Pick<WorkbookWire, "sheetOrder" | "sheets" | "unitID" | "id">) {
+function unwrapCompatUnitWrapper(
+  doc: Record<string, unknown>,
+  wb: Pick<WorkbookWire, "sheetOrder" | "sheets" | "unitID" | "id">,
+) {
   const sheetIds = sheetIdsFromWorkbook(wb)
   if (!sheetIds.length) return
   const set = new Set(sheetIds)

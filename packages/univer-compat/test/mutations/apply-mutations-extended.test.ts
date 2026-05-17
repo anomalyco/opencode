@@ -276,12 +276,22 @@ describe("applyMutationsToSnapshotJson — nested drawing insert (browser shape)
     const opB = [uid, sheet, ["data", b, { i: { drawingId: b, x: 2 } }], ["order", 0, { i: b }]]
     const mid = applyMutationsToSnapshotJson(
       raw,
-      [{ id: "sheet.mutation.set-drawing-apply", params: { unitId: uid, subUnitId: sheet, op: opA, objects: [], type: 0 } }],
+      [
+        {
+          id: "sheet.mutation.set-drawing-apply",
+          params: { unitId: uid, subUnitId: sheet, op: opA, objects: [], type: 0 },
+        },
+      ],
       1,
     )
     const fin = applyMutationsToSnapshotJson(
       mid,
-      [{ id: "sheet.mutation.set-drawing-apply", params: { unitId: uid, subUnitId: sheet, op: opB, objects: [], type: 0 } }],
+      [
+        {
+          id: "sheet.mutation.set-drawing-apply",
+          params: { unitId: uid, subUnitId: sheet, op: opB, objects: [], type: 0 },
+        },
+      ],
       2,
     )
     const out = JSON.parse(fin) as { resources?: { name: string; data: string }[] }
@@ -325,12 +335,36 @@ describe("applyMutationsToSnapshotJson — flat drawing update", () => {
     const insert = [
       uid,
       sheet,
-      ["data", draw, { i: { drawingId: draw, transform: { left: 0, top: 0, width: 1, height: 1, angle: 0, flipY: false, flipX: false, skewX: 0, skewY: 0 } } }],
+      [
+        "data",
+        draw,
+        {
+          i: {
+            drawingId: draw,
+            transform: {
+              left: 0,
+              top: 0,
+              width: 1,
+              height: 1,
+              angle: 0,
+              flipY: false,
+              flipX: false,
+              skewX: 0,
+              skewY: 0,
+            },
+          },
+        },
+      ],
       ["order", 0, { i: draw }],
     ]
     const mid = applyMutationsToSnapshotJson(
       raw,
-      [{ id: "sheet.mutation.set-drawing-apply", params: { unitId: uid, subUnitId: sheet, op: insert, objects: [], type: 0 } }],
+      [
+        {
+          id: "sheet.mutation.set-drawing-apply",
+          params: { unitId: uid, subUnitId: sheet, op: insert, objects: [], type: 0 },
+        },
+      ],
       1,
     )
     const move = [
@@ -348,7 +382,12 @@ describe("applyMutationsToSnapshotJson — flat drawing update", () => {
     ]
     const fin = applyMutationsToSnapshotJson(
       mid,
-      [{ id: "sheet.mutation.set-drawing-apply", params: { unitId: uid, subUnitId: sheet, op: move, objects: [], type: 2 } }],
+      [
+        {
+          id: "sheet.mutation.set-drawing-apply",
+          params: { unitId: uid, subUnitId: sheet, op: move, objects: [], type: 2 },
+        },
+      ],
       2,
     )
     const out = JSON.parse(fin) as { resources?: { name: string; data: string }[] }
@@ -469,7 +508,11 @@ describe("applyMutationsToSnapshotJson — failures", () => {
     const uid = crypto.randomUUID()
     const raw = JSON.stringify(defaultWorkbook(uid, "x"))
     expect(() =>
-      applyMutationsToSnapshotJson(raw, [{ id: "sheet.mutation.unknown", params: { unitId: uid, subUnitId: "s", x: 1 } }], 1),
+      applyMutationsToSnapshotJson(
+        raw,
+        [{ id: "sheet.mutation.unknown", params: { unitId: uid, subUnitId: "s", x: 1 } }],
+        1,
+      ),
     ).toThrow("no supported mutations applied")
   })
 

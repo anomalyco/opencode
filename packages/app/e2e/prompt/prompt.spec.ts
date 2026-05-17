@@ -4,7 +4,7 @@ import { cleanupSession, sessionIDFromUrl } from "../actions"
 
 /**
  * E2E test for stateless architecture with database projects
- * 
+ *
  * In the new architecture:
  * - Projects are database entities with UUIDs, not filesystem directories
  * - Sessions belong to projects (via project_id foreign key)
@@ -58,7 +58,7 @@ test("can send a prompt and receive a reply", async ({ page, sdk, project, gotoS
         { timeout: 90_000, intervals: [1000, 2000, 2000] },
       )
       .toContain(token)
-    
+
     console.log("✓ Received AI reply with expected token")
   } finally {
     page.off("pageerror", onPageError)
