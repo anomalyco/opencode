@@ -1,7 +1,7 @@
 import { Context, Effect, FileSystem, Layer, Schema } from "effect"
 import * as fs from "node:fs"
 import * as path from "node:path"
-import { secretFindings, type SecretFinding } from "./redaction"
+import { secretFindings, SecretFindingSchema, type SecretFinding } from "./redaction"
 import { decodeCassette, encodeCassette, type Cassette, type CassetteMetadata, type Interaction } from "./schema"
 
 const DEFAULT_RECORDINGS_DIR = path.resolve(process.cwd(), "test", "fixtures", "recordings")
@@ -14,13 +14,24 @@ export class CassetteNotFoundError extends Schema.TaggedErrorClass<CassetteNotFo
   }
 }
 
-export interface AppendResult {
-  readonly findings: ReadonlyArray<SecretFinding>
+export class UnsafeCassetteError extends Schema.TaggedErrorClass<UnsafeCassetteError>()("UnsafeCassetteError", {
+  cassetteName: Schema.String,
+  findings: Schema.Array(SecretFindingSchema),
+}) {
+  override get message() {
+    return `Refusing to write cassette "${this.cassetteName}" because it contains possible secrets: ${this.findings
+      .map((finding) => `${finding.path} (${finding.reason})`)
+      .join(", ")}`
+  }
 }
 
 export interface Interface {
   readonly read: (name: string) => Effect.Effect<ReadonlyArray<Interaction>, CassetteNotFoundError>
-  readonly append: (name: string, interaction: Interaction, metadata?: CassetteMetadata) => Effect.Effect<AppendResult>
+  readonly append: (
+    name: string,
+    interaction: Interaction,
+    metadata?: CassetteMetadata,
+  ) => Effect.Effect<void, UnsafeCassetteError>
   readonly exists: (name: string) => Effect.Effect<boolean>
   readonly list: () => Effect.Effect<ReadonlyArray<string>>
 }
@@ -43,6 +54,9 @@ const buildCassette = (
 const formatCassette = (cassette: Cassette) => `${JSON.stringify(encodeCassette(cassette), null, 2)}\n`
 
 const parseCassette = (raw: string) => decodeCassette(JSON.parse(raw))
+
+const failIfUnsafe = (name: string, findings: ReadonlyArray<SecretFinding>) =>
+  findings.length === 0 ? Effect.void : Effect.fail(new UnsafeCassetteError({ cassetteName: name, findings }))
 
 export const fileSystem = (
   options: { readonly directory?: string } = {},
@@ -92,11 +106,9 @@ export const fileSystem = (
             entry.findings.push(...secretFindings(interaction))
             const cassette = buildCassette(name, entry.interactions, metadata)
             const findings = [...entry.findings, ...secretFindings(cassette.metadata ?? {})]
-            if (findings.length === 0) {
-              yield* ensureDirectory(name)
-              yield* fs.writeFileString(cassettePath(name), formatCassette(cassette)).pipe(Effect.orDie)
-            }
-            return { findings }
+            yield* failIfUnsafe(name, findings)
+            yield* ensureDirectory(name)
+            yield* fs.writeFileString(cassettePath(name), formatCassette(cassette)).pipe(Effect.orDie)
           }),
         exists: (name) =>
           fs.access(cassettePath(name)).pipe(
@@ -133,17 +145,17 @@ export const memory = (initial: Record<string, ReadonlyArray<Interaction>> = {})
         stored.has(name)
           ? Effect.succeed(stored.get(name) ?? [])
           : Effect.fail(new CassetteNotFoundError({ cassetteName: name })),
-      append: (name, interaction, metadata) =>
-        Effect.sync(() => {
-          const existing = stored.get(name)
-          if (existing) existing.push(interaction)
-          else stored.set(name, [interaction])
-          const findings = accumulatedFindings.get(name)
-          if (findings) findings.push(...secretFindings(interaction))
-          else accumulatedFindings.set(name, [...secretFindings(interaction)])
-          if (metadata) accumulatedFindings.get(name)!.push(...secretFindings({ name, ...metadata }))
-          return { findings: accumulatedFindings.get(name) ?? [] }
-        }),
+      append: (name, interaction, metadata) => {
+        const existing = stored.get(name)
+        if (existing) existing.push(interaction)
+        else stored.set(name, [interaction])
+        const existingFindings = accumulatedFindings.get(name)
+        const findings = existingFindings ?? []
+        if (!existingFindings) accumulatedFindings.set(name, findings)
+        findings.push(...secretFindings(interaction))
+        if (metadata) findings.push(...secretFindings({ name, ...metadata }))
+        return failIfUnsafe(name, findings)
+      },
       exists: (name) => Effect.sync(() => stored.has(name)),
       list: () => Effect.sync(() => Array.from(stored.keys()).toSorted()),
     })

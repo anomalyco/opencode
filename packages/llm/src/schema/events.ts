@@ -1,24 +1,78 @@
 import { Schema } from "effect"
-import { ContentBlockID, FinishReason, ProtocolID, ProviderMetadata, ResponseID, RouteID, ToolCallID } from "./ids"
+import { ContentBlockID, FinishReason, ProtocolID, ProviderMetadata, RouteID, ToolCallID } from "./ids"
 import { ModelRef } from "./options"
 import { ToolResultValue } from "./messages"
 
+/**
+ * Token usage reported by an LLM provider.
+ *
+ * **Inclusive totals** (match AI SDK / OpenAI / LangChain convention — a
+ * reader from any of those ecosystems sees the number they expect):
+ *
+ * - `inputTokens` — total prompt tokens, *including* cached reads/writes.
+ * - `outputTokens` — total output tokens, *including* reasoning.
+ * - `totalTokens` — provider-supplied total, or `inputTokens + outputTokens`.
+ *
+ * **Non-overlapping breakdown** (every field is independently meaningful;
+ * consumers never have to subtract):
+ *
+ * - `nonCachedInputTokens` — the "fresh" portion of the prompt.
+ * - `cacheReadInputTokens` — input tokens served from cache.
+ * - `cacheWriteInputTokens` — input tokens written to cache.
+ * - `reasoningTokens` — subset of `outputTokens` spent on hidden reasoning.
+ *
+ * **Invariant**: `nonCachedInputTokens + cacheReadInputTokens +
+ * cacheWriteInputTokens = inputTokens`, and `reasoningTokens ≤ outputTokens`.
+ * Each protocol mapper computes whichever side it doesn't get natively,
+ * with `Math.max(0, …)` clamping for defense against provider bugs. Because
+ * every breakdown field is stored independently, downstream consumers can
+ * read whatever they need (cost-by-category, context-pressure, AI-SDK-style
+ * inclusive total) without ever subtracting — eliminating the underflow
+ * class of bug where a clamped difference would silently store the wrong
+ * value.
+ *
+ * **Semantics by provider**:
+ *
+ * - OpenAI Chat / Responses / Gemini / Bedrock: provider reports inclusive
+ *   `inputTokens` and an inclusive `outputTokens`; mapper subtracts to
+ *   derive the breakdown.
+ * - Anthropic: provider reports the breakdown natively (`input_tokens` is
+ *   non-cached only); mapper sums to derive the inclusive `inputTokens`.
+ *   Anthropic does *not* break extended-thinking out of `output_tokens`, so
+ *   `reasoningTokens` is `undefined` and `outputTokens` carries the
+ *   combined total — a documented limitation of the Anthropic API.
+ *
+ * `providerMetadata` always carries the provider's raw usage payload —
+ * keyed by provider name (`{ openai: ... }`, `{ anthropic: ... }`, etc.)
+ * — for fields we don't normalize and for billing-level audit trails.
+ * Matches the same escape-hatch field on `LLMEvent`.
+ */
 export class Usage extends Schema.Class<Usage>("LLM.Usage")({
   inputTokens: Schema.optional(Schema.Number),
   outputTokens: Schema.optional(Schema.Number),
-  reasoningTokens: Schema.optional(Schema.Number),
+  nonCachedInputTokens: Schema.optional(Schema.Number),
   cacheReadInputTokens: Schema.optional(Schema.Number),
   cacheWriteInputTokens: Schema.optional(Schema.Number),
+  reasoningTokens: Schema.optional(Schema.Number),
   totalTokens: Schema.optional(Schema.Number),
-  native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}) {}
+  providerMetadata: Schema.optional(ProviderMetadata),
+}) {
+  /**
+   * Visible output tokens — `outputTokens` minus `reasoningTokens`, clamped
+   * to zero. The one place subtraction happens in this contract; the clamp
+   * means a provider reporting `reasoningTokens > outputTokens` produces a
+   * harmless zero rather than a negative that crashes downstream schemas.
+   */
+  get visibleOutputTokens() {
+    return Math.max(0, (this.outputTokens ?? 0) - (this.reasoningTokens ?? 0))
+  }
 
-export const RequestStart = Schema.Struct({
-  type: Schema.tag("request-start"),
-  id: ResponseID,
-  model: ModelRef,
-}).annotate({ identifier: "LLM.Event.RequestStart" })
-export type RequestStart = Schema.Schema.Type<typeof RequestStart>
+  static from(input: UsageInput) {
+    return input instanceof Usage ? input : new Usage(input)
+  }
+}
+
+export type UsageInput = Usage | ConstructorParameters<typeof Usage>[0]
 
 export const StepStart = Schema.Struct({
   type: Schema.tag("step-start"),
@@ -117,6 +171,7 @@ export const ToolError = Schema.Struct({
   id: ToolCallID,
   name: Schema.String,
   message: Schema.String,
+  error: Schema.optional(Schema.Defect),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolError" })
 export type ToolError = Schema.Schema.Type<typeof ToolError>
@@ -130,13 +185,13 @@ export const StepFinish = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.StepFinish" })
 export type StepFinish = Schema.Schema.Type<typeof StepFinish>
 
-export const RequestFinish = Schema.Struct({
-  type: Schema.tag("request-finish"),
+export const Finish = Schema.Struct({
+  type: Schema.tag("finish"),
   reason: FinishReason,
   usage: Schema.optional(Usage),
   providerMetadata: Schema.optional(ProviderMetadata),
-}).annotate({ identifier: "LLM.Event.RequestFinish" })
-export type RequestFinish = Schema.Schema.Type<typeof RequestFinish>
+}).annotate({ identifier: "LLM.Event.Finish" })
+export type Finish = Schema.Schema.Type<typeof Finish>
 
 export const ProviderErrorEvent = Schema.Struct({
   type: Schema.tag("provider-error"),
@@ -147,7 +202,6 @@ export const ProviderErrorEvent = Schema.Struct({
 export type ProviderErrorEvent = Schema.Schema.Type<typeof ProviderErrorEvent>
 
 const llmEventTagged = Schema.Union([
-  RequestStart,
   StepStart,
   TextStart,
   TextDelta,
@@ -162,13 +216,15 @@ const llmEventTagged = Schema.Union([
   ToolResult,
   ToolError,
   StepFinish,
-  RequestFinish,
+  Finish,
   ProviderErrorEvent,
 ]).pipe(Schema.toTaggedUnion("type"))
 
 type WithID<Event extends { readonly id: unknown }, ID> = Omit<Event, "type" | "id"> & { readonly id: ID | string }
+type WithUsage<Event extends { readonly usage?: Usage }> = Omit<Event, "type" | "usage"> & {
+  readonly usage?: UsageInput
+}
 
-const responseID = (value: ResponseID | string) => ResponseID.make(value)
 const contentBlockID = (value: ContentBlockID | string) => ContentBlockID.make(value)
 const toolCallID = (value: ToolCallID | string) => ToolCallID.make(value)
 
@@ -178,7 +234,6 @@ const toolCallID = (value: ToolCallID | string) => ToolCallID.make(value)
  * `events.filter(LLMEvent.guards["tool-call"])`.
  */
 export const LLMEvent = Object.assign(llmEventTagged, {
-  requestStart: (input: WithID<RequestStart, ResponseID>) => RequestStart.make({ ...input, id: responseID(input.id) }),
   stepStart: StepStart.make,
   textStart: (input: WithID<TextStart, ContentBlockID>) => TextStart.make({ ...input, id: contentBlockID(input.id) }),
   textDelta: (input: WithID<TextDelta, ContentBlockID>) => TextDelta.make({ ...input, id: contentBlockID(input.id) }),
@@ -197,11 +252,18 @@ export const LLMEvent = Object.assign(llmEventTagged, {
   toolCall: (input: WithID<ToolCall, ToolCallID>) => ToolCall.make({ ...input, id: toolCallID(input.id) }),
   toolResult: (input: WithID<ToolResult, ToolCallID>) => ToolResult.make({ ...input, id: toolCallID(input.id) }),
   toolError: (input: WithID<ToolError, ToolCallID>) => ToolError.make({ ...input, id: toolCallID(input.id) }),
-  stepFinish: StepFinish.make,
-  requestFinish: RequestFinish.make,
+  stepFinish: (input: WithUsage<StepFinish>) =>
+    StepFinish.make({
+      ...input,
+      usage: input.usage === undefined ? undefined : Usage.from(input.usage),
+    }),
+  finish: (input: WithUsage<Finish>) =>
+    Finish.make({
+      ...input,
+      usage: input.usage === undefined ? undefined : Usage.from(input.usage),
+    }),
   providerError: ProviderErrorEvent.make,
   is: {
-    requestStart: llmEventTagged.guards["request-start"],
     stepStart: llmEventTagged.guards["step-start"],
     textStart: llmEventTagged.guards["text-start"],
     textDelta: llmEventTagged.guards["text-delta"],
@@ -216,7 +278,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     toolResult: llmEventTagged.guards["tool-result"],
     toolError: llmEventTagged.guards["tool-error"],
     stepFinish: llmEventTagged.guards["step-finish"],
-    requestFinish: llmEventTagged.guards["request-finish"],
+    finish: llmEventTagged.guards.finish,
     providerError: llmEventTagged.guards["provider-error"],
   },
 })

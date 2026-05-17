@@ -73,6 +73,29 @@ function foo() {
 }
 ```
 
+### Complex Logic
+
+When a function has several validation branches or supporting details, make the main function read as the happy path and move supporting details into small helpers below it.
+
+```ts
+// Good
+export function loadThing(input: unknown) {
+  const config = requireConfig(input)
+  const metadata = readMetadata(input)
+  return createThing({ config, metadata })
+}
+
+function requireConfig(input: unknown) {
+  ...
+}
+```
+
+- Keep helpers close to the code they support, below the main export when that improves readability.
+- Do not over-abstract simple expressions into many single-use helpers; extract only when it names a real concept like `requireConfig` or `readMetadata`.
+- Do not return `Effect` from helpers unless they actually perform effectful work. Synchronous parsing, validation, and option building should stay synchronous.
+- Prefer Effect schema helpers such as `Schema.UnknownFromJsonString` and `Schema.decodeUnknownOption` over manual `JSON.parse` wrapped in `Effect.try` when parsing untrusted JSON strings.
+- Add comments for non-obvious constraints and surprising behavior, not for obvious assignments or control flow.
+
 ### Schema Definitions (Drizzle)
 
 Use snake_case for field names so column names don't need to be redefined as strings.

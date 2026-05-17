@@ -24,6 +24,9 @@ type Data = {
   part: {
     [messageID: string]: Part[]
   }
+  part_text_accum_delta?: {
+    [partID: string]: string
+  }
 }
 
 export type NavigateToSessionFn = (sessionID: string) => void

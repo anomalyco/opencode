@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import net from "node:net"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Log from "@opencode-ai/core/util/log"
 import { Server } from "../../src/server/server"
@@ -156,6 +157,16 @@ function waitForMessage(ws: WebSocket, predicate: (message: string) => boolean) 
   })
 }
 
+async function openPtySocket(listener: Awaited<ReturnType<typeof startListener>>, dir: string) {
+  const info = await createCat(listener, dir)
+  const ticket = await connectTicket(listener, info.id, dir)
+  const ws = await openSocket(socketURL(listener, info.id, dir, ticket.ticket))
+  return {
+    ws,
+    closed: new Promise<void>((resolve) => ws.addEventListener("close", () => resolve(), { once: true })),
+  }
+}
+
 describe("HttpApi Server.listen", () => {
   testPty("serves HTTP routes and upgrades PTY websocket through Server.listen", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
@@ -205,6 +216,116 @@ describe("HttpApi Server.listen", () => {
       }
     } finally {
       if (!stopped) await stop(listener, "timed out cleaning up listener").catch(() => undefined)
+    }
+  })
+
+  testPty("stop(true) is safe when called concurrently and repeatedly", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const listener = await startListener()
+    let stopped = false
+    try {
+      const socket = await openPtySocket(listener, tmp.path)
+
+      await withTimeout(
+        Promise.all([listener.stop(true), listener.stop(true)]).then(() => undefined),
+        10_000,
+        "timed out waiting for concurrent listener.stop(true)",
+      )
+      await withTimeout(socket.closed, 5_000, "timed out waiting for websocket close after concurrent stop")
+      await withTimeout(listener.stop(true), 5_000, "timed out waiting for repeated listener.stop(true)")
+      stopped = true
+    } finally {
+      if (!stopped) await stop(listener, "timed out cleaning up concurrent stop listener").catch(() => undefined)
+    }
+  })
+
+  testPty("stop(true) can force a graceful stop already in progress", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const listener = await startListener()
+    let stopped = false
+    try {
+      const socket = await openPtySocket(listener, tmp.path)
+
+      const graceful = listener.stop()
+      const forced = listener.stop(true)
+      await withTimeout(
+        Promise.all([graceful, forced]).then(() => undefined),
+        10_000,
+        "timed out waiting for forced listener stop",
+      )
+      await withTimeout(socket.closed, 5_000, "timed out waiting for websocket close after forced stop")
+      stopped = true
+    } finally {
+      if (!stopped) await stop(listener, "timed out cleaning up forced stop listener").catch(() => undefined)
+    }
+  })
+
+  testPty("graceful stop waits for an overlapping forced stop", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const listener = await startListener()
+    let stopped = false
+    try {
+      const socket = await openPtySocket(listener, tmp.path)
+      const forced = listener.stop(true)
+      await withTimeout(listener.stop(), 10_000, "timed out waiting for graceful stop after forced stop")
+      stopped = true
+      await withTimeout(forced, 5_000, "timed out waiting for overlapping forced stop")
+      await withTimeout(socket.closed, 5_000, "timed out waiting for websocket close before graceful stop resolved")
+    } finally {
+      if (!stopped) await stop(listener, "timed out cleaning up overlapping stop listener").catch(() => undefined)
+    }
+  })
+
+  test("stop() gracefully closes an idle listener and is repeat-safe", async () => {
+    const listener = await startListener()
+    await withTimeout(listener.stop(), 10_000, "timed out waiting for graceful listener.stop()")
+    await withTimeout(listener.stop(), 5_000, "timed out waiting for repeated graceful listener.stop()")
+    await expect(
+      fetch(new URL(PtyPaths.shells, listener.url), { headers: { authorization: authorization() } }),
+    ).rejects.toThrow()
+  })
+
+  test("default in-process handler does not emit Effect HTTP response logs", async () => {
+    let output = ""
+    // oxlint-disable-next-line typescript-eslint/unbound-method -- restored in finally after temporarily capturing stderr.
+    const original = process.stderr.write
+    process.stderr.write = ((chunk) => {
+      output += String(chunk)
+      return true
+    }) as typeof process.stderr.write
+    try {
+      const response = await Server.Default().app.request("/status")
+      expect(response.status).toBe(200)
+    } finally {
+      process.stderr.write = original
+    }
+
+    expect(output).not.toContain("Sent HTTP response")
+  })
+
+  test("port 0 prefers 4096 when free", async () => {
+    if (!(await isPortFree(4096))) return
+    const listener = await startListener()
+    try {
+      expect(listener.port).toBe(4096)
+    } finally {
+      await stop(listener, "timed out cleaning up port-0 prefers-4096 listener")
+    }
+  })
+
+  test("port 0 falls back when 4096 is taken", async () => {
+    const blocker = await occupyPort(4096)
+    if (!blocker) return
+    try {
+      const listener = await startListener()
+      try {
+        expect(listener.port).not.toBe(4096)
+        expect(listener.port).toBeGreaterThan(0)
+      } finally {
+        await stop(listener, "timed out cleaning up port-0 fallback listener")
+      }
+    } finally {
+      await new Promise<void>((resolve) => blocker.close(() => resolve()))
     }
   })
 
@@ -295,3 +416,20 @@ describe("HttpApi Server.listen", () => {
     }
   })
 })
+
+function isPortFree(port: number) {
+  return new Promise<boolean>((resolve) => {
+    const probe = net.createServer()
+    probe.once("error", () => resolve(false))
+    probe.once("listening", () => probe.close(() => resolve(true)))
+    probe.listen(port, "127.0.0.1")
+  })
+}
+
+function occupyPort(port: number) {
+  return new Promise<net.Server | undefined>((resolve) => {
+    const server = net.createServer()
+    server.once("error", () => resolve(undefined))
+    server.listen(port, "127.0.0.1", () => resolve(server))
+  })
+}
