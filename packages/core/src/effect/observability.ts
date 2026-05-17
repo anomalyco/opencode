@@ -1,14 +1,19 @@
 import { Effect, Layer, Logger } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { OtlpLogger, OtlpSerialization } from "effect/unstable/observability"
+import { context as otelContext } from "@opentelemetry/api"
+import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks"
 import * as EffectLogger from "./logger"
 import { Flag } from "../flag/flag"
 import { InstallationChannel, InstallationVersion } from "../installation/version"
 import { ensureProcessMetadata } from "../util/opencode-process"
 
 const base = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
-export const enabled = !!base
+// Evaluated at access time so tests and runtime callers see the current
+// env value rather than the snapshot captured when the Flag module loaded.
+export const isEnabled = () => !!process.env["OTEL_EXPORTER_OTLP_ENDPOINT"]
 const processID = crypto.randomUUID()
+const otelGlobalsKey = Symbol.for("opencode.otel.api.globals.initialized")
 
 const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
   ? Flag.OTEL_EXPORTER_OTLP_HEADERS.split(",").reduce(
@@ -67,22 +72,29 @@ function logs() {
   ).pipe(Layer.provide(OtlpSerialization.layerJson), Layer.provide(FetchHttpClient.layer))
 }
 
+// Install the OTel API global context manager idempotently. This is the
+// same fix as PR #22645 (Kit Langton) but extracted so other modules can
+// call it before the OTel SDK Layer has been built (e.g. from the MCP
+// layer, which constructs its tracing fetch eagerly). Effect's tracer
+// integration relies on `context.active()` returning the current span;
+// without a real context manager it always returns ROOT_CONTEXT.
+export function setupOtelApiGlobals(): void {
+  const state = globalThis as Record<symbol, boolean>
+  if (state[otelGlobalsKey]) return
+  const mgr = new AsyncLocalStorageContextManager()
+  if (otelContext.setGlobalContextManager(mgr)) mgr.enable()
+  state[otelGlobalsKey] = true
+}
+
 const traces = async () => {
   const NodeSdk = await import("@effect/opentelemetry/NodeSdk")
   const OTLP = await import("@opentelemetry/exporter-trace-otlp-http")
   const SdkBase = await import("@opentelemetry/sdk-trace-base")
-
   // @effect/opentelemetry creates a NodeTracerProvider but never calls
   // register(), so the global @opentelemetry/api context manager stays
-  // as the no-op default. Non-Effect code (like the AI SDK) that calls
-  // tracer.startActiveSpan() relies on context.active() to find the
-  // parent span - without a real context manager every span starts a
-  // new trace. Registering AsyncLocalStorageContextManager fixes this.
-  const { AsyncLocalStorageContextManager } = await import("@opentelemetry/context-async-hooks")
-  const { context } = await import("@opentelemetry/api")
-  const mgr = new AsyncLocalStorageContextManager()
-  mgr.enable()
-  context.setGlobalContextManager(mgr)
+  // as the no-op default. Non-Effect code (like the AI SDK) that reads
+  // context.active() needs a real context manager installed.
+  setupOtelApiGlobals()
 
   return NodeSdk.layer(() => ({
     resource: resource(),
@@ -104,4 +116,9 @@ export const layer = !base
       }),
     )
 
-export const Observability = { enabled, layer }
+export const Observability = {
+  get enabled() {
+    return isEnabled()
+  },
+  layer,
+}

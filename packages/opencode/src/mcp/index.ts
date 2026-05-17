@@ -4,6 +4,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
+import { context as otelContext, trace } from "@opentelemetry/api"
 import {
   CallToolResultSchema,
   ListToolsResultSchema,
@@ -31,6 +32,7 @@ import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Observability, setupOtelApiGlobals } from "@opencode-ai/core/effect/observability"
 
 const log = Log.create({ service: "mcp" })
 const DEFAULT_TIMEOUT = 30_000
@@ -148,6 +150,55 @@ function listTools(key: string, client: MCPClient, timeout: number) {
       )
     }),
   )
+}
+
+// Build a fetch-like function that injects the W3C `traceparent` header
+// (and `tracestate`, when present) into every outgoing MCP HTTP request,
+// so the remote MCP server's spans link back to the opencode trace.
+// Returned only when distributed tracing is enabled — see isTracingEnabled().
+//
+// We hand-roll the wrapper rather than importing `createMiddleware` from
+// `@modelcontextprotocol/sdk/client/middleware.js` because that module
+// transitively pulls in `auth.js` symbols (auth, extractWWWAuthenticateParams)
+// that several existing tests do not mock. The shape we need is trivial.
+function buildTracingFetch(): typeof fetch {
+  // Ensure the global context manager is installed so `context.active()`
+  // returns the current Effect span (rather than ROOT_CONTEXT). Safe to
+  // call repeatedly.
+  setupOtelApiGlobals()
+  return ((input: RequestInfo | URL, init?: RequestInit) => {
+    const headers = new Headers(input instanceof Request ? input.headers : undefined)
+    new Headers(init?.headers).forEach((value, key) => headers.set(key, value))
+    injectTraceContextHeaders(headers)
+    // Resolve globalThis.fetch on each call so tests that swap it after
+    // wiring (and production code that wraps fetch later) still observe
+    // the current implementation.
+    if (input instanceof Request) {
+      return globalThis.fetch(new Request(input, { ...init, headers }))
+    }
+    return globalThis.fetch(input, { ...init, headers })
+  }) as typeof fetch
+}
+
+// Format the active span context as a W3C `traceparent` header and set it
+// (along with `tracestate`, when non-empty) on the carrier. No-op when no
+// valid span is active. Spec: https://www.w3.org/TR/trace-context/#traceparent-header
+function injectTraceContextHeaders(headers: Headers): void {
+  const sc = trace.getSpan(otelContext.active())?.spanContext()
+  if (!sc || !trace.isSpanContextValid(sc)) return
+  const flags = (sc.traceFlags ?? 0).toString(16).padStart(2, "0")
+  headers.set("traceparent", `00-${sc.traceId}-${sc.spanId}-${flags}`)
+  const tracestate = sc.traceState?.serialize()
+  if (tracestate) headers.set("tracestate", tracestate)
+}
+
+// Distributed trace propagation to MCP servers requires both:
+//   1. OTel SDK is active (OTEL_EXPORTER_OTLP_ENDPOINT env var set), and
+//   2. The user opted in via experimental.openTelemetry config flag.
+// The first ensures the global context manager is registered; the second
+// matches the gating used for AI SDK telemetry spans.
+function isTracingEnabled(cfg: Config.Info): boolean {
+  return Observability.enabled && cfg.experimental?.openTelemetry === true
 }
 
 // Convert MCP tool definition to AI SDK Tool type
@@ -270,6 +321,7 @@ export const layer = Layer.effect(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const auth = yield* McpAuth.Service
     const bus = yield* Bus.Service
+    const cfgSvc = yield* Config.Service
 
     type Transport = StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport
 
@@ -327,12 +379,16 @@ export const layer = Layer.effect(
         )
       }
 
+      const cfg = yield* cfgSvc.get()
+      const tracingFetch = isTracingEnabled(cfg) ? buildTracingFetch() : undefined
+
       const transports: Array<{ name: string; transport: TransportWithAuth }> = [
         {
           name: "StreamableHTTP",
           transport: new StreamableHTTPClientTransport(url, {
             authProvider,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            fetch: tracingFetch,
           }),
         },
         {
@@ -340,6 +396,7 @@ export const layer = Layer.effect(
           transport: new SSEClientTransport(url, {
             authProvider,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            fetch: tracingFetch,
           }),
         },
       ]
@@ -470,7 +527,6 @@ export const layer = Layer.effect(
       log.info("create() successfully created client", { key, toolCount: listed.length })
       return { mcpClient, status, defs: listed } satisfies CreateResult
     })
-    const cfgSvc = yield* Config.Service
 
     const descendants = Effect.fnUntraced(
       function* (pid: number) {
