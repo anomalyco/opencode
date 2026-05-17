@@ -68,12 +68,12 @@ nix run nixpkgs#opencode           # 或用 github:anomalyco/opencode 获取最�
 
 OpenCode 也提供桌面版应用。可直接从 [发布页 (releases page)](https://github.com/anomalyco/opencode/releases) 或 [opencode.ai/download](https://opencode.ai/download) 下载。
 
-| 平台                  | 下载文件                              |
-| --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`、`.rpm` 或 AppImage            |
+| 平台                  | 下载文件                           |
+| --------------------- | ---------------------------------- |
+| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
+| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
+| Windows               | `opencode-desktop-windows-x64.exe` |
+| Linux                 | `.deb`、`.rpm` 或 AppImage         |
 
 ```bash
 # macOS (Homebrew Cask)
@@ -122,18 +122,6 @@ OpenCode 内置两种 Agent，可用 `Tab` 键快速切换：
 ### 基于 OpenCode 进行开发
 
 如果你在项目名中使用了 “opencode”（如 “opencode-dashboard” 或 “opencode-mobile”），请在 README 里注明该项目不是 OpenCode 团队官方开发，且不存在隶属关系。
-
-### 常见问题 (FAQ)
-
-#### 这和 Claude Code 有什么不同？
-
-功能上很相似，关键差异：
-
-- 100% 开源。
-- 不绑定特定提供商。推荐使用 [OpenCode Zen](https://opencode.ai/zen) 的模型，但也可搭配 Claude、OpenAI、Google 甚至本地模型。模型迭代会缩小差异、降低成本，因此保持 provider-agnostic 很重要。
-- 内置 LSP 支持。
-- 聚焦终端界面 (TUI)。OpenCode 由 Neovim 爱好者和 [terminal.shop](https://terminal.shop) 的创建者打造，会持续探索终端的极限。
-- 客户端/服务器架构。可在本机运行，同时用移动设备远程驱动。TUI 只是众多潜在客户端之一。
 
 ---
 

@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "openai-compatible-chat/openrouter-claude-opus-4-7-drives-a-tool-loop",
+    "recordedAt": "2026-05-06T01:35:14.282Z",
+    "tags": [
+      "prefix:openai-compatible-chat",
+      "protocol:openai-compatible-chat",
+      "provider:openrouter",
+      "tool",
+      "tool-loop",
+      "golden",
+      "flagship"
+    ]
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"anthropic/claude-opus-4.7\",\"messages\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool exactly once, then answer in one short sentence.\"},{\"role\":\"user\",\"content\":\"What is the weather in Paris?\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":80,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": ": OPENROUTER PROCESSING\n\n: OPENROUTER PROCESSING\n\n: OPENROUTER PROCESSING\n\ndata: {\"id\":\"gen-1778031311-S3NlfYGRwAnOoPoNrThK\",\"object\":\"chat.completion.chunk\",\"created\":1778031311,\"model\":\"anthropic/claude-4.7-opus-20260416\",\"provider\":\"Amazon Bedrock\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"toolu_bdrk_01AVRkzbigpMbNJ3zjnuQ6ZE\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031311-S3NlfYGRwAnOoPoNrThK\",\"object\":\"chat.completion.chunk\",\"created\":1778031311,\"model\":\"anthropic/claude-4.7-opus-20260416\",\"provider\":\"Amazon Bedrock\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031311-S3NlfYGRwAnOoPoNrThK\",\"object\":\"chat.completion.chunk\",\"created\":1778031311,\"model\":\"anthropic/claude-4.7-opus-20260416\",\"provider\":\"Amazon Bedrock\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031311-S3NlfYGRwAnOoPoNrThK\",\"object\":\"chat.completion.chunk\",\"created\":1778031311,\"model\":\"anthropic/claude-4.7-opus-20260416\",\"provider\":\"Amazon Bedrock\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"city\\\": \\\"P\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031311-S3NlfYGRwAnOoPoNrThK\",\"object\":\"chat.completion.chunk\",\"created\":1778031311,\"model\":\"anthropic/claude-4.7-opus-20260416\",\"provider\":\"Amazon Bedrock\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"ari\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031311-S3NlfYGRwAnOoPoNrThK\",\"object\":\"chat.completion.chunk\",\"created\":1778031311,\"model\":\"anthropic/claude-4.7-opus-20260416\",\"provider\":\"Amazon Bedrock\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"s\\\"}\"}}]},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031311-S3NlfYGRwAnOoPoNrThK\",\"object\":\"chat.completion.chunk\",\"created\":1778031311,\"model\":\"anthropic/claude-4.7-opus-20260416\",\"provider\":\"Amazon Bedrock\",\"service_tier\":\"standard\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"tool_calls\",\"native_finish_reason\":\"tool_use\"}]}\n\ndata: {\"id\":\"gen-1778031311-S3NlfYGRwAnOoPoNrThK\",\"object\":\"chat.completion.chunk\",\"created\":1778031311,\"model\":\"anthropic/claude-4.7-opus-20260416\",\"provider\":\"Amazon Bedrock\",\"service_tier\":\"standard\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"tool_calls\",\"native_finish_reason\":\"tool_use\"}],\"usage\":{\"prompt_tokens\":802,\"completion_tokens\":66,\"total_tokens\":868,\"cost\":0.00566,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.00566,\"upstream_inference_prompt_cost\":0.00401,\"upstream_inference_completions_cost\":0.00165},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"image_tokens\":0,\"audio_tokens\":0}}}\n\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"anthropic/claude-opus-4.7\",\"messages\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool exactly once, then answer in one short sentence.\"},{\"role\":\"user\",\"content\":\"What is the weather in Paris?\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"toolu_bdrk_01AVRkzbigpMbNJ3zjnuQ6ZE\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"toolu_bdrk_01AVRkzbigpMbNJ3zjnuQ6ZE\",\"content\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":80,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": ": OPENROUTER PROCESSING\n\ndata: {\"id\":\"gen-1778031313-XM4XZGmFyt6jg3GZ772w\",\"object\":\"chat.completion.chunk\",\"created\":1778031313,\"model\":\"anthropic/claude-4.7-opus-20260416\",\"provider\":\"Amazon Bedrock\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"It\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031313-XM4XZGmFyt6jg3GZ772w\",\"object\":\"chat.completion.chunk\",\"created\":1778031313,\"model\":\"anthropic/claude-4.7-opus-20260416\",\"provider\":\"Amazon Bedrock\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"'s sunny and\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031313-XM4XZGmFyt6jg3GZ772w\",\"object\":\"chat.completion.chunk\",\"created\":1778031313,\"model\":\"anthropic/claude-4.7-opus-20260416\",\"provider\":\"Amazon Bedrock\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" 22°C in\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031313-XM4XZGmFyt6jg3GZ772w\",\"object\":\"chat.completion.chunk\",\"created\":1778031313,\"model\":\"anthropic/claude-4.7-opus-20260416\",\"provider\":\"Amazon Bedrock\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" Paris.\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031313-XM4XZGmFyt6jg3GZ772w\",\"object\":\"chat.completion.chunk\",\"created\":1778031313,\"model\":\"anthropic/claude-4.7-opus-20260416\",\"provider\":\"Amazon Bedrock\",\"service_tier\":\"standard\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"native_finish_reason\":\"end_turn\"}]}\n\ndata: {\"id\":\"gen-1778031313-XM4XZGmFyt6jg3GZ772w\",\"object\":\"chat.completion.chunk\",\"created\":1778031313,\"model\":\"anthropic/claude-4.7-opus-20260416\",\"provider\":\"Amazon Bedrock\",\"service_tier\":\"standard\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"native_finish_reason\":\"end_turn\"}],\"usage\":{\"prompt_tokens\":899,\"completion_tokens\":19,\"total_tokens\":918,\"cost\":0.00497,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.00497,\"upstream_inference_prompt_cost\":0.004495,\"upstream_inference_completions_cost\":0.000475},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"image_tokens\":0,\"audio_tokens\":0}}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

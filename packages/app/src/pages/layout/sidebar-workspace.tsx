@@ -14,12 +14,12 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import { type LocalProject } from "@/context/layout"
-import { loadSessionsQuery, useGlobalSync } from "@/context/global-sync"
+import { useGlobalSync, useQueryOptions } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { pathKey } from "@/utils/path-key"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
 import { sortedRootSessions } from "./helpers"
-import { useQuery } from "@tanstack/solid-query"
+import { useIsFetching } from "@tanstack/solid-query"
 
 type InlineEditorComponent = (props: {
   id: string
@@ -300,6 +300,7 @@ export const SortableWorkspace = (props: {
   const navigate = useNavigate()
   const params = useParams()
   const globalSync = useGlobalSync()
+  const queryOptions = useQueryOptions()
   const language = useLanguage()
   const sortable = createSortable(props.directory)
   const [workspaceStore, setWorkspaceStore] = globalSync.child(props.directory, { bootstrap: false })
@@ -320,9 +321,9 @@ export const SortableWorkspace = (props: {
   const boot = createMemo(() => open() || active())
   const count = createMemo(() => sessions()?.length ?? 0)
   const hasMore = createMemo(() => workspaceStore.sessionTotal > count())
-  const query = useQuery(() => ({ ...loadSessionsQuery(props.project.worktree) }))
+  const fetching = useIsFetching(() => queryOptions.sessions(pathKey(props.directory)))
   const busy = createMemo(() => props.ctx.isBusy(props.directory))
-  const loading = () => query.isLoading && count() === 0
+  const loading = () => fetching() > 0 && count() === 0
   const touch = createMediaQuery("(hover: none)")
   const showNew = createMemo(() => !loading() && (touch() || count() === 0 || (active() && !params.id)))
   const loadMore = async () => {
@@ -427,7 +428,7 @@ export const SortableWorkspace = (props: {
             mobile={props.mobile}
             ctx={props.ctx}
             showNew={showNew}
-            loading={() => query.isLoading && count() === 0}
+            loading={loading}
             sessions={sessions}
             hasMore={hasMore}
             loadMore={loadMore}
@@ -446,6 +447,7 @@ export const LocalWorkspace = (props: {
   mobile?: boolean
 }): JSX.Element => {
   const globalSync = useGlobalSync()
+  const queryOptions = useQueryOptions()
   const language = useLanguage()
   const workspace = createMemo(() => {
     const [store, setStore] = globalSync.child(props.project.worktree)
@@ -454,9 +456,9 @@ export const LocalWorkspace = (props: {
   const slug = createMemo(() => base64Encode(props.project.worktree))
   const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
   const count = createMemo(() => sessions()?.length ?? 0)
-  const query = useQuery(() => ({ ...loadSessionsQuery(props.project.worktree) }))
+  const fetching = useIsFetching(() => queryOptions.sessions(pathKey(props.project.worktree)))
   const hasMore = createMemo(() => workspace().store.sessionTotal > count())
-  const loading = () => query.isLoading && count() === 0
+  const loading = () => fetching() > 0 && count() === 0
   const loadMore = async () => {
     workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
     await globalSync.project.loadSessions(props.project.worktree)

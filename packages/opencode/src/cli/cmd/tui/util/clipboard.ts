@@ -3,8 +3,20 @@ import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
 import fs from "fs/promises"
+import { Effect } from "effect"
+import { ChildProcess } from "effect/unstable/process"
+import { AppProcess } from "@opencode-ai/core/process"
 import * as Filesystem from "../../../../util/filesystem"
 import * as Process from "../../../../util/process"
+
+const writeWithStdin = (cmd: string[], text: string): Promise<void> =>
+  Effect.runPromise(
+    AppProcess.Service.use((svc) => svc.run(ChildProcess.make(cmd[0]!, cmd.slice(1)), { stdin: text })).pipe(
+      Effect.provide(AppProcess.defaultLayer),
+      Effect.catch(() => Effect.void),
+      Effect.asVoid,
+    ),
+  ).catch(() => undefined)
 
 // Lazy load which and clipboardy to avoid expensive execa/which/isexe chain at startup
 const getWhich = lazy(async () => {
@@ -125,49 +137,23 @@ const getCopyMethod = lazy(async () => {
   if (os === "linux") {
     if (process.env["WAYLAND_DISPLAY"] && which("wl-copy")) {
       console.log("clipboard: using wl-copy")
-      return async (text: string) => {
-        const proc = Process.spawn(["wl-copy"], { stdin: "pipe", stdout: "ignore", stderr: "ignore" })
-        if (!proc.stdin) return
-        proc.stdin.write(text)
-        proc.stdin.end()
-        await proc.exited.catch(() => {})
-      }
+      return (text: string) => writeWithStdin(["wl-copy"], text)
     }
     if (which("xclip")) {
       console.log("clipboard: using xclip")
-      return async (text: string) => {
-        const proc = Process.spawn(["xclip", "-selection", "clipboard"], {
-          stdin: "pipe",
-          stdout: "ignore",
-          stderr: "ignore",
-        })
-        if (!proc.stdin) return
-        proc.stdin.write(text)
-        proc.stdin.end()
-        await proc.exited.catch(() => {})
-      }
+      return (text: string) => writeWithStdin(["xclip", "-selection", "clipboard"], text)
     }
     if (which("xsel")) {
       console.log("clipboard: using xsel")
-      return async (text: string) => {
-        const proc = Process.spawn(["xsel", "--clipboard", "--input"], {
-          stdin: "pipe",
-          stdout: "ignore",
-          stderr: "ignore",
-        })
-        if (!proc.stdin) return
-        proc.stdin.write(text)
-        proc.stdin.end()
-        await proc.exited.catch(() => {})
-      }
+      return (text: string) => writeWithStdin(["xsel", "--clipboard", "--input"], text)
     }
   }
 
   if (os === "win32") {
     console.log("clipboard: using powershell")
-    return async (text: string) => {
+    return (text: string) =>
       // Pipe via stdin to avoid PowerShell string interpolation ($env:FOO, $(), etc.)
-      const proc = Process.spawn(
+      writeWithStdin(
         [
           "powershell.exe",
           "-NonInteractive",
@@ -175,18 +161,8 @@ const getCopyMethod = lazy(async () => {
           "-Command",
           "[Console]::InputEncoding = [System.Text.Encoding]::UTF8; Set-Clipboard -Value ([Console]::In.ReadToEnd())",
         ],
-        {
-          stdin: "pipe",
-          stdout: "ignore",
-          stderr: "ignore",
-        },
+        text,
       )
-
-      if (!proc.stdin) return
-      proc.stdin.write(text)
-      proc.stdin.end()
-      await proc.exited.catch(() => {})
-    }
   }
 
   console.log("clipboard: no native support")
