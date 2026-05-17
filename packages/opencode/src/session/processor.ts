@@ -79,6 +79,7 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: MessageV2.TextPart | undefined
   reasoningMap: Record<string, MessageV2.ReasoningPart>
+  lastReasoningPart: MessageV2.ReasoningPart | undefined
 }
 
 type StreamEvent = Event
@@ -119,6 +120,7 @@ export const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        lastReasoningPart: undefined,
       }
       let aborted = false
       const slog = log.clone().tag("session.id", input.sessionID).tag("messageID", input.assistantMessage.id)
@@ -227,6 +229,16 @@ export const layer = Layer.effect(
                 timestamp: DateTime.makeUnsafe(Date.now()),
               })
             }
+            if (ctx.lastReasoningPart) {
+              ctx.reasoningMap[value.id] = {
+                ...ctx.lastReasoningPart,
+                time: { start: ctx.lastReasoningPart.time.start },
+                metadata: value.providerMetadata ?? ctx.lastReasoningPart.metadata,
+              }
+              ctx.lastReasoningPart = undefined
+              yield* session.updatePart(ctx.reasoningMap[value.id])
+              return
+            }
             ctx.reasoningMap[value.id] = {
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -268,10 +280,12 @@ export const layer = Layer.effect(
             ctx.reasoningMap[value.id].time = { ...ctx.reasoningMap[value.id].time, end: Date.now() }
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
             yield* session.updatePart(ctx.reasoningMap[value.id])
+            ctx.lastReasoningPart = ctx.reasoningMap[value.id]
             delete ctx.reasoningMap[value.id]
             return
 
           case "tool-input-start":
+            ctx.lastReasoningPart = undefined
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
@@ -319,6 +333,7 @@ export const layer = Layer.effect(
           }
 
           case "tool-call": {
+            ctx.lastReasoningPart = undefined
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
@@ -464,6 +479,7 @@ export const layer = Layer.effect(
             throw value.error
 
           case "start-step":
+            ctx.lastReasoningPart = undefined
             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
@@ -491,6 +507,7 @@ export const layer = Layer.effect(
             return
 
           case "finish-step": {
+            ctx.lastReasoningPart = undefined
             const completedSnapshot = yield* snapshot.track()
             const usage = Session.getUsage({
               model: ctx.model,
@@ -554,6 +571,7 @@ export const layer = Layer.effect(
           }
 
           case "text-start":
+            ctx.lastReasoningPart = undefined
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
               if (flags.experimentalEventSystem) {
@@ -660,6 +678,7 @@ export const layer = Layer.effect(
           })
         }
         ctx.reasoningMap = {}
+        ctx.lastReasoningPart = undefined
 
         yield* Effect.forEach(
           Object.values(ctx.toolcalls),
@@ -727,6 +746,7 @@ export const layer = Layer.effect(
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
+            ctx.lastReasoningPart = undefined
             const stream = llm.stream(streamInput)
 
             yield* stream.pipe(
@@ -738,6 +758,7 @@ export const layer = Layer.effect(
             Effect.onInterrupt(() =>
               Effect.gen(function* () {
                 aborted = true
+                ctx.lastReasoningPart = undefined
                 if (!ctx.assistantMessage.error) {
                   yield* halt(new DOMException("Aborted", "AbortError"))
                 }

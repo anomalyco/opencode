@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect } from "bun:test"
-import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import path from "path"
 import type { Agent } from "../../src/agent/agent"
 import { Agent as AgentSvc } from "../../src/agent/agent"
@@ -183,6 +183,18 @@ const deps = Layer.mergeAll(
   SyncEvent.defaultLayer,
   EventV2Bridge.defaultLayer,
 ).pipe(Layer.provideMerge(infra))
+const depsWithoutLLM = Layer.mergeAll(
+  Session.defaultLayer,
+  Snapshot.defaultLayer,
+  AgentSvc.defaultLayer,
+  Permission.defaultLayer,
+  Plugin.defaultLayer,
+  Config.defaultLayer,
+  Provider.defaultLayer,
+  status,
+  SyncEvent.defaultLayer,
+  EventV2Bridge.defaultLayer,
+).pipe(Layer.provideMerge(infra))
 const env = Layer.mergeAll(
   TestLLMServer.layer,
   SessionProcessor.layer.pipe(
@@ -194,6 +206,33 @@ const env = Layer.mergeAll(
 )
 
 const it = testEffect(env)
+
+const splitReasoningLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.make(
+        { type: "reasoning-start", id: "reason-1" } as LLM.Event,
+        { type: "reasoning-delta", id: "reason-1", text: "The" } as LLM.Event,
+        { type: "reasoning-end", id: "reason-1" } as LLM.Event,
+        { type: "reasoning-start", id: "reason-2" } as LLM.Event,
+        { type: "reasoning-delta", id: "reason-2", text: " user" } as LLM.Event,
+        { type: "reasoning-end", id: "reason-2" } as LLM.Event,
+        { type: "finish" } as LLM.Event,
+      ),
+  }),
+)
+const splitReasoningEnv = Layer.mergeAll(
+  TestLLMServer.layer,
+  SessionProcessor.layer.pipe(
+    Layer.provide(summary),
+    Layer.provide(Image.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provide(splitReasoningLLM),
+    Layer.provideMerge(depsWithoutLLM),
+  ),
+)
+const splitReasoningIt = testEffect(splitReasoningEnv)
 
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
@@ -424,6 +463,52 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
         expect(yield* llm.calls).toBe(1)
         expect(reasoning?.text).toBe("think")
         expect(text?.text).toBe("done")
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
+splitReasoningIt.live("session.processor effect tests merge adjacent reasoning cycles", () =>
+  provideTmpdirServer(
+    ({ dir }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "reason")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "reason" }],
+          tools: {},
+        })
+
+        const reasoning = MessageV2.parts(msg.id).filter(
+          (part): part is MessageV2.ReasoningPart => part.type === "reasoning",
+        )
+
+        expect(value).toBe("continue")
+        expect(reasoning).toHaveLength(1)
+        expect(reasoning[0]?.text).toBe("The user")
+        expect(reasoning[0]?.time.end).toBeDefined()
       }),
     { git: true, config: (url) => providerCfg(url) },
   ),
