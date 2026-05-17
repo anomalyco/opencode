@@ -29,8 +29,6 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       ? last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
       : 0
 
-    // Prefer the session's current model so the context window updates immediately
-    // when the user switches models, even before any new assistant response arrives.
     const sessionModel = session()?.model
     const providerID = sessionModel?.providerID ?? last?.providerID
     const modelID = sessionModel?.id ?? last?.modelID
