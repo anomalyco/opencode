@@ -113,22 +113,37 @@ const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.I
 
   if (!isSkillFrontmatter(md.data)) return
 
-  if (state.skills[md.data.name]) {
+  const name = namespaceSkillName(match, md.data.name)
+
+  if (state.skills[name]) {
     log.warn("duplicate skill name", {
-      name: md.data.name,
-      existing: state.skills[md.data.name].location,
+      name,
+      existing: state.skills[name].location,
       duplicate: match,
     })
   }
 
   state.dirs.add(path.dirname(match))
-  state.skills[md.data.name] = {
-    name: md.data.name,
+  state.skills[name] = {
+    name,
     description: md.data.description,
     location: match,
     content: md.content,
   }
 })
+
+function namespaceSkillName(match: string, name: string) {
+  if (name.includes(":")) return name
+
+  const parts = path.normalize(match).split(path.sep)
+  const skillRoot = Math.max(parts.lastIndexOf("skills"), parts.lastIndexOf("skill"))
+  if (skillRoot === -1) return name
+
+  const skillDirs = parts.slice(skillRoot + 1, -1)
+  if (skillDirs.length <= 1) return name
+
+  return [...skillDirs.slice(0, -1), name].join(":")
+}
 
 const scan = Effect.fnUntraced(function* (
   state: ScanState,

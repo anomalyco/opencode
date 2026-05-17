@@ -174,6 +174,55 @@ description: Second test skill.
     ),
   )
 
+  it.live("prefixes nested skill names with their directory namespace", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              Bun.write(
+                path.join(dir, ".opencode", "skills", "deploy", "SKILL.md"),
+                `---
+name: deploy
+description: Flat deploy skill.
+---
+
+# Deploy
+`,
+              ),
+              Bun.write(
+                path.join(dir, ".opencode", "skills", "team-a", "deploy", "SKILL.md"),
+                `---
+name: deploy
+description: Team A deploy skill.
+---
+
+# Team A Deploy
+`,
+              ),
+              Bun.write(
+                path.join(dir, ".opencode", "skills", "org", "team", "deploy", "SKILL.md"),
+                `---
+name: deploy
+description: Org team deploy skill.
+---
+
+# Org Team Deploy
+`,
+              ),
+            ]),
+          )
+
+          const skill = yield* Skill.Service
+          const list = (yield* skill.all()).filter((s) => s.location !== "<built-in>")
+          expect(list.map((s) => s.name).sort()).toEqual(["deploy", "org:team:deploy", "team-a:deploy"])
+          expect(yield* skill.get("team-a:deploy")).toBeDefined()
+          expect(yield* skill.get("org:team:deploy")).toBeDefined()
+        }),
+      { git: true },
+    ),
+  )
+
   it.live("skips skills with missing frontmatter", () =>
     provideTmpdirInstance(
       (dir) =>
