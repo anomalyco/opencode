@@ -6,6 +6,9 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import * as Log from "@opencode-ai/core/util/log"
 import { provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { Database } from "@/storage/db"
+import { SessionTable } from "@/session/session.sql"
+import { eq } from "drizzle-orm"
 
 void Log.init({ print: false })
 
@@ -98,6 +101,32 @@ describe("session.listGlobal", () => {
 
         expect(ids).toContain(first.id)
         expect(ids).not.toContain(second.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "matches Windows directories across separator styles",
+    () =>
+      Effect.gen(function* () {
+        const created = yield* withSession({ title: "windows-global-directory" })
+        const storedDirectory = String.raw`C:\Users\demo\project`
+        const requestedDirectory = "C:/Users/demo/project"
+
+        yield* Effect.sync(() =>
+          Database.use((db) =>
+            db
+              .update(SessionTable)
+              .set({ directory: storedDirectory, path: null })
+              .where(eq(SessionTable.id, created.id))
+              .run(),
+          ),
+        )
+
+        const sessions = yield* Effect.sync(() => [...SessionNs.listGlobal({ directory: requestedDirectory })])
+        const ids = sessions.map((session) => session.id)
+
+        expect(ids).toContain(created.id)
       }),
     { git: true },
   )

@@ -18,6 +18,7 @@ import { like } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
+import { sql } from "drizzle-orm"
 import { SyncEvent } from "../sync"
 import type { SQL } from "drizzle-orm"
 import { PartTable, SessionTable } from "./session.sql"
@@ -47,6 +48,22 @@ const childTitlePrefix = "Child session - "
 
 function createDefaultTitle(isChild = false) {
   return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
+}
+
+function isWindowsDirectory(directory: string) {
+  return directory.length > 1 && (directory[1] === ":" || directory.startsWith("\\\\"))
+}
+
+function normalizeDirectory(directory: string) {
+  if (isWindowsDirectory(directory)) {
+    return directory.replaceAll("\\", "/")
+  }
+  return directory
+}
+
+function directoryMatches(directory: string) {
+  if (!isWindowsDirectory(directory)) return eq(SessionTable.directory, directory)
+  return sql`replace(${SessionTable.directory}, ${"\\"}, ${"/"}) = ${normalizeDirectory(directory)}`
 }
 
 export function isDefaultTitle(title: string) {
@@ -536,7 +553,7 @@ export const layer: Layer.Layer<
         slug: Slug.create(),
         version: InstallationVersion,
         projectID: ctx.project.id,
-        directory: input.directory,
+        directory: normalizeDirectory(input.directory),
         path: input.path,
         workspaceID: input.workspaceID,
         parentID: input.parentID,
@@ -904,13 +921,13 @@ function* listByProject(
 
       conditions.push(
         input.directory
-          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, input.directory))!)!
+          ? or(...conds, and(isNull(SessionTable.path), directoryMatches(input.directory))!)!
           : or(...conds)!,
       )
     }
   } else if (input.scope !== "project" && !input.experimentalWorkspaces) {
     if (input.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push(directoryMatches(input.directory))
     }
   }
   if (input.roots) {
@@ -951,7 +968,7 @@ export function* listGlobal(input?: {
   const conditions: SQL[] = []
 
   if (input?.directory) {
-    conditions.push(eq(SessionTable.directory, input.directory))
+    conditions.push(directoryMatches(input.directory))
   }
   if (input?.roots) {
     conditions.push(isNull(SessionTable.parent_id))
