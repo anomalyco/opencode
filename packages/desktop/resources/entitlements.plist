@@ -17,5 +17,11 @@
     <!-- Required for "Open in VS Code" and similar integrations -->
     <key>com.apple.security.automation.apple-events</key>
     <true/>
+    <!-- Allow bundled sidecar (opencode-cli) to inherit TCC permissions
+         granted to the main app bundle. Without this, macOS may prompt
+         separately for the sidecar process when it accesses user directories
+         (Desktop, Documents, etc.) during file watching and project operations. -->
+    <key>com.apple.security.tcc.inherit</key>
+    <true/>
 </dict>
 </plist>
