@@ -403,9 +403,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         (projectID ? globalSync.data.project.find((x) => x.id === projectID) : undefined) ??
         Object.values(globalSync.data.projectByDomain)
           .flat()
-          .filter(Boolean)
+          .filter((x): x is NonNullable<typeof x> => Boolean(x))
           .find((x) => x.worktree === project.worktree) ??
-        (projectID ? Object.values(globalSync.data.projectByDomain).flat().filter(Boolean).find((x) => x.id === projectID) : undefined)
+        (projectID ? Object.values(globalSync.data.projectByDomain).flat().filter((x): x is NonNullable<typeof x> => Boolean(x)).find((x) => x.id === projectID) : undefined)
 
       const local = childStore.projectMeta
       const localOverride =
@@ -442,7 +442,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const roots = createMemo(() => {
       const map = new Map<string, string>()
-      const allProjects = Object.values(globalSync.data.projectByDomain).flat().filter(Boolean)
+      const allProjects = Object.values(globalSync.data.projectByDomain).flat().filter((x): x is NonNullable<typeof x> => Boolean(x))
       const worktrees = new Set(allProjects.map((project) => workspaceKey(project.worktree)))
       for (const project of allProjects) {
         const sandboxes = project.sandboxes ?? []
