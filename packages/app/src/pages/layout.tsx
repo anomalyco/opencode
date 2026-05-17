@@ -119,7 +119,24 @@ import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from 
 import { SidebarContent } from "./layout/sidebar-shell"
 import { TrellisTasksPanel } from "./layout/trellis-tasks-panel"
 
-const USE_NEW_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+const startupProfilerClock = typeof performance === "object" ? performance.now() : Date.now()
+
+function startupProfilerElapsed() {
+  return Math.round((typeof performance === "object" ? performance.now() : Date.now()) - startupProfilerClock)
+}
+
+function startupProfilerLog(phase: string, detail: string) {
+  console.debug(`[startup-profiler] t=${startupProfilerElapsed()}ms phase=${phase} ${detail}`)
+}
+
+function startupProfilerLayoutState(page: boolean, layout: boolean, selecting: boolean, dir: string | undefined) {
+  return [
+    `pageReady=${page}`,
+    `layoutReady=${layout}`,
+    `autoselecting.loading=${selecting}`,
+    `routeDir=${dir ?? "none"}`,
+  ].join(" ")
+}
 
 export default function Layout(props: ParentProps) {
   type CurrentProject = LocalProject & {
@@ -670,22 +687,63 @@ export default function Layout(props: ParentProps) {
   })
 
   const startup = createMemo(() => {
-    if (!pageReady()) return false
-    if (!layoutReady()) return false
-    if (autoselecting.loading) return false
+    const page = pageReady()
+    const layout = layoutReady()
+    const selecting = autoselecting.loading
     const dir = routeDir()
-    if (!dir) return true
+    if (!page || !layout || selecting) {
+      startupProfilerLog(
+        "layout.startup.check",
+        [`ready=false`, `reason=app-not-ready`, startupProfilerLayoutState(page, layout, selecting, dir)].join(" "),
+      )
+      return false
+    }
+    if (!dir) {
+      startupProfilerLog(
+        "layout.startup.check",
+        [`ready=true`, `reason=no-route-directory`, startupProfilerLayoutState(page, layout, selecting, dir)].join(" "),
+      )
+      return true
+    }
     const [child] = globalSync.child(dir, { bootstrap: false })
-    if (!child.path.directory) return false
-    if (child.session.length > 0) return true
-    return child.status === "complete"
+    const hasDirectory = !!child.path.directory
+    const sessionCount = child.session.length
+    const status = child.status
+    const ready = hasDirectory && (sessionCount > 0 || status === "complete")
+    const reason = !hasDirectory
+      ? "missing-child-directory"
+      : sessionCount > 0
+        ? "session-count-positive"
+        : status === "complete"
+          ? "status-complete-with-zero-sessions"
+          : status === "partial"
+            ? "status-partial-with-zero-sessions"
+            : `status-${status}-with-zero-sessions`
+    startupProfilerLog(
+      "layout.startup.check",
+      [
+        `ready=${ready}`,
+        `reason=${reason}`,
+        startupProfilerLayoutState(page, layout, selecting, dir),
+        `child.path.directory=${hasDirectory}`,
+        `child.session.length=${sessionCount}`,
+        `child.status=${status}`,
+      ].join(" "),
+    )
+    if (!hasDirectory) return false
+    if (sessionCount > 0) return true
+    return status === "complete"
   })
 
   createEffect(() => {
     if (booted) return
     if (!startup()) return
     booted = true
-    queueMicrotask(() => window.dispatchEvent(new CustomEvent("opencode:startup-interactive")))
+    startupProfilerLog("layout.startup.interactive", "dispatch=queued")
+    queueMicrotask(() => {
+      startupProfilerLog("layout.startup.interactive", "dispatch=sent")
+      window.dispatchEvent(new CustomEvent("opencode:startup-interactive"))
+    })
   })
 
   type PrefetchQueue = {
@@ -2422,6 +2480,10 @@ export default function Layout(props: ParentProps) {
           if (!dir) return
           const [child] = globalSync.child(dir, { bootstrap: false })
           if (child.sessions === "ready" || child.sessions === "loading") return
+          startupProfilerLog(
+            "layout.visibleSessionDirs.load",
+            `reason=startup directory=${dir} child.sessions=${child.sessions} visibleSessionDirs=${dirs.join("|") || "none"}`,
+          )
           trace("visibleSessionDirs.load", {
             directory: dir,
             reason: "startup",

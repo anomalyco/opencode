@@ -43,10 +43,18 @@ export function createRefreshQueue(input: QueueInput) {
     schedule()
   }
 
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined
+  const REFRESH_DEBOUNCE_MS = 300
+
   const refresh = () => {
-    root = true
-    if (input.paused()) return
-    schedule()
+    if (refreshTimer) clearTimeout(refreshTimer)
+    refreshTimer = setTimeout(() => {
+      refreshTimer = undefined
+      root = true
+      console.debug(`[startup-profiler] phase=queue.refresh root=${root} queued=${queued.size}`)
+      if (input.paused()) return
+      schedule()
+    }, REFRESH_DEBOUNCE_MS)
   }
 
   async function drain() {
@@ -81,6 +89,10 @@ export function createRefreshQueue(input: QueueInput) {
       queued.delete(key(directory))
     },
     dispose() {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer)
+        refreshTimer = undefined
+      }
       if (!timer) return
       clearTimeout(timer)
       timer = undefined

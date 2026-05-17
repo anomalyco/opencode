@@ -482,6 +482,7 @@ function LegacyHome() {
     async (dirs) => {
       await Promise.allSettled(
         dirs.map(async (dir) => {
+          console.debug(`[startup-profiler] phase=home.warmup dir=${dir}`)
           sync.child(dir, { bootstrap: true })
           await Promise.race([sync.project.loadSessions(dir, { silent: true }), new Promise((resolve) => setTimeout(resolve, 1500))])
         }),

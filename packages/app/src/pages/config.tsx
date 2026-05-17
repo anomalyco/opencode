@@ -49,8 +49,7 @@ import { monoFontFamily, useSettings } from "@/context/settings"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { normalizeProviderList } from "@/context/global-sync/utils"
-import { useMainProviders } from "@/hooks/use-providers"
-import { useServer } from "@/context/server"
+import { ServerConnection, useServer } from "@/context/server"
 import { extraAgents, mainDomain } from "@/pages/layout/extra-agents"
 import {
   basename,
@@ -1850,7 +1849,6 @@ export default function ConfigPage() {
   const platform = usePlatform()
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
-  const mainProviders = useMainProviders()
   const server = useServer()
   const navigate = useNavigate()
   const params = useParams()
@@ -1861,6 +1859,11 @@ export default function ConfigPage() {
     if (platform.platform !== "desktop") return
     if (!layout.sidebar.opened()) return
     layout.sidebar.close()
+  })
+  onMount(() => {
+    const currentServer = server.current
+    const serverKey = currentServer ? ServerConnection.key(currentServer) : "none"
+    console.debug(`[startup-profiler] phase=config.mount server.key=${serverKey} server.url=${currentServer?.http.url ?? "none"} server.integration=${currentServer?.integration ?? "none"} domain=${server.domain} section=${query.section ?? "none"} pick=${query.pick ?? "none"}`)
   })
   const cache = new Map<string, string>()
   const pending = new Map<string, Promise<string>>()

@@ -41,9 +41,27 @@ function projectsKey(key: ServerConnection.Key) {
   return key
 }
 
+function hostnameFromUrl(input: string) {
+  try {
+    const normalized = /^https?:\/\//.test(input) ? input : `http://${input}`
+    return new URL(normalized).hostname
+  } catch {
+    return
+  }
+}
+
 function isLocalHost(url: string) {
-  const host = url.replace(/^https?:\/\//, "").split(":")[0]
-  if (host === "localhost" || host === "127.0.0.1") return "local"
+  const host = hostnameFromUrl(url)
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]") return "local"
+}
+
+function isPersistedLoopbackHttpServer(value: StoredServer) {
+  const candidate = typeof value === "string" ? value : "type" in value ? value.http.url : value.url
+  const normalized = /^https?:\/\//.test(candidate) ? candidate : `http://${candidate}`
+  const host = hostnameFromUrl(candidate)
+  if (!host) return false
+  if (!normalized.startsWith("http://")) return false
+  return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]"
 }
 
 export function resolveServerList(input: {
@@ -157,9 +175,19 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const allServers = createMemo((): Array<ServerConnection.Any> => {
       const sidecar = (props.servers ?? []).find((item) => item.type === "sidecar" && item.variant === "base")
       const legacy = store.currentSidecarUrl
+      for (const conn of props.servers ?? []) {
+        console.debug(
+          `[startup-profiler] phase=server.source source=props type=${conn.type} key=${ServerConnection.key(conn)} url=${conn.http.url} integration=${conn.integration ?? "none"}`,
+        )
+      }
       const servers = [
         ...(props.servers ?? []),
         ...store.list.flatMap((value) => {
+          const persistedUrl = url(value)
+          if (isPersistedLoopbackHttpServer(value)) {
+            console.debug(`[startup-profiler] phase=server.source source=store action=filtered url=${persistedUrl}`)
+            return []
+          }
           const conn =
             typeof value === "string"
               ? ({
@@ -172,7 +200,13 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
                     type: "http" as const,
                     http: value,
                   } satisfies ServerConnection.Http)
-          if (legacy && sidecar && conn.type === "http" && conn.http.url === legacy) return []
+          if (legacy && sidecar && conn.type === "http" && conn.http.url === legacy) {
+            console.debug(`[startup-profiler] phase=server.source source=store action=legacy-filtered url=${conn.http.url}`)
+            return []
+          }
+          console.debug(
+            `[startup-profiler] phase=server.source source=store action=kept type=${conn.type} key=${ServerConnection.key(conn)} url=${conn.http.url} integration=${conn.integration ?? "none"}`,
+          )
           return [conn]
         }),
       ]
@@ -192,6 +226,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       healthyByDomain: {} as Partial<Record<DomainId, boolean | undefined>>,
     })
     const trace = (_event: string, _extra?: Record<string, unknown>) => {}
+    let lastServerSelectionLog = ""
 
     const healthyFor = (input: DomainId) => state.healthyByDomain[input]
     const healthy = () => healthyFor(domain())
@@ -271,12 +306,41 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     )
     const domain = createMemo(() => domainFromIntegration(current()?.integration))
 
+    createEffect(() => {
+      const currentConn = current()
+      const currentMain = state.active ? originFor(state.active) : undefined
+      const currentForMain =
+        allServers().find((item) => !isExtraAgentIntegration(item.integration)) ?? currentConn
+      const currentForCurrentDomain = (() => {
+        const currentDomain = domain()
+        if (currentDomain === mainDomain) return currentForMain
+        const id = currentDomain.slice("extra-agent/".length)
+        return allServers().find((item) => item.integration === id)
+      })()
+      const line = [
+        `active=${state.active || "none"}`,
+        `current=${currentConn ? ServerConnection.key(currentConn) : "none"}`,
+        `current.url=${currentConn?.http.url ?? "none"}`,
+        `current.integration=${currentConn?.integration ?? "none"}`,
+        `domain=${domain()}`,
+        `currentForMain=${currentForMain ? ServerConnection.key(currentForMain) : "none"}`,
+        `currentForMain.url=${currentForMain?.http.url ?? "none"}`,
+        `currentForCurrentDomain=${currentForCurrentDomain ? ServerConnection.key(currentForCurrentDomain) : "none"}`,
+        `currentForCurrentDomain.url=${currentForCurrentDomain?.http.url ?? "none"}`,
+        `origin=${currentMain ?? "none"}`,
+        `lastNonExtraAgent=${state.lastNonExtraAgent || "none"}`,
+      ].join(" ")
+      if (line === lastServerSelectionLog) return
+      lastServerSelectionLog = line
+      console.debug(`[startup-profiler] phase=server.selection ${line}`)
+    })
+
     const polls = new Map<ServerConnection.Key, { url: string; domain: DomainId; stop: () => void }>()
 
     createEffect(() => {
       const legacy = store.currentSidecarUrl
       if (!legacy) return
-      console.debug("[server] removing legacy sidecar url from persisted server list", { legacy })
+      console.debug(`[startup-profiler] phase=server.legacy-remove url=${legacy}`)
       setStore("list", (list) =>
         list.filter((value) => {
           const next = typeof value === "string" ? value : "type" in value ? value.http.url : value.url

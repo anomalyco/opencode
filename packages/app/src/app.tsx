@@ -222,6 +222,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean | Acce
     message: "",
   })
   let sent = false
+  let lastStartupProfilerState = ""
   const disabled = () => (typeof props.disableHealthCheck === "function" ? props.disableHealthCheck() : props.disableHealthCheck)
 
   const [checkMode, setCheckMode] = createSignal<"blocking" | "background">("blocking")
@@ -234,10 +235,16 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean | Acce
       : Effect.gen(function* () {
           if (!server.current) return true
           const { http, type } = server.current
+          console.debug(
+            `[startup-profiler] phase=connection-gate.run server.key=${server.key || "none"} server.current.key=${ServerConnection.key(server.current)} server.current.url=${http.url} server.current.integration=${server.current.integration ?? "none"} server.current.type=${type} checkMode=${checkMode()}`,
+          )
 
           while (true) {
             const res = yield* Effect.promise(() => checkServerHealth(http))
             setStore("message", res.message ?? "")
+            console.debug(
+              `[startup-profiler] phase=connection-gate.result healthy=${res.healthy ? "true" : "false"} message=${res.message || "none"} server.key=${server.key || "none"} server.current.key=${ServerConnection.key(server.current)} server.current.url=${http.url} server.current.integration=${server.current.integration ?? "none"} checkMode=${checkMode()}`,
+            )
             if (res.healthy) return true
             if (checkMode() === "background" || type === "http") return false
           }
@@ -249,10 +256,33 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean | Acce
   )
 
   createEffect(() => {
+    const current = server.current
+    const line = [
+      `disabled=${disabled() ? "true" : "false"}`,
+      `checkMode=${checkMode()}`,
+      `server.key=${server.key || "none"}`,
+      `server.current.key=${current ? ServerConnection.key(current) : "none"}`,
+      `server.current.url=${current?.http.url ?? "none"}`,
+      `server.current.integration=${current?.integration ?? "none"}`,
+      `server.current.type=${current?.type ?? "none"}`,
+      `health.loading=${startupHealthCheck.loading ? "true" : "false"}`,
+      `health.state=${startupHealthCheck.state}`,
+      `health.value=${startupHealthCheck() ? "true" : "false"}`,
+      `health.message=${store.message || "none"}`,
+    ].join(" ")
+    if (line === lastStartupProfilerState) return
+    lastStartupProfilerState = line
+    console.debug(`[startup-profiler] phase=connection-gate ${line}`)
+  })
+
+  createEffect(() => {
     if (sent) return
     if (startupHealthCheck.loading) return
     if (!startupHealthCheck()) return
     sent = true
+    console.debug(
+      `[startup-profiler] phase=connection-gate startup-ready-dispatch=queued server.key=${server.key || "none"} server.current.key=${server.current ? ServerConnection.key(server.current) : "none"}`,
+    )
     queueMicrotask(() => window.dispatchEvent(new CustomEvent("opencode:startup-ready")))
   })
 
@@ -282,6 +312,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean | Acce
               if (checkMode() === "background") void healthCheckActions.refetch()
             }}
             onServerSelected={(key) => {
+              console.debug(`[startup-profiler] phase=connection-gate action=server-selected key=${key}`)
               setCheckMode("blocking")
               server.setActive(key)
               void healthCheckActions.refetch()

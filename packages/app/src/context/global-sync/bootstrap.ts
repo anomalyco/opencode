@@ -110,6 +110,11 @@ export async function bootstrapGlobal(input: {
     <K extends keyof GlobalStoreMinimal>(key: K, value: GlobalStoreMinimal[K]): void
   }
 }) {
+  const _globalStart = typeof performance === "object" ? performance.now() : Date.now()
+  const _globalElapsed = () => Math.round((typeof performance === "object" ? performance.now() : Date.now()) - _globalStart)
+
+  console.debug(`[startup-profiler] phase=globalSync.bootstrap.start elapsedMs=0`)
+
   const fast = [
     () =>
       retry(() =>
@@ -144,20 +149,25 @@ export async function bootstrapGlobal(input: {
 
   const slow: Array<() => Promise<unknown>> = []
 
+  const _fastErrs = errors(await runAll(fast))
+  console.debug(`[startup-profiler] phase=globalSync.bootstrap.fastDone errors=${_fastErrs.length} elapsedMs=${_globalElapsed()}`)
   showErrors({
-    errors: errors(await runAll(fast)),
+    errors: _fastErrs,
     title: input.requestFailedTitle,
     translate: input.translate,
     formatMoreCount: input.formatMoreCount,
   })
   await waitForPaint()
+  const _slowErrs = errors(await runAll(slow))
+  console.debug(`[startup-profiler] phase=globalSync.bootstrap.slowDone errors=${_slowErrs.length} elapsedMs=${_globalElapsed()}`)
   showErrors({
-    errors: errors(await runAll(slow)),
+    errors: _slowErrs,
     title: input.requestFailedTitle,
     translate: input.translate,
     formatMoreCount: input.formatMoreCount,
   })
   input.setGlobalStore("ready", true)
+  console.debug(`[startup-profiler] phase=globalSync.bootstrap.ready elapsedMs=${_globalElapsed()}`)
 }
 
 function groupBySession<T extends { id: string; sessionID: string }>(input: T[]) {
@@ -195,6 +205,9 @@ export async function bootstrapDirectory(input: {
   }
   queryClient: QueryClient
 }) {
+  const _dirStart = typeof performance === "object" ? performance.now() : Date.now()
+  const _dirElapsed = () => Math.round((typeof performance === "object" ? performance.now() : Date.now()) - _dirStart)
+
   const loading = input.store.status !== "complete"
   let projects = input.global.project
   const seededProject = projectID(input.directory, projects)
@@ -204,6 +217,7 @@ export async function bootstrapDirectory(input: {
     input.setStore("config", reconcile(input.global.config, { merge: false }))
   }
   if (loading) input.setStore("status", "partial")
+  console.debug(`[startup-profiler] phase=bootstrap.directory.start directory=${input.directory} status=${input.store.status} pathDirectory=${input.store.path.directory} seededProjectId=${seededProject ?? ""} elapsedMs=0`)
 
   const fast = [
     () =>
@@ -212,12 +226,7 @@ export async function bootstrapDirectory(input: {
         projects = upsertProject(projects, project)
         input.setProject?.(projects)
         const id = projectID(input.directory, projects) ?? project.id
-        console.debug("[global-sync] project current seeded", {
-          directory: input.directory,
-          project: project.id,
-          vcs: project.vcs ?? null,
-          worktree: project.worktree,
-        })
+        console.debug(`[startup-profiler] phase=bootstrap.directory.projectSeeded directory=${input.directory} project=${project.id} vcs=${project.vcs ?? "null"} worktree=${project.worktree} elapsedMs=${_dirElapsed()}`)
         input.setStore("project", id)
       }),
     () => retry(() => input.sdk.config.get().then((x) => input.setStore("config", x.data!))),
@@ -225,6 +234,7 @@ export async function bootstrapDirectory(input: {
       retry(() =>
         input.sdk.path.get().then((x) => {
           input.setStore("path", x.data!)
+          console.debug(`[startup-profiler] phase=bootstrap.directory.pathReady directory=${input.directory} pathDirectory=${x.data?.directory ?? ""} projectId=${projectID(x.data?.directory ?? input.directory, projects) ?? ""} elapsedMs=${_dirElapsed()}`)
           const next = projectID(x.data?.directory ?? input.directory, projects)
           if (next) input.setStore("project", next)
         }),
@@ -299,6 +309,31 @@ export async function bootstrapDirectory(input: {
     () => retry(() => input.sdk.lsp.status().then((x) => input.setStore("lsp", x.data!))),
   ]
 
-    if (loading && slowErrs.length === 0) input.setStore("status", "complete")
-  })()
+  const errs = errors(await runAll(fast))
+  console.debug(`[startup-profiler] phase=bootstrap.directory.fastDone directory=${input.directory} status=${input.store.status} pathDirectory=${input.store.path.directory} errors=${errs.length} elapsedMs=${_dirElapsed()}`)
+  if (errs.length > 0) {
+    console.error("Failed to bootstrap instance", errs[0])
+    const project = getFilename(input.directory)
+    showToast({
+      variant: "error",
+      title: input.translate("toast.project.reloadFailed.title", { project }),
+      description: formatServerError(errs[0], input.translate),
+    })
+  }
+
+  await waitForPaint()
+  const slowErrs = errors(await runAll(slow))
+  console.debug(`[startup-profiler] phase=bootstrap.directory.slowDone directory=${input.directory} status=${input.store.status} pathDirectory=${input.store.path.directory} errors=${slowErrs.length} elapsedMs=${_dirElapsed()}`)
+  if (slowErrs.length > 0) {
+    console.error("Failed to finish bootstrap instance", slowErrs[0])
+    const project = getFilename(input.directory)
+    showToast({
+      variant: "error",
+      title: input.translate("toast.project.reloadFailed.title", { project }),
+      description: formatServerError(slowErrs[0], input.translate),
+    })
+  }
+
+  if (loading && errs.length === 0 && slowErrs.length === 0) input.setStore("status", "complete")
+  console.debug(`[startup-profiler] phase=bootstrap.directory.final directory=${input.directory} status=${input.store.status} pathDirectory=${input.store.path.directory} projectId=${input.store.project} totalErrors=${errs.length + slowErrs.length} elapsedMs=${_dirElapsed()}`)
 }
