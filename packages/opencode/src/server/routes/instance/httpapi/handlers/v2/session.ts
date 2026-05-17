@@ -1,4 +1,5 @@
 import { WorkspaceID } from "@/control-plane/schema"
+import { sameDirectory } from "@/session/directory"
 import { SessionV2 } from "@/v2/session"
 import { Effect, Schema } from "effect"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
@@ -43,7 +44,7 @@ function hasCursorRoutingMismatch(
   decoded: SessionCursor | undefined,
 ) {
   if (!decoded) return false
-  if (query.directory !== undefined && query.directory !== decoded.directory) return true
+  if (query.directory !== undefined && !sameDirectory(query.directory, decoded.directory)) return true
   return query.workspace !== undefined && query.workspace !== decoded.workspaceID
 }
 

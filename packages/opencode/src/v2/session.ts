@@ -14,6 +14,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { directoryVariants } from "@/session/directory"
 
 export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({
   identifier: "Session.Delivery",
@@ -181,7 +182,8 @@ export const layer = Layer.effect(
         if (direction === "previous" && order === "asc") order = "desc"
         if (direction === "previous" && order === "desc") order = "asc"
         const conditions: SQL[] = []
-        if (input.directory) conditions.push(eq(SessionTable.directory, input.directory))
+        const directories = directoryVariants(input.directory)
+        if (directories.length > 0) conditions.push(matchDirectory(directories))
         if (input.path)
           conditions.push(or(eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`))!)
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
@@ -333,6 +335,11 @@ export const layer = Layer.effect(
     return result
   }),
 )
+
+function matchDirectory(directories: string[]) {
+  if (directories.length === 1) return eq(SessionTable.directory, directories[0]!)
+  return or(...directories.map((directory) => eq(SessionTable.directory, directory)))!
+}
 
 export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer))
 
