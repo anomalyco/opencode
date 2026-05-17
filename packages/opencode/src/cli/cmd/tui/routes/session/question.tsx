@@ -1,4 +1,4 @@
-import { createStore } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { useRenderer } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
@@ -9,9 +9,11 @@ import { SplitBorder } from "../../component/border"
 import { useDialog } from "../../ui/dialog"
 import { useTuiConfig } from "../../context/tui-config"
 import { useBindings } from "../../keymap"
+import { useSync } from "../../context/sync"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
+  const sync = useSync()
   const { theme } = useTheme()
   const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
@@ -43,18 +45,41 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     return store.answers[store.tab]?.includes(value) ?? false
   })
 
-  function submit() {
-    const answers = questions().map((_, i) => store.answers[i] ?? [])
-    void sdk.client.question.reply({
+  function clearPendingQuestion() {
+    const requests = sync.data.question[props.request.sessionID]
+    const index = requests?.findIndex((request) => request.id === props.request.id) ?? -1
+    if (index === -1) return
+    sync.set(
+      "question",
+      props.request.sessionID,
+      produce((draft) => {
+        draft.splice(index, 1)
+      }),
+    )
+  }
+
+  async function reply(answers: QuestionAnswer[]) {
+    await sdk.client.question.reply({
       requestID: props.request.id,
       answers,
     })
+    clearPendingQuestion()
+  }
+
+  async function rejectQuestion() {
+    await sdk.client.question.reject({
+      requestID: props.request.id,
+    })
+    clearPendingQuestion()
+  }
+
+  function submit() {
+    const answers = questions().map((_, i) => store.answers[i] ?? [])
+    void reply(answers)
   }
 
   function reject() {
-    void sdk.client.question.reject({
-      requestID: props.request.id,
-    })
+    void rejectQuestion()
   }
 
   function pick(answer: string, custom: boolean = false) {
@@ -67,10 +92,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       setStore("custom", inputs)
     }
     if (single()) {
-      void sdk.client.question.reply({
-        requestID: props.request.id,
-        answers: [[answer]],
-      })
+      void reply([[answer]])
       return
     }
     setStore("tab", store.tab + 1)
