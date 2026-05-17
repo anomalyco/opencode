@@ -131,7 +131,15 @@ export async function load(dir: string) {
       ...md.data,
       prompt: md.content.trim(),
     }
-    result[config.name] = ConfigParse.schema(Info, config, item)
+    try {
+      result[config.name] = ConfigParse.schema(Info, config, item)
+    } catch (err) {
+      const { Session } = await import("@/session/session")
+      void Bus.publish(Session.Event.Error, {
+        error: new NamedError.Unknown({ message: `Failed to validate agent ${item}` }).toObject(),
+      })
+      log.error("failed to validate agent", { agent: item, err })
+    }
   }
   return result
 }
