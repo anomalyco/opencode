@@ -1,8 +1,11 @@
 import { Buffer } from "node:buffer"
 import * as XLSX from "xlsx"
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../support/use-full-app-stack"
+
 import { By } from "selenium-webdriver"
 import { WORKOS_SESSION_COOKIE_NAME } from "@veritly/auth-shared"
+import { fileTreeAllTabTriggerSelector, fileTreeToggleSelector } from "../../../e2e/selectors"
 import { e2eAppOrigin, mintE2eSealedSessionForTenantB, mintE2eSealedSessionFromWorkos } from "../../../e2e/workos-auth"
 import { waitVisible } from "../support/wd-wait"
 import { useAppWebDriver } from "../support/use-app-webdriver"
@@ -15,13 +18,21 @@ function minimalXlsx(): Uint8Array {
 }
 
 async function expandFileTree(driver: import("selenium-webdriver").WebDriver) {
-  const toggle = await waitVisible(driver, By.xpath(`//button[contains(., "Toggle file tree")]`))
+  const toggle = await waitVisible(driver, By.css(fileTreeToggleSelector))
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click()
-  const panel = await waitVisible(driver, By.css("#file-tree-panel"))
-  const tabs = await panel.findElement(
-    By.css('[data-component="tabs"][data-variant="pill"][data-scope="filetree"]'),
+  await driver.wait(async () => (await toggle.getAttribute("aria-expanded")) === "true", 10_000)
+  await driver.wait(
+    async () =>
+      Number(
+        await driver.executeScript(
+          `return document.getElementById("file-tree-panel")?.getBoundingClientRect().width ?? 0`,
+        ),
+      ) > 100,
+    15_000,
   )
-  await tabs.findElement(By.xpath(`.//button[@role="tab" and contains(translate(., "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "all files")]`)).click()
+  const panel = await waitVisible(driver, By.css("#file-tree-panel"))
+  const allTab = await waitVisible(driver, By.css(fileTreeAllTabTriggerSelector))
+  await allTab.click()
   return panel
 }
 
@@ -30,6 +41,8 @@ async function dropXlsx(driver: import("selenium-webdriver").WebDriver, name: st
     `
     const payload = arguments[0];
     const panel = document.querySelector("#file-tree-panel");
+    const tree = panel?.querySelector('[data-component="filetree"]');
+    if (!(tree instanceof HTMLElement)) throw new Error("file tree droppable root missing");
     const raw = atob(payload.data);
     const u = new Uint8Array(raw.length);
     for (let i = 0; i < raw.length; i++) u[i] = raw.charCodeAt(i);
@@ -38,8 +51,10 @@ async function dropXlsx(driver: import("selenium-webdriver").WebDriver, name: st
     });
     const data = new DataTransfer();
     data.items.add(file);
-    const target = panel || document.body;
-    target.dispatchEvent(new DragEvent("drop", { bubbles: true, dataTransfer: data }));
+    const ev = { bubbles: true, cancelable: true, dataTransfer: data };
+    tree.dispatchEvent(new DragEvent("dragenter", ev));
+    tree.dispatchEvent(new DragEvent("dragover", ev));
+    tree.dispatchEvent(new DragEvent("drop", ev));
   `,
     { data: b64, filename: name },
   )
@@ -48,6 +63,7 @@ async function dropXlsx(driver: import("selenium-webdriver").WebDriver, name: st
 const CT = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 describe("univer presign workos (webdriver)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test(

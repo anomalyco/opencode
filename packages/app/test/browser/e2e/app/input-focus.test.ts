@@ -1,10 +1,13 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import { promptSelector } from "../../../../e2e/selectors"
 import { waitVisible } from "../../support/wd-wait"
 import { useAppWebDriver } from "../../support/use-app-webdriver"
 
 describe("input focus (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("ctrl+l focuses the prompt", async () => {

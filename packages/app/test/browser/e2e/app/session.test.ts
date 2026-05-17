@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, waitVisible } from "../../support/wd-wait"
 import { useAppWebDriver } from "../../support/use-app-webdriver"
 import { withSession } from "../../../../e2e/actions"
 
 describe("session prompt (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("can open an existing session and type into the prompt", async () => {

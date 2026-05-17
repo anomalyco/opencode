@@ -1,4 +1,6 @@
 import { beforeAll, describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By } from "selenium-webdriver"
 import type { WebDriver } from "selenium-webdriver"
 import {
@@ -114,6 +116,7 @@ async function withMockPermissionWd(
 }
 
 describe("session composer dock (webdriver)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   beforeAll(async () => {

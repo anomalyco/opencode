@@ -1,5 +1,7 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import type { WebDriver } from "selenium-webdriver"
 import { withSession } from "../../../../e2e/actions"
@@ -47,7 +49,7 @@ async function seedConversation(input: { driver: WebDriver; sdk: Sdk; sessionID:
 }
 
 async function withFreshProject<T>(driver: WebDriver, origin: string, fn: (ctx: { sdk: Sdk; pid: string }) => Promise<T>) {
-  const listSdk = createOpencodeClient({ baseUrl: serverUrl, throwOnError: true })
+  const listSdk = createOpencodeClient({ baseUrl: serverUrl(), throwOnError: true })
   const r = await listSdk.project.create({ name: `e2e wd project ${Date.now()}` })
   if (!r.data?.project?.id) throw new Error("project create failed")
   const pid = r.data.project.id
@@ -56,6 +58,7 @@ async function withFreshProject<T>(driver: WebDriver, origin: string, fn: (ctx: 
 }
 
 describe("session undo redo (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("slash undo sets revert and restores prior prompt", async () => {

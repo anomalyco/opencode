@@ -1,0 +1,14 @@
+diff --git a/build/generic-container/inspect-container-util-ports-exposed.js b/build/generic-container/inspect-container-util-ports-exposed.js
+--- a/build/generic-container/inspect-container-util-ports-exposed.js
++++ b/build/generic-container/inspect-container-util-ports-exposed.js
+@@ -1,9 +1,9 @@
+ "use strict";
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.inspectContainerUntilPortsExposed = inspectContainerUntilPortsExposed;
+ const common_1 = require("../common");
+-async function inspectContainerUntilPortsExposed(inspectFn, containerId, timeout = 10_000) {
++async function inspectContainerUntilPortsExposed(inspectFn, containerId, timeout = 120_000) {
+     const result = await new common_1.IntervalRetry(250).retryUntil(() => inspectFn(), (inspectResult) => {
+         const portBindings = inspectResult?.HostConfig?.PortBindings;
+         if (!portBindings)
+             return true;

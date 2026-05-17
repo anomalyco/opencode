@@ -1,7 +1,10 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../support/use-full-app-stack"
+
 import { useAppWebDriver } from "../support/use-app-webdriver"
 
 describe("pyodide hook (webdriver)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test(

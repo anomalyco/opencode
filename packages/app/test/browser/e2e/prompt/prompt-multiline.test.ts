@@ -1,10 +1,13 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import { promptSelector } from "../../../../e2e/selectors"
 import { waitUrlMatches } from "../../support/wd-wait"
 import { useAppWebDriver } from "../../support/use-app-webdriver"
 
 describe("prompt multiline (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("shift+enter inserts a newline without submitting", async () => {

@@ -78,7 +78,14 @@ export class S3ExchangeFiles implements ExchangeFileBackend {
   ) {}
 
   async ensureReady() {
-    await this.bun.list({ maxKeys: 1 })
+    const stamp = () => new Date().toISOString()
+    console.error(`[univer-compat] ${stamp()} S3 ensureReady: ListObjectsV2 bucket=${this.bucket} (30s abort)`)
+    /** Bun `S3Client.list` has hung indefinitely against MinIO in Linux Testcontainers; AWS SDK matches presign path. */
+    await this.signer.send(
+      new ListObjectsV2Command({ Bucket: this.bucket, MaxKeys: 1 }),
+      { abortSignal: AbortSignal.timeout(30_000) },
+    )
+    console.error(`[univer-compat] ${stamp()} S3 ensureReady: ok`)
   }
 
   async put(id: string, body: Uint8Array) {

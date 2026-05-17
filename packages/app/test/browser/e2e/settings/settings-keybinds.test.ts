@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { By, Key } from "selenium-webdriver"
 import type { WebDriver, WebElement } from "selenium-webdriver"
@@ -68,6 +70,7 @@ async function shortcutsTab(dialog: WebElement) {
 }
 
 describe("settings keybinds (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("changing sidebar toggle keybind works", async () => {
@@ -221,7 +224,7 @@ describe("settings keybinds (webdriver migration)", () => {
   })
 
   test("changing new session keybind works", async () => {
-    const listSdk = createOpencodeClient({ baseUrl: serverUrl, throwOnError: true })
+    const listSdk = createOpencodeClient({ baseUrl: serverUrl(), throwOnError: true })
     const created = await listSdk.project.create({ name: `e2e keybind ${Date.now()}` })
     if (!created.data?.project?.id) throw new Error("project create failed")
     const pid = created.data.project.id

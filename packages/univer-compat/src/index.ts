@@ -24,8 +24,12 @@ export {
 export type { WorkbookMigrationStep } from "./workbook"
 
 export async function createCompatAppFromEnv(auth: SessionResolver, opts?: { persistEveryRev?: number }) {
+  const stamp = () => new Date().toISOString()
+  console.error(`[univer-compat] ${stamp()} createCompatAppFromEnv: exchangeFilesFromEnv()`)
   const blob = exchangeFilesFromEnv()
+  console.error(`[univer-compat] ${stamp()} createCompatAppFromEnv: ensureReady()…`)
   await blob.ensureReady()
+  console.error(`[univer-compat] ${stamp()} createCompatAppFromEnv: ensureReady ok`)
   let step = opts?.persistEveryRev
   if (step === undefined) {
     const raw = process.env.UNIVER_COMPAT_PERSIST_EVERY_REV?.trim()
@@ -33,7 +37,10 @@ export async function createCompatAppFromEnv(auth: SessionResolver, opts?: { per
     step = Number.parseInt(raw, 10)
   }
   if (!Number.isFinite(step) || step < 1) throw new Error("UNIVER_COMPAT_PERSIST_EVERY_REV must be >= 1")
-  return createCompatApp(new Store(blob, step), auth)
+  console.error(`[univer-compat] ${stamp()} createCompatAppFromEnv: createCompatApp(Store, auth)…`)
+  const out = createCompatApp(new Store(blob, step), auth)
+  console.error(`[univer-compat] ${stamp()} createCompatAppFromEnv: done`)
+  return out
 }
 
 export async function createDefaultCompatApp(opts?: { persistEveryRev?: number }) {

@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By } from "selenium-webdriver"
 import { waitUrlMatches, waitVisible } from "../../support/wd-wait"
 import { useAppWebDriver } from "../../support/use-app-webdriver"
 
 describe("project create (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("new project appears in sidebar and is selected", async () => {

@@ -1,37 +1,28 @@
 /**
  * All Docker-backed E2E **composition** for this package: Postgres, optional Ollama, optional MinIO + univer-compat,
- * and the OpenCode API Testcontainer. Spec files stay thin; **lifecycle** (start deps → bind ports → seed → run Vitest browser tests → tear down)
- * lives in `script/e2e-local.ts` because the runner must wire `DATABASE_URL`, API port, and Univer URLs before WebDriver starts.
+ * and the OpenCode API Testcontainer. **Browser Vitest** specs call `useFullAppStack()` (see `test/browser/support/use-full-app-stack.ts`)
+ * per file, or use `script/e2e-local.ts` as a thin `vitest -c vitest.e2e.config.ts` forwarder with the same `OPENCODE_E2E_INFRA` env.
  *
- * **Runner contract:** use `bun ./script/e2e-local.ts -- …vitest paths` with `OPENCODE_E2E_INFRA` (default `postgres,ollama`;
- * add `univer` for MinIO + compat on the same Docker network as OpenCode).
+ * **Runner contract:** `OPENCODE_E2E_INFRA` (default `postgres,ollama`; add `univer` for MinIO + compat on the same Docker network as OpenCode).
+ * Vitest `useFullAppStack` always starts Univer in Testcontainers; it skips Testcontainers Ollama unless `OPENCODE_E2E_TC_OLLAMA=1` (host Ollama via `host.docker.internal` otherwise).
+ *
+ * **Debugging compat startup:** run with `DEBUG=testcontainers*` on the **same** shell command as Vitest (prefix env, do not use `DEBUG=… cd …` — env applies only to `cd`).
+ * This file also emits `[e2e-tc]` lines and tails `docker logs -f` for the compat container from `containerCreated` until `containerStarted`.
  */
+import { spawn, type ChildProcess } from "node:child_process"
 import path from "node:path"
-import { S3Client } from "bun"
-import { GenericContainer, Network, Wait, type StartedNetwork, type StartedTestContainer } from "testcontainers"
+import {
+  GenericContainer,
+  Network,
+  Wait,
+  type InspectResult,
+  type StartedNetwork,
+  type StartedTestContainer,
+} from "testcontainers"
 import { e2eEmit, e2eEmitElapsed } from "../e2e/emit"
-
-export type E2eInfraLayer = "postgres" | "ollama" | "univer"
-
-const KNOWN: readonly E2eInfraLayer[] = ["postgres", "ollama", "univer"]
-
-/** Which Docker layers `e2e-local.ts` / `startE2eDockerDeps` should start (`OPENCODE_E2E_INFRA`, comma-separated). */
-export function parseOpencodeE2eInfra(): ReadonlySet<E2eInfraLayer> {
-  const raw = process.env.OPENCODE_E2E_INFRA?.trim()
-  const defaults = "postgres,ollama"
-  const src = raw ? raw : defaults
-  const out = new Set<E2eInfraLayer>()
-  for (const token of src.split(",")) {
-    const p = token.trim()
-    if (!p) continue
-    if (!KNOWN.includes(p as E2eInfraLayer)) {
-      throw new Error(`unknown OPENCODE_E2E_INFRA layer "${p}" (allowed: ${KNOWN.join(", ")})`)
-    }
-    out.add(p as E2eInfraLayer)
-  }
-  if (out.size === 0) throw new Error("OPENCODE_E2E_INFRA resolved to no layers")
-  return out
-}
+import type { E2eInfraLayer } from "./e2e-infra-parse"
+export type { E2eInfraLayer } from "./e2e-infra-parse"
+export { parseOpencodeE2eInfra } from "./e2e-infra-parse"
 
 const pgUser = "veritly"
 const pgPass = "veritly"
@@ -114,7 +105,7 @@ async function startOllamaOnNetwork(
     .withNetwork(net)
     .withNetworkAliases("ollama")
     .withExposedPorts(11434)
-    .withStartupTimeout(180_000)
+    .withStartupTimeout(300_000)
     .start()
   e2ePhase(t0, "Ollama container started (image + port bind).")
   const host = c.getHost()
@@ -239,8 +230,9 @@ function workosEnvForCompatContainer(): Record<string, string> {
  * OpenCode API in Docker: migrate → seed-e2e → HTTP server (same network as Postgres / Ollama).
  * Host binds `hostApiPort` → container `:4096`.
  *
- * The repo is bind-mounted read-only at `/app`. Use a **Linux** host (or CI) so `node_modules`
- * native addons match the container; macOS bind mounts can mismatch the Linux Bun image.
+ * The repo is bind-mounted **read-write** at `/app` so `bun run db:migrate` / tooling can create dirs
+ * under the tree inside the container. Use a **Linux** host (or CI) so `node_modules` native addons
+ * match the container; macOS bind mounts can mismatch the Linux Bun image.
  */
 export async function startOpencodeE2eContainer(opts: {
   repoRoot: string
@@ -258,7 +250,7 @@ export async function startOpencodeE2eContainer(opts: {
     "mkdir -p /tmp/o/h /tmp/o/s /tmp/o/c /tmp/o/t && ",
     "export OPENCODE_TEST_HOME=/tmp/o/h XDG_DATA_HOME=/tmp/o/s XDG_CACHE_HOME=/tmp/o/c XDG_STATE_HOME=/tmp/o/t XDG_CONFIG_HOME=/config && ",
     "cd /app/packages/opencode && ",
-    "bun run db:migrate && bun script/seed-e2e.ts && ",
+    "bun ./src/storage/migrate-pg.ts && bun ./script/seed-e2e.ts && ",
     `exec bun -e ${JSON.stringify(serverBun)}`,
   ].join("")
 
@@ -270,7 +262,7 @@ export async function startOpencodeE2eContainer(opts: {
   let box = new GenericContainer(e2eBunImage)
     .withNetwork(opts.network)
     .withBindMounts([
-      { source: opts.repoRoot, target: "/app", mode: "ro" },
+      { source: opts.repoRoot, target: "/app", mode: "rw" },
       { source: opts.configHostDir, target: "/config", mode: "rw" },
     ])
     .withWorkingDir("/app/packages/opencode")
@@ -345,6 +337,54 @@ async function minioOnNetwork(appsNetwork: StartedNetwork) {
 
 const veritlyUniverInternalPort = 8811
 
+/**
+ * Extra lifecycle prints for the compat GenericContainer: after `docker create`, Testcontainers blocks on
+ * host port-map inspect, then on the HTTP wait. `DEBUG=testcontainers*` still omits in-container Bun output,
+ * so we also `docker logs -f` from the host until `containerStarted` fires.
+ */
+class UniverCompatE2eContainer extends GenericContainer {
+  follow?: ChildProcess
+  constructor(private readonly mark: number) {
+    super(e2eBunImage)
+  }
+
+  protected override async containerCreated(id: string) {
+    const cid = id.length > 12 ? id.slice(0, 12) : id
+    e2eEmitElapsed(this.mark, "e2e-tc", `compat: docker create ok id=${cid}… (next: docker start → inspect until host port map)`)
+    const follow = spawn("docker", ["logs", "-f", id], { stdio: ["ignore", "pipe", "pipe"] })
+    this.follow = follow
+    const onChunk = (buf: Buffer, stream: string) => {
+      for (const line of buf.toString("utf8").split("\n")) {
+        if (line.length > 0) e2eEmit(`[e2e-tc][compat ${cid} ${stream}] ${line}`)
+      }
+    }
+    follow.stdout?.on("data", (b: Buffer) => onChunk(b, "stdout"))
+    follow.stderr?.on("data", (b: Buffer) => onChunk(b, "stderr"))
+    follow.on("error", (e) => {
+      e2eEmit(`[e2e-tc][compat ${cid}] docker logs -f spawn error: ${String(e)}`)
+    })
+  }
+
+  protected override async containerStarting(inspectResult: InspectResult, reused: boolean) {
+    e2eEmitElapsed(
+      this.mark,
+      "e2e-tc",
+      `compat: host port bindings visible reused=${reused} (next: TC wait strategy GET /readyz :${veritlyUniverInternalPort})`,
+    )
+    e2eEmit(`[e2e-tc] compat: inspectResult.ports=${JSON.stringify(inspectResult.ports)}`)
+  }
+
+  protected override async containerStarted(
+    _c: StartedTestContainer,
+    _inspect: InspectResult,
+    reused: boolean,
+  ) {
+    e2eEmitElapsed(this.mark, "e2e-tc", `compat: startup finished reused=${reused} (stopping docker logs -f helper)`)
+    this.follow?.kill("SIGTERM")
+    this.follow = undefined
+  }
+}
+
 /** MinIO (Testcontainers) + univer-compat in Docker on one network. */
 export type UniverE2eRuntime = {
   /** Host URL for Vite / Playwright (mapped port). */
@@ -376,9 +416,12 @@ export async function startUniverE2e(
     minio = await minioOnNetwork(net)
     e2ePhase(t0, "MinIO + mc init containers started.")
     await minioReady(minio.endpoint)
-    e2ePhase(t0, "MinIO S3 bucket responds to list.")
+    e2ePhase(t0, "MinIO health ready.")
 
     e2eEmit("[e2e-tc] → Univer: starting univer-compat (Testcontainer, alias veritly-univer)…")
+    e2eEmit(
+      "[e2e-tc] compat: tip: set DEBUG=testcontainers* on the same command for Docker API noise from testcontainers.",
+    )
     const compatEnv: Record<string, string> = {
       PORT: String(veritlyUniverInternalPort),
       LISTEN_HOST: "0.0.0.0",
@@ -391,16 +434,24 @@ export async function startUniverE2e(
       ...workosEnvForCompatContainer(),
     }
 
-    compat = await new GenericContainer(e2eBunImage)
+    e2ePhase(t0, "compat: building GenericContainer (network → aliases → exposed port → bind → workdir → env → cmd → http wait).")
+    e2eEmit(`[e2e-tc] compat: image=${e2eBunImage} internalPort=${veritlyUniverInternalPort} bind=${root} → /app`)
+    e2eEmit(`[e2e-tc] compat: cmd=bun ./script/serve.ts cwd=/app/packages/univer-compat`)
+    e2eEmit(
+      `[e2e-tc] compat: env keys=${Object.keys(compatEnv).sort().join(",")} (values omitted; includes WorkOS + S3)`,
+    )
+
+    e2ePhase(t0, "compat: calling GenericContainer.start() (blocks: pull if needed → create → connect net → start → port inspect → http /readyz).")
+    compat = await new UniverCompatE2eContainer(t0)
       .withNetwork(net)
       .withNetworkAliases("veritly-univer")
       .withExposedPorts(veritlyUniverInternalPort)
-      .withBindMounts([{ source: root, target: "/app", mode: "ro" }])
+      .withBindMounts([{ source: root, target: "/app", mode: "rw" }])
       .withWorkingDir("/app/packages/univer-compat")
       .withEnvironment(compatEnv)
-      .withCommand(["bun", "script/serve.ts"])
+      .withCommand(["bun", "./script/serve.ts"])
       .withWaitStrategy(Wait.forHttp("/readyz", veritlyUniverInternalPort))
-      .withStartupTimeout(120_000)
+      .withStartupTimeout(600_000)
       .start()
     e2ePhase(t0, "univer-compat container /readyz wait passed.")
 
@@ -438,28 +489,25 @@ export async function startUniverE2e(
 
 async function minioReady(endpoint: string) {
   const t0 = Date.now()
-  e2eEmit("[e2e-tc] → MinIO: waiting until S3 listObjects succeeds (≤60s, quiet unless slow)…")
-  const client = new S3Client({
-    accessKeyId: minioAccess,
-    secretAccessKey: minioSecret,
-    bucket,
-    endpoint,
-    region: s3Region,
-  })
+  e2eEmit("[e2e-tc] → MinIO: waiting until /minio/health/ready succeeds (≤60s, quiet unless slow)…")
+  const base = endpoint.replace(/\/+$/, "")
+  const probe = `${base}/minio/health/ready`
   const end = Date.now() + 60_000
   let tries = 0
   while (Date.now() < end) {
     tries++
-    if (tries % 20 === 0) e2ePhase(t0, `MinIO S3 poll still running (try ${tries})…`)
+    if (tries % 20 === 0) e2ePhase(t0, `MinIO health poll still running (try ${tries})…`)
     try {
-      await client.list({ maxKeys: 1 })
-      e2ePhase(t0, "MinIO S3 list OK.")
-      return
+      const res = await fetch(probe, { signal: AbortSignal.timeout(5_000) })
+      if (res.ok) {
+        e2ePhase(t0, "MinIO health OK.")
+        return
+      }
     } catch {
       await sleep(300)
     }
   }
-  throw new Error(`MinIO bucket ${bucket} not ready`)
+  throw new Error(`MinIO not ready at ${probe}`)
 }
 
 /** All Docker-backed E2E deps: Postgres (+ Ollama) + optional Univer MinIO stack + shared network for OpenCode-in-Docker. */

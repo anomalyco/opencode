@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import type { WebDriver } from "selenium-webdriver"
 import { withSession } from "../../../../e2e/actions"
@@ -23,6 +25,7 @@ async function seed(driver: WebDriver, sdk: Sdk, sessionID: string) {
 }
 
 describe("prompt slash share (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("/share and /unshare update session share state", async () => {

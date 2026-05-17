@@ -1,7 +1,7 @@
 import { afterAll, beforeAll } from "vitest"
 import type { WebDriver } from "selenium-webdriver"
 import { WORKOS_SESSION_COOKIE_NAME } from "@veritly/auth-shared"
-import { createSdk, getCurrentProject, sessionPath, serverUrl as opencodeServerUrl } from "../../../e2e/utils"
+import { createSdk, getCurrentProject, sessionPath, serverUrl } from "../../../e2e/utils"
 import { mintE2eSealedSessionFromWorkos } from "../../../e2e/workos-auth"
 import { promptSelector } from "../../../e2e/selectors"
 import { startStandaloneSelenium } from "../../support/selenium-standalone"
@@ -9,7 +9,7 @@ import { By, waitVisible } from "./wd-wait"
 
 function requireAppOrigin(): string {
   const b = process.env.PLAYWRIGHT_BASE_URL?.trim()
-  if (!b) throw new Error("PLAYWRIGHT_BASE_URL is required (same as Playwright app E2E)")
+  if (!b) throw new Error("PLAYWRIGHT_BASE_URL is required — call useFullAppStack() in the file's root describe before useAppWebDriver()")
   return b.replace(/\/$/, "")
 }
 
@@ -34,7 +34,7 @@ async function seedServerAndModel(driver: WebDriver, origin: string, projectId: 
       nextLast[args.serverUrl] = args.directory
       localStorage.setItem(key, JSON.stringify({ list, lastProject: nextLast }))
     })()`,
-    { directory: projectId, serverUrl: opencodeServerUrl },
+    { directory: projectId, serverUrl: serverUrl() },
   )
   const model = JSON.stringify({
     recent: [{ providerID: "openai", modelID: "llama3.2:1b" }],
@@ -64,16 +64,16 @@ export async function openProjectSession(driver: WebDriver, origin: string, proj
   await seedServerAndModel(driver, origin, projectId)
   await driver.get(`${origin}${sessionPath(projectId, sessionId)}`)
   await waitVisible(driver, By.css(promptSelector))
+  await driver.manage().window().setRect({ width: 1600, height: 1000, x: 0, y: 0 })
 }
 
 /**
  * Vitest file hook: Selenium standalone + OpenCode-backed project + `gotoSession` / `sdk` (WebDriver migration path).
- * Requires Vite + API already running (`e2e-local.ts` or dev) and the same env as Playwright (`PLAYWRIGHT_BASE_URL`, WorkOS, etc.).
+ * Requires Vite + API already running (`useFullAppStack()` in the same `describe`, or dev) and the same env as Playwright (`PLAYWRIGHT_BASE_URL`, WorkOS, etc.).
  */
 export function useAppWebDriver() {
   let driver: WebDriver | undefined
   let stop: (() => Promise<void>) | undefined
-  const origin = requireAppOrigin()
   const project = { id: "", directory: "" }
   let sdk: ReturnType<typeof createSdk> | undefined
 
@@ -94,11 +94,13 @@ export function useAppWebDriver() {
   const gotoSession = async (sessionId?: string) => {
     const d = driver
     if (!d) throw new Error("driver missing")
-    await openProjectSession(d, origin, project.id, sessionId)
+    await openProjectSession(d, requireAppOrigin(), project.id, sessionId)
   }
 
   return {
-    origin,
+    get origin() {
+      return requireAppOrigin()
+    },
     get driver(): WebDriver {
       if (!driver) throw new Error("WebDriver not ready")
       return driver

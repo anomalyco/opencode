@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By } from "selenium-webdriver"
+import { fileTreeToggleSelector } from "../../../../e2e/selectors"
 import { waitVisible } from "../../support/wd-wait"
 import { useAppWebDriver } from "../../support/use-app-webdriver"
 import { wdToggleReviewPanel } from "../../support/wd-actions"
@@ -11,6 +14,7 @@ async function expanded(el: { getAttribute(name: string): Promise<string | null>
 }
 
 describe("panels (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("review panel can be toggled via keybind", async () => {
@@ -18,10 +22,7 @@ describe("panels (webdriver migration)", () => {
 
     const reviewPanel = await waitVisible(app.driver, By.css("#review-panel"))
 
-    const treeToggle = await waitVisible(
-      app.driver,
-      By.xpath(`(//button[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "toggle file tree")])[1]`),
-    )
+    const treeToggle = await waitVisible(app.driver, By.css(fileTreeToggleSelector))
     if (await expanded(treeToggle)) await treeToggle.click()
     expect(await treeToggle.getAttribute("aria-expanded")).toBe("false")
 

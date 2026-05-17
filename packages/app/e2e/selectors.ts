@@ -30,6 +30,13 @@ export const titlebarRightSelector = "#opencode-titlebar-right"
 
 export const popoverBodySelector = '[data-slot="popover-body"]'
 
+/** File tree side panel toggle (icon-only; `aria-label` is i18n, not matched by text XPath). */
+export const fileTreeToggleSelector = 'button[aria-controls="file-tree-panel"]'
+
+/** File tree panel → "All files" tab trigger (`value="all"`; label is i18n). */
+export const fileTreeAllTabTriggerSelector =
+  '#file-tree-panel button[data-slot="tabs-trigger"][data-value="all"]'
+
 export const dropdownMenuTriggerSelector = '[data-slot="dropdown-menu-trigger"]'
 
 export const dropdownMenuContentSelector = '[data-component="dropdown-menu-content"]'

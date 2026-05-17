@@ -1,5 +1,7 @@
 import { createOpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2/client"
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import type { WebDriver } from "selenium-webdriver"
 import { cleanupSession, sessionIDFromUrl } from "../../../../e2e/actions"
@@ -40,10 +42,11 @@ async function waitShellOutput(driver: WebDriver, sdk: Sdk, sessionID: string, d
 }
 
 describe("prompt shell (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("shell mode runs a command in the project directory", async () => {
-    const listSdk = createOpencodeClient({ baseUrl: serverUrl, throwOnError: true })
+    const listSdk = createOpencodeClient({ baseUrl: serverUrl(), throwOnError: true })
     const created = await listSdk.project.create({ name: `e2e shell ${Date.now()}` })
     if (!created.data?.project?.id) throw new Error("project create failed")
     const pid = created.data.project.id

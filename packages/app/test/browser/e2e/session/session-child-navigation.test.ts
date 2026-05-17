@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By } from "selenium-webdriver"
 import { seedSessionTask, withSession } from "../../../../e2e/actions"
 import { useAppWebDriver } from "../../support/use-app-webdriver"
 
 describe("session child navigation (webdriver)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test(

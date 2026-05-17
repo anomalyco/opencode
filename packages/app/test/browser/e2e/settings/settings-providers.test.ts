@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import type { WebDriver } from "selenium-webdriver"
 import { wdCloseDialog, wdOpenSettings } from "../../support/wd-actions"
@@ -14,6 +16,7 @@ async function openCustomProviderDialog(driver: WebDriver) {
 }
 
 describe("settings providers (webdriver)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("custom provider form can be filled and validates input", async () => {

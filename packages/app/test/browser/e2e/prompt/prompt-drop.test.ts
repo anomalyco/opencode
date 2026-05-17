@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By } from "selenium-webdriver"
 import { promptSelector } from "../../../../e2e/selectors"
 import { waitVisible } from "../../support/wd-wait"
@@ -8,6 +10,7 @@ const png =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO3+4uQAAAAASUVORK5CYII="
 
 describe("prompt drop (webdriver)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("dropping an image file adds an attachment", async () => {

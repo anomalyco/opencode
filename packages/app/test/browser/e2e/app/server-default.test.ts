@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By } from "selenium-webdriver"
 import { serverNamePattern, serverUrls } from "../../../../e2e/utils"
 import { dropdownMenuContentSelector } from "../../../../e2e/selectors"
@@ -13,6 +15,7 @@ import { useAppWebDriver } from "../../support/use-app-webdriver"
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 
 describe("default server (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("can set a default server on web", async () => {
@@ -29,11 +32,14 @@ describe("default server (webdriver migration)", () => {
     const pop = await wdEnsureServerManagePopover(app.driver)
     await pop.findElement(By.xpath(`.//button[contains(., "Manage servers")]`)).click()
 
-    const dialog = await waitVisible(app.driver, By.css('[role="dialog"]'))
-    expect(await dialog.getText()).toMatch(serverNamePattern)
-
-    const trigger = await dialog.findElement(By.css('[data-slot="dropdown-menu-trigger"]'))
-    await app.driver.executeScript("arguments[0].click()", trigger)
+    const trigger = await waitVisible(
+      app.driver,
+      By.css('[data-slot="dialog-body"] [data-component="icon-button"][data-icon="dot-grid"]'),
+      30_000,
+    )
+    const dialog = await trigger.findElement(By.xpath("./ancestor::*[@data-slot='dialog-content'][1]"))
+    expect(await dialog.getText()).toMatch(serverNamePattern())
+    await trigger.click()
 
     const menu = await waitVisible(app.driver, By.css(dropdownMenuContentSelector))
     await wdClickMenuItem(menu, /set as default/i)
@@ -44,10 +50,13 @@ describe("default server (webdriver migration)", () => {
         DEFAULT_SERVER_URL_KEY,
       )
       if (!v) return false
-      return serverUrls.includes(v)
+      return serverUrls().includes(v)
     }, 20_000)
 
-    await waitVisible(app.driver, By.xpath(`//*[@role="dialog"]//*[normalize-space(.)='Default']`))
+    await waitVisible(
+      app.driver,
+      By.xpath(`//*[@data-slot="dialog-content"]//*[normalize-space(.)='Default']`),
+    )
 
     await wdCloseDialog(app.driver)
 
@@ -55,12 +64,12 @@ describe("default server (webdriver migration)", () => {
     let rowText = ""
     for (const b of await pop2.findElements(By.css("button"))) {
       const t = await b.getText()
-      if (serverNamePattern.test(t)) {
+      if (serverNamePattern().test(t)) {
         rowText = t
         break
       }
     }
-    expect(rowText).toMatch(serverNamePattern)
+    expect(rowText).toMatch(serverNamePattern())
     expect(rowText).toContain("Default")
   })
 })

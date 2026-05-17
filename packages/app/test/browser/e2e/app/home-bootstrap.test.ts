@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, logging } from "selenium-webdriver"
 import { useAppWebDriver } from "../../support/use-app-webdriver"
 import { waitVisible } from "../../support/wd-wait"
 
 describe("home bootstrap (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("home load emits no severe browser logs", async () => {

@@ -1,5 +1,7 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import { cleanupSession } from "../../../e2e/actions"
 import { promptSelector } from "../../../e2e/selectors"
@@ -8,6 +10,7 @@ import { waitVisible } from "../support/wd-wait"
 import { useAppWebDriver } from "../support/use-app-webdriver"
 
 describe("ai reply flow (webdriver)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test(
@@ -157,7 +160,7 @@ describe("ai reply flow (webdriver)", () => {
   )
 
   test("using isolated project create flow", async () => {
-    const listSdk = createOpencodeClient({ baseUrl: serverUrl, throwOnError: true })
+    const listSdk = createOpencodeClient({ baseUrl: serverUrl(), throwOnError: true })
     const created = await listSdk.project.create({ name: "Isolated Test" })
     if (!created.data?.project?.id) throw new Error("Failed to create project")
     const sdk = createSdk({ id: created.data.project.id })

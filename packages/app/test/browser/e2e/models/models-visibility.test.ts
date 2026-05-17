@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import { promptSelector } from "../../../../e2e/selectors"
 import { waitVisible } from "../../support/wd-wait"
@@ -6,6 +8,7 @@ import { useAppWebDriver } from "../../support/use-app-webdriver"
 import { wdCloseDialog, wdOpenSettings, wdPressEscape } from "../../support/wd-actions"
 
 describe("models visibility (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("hiding a model removes it from the model picker", async () => {

@@ -16,7 +16,9 @@ export async function startStandaloneSelenium(): Promise<{
   box: StartedSeleniumContainer
   stop: () => Promise<void>
 }> {
-  const box = await new SeleniumContainer(defaultStandaloneImage()).start()
+  const box = await new SeleniumContainer(defaultStandaloneImage())
+    .withExtraHosts([{ host: "host.docker.internal", ipAddress: "host-gateway" }])
+    .start()
   const prefs = new logging.Preferences()
   prefs.setLevel(logging.Type.BROWSER, logging.Level.ALL)
   const driver = await new Builder()

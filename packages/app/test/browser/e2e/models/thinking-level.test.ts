@@ -1,10 +1,13 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By } from "selenium-webdriver"
 import { modelVariantCycleSelector } from "../../../../e2e/selectors"
 import { waitVisible } from "../../support/wd-wait"
 import { useAppWebDriver } from "../../support/use-app-webdriver"
 
 describe("thinking level / model variant (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("smoke model variant cycle updates label", async () => {

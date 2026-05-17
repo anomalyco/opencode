@@ -42,12 +42,12 @@ export async function seedProjectsWebDriver(driver: WebDriver, input: { projectI
       nextLast[args.serverUrl] = args.directory
       localStorage.setItem(key, JSON.stringify({ list, lastProject: nextLast }))
     })()`,
-    { directory, serverUrl },
+    { directory, serverUrl: serverUrl() },
   )
 }
 
 export async function createTestProject(name = "E2E Test Project") {
-  const sdk = createOpencodeClient({ baseUrl: serverUrl, throwOnError: true })
+  const sdk = createOpencodeClient({ baseUrl: serverUrl(), throwOnError: true })
   const result = await sdk.project.create({ name })
   if (!result.data?.project?.id) throw new Error("Failed to create test project")
 

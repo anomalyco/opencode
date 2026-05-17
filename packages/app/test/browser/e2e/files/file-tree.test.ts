@@ -1,15 +1,19 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, until } from "selenium-webdriver"
+import { fileTreeToggleSelector } from "../../../../e2e/selectors"
 import { waitVisible } from "../../support/wd-wait"
 import { useAppWebDriver } from "../../support/use-app-webdriver"
 
 describe("file tree (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("file tree can expand folders and open a file", async () => {
     await app.gotoSession()
 
-    const toggle = await waitVisible(app.driver, By.css('button[aria-controls="file-tree-panel"]'))
+    const toggle = await waitVisible(app.driver, By.css(fileTreeToggleSelector))
     if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click()
     await app.driver.wait(async () => (await toggle.getAttribute("aria-expanded")) === "true", 10_000)
 
@@ -23,11 +27,7 @@ describe("file tree (webdriver migration)", () => {
       By.css('#file-tree-panel [data-component="tabs"][data-variant="pill"][data-scope="filetree"]'),
     )
 
-    const allTab = await treeTabs.findElement(
-      By.xpath(
-        './/button[@role="tab" and contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "all files")]',
-      ),
-    )
+    const allTab = await treeTabs.findElement(By.css('button[data-slot="tabs-trigger"][data-value="all"]'))
     await app.driver.wait(until.elementIsVisible(allTab), 30_000)
     await allTab.click()
     await app.driver.wait(async () => (await allTab.getAttribute("aria-selected")) === "true", 10_000)

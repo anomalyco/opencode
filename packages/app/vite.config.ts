@@ -109,8 +109,8 @@ export default defineConfig(({ mode }) => {
     server: {
       /** `true` listens on all interfaces (v4 + v6); `0.0.0.0` is IPv4-only and can break `localhost`→`::1` clients (e.g. cloudflared). */
       host: true,
-      /** Tunnel hostnames send `Host: local-*.veritly.co.uk`; without this Vite returns 403 (OpenCode/sdk-relay on other ports do not run this check). */
-      allowedHosts: [".veritly.co.uk"],
+      /** Tunnel hostnames send `Host: local-*.veritly.co.uk`; without this Vite returns 403 (OpenCode/sdk-relay on other ports do not run this check). Selenium-in-Docker hits the host via `host.docker.internal`. */
+      allowedHosts: [".veritly.co.uk", "host.docker.internal", "localhost"],
       ...(tunnelPublicHost
         ? {
             origin: `https://${tunnelPublicHost}`,

@@ -100,7 +100,7 @@ export async function wdEnsureServerManagePopover(driver: WebDriver) {
     if (await el.isDisplayed()) return el
   }
   const bar = await waitVisible(driver, By.css(titlebarRightSelector))
-  const status = await bar.findElement(By.xpath(`.//button[normalize-space(.)='Status']`))
+  const status = await bar.findElement(By.css("button.titlebar-icon"))
   await status.click()
   return waitVisible(driver, popBy)
 }

@@ -1,10 +1,13 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By } from "selenium-webdriver"
 import { wdChordModF, wdCloseDialog, wdOpenSettings } from "../../support/wd-actions"
 import { waitVisible } from "../../support/wd-wait"
 import { useAppWebDriver } from "../../support/use-app-webdriver"
 
 describe("settings smoke (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("smoke settings dialog opens, switches tabs, closes", async () => {

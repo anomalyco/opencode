@@ -1,6 +1,7 @@
 /**
- * Host-side guard before starting Univer Testcontainers (e.g. `OPENCODE_E2E_INFRA` includes `univer` in `e2e-local.ts`).
- * univer-compat validates `wos-session` via WorkOS — same keys must exist on the host that spawns Docker.
+ * Host-side guard before starting Univer Testcontainers. Keys must be available in the Vitest process
+ * (e.g. `vitest.e2e.config.ts` loads repo `.env.development` + app `.env.e2e`, or use `bun --env-file=… vitest …`).
+ * univer-compat validates `wos-session` via WorkOS — the same values are passed into the compat container.
  */
 export function assertHostWorkosForUniverE2e(): void {
   const missing: string[] = []

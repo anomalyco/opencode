@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import type { WebDriver } from "selenium-webdriver"
 import { By, Key } from "selenium-webdriver"
 import { withSession } from "../../../../e2e/actions"
@@ -30,6 +32,7 @@ async function seedMessage(driver: WebDriver, sdk: Sdk, sessionID: string) {
 }
 
 describe("session header menu (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("session can be renamed via header menu", async () => {

@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import type { WebDriver } from "selenium-webdriver"
 import { promptSelector } from "../../../../e2e/selectors"
@@ -49,6 +51,7 @@ async function openPackagesAppPackageJson(driver: WebDriver) {
 }
 
 describe("file viewer (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("smoke file viewer renders real file content", async () => {

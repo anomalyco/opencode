@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import { promptSelector } from "../../../../e2e/selectors"
 import { waitAbsent, waitVisible } from "../../support/wd-wait"
@@ -6,6 +8,7 @@ import { useAppWebDriver } from "../../support/use-app-webdriver"
 import { wdPressModW } from "../../support/wd-actions"
 
 describe("tab close (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("mod+w closes the active file tab", async () => {

@@ -1,5 +1,7 @@
 import type { ToolPart } from "@opencode-ai/sdk/v2/client"
 import { describe, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import type { WebDriver } from "selenium-webdriver"
 import { withSession } from "../../../../e2e/actions"
@@ -90,6 +92,7 @@ async function shellWait(driver: WebDriver, sdk: Sdk, sessionID: string, cmd: st
 }
 
 describe("prompt history (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("prompt history restores unsent draft with arrow navigation", async () => {

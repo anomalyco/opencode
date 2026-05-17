@@ -1,33 +1,62 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 
-export const serverHost = process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"
-export const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
+const localHosts = ["127.0.0.1", "localhost", "host.docker.internal"]
 
-export const serverUrl = `http://${serverHost}:${serverPort}`
-export const serverName = `${serverHost}:${serverPort}`
+const esc = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
-const localHosts = ["127.0.0.1", "localhost"]
+/** Vitest on the host calls the mapped OpenCode port on loopback while Selenium Chrome uses `PLAYWRIGHT_SERVER_HOST` (often `host.docker.internal`). */
+export function serverHost() {
+  const api = process.env.OPENCODE_E2E_API_HOST?.trim()
+  if (api) return api
+  const v = process.env.PLAYWRIGHT_SERVER_HOST?.trim()
+  if (!v) return "127.0.0.1"
+  return v
+}
 
-const serverLabels = (() => {
-  const url = new URL(serverUrl)
-  if (!localHosts.includes(url.hostname)) return [serverName]
-  return localHosts.map((host) => `${host}:${url.port}`)
-})()
+export function serverPort() {
+  const v = process.env.PLAYWRIGHT_SERVER_PORT?.trim()
+  if (!v) return "4096"
+  return v
+}
 
-export const serverNames = [...new Set(serverLabels)]
+export function serverUrl() {
+  return `http://${serverHost()}:${serverPort()}`
+}
 
-export const serverUrls = serverNames.map((name) => `http://${name}`)
+/** Host segment for UI labels (uses `PLAYWRIGHT_SERVER_HOST` when set; may differ from API `serverHost()` in Docker-Selenium E2E). */
+export function serverUiHost() {
+  const v = process.env.PLAYWRIGHT_SERVER_HOST?.trim()
+  if (v) return v
+  return serverHost()
+}
 
-const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+export function serverName() {
+  return `${serverUiHost()}:${serverPort()}`
+}
 
-export const serverNamePattern = new RegExp(`(?:${serverNames.map(escape).join("|")})`)
+export function serverNames() {
+  const host = serverUiHost()
+  const port = serverPort()
+  const label = `${host}:${port}`
+  if (!localHosts.includes(host)) return [label]
+  return [...new Set(localHosts.map((h) => `${h}:${port}`))]
+}
+
+export function serverUrls() {
+  return serverNames().map((n) => `http://${n}`)
+}
+
+export function serverNamePattern() {
+  const names = serverNames()
+  return new RegExp(`(?:${names.map(esc).join("|")})`)
+}
 
 export const modKey = process.platform === "darwin" ? "Meta" : "Control"
 
 /** SDK scoped to one DB project via `x-opencode-project` (use `createOpencodeClient` for unscoped calls like `GET /project`). */
 export function createSdk(project: { id: string }) {
   return createOpencodeClient({
-    baseUrl: serverUrl,
+    baseUrl: serverUrl(),
     projectId: project.id,
     throwOnError: true,
   })
@@ -37,7 +66,7 @@ export function createSdk(project: { id: string }) {
 // In stateless architecture, this returns the first available project
 // or creates one if none exists
 export async function getCurrentProject() {
-  const listSdk = createOpencodeClient({ baseUrl: serverUrl, throwOnError: true })
+  const listSdk = createOpencodeClient({ baseUrl: serverUrl(), throwOnError: true })
 
   // List projects and use the first one, or create if none
   const projectsResult = await listSdk.project.list()
@@ -57,7 +86,7 @@ export async function getCurrentProject() {
 
 // Create a new database project via API
 export async function createProject(name: string) {
-  const sdk = createOpencodeClient({ baseUrl: serverUrl, throwOnError: true })
+  const sdk = createOpencodeClient({ baseUrl: serverUrl(), throwOnError: true })
   const result = await sdk.project.create({ name })
   if (!result.data?.project?.id) throw new Error("Failed to create project")
 

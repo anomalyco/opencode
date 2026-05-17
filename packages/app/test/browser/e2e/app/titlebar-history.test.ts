@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import { withSession } from "../../../../e2e/actions"
 import { promptSelector } from "../../../../e2e/selectors"
@@ -7,6 +9,7 @@ import { wdDefocus, wdOpenSidebar } from "../../support/wd-actions"
 import { useAppWebDriver } from "../../support/use-app-webdriver"
 
 describe("titlebar history (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("titlebar back/forward navigates between sessions", async () => {

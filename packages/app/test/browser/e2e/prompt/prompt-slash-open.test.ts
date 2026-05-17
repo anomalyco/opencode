@@ -1,10 +1,13 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import { promptSelector } from "../../../../e2e/selectors"
 import { waitAbsent, waitVisible } from "../../support/wd-wait"
 import { useAppWebDriver } from "../../support/use-app-webdriver"
 
 describe("prompt slash open (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("smoke /open opens file picker dialog", async () => {

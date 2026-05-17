@@ -1,4 +1,6 @@
 import { beforeAll, describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import { cleanupSession, sessionIDFromUrl, withSession } from "../../../../e2e/actions"
 import { promptSelector } from "../../../../e2e/selectors"
@@ -17,6 +19,7 @@ function normPromptText(raw: string | null) {
 }
 
 describe("prompt async (webdriver)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   beforeAll(async () => {

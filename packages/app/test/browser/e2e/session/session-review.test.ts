@@ -1,5 +1,7 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By } from "selenium-webdriver"
 import { waitSessionIdle, withSession } from "../../../../e2e/actions"
 import { createSdk, serverUrl } from "../../../../e2e/utils"
@@ -61,6 +63,7 @@ async function patch(sdk: ReturnType<typeof createSdk>, sessionID: string, patch
 }
 
 describe("session review scroll (webdriver)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test.skipIf(Boolean(process.env.CI))(
@@ -73,7 +76,7 @@ describe("session review scroll (webdriver)", () => {
       const hit = list[list.length - 4]!
       const nextMark = `${tag}-live`
 
-      const listSdk = createOpencodeClient({ baseUrl: serverUrl, throwOnError: true })
+      const listSdk = createOpencodeClient({ baseUrl: serverUrl(), throwOnError: true })
       const created = await listSdk.project.create({ name: `e2e review ${tag}` })
       if (!created.data?.project?.id) throw new Error("project create failed")
       const pid = created.data.project.id

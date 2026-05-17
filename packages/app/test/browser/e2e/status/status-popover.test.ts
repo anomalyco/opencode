@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By } from "selenium-webdriver"
 import type { WebElement } from "selenium-webdriver"
 import { waitAbsent } from "../../support/wd-wait"
@@ -14,6 +16,7 @@ function tab(pop: WebElement, needle: string) {
 }
 
 describe("status popover (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("opens and shows tabs", async () => {

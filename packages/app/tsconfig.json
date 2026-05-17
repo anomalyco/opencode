@@ -24,12 +24,15 @@
   },
   "include": [
     "src",
+    "e2e/emit.ts",
     "e2e/workos-auth.ts",
     "e2e/assert-univer-workos-env.ts",
     "e2e/utils.ts",
     "e2e/selectors.ts",
     "e2e/actions.ts",
     "test",
+    "script/e2e-infra-parse.ts",
+    "script/e2e-testcontainers.ts",
     "package.json"
   ],
   "exclude": ["dist", "ts-dist"]

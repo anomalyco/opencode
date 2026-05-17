@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import type { WebDriver } from "selenium-webdriver"
 import {
@@ -34,6 +36,7 @@ async function clickSelectItem(driver: WebDriver, text: string) {
 }
 
 describe("settings general (webdriver)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("changing language updates settings labels", async () => {

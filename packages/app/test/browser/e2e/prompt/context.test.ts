@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { By, Key } from "selenium-webdriver"
 import type { WebDriver } from "selenium-webdriver"
 import { withSession } from "../../../../e2e/actions"
@@ -21,6 +23,7 @@ async function seedContextSession(driver: WebDriver, sdk: Sdk, sessionID: string
 }
 
 describe("context panel (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("context panel can be opened from the prompt", async () => {

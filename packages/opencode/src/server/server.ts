@@ -128,6 +128,7 @@ export namespace Server {
             if (!input) return
             if (input.startsWith("http://localhost:")) return input
             if (input.startsWith("http://127.0.0.1:")) return input
+            if (input.startsWith("http://host.docker.internal:")) return input
             if (
               input === "tauri://localhost" ||
               input === "http://tauri.localhost" ||

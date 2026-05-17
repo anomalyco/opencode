@@ -1,10 +1,13 @@
 import { describe, expect, test } from "vitest"
+import { useFullAppStack } from "../../support/use-full-app-stack"
+
 import { projectPath } from "../../../../e2e/utils"
 import { promptSelector } from "../../../../e2e/selectors"
 import { By, waitUrlMatches, waitVisible } from "../../support/wd-wait"
 import { useAppWebDriver } from "../../support/use-app-webdriver"
 
 describe("navigation (webdriver migration)", () => {
+  useFullAppStack()
   const app = useAppWebDriver()
 
   test("project route redirects to /session", async () => {
