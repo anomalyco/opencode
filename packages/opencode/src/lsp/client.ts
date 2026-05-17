@@ -7,10 +7,13 @@ import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types
 import * as Log from "@opencode-ai/core/util/log"
 import { Process } from "@/util/process"
 import { LANGUAGE_EXTENSIONS } from "./language"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import type * as LSPServer from "./server"
 import { withTimeout } from "../util/timeout"
 import { Filesystem } from "@/util/filesystem"
+import { InstanceRef } from "@/effect/instance-ref"
+import { makeRuntime } from "@/effect/run-service"
+import type { InstanceContext } from "@/project/instance-context"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
 const DIAGNOSTICS_DOCUMENT_WAIT_TIMEOUT_MS = 5_000
@@ -25,6 +28,7 @@ const FILE_CHANGE_CHANGED = 2
 const TEXT_DOCUMENT_SYNC_INCREMENTAL = 2
 
 const log = Log.create({ service: "lsp.client" })
+const busRuntime = makeRuntime(Bus.Service, Bus.layer)
 
 export type Info = NonNullable<Awaited<ReturnType<typeof create>>>
 
@@ -134,9 +138,16 @@ function shouldSeedDiagnosticsOnFirstPush(serverID: string) {
   return serverID === "typescript"
 }
 
-export async function create(input: { serverID: string; server: LSPServer.Handle; root: string; directory: string }) {
+export async function create(input: {
+  serverID: string
+  server: LSPServer.Handle
+  root: string
+  directory: string
+  instance: InstanceContext
+}) {
   const logger = log.clone().tag("serverID", input.serverID)
   logger.info("starting client")
+  const instance = input.instance
 
   const connection = createMessageConnection(
     new StreamMessageReader(input.server.process.stdout as any),
@@ -162,7 +173,11 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
     dedupeDiagnostics([...(pushDiagnostics.get(filePath) ?? []), ...(pullDiagnostics.get(filePath) ?? [])])
   const updatePushDiagnostics = (filePath: string, next: Diagnostic[]) => {
     pushDiagnostics.set(filePath, next)
-    Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
+    void busRuntime.runPromise((svc) =>
+      svc
+        .publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
+        .pipe(Effect.provideService(InstanceRef, instance)),
+    )
   }
   const updatePullDiagnostics = (filePath: string, next: Diagnostic[]) => {
     pullDiagnostics.set(filePath, next)
@@ -510,10 +525,14 @@ export async function create(input: { serverID: string; server: LSPServer.Handle
       }
 
       timeoutTimer = setTimeout(() => finish(false), request.timeout)
-      unsub = Bus.subscribe(Event.Diagnostics, (event) => {
-        if (event.properties.path !== request.path || event.properties.serverID !== input.serverID) return
-        schedule()
-      })
+      unsub = busRuntime.runSync((svc) =>
+        svc
+          .subscribeCallback(Event.Diagnostics, (event) => {
+            if (event.properties.path !== request.path || event.properties.serverID !== input.serverID) return
+            schedule()
+          })
+          .pipe(Effect.provideService(InstanceRef, instance)),
+      )
       schedule()
     })
   }

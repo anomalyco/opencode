@@ -3,15 +3,15 @@ import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ApiNotFoundError } from "../../errors"
 import { Authorization } from "../../middleware/authorization"
-import { InstanceQuery, instanceQueryOpenApi, V2InstanceMiddleware } from "./instance"
+import { LocationQuery, locationQueryOpenApi, V2LocationMiddleware } from "./location"
 
 export const ProviderGroup = HttpApiGroup.make("v2.provider")
   .add(
     HttpApiEndpoint.get("providers", "/api/provider", {
-      query: InstanceQuery,
+      query: LocationQuery,
       success: Schema.Array(ProviderV2.Info),
     })
-      .annotateMerge(instanceQueryOpenApi)
+      .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
           identifier: "v2.provider.list",
@@ -23,11 +23,11 @@ export const ProviderGroup = HttpApiGroup.make("v2.provider")
   .add(
     HttpApiEndpoint.get("provider", "/api/provider/:providerID", {
       params: { providerID: ProviderV2.ID },
-      query: InstanceQuery,
+      query: LocationQuery,
       success: ProviderV2.Info,
       error: ApiNotFoundError,
     })
-      .annotateMerge(instanceQueryOpenApi)
+      .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
           identifier: "v2.provider.get",
@@ -43,5 +43,5 @@ export const ProviderGroup = HttpApiGroup.make("v2.provider")
       description: "Experimental v2 provider routes.",
     }),
   )
-  .middleware(V2InstanceMiddleware)
+  .middleware(V2LocationMiddleware)
   .middleware(Authorization)

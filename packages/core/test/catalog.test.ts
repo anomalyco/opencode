@@ -1,14 +1,21 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Layer, Option } from "effect"
+import { DateTime, Effect, Fiber, Layer, Option, Stream } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { Instance } from "@opencode-ai/core/instance"
+import { EventV2 } from "@opencode-ai/core/event"
+import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { testEffect } from "./lib/effect"
 
-const instanceLayer = Layer.succeed(Instance.Service, Instance.Service.of({ directory: "test" }))
-const it = testEffect(Catalog.layer.pipe(Layer.provideMerge(PluginV2.defaultLayer), Layer.provide(instanceLayer)))
+const locationLayer = Layer.succeed(Location.Service, Location.Service.of({ directory: "test" }))
+const it = testEffect(
+  Catalog.layer.pipe(
+    Layer.provideMerge(EventV2.defaultLayer),
+    Layer.provideMerge(PluginV2.defaultLayer),
+    Layer.provideMerge(locationLayer),
+  ),
+)
 
 describe("CatalogV2", () => {
   it.effect("normalizes provider baseURL into endpoint url", () =>
@@ -66,6 +73,31 @@ describe("CatalogV2", () => {
         url: "https://override.example.com",
       })
       expect(model.options.aisdk.provider.baseURL).toBeUndefined()
+    }),
+  )
+
+  it.effect("publishes model updated events", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const events = yield* EventV2.Service
+      const providerID = ProviderV2.ID.make("test")
+      const modelID = ModelV2.ID.make("model")
+      const fiber = yield* events
+        .subscribe(Catalog.Event.ModelUpdated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+
+      yield* Effect.yieldNow
+      yield* catalog.provider.update(providerID, () => {})
+      yield* catalog.model.update(providerID, modelID, (model) => {
+        model.name = "Updated Model"
+      })
+      const event = Array.from(yield* Fiber.join(fiber))[0]
+
+      expect(event?.type).toBe("catalog.model.updated")
+      expect(event?.data.model.providerID).toBe(providerID)
+      expect(event?.data.model.id).toBe(modelID)
+      expect(event?.data.model.name).toBe("Updated Model")
+      expect(event?.location).toEqual({ directory: "test" })
     }),
   )
 

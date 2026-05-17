@@ -1,28 +1,28 @@
 import { Catalog } from "@opencode-ai/core/catalog"
-import { Instance } from "@opencode-ai/core/instance"
-import { InstanceServiceMap } from "@opencode-ai/core/instance-layer"
+import { Location } from "@opencode-ai/core/location"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware, OpenApi } from "effect/unstable/httpapi"
 
-export const InstanceQuery = Schema.Struct({
-  instance: Schema.optional(
+export const LocationQuery = Schema.Struct({
+  location: Schema.optional(
     Schema.Struct({
       directory: Schema.optional(Schema.String),
       workspace: Schema.optional(Schema.String),
     }),
   ),
-}).annotate({ identifier: "V2InstanceQuery" })
+}).annotate({ identifier: "V2LocationQuery" })
 
-export const instanceQueryOpenApi = OpenApi.annotations({
+export const locationQueryOpenApi = OpenApi.annotations({
   transform: (operation) => {
     const parameters = operation.parameters
     if (!Array.isArray(parameters)) return operation
     return {
       ...operation,
       parameters: parameters.map((parameter) =>
-        parameter?.name === "instance" && parameter?.in === "query"
+        parameter?.name === "location" && parameter?.in === "query"
           ? { ...parameter, style: "deepObject", explode: true }
           : parameter,
       ),
@@ -30,30 +30,30 @@ export const instanceQueryOpenApi = OpenApi.annotations({
   },
 })
 
-export class V2InstanceMiddleware extends HttpApiMiddleware.Service<
-  V2InstanceMiddleware,
+export class V2LocationMiddleware extends HttpApiMiddleware.Service<
+  V2LocationMiddleware,
   {
     provides: Catalog.Service | PluginBoot.Service
   }
->()("@opencode/ExperimentalHttpApiV2Instance") {}
+>()("@opencode/ExperimentalHttpApiV2Location") {}
 
-function ref(request: HttpServerRequest.HttpServerRequest): Instance.Ref {
+function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
   return {
-    directory: query.get("instance[directory]") || request.headers["x-opencode-directory"] || process.cwd(),
-    workspaceID: query.get("instance[workspace]") || request.headers["x-opencode-workspace"],
+    directory: query.get("location[directory]") || request.headers["x-opencode-directory"] || process.cwd(),
+    workspaceID: query.get("location[workspace]") || request.headers["x-opencode-workspace"],
   }
 }
 
 export const layer = Layer.effect(
-  V2InstanceMiddleware,
+  V2LocationMiddleware,
   Effect.gen(function* () {
-    const instances = yield* InstanceServiceMap
-    return V2InstanceMiddleware.of((effect) =>
+    const locations = yield* LocationServiceMap
+    return V2LocationMiddleware.of((effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
-        return yield* effect.pipe(Effect.provide(instances.get(ref(request))))
+        return yield* effect.pipe(Effect.provide(locations.get(ref(request))))
       }),
     )
   }),
-).pipe(Layer.provide(InstanceServiceMap.layer))
+).pipe(Layer.provide(LocationServiceMap.layer))

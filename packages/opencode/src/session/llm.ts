@@ -173,7 +173,7 @@ const live: Layer.Layer<
             : undefined,
           topP: input.agent.topP ?? ProviderTransform.topP(input.model),
           topK: ProviderTransform.topK(input.model),
-          maxOutputTokens: ProviderTransform.maxOutputTokens(input.model),
+          maxOutputTokens: ProviderTransform.maxOutputTokens(input.model, flags.outputTokenMax),
           options,
         },
       )
@@ -256,7 +256,7 @@ const live: Layer.Layer<
 
         const bridge = yield* EffectBridge.make()
         const approvedToolsForSession = new Set<string>()
-        workflowModel.approvalHandler = InstanceState.bind(async (approvalTools) => {
+        workflowModel.approvalHandler = bridge.bind(async (approvalTools) => {
           const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
           // Auto-approve tools that were already approved in this session
           // (prevents infinite approval loops for server-side MCP tools)
