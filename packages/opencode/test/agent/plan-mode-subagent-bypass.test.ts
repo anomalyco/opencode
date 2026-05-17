@@ -253,6 +253,49 @@ it.effect("subagent with explicit edit:allow overrides parent edit:deny", () =>
   }),
 )
 
+it.effect("subagent with scoped edit:allow overrides parent edit:deny", () =>
+  Effect.sync(() => {
+    const restrictedParent = testAgent({
+      name: "restricted-parent",
+      mode: "primary",
+      permission: {
+        edit: { "*": "deny", "src/**": "allow" },
+        bash: "deny",
+        read: "allow",
+        task: {
+          "*": "deny",
+          capableChild: "allow",
+        },
+      },
+    })
+    const scopedChild = testAgent({
+      name: "scoped-child",
+      mode: "subagent",
+      permission: {
+        edit: { "lib/**": "allow" },
+        read: "allow",
+        bash: "allow",
+        task: "deny",
+      },
+    })
+
+    const effective = Permission.merge(
+      scopedChild.permission,
+      deriveSubagentSessionPermission({
+        parentSessionPermission: [],
+        parentAgent: restrictedParent,
+        subagent: scopedChild,
+      }),
+    )
+
+    // Child has scoped edit:allow — parent edit:deny should not be inherited
+    expect(Permission.evaluate("edit", "lib/foo.ts", effective).action).toBe("allow")
+    // Even for paths outside the child's scope, edit should not be blanket denied
+    // (it would be "ask" since there's no matching rule, not "deny")
+    expect(Permission.evaluate("edit", "other/file.ts", effective).action).toBe("ask")
+  }),
+)
+
 it.effect("subagent without explicit edit permission inherits parent edit:deny", () =>
   Effect.sync(() => {
     const restrictedParent = testAgent({
