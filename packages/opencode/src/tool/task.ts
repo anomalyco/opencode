@@ -11,6 +11,7 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
+import { Truncate } from "./truncate"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -151,7 +152,7 @@ export const TaskTool = Tool.define<typeof parameters, Record<string, any>>("tas
 
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
-      const output = [
+      const fullOutput = [
         `task_id: ${session.id} (for resuming to continue this task if needed)`,
         "",
         "<task_result>",
@@ -159,11 +160,27 @@ export const TaskTool = Tool.define<typeof parameters, Record<string, any>>("tas
         "</task_result>",
       ].join("\n")
 
+      // Apply task-specific truncation with higher limits (4000 lines / 100KB vs default 2000/50KB).
+      // Setting metadata.truncated skips the automatic Truncate.output() in tool.ts,
+      // preventing double-truncation.
+      const out = await Truncate.output(fullOutput, { maxLines: 4000, maxBytes: 100 * 1024 })
+      const output = out.truncated
+        ? [
+            `📁 Full task output: ${out.outputPath}`,
+            `Use the Read tool with offset/limit to access the full content.`,
+            "",
+            `--- Preview (${fullOutput.split("\n").length} total lines, ${Buffer.byteLength(fullOutput, "utf-8")} bytes) ---`,
+            out.content,
+          ].join("\n")
+        : out.content
+
       return {
         title: params.description,
         metadata: {
           sessionId: session.id,
           model,
+          truncated: out.truncated,
+          outputPath: out.truncated ? out.outputPath : undefined,
         },
         output,
       }
