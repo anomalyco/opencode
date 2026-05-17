@@ -76,6 +76,21 @@ describe("AppFileSystem", () => {
         expect(result).toEqual(data)
       }),
     )
+
+    it(
+      "writes JSON through a complete replacement file",
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        const tmp = yield* fs.makeTempDirectoryScoped()
+        const file = path.join(tmp, "nested", "data.json")
+
+        yield* fs.writeJson(file, { value: "old" })
+        yield* fs.writeJson(file, { value: "new" })
+
+        expect(yield* fs.readJson(file)).toEqual({ value: "new" })
+        expect(yield* fs.glob("*.tmp", { cwd: path.dirname(file) })).toEqual([])
+      }),
+    )
   })
 
   describe("ensureDir", () => {

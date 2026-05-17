@@ -1,6 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { dirname, join, relative, resolve as pathResolve } from "path"
 import { realpathSync } from "fs"
+import { randomUUID } from "crypto"
 import * as NFS from "fs/promises"
 import { lookup } from "mime-types"
 import { Effect, FileSystem, Layer, Schema, Context } from "effect"
@@ -84,12 +85,6 @@ export namespace AppFileSystem {
         return JSON.parse(text)
       })
 
-      const writeJson = Effect.fn("FileSystem.writeJson")(function* (path: string, data: unknown, mode?: number) {
-        const content = JSON.stringify(data, null, 2)
-        yield* fs.writeFileString(path, content)
-        if (mode) yield* fs.chmod(path, mode)
-      })
-
       const ensureDir = Effect.fn("FileSystem.ensureDir")(function* (path: string) {
         yield* fs.makeDirectory(path, { recursive: true })
       })
@@ -99,19 +94,25 @@ export namespace AppFileSystem {
         content: string | Uint8Array,
         mode?: number,
       ) {
-        const write = typeof content === "string" ? fs.writeFileString(path, content) : fs.writeFile(path, content)
+        yield* Effect.tryPromise({
+          try: async () => {
+            await NFS.mkdir(dirname(path), { recursive: true })
+            const tmp = path + "." + process.pid + "." + randomUUID() + ".tmp"
+            try {
+              await NFS.writeFile(tmp, content, mode ? { mode } : undefined)
+              if (mode) await NFS.chmod(tmp, mode)
+              await NFS.rename(tmp, path)
+            } catch (e) {
+              await NFS.rm(tmp, { force: true }).catch(() => {})
+              throw e
+            }
+          },
+          catch: (cause) => new FileSystemError({ method: "writeWithDirs", cause }),
+        })
+      })
 
-        yield* write.pipe(
-          Effect.catchIf(
-            (e) => e.reason._tag === "NotFound",
-            () =>
-              Effect.gen(function* () {
-                yield* fs.makeDirectory(dirname(path), { recursive: true })
-                yield* write
-              }),
-          ),
-        )
-        if (mode) yield* fs.chmod(path, mode)
+      const writeJson = Effect.fn("FileSystem.writeJson")(function* (path: string, data: unknown, mode?: number) {
+        yield* writeWithDirs(path, JSON.stringify(data, null, 2), mode)
       })
 
       const glob = Effect.fn("FileSystem.glob")(function* (pattern: string, options?: Glob.Options) {
