@@ -91,6 +91,7 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { useCommandPalette } from "../../context/command-palette"
 import { useBindings, useCommandShortcut } from "../../keymap"
 import { PathFormatterProvider, usePathFormatter } from "../../context/path-format"
+import { splitStreamingMarkdown } from "./streaming-markdown"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1579,19 +1580,57 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const content = createMemo(() => props.part.text.trim())
+  const split = createMemo(() => splitStreamingMarkdown(content()))
+  const tail = createMemo(() => split().tail)
+  const messageStreaming = createMemo(() => props.message.time.completed === undefined)
   return (
-    <Show when={props.part.text.trim()}>
-      <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
-        <markdown
-          syntaxStyle={syntax()}
-          streaming={true}
-          internalBlockMode="top-level"
-          content={props.part.text.trim()}
-          tableOptions={{ style: "grid" }}
-          conceal={ctx.conceal()}
-          fg={theme.markdownText}
-          bg={theme.background}
-        />
+    <Show when={content()}>
+      <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} flexDirection="column">
+        <Show
+          when={tail()}
+          fallback={
+            <markdown
+              syntaxStyle={syntax()}
+              streaming={true}
+              internalBlockMode="top-level"
+              content={content()}
+              tableOptions={{ style: "grid" }}
+              conceal={ctx.conceal()}
+              fg={theme.markdownText}
+              bg={theme.background}
+            />
+          }
+        >
+          <>
+            <Show when={split().head}>
+              <markdown
+                syntaxStyle={syntax()}
+                streaming={false}
+                internalBlockMode="top-level"
+                content={split().head}
+                tableOptions={{ style: "grid" }}
+                conceal={ctx.conceal()}
+                fg={theme.markdownText}
+                bg={theme.background}
+              />
+            </Show>
+            {/* Keep settled markdown stable while the trailing code block grows separately. */}
+            <code
+              filetype={tail()!.filetype}
+              drawUnstyledText={false}
+              // Let OpenTUI use its streaming code path until the
+              // assistant message fully settles. Switching modes as
+              // soon as the fence closes caused highlight flicker.
+              streaming={messageStreaming()}
+              syntaxStyle={syntax()}
+              content={tail()!.content}
+              conceal={ctx.conceal()}
+              fg={theme.markdownText}
+              bg={theme.background}
+            />
+          </>
+        </Show>
       </box>
     </Show>
   )
