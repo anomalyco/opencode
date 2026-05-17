@@ -110,6 +110,7 @@ function formatOptions(config: TuiConfig.Resolved) {
 }
 
 export function formatKeySequence(parts: Parameters<typeof formatKeySequenceExtra>[0], config: TuiConfig.Resolved) {
+  if (!parts?.length) return ""
   return formatKeySequenceExtra(parts, formatOptions(config))
 }
 
