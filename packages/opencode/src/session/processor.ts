@@ -79,6 +79,7 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: MessageV2.TextPart | undefined
   reasoningMap: Record<string, MessageV2.ReasoningPart>
+  previousReasoning: MessageV2.ReasoningPart | undefined
 }
 
 type StreamEvent = Event
@@ -119,6 +120,7 @@ export const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        previousReasoning: undefined,
       }
       let aborted = false
       const slog = log.clone().tag("session.id", input.sessionID).tag("messageID", input.assistantMessage.id)
@@ -219,6 +221,11 @@ export const layer = Layer.effect(
 
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
+            if (ctx.previousReasoning) {
+              ctx.reasoningMap[value.id] = ctx.previousReasoning
+              ctx.previousReasoning = undefined
+              return
+            }
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
             if (flags.experimentalEventSystem) {
               yield* events.publish(SessionEvent.Reasoning.Started, {
@@ -268,10 +275,12 @@ export const layer = Layer.effect(
             ctx.reasoningMap[value.id].time = { ...ctx.reasoningMap[value.id].time, end: Date.now() }
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
             yield* session.updatePart(ctx.reasoningMap[value.id])
+            ctx.previousReasoning = ctx.reasoningMap[value.id]
             delete ctx.reasoningMap[value.id]
             return
 
           case "tool-input-start":
+            ctx.previousReasoning = undefined
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
             }
@@ -554,6 +563,7 @@ export const layer = Layer.effect(
           }
 
           case "text-start":
+            ctx.previousReasoning = undefined
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
               if (flags.experimentalEventSystem) {
@@ -660,6 +670,7 @@ export const layer = Layer.effect(
           })
         }
         ctx.reasoningMap = {}
+        ctx.previousReasoning = undefined
 
         yield* Effect.forEach(
           Object.values(ctx.toolcalls),
@@ -727,6 +738,7 @@ export const layer = Layer.effect(
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
+            ctx.previousReasoning = undefined
             const stream = llm.stream(streamInput)
 
             yield* stream.pipe(

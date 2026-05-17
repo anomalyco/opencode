@@ -429,6 +429,52 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
   ),
 )
 
+it.live("session.processor effect tests merge adjacent reasoning cycles", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.push(reply().reason("thi").reason("nk").text("done").stop())
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "reason")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "reason" }],
+          tools: {},
+        })
+
+        const parts = MessageV2.parts(msg.id)
+        const reasoning = parts.filter((part): part is MessageV2.ReasoningPart => part.type === "reasoning")
+
+        expect(value).toBe("continue")
+        expect(reasoning).toHaveLength(1)
+        expect(reasoning[0]?.text).toBe("think")
+      }),
+    { git: true, config: (url) => providerCfg(url) },
+  ),
+)
+
 it.live("session.processor effect tests reset reasoning state across retries", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
