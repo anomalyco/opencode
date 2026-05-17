@@ -5,7 +5,22 @@ import type { MessageV2 } from "./message-v2"
 
 const COMPACTION_BUFFER = 20_000
 
-export function usable(input: { cfg: Config.Info; model: Provider.Model; outputTokenMax?: number }) {
+type ContextConfig = {
+  compaction?: {
+    auto?: boolean
+    reserved?: number
+  }
+}
+
+type ContextModel = {
+  limit: {
+    context: number
+    input?: number
+    output: number
+  }
+}
+
+export function usable(input: { cfg: ContextConfig; model: ContextModel; outputTokenMax?: number }) {
   const context = input.model.limit.context
   if (context === 0) return 0
 
@@ -17,6 +32,21 @@ export function usable(input: { cfg: Config.Info; model: Provider.Model; outputT
     : Math.max(0, context - ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))
 }
 
+export function count(tokens: MessageV2.Assistant["tokens"]) {
+  return tokens.total || tokens.input + tokens.output + tokens.cache.read + tokens.cache.write
+}
+
+export function percent(input: {
+  cfg: ContextConfig
+  tokens: MessageV2.Assistant["tokens"]
+  model: ContextModel
+  outputTokenMax?: number
+}) {
+  const limit = usable(input)
+  if (limit === 0) return null
+  return Math.round((count(input.tokens) / limit) * 100)
+}
+
 export function isOverflow(input: {
   cfg: Config.Info
   tokens: MessageV2.Assistant["tokens"]
@@ -26,7 +56,7 @@ export function isOverflow(input: {
   if (input.cfg.compaction?.auto === false) return false
   if (input.model.limit.context === 0) return false
 
-  const count =
-    input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
-  return count >= usable(input)
+  return count(input.tokens) >= usable(input)
 }
+
+export * as SessionOverflow from "./overflow"

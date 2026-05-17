@@ -62,6 +62,7 @@ import { type WorkspaceStatus } from "../workspace-label"
 import { useCommandPalette } from "../../context/command-palette"
 import { useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
 import { useTuiConfig } from "../../context/tui-config"
+import { SessionOverflow } from "@/session/overflow"
 
 export type PromptProps = {
   sessionID?: string
@@ -342,15 +343,14 @@ export function Prompt(props: PromptProps) {
     const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
     if (!last) return
 
-    const tokens =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+    const tokens = SessionOverflow.count(last.tokens)
     if (tokens <= 0) return
 
     const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
-    const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
+    const percent = model ? SessionOverflow.percent({ cfg: sync.data.config, tokens: last.tokens, model }) : null
     const cost = session?.cost ?? 0
     return {
-      context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
+      context: percent === null ? Locale.number(tokens) : `${Locale.number(tokens)} (${percent}%)`,
       cost: cost > 0 ? money.format(cost) : undefined,
     }
   })

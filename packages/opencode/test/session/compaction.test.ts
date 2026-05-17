@@ -8,6 +8,7 @@ import { Image } from "@/image/image"
 import { Agent } from "../../src/agent/agent"
 import { LLM } from "../../src/session/llm"
 import { SessionCompaction } from "../../src/session/compaction"
+import { SessionOverflow } from "../../src/session/overflow"
 import { Token } from "@/util/token"
 import * as Log from "@opencode-ai/core/util/log"
 import { Permission } from "../../src/permission"
@@ -82,6 +83,38 @@ function createModel(opts: {
 }
 
 const wide = () => ProviderTest.fake({ model: createModel({ context: 100_000, output: 32_000 }) })
+
+describe("session.overflow.percent", () => {
+  test("uses input limit minus default compaction reserve", () => {
+    const model = createModel({ context: 400_000, input: 272_000, output: 128_000 })
+    const tokens = { input: 126_000, output: 0, reasoning: 50_000, cache: { read: 0, write: 0 } }
+
+    expect(SessionOverflow.usable({ cfg: {}, model })).toBe(252_000)
+    expect(SessionOverflow.percent({ cfg: {}, tokens, model })).toBe(50)
+  })
+
+  test("uses configured compaction reserve for input-limited models", () => {
+    const model = createModel({ context: 400_000, input: 272_000, output: 128_000 })
+    const tokens = { input: 121_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+
+    expect(SessionOverflow.percent({ cfg: { compaction: { reserved: 30_000 } }, tokens, model })).toBe(50)
+  })
+
+  test("returns null when there is no known context limit", () => {
+    const model = createModel({ context: 0, output: 32_000 })
+    const tokens = { input: 10_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+
+    expect(SessionOverflow.percent({ cfg: {}, tokens, model })).toBe(null)
+  })
+
+  test("uses total token count when providers report it", () => {
+    const model = createModel({ context: 400_000, input: 272_000, output: 128_000 })
+    const tokens = { total: 63_000, input: 126_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+
+    expect(SessionOverflow.count(tokens)).toBe(63_000)
+    expect(SessionOverflow.percent({ cfg: {}, tokens, model })).toBe(25)
+  })
+})
 
 function createUserMessage(sessionID: SessionID, text: string) {
   return Effect.gen(function* () {
