@@ -77,11 +77,13 @@ type State = {
 type DiscoveryState = {
   matches: string[]
   dirs: string[]
+  skillRoots: Map<string, string>
 }
 
 type ScanState = {
   matches: Set<string>
   dirs: Set<string>
+  skillRoots: Map<string, string>
 }
 
 export interface Interface {
@@ -91,7 +93,7 @@ export interface Interface {
   readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
 }
 
-const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.Interface) {
+const add = Effect.fnUntraced(function* (state: State, match: string, skillRoot: string, bus: Bus.Interface) {
   const md = yield* Effect.tryPromise({
     try: () => ConfigMarkdown.parse(match),
     catch: (err) => err,
@@ -113,28 +115,36 @@ const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.I
 
   if (!isSkillFrontmatter(md.data)) return
 
-  if (state.skills[md.data.name]) {
+  const fullName = prefix(match, skillRoot, md.data.name)
+
+  if (state.skills[fullName]) {
     log.warn("duplicate skill name", {
-      name: md.data.name,
-      existing: state.skills[md.data.name].location,
+      name: fullName,
+      existing: state.skills[fullName].location,
       duplicate: match,
     })
   }
 
   state.dirs.add(path.dirname(match))
-  state.skills[md.data.name] = {
-    name: md.data.name,
+  state.skills[fullName] = {
+    name: fullName,
     description: md.data.description,
     location: match,
     content: md.content,
   }
 })
 
+function prefix(match: string, skillRoot: string, name: string) {
+  const parts = path.relative(skillRoot, path.dirname(match)).split(path.sep).filter(Boolean)
+  const ns = parts.length > 1 ? parts.slice(0, -1).join(":") : ""
+  return ns ? `${ns}:${name}` : name
+}
+
 const scan = Effect.fnUntraced(function* (
   state: ScanState,
   root: string,
   pattern: string,
-  opts?: { dot?: boolean; scope?: string },
+  opts?: { dot?: boolean; scope?: string; skillRoot?: string; skillRootFromMatch?: boolean },
 ) {
   const matches = yield* Effect.tryPromise({
     try: () =>
@@ -157,8 +167,13 @@ const scan = Effect.fnUntraced(function* (
   for (const match of matches) {
     state.matches.add(match)
     state.dirs.add(path.dirname(match))
+    state.skillRoots.set(match, opts?.skillRootFromMatch ? skillsRootFromMatch(root, match) : (opts?.skillRoot ?? root))
   }
 })
+
+function skillsRootFromMatch(root: string, match: string) {
+  return path.join(root, path.relative(root, match).split(path.sep)[0] ?? "")
+}
 
 const discoverSkills = Effect.fnUntraced(function* (
   config: Config.Interface,
@@ -170,7 +185,7 @@ const discoverSkills = Effect.fnUntraced(function* (
   directory: string,
   worktree: string,
 ) {
-  const state: ScanState = { matches: new Set(), dirs: new Set() }
+  const state: ScanState = { matches: new Set(), dirs: new Set(), skillRoots: new Map() }
 
   const externalDirs: string[] = []
   if (!disableExternalSkills) {
@@ -180,7 +195,7 @@ const discoverSkills = Effect.fnUntraced(function* (
     for (const dir of externalDirs) {
       const root = path.join(global.home, dir)
       if (!(yield* fsys.isDir(root))) continue
-      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
+      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global", skillRoot: path.join(root, "skills") })
     }
 
     const upDirs = yield* fsys
@@ -188,13 +203,13 @@ const discoverSkills = Effect.fnUntraced(function* (
       .pipe(Effect.catch(() => Effect.succeed([] as string[])))
 
     for (const root of upDirs) {
-      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
+      yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project", skillRoot: path.join(root, "skills") })
     }
   }
 
   const configDirs = yield* config.directories()
   for (const dir of configDirs) {
-    yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
+    yield* scan(state, dir, OPENCODE_SKILL_PATTERN, { skillRootFromMatch: true })
   }
 
   const cfg = yield* config.get()
@@ -206,24 +221,25 @@ const discoverSkills = Effect.fnUntraced(function* (
       continue
     }
 
-    yield* scan(state, dir, SKILL_PATTERN)
+    yield* scan(state, dir, SKILL_PATTERN, { skillRoot: dir })
   }
 
   for (const url of cfg.skills?.urls ?? []) {
     const pulledDirs = yield* discovery.pull(url)
     for (const dir of pulledDirs) {
-      yield* scan(state, dir, SKILL_PATTERN)
+      yield* scan(state, dir, SKILL_PATTERN, { skillRoot: dir })
     }
   }
 
   return {
     matches: Array.from(state.matches),
     dirs: Array.from(state.dirs),
+    skillRoots: state.skillRoots,
   }
 })
 
 const loadSkills = Effect.fnUntraced(function* (state: State, discovered: DiscoveryState, bus: Bus.Interface) {
-  yield* Effect.forEach(discovered.matches, (match) => add(state, match, bus), {
+  yield* Effect.forEach(discovered.matches, (match) => add(state, match, discovered.skillRoots.get(match)!, bus), {
     concurrency: "unbounded",
     discard: true,
   })

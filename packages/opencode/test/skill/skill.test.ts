@@ -174,6 +174,43 @@ description: Second test skill.
     ),
   )
 
+  it.live("prefixes nested skills from .opencode/skills/ directory", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              Bun.write(
+                path.join(dir, ".opencode", "skills", "team-a", "skill-one", "SKILL.md"),
+                `---
+name: skill-one
+description: Nested team skill.
+---
+
+# Skill One
+`,
+              ),
+              Bun.write(
+                path.join(dir, ".opencode", "skills", "flat-skill", "SKILL.md"),
+                `---
+name: flat-skill
+description: Flat skill.
+---
+
+# Flat Skill
+`,
+              ),
+            ]),
+          )
+
+          const skill = yield* Skill.Service
+          const list = (yield* skill.all()).filter((s) => s.location.startsWith(dir))
+          expect(list.map((s) => s.name).toSorted()).toEqual(["flat-skill", "team-a:skill-one"])
+        }),
+      { git: true },
+    ),
+  )
+
   it.live("skips skills with missing frontmatter", () =>
     provideTmpdirInstance(
       (dir) =>
