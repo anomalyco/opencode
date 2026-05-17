@@ -282,6 +282,47 @@ it.instance(
   { git: true },
 )
 
+it.instance(
+  "interrupt - publishes Rejected event so TUI orphans get dismissed",
+  () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2Bridge.Service
+      const received = yield* Queue.unbounded<{ sessionID: SessionID; requestID: QuestionID }>()
+      const off = yield* events.listen((event) => {
+        if (event.type === Question.Event.Rejected.type)
+          Queue.offerUnsafe(received, event.data as { sessionID: SessionID; requestID: QuestionID })
+        return Effect.void
+      })
+      yield* Effect.addFinalizer(() => off)
+
+      const fiber = yield* askEffect({
+        sessionID: SessionID.make("ses_test"),
+        questions: [
+          {
+            question: "What would you like to do?",
+            header: "Action",
+            options: [{ label: "Option 1", description: "First option" }],
+          },
+        ],
+      }).pipe(Effect.forkScoped)
+
+      const pending = yield* waitForPending(1)
+      const requestID = pending[0].id
+
+      // Simulate the tool execution being interrupted before the user replies
+      // (session ended, parent killed, scope torn down, etc.).
+      yield* Fiber.interrupt(fiber)
+
+      expect(yield* Queue.take(received).pipe(Effect.timeout("1 second"))).toEqual({
+        sessionID: SessionID.make("ses_test"),
+        requestID,
+      })
+      const after = yield* listEffect
+      expect(after.length).toBe(0)
+    }),
+  { git: true },
+)
+
 // multiple questions tests
 
 it.instance(

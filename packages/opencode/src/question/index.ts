@@ -171,8 +171,19 @@ export const layer = Layer.effect(
 
       return yield* Effect.ensuring(
         Deferred.await(deferred),
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          // If the entry is still here, this finalizer is running because ask was
+          // interrupted (tool cancelled, session ended, parent killed). The reply
+          // and reject paths delete the entry themselves before publishing their
+          // event, so we only fire Rejected here for the orphan case — otherwise
+          // the TUI's sync.data.question never receives a terminal event and the
+          // prompt stays visible forever.
+          if (!pending.has(id)) return
           pending.delete(id)
+          yield* events.publish(Event.Rejected, {
+            sessionID: info.sessionID,
+            requestID: info.id,
+          })
         }),
       )
     })

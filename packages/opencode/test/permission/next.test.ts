@@ -965,6 +965,67 @@ it.instance(
   { git: true },
 )
 
+it.live("interrupt - publishes Replied(reject) so TUI orphans get dismissed", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped({ git: true })
+    const store = yield* InstanceStore.Service
+    return yield* store.provide(
+      { directory: dir },
+      Effect.gen(function* () {
+        const events = yield* EventV2Bridge.Service
+        const seen = yield* Deferred.make<{
+          sessionID: SessionID
+          requestID: PermissionV1.ID
+          reply: PermissionV1.Reply
+        }>()
+        const unsub = yield* events.listen((event) => {
+          if (event.type === Permission.Event.Replied.type)
+            Deferred.doneUnsafe(
+              seen,
+              Effect.succeed(
+                event.data as { sessionID: SessionID; requestID: PermissionV1.ID; reply: PermissionV1.Reply },
+              ),
+            )
+          return Effect.void
+        })
+        yield* Effect.addFinalizer(() => unsub)
+
+        const fiber = yield* ask({
+          id: PermissionV1.ID.make("per_interrupt"),
+          sessionID: SessionID.make("session_interrupt"),
+          permission: "read",
+          patterns: [".env.template"],
+          metadata: {},
+          always: ["*"],
+          ruleset: [],
+        }).pipe(Effect.forkScoped)
+
+        yield* waitForPending(1)
+
+        // Simulate the tool execution being interrupted before the user replies
+        // (session ended, parent killed, scope torn down, etc.). Without the
+        // finalizer publishing a synthetic reject, the TUI's sync.data.permission
+        // would keep showing the prompt forever.
+        yield* Fiber.interrupt(fiber)
+
+        expect(
+          yield* Deferred.await(seen).pipe(
+            Effect.timeoutOrElse({
+              duration: "1 second",
+              orElse: () => Effect.fail(new Error("timed out waiting for synthetic permission reject event")),
+            }),
+          ),
+        ).toEqual({
+          sessionID: SessionID.make("session_interrupt"),
+          requestID: PermissionV1.ID.make("per_interrupt"),
+          reply: "reject",
+        })
+        expect(yield* list()).toHaveLength(0)
+      }),
+    )
+  }),
+)
+
 it.live("permission requests stay isolated by directory", () =>
   Effect.gen(function* () {
     const one = yield* tmpdirScoped({ git: true })
