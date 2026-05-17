@@ -8,10 +8,9 @@ import { ReferralRewardTable, ReferralTable } from "./schema/referral.sql"
 import { AuthTable } from "./schema/auth.sql"
 import { UserTable } from "./schema/user.sql"
 import { WorkspaceTable } from "./schema/workspace.sql"
-import { LiteData } from "./lite"
 import { centsToMicroCents, microCentsToCents } from "./util/price"
-import { getMonthlyBounds, getWeekBounds } from "./util/date"
 import { fn } from "./util/fn"
+import { Billing } from "./billing"
 
 export namespace Referral {
   export const REWARD_AMOUNT = centsToMicroCents(500)
@@ -183,13 +182,6 @@ export namespace Referral {
       if (!reward) throw new Error("Referral reward not found")
       if (reward.timeApplied) return { applied: false }
 
-      const lite = await tx
-        .select({ id: LiteTable.id, timeCreated: LiteTable.timeCreated })
-        .from(LiteTable)
-        .where(and(eq(LiteTable.workspaceID, workspaceID), isNull(LiteTable.timeDeleted)))
-        .then((rows) => rows[0])
-      if (!lite) throw new Error("Subscribe to Go before applying referral rewards")
-
       const update = await tx
         .update(ReferralRewardTable)
         .set({
@@ -205,32 +197,7 @@ export namespace Referral {
         )
       if (update.rowsAffected === 0) return { applied: false }
 
-      const week = getWeekBounds(new Date())
-      const month = getMonthlyBounds(new Date(), lite.timeCreated)
-      const rollingWindowSeconds = LiteData.getLimits().rollingWindow * 3600
-      await tx
-        .update(LiteTable)
-        .set({
-          monthlyUsage: sql`
-            CASE
-              WHEN ${LiteTable.timeMonthlyUpdated} >= ${month.start} THEN GREATEST(0, COALESCE(${LiteTable.monthlyUsage}, 0) - ${reward.amount})
-              ELSE ${LiteTable.monthlyUsage}
-            END
-          `,
-          weeklyUsage: sql`
-            CASE
-              WHEN ${LiteTable.timeWeeklyUpdated} >= ${week.start} THEN GREATEST(0, COALESCE(${LiteTable.weeklyUsage}, 0) - ${reward.amount})
-              ELSE ${LiteTable.weeklyUsage}
-            END
-          `,
-          rollingUsage: sql`
-            CASE
-              WHEN UNIX_TIMESTAMP(${LiteTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN GREATEST(0, COALESCE(${LiteTable.rollingUsage}, 0) - ${reward.amount})
-              ELSE ${LiteTable.rollingUsage}
-            END
-          `,
-        })
-        .where(and(eq(LiteTable.workspaceID, workspaceID), isNull(LiteTable.timeDeleted)))
+      await Billing.subtractLiteUsage(workspaceID, reward.amount)
 
       return { applied: true, amount: microCentsToCents(reward.amount) }
     })
