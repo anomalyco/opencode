@@ -1109,7 +1109,37 @@ export function Session() {
           <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
             <Show when={session()}>
               <scrollbox
-                ref={(r) => (scroll = r)}
+                ref={(r) => {
+                  scroll = r
+                  const bar = r.verticalScrollBar as any
+                  const slider = bar.slider
+
+                  // Fix: upstream @opentui/core (<=0.2.12) Slider.set viewPortSize
+                  // clamps to slider.max–min, but updateSliderFromScrollState sets
+                  // slider.max AFTER viewPortSize is assigned, so viewPortSize gets
+                  // clamped to ≈0. Re-sync it after every state update.
+                  const origUpdate = bar.updateSliderFromScrollState.bind(bar)
+                  bar.updateSliderFromScrollState = function () {
+                    origUpdate()
+                    slider.viewPortSize = Math.max(1, bar._viewportSize)
+                  }
+
+                  // Enforce a visible minimum thumb size (≥10% of track or 3 cells)
+                  const origThumb = slider.getVirtualThumbSize
+                  slider.getVirtualThumbSize = function (this: any) {
+                    const raw: number = origThumb.call(this)
+                    const track =
+                      this.orientation === "vertical"
+                        ? this.height * 2
+                        : this.width * 2
+                    if (track <= 0) return raw
+                    return Math.max(
+                      Math.max(6, Math.floor(track * 0.1)),
+                      Math.min(raw, track),
+                    )
+                  }
+
+                }}
                 viewportOptions={{
                   paddingRight: showScrollbar() ? 1 : 0,
                 }}
@@ -1118,7 +1148,7 @@ export function Session() {
                   visible: showScrollbar(),
                   trackOptions: {
                     backgroundColor: theme.backgroundElement,
-                    foregroundColor: theme.border,
+                    foregroundColor: theme.primary,
                   },
                 }}
                 stickyScroll={true}
