@@ -481,8 +481,8 @@ export function temperature(model: Provider.Model) {
   if (id.includes("glm-4.6")) return 1.0
   if (id.includes("glm-4.7")) return 1.0
   if (id.includes("minimax-m2")) return 1.0
-  if (id.includes("kimi-k2")) {
-    // kimi-k2-thinking & kimi-k2.5 && kimi-k2p5 && kimi-k2-5
+  if (id.includes("kimi-k2") || id.includes("k2p")) {
+    // kimi-k2-thinking & kimi-k2.5 & kimi-k2p5 & kimi-k2-5 & k2p6
     if (["thinking", "k2.", "k2p", "k2-5"].some((s) => id.includes(s))) {
       return 1.0
     }
@@ -494,7 +494,7 @@ export function temperature(model: Provider.Model) {
 export function topP(model: Provider.Model) {
   const id = model.id.toLowerCase()
   if (id.includes("qwen")) return 1
-  if (["minimax-m2", "gemini", "kimi-k2.5", "kimi-k2p5", "kimi-k2-5"].some((s) => id.includes(s))) {
+  if (["minimax-m2", "gemini", "kimi-k2.5", "kimi-k2p5", "kimi-k2-5", "k2p6"].some((s) => id.includes(s))) {
     return 0.95
   }
   return undefined
@@ -1273,7 +1273,7 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
   }
   */
 
-  if (model.providerID === "moonshotai" || model.api.id.toLowerCase().includes("kimi")) {
+  if (model.providerID === "moonshotai" || model.providerID === "kimi-for-coding" || model.api.id.toLowerCase().includes("kimi")) {
     const sanitizeMoonshot = (obj: unknown): unknown => {
       if (obj === null || typeof obj !== "object") return obj
       if (Array.isArray(obj)) return obj.map(sanitizeMoonshot)
