@@ -2399,6 +2399,7 @@ async fn initialize(app: AppHandle) {
     });
 
     tracing::info!("Spawning sidecar on {url}");
+    startup_mark(&app, "native", "sidecar.spawn.start", Some(url.clone()), None);
     let mut fail = None::<String>;
     let health_check =
         match server::spawn_local_server(app.clone(), hostname.to_string(), port, password.clone())
@@ -2449,6 +2450,13 @@ async fn initialize(app: AppHandle) {
     // We only do this if the sqlite db doesn't exist, and we're expecting the sidecar to create it.
     // A separate loading window is shown for long migrations.
     let needs_migration = !sqlite_file_exists();
+    startup_mark(
+        &app,
+        "native",
+        "sqlite.gate",
+        Some(if needs_migration { "waiting" } else { "skipped" }.to_string()),
+        None,
+    );
     let sqlite_done = (needs_migration && fail.is_none()).then(|| {
         tracing::info!(
             path = %opencode_db_path().expect("failed to get db path").display(),
@@ -2495,9 +2503,12 @@ async fn initialize(app: AppHandle) {
         } else {
             startup_mark(&app, "native", "sqlite.ready", None, None);
         }
+    } else {
+        startup_mark(&app, "native", "sqlite.ready", Some("skipped".to_string()), None);
     }
 
     tracing::info!("Showing main window after sqlite gating");
+    startup_mark(&app, "native", "main_window.showing", None, None);
 
     // The window-state plugin can restore the main window onto a stale monitor
     // during startup. The loading window consistently appears on the visible
@@ -2537,6 +2548,8 @@ async fn initialize(app: AppHandle) {
 
     if health_check.is_some() {
         startup_mark(&app, "native", "health.waiting", None, None);
+    } else {
+        startup_mark(&app, "native", "health.ready", Some("skipped".to_string()), None);
     }
     if let Some(health_check) = health_check {
         match wait_health(health_check).await {

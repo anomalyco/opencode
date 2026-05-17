@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Privacy usage descriptions for user directory access.
+         OpenCode is a coding agent that reads, edits, and watches files in
+         the user's project directory, which may be located in any of these
+         protected macOS folders. -->
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>OpenCode needs access to the Desktop folder to read, edit, and watch project files located there.</string>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>OpenCode needs access to the Documents folder to read, edit, and watch project files located there.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>OpenCode needs access to the Downloads folder to read, edit, and watch project files located there.</string>
+    <key>NSMusicFolderUsageDescription</key>
+    <string>OpenCode needs access to the Music folder to read, edit, and watch project files located there.</string>
+    <key>NSPicturesFolderUsageDescription</key>
+    <string>OpenCode needs access to the Pictures folder to read, edit, and watch project files located there.</string>
+</dict>
+</plist>
