@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "python3 .github/copilot/hooks/session-start.py",
+        "timeout": 10
+      }
+    ]
+  }
+}
