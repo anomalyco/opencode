@@ -44,7 +44,7 @@ body:
     attributes:
       label: スクリーンショット / シェアリンク
       description: "`/share` を実行してシェアリンクを取得するか、スクリーンショットを貼り付けてください"
-      placeholder: リンストを貼り付けか、スクリーンショットをドラッグ＆ドロップ
+      placeholder: リンクを貼り付けか、スクリーンショットをドラッグ＆ドロップ
     validations:
       required: false
 
