@@ -75,8 +75,7 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
     messageID: userMessage.info.id,
     sessionID: userMessage.info.sessionID,
     type: "text",
-    text: PLAN_MODE.replace(
-      "${planInfo}",
+    text: PLAN_MODE.replace("${planInfo}", () =>
       exists
         ? `A plan file already exists at ${plan}. You can read it and make incremental edits using the edit tool.`
         : `No plan file exists yet. You should create your plan at ${plan} using the write tool.`,
