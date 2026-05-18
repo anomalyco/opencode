@@ -1,0 +1,1 @@
+{"version":3,"file":"has-magic.d.ts","sourceRoot":"","sources":["../../src/has-magic.ts"],"names":[],"mappings":"AACA,OAAO,EAAE,WAAW,EAAE,MAAM,WAAW,CAAA;AAEvC;;;;;;;;;;GAUG;AACH,eAAO,MAAM,QAAQ,YACV,MAAM,GAAG,MAAM,EAAE,YACjB,WAAW,KACnB,OAQF,CAAA"}

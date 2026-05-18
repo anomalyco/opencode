@@ -7,7 +7,7 @@
    - 编辑 config\opencode.json 文件
    - 将 YOUR_LLM_SERVER:8080/v1 替换为真实大模型服务地址
    - 将 your-model-name 替换为实际模型名称
-   - 设置接口密钥: set ENTERPRISE_API_KEY=sk-your-key-here（run.bat里去掉注释或者修改opencode.json）
+   - 设置接口密钥: set ENTERPRISE_API_KEY=sk-your-key-here（lingxicode.bat和lingxicode-harness.bat里修改后去掉注释或修改opencode.json）
 2. 双击 lingxicode.bat（基础功能） 或 lingxicode-harness.bat（加载Harness功能） 启动
 
 环境变量说明
@@ -26,7 +26,8 @@
 --------------------
 bin/opencode.exe       - CLI 主程序（含 Bun 运行时 + 内嵌解析器）
 parsers/               - tree-sitter 离线解析器（外置备用）
-lingxicode.bat         - 快速启动脚本
+lingxicode.bat         - 快速启动脚本（基础功能）
+lingxicode-harness.bat - 快速启动脚本（加载Harness功能）
 config/                - 配置目录（包含配置文件、插件、skills等）
 
 日志

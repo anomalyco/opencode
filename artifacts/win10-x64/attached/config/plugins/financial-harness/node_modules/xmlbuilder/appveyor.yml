@@ -1,0 +1,20 @@
+environment:
+  matrix:
+    - nodejs_version: "4"
+    - nodejs_version: "5"
+    - nodejs_version: "6"
+    - nodejs_version: "8"
+    - nodejs_version: "10"
+    - nodejs_version: "" # latest
+
+install:
+  - ps: "Install-Product node $env:nodejs_version"
+  - "npm install"
+
+test_script:
+  - "node --version"
+  - "npm --version"
+  - "npm test"
+
+build: off
+
