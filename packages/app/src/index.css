@@ -95,11 +95,6 @@
     animation: sidebar-session-loading-sheen 1.8s linear infinite;
   }
 
-  .genericagent-refresh-icon-spin {
-    transform-origin: center;
-    animation: genericagent-refresh-icon-spin 0.7s linear infinite;
-  }
-
   [data-component="project-icon-loading"] [data-slot="sheen"] {
     background: linear-gradient(
       110deg,
@@ -380,12 +375,6 @@
   @keyframes sidebar-session-loading-sheen {
     to {
       transform: translateX(140%);
-    }
-  }
-
-  @keyframes genericagent-refresh-icon-spin {
-    to {
-      transform: rotate(360deg);
     }
   }
 }
