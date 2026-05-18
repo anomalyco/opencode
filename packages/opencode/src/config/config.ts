@@ -703,7 +703,11 @@ export const layer = Layer.effect(
         }
 
         if (Flag.OPENCODE_PERMISSION) {
-          result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
+          try {
+            result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
+          } catch {
+            Log.warn("OPENCODE_PERMISSION contains invalid JSON, skipping")
+          }
         }
 
         if (result.tools) {
