@@ -129,9 +129,6 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
       monthlyUsage: currentUsagePreview(current.monthlyUsage),
     } satisfies GoReferralUsagePreview
   })
-  const appliedCount = createMemo(() => props.summary.rewards.filter((reward) => reward.timeApplied).length)
-  const earnedCount = createMemo(() => props.summary.rewards.filter((reward) => reward.status !== "pending").length)
-
   createEffect(() => {
     const reward = selected()
     if (!reward) {
@@ -188,18 +185,8 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
             <li>{i18n.t("workspace.referral.instructions.share")}</li>
             <li>{i18n.t("workspace.referral.instructions.subscribe")}</li>
             <li>{i18n.t("workspace.referral.instructions.claim")}</li>
-            <li>{i18n.t("workspace.referral.instructions.apply", { amount: formatCurrency(props.summary.rewardAmount) })}</li>
           </ol>
         </div>
-      </div>
-      <div data-slot="rewards-title">
-        <h2>{i18n.t("workspace.referral.rewards.title")}</h2>
-        <p>
-          {i18n.t("workspace.referral.rewards.subtitle", {
-            applied: appliedCount(),
-            total: earnedCount(),
-          })}
-        </p>
       </div>
       <Show
         when={props.summary.rewards.length > 0}
@@ -240,9 +227,11 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
                           <Show when={!applied} fallback={i18n.t("workspace.referral.reward.status.applied")}>
                             {pending
                               ? i18n.t(rewardPendingStatusKey(reward.source))
-                              : props.summary.hasActiveGo
-                                ? i18n.t("workspace.referral.apply.action")
-                                : i18n.t("workspace.referral.apply.noGo")}
+                              : props.summary.hasActiveGo && !submission.pending
+                                ? i18n.t("workspace.referral.apply.preview")
+                                : props.summary.hasActiveGo
+                                  ? i18n.t("workspace.referral.apply.action")
+                                  : i18n.t("workspace.referral.apply.noGo")}
                           </Show>
                         </button>
                       </td>
