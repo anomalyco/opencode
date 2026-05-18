@@ -25,7 +25,10 @@ type Row = {
 
 function cleanInput(value: string) {
   const first = (value ?? "").split(/\r?\n/)[0] ?? ""
-  return first.replace(/[\u0000-\u001F\u007F]/g, "").trim()
+  return first
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .trim()
+    .replaceAll("\\", "/")
 }
 
 function normalizePath(input: string) {
@@ -339,7 +342,11 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
           group.category === "recent" ? language.t("home.recentProjects") : language.t("command.project.open")
         }
         ref={(r) => (list = r)}
-        onFilter={(value) => setFilter(cleanInput(value))}
+        onFilter={(value) => {
+          const cleaned = cleanInput(value)
+          setFilter(cleaned)
+          if (value !== cleaned) list?.setFilter(cleaned)
+        }}
         onKeyEvent={(e, item) => {
           if (e.key !== "Tab") return
           if (e.shiftKey) return
