@@ -171,7 +171,7 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
         <div data-slot="referral-stats">
           <div>
             <span>{i18n.t("workspace.referral.stats.invites")}</span>
-            <strong>{props.summary.validInviteCount}</strong>
+            <strong>{props.summary.inviteCount}</strong>
           </div>
           <div>
             <span>{i18n.t("workspace.referral.stats.earned")}</span>

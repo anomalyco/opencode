@@ -151,18 +151,19 @@ export namespace Referral {
           timeApplied: null,
         })),
     ]
+    const allRewards = [...pending, ...rewards].sort(
+      (a, b) => new Date(b.timeCreated).getTime() - new Date(a.timeCreated).getTime(),
+    )
     return {
       inviteCode: code.code,
-      validInviteCount: rows.invites.length,
+      inviteCount: allRewards.length,
       hasActiveGo: !!rows.lite,
       rewardAmount: microCentsToCents(REWARD_AMOUNT),
       totalEarned: rewards.reduce((total, reward) => total + reward.amount, 0),
       totalApplied: rewards
         .filter((reward) => reward.timeApplied)
         .reduce((total, reward) => total + reward.amount, 0),
-      rewards: [...pending, ...rewards].sort(
-        (a, b) => new Date(b.timeCreated).getTime() - new Date(a.timeCreated).getTime(),
-      ),
+      rewards: allRewards,
     }
   })
 
