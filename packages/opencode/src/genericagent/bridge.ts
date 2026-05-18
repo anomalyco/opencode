@@ -845,9 +845,17 @@ export namespace GenericAgentBridge {
 
         if (existing.time.updated !== info.time.updated || existing.title !== info.title) {
           sessions.set(info.id, info)
-          messages.delete(info.id)
+          const history = emitEvents ? await shim.getHistoryMessages(info.id) : undefined
+          const updatedMessages = history ? historyMessagesToBridge(info.id, info.time.updated, history) : undefined
+          if (updatedMessages) messages.set(info.id, updatedMessages)
+          if (!updatedMessages) messages.delete(info.id)
           updated++
-          if (emitEvents) emit({ type: "session.updated", properties: { info } })
+          if (emitEvents) {
+            emit({ type: "session.updated", properties: { info } })
+            if (updatedMessages) {
+              emit({ type: "message.list.updated", properties: { sessionID: info.id, messages: updatedMessages } })
+            }
+          }
         }
       }
 
