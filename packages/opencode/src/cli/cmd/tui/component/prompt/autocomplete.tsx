@@ -6,6 +6,7 @@ import { firstBy } from "remeda"
 import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useEditorContext } from "@tui/context/editor"
+import { useProject } from "@tui/context/project"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -85,6 +86,7 @@ export function Autocomplete(props: {
   const editor = useEditorContext()
   const sdk = useSDK()
   const sync = useSync()
+  const project = useProject()
   const command = useCommandPalette()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
@@ -382,6 +384,7 @@ export function Autocomplete(props: {
       // Get files from SDK
       const result = await sdk.client.find.files({
         query: baseQuery,
+        workspace: project.workspace.current(),
       })
 
       const options: AutocompleteOption[] = []

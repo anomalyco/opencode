@@ -67,6 +67,10 @@ Repeated setup work, long sleeps/timeouts, serial integration tests, filesystem/
 | Remaining prompt behavior tests mostly do not require repository state                                    | Removed git setup from safe loop/reference/error fixtures; restored shell queue/cancel cases   | 23.400s   | 19.610s | keep     | Safety review found shell runner readiness depends on git-backed setup in several tests; current single rerun passes.       |
 | Session processor effect tests do not require repository state                                            | Removed git setup from all processor-effect temp server fixtures                               | 12.500s   | 9.230s  | keep     | Two targeted reruns passed after the change: 9.61s, 9.23s.                                                                  |
 | HTTP listen PTY ticket tests restart the same listener topology twice                                     | Folded directory-scoped ticket regression into the broader unsafe-ticket test                  | 7.051s    | 6.170s  | keep     | Two targeted reruns passed after the change: 6.76s, 6.17s; still covers mint failure and successful same-directory upgrade. |
+| File watcher readiness can write before async native subscriptions are active                             | Retried short readiness writes and accepted symlink-realpath HEAD events                       | failed    | 4.62s   | keep     | Three sequential focused watcher runs passed: 4.62s, 4.57s, 4.64s; full suite no longer failed in `watcher.test.ts`.        |
+| First provider config/env/filtering block can use Effect-aware instance fixtures                          | Migrated six `tmpdir` + `withTestInstance` cases to `it.instance`                              | 6.06s     | 6.07s   | keep     | Neutral timing, but removes manual config file writes and instance plumbing; use as the pattern for later provider slices.  |
+| Custom provider/model config cases can use Effect-aware instance fixtures                                 | Migrated three more config-heavy provider cases to `it.instance`                               | 6.07s     | 6.12s   | keep     | Neutral timing within noise, but continues removing manual config file writes on top of the first provider fixture PR.      |
+| Provider env precedence and model lookup cases can use Effect-aware instance fixtures                     | Migrated four more provider lookup/default-model cases to `it.instance`                        | 6.12s     | 6.36s   | keep     | Noisy 5-run median; kept as a small stacked cleanup slice but do not claim speedup from this migration.                     |
 
 ## Profiling Results
 
@@ -107,11 +111,12 @@ Targeted 3-run baselines:
 
 Full-suite sanity checks:
 
-| Command              |   Result | Notes                                                                |
-| -------------------- | -------: | -------------------------------------------------------------------- |
-| `bun run bench:test` | 225.069s | Before continuing prompt/session work.                               |
-| `bun run bench:test` | 186.729s | After prompt, processor, and PTY wins before safety review restores. |
-| `bun run bench:test` | 202.317s | After restoring prompt shell coverage and SDK VCS parity coverage.   |
+| Command              |   Result | Notes                                                                                                                                           |
+| -------------------- | -------: | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run bench:test` | 225.069s | Before continuing prompt/session work.                                                                                                          |
+| `bun run bench:test` | 186.729s | After prompt, processor, and PTY wins before safety review restores.                                                                            |
+| `bun run bench:test` | 202.317s | After restoring prompt shell coverage and SDK VCS parity coverage.                                                                              |
+| `bun run bench:test` |   failed | Watcher blocker cleared; current run later failed in focused-passing `tool/skill.test.ts` and prompt shell timeout cases under full-suite load. |
 
 ## Dead Ends
 
