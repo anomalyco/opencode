@@ -112,9 +112,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
-type Requirements = AppFileSystem.Service | HttpClient.HttpClient
-
-export const layer: Layer.Layer<Service, never, Requirements> = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
