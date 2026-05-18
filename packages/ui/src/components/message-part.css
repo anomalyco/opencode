@@ -935,7 +935,7 @@
     gap: 6px;
     margin-top: 12px;
     padding: 1px 1px 8px;
-    flex: 1;
+    flex-shrink: 0;
     min-height: 0;
     overflow-y: auto;
     scrollbar-width: none;
