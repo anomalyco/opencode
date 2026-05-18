@@ -1600,7 +1600,11 @@ export const layer = Layer.effect(
           }
           const maxSteps = agent.steps ?? Infinity
           const isLastStep = step >= maxSteps
-          msgs = yield* SessionReminders.apply({ messages: msgs, agent, session })
+          msgs = yield* SessionReminders.apply({ messages: msgs, agent, session }).pipe(
+            Effect.provideService(RuntimeFlags.Service, flags),
+            Effect.provideService(AppFileSystem.Service, fsys),
+            Effect.provideService(Session.Service, sessions),
+          )
 
           const msg: MessageV2.Assistant = {
             id: MessageID.ascending(),
