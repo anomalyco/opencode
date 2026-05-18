@@ -1,6 +1,6 @@
 import { Referral } from "@opencode-ai/console-core/referral.js"
 
-const INVITE_COOKIE = "opencode.go.invite"
+const INVITE_COOKIE = "oc_referral"
 const INVITE_MAX_AGE = 60 * 60 * 24 * 30
 
 export function normalizeInviteCode(code?: string | null) {
