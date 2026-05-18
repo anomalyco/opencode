@@ -35,6 +35,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 
 import type { Provider } from "@/provider/provider"
+import { Plugin } from "../plugin"
 import { Permission } from "@/permission"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Option, Context, Schema, Types } from "effect"
@@ -621,6 +622,15 @@ export const layer: Layer.Layer<
 
     const updatePart = <T extends MessageV2.Part>(part: T): Effect.Effect<T> =>
       Effect.gen(function* () {
+        const pluginOpt = yield* Effect.serviceOption(Plugin.Service)
+        if (Option.isSome(pluginOpt)) {
+          const output = yield* pluginOpt.value.trigger("experimental.message.store.before", {
+            sessionID: part.sessionID,
+            messageID: part.messageID,
+            partID: part.id,
+          }, { part })
+          part = output.part as T
+        }
         yield* sync.run(MessageV2.Event.PartUpdated, {
           sessionID: part.sessionID,
           part: structuredClone(part),

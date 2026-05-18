@@ -330,4 +330,17 @@ export interface Hooks {
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  /**
+   * Called before a message part is persisted to the database.
+   * Allows plugins to redact or transform part data before it hits disk.
+   *
+   * - `part`: The mutable part object about to be stored. Modify its fields
+   *   (e.g. `part.text`, `part.state.output`) to change what is persisted.
+   *
+   * Use cases: PII/secret redaction at rest, content filtering, audit logging.
+   */
+  "experimental.message.store.before"?: (
+    input: { sessionID: string; messageID: string; partID: string },
+    output: { part: Part },
+  ) => Promise<void>
 }
