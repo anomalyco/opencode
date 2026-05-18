@@ -18,6 +18,7 @@ import { ShellID } from "./shell/id"
 
 import * as Truncate from "./truncate"
 import { Plugin } from "@/plugin"
+import { OPENCODE_SESSION_ID } from "@opencode-ai/core/util/opencode-process"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { ShellPrompt, type Parameters } from "./shell/prompt"
@@ -418,6 +419,7 @@ export const ShellTool = Tool.define(
       return {
         ...process.env,
         ...extra.env,
+        [OPENCODE_SESSION_ID]: ctx.sessionID,
       }
     })
 
