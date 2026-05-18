@@ -10,8 +10,10 @@ import { Store } from "../src/store"
 const tenantHdr = "x-e2e-univer-tenant"
 const testTenantResolver = headerSessionResolver(tenantHdr, assertSafeUserSegment)
 
+const isoProj = "iso-p1"
+
 function hdr(user: string) {
-  return { [tenantHdr]: user }
+  return { [tenantHdr]: user, "x-veritly-project-id": isoProj }
 }
 
 function minimalXlsx() {
@@ -54,7 +56,7 @@ describe("presign + in-memory per-request tenant (auth-shared headerSessionResol
     const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), testTenantResolver)
     const r = await app.request("http://127.0.0.1/universer-api/stream/file/presign-upload", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-veritly-project-id": isoProj },
       body: JSON.stringify({ size: 10, contentType: ct }),
     })
     expect(r.status).toBe(401)

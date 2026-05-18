@@ -8,7 +8,14 @@ export { BlobMissing, exchangeFilesFromEnv, type ExchangeFileBackend, S3Exchange
 export { MemoryExchangeFiles } from "./memory-exchange-files"
 export { resolverAuthenticator, workosCompatResolver, type CompatAuthenticator } from "./compat-authenticator"
 export { isUniverCompatPublicPath } from "./compat-public-path"
-export { unitBundleKey, unitBundlesPrefix, exchangeUploadKey, assertSafeUserSegment } from "./object-keys"
+export {
+  unitBundleKey,
+  unitBundlesPrefix,
+  exchangeUploadKey,
+  assertSafeUserSegment,
+  assertSafeProjectSegment,
+} from "./object-keys"
+export { runWithRequestProject, runWithRequestProjectAsync, requireRequestProjectId } from "./request-project"
 export { applyMutationsToSnapshotJson } from "./apply-mutations"
 export { commitDrawingPluginInWorkbook, parseDrawingResourceBlob, parseWorkbookWire } from "./drawing-plugin-normalize"
 export { createCompatApp, Store, unitStateKey }

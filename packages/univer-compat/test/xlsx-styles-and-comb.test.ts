@@ -1,4 +1,4 @@
-import { auth } from "./setup-compat-auth"
+import { auth, projHdr } from "./setup-compat-auth"
 import { describe, expect, test } from "bun:test"
 import ExcelJS from "exceljs"
 import { createCompatApp } from "../src/app"
@@ -54,7 +54,7 @@ describe("exchange import keeps styles in stored snapshot JSON", () => {
     const fileId = await exchangePresignPut(app, buf)
     const ir = await app.request("http://127.0.0.1/universer-api/exchange/2/import", {
       method: "POST",
-      headers: { "Content-Type": "application/json;charset=UTF-8" },
+      headers: { "Content-Type": "application/json;charset=UTF-8", ...projHdr },
       body: JSON.stringify({
         fileID: fileId,
         outputType: 1,
@@ -64,13 +64,17 @@ describe("exchange import keeps styles in stored snapshot JSON", () => {
     })
     expect(ir.status).toBe(200)
     const imp = (await ir.json()) as { taskID: string }
-    const tr = await app.request(`http://127.0.0.1/universer-api/exchange/task/${imp.taskID}`)
+    const tr = await app.request(`http://127.0.0.1/universer-api/exchange/task/${imp.taskID}`, {
+      headers: { ...projHdr },
+    })
     expect(tr.status).toBe(200)
     const task = (await tr.json()) as { status: string; import: { unitID: string } }
     expect(task.status).toBe("done")
     const unitID = task.import.unitID
 
-    const rev = await app.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`)
+    const rev = await app.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`, {
+      headers: { ...projHdr },
+    })
     expect(rev.status).toBe(200)
     const body = (await rev.json()) as {
       snapshot: {
@@ -98,19 +102,21 @@ describe("exchange import keeps styles in stored snapshot JSON", () => {
     const fid = await exchangePresignPut(app0, buf)
     const ir = await app0.request("http://127.0.0.1/universer-api/exchange/2/import", {
       method: "POST",
-      headers: { "Content-Type": "application/json;charset=UTF-8" },
+      headers: { "Content-Type": "application/json;charset=UTF-8", ...projHdr },
       body: JSON.stringify({ fileID: fid, outputType: 1, minSheetColumnCount: 1, minSheetRowCount: 1 }),
     })
     const tid = ((await ir.json()) as { taskID: string }).taskID
-    await app0.request(`http://127.0.0.1/universer-api/exchange/task/${tid}`)
-    const t1 = (await (await app0.request(`http://127.0.0.1/universer-api/exchange/task/${tid}`)).json()) as {
+    await app0.request(`http://127.0.0.1/universer-api/exchange/task/${tid}`, { headers: { ...projHdr } })
+    const t1 = (await (await app0.request(`http://127.0.0.1/universer-api/exchange/task/${tid}`, { headers: { ...projHdr } })).json()) as {
       import: { unitID: string }
     }
     const unitID = t1.import.unitID
 
     const s1 = new Store(mem, 1)
     const app1 = createCompatApp(s1, auth)
-    const load = await app1.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`)
+    const load = await app1.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`, {
+      headers: { ...projHdr },
+    })
     expect(load.status).toBe(200)
     const j = (await load.json()) as { snapshot: { workbook: { styles: Record<string, unknown> } } }
     expect(Object.keys(j.snapshot.workbook.styles).length).toBeGreaterThan(0)
@@ -134,17 +140,19 @@ describe("comb new_changes and snapshot changeset", () => {
     const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), auth)
     const cr = await app.request("http://127.0.0.1/universer-api/snapshot/2/unit/-/create", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...projHdr },
       body: JSON.stringify({ type: 2, name: "Sheet", creator: "t" }),
     })
     const { unitID } = (await cr.json()) as { unitID: string }
-    const snap = await app.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`)
+    const snap = await app.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`, {
+      headers: { ...projHdr },
+    })
     const snapBody = (await snap.json()) as { snapshot: { workbook: { sheetOrder: string[] } } }
     const sheet = snapBody.snapshot.workbook.sheetOrder[0]
 
     const comb = await app.request(`http://127.0.0.1/universer-api/comb/2/unit/${unitID}/new_changes`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...projHdr },
       body: JSON.stringify({
         unitID,
         memberID: "m1",
@@ -161,7 +169,9 @@ describe("comb new_changes and snapshot changeset", () => {
     const ack = (await comb.json()) as { revision: number }
     expect(ack.revision).toBe(1)
 
-    const rev = await app.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`)
+    const rev = await app.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`, {
+      headers: { ...projHdr },
+    })
     const body = (await rev.json()) as {
       snapshot: { workbook: { sheets: Record<string, { cellData?: Record<string, Record<string, { v?: unknown }>> }> } }
       latestRevision: number
@@ -177,13 +187,13 @@ describe("comb new_changes and snapshot changeset", () => {
     const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), auth)
     const cr = await app.request("http://127.0.0.1/universer-api/snapshot/2/unit/-/create", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...projHdr },
       body: JSON.stringify({ type: 2, name: "Sheet", creator: "t" }),
     })
     const { unitID } = (await cr.json()) as { unitID: string }
     const comb = await app.request(`http://127.0.0.1/universer-api/comb/2/unit/${unitID}/new_changes`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...projHdr },
       body: JSON.stringify({
         unitID,
         memberID: "m1",
@@ -203,17 +213,19 @@ describe("comb new_changes and snapshot changeset", () => {
     const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), auth)
     const cr = await app.request("http://127.0.0.1/universer-api/snapshot/2/unit/-/create", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...projHdr },
       body: JSON.stringify({ type: 2, name: "Sheet", creator: "t" }),
     })
     const { unitID } = (await cr.json()) as { unitID: string }
-    const snap = await app.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`)
+    const snap = await app.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`, {
+      headers: { ...projHdr },
+    })
     const sheet = ((await snap.json()) as { snapshot: { workbook: { sheetOrder: string[] } } }).snapshot.workbook
       .sheetOrder[0]
 
     const cs = await app.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/changeset`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...projHdr },
       body: JSON.stringify({
         baseRev: 0,
         memberID: "m2",
@@ -226,7 +238,9 @@ describe("comb new_changes and snapshot changeset", () => {
     })
     expect(cs.status).toBe(200)
 
-    const rev = await app.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`)
+    const rev = await app.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`, {
+      headers: { ...projHdr },
+    })
     const wb = (await rev.json()) as {
       snapshot: { workbook: { sheets: Record<string, { cellData?: Record<string, Record<string, { v?: unknown }>> }> } }
     }
@@ -237,13 +251,13 @@ describe("comb new_changes and snapshot changeset", () => {
     const app = createCompatApp(new Store(new MemoryExchangeFiles(), 1), auth)
     const cr = await app.request("http://127.0.0.1/universer-api/snapshot/2/unit/-/create", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...projHdr },
       body: JSON.stringify({ type: 2, name: "Sheet", creator: "t" }),
     })
     const { unitID } = (await cr.json()) as { unitID: string }
     const comb = await app.request(`http://127.0.0.1/universer-api/comb/2/unit/${unitID}/new_changes`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...projHdr },
       body: JSON.stringify({
         unitID,
         memberID: "m1",

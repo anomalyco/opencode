@@ -1,4 +1,4 @@
-import { auth } from "./setup-compat-auth"
+import { auth, projHdr } from "./setup-compat-auth"
 import { describe, expect, test } from "bun:test"
 import { createCompatApp } from "../src/app"
 import { Store } from "../src/store"
@@ -19,7 +19,7 @@ describe("maybePersistUnit cadence", () => {
     const app = createCompatApp(store, auth)
     const cr = await app.request("http://127.0.0.1/universer-api/snapshot/2/unit/-/create", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...projHdr },
       body: JSON.stringify({ type: 2, name: "Sheet", creator: "t" }),
     })
     const { unitID } = (await cr.json()) as { unitID: string }
@@ -28,7 +28,7 @@ describe("maybePersistUnit cadence", () => {
     const bump = (base: number) =>
       app.request(`http://127.0.0.1/universer-api/comb/2/unit/${unitID}/new_changes`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...projHdr },
         body: JSON.stringify({
           unitID,
           memberID: "x",

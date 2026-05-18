@@ -6,10 +6,25 @@ import { UniverInstanceType } from "@univerjs/core"
 import type { FUniver } from "@univerjs/core/facade"
 import type { PushCombMutationsInput, PushSetRangeInput, UniverHostApi } from "@opencode-ai/univer-sdk"
 
-async function pollImportUnit(base: string, taskID: string) {
+const PROJECT_HDR = "x-veritly-project-id"
+
+function projectId(get: () => string): string {
+  const p = get().trim()
+  if (!p) throw new Error("missing Univer project id")
+  return p
+}
+
+function withProject(get: () => string, headers?: HeadersInit): HeadersInit {
+  const h = new Headers(headers)
+  h.set(PROJECT_HDR, projectId(get))
+  return h
+}
+
+async function pollImportUnit(base: string, taskID: string, getProjectId: () => string) {
   for (let i = 0; i < 200; i++) {
     const r = await fetch(`${base}/universer-api/exchange/task/${encodeURIComponent(taskID)}`, {
       credentials: "include",
+      headers: withProject(getProjectId),
     })
     if (!r.ok) throw new Error(`task poll ${r.status}`)
     const j = (await r.json()) as {
@@ -25,10 +40,13 @@ async function pollImportUnit(base: string, taskID: string) {
 
 export type UniverPersistedUnitRow = { id: string; name: string }
 
-/** Lists persisted sheet units for the signed-in user (S3-backed bundles on the compat server). */
-export async function listPersistedUniverUnits(base: string): Promise<UniverPersistedUnitRow[]> {
+/** Lists persisted sheet units for the signed-in user within the given OpenCode project (S3-backed). */
+export async function listPersistedUniverUnits(base: string, getProjectId: () => string): Promise<UniverPersistedUnitRow[]> {
   const b = base.replace(/\/$/, "")
-  const r = await fetch(`${b}/universer-api/veritly/units`, { credentials: "include" })
+  const r = await fetch(`${b}/universer-api/veritly/units`, {
+    credentials: "include",
+    headers: withProject(getProjectId),
+  })
   if (!r.ok) throw new Error(`veritly units ${r.status}`)
   const j = (await r.json()) as { units?: unknown }
   const rows = j.units
@@ -45,7 +63,7 @@ export async function listPersistedUniverUnits(base: string): Promise<UniverPers
 }
 
 /** Upload xlsx: presign PUT to private bucket, then universer exchange import → unit id. */
-export async function primitiveImportXlsx(base: string, file: File) {
+export async function primitiveImportXlsx(base: string, file: File, getProjectId: () => string) {
   const buf = new Uint8Array(await file.arrayBuffer())
   const rawCt = file.type.trim()
   const ct =
@@ -55,7 +73,7 @@ export async function primitiveImportXlsx(base: string, file: File) {
   const pr = await fetch(`${base}/universer-api/stream/file/presign-upload`, {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers: withProject(getProjectId, { "Content-Type": "application/json" }),
     body: JSON.stringify({ size: buf.byteLength, contentType: ct }),
   })
   if (!pr.ok) throw new Error(`presign upload failed: ${pr.status}`)
@@ -76,7 +94,7 @@ export async function primitiveImportXlsx(base: string, file: File) {
   const ir = await fetch(`${base}/universer-api/exchange/2/import`, {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": "application/json;charset=UTF-8" },
+    headers: withProject(getProjectId, { "Content-Type": "application/json;charset=UTF-8" }),
     body: JSON.stringify({
       fileID: fid,
       outputType: 1,
@@ -87,13 +105,20 @@ export async function primitiveImportXlsx(base: string, file: File) {
   if (!ir.ok) throw new Error(`exchange import failed: ${ir.status}`)
   const imp = (await ir.json()) as { taskID?: string }
   if (!imp.taskID) throw new Error("import returned no taskID")
-  return pollImportUnit(base, imp.taskID)
+  return pollImportUnit(base, imp.taskID, getProjectId)
 }
 
 /** Fetch snapshot from universer and mount as the active sheet unit. Returns server revision for comb `baseRev` tracking. */
-export async function primitiveLoadServerUnit(api: FUniver, univer: Univer, base: string, unitId: string, unitType: number) {
+export async function primitiveLoadServerUnit(
+  api: FUniver,
+  univer: Univer,
+  base: string,
+  unitId: string,
+  unitType: number,
+  getProjectId: () => string,
+) {
   const url = `${base}/universer-api/snapshot/${unitType}/unit/${encodeURIComponent(unitId)}/rev/0`
-  const res = await fetch(url, { credentials: "include" })
+  const res = await fetch(url, { credentials: "include", headers: withProject(getProjectId) })
   if (!res.ok) throw new Error(`snapshot GET ${res.status}`)
   const body = (await res.json()) as {
     snapshot?: { workbook?: Partial<IWorkbookData> }
@@ -140,6 +165,7 @@ export function augmentVeritlyHost(
   api: FUniver,
   univer: Univer,
   universerBase: string,
+  getProjectId: () => string,
   opts?: { combDebounceMs?: number },
 ): UniverHostApi {
   const base = universerBase.replace(/\/$/, "")
@@ -155,7 +181,7 @@ export function augmentVeritlyHost(
       {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: withProject(getProjectId, { "Content-Type": "application/json" }),
         body: JSON.stringify({
           unitID: input.unitId,
           memberID: member,
@@ -213,9 +239,9 @@ export function augmentVeritlyHost(
   }
 
   return Object.assign(api, {
-    importXLSXToUnitIdAsync: (file: File) => primitiveImportXlsx(base, file),
+    importXLSXToUnitIdAsync: (file: File) => primitiveImportXlsx(base, file, getProjectId),
     loadServerUnit: async (unitId: string, unitType: number) => {
-      const r = await primitiveLoadServerUnit(api, univer, base, unitId, unitType)
+      const r = await primitiveLoadServerUnit(api, univer, base, unitId, unitType, getProjectId)
       head.set(combKey(base, unitId), r)
       return r
     },

@@ -351,7 +351,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       if (!dir) return
       const baseUrl = universerBase()
       if (!baseUrl) return
-      void listPersistedUniverUnits(baseUrl)
+      void listPersistedUniverUnits(baseUrl, () => dir)
         .then((units) => {
           if (scope() !== dir) return
           const dirty = new Set<string>()

@@ -1,15 +1,17 @@
 import { expect } from "bun:test"
 import type { Hono } from "hono"
+import { projHdr } from "../setup-compat-auth"
 
 /** Authenticated universer presign + PUT (memory or real S3), returns `FileId`. */
 export async function exchangePresignPut(
   app: Hono,
   buf: Uint8Array,
   contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  hdr: Record<string, string> = { ...projHdr },
 ) {
   const pr = await app.request("http://127.0.0.1/universer-api/stream/file/presign-upload", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...hdr },
     body: JSON.stringify({ size: buf.byteLength, contentType }),
   })
   expect(pr.status).toBe(200)
@@ -21,7 +23,7 @@ export async function exchangePresignPut(
   if (uploadUrl.includes("/_memory_exchange_put/")) {
     const put = await app.request(uploadUrl, {
       method: "PUT",
-      headers: hdrs,
+      headers: { ...hdrs, ...hdr },
       body: Buffer.from(buf),
     })
     expect(put.status).toBeGreaterThanOrEqual(200)

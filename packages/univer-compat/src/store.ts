@@ -5,15 +5,17 @@ import { bumpSnapshotRevOnly, defaultWorkbook, migrateWorkbookInSnapshotRoot } f
 import { isSnapshotSave, mutationsFromChangeset } from "./changeset"
 import { xlsxToWorkbookJson } from "./xlsx-import"
 import { exchangeUploadKey, unitBundleKey, unitBundlesPrefix } from "./object-keys"
+import { exchangePresignActor } from "./presign-actor"
 import { requireRequestUserId } from "./request-user"
+import { requireRequestProjectId } from "./request-project"
 
 function plain(o: unknown): o is Record<string, unknown> {
   return o !== null && typeof o === "object" && !Array.isArray(o)
 }
 
 /** @deprecated use `unitBundleKey` from `./object-keys` */
-export function unitStateKey(userId: string, unitID: string) {
-  return unitBundleKey(userId, unitID)
+export function unitStateKey(userId: string, projectId: string, unitID: string) {
+  return unitBundleKey(userId, projectId, unitID)
 }
 
 export type Unit = {
@@ -77,7 +79,7 @@ function snapshotRowAtOrBefore(rs: SnapshotRow[], rev: number) {
 
 /**
  * Holds unit state in RAM for the process lifetime: every revision appends a full `snapshot` JSON string
- * plus changeset rows. Hydrate loads the per-user unit bundle from S3 (`unitBundleKey`). Persist cadence
+ * plus changeset rows. Hydrate loads the per-project unit bundle from S3 (`unitBundleKey`). Persist cadence
  * (`maybePersistUnit`) does not trim RAM — only how often the bundle is written to object storage.
  */
 export class Store {
@@ -89,7 +91,7 @@ export class Store {
   private readonly hydrateLocks = new Map<string, Promise<void>>()
 
   private hydrateLockKey(unitID: string) {
-    return `${requireRequestUserId()}:${unitID}`
+    return `${requireRequestUserId()}:${requireRequestProjectId()}:${unitID}`
   }
 
   constructor(
@@ -110,16 +112,16 @@ export class Store {
     const max = 32 << 20
     if (!Number.isFinite(size) || size < 0 || size > max) throw new Error("invalid size")
     const id = crypto.randomUUID()
-    const k = exchangeUploadKey(requireRequestUserId(), id)
+    const k = exchangeUploadKey(requireRequestUserId(), requireRequestProjectId(), id)
     const ttl = 300
-    const owner = requireRequestUserId()
+    const owner = exchangePresignActor()
     const signed = await this.blob.presignedPut(k, contentType, ttl, owner)
     return { FileId: id, url: signed.url, headers: signed.headers }
   }
 
   async presignedGetExchangeFile(fileID: string, ttlSec: number) {
-    const k = exchangeUploadKey(requireRequestUserId(), fileID)
-    const owner = requireRequestUserId()
+    const k = exchangeUploadKey(requireRequestUserId(), requireRequestProjectId(), fileID)
+    const owner = exchangePresignActor()
     return this.blob.presignedGet(k, ttlSec, owner)
   }
 
@@ -133,26 +135,27 @@ export class Store {
   }
 
   async saveFile(id: string, b: Uint8Array) {
-    await this.blob.put(exchangeUploadKey(requireRequestUserId(), id), b)
+    await this.blob.put(exchangeUploadKey(requireRequestUserId(), requireRequestProjectId(), id), b)
   }
 
   async fileExists(id: string) {
-    return this.blob.exists(exchangeUploadKey(requireRequestUserId(), id))
+    return this.blob.exists(exchangeUploadKey(requireRequestUserId(), requireRequestProjectId(), id))
   }
 
   async fileBytes(fileID: string) {
     try {
-      return await this.blob.get(exchangeUploadKey(requireRequestUserId(), fileID))
+      return await this.blob.get(exchangeUploadKey(requireRequestUserId(), requireRequestProjectId(), fileID))
     } catch (e: unknown) {
       if (e instanceof BlobMissing) throw new Missing()
       throw e
     }
   }
 
-  /** List persisted sheet units for the current user (S3 list + one GET per unit for display name). */
+  /** List persisted sheet units for the current user and project (S3 list + one GET per unit for display name). */
   async listPersistedSheetUnits(): Promise<{ id: string; name: string }[]> {
     const uid = requireRequestUserId()
-    const prefix = unitBundlesPrefix(uid)
+    const pj = requireRequestProjectId()
+    const prefix = unitBundlesPrefix(uid, pj)
     const keys = await this.blob.listKeysWithPrefix(prefix)
     const ids: string[] = []
     for (const k of keys) {
@@ -167,7 +170,7 @@ export class Store {
       ids.map(async (id): Promise<{ id: string; name: string } | undefined> => {
         let raw: Uint8Array
         try {
-          raw = await this.blob.get(unitBundleKey(uid, id))
+          raw = await this.blob.get(unitBundleKey(uid, pj, id))
         } catch (e: unknown) {
           if (e instanceof BlobMissing) return undefined
           throw e
@@ -199,7 +202,7 @@ export class Store {
     if (this.units.has(unitID)) return
     let raw: Uint8Array
     try {
-      raw = await this.blob.get(unitBundleKey(requireRequestUserId(), unitID))
+      raw = await this.blob.get(unitBundleKey(requireRequestUserId(), requireRequestProjectId(), unitID))
     } catch (e: unknown) {
       if (e instanceof BlobMissing) return
       throw e
@@ -222,7 +225,10 @@ export class Store {
       snapshots: snaps,
       changesets: this.changesets.get(unitID) ?? [],
     }
-    await this.blob.put(unitBundleKey(requireRequestUserId(), unitID), new TextEncoder().encode(JSON.stringify(bundle)))
+    await this.blob.put(
+      unitBundleKey(requireRequestUserId(), requireRequestProjectId(), unitID),
+      new TextEncoder().encode(JSON.stringify(bundle)),
+    )
   }
 
   createUnit(name: string, creator: string, typ: number) {

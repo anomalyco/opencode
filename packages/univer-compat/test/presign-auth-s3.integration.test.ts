@@ -5,16 +5,18 @@ import { GenericContainer, Network, Wait, type StartedTestContainer } from "test
 import * as XLSX from "xlsx"
 import { headerSessionResolver } from "@veritly/auth-shared"
 import { createCompatApp } from "../src/app"
-import { assertSafeUserSegment } from "../src/object-keys"
+import { assertSafeUserSegment, exchangeUploadKey } from "../src/object-keys"
 import { S3ExchangeFiles } from "../src/exchange-files"
 import { runWithRequestUserAsync } from "../src/request-user"
+import { runWithRequestProjectAsync } from "../src/request-project"
 import { Store } from "../src/store"
 
 const tenantHdr = "x-e2e-univer-tenant"
+const s3Proj = "s3-it-proj"
 const testTenantResolver = headerSessionResolver(tenantHdr, assertSafeUserSegment)
 
 function hdr(user: string) {
-  return { [tenantHdr]: user }
+  return { [tenantHdr]: user, "x-veritly-project-id": s3Proj }
 }
 
 const access = "veritlyminio"
@@ -120,10 +122,12 @@ test.skipIf(process.env.UNIVER_COMPAT_PRESIGN_S3_IT !== "1")(
       })
       expect(ir.status).toBe(404)
 
-      await runWithRequestUserAsync("s3-tenant-alpha", async () => {
-        const ok = await blob.exists(`u/s3-tenant-alpha/sheets/exchange/${j.FileId}`)
-        expect(ok).toBe(true)
-      })
+      await runWithRequestUserAsync("s3-tenant-alpha", () =>
+        runWithRequestProjectAsync(s3Proj, async () => {
+          const ok = await blob.exists(exchangeUploadKey("s3-tenant-alpha", s3Proj, j.FileId))
+          expect(ok).toBe(true)
+        }),
+      )
     } finally {
       if (init) await init.stop()
       if (minio) await minio.stop()

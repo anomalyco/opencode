@@ -108,7 +108,11 @@ export function SpreadsheetViewer(props: Props) {
 
     const chartReg = registerVeritlyLiveChartFloat(instance.univerAPI as FUniver & IFUniverUIMixin)
 
-    augmentVeritlyHost(instance.univerAPI, instance.univer, UNIVERSER_BASE)
+    augmentVeritlyHost(instance.univerAPI, instance.univer, UNIVERSER_BASE, () => {
+      const p = props.projectId?.trim()
+      if (!p) throw new Error("SpreadsheetViewer requires projectId")
+      return p
+    })
     bindVeritlyUniverHost({
       univerAPI: instance.univerAPI,
       univer: instance.univer,

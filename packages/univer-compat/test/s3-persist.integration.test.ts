@@ -1,4 +1,4 @@
-import { auth, user } from "./setup-compat-auth"
+import { auth, proj, projHdr, user } from "./setup-compat-auth"
 import { afterAll, describe, expect, test } from "bun:test"
 import { S3Client } from "bun"
 import { S3Client as AwsJsS3Client } from "@aws-sdk/client-s3"
@@ -7,6 +7,7 @@ import { createCompatApp } from "../src/app"
 import { S3ExchangeFiles } from "../src/exchange-files"
 import { unitBundleKey } from "../src/object-keys"
 import { runWithRequestUserAsync } from "../src/request-user"
+import { runWithRequestProjectAsync } from "../src/request-project"
 import { Store } from "../src/store"
 
 const access = "veritlyminio"
@@ -91,18 +92,20 @@ describe.skipIf(process.env.UNIVER_COMPAT_S3_IT !== "1")("S3 persist + hydrate (
 
     const cr = await app1.request("http://127.0.0.1/universer-api/snapshot/2/unit/-/create", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...projHdr },
       body: JSON.stringify({ type: 2, name: "S", creator: "it" }),
     })
     const { unitID } = (await cr.json()) as { unitID: string }
-    const snap = await app1.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`)
+    const snap = await app1.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`, {
+      headers: { ...projHdr },
+    })
     const sheet = ((await snap.json()) as { snapshot: { workbook: { sheetOrder: string[] } } }).snapshot.workbook
       .sheetOrder[0]
 
     const mut = (v: unknown, t: number, base: number) =>
       app1.request(`http://127.0.0.1/universer-api/comb/2/unit/${unitID}/new_changes`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...projHdr },
         body: JSON.stringify({
           unitID,
           memberID: "it",
@@ -131,8 +134,12 @@ describe.skipIf(process.env.UNIVER_COMPAT_S3_IT !== "1")("S3 persist + hydrate (
 
     const s2 = new Store(blob, 3)
     const app2 = createCompatApp(s2, auth)
-    await runWithRequestUserAsync(user, () => s2.hydrateUnit(unitID))
-    const stale = await app2.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`)
+    await runWithRequestUserAsync(user, () =>
+      runWithRequestProjectAsync(proj, () => s2.hydrateUnit(unitID)),
+    )
+    const stale = await app2.request(`http://127.0.0.1/universer-api/snapshot/2/unit/${unitID}/rev/0`, {
+      headers: { ...projHdr },
+    })
     const staleBody = (await stale.json()) as {
       snapshot: { workbook: { sheets: Record<string, { cellData?: Record<string, Record<string, { v?: unknown }>> }> } }
     }
@@ -140,7 +147,7 @@ describe.skipIf(process.env.UNIVER_COMPAT_S3_IT !== "1")("S3 persist + hydrate (
 
     expect((await mut(30, 2, 2)).status).toBe(200)
 
-    const raw = new TextDecoder().decode(await client.file(unitBundleKey(user, unitID)).bytes())
+    const raw = new TextDecoder().decode(await client.file(unitBundleKey(user, proj, unitID)).bytes())
     const bundle = JSON.parse(raw) as {
       unit: { revision: number }
       snapshots: Array<{ revision: number; snapshot: string }>

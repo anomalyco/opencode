@@ -60,9 +60,10 @@ describe("univer presign workos (webdriver)", () => {
 
       const cookie = `${WORKOS_SESSION_COOKIE_NAME}=${encodeURIComponent(sealA)}`
       const buf = minimalXlsx()
+      const ph = { "x-veritly-project-id": "e2e-workos-proj" }
       const pr = await fetch(`${base}/universer-api/stream/file/presign-upload`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: cookie },
+        headers: { "Content-Type": "application/json", Cookie: cookie, ...ph },
         body: JSON.stringify({ size: buf.byteLength, contentType: CT }),
       })
       expect(pr.status).toBe(200)
@@ -73,7 +74,7 @@ describe("univer presign workos (webdriver)", () => {
       const cookieB = `${WORKOS_SESSION_COOKIE_NAME}=${encodeURIComponent(sealB)}`
       const imp = await fetch(`${base}/universer-api/exchange/2/import`, {
         method: "POST",
-        headers: { "Content-Type": "application/json;charset=UTF-8", Cookie: cookieB },
+        headers: { "Content-Type": "application/json;charset=UTF-8", Cookie: cookieB, ...ph },
         body: JSON.stringify({
           fileID: j.FileId,
           outputType: 1,

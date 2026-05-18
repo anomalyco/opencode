@@ -6,7 +6,7 @@ import { buildRealSnapshotEnvelope } from "./workbook"
 import { Conflict, MergeFailed, Missing, Store } from "./store"
 import { jsonResponse } from "./json-response"
 
-import { requireRequestUserId } from "./request-user"
+import { exchangePresignActor } from "./presign-actor"
 import type { SessionResolver } from "@veritly/auth-shared"
 import { univerCompatAuthMiddleware } from "./auth-middleware"
 
@@ -168,14 +168,14 @@ export function createCompatApp(store: Store, auth: SessionResolver) {
     app.put("/universer-api/_memory_exchange_put/:token", async (c) => {
       const raw = await c.req.arrayBuffer()
       try {
-        mem.finishPresignedPut(c.req.param("token"), requireRequestUserId(), new Uint8Array(raw))
+        mem.finishPresignedPut(c.req.param("token"), exchangePresignActor(), new Uint8Array(raw))
       } catch {
         return c.json({ error: "invalid presign" }, 400)
       }
       return c.body(null, 204)
     })
     app.get("/universer-api/_memory_exchange_get/:token", async (c) => {
-      const key = mem.consumePresignedGetToken(c.req.param("token"), requireRequestUserId())
+      const key = mem.consumePresignedGetToken(c.req.param("token"), exchangePresignActor())
       if (!key) return c.json({ error: "not found" }, 404)
       const bytes = await mem.get(key)
       return new Response(Buffer.from(bytes), {
