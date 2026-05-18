@@ -61,7 +61,7 @@ Run the selected deliverables **in this order** (each builds on the previous):
 
 @truth_teller_nova: [same prompt]
 
-@truth_teller_llama: [same prompt]
+@truth_teller_lite: [same prompt]
 ```
 
 After all three respond, synthesize their feedback:
