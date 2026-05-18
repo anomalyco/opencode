@@ -29,7 +29,7 @@ import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/core/util/encode"
-import { useLocation, useSearchParams } from "@solidjs/router"
+import { useLocation, useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
@@ -192,6 +192,7 @@ export default function Page() {
   const prompt = usePrompt()
   const comments = useComments()
   const terminal = useTerminal()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const location = useLocation()
   const { params, sessionKey, tabs, view } = useSessionLayout()
@@ -1548,6 +1549,36 @@ export default function Page() {
     return revertMutation.mutateAsync(input)
   }
 
+  const fork = (input: { sessionID: string; messageID: string }) => {
+    if (!params.dir) return
+    const dir = params.dir
+    return sdk.client.session
+      .fork(input)
+      .then((result) => {
+        if (!result.data) {
+          showToast({
+            variant: "error",
+            title: language.t("common.requestFailed"),
+          })
+          return
+        }
+
+        sync.set("session", (list) => {
+          const idx = list.findIndex((item) => item.id === result.data.id)
+          if (idx >= 0) {
+            const out = list.slice()
+            out[idx] = result.data
+            return out
+          }
+          return [...list, result.data]
+        })
+
+        prompt.set(draft(input.messageID), undefined, { dir, id: result.data.id })
+        navigate(`/${dir}/session/${result.data.id}`)
+      })
+      .catch(fail)
+  }
+
   const restore = (id: string) => {
     if (!params.id || reverting()) return
     return restoreMutation.mutateAsync(id)
@@ -1561,7 +1592,7 @@ export default function Page() {
       .map((item) => ({ id: item.id, text: line(item.id) }))
   })
 
-  const actions = { revert }
+  const actions = { revert, fork }
 
   createEffect(() => {
     const sessionID = params.id
