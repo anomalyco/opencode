@@ -416,7 +416,7 @@ function sdk(
 }
 
 describe("run stream transport", () => {
-  test("replays persisted main-session history during bootstrap", async () => {
+  test("does not replay persisted main-session history during bootstrap by default", async () => {
     const src = eventFeed()
     const ui = footer()
     const transport = await createSessionTransport({
@@ -448,6 +448,47 @@ describe("run stream transport", () => {
     })
 
     try {
+      expect(ui.commits).toEqual([])
+      expect(ui.idleCalls).toBe(0)
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("replays persisted main-session history during bootstrap when enabled", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        messages: async ({ sessionID }) =>
+          sessionID === "session-1"
+            ? ok([
+                assistantMessage({
+                  sessionID: "session-1",
+                  id: "msg-1",
+                  parts: [
+                    {
+                      ...textPart("text-1", "msg-1", "Hello."),
+                      time: {
+                        start: 1,
+                        end: 2,
+                      },
+                    },
+                  ],
+                }),
+              ])
+            : ok([]),
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      replay: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
       await waitFor(() => ui.commits.find((item) => item.kind === "assistant" && item.text === "Hello."))
       expect(ui.idleCalls).toBeGreaterThan(0)
     } finally {
@@ -456,16 +497,14 @@ describe("run stream transport", () => {
     }
   })
 
-  test("applies the configured replay message limit during bootstrap", async () => {
+  test("caps replayed bootstrap history to the configured number of messages", async () => {
     const src = eventFeed()
     const ui = footer()
-    const seen: Array<{ sessionID: string; limit?: number }> = []
     const transport = await createSessionTransport({
       sdk: sdk({
         stream: src.stream,
-        messages: async ({ sessionID, limit }) => {
-          seen.push({ sessionID, limit })
-          return ok(
+        messages: async ({ sessionID }) =>
+          ok(
             sessionID === "session-1"
               ? [
                   assistantMessage({
@@ -481,13 +520,26 @@ describe("run stream transport", () => {
                       },
                     ],
                   }),
+                  assistantMessage({
+                    sessionID: "session-1",
+                    id: "msg-2",
+                    parts: [
+                      {
+                        ...textPart("text-2", "msg-2", "World."),
+                        time: {
+                          start: 3,
+                          end: 4,
+                        },
+                      },
+                    ],
+                  }),
                 ]
               : [],
-          )
-        },
+          ),
       }),
       sessionID: "session-1",
       thinking: true,
+      replay: true,
       replayLimit: 1,
       limits: () => ({}),
       footer: ui.api,
@@ -495,7 +547,11 @@ describe("run stream transport", () => {
 
     try {
       await waitFor(() => (ui.commits.length > 0 ? ui.commits : undefined))
-      expect(seen[0]).toEqual({ sessionID: "session-1", limit: 1 })
+      expect(ui.commits.filter((item) => item.kind === "assistant")).toEqual([
+        expect.objectContaining({
+          text: "World.",
+        }),
+      ])
     } finally {
       src.close()
       await transport.close()
@@ -527,6 +583,7 @@ describe("run stream transport", () => {
       }),
       sessionID: "session-1",
       thinking: true,
+      replay: true,
       limits: () => ({}),
       footer: ui.api,
     })
@@ -575,6 +632,7 @@ describe("run stream transport", () => {
       }),
       sessionID: "session-1",
       thinking: true,
+      replay: true,
       limits: () => ({}),
       footer: ui.api,
     })
@@ -628,6 +686,7 @@ describe("run stream transport", () => {
       }),
       sessionID: "session-1",
       thinking: true,
+      replay: true,
       limits: () => ({}),
       footer: ui.api,
     })

@@ -218,9 +218,14 @@ export const RunCommand = effectCmd({
         type: "boolean",
         describe: "show thinking blocks",
       })
+      .option("replay", {
+        type: "boolean",
+        default: false,
+        describe: "replay visible session history on interactive resume",
+      })
       .option("replay-limit", {
         type: "number",
-        describe: "cap interactive replay bootstrap to the newest N messages",
+        describe: "cap visible interactive replay to the newest N messages",
       })
       .option("interactive", {
         alias: ["i"],
@@ -273,6 +278,10 @@ export const RunCommand = effectCmd({
         die("--interactive cannot be used with --format json")
       }
 
+      if (args.replay && !args.interactive) {
+        die("--replay requires --interactive")
+      }
+
       if (args["replay-limit"] !== undefined && !args.interactive) {
         die("--replay-limit requires --interactive")
       }
@@ -295,6 +304,8 @@ export const RunCommand = effectCmd({
           dieInteractive(error)
         }
       }
+
+      const replay = args.replay || args["replay-limit"] !== undefined
 
       const root = Filesystem.resolve(process.env.PWD ?? process.cwd())
       const directory = (() => {
@@ -801,6 +812,7 @@ export const RunCommand = effectCmd({
             sessionID,
             sessionTitle: sess.title,
             resume: Boolean(args.session || args.continue) && !args.fork,
+            replay,
             replayLimit: args["replay-limit"],
             agent,
             model,
@@ -837,6 +849,7 @@ export const RunCommand = effectCmd({
             agent: args.agent,
             model,
             variant: args.variant,
+            replay,
             replayLimit: args["replay-limit"],
             files,
             initialInput,

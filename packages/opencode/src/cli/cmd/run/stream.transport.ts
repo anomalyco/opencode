@@ -67,6 +67,7 @@ type StreamInput = {
   directory?: string
   sessionID: string
   thinking: boolean
+  replay?: boolean
   replayLimit?: number
   limits: () => Record<string, number>
   footer: FooterApi
@@ -603,7 +604,14 @@ function createLayer(input: StreamInput) {
         const bootstrap = Effect.fn("RunStreamTransport.bootstrap")(function* () {
           const [messagesList, children, permissions, questions] = yield* Effect.all(
             [
-              messages(input.sessionID, input.replayLimit),
+              messages(
+                input.sessionID,
+                input.replay
+                  ? (input.replayLimit === undefined
+                      ? undefined
+                      : Math.max(input.replayLimit, SUBAGENT_BOOTSTRAP_LIMIT))
+                  : SUBAGENT_BOOTSTRAP_LIMIT,
+              ),
               Effect.promise(() =>
                 input.sdk.session.children({
                   sessionID: input.sessionID,
@@ -626,22 +634,51 @@ function createLayer(input: StreamInput) {
             },
           )
 
-          const replay = replaySession({
-            messages: messagesList,
-            permissions: permissions.filter((item) => item.sessionID === input.sessionID),
-            questions: questions.filter((item) => item.sessionID === input.sessionID),
-            thinking: input.thinking,
-            limits: input.limits(),
-          })
-          state.data = replay.data
-          replayedParts.clear()
-          for (const [partID] of state.data.text) {
-            if (!state.data.part.has(partID)) {
-              continue
-            }
+          const sessionPermissions = permissions.filter((item) => item.sessionID === input.sessionID)
+          const sessionQuestions = questions.filter((item) => item.sessionID === input.sessionID)
+          const history = input.replay
+            ? replaySession({
+                messages: messagesList,
+                permissions: sessionPermissions,
+                questions: sessionQuestions,
+                thinking: input.thinking,
+                limits: input.limits(),
+              })
+            : undefined
+          const replay = history && input.replayLimit !== undefined && messagesList.length > input.replayLimit
+            ? replaySession({
+                messages: messagesList.slice(-input.replayLimit),
+                permissions: sessionPermissions,
+                questions: sessionQuestions,
+                thinking: input.thinking,
+                limits: input.limits(),
+              })
+            : history
 
-            replayedParts.add(partID)
+          replayedParts.clear()
+          if (history) {
+            state.data = history.data
           }
+
+          if (!history) {
+            bootstrapSessionData({
+              data: state.data,
+              messages: messagesList,
+              permissions: sessionPermissions,
+              questions: sessionQuestions,
+            })
+          }
+
+          if (replay) {
+            for (const [partID] of replay.data.text) {
+              if (!replay.data.part.has(partID)) {
+                continue
+              }
+
+              replayedParts.add(partID)
+            }
+          }
+
           bootstrapSubagentData({
             data: state.subagent,
             messages: messagesList,
@@ -660,22 +697,26 @@ function createLayer(input: StreamInput) {
             seedBlocker(request.id)
           }
 
-          const activeCommitIDs = new Set([...state.data.part.keys(), ...state.data.tools])
-          for (const commit of replay.commits) {
-            input.trace?.write("ui.commit", commit)
-            input.footer.append(commit)
+          if (replay) {
+            const activeCommitIDs = new Set([...state.data.part.keys(), ...state.data.tools])
+            for (const commit of replay.commits) {
+              input.trace?.write("ui.commit", commit)
+              input.footer.append(commit)
 
-            if (commit.partID && activeCommitIDs.has(commit.partID)) {
-              continue
+              if (commit.partID && activeCommitIDs.has(commit.partID)) {
+                continue
+              }
+
+              yield* Effect.promise(() => input.footer.idle()).pipe(Effect.orElseSucceed(() => undefined))
             }
-
-            yield* Effect.promise(() => input.footer.idle()).pipe(Effect.orElseSucceed(() => undefined))
           }
 
           const snapshot = currentSubagentState()
           traceTabs(input.trace, [], snapshot.tabs)
-          syncFooter([], replay.patch, snapshot)
-          yield* Effect.promise(() => input.footer.idle()).pipe(Effect.orElseSucceed(() => undefined))
+          syncFooter([], replay?.patch, snapshot)
+          if (replay) {
+            yield* Effect.promise(() => input.footer.idle()).pipe(Effect.orElseSucceed(() => undefined))
+          }
 
           booting = false
           yield* drainBuffered()
