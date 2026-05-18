@@ -2,8 +2,8 @@ import { Effect } from "effect"
 import { AccountV2 } from "../account"
 import { PluginV2 } from "../plugin"
 
-export const AuthPlugin = PluginV2.define({
-  id: PluginV2.ID.make("auth"),
+export const AccountPlugin = PluginV2.define({
+  id: PluginV2.ID.make("account"),
   effect: Effect.gen(function* () {
     const accounts = yield* AccountV2.Service
     return {
@@ -11,7 +11,7 @@ export const AuthPlugin = PluginV2.define({
         const account = yield* accounts.active(AccountV2.ServiceID.make(evt.provider.id)).pipe(Effect.orDie)
         if (!account) return
         evt.provider.enabled = {
-          via: "auth",
+          via: "account",
           service: account.serviceID,
         }
         if (account.credential.type === "api") {

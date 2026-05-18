@@ -232,7 +232,7 @@ export interface Interface {
 }
 ```
 
-`ProviderV2.Info.enabled` is stored provider state. Provider plugins set this field after checking env, auth, config, or provider-specific availability.
+`ProviderV2.Info.enabled` is stored provider state. Provider plugins set this field after checking env, account, config, or provider-specific availability.
 
 `ProviderV2.Endpoint` includes `{ type: "unknown" }`. `CatalogV2.model.get()` and `CatalogV2.model.all()` resolve `unknown` endpoints from the provider before returning models.
 
@@ -312,7 +312,7 @@ export interface Interface {
 export const Order = {
   modelsDev: 0,
   env: 10,
-  auth: 20,
+  account: 20,
   provider: 30,
   config: 40,
   discovery: 50,
@@ -326,7 +326,7 @@ export const ModelsDevPlugin: PluginV2.Definition<ProviderV2.Service | ModelV2.S
 
 export const EnvPlugin: PluginV2.Definition<ProviderV2.Service | Env.Service>
 
-export const AuthPlugin: PluginV2.Definition<ProviderV2.Service | AccountV2.Service>
+export const AccountPlugin: PluginV2.Definition<ProviderV2.Service | AccountV2.Service>
 
 export const ConfigPlugin: PluginV2.Definition<ProviderV2.Service | ModelV2.Service | Config.Service>
 

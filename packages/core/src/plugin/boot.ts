@@ -5,7 +5,7 @@ import { AccountV2 } from "../account"
 import { Catalog } from "../catalog"
 import { Npm } from "../npm"
 import { PluginV2 } from "../plugin"
-import { AuthPlugin } from "./auth"
+import { AccountPlugin } from "./account"
 import { EnvPlugin } from "./env"
 import { ModelsDevPlugin } from "./models-dev"
 import { ProviderPlugins } from "./provider"
@@ -44,7 +44,7 @@ export const layer: Layer.Layer<Service, never, Catalog.Service | PluginV2.Servi
 
       const boot = Effect.gen(function* () {
         yield* add(EnvPlugin)
-        yield* add(AuthPlugin)
+        yield* add(AccountPlugin)
         for (const item of ProviderPlugins) {
           yield* add(item)
         }

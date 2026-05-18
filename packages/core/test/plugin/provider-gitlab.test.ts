@@ -2,7 +2,7 @@ import { describe, expect, mock } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AccountV2 } from "@opencode-ai/core/account"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { AuthPlugin } from "@opencode-ai/core/plugin/auth"
+import { AccountPlugin } from "@opencode-ai/core/plugin/account"
 import { GitLabPlugin } from "@opencode-ai/core/plugin/provider/gitlab"
 import { testEffect } from "../lib/effect"
 import { it, model, npmLayer, provider, withEnv } from "./provider-helper"
@@ -157,8 +157,8 @@ describe("GitLabPlugin", () => {
             active: true,
           })
           yield* plugin.add({
-            ...AuthPlugin,
-            effect: AuthPlugin.effect.pipe(Effect.provideService(AccountV2.Service, accounts)),
+            ...AccountPlugin,
+            effect: AccountPlugin.effect.pipe(Effect.provideService(AccountV2.Service, accounts)),
           })
           yield* plugin.add(GitLabPlugin)
           const updated = yield* plugin.trigger("provider.update", {}, { provider: provider("gitlab"), cancel: false })
@@ -197,8 +197,8 @@ describe("GitLabPlugin", () => {
             active: true,
           })
           yield* plugin.add({
-            ...AuthPlugin,
-            effect: AuthPlugin.effect.pipe(Effect.provideService(AccountV2.Service, accounts)),
+            ...AccountPlugin,
+            effect: AccountPlugin.effect.pipe(Effect.provideService(AccountV2.Service, accounts)),
           })
           yield* plugin.add(GitLabPlugin)
           const updated = yield* plugin.trigger("provider.update", {}, { provider: provider("gitlab"), cancel: false })

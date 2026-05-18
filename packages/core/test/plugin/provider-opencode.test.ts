@@ -140,7 +140,7 @@ describe("OpencodePlugin", () => {
         const updated = yield* plugin.trigger(
           "provider.update",
           {},
-          { provider: provider("opencode", { enabled: { via: "auth", service: "opencode" } }), cancel: false },
+          { provider: provider("opencode", { enabled: { via: "account", service: "opencode" } }), cancel: false },
         )
         const paid = yield* plugin.trigger(
           "model.update",

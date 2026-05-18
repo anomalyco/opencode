@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AccountV2 } from "@opencode-ai/core/account"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { AuthPlugin } from "@opencode-ai/core/plugin/auth"
+import { AccountPlugin } from "@opencode-ai/core/plugin/account"
 import { AzurePlugin } from "@opencode-ai/core/plugin/provider/azure"
 import { testEffect } from "../lib/effect"
 import { fakeSelectorSdk, it, model, npmLayer, provider, withEnv } from "./provider-helper"
@@ -62,8 +62,8 @@ describe("AzurePlugin", () => {
             active: true,
           })
           yield* plugin.add({
-            ...AuthPlugin,
-            effect: AuthPlugin.effect.pipe(Effect.provideService(AccountV2.Service, accounts)),
+            ...AccountPlugin,
+            effect: AccountPlugin.effect.pipe(Effect.provideService(AccountV2.Service, accounts)),
           })
           yield* plugin.add(AzurePlugin)
           const result = yield* plugin.trigger("provider.update", {}, { provider: provider("azure"), cancel: false })

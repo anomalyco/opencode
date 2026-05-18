@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect"
 import { AccountV2 } from "@opencode-ai/core/account"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { AuthPlugin } from "@opencode-ai/core/plugin/auth"
+import { AccountPlugin } from "@opencode-ai/core/plugin/account"
 import { CloudflareWorkersAIPlugin } from "@opencode-ai/core/plugin/provider/cloudflare-workers-ai"
 import { testEffect } from "../lib/effect"
 import { fakeSelectorSdk, it, model, npmLayer, provider, withEnv } from "./provider-helper"
@@ -124,8 +124,8 @@ describe("CloudflareWorkersAIPlugin", () => {
             active: true,
           })
           yield* plugin.add({
-            ...AuthPlugin,
-            effect: AuthPlugin.effect.pipe(Effect.provideService(AccountV2.Service, accounts)),
+            ...AccountPlugin,
+            effect: AccountPlugin.effect.pipe(Effect.provideService(AccountV2.Service, accounts)),
           })
           yield* plugin.add(CloudflareWorkersAIPlugin)
           const updated = yield* plugin.trigger(

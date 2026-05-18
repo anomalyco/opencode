@@ -13,7 +13,7 @@ export const OpencodePlugin = PluginV2.define({
           process.env.OPENCODE_API_KEY ||
             evt.provider.env.some((item) => process.env[item]) ||
             evt.provider.options.aisdk.provider.apiKey ||
-            (evt.provider.enabled && evt.provider.enabled.via === "auth"),
+            (evt.provider.enabled && evt.provider.enabled.via === "account"),
         )
         if (!hasKey) evt.provider.options.aisdk.provider.apiKey = "public"
       }),
