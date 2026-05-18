@@ -115,8 +115,8 @@ export const layer = Layer.effect(Service)(
         : undefined
       // Bridge captures handler-fiber refs (InstanceRef/WorkspaceRef) and the
       // full Effect context, so the forked publish runs with the right state
-      // without an explicit attachWith.
-      const bridge = publish ? yield* EffectBridge.make() : undefined
+      // without a per-call attachWith.
+      const bridge = yield* EffectBridge.make()
       process(def, event, {
         bus,
         bridge,
@@ -165,7 +165,7 @@ export const layer = Layer.effect(Service)(
             workspace: yield* InstanceState.workspaceID,
           }
         : undefined
-      const bridge = publish ? yield* EffectBridge.make() : undefined
+      const bridge = yield* EffectBridge.make()
 
       // Note that this is an "immediate" transaction which is critical.
       // We need to make sure we can safely read and write with nothing
@@ -314,7 +314,7 @@ function process<Def extends Definition>(
   event: Event<Def>,
   options: {
     bus: ProjectBus.Interface
-    bridge: EffectBridge.Shape | undefined
+    bridge: EffectBridge.Shape
     publish: boolean
     context?: PublishContext
     ownerID?: string
@@ -367,9 +367,8 @@ function process<Def extends Definition>(
         // The bridge was built inside the caller's fiber so it already carries
         // InstanceRef/WorkspaceRef and the full Effect context — no per-call
         // attachWith needed.
-        const bridge = options.bridge!
         const publish = (data: unknown) =>
-          bridge.fork(options.bus.publish(def, data as Properties<Def>, { id: event.id }))
+          options.bridge.fork(options.bus.publish(def, data as Properties<Def>, { id: event.id }))
         if (result instanceof Promise) {
           void result.then(publish)
         } else {
