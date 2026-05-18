@@ -1,50 +1,30 @@
-# ── Build stage ────────────────────────────────────────────────────────────────
-FROM oven/bun:1.3 AS builder
-
-WORKDIR /app
-
-# Copy workspace manifest files first for better layer caching
-COPY package.json bun.lock* ./
-COPY packages/collab/package.json ./packages/collab/
-COPY packages/core/package.json ./packages/core/
-COPY packages/llm/package.json ./packages/llm/
-COPY packages/opencode/package.json ./packages/opencode/
-COPY packages/app/package.json ./packages/app/
-COPY packages/ui/package.json ./packages/ui/
-COPY packages/sdk/js/package.json ./packages/sdk/js/
-
-RUN bun install --frozen-lockfile
-
-# Copy source
-COPY . .
-
-# Build the app (SolidJS → static)
-RUN bun run --cwd packages/app build 2>/dev/null || true
-
-# Build the opencode server binary
-RUN bun run --cwd packages/opencode build 2>/dev/null || true
-
-# ── Runtime stage ───────────────────────────────────────────────────────────────
+# syntax=docker/dockerfile:1
 FROM oven/bun:1.3
 
 WORKDIR /app
 
-# Install git (needed for server-side workspace cloning)
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
+# git for server-side repo cloning; build tools for native npm packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git ca-certificates python3 make g++ nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy built artifacts from builder
-COPY --from=builder /app /app
+# Copy source
+COPY . .
 
-# Create workspace directory for collab session repos
-RUN mkdir -p /var/opencode/workspaces
+# Install — cache mount keeps tarballs between builds, --ignore-scripts skips
+# native compilation (tree-sitter/pty) so the image starts fast;
+# those features work fine without native binaries via wasm/fallback.
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --no-optional --ignore-scripts
 
-# Data directory for SQLite database
-RUN mkdir -p /root/.local/share/opencode
+# Build the SolidJS web app (collab features in packages/app/src/pages/collab/)
+RUN bun run --cwd packages/app build
+
+# Workspace dirs + opencode config with claude-auth plugin
+RUN mkdir -p /var/opencode/workspaces /root/.local/share/opencode /root/.config/opencode && \
+    printf '{"plugin":["opencode-claude-auth@latest"]}\n' > /root/.config/opencode/opencode.json
 
 ENV NODE_ENV=production
-ENV OPENCODE_BASE_URL=http://localhost:4096
-
 EXPOSE 4096
 
-# Start opencode server
-CMD ["bun", "run", "--cwd", "packages/opencode", "src/index.ts"]
+CMD ["bun", "run", "--cwd", "packages/opencode", "src/index.ts", "serve", "--port", "4096", "--hostname", "0.0.0.0", "--print-logs"]

@@ -2,6 +2,8 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Effect, Stream } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createHash } from "node:crypto"
+import fs from "node:fs"
+import path from "node:path"
 import { ProxyUtil } from "../proxy-util"
 
 let embeddedUIPromise: Promise<Record<string, string> | null> | undefined
@@ -75,18 +77,47 @@ export function serveEmbeddedUIEffect(
   )
 }
 
+/**
+ * Serve UI files from a local directory (used in Docker when OPENCODE_LOCAL_UI_PATH is set).
+ * Falls back to index.html for any path that doesn't map to an existing file (SPA routing).
+ */
+function serveLocalUIEffect(requestPath: string, localUIPath: string) {
+  return Effect.sync(() => {
+    // Strip leading slash and resolve against local dist dir
+    const relative = requestPath.replace(/^\//, "") || "index.html"
+    const candidate = path.join(localUIPath, relative)
+    const filePath = fs.existsSync(candidate) && fs.statSync(candidate).isFile() ? candidate : path.join(localUIPath, "index.html")
+
+    const body = fs.readFileSync(filePath)
+    const mime = AppFileSystem.mimeType(filePath)
+    const headers = new Headers({
+      "content-type": mime,
+      "cache-control": filePath.endsWith("index.html") ? "max-age=0,no-cache,no-store,must-revalidate" : "public,max-age=31536000,immutable",
+    })
+    if (mime.startsWith("text/html")) {
+      headers.set("content-security-policy", cspForHtml(new TextDecoder().decode(body)))
+    }
+    return HttpServerResponse.raw(body, { headers })
+  })
+}
+
 export function serveUIEffect(
   request: HttpServerRequest.HttpServerRequest,
   services: { fs: AppFileSystem.Interface; client: HttpClient.HttpClient; disableEmbeddedWebUi: boolean },
 ) {
   return Effect.gen(function* () {
     const embeddedWebUI = yield* Effect.promise(() => embeddedUI(services.disableEmbeddedWebUi))
-    const path = new URL(request.url, "http://localhost").pathname
+    const urlPath = new URL(request.url, "http://localhost").pathname
 
-    if (embeddedWebUI) return yield* serveEmbeddedUIEffect(path, services.fs, embeddedWebUI)
+    if (embeddedWebUI) return yield* serveEmbeddedUIEffect(urlPath, services.fs, embeddedWebUI)
+
+    // When OPENCODE_LOCAL_UI_PATH is set (e.g. in Docker), serve our built app from disk
+    // instead of proxying app.opencode.ai. This lets us run a custom fork with collab features.
+    const localUIPath = process.env.OPENCODE_LOCAL_UI_PATH
+    if (localUIPath) return yield* serveLocalUIEffect(urlPath, localUIPath)
 
     const response = yield* services.client.execute(
-      HttpClientRequest.make(request.method)(upstreamURL(path), {
+      HttpClientRequest.make(request.method)(upstreamURL(urlPath), {
         headers: ProxyUtil.headers(request.headers, { host: UI_UPSTREAM.host }),
         body: requestBody(request),
       }),

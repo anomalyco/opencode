@@ -1,3 +1,97 @@
+# unleashlive/opencode
+
+> **This is the [unleashlive](https://github.com/unleashlive) fork of [opencode](https://github.com/anomalyco/opencode).**
+> It adds **Collab Sessions** — real-time multi-user AI coding sessions where your whole team shares one LLM context, with role-based participation and a shared prompt queue.
+>
+> Upstream opencode docs and install instructions are preserved below.
+
+---
+
+## Collab Sessions
+
+### What is a Collab Session?
+
+A Collab Session lets two or more developers share a single opencode session — same conversation, same codebase, same LLM context. One person drives, others contribute or watch.
+
+- **Driver** — sends prompts directly to the LLM, approves suggestions from Contributors, manages roles
+- **Contributor** — submits prompt suggestions for the Driver to approve before execution, votes in Vote Pool mode
+- **Viewer** — read-only access to the full session in real time
+
+The server runs on one machine. Everyone else joins in their browser — **no install required for collaborators.**
+
+---
+
+## Joining a session (collaborators)
+
+**You need: a browser and a GitHub account in the `unleashlive` org. Nothing else.**
+
+1. Receive an invite link from the session Driver — it looks like:
+   ```
+   https://corrosive-cola-chalice.ngrok-free.dev/collab/invite/abc123xyz
+   ```
+2. Open it in your browser
+3. Click **Sign in with GitHub** — this just confirms you're in the org
+4. You're in the session with the role the Driver assigned you
+
+That's it. No Docker, no API keys, no local setup.
+
+---
+
+## Starting a session (Driver)
+
+The server is running at: **https://corrosive-cola-chalice.ngrok-free.dev**
+
+1. Go to [`/collab/new`](https://corrosive-cola-chalice.ngrok-free.dev/collab/new)
+2. Sign in with your GitHub account (unleashlive org member)
+3. Fill in your session:
+   - **Session name** — e.g. "Drone API refactor"
+   - **Visibility while typing** — choose how much teammates see before you submit a prompt:
+     - *Submitted only* — they see prompts only after you send
+     - *Typing indicator* — shows "Hanno is typing…" while you compose
+     - *Live preview* — they see your draft in real time
+   - **Prompt queue mode**:
+     - *FIFO* — prompts execute in the order received
+     - *Vote Pool* — team votes on suggestions; highest score runs first
+4. Click **Create Collab Session**
+5. From the session page, click **Invite** → pick a role → copy the link → share it
+
+---
+
+## How it works
+
+```
+Your browser ──── HTTPS ──── ngrok tunnel ──── Docker (localhost:4096)
+                                                      │
+                                              opencode server
+                                              + collab router
+                                              + GitHub OAuth
+                                              + Claude LLM (server-side)
+```
+
+- **LLM calls are server-side.** The server holds the Claude credentials. Teammates' own Claude accounts are not involved — this is a shared session billed to the server owner.
+- **GitHub OAuth** only verifies org membership. No GitHub permissions beyond that are granted.
+- **Sessions persist** across server restarts (SQLite, Docker volume). Disconnect and reconnect — your history is intact.
+
+---
+
+## Running your own server
+
+Want to run this for a different org, or deploy to EC2?
+
+```bash
+git clone https://github.com/unleashlive/opencode
+cd opencode
+cp .env.example .env
+# Fill in GITHUB_OAUTH_CLIENT_ID, GITHUB_OAUTH_CLIENT_SECRET,
+# GITHUB_TOKEN, SESSION_SECRET, OPENCODE_BASE_URL, and LLM credentials
+ngrok http 4096              # note your https URL → set as OPENCODE_BASE_URL
+docker compose up --build -d
+```
+
+Full setup details in [COLLAB.md](./COLLAB.md).
+
+---
+
 <p align="center">
   <a href="https://opencode.ai">
     <picture>
