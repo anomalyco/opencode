@@ -386,6 +386,30 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.persistModelPerAgent.title")}
+          description={language.t("settings.general.row.persistModelPerAgent.description")}
+        >
+          <div data-action="settings-persist-model-per-agent">
+            <Switch
+              checked={settings.general.persistModelPerAgent()}
+              onChange={(checked) => settings.general.setPersistModelPerAgent(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.persistModelAcrossSessions.title")}
+          description={language.t("settings.general.row.persistModelAcrossSessions.description")}
+        >
+          <div data-action="settings-persist-model-across-sessions">
+            <Switch
+              checked={settings.general.persistModelAcrossSessions()}
+              onChange={(checked) => settings.general.setPersistModelAcrossSessions(checked)}
+            />
+          </div>
+        </SettingsRow>
       </SettingsList>
     </div>
   )
@@ -729,7 +753,6 @@ export const SettingsGeneral: Component = () => {
     </div>
   )
 
-  console.log(import.meta.env)
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">

@@ -775,6 +775,13 @@ export const dict = {
   "settings.general.row.showSessionProgressBar.description":
     "Display the animated progress bar at the top of the session when the agent is working",
 
+  "settings.general.row.persistModelPerAgent.title": "Persist model per agent",
+  "settings.general.row.persistModelPerAgent.description":
+    "Remember the selected model for each agent when switching between them",
+  "settings.general.row.persistModelAcrossSessions.title": "Persist model across sessions",
+  "settings.general.row.persistModelAcrossSessions.description":
+    "Keep the selected model when moving between sessions",
+
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",
   "settings.general.row.wayland.tooltip":

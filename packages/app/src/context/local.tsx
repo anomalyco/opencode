@@ -9,6 +9,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
+import { useSettings } from "@/context/settings"
 
 export type ModelKey = { providerID: string; modelID: string; variant?: string }
 
@@ -20,6 +21,7 @@ type State = {
 
 type Saved = {
   session: Record<string, State | undefined>
+  agent: Record<string, State | undefined>
 }
 
 const WORKSPACE_KEY = "__workspace__"
@@ -59,6 +61,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sync = useSync()
     const providers = useProviders()
     const models = useModels()
+    const settings = useSettings()
 
     const id = createMemo(() => params.id || undefined)
     const list = createMemo(() => sync.data.agent.filter((item) => item.mode !== "subagent" && !item.hidden))
@@ -71,6 +74,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
       createStore<Saved>({
         session: {},
+        agent: {},
       }),
     )
 
@@ -192,6 +196,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             variant: item.variant ?? null,
           })
           const prev = scope()
+          if (settings.general.persistModelPerAgent()) {
+            if (prev?.agent) {
+              setSaved("agent", prev.agent, clone(prev))
+            }
+          }
           const next = {
             agent: item.name,
             model: item.model ?? prev?.model,
@@ -222,9 +231,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const current = () => {
+      const a = agent.current()
       const item = firstModel(
+        () => settings.general.persistModelPerAgent() && a ? saved.agent[a.name]?.model : undefined,
         () => scope()?.model,
-        () => agent.current()?.model,
+        () => a?.model,
         fallback,
       )
       if (!item) return
@@ -241,7 +252,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
     }
 
-    const selected = () => scope()?.variant
+    const selected = () => {
+      if (settings.general.persistModelPerAgent()) {
+        const a = agent.current()
+        if (a?.name && saved.agent[a.name]) {
+          return saved.agent[a.name]!.variant
+        }
+      }
+      return scope()?.variant
+    }
 
     const snapshot = () => {
       const model = current()
@@ -258,9 +277,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         ...next,
       } satisfies State
 
+      if (settings.general.persistModelPerAgent() && state.agent) {
+        setSaved("agent", state.agent, {
+          agent: state.agent,
+          model: state.model,
+          variant: state.variant ?? null,
+        })
+      }
+
       const session = id()
       if (session) {
-        setSaved("session", session, state)
+        if (settings.general.persistModelAcrossSessions()) {
+          setSaved("session", session, state)
+        }
         return
       }
       setStore("draft", state)
@@ -371,6 +400,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const next = clone(snapshot())
           if (!next) return
 
+          if (settings.general.persistModelPerAgent() && next.agent) {
+            setSaved("agent", next.agent, next)
+          }
+
           if (dir === sdk.directory) {
             setSaved("session", session, next)
             setStore("draft", undefined)
@@ -387,11 +420,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (saved.session[session] !== undefined) return
           if (handoff.has(handoffKey(sdk.directory, session))) return
 
-          setSaved("session", session, {
+          const state = {
             agent: msg.agent,
             model: msg.model,
             variant: msg.model?.variant ?? null,
-          })
+          }
+          if (settings.general.persistModelPerAgent() && msg.agent) {
+            setSaved("agent", msg.agent, state)
+          }
+          setSaved("session", session, state)
         },
       },
     }

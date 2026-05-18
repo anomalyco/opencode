@@ -32,6 +32,8 @@ export interface Settings {
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
     showSessionProgressBar: boolean
+    persistModelPerAgent: boolean
+    persistModelAcrossSessions: boolean
   }
   updates: {
     startup: boolean
@@ -117,6 +119,8 @@ const defaultSettings: Settings = {
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
     showSessionProgressBar: true,
+    persistModelPerAgent: false,
+    persistModelAcrossSessions: true,
   },
   updates: {
     startup: true,
@@ -235,6 +239,20 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setShowSessionProgressBar(value: boolean) {
           setStore("general", "showSessionProgressBar", value)
+        },
+        persistModelPerAgent: withFallback(
+          () => store.general?.persistModelPerAgent,
+          defaultSettings.general.persistModelPerAgent,
+        ),
+        setPersistModelPerAgent(value: boolean) {
+          setStore("general", "persistModelPerAgent", value)
+        },
+        persistModelAcrossSessions: withFallback(
+          () => store.general?.persistModelAcrossSessions,
+          defaultSettings.general.persistModelAcrossSessions,
+        ),
+        setPersistModelAcrossSessions(value: boolean) {
+          setStore("general", "persistModelAcrossSessions", value)
         },
       },
       updates: {
