@@ -607,9 +607,9 @@ function createLayer(input: StreamInput) {
               messages(
                 input.sessionID,
                 input.replay
-                  ? (input.replayLimit === undefined
-                      ? undefined
-                      : Math.max(input.replayLimit, SUBAGENT_BOOTSTRAP_LIMIT))
+                  ? input.replayLimit === undefined
+                    ? undefined
+                    : Math.max(input.replayLimit, SUBAGENT_BOOTSTRAP_LIMIT)
                   : SUBAGENT_BOOTSTRAP_LIMIT,
               ),
               Effect.promise(() =>
@@ -645,15 +645,16 @@ function createLayer(input: StreamInput) {
                 limits: input.limits(),
               })
             : undefined
-          const replay = history && input.replayLimit !== undefined && messagesList.length > input.replayLimit
-            ? replaySession({
-                messages: messagesList.slice(-input.replayLimit),
-                permissions: sessionPermissions,
-                questions: sessionQuestions,
-                thinking: input.thinking,
-                limits: input.limits(),
-              })
-            : history
+          const replay =
+            history && input.replayLimit !== undefined && messagesList.length > input.replayLimit
+              ? replaySession({
+                  messages: messagesList.slice(-input.replayLimit),
+                  permissions: sessionPermissions,
+                  questions: sessionQuestions,
+                  thinking: input.thinking,
+                  limits: input.limits(),
+                })
+              : history
 
           replayedParts.clear()
           if (history) {

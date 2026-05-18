@@ -106,7 +106,10 @@ function runningToolMessage(id: string): SessionMessages[number] {
 describe("run session replay", () => {
   test("replays persisted user and assistant history into scrollback commits", () => {
     const out = replaySession({
-      messages: [userMessage("msg-user-1", "Hello, whats the weather today?"), assistantMessage("msg-1", "What city or ZIP code should I check?")],
+      messages: [
+        userMessage("msg-user-1", "Hello, whats the weather today?"),
+        assistantMessage("msg-1", "What city or ZIP code should I check?"),
+      ],
       permissions: [],
       questions: [],
       thinking: true,

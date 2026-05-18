@@ -374,7 +374,14 @@ function footer(fn?: (commit: StreamCommit) => void) {
     },
   }
 
-  return { api, commits, events, get idleCalls() { return idleCalls } }
+  return {
+    api,
+    commits,
+    events,
+    get idleCalls() {
+      return idleCalls
+    },
+  }
 }
 
 function sdk(
@@ -932,16 +939,16 @@ describe("run stream transport", () => {
         messages: async ({ sessionID }) => {
           if (sessionID === "session-1") {
             return ok([
-                assistantMessage({
-                  sessionID: "session-1",
-                  id: "msg-1",
-                  parts: [
-                    runningTool({
-                      sessionID: "session-1",
-                      messageID: "msg-1",
-                      id: "task-1",
-                      callID: "call-1",
-                      tool: "task",
+              assistantMessage({
+                sessionID: "session-1",
+                id: "msg-1",
+                parts: [
+                  runningTool({
+                    sessionID: "session-1",
+                    messageID: "msg-1",
+                    id: "task-1",
+                    callID: "call-1",
+                    tool: "task",
                     body: {
                       description: "Explore run.ts",
                       subagent_type: "explore",
@@ -949,10 +956,10 @@ describe("run stream transport", () => {
                     metadata: {
                       sessionId: "child-1",
                     },
-                    }),
-                  ],
-                }),
-              ])
+                  }),
+                ],
+              }),
+            ])
           }
 
           return sessionID === "child-1"
