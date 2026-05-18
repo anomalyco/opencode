@@ -225,4 +225,21 @@ describe("tool.repo_clone", () => {
       }),
     ),
   )
+
+  it.live("rejects invalid branch inputs", () =>
+    provideTmpdirInstance((_dir) =>
+      Effect.gen(function* () {
+        const tool = yield* init()
+        const result = yield* tool.execute({ repository: "owner/repo", branch: "bad..branch" }, ctx).pipe(Effect.exit)
+
+        expect(Exit.isFailure(result)).toBe(true)
+        if (Exit.isFailure(result)) {
+          const error = Cause.squash(result.cause)
+          expect(error instanceof Error ? error.message : String(error)).toContain(
+            "Branch must contain only alphanumeric characters",
+          )
+        }
+      }),
+    ),
+  )
 })
