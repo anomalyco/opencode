@@ -1,5 +1,6 @@
 import "./init-projectors"
 
+import { handleCollabRequest } from "@/collab/router"
 import { NodeHttpServer } from "@effect/platform-node"
 import * as Log from "@opencode-ai/core/util/log"
 import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
@@ -58,7 +59,13 @@ class ListenerServerService extends Context.Service<ListenerServerService, Liste
 export const Default = lazy(() => {
   const handler = HttpApiApp.webHandler().handler
   const app: ServerApp = {
-    fetch: (request: Request) => handler(request, HttpApiApp.context),
+    fetch: (request: Request) => {
+      const url = new URL(request.url)
+      if (url.pathname.startsWith("/collab/")) {
+        return handleCollabRequest(request)
+      }
+      return handler(request, HttpApiApp.context)
+    },
     request(input, init) {
       return app.fetch(input instanceof Request ? input : new Request(new URL(input, "http://localhost"), init))
     },

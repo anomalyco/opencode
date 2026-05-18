@@ -1,0 +1,45 @@
+services:
+  opencode:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "4096:4096"
+    environment:
+      # GitHub OAuth (create at https://github.com/settings/developers)
+      - GITHUB_OAUTH_CLIENT_ID=${GITHUB_OAUTH_CLIENT_ID}
+      - GITHUB_OAUTH_CLIENT_SECRET=${GITHUB_OAUTH_CLIENT_SECRET}
+
+      # GitHub org + server token (PAT with read:org scope)
+      - GITHUB_ORG_NAME=${GITHUB_ORG_NAME:-unleashlive}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+
+      # Public base URL — use ngrok URL when testing remotely
+      - OPENCODE_BASE_URL=${OPENCODE_BASE_URL:-http://localhost:4096}
+
+      # Random 32-byte hex string: openssl rand -hex 32
+      - SESSION_SECRET=${SESSION_SECRET}
+
+      # Collab workspace root (inside container — maps to named volume)
+      - COLLAB_WORKSPACE_ROOT=/var/opencode/workspaces
+
+      # LLM provider keys — pass through whatever is set in .env
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+
+    volumes:
+      # Persistent SQLite database
+      - opencode-data:/root/.local/share/opencode
+      # Persistent server-side repo workspaces
+      - collab-workspaces:/var/opencode/workspaces
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4096/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  opencode-data:
+  collab-workspaces:

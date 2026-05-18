@@ -1,0 +1,9 @@
+.git
+node_modules
+**/node_modules
+**/.turbo
+**/dist
+**/.artifacts
+.env
+.env.local
+*.log

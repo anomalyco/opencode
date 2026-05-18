@@ -1,0 +1,145 @@
+import { Database, eq, and, isNull } from "@/storage/db"
+import {
+  CollabSessionTable,
+  CollabParticipantTable,
+  CollabRepoTable,
+} from "./schema.sql"
+import { collabId } from "@opencode-ai/collab"
+import type { CollabSession, CollabRole, VisibilityMode, QueueMode } from "@opencode-ai/collab"
+
+export interface CreateCollabSessionInput {
+  name: string
+  ownerGithubId: number
+  ownerGithubLogin: string
+  ownerAvatarUrl: string
+  repos: string[]
+  visibilityMode?: VisibilityMode
+  queueMode?: QueueMode
+}
+
+export function createCollabSession(input: CreateCollabSessionInput): CollabSession {
+  const id = collabId("cs")
+  const now = Date.now()
+
+  Database.transaction((db) => {
+    db.insert(CollabSessionTable).values({
+      id,
+      owner_github_id: input.ownerGithubId,
+      owner_github_login: input.ownerGithubLogin,
+      name: input.name,
+      visibility_mode: input.visibilityMode ?? "submitted",
+      queue_mode: input.queueMode ?? "fifo",
+      session_id: null,
+      created_at: now,
+      deleted_at: null,
+    }).run()
+
+    db.insert(CollabParticipantTable).values({
+      collab_session_id: id,
+      github_id: input.ownerGithubId,
+      github_login: input.ownerGithubLogin,
+      github_avatar_url: input.ownerAvatarUrl,
+      role: "driver" as CollabRole,
+      is_online: false,
+      joined_at: now,
+    }).run()
+
+    if (input.repos.length > 0) {
+      for (const repo of input.repos) {
+        db.insert(CollabRepoTable).values({
+          id: collabId("rp"),
+          collab_session_id: id,
+          repo_full_name: repo,
+        }).run()
+      }
+    }
+  })
+
+  return getCollabSession(id)!
+}
+
+export function getCollabSession(id: string): CollabSession | null {
+  return Database.use((db) => {
+    const session = db
+      .select()
+      .from(CollabSessionTable)
+      .where(and(eq(CollabSessionTable.id, id), isNull(CollabSessionTable.deleted_at)))
+      .get()
+
+    if (!session) return null
+
+    const participants = db
+      .select()
+      .from(CollabParticipantTable)
+      .where(eq(CollabParticipantTable.collab_session_id, id))
+      .all()
+
+    const repos = db
+      .select()
+      .from(CollabRepoTable)
+      .where(eq(CollabRepoTable.collab_session_id, id))
+      .all()
+
+    return {
+      id: session.id,
+      name: session.name,
+      ownerGithubId: session.owner_github_id,
+      ownerGithubLogin: session.owner_github_login,
+      visibilityMode: session.visibility_mode,
+      queueMode: session.queue_mode,
+      sessionId: session.session_id ?? null,
+      repos: repos.map((r) => r.repo_full_name),
+      participants: participants.map((p) => ({
+        githubId: p.github_id,
+        githubLogin: p.github_login,
+        githubAvatarUrl: p.github_avatar_url,
+        role: p.role,
+        isOnline: Boolean(p.is_online),
+        joinedAt: new Date(p.joined_at),
+      })),
+      createdAt: new Date(session.created_at),
+      deletedAt: session.deleted_at ? new Date(session.deleted_at) : null,
+    } satisfies CollabSession
+  })
+}
+
+export function listCollabSessions(ownerGithubId?: number): CollabSession[] {
+  return Database.use((db) => {
+    const rows = ownerGithubId
+      ? db
+          .select()
+          .from(CollabSessionTable)
+          .where(
+            and(
+              eq(CollabSessionTable.owner_github_id, ownerGithubId),
+              isNull(CollabSessionTable.deleted_at),
+            ),
+          )
+          .all()
+      : db
+          .select()
+          .from(CollabSessionTable)
+          .where(isNull(CollabSessionTable.deleted_at))
+          .all()
+
+    return rows.map((r) => getCollabSession(r.id)).filter(Boolean) as CollabSession[]
+  })
+}
+
+export function linkNativeSession(collabSessionId: string, sessionId: string): void {
+  Database.use((db) => {
+    db.update(CollabSessionTable)
+      .set({ session_id: sessionId })
+      .where(eq(CollabSessionTable.id, collabSessionId))
+      .run()
+  })
+}
+
+export function deleteCollabSession(id: string): void {
+  Database.use((db) => {
+    db.update(CollabSessionTable)
+      .set({ deleted_at: Date.now() })
+      .where(eq(CollabSessionTable.id, id))
+      .run()
+  })
+}
