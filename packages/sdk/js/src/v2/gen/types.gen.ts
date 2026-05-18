@@ -1719,7 +1719,7 @@ export type ProviderAuthMethod = {
 
 export type ProviderAuthAuthorization = {
   url: string
-  method: "auto" | "code"
+  method: "auto" | "code" | "auto-code"
   instructions: string
 }
 

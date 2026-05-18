@@ -47,7 +47,7 @@ export type Methods = typeof Methods.Type
 
 export class Authorization extends Schema.Class<Authorization>("ProviderAuthAuthorization")({
   url: Schema.String,
-  method: Schema.Literals(["auto", "code"]),
+  method: Schema.Literals(["auto", "code", "auto-code"]),
   instructions: Schema.String,
 }) {}
 
@@ -189,9 +189,11 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
         return yield* new OauthCodeMissing({ providerID: input.providerID })
       }
 
-      const result = yield* Effect.promise(() =>
-        match.method === "code" ? match.callback(input.code!) : match.callback(),
-      )
+      const result = yield* Effect.promise(() => {
+        if (match.method === "code") return match.callback(input.code!)
+        if (match.method === "auto-code") return match.callback(input.code)
+        return match.callback()
+      })
       if (!result || result.type !== "success") return yield* new OauthCallbackFailed({})
 
       if ("key" in result) {

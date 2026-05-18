@@ -205,6 +205,27 @@ export type AuthOAuthResult = { url: string; instructions: string } & (
           }
       >
     }
+  | {
+      method: "auto-code"
+      callback(code?: string): Promise<
+        | ({
+            type: "success"
+            provider?: string
+          } & (
+            | {
+                refresh: string
+                access: string
+                expires: number
+                accountId?: string
+                enterpriseUrl?: string
+              }
+            | { key: string; metadata?: Record<string, string> }
+          ))
+        | {
+            type: "failed"
+          }
+      >
+    }
 )
 
 export type ProviderHookContext = {

@@ -575,6 +575,93 @@ export function DialogConnectProvider(props: { provider: string }) {
     )
   }
 
+  function OAuthAutoCodeView() {
+    const [formStore, setFormStore] = createStore({
+      value: "",
+      error: undefined as string | undefined,
+      complete: false,
+    })
+
+    async function finish() {
+      if (formStore.complete) return
+      setFormStore("complete", true)
+      await complete()
+    }
+
+    async function submitCode(code: string) {
+      const result = await globalSDK.client.provider.oauth
+        .callback({
+          providerID: props.provider,
+          method: store.methodIndex,
+          code,
+        })
+        .then((value) => (value.error ? { ok: false as const, error: value.error } : { ok: true as const }))
+        .catch((error) => ({ ok: false as const, error }))
+      if (result.ok) {
+        await finish()
+        return
+      }
+      setFormStore("error", formatError(result.error, language.t("provider.connect.oauth.code.invalid")))
+    }
+
+    async function handleSubmit(e: SubmitEvent) {
+      e.preventDefault()
+      const form = e.currentTarget as HTMLFormElement
+      const formData = new FormData(form)
+      const code = formData.get("code") as string
+      if (!code?.trim()) {
+        setFormStore("error", language.t("provider.connect.oauth.code.required"))
+        return
+      }
+      setFormStore("error", undefined)
+      await submitCode(code)
+    }
+
+    onMount(() => {
+      void (async () => {
+        const result = await globalSDK.client.provider.oauth
+          .callback({
+            providerID: props.provider,
+            method: store.methodIndex,
+          })
+          .then((value) => (value.error ? { ok: false as const, error: value.error } : { ok: true as const }))
+          .catch((error) => ({ ok: false as const, error }))
+        if (!alive.value || formStore.complete) return
+        if (!result.ok) return
+        await finish()
+      })()
+    })
+
+    return (
+      <div class="flex flex-col gap-6">
+        <div class="text-14-regular text-text-base">
+          {language.t("provider.connect.oauth.auto.visit.prefix")}
+          <Link href={store.authorization!.url}>{language.t("provider.connect.oauth.auto.visit.link")}</Link>
+          {language.t("provider.connect.oauth.auto.visit.suffix", { provider: provider().name })}
+        </div>
+        <div class="text-14-regular text-text-base flex items-center gap-4">
+          <Spinner />
+          <span>{language.t("provider.connect.status.waiting")}</span>
+        </div>
+        <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
+          <TextField
+            type="text"
+            label={language.t("provider.connect.oauth.code.label", { method: method()?.label ?? "" })}
+            placeholder={language.t("provider.connect.oauth.code.placeholder")}
+            name="code"
+            value={formStore.value}
+            onChange={(v) => setFormStore("value", v)}
+            validationState={formStore.error ? "invalid" : undefined}
+            error={formStore.error}
+          />
+          <Button class="w-auto" type="submit" size="large" variant="primary">
+            {language.t("common.continue")}
+          </Button>
+        </form>
+      </div>
+    )
+  }
+
   return (
     <Dialog
       title={
@@ -642,6 +729,9 @@ export function DialogConnectProvider(props: { provider: string }) {
                   </Match>
                   <Match when={store.authorization?.method === "auto"}>
                     <OAuthAutoView />
+                  </Match>
+                  <Match when={store.authorization?.method === "auto-code"}>
+                    <OAuthAutoCodeView />
                   </Match>
                 </Switch>
               </Match>

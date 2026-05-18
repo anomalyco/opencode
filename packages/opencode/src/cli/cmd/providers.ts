@@ -131,13 +131,18 @@ const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
       }
     }
 
-    if (authorize.method === "code") {
+    if (authorize.method === "code" || authorize.method === "auto-code") {
       const code = yield* Prompt.text({
-        message: "Paste the authorization code here: ",
-        validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+        message:
+          authorize.method === "auto-code"
+            ? "Paste the authorization code if shown, or press Enter to wait: "
+            : "Paste the authorization code here: ",
+        validate: (x) => (authorize.method === "auto-code" || (x && x.length > 0) ? undefined : "Required"),
       })
       const authorizationCode = yield* promptValue(code)
-      const result = yield* cliTry("Failed to authorize: ", () => authorize.callback(authorizationCode))
+      const result = yield* cliTry("Failed to authorize: ", () =>
+        authorize.method === "auto-code" ? authorize.callback(authorizationCode || undefined) : authorize.callback(authorizationCode),
+      )
       if (result.type === "failed") {
         yield* Prompt.log.error("Failed to authorize")
       }
