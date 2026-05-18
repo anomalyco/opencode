@@ -434,7 +434,11 @@ export const layerWith = (options?: LayerOptions) =>
           const location =
             options?.location ??
             (serviceLocation
-              ? { directory: serviceLocation.directory, workspaceID: serviceLocation.workspaceID }
+              ? new Location.Info({
+                  directory: serviceLocation.directory,
+                  ...(serviceLocation.workspaceID ? { workspaceID: serviceLocation.workspaceID } : {}),
+                  project: serviceLocation.project,
+                })
               : undefined)
           return yield* publishEvent(
             {

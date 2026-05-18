@@ -195,8 +195,17 @@ type RouteRequirements =
 
 export function createRoutes(
   corsOptions?: CorsOptions,
+  options?: {
+    readonly cors?: boolean
+    readonly freshRoutes?: boolean
+    readonly routes?: ReadonlyArray<Layer.Layer<never, never, RouteRequirements | SessionRunState.Service>>
+    readonly routerLayers?: ReadonlyArray<Layer.Layer<never, never, HttpRouter.HttpRouter>>
+  },
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
-  return Layer.mergeAll(
+  const corsLayer = options?.cors === false ? [] : [cors(corsOptions)]
+  const routerLayers = options?.routerLayers ?? []
+  const routeLayers = options?.routes ?? []
+  const routes = Layer.mergeAll(
     rootApiRoutes,
     eventApiRoutes,
     ptyConnectApiRoutes,
@@ -204,13 +213,16 @@ export function createRoutes(
     serverRoutes,
     docRoute,
     uiRoute,
-  ).pipe(
+    ...routeLayers,
+  )
+  return (options?.freshRoutes ? Layer.fresh(routes) : routes).pipe(
     Layer.provide([
       errorLayer,
       compressionLayer,
       corsVaryFix,
       fenceLayer.pipe(Layer.provide(Database.defaultLayer)),
-      cors(corsOptions),
+      ...corsLayer,
+      ...routerLayers,
       Database.defaultLayer,
       Account.defaultLayer,
       Agent.defaultLayer,

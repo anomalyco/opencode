@@ -1,7 +1,10 @@
 import { expect } from "bun:test"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Scope } from "effect"
+import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { makeRuntime } from "../../src/effect/run-service"
+import { AppRuntime } from "../../src/effect/app-runtime"
+import { SessionRunState } from "../../src/session/run-state"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { it } from "../lib/effect"
 
@@ -86,4 +89,35 @@ it.live("makeRuntime inherits InstanceRef from the current fiber", () =>
       },
     }),
   ),
+)
+
+// Regression for parallel-generation bug. `Server.listen()` used to build its
+// listener layer tree with a fresh `Layer.makeMemoMapUnsafe()`, producing a
+// second `SessionRunState` instance independent of the AppRuntime singleton.
+// Sessions touched by both the TCP listener path and the in-process
+// AppRuntime path (plugins, Bus subscribers, subagents) got two `Runner`s
+// from two `runners` Maps, so Esc cancelled only one and the other kept
+// streaming. The fix shares the process-wide `memoMap` so the listener and
+// AppRuntime resolve to the same Service instances; these tests pin down
+// that invariant.
+it.live("Layer.buildWithMemoMap with shared memoMap reuses AppRuntime's SessionRunState", () =>
+  Effect.gen(function* () {
+    const fromAppRuntime = yield* Effect.promise(() =>
+      AppRuntime.runPromise(SessionRunState.Service.use((svc) => Effect.succeed(svc))),
+    )
+    const scope = yield* Scope.Scope
+    const ctx = yield* Layer.buildWithMemoMap(SessionRunState.defaultLayer, memoMap, scope)
+    expect(Context.get(ctx, SessionRunState.Service)).toBe(fromAppRuntime)
+  }),
+)
+
+it.live("Layer.buildWithMemoMap with a fresh MemoMap produces a separate SessionRunState", () =>
+  Effect.gen(function* () {
+    const fromAppRuntime = yield* Effect.promise(() =>
+      AppRuntime.runPromise(SessionRunState.Service.use((svc) => Effect.succeed(svc))),
+    )
+    const scope = yield* Scope.Scope
+    const ctx = yield* Layer.buildWithMemoMap(SessionRunState.defaultLayer, Layer.makeMemoMapUnsafe(), scope)
+    expect(Context.get(ctx, SessionRunState.Service)).not.toBe(fromAppRuntime)
+  }),
 )

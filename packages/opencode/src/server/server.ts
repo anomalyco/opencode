@@ -1,8 +1,9 @@
 import "./init-projectors"
 
 import { NodeHttpServer } from "@effect/platform-node"
+import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
-import { HttpRouter, HttpServer } from "effect/unstable/http"
+import { HttpMiddleware, HttpRouter, HttpServer } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
 import { createServer } from "node:http"
 import { MDNS } from "./mdns"
@@ -10,7 +11,7 @@ import { HttpApiApp } from "./routes/instance/httpapi/server"
 import { disposeMiddleware } from "./routes/instance/httpapi/lifecycle"
 import { WebSocketTracker } from "./routes/instance/httpapi/websocket-tracker"
 import { PublicApi } from "./routes/instance/httpapi/public"
-import type { CorsOptions } from "./cors"
+import { isAllowedCorsOrigin, type CorsOptions } from "./cors"
 import { lazy } from "@/util/lazy"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
@@ -97,12 +98,24 @@ const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unkno
   },
 )
 
-function listenerLayer(opts: ListenOptions, port: number) {
-  return HttpRouter.serve(HttpApiApp.createRoutes(opts), {
-    middleware: disposeMiddleware,
-    disableLogger: true,
-    disableListenLog: true,
+export function listenerLayer(
+  opts: ListenOptions,
+  port: number,
+  routeLayers: NonNullable<NonNullable<Parameters<typeof HttpApiApp.createRoutes>[1]>["routes"]> = [],
+) {
+  const routes = HttpApiApp.createRoutes(opts, {
+    cors: false,
+    freshRoutes: true,
+    routes: routeLayers,
+    routerLayers: [listenerCorsLayer(opts)],
+  })
+  return Effect.gen(function* () {
+    const router = yield* HttpRouter.HttpRouter
+    return HttpServer.serve(router.asHttpEffect(), disposeMiddleware)
   }).pipe(
+    Layer.unwrap,
+    Layer.provideMerge(routes),
+    Layer.provide(Layer.fresh(HttpRouter.layer)),
     Layer.provideMerge(WebSocketTracker.layer),
     Layer.provideMerge(serverLayer({ port, hostname: opts.hostname })),
     // Install a fresh `ConfigProvider` per listener so `Config.string(...)`
@@ -114,6 +127,14 @@ function listenerLayer(opts: ListenOptions, port: number) {
   )
 }
 
+function listenerCorsLayer(opts: ListenOptions) {
+  const cors = HttpMiddleware.cors({
+    allowedOrigins: (origin) => isAllowedCorsOrigin(origin, opts),
+    maxAge: 86_400,
+  })
+  return HttpRouter.middleware(cors, { global: true })
+}
+
 function startWithPortFallback(opts: ListenOptions) {
   if (opts.port !== 0) return startListener(opts, opts.port)
   // Match the legacy listener port-resolution behavior: explicit `0` prefers
@@ -123,7 +144,22 @@ function startWithPortFallback(opts: ListenOptions) {
 
 function startListener(opts: ListenOptions, port: number) {
   const scope = Scope.makeUnsafe()
-  return Layer.buildWithMemoMap(listenerLayer(opts, port), Layer.makeMemoMapUnsafe(), scope).pipe(
+  // Use the process-wide shared MemoMap so the listener's layer tree reuses the same
+  // singleton instances of SessionRunState, SessionPrompt, Permission, etc. that
+  // AppRuntime, Server.Default, and other `memoMap`-backed runtimes already use.
+  // `listenerLayer` creates fresh HTTP infrastructure layers per call, so they
+  // stay listener-local; only Service-tagged singletons get deduplicated.
+  //
+  // With a per-listener `Layer.makeMemoMapUnsafe()`, the listener built its own
+  // copy of SessionRunState. When the same session took activity on both the TCP
+  // listener path AND the in-process path (Server.Default().app.fetch from a
+  // plugin / subagent / Bus subscriber resolved against AppRuntime), each
+  // SessionRunState instance created its own Runner in its own Map. The Maps were
+  // independent: aborts cancelled only the runner in the service the abort
+  // happened to route to; the other runner kept streaming, producing parallel
+  // generations and "assistant message prefill" errors when the same session
+  // accumulated two trailing assistant messages.
+  return Layer.buildWithMemoMap(listenerLayer(opts, port), memoMap, scope).pipe(
     Effect.provide(HttpApiApp.context),
     Effect.onError(() => Scope.close(scope, Exit.void).pipe(Effect.ignore)),
     Effect.map(
