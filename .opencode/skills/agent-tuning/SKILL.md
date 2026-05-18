@@ -10,7 +10,7 @@ description: Configure and optimize AI coding agents (OpenCode/Claude). Use when
 ~/.config/opencode/
 ├── opencode.json          # Main config
 ├── agent/                 # Custom agent prompts
-│   ├── orchestrator.md
+│   ├── ammo_team_lead.md
 │   ├── researcher.md
 │   ├── implementor_cpp.md
 │   ├── tester_cpp.md
@@ -139,7 +139,7 @@ permission:
 
 ## Agent Roles
 
-### Orchestrator Agent
+### AMMO Team Lead Agent
 - Has `task: true` to delegate
 - Has `question: true` to interact with user
 - Limited direct tool access
@@ -195,7 +195,7 @@ Begin with minimal permissions, expand as needed.
 ```
 
 ### 3. Separate Concerns
-- Orchestrator: coordinates
+- AMMO Team Lead: coordinates
 - Researcher: investigates
 - Implementor C++: changes code
 - Reviewer: validates

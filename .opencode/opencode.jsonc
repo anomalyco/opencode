@@ -16,13 +16,13 @@
 		"github-pr-search": false
 	},
 	// Agents live in .opencode/agent/ — skills live in .opencode/skills/
-	// Use @orchestrator as the main entry point for any task.
+	// Use @ammo_team_lead as the main entry point for any task.
 	"agent": {
 		// ── Core agents ───────────────────────────────────────────────────────
-		"orchestrator": {
-			"description": "Orchestrator - coordinates all work, delegates to specialists",
+		"ammo_team_lead": {
+			"description": "AMMO Team Lead - coordinates all work, delegates to specialists",
 			"mode": "primary",
-			"prompt": "{file:agent/orchestrator.md}"
+			"prompt": "{file:agent/ammo_team_lead.md}"
 		},
 		"researcher": {
 			"description": "Researcher + Planner - deep codebase analysis, actionable plans",
