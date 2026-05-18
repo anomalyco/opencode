@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test"
 import os from "os"
+import path from "path"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { Bus } from "../../src/bus"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -1183,6 +1184,30 @@ it.instance(
       const exit = yield* Fiber.await(fiber)
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Permission.RejectedError)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - tilde/absolute rule matches worktree-relative path via candidate resolution",
+  () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const home = os.homedir()
+      const absPath = path.join(home, ".config/opencode/opencode.jsonc")
+      const relPath = path.relative(test.directory, absPath)
+
+      yield* ask({
+        sessionID: SessionID.make("session_tilde"),
+        permission: "read",
+        patterns: [relPath],
+        always: ["*"],
+        metadata: {},
+        ruleset: [
+          { permission: "read", pattern: "*", action: "deny" },
+          { permission: "read", pattern: `${home}/.config/opencode/**`, action: "allow" },
+        ],
+      })
     }),
   { git: true },
 )

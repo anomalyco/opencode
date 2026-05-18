@@ -11,7 +11,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Wildcard } from "@/util/wildcard"
 import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import os from "os"
-import * as path from "path"
+import path from "path"
 import { evaluate as evalRule } from "./evaluate"
 import { PermissionID } from "./schema"
 
