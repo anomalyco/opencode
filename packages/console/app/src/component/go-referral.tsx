@@ -1,5 +1,6 @@
 import { action, createAsync, json, query, useAction, useSubmission } from "@solidjs/router"
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
+import { getRequestEvent } from "solid-js/web"
 import { Referral } from "@opencode-ai/console-core/referral.js"
 import { withActor } from "~/context/auth.withActor"
 import { Modal } from "~/component/modal"
@@ -73,14 +74,17 @@ function rewardPendingStatusKey(source: GoReferralReward["source"]) {
 function CopyInviteLink(props: { summary: GoReferralSummary }) {
   const i18n = useI18n()
   const [copied, setCopied] = createSignal(false)
-  const [origin, setOrigin] = createSignal("")
+  const event = getRequestEvent()
+  const origin = event
+    ? new URL(event.request.url).origin
+    : typeof window === "object"
+      ? window.location.origin
+      : undefined
   const inviteUrl = createMemo(() => {
     const path = `/go?ref=${props.summary.inviteCode}`
-    if (!origin()) return path
-    return new URL(path, origin()).toString()
+    if (!origin) return path
+    return new URL(path, origin).toString()
   })
-
-  onMount(() => setOrigin(window.location.origin))
 
   async function copy() {
     if (typeof navigator !== "object") return
