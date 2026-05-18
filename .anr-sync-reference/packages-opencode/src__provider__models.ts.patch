@@ -1,0 +1,197 @@
+diff --git a/packages/opencode/src/provider/models.ts b/packages/opencode/src/provider/models.ts
+index bae331784..d1b5b3a04 100644
+--- a/packages/opencode/src/provider/models.ts
++++ b/packages/opencode/src/provider/models.ts
+@@ -1,3 +1,5 @@
++// DANGER ZONE: Shared across CLI + ANR surfaces.
++// ANR sets OPENCODE_API_ENDPOINT at runtime, not module load time. See /AGENTS.md#surface-flavor-rules
+ import { Global } from "../global"
+ import { Log } from "../util/log"
+ import path from "path"
+@@ -13,7 +15,13 @@ import { Filesystem } from "../util/filesystem"
+ 
+ export namespace ModelsDev {
+   const log = Log.create({ service: "models.dev" })
+-  const filepath = path.join(Global.Path.cache, "models.json")
++
++  function cache() {
++    const endpoint = Flag.OPENCODE_API_ENDPOINT
++    if (!endpoint) return path.join(Global.Path.cache, "models.json")
++    const hash = Bun.hash(endpoint).toString(36)
++    return path.join(Global.Path.cache, `models-${hash}.json`)
++  }
+ 
+   export const Model = z.object({
+     id: z.string(),
+@@ -85,8 +93,101 @@ export namespace ModelsDev {
+     return Flag.OPENCODE_MODELS_URL || "https://models.dev"
+   }
+ 
++  function fromDynamoDBValue(value: Record<string, unknown>): unknown {
++    if ("S" in value) return value.S
++    if ("N" in value) return Number(value.N)
++    if ("BOOL" in value) return value.BOOL
++    if ("M" in value) {
++      const map = value.M as Record<string, Record<string, unknown>>
++      return Object.fromEntries(Object.entries(map).map(([k, v]) => [k, fromDynamoDBValue(v)]))
++    }
++    if ("L" in value) {
++      const list = value.L as Record<string, unknown>[]
++      return list.map((item) => fromDynamoDBValue(item))
++    }
++    return undefined
++  }
++
++  export function parsePolicyModels(policy: Record<string, unknown>): Record<string, Provider> {
++    const modelsAttr = policy.models as { M?: Record<string, Record<string, unknown>> } | undefined
++    if (!modelsAttr?.M) return {}
++    return Object.fromEntries(
++      Object.entries(modelsAttr.M).map(([providerID, providerDDB]) => [
++        providerID,
++        fromDynamoDBValue(providerDDB) as Provider,
++      ]),
++    )
++  }
++
++  async function fetchFromApiEndpoint(): Promise<Record<string, unknown> | undefined> {
++    const headers: Record<string, string> = {
++      "User-Agent": Installation.USER_AGENT,
++    }
++    const idToken = process.env.OPENCODE_ANR_ID_TOKEN
++    if (idToken) {
++      headers.Authorization = `Bearer ${idToken}`
++    }
++    const result = await fetch(`${Flag.OPENCODE_API_ENDPOINT}/model`, {
++      headers,
++      signal: AbortSignal.timeout(10 * 1000),
++    }).catch((e) => {
++      log.error("Failed to fetch from API endpoint", { error: e, url: `${Flag.OPENCODE_API_ENDPOINT}/model` })
++    })
++    if (result && result.ok) return result.json()
++    if (result)
++      log.error("API endpoint returned non-ok response", {
++        status: result.status,
++        url: `${Flag.OPENCODE_API_ENDPOINT}/model`,
++      })
++    return undefined
++  }
++
+   export const Data = lazy(async () => {
+-    const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
++    if (Flag.OPENCODE_API_ENDPOINT) {
++      // When API endpoint is configured, ONLY use that endpoint
++      const cached = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? cache()).catch(() => {})
++      if (cached) {
++        // Validate cache is from API endpoint (should have amazon-bedrock provider for ANR)
++        // If cache looks like models.dev format (has many providers), invalidate it
++        const providerCount = Object.keys(cached).length
++        if (providerCount > 5) {
++          // Likely models.dev cache (has 20+ providers), invalidate it
++          log.warn("Invalidating stale models.dev cache, will fetch from API endpoint", {
++            providerCount,
++          })
++        } else {
++          log.info("Using cached models from API endpoint")
++          return cached
++        }
++      }
++      const policy = await fetchFromApiEndpoint()
++      if (policy) {
++        // Check if response has models in DynamoDB format (with .M) or direct format
++        const modelsAttr = policy.models as { M?: Record<string, Record<string, unknown>> } | undefined
++        if (modelsAttr?.M) {
++          // DynamoDB format - parse it
++          const models = parsePolicyModels(policy)
++          log.info("Loaded models from API endpoint (DynamoDB format)", {
++            providerCount: Object.keys(models).length,
++          })
++          // Cache the result
++          await Filesystem.write(cache(), JSON.stringify(models))
++          return models
++        } else if (policy.models && typeof policy.models === "object") {
++          // Direct format - use it as-is
++          const models = policy.models as Record<string, Provider>
++          log.info("Loaded models from API endpoint (direct format)", {
++            providerCount: Object.keys(models).length,
++          })
++          // Cache the result
++          await Filesystem.write(cache(), JSON.stringify(models))
++          return models
++        }
++      }
++      log.warn("API endpoint configured but no models returned, using empty set")
++      return {}
++    }
++    const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? cache()).catch(() => {})
+     if (result) return result
+     // @ts-ignore
+     const snapshot = await import("./models-snapshot")
+@@ -104,6 +205,37 @@ export namespace ModelsDev {
+   }
+ 
+   export async function refresh() {
++    if (Flag.OPENCODE_API_ENDPOINT) {
++      log.info("Refreshing models from API endpoint")
++      const policy = await fetchFromApiEndpoint()
++      if (policy) {
++        // Check if response has models in DynamoDB format (with .M) or direct format
++        const modelsAttr = policy.models as { M?: Record<string, Record<string, unknown>> } | undefined
++        let modelsData: Record<string, Provider>
++        if (modelsAttr?.M) {
++          // DynamoDB format - parse it
++          modelsData = parsePolicyModels(policy)
++          log.info("Refreshed models from API endpoint (DynamoDB format)", {
++            providerCount: Object.keys(modelsData).length,
++          })
++        } else if (policy.models && typeof policy.models === "object") {
++          // Direct format - use it as-is
++          modelsData = policy.models as Record<string, Provider>
++          log.info("Refreshed models from API endpoint (direct format)", {
++            providerCount: Object.keys(modelsData).length,
++          })
++        } else {
++          log.warn("API endpoint returned policy without models field")
++          return
++        }
++        await Filesystem.write(cache(), JSON.stringify(modelsData))
++        ModelsDev.Data.reset()
++      } else {
++        log.warn("API endpoint refresh returned no data")
++      }
++      return
++    }
++    log.info("Refreshing models from models.dev")
+     const result = await fetch(`${url()}/api.json`, {
+       headers: {
+         "User-Agent": Installation.USER_AGENT,
+@@ -115,14 +247,28 @@ export namespace ModelsDev {
+       })
+     })
+     if (result && result.ok) {
+-      await Filesystem.write(filepath, await result.text())
++      await Filesystem.write(cache(), await result.text())
+       ModelsDev.Data.reset()
++      log.info("Successfully refreshed models from models.dev")
+     }
+   }
+ }
+ 
++// Auto-refresh models periodically, but NOT immediately on module load when using API endpoint
++// because ANR initialization needs to complete first to set authentication token
+ if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
+-  ModelsDev.refresh()
++  const isANRMode = process.env.OPENCODE_FLAVOR === "anr"
++
++  if (!isANRMode) {
++    // For non-ANR mode, refresh immediately from models.dev
++    // ANR mode skips this - OPENCODE_API_ENDPOINT isn't set until initializeANR() runs
++    ModelsDev.refresh()
++  }
++  // For ANR mode with API endpoint, skip initial refresh - it will happen:
++  // 1. On first Data() call (via lazy loader)
++  // 2. Or via the periodic refresh below after ANR has initialized
++
++  // Periodic refresh every 60 minutes
+   setInterval(
+     async () => {
+       await ModelsDev.refresh()

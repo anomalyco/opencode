@@ -23,7 +23,7 @@ export function Spinner(props: {
       viewBox="0 0 15 15"
       data-component="spinner"
       classList={{
-        ...(props.classList ?? {}),
+        ...props.classList,
         [props.class ?? ""]: !!props.class,
       }}
       fill="currentColor"

@@ -1,0 +1,15 @@
+diff --git a/packages/opencode/src/session/compaction.ts b/packages/opencode/src/session/compaction.ts
+index 8d934c05d..24f7eb4a8 100644
+--- a/packages/opencode/src/session/compaction.ts
++++ b/packages/opencode/src/session/compaction.ts
+@@ -153,8 +153,8 @@ export namespace SessionCompaction {
+         reasoning: 0,
+         cache: { read: 0, write: 0 },
+       },
+-      modelID: model.id,
+-      providerID: model.providerID,
++      modelID: ModelID.make(model.id),
++      providerID: ProviderID.make(model.providerID),
+       time: {
+         created: Date.now(),
+       },

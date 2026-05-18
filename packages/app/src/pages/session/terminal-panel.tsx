@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -20,6 +21,7 @@ import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
 export function TerminalPanel() {
+  const delays = [120, 240]
   const layout = useLayout()
   const terminal = useTerminal()
   const language = useLanguage()
@@ -35,6 +37,7 @@ export function TerminalPanel() {
   const [store, setStore] = createStore({
     autoCreated: false,
     activeDraggable: undefined as string | undefined,
+    recovered: {} as Record<string, boolean>,
     view: typeof window === "undefined" ? 1000 : (window.visualViewport?.height ?? window.innerHeight),
   })
 
@@ -48,12 +51,8 @@ export function TerminalPanel() {
     const port = window.visualViewport
 
     sync()
-    window.addEventListener("resize", sync)
-    port?.addEventListener("resize", sync)
-    onCleanup(() => {
-      window.removeEventListener("resize", sync)
-      port?.removeEventListener("resize", sync)
-    })
+    makeEventListener(window, "resize", sync)
+    if (port) makeEventListener(port, "resize", sync)
   })
 
   createEffect(() => {
@@ -87,7 +86,7 @@ export function TerminalPanel() {
       focusTerminalById(id)
     })
 
-    const timers = [120, 240].map((ms) =>
+    const timers = delays.map((ms) =>
       window.setTimeout(() => {
         if (!opened()) return
         if (terminal.active() !== id) return
@@ -146,6 +145,21 @@ export function TerminalPanel() {
 
   const all = terminal.all
   const ids = createMemo(() => all().map((pty) => pty.id))
+
+  const recoverTerminal = (key: string, id: string, clone: (id: string) => Promise<void>) => {
+    if (store.recovered[key]) return
+    setStore("recovered", key, true)
+    void clone(id)
+  }
+
+  const terminalRecoveryKey = (pty: { id: string; title: string; titleNumber: number }) => {
+    return String(pty.titleNumber || pty.title || pty.id)
+  }
+
+  const markTerminalConnected = (key: string, id: string, trim: (id: string) => void) => {
+    setStore("recovered", key, false)
+    trim(id)
+  }
 
   const handleTerminalDragStart = (event: unknown) => {
     const id = getDraggableId(event)
@@ -273,21 +287,24 @@ export function TerminalPanel() {
               </Tabs>
               <div class="flex-1 min-h-0 relative">
                 <Show when={terminal.active()} keyed>
-                  {(id) => (
-                    <Show when={all().find((pty) => pty.id === id)}>
-                      {(pty) => (
-                        <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
-                          <Terminal
-                            pty={pty()}
-                            autoFocus={opened()}
-                            onConnect={() => terminal.trim(id)}
-                            onCleanup={terminal.update}
-                            onConnectError={() => terminal.clone(id)}
-                          />
-                        </div>
-                      )}
-                    </Show>
-                  )}
+                  {(id) => {
+                    const ops = terminal.bind()
+                    return (
+                      <Show when={all().find((pty) => pty.id === id)}>
+                        {(pty) => (
+                          <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
+                            <Terminal
+                              pty={pty()}
+                              autoFocus={opened()}
+                              onConnect={() => markTerminalConnected(terminalRecoveryKey(pty()), id, ops.trim)}
+                              onCleanup={ops.update}
+                              onConnectError={() => recoverTerminal(terminalRecoveryKey(pty()), id, ops.clone)}
+                            />
+                          </div>
+                        )}
+                      </Show>
+                    )
+                  }}
                 </Show>
               </div>
             </div>

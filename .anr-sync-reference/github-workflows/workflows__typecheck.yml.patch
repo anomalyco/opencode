@@ -1,0 +1,21 @@
+diff --git a/.github/workflows/typecheck.yml b/.github/workflows/typecheck.yml
+index b247d24b4..39edcb4ed 100644
+--- a/.github/workflows/typecheck.yml
++++ b/.github/workflows/typecheck.yml
+@@ -1,15 +1,11 @@
+ name: typecheck
+ 
+ on:
+-  push:
+-    branches: [dev]
+-  pull_request:
+-    branches: [dev]
+   workflow_dispatch:
+ 
+ jobs:
+   typecheck:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
++    runs-on: ubuntu-latest
+     steps:
+       - name: Checkout repository
+         uses: actions/checkout@v4

@@ -19,7 +19,7 @@ import {
 } from "@opencode-ai/anr-core"
 import type { QuotaPolicy, QuotaUsage, QuotaCheckResponse } from "@opencode-ai/anr-core"
 import { SessionRetry } from "../../src/session/retry"
-import type { NamedError } from "@opencode-ai/util/error"
+import type { NamedError } from "@opencode-ai/core/util/error"
 
 // ── helpers ──
 
@@ -184,7 +184,7 @@ describe("CLI retry: quota errors are not retried", () => {
       data: { message: "Quota exceeded.\n  Daily: 5,200,000 / 5,000,000 tokens (104%)" },
     } as ReturnType<NamedError["toObject"]>
 
-    const result = SessionRetry.retryable(err)
+    const result = SessionRetry.retryable(err, "anthropic")
     expect(result).toBeUndefined()
   })
 
@@ -204,7 +204,7 @@ describe("CLI retry: quota errors are not retried", () => {
       data: { message: "Quota exceeded." },
     } as ReturnType<NamedError["toObject"]>
 
-    expect(SessionRetry.retryable(quotaErr)).toBeUndefined()
+    expect(SessionRetry.retryable(quotaErr, "anthropic")).toBeUndefined()
   })
 })
 

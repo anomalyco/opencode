@@ -11,7 +11,7 @@ export const dict = {
   "nav.enterprise": "Enterprise",
   "nav.zen": "Zen",
   "nav.login": "Anmelden",
-  "nav.free": "Kostenlos",
+  "nav.free": "Download",
   "nav.home": "Startseite",
   "nav.openMenu": "Menü öffnen",
   "nav.getStartedFree": "Kostenlos starten",
@@ -253,7 +253,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Kostengünstige Coding-Modelle für alle",
   "go.meta.description":
-    "Go beginnt bei $5 für den ersten Monat, danach $10/Monat, mit großzügigen 5-Stunden-Anfragelimits für GLM-5, Kimi K2.5 und MiniMax M2.5.",
+    "Go beginnt bei $5 für den ersten Monat, danach $10/Monat, mit großzügigen 5-Stunden-Anfragelimits für GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro und DeepSeek V4 Flash.",
   "go.hero.title": "Kostengünstige Coding-Modelle für alle",
   "go.hero.body":
     "Go bringt Agentic Coding zu Programmierern auf der ganzen Welt. Mit großzügigen Limits und zuverlässigem Zugang zu den leistungsfähigsten Open-Source-Modellen, damit du mit leistungsstarken Agenten entwickeln kannst, ohne dir Gedanken über Kosten oder Verfügbarkeit zu machen.",
@@ -301,7 +301,8 @@ export const dict = {
   "go.problem.item1": "Kostengünstiges Abonnement",
   "go.problem.item2": "Großzügige Limits und zuverlässiger Zugang",
   "go.problem.item3": "Für so viele Programmierer wie möglich gebaut",
-  "go.problem.item4": "Beinhaltet GLM-5, Kimi K2.5 und MiniMax M2.5",
+  "go.problem.item4":
+    "Beinhaltet GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro und DeepSeek V4 Flash",
   "go.how.title": "Wie Go funktioniert",
   "go.how.body":
     "Go beginnt bei $5 für den ersten Monat, danach $10/Monat. Du kannst es mit OpenCode oder jedem Agenten nutzen.",
@@ -324,10 +325,10 @@ export const dict = {
   "go.faq.a1":
     "Go ist ein kostengünstiges Abonnement, das dir zuverlässigen Zugang zu leistungsfähigen Open-Source-Modellen für Agentic Coding bietet.",
   "go.faq.q2": "Welche Modelle beinhaltet Go?",
-  "go.faq.a2": "Go beinhaltet GLM-5, Kimi K2.5 und MiniMax M2.5, mit großzügigen Limits und zuverlässigem Zugang.",
+  "go.faq.a2": "Go umfasst die unten aufgeführten Modelle mit großzügigen Limits und zuverlässigem Zugriff.",
   "go.faq.q3": "Ist Go dasselbe wie Zen?",
   "go.faq.a3":
-    "Nein. Zen ist Pay-as-you-go, während Go bei $5 für den ersten Monat beginnt, danach $10/Monat, mit großzügigen Limits und zuverlässigem Zugang zu den Open-Source-Modellen GLM-5, Kimi K2.5 und MiniMax M2.5.",
+    "Nein. Zen ist Pay-as-you-go, während Go bei $5 für den ersten Monat beginnt, danach $10/Monat, mit großzügigen Limits und zuverlässigem Zugang zu den Open-Source-Modellen GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro und DeepSeek V4 Flash.",
   "go.faq.q4": "Wie viel kostet Go?",
   "go.faq.a4.p1.beforePricing": "Go kostet",
   "go.faq.a4.p1.pricingLink": "$5 im ersten Monat",
@@ -337,8 +338,7 @@ export const dict = {
   "go.faq.a4.p3": "Jederzeit kündbar.",
   "go.faq.q5": "Was ist mit Daten und Privatsphäre?",
   "go.faq.a5.body":
-    "Der Plan ist primär für internationale Nutzer konzipiert, mit Modellen gehostet in den USA, der EU und Singapur für stabilen globalen Zugang.",
-  "go.faq.a5.contactAfter": "wenn du Fragen hast.",
+    "Der Plan ist primär für internationale Nutzer konzipiert, mit Modellen gehostet in den USA, der EU und Singapur für stabilen globalen Zugang. Unsere Anbieter verfolgen eine Zero-Retention-Politik und nutzen deine Daten nicht für das Training von Modellen.",
   "go.faq.a5.beforeExceptions":
     "Go-Modelle werden in den USA gehostet. Anbieter verfolgen eine Zero-Retention-Politik und nutzen deine Daten nicht für das Training von Modellen, mit den",
   "go.faq.a5.exceptionsLink": "folgenden Ausnahmen",
@@ -352,7 +352,7 @@ export const dict = {
 
   "go.faq.q9": "Was ist der Unterschied zwischen kostenlosen Modellen und Go?",
   "go.faq.a9":
-    "Kostenlose Modelle beinhalten Big Pickle sowie Werbemodelle, die zum jeweiligen Zeitpunkt verfügbar sind, mit einem Kontingent von 200 Anfragen/Tag. Go beinhaltet GLM-5, Kimi K2.5 und MiniMax M2.5 mit höheren Anfragekontingenten, die über rollierende Zeitfenster (5 Stunden, wöchentlich und monatlich) durchgesetzt werden, grob äquivalent zu $12 pro 5 Stunden, $30 pro Woche und $60 pro Monat (tatsächliche Anfragezahlen variieren je nach Modell und Nutzung).",
+    "Kostenlose Modelle beinhalten Big Pickle sowie Werbemodelle, die zum jeweiligen Zeitpunkt verfügbar sind, mit einem Kontingent von 200 Anfragen/Tag. Go beinhaltet GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro und DeepSeek V4 Flash mit höheren Anfragekontingenten, die über rollierende Zeitfenster (5 Stunden, wöchentlich und monatlich) durchgesetzt werden, grob äquivalent zu $12 pro 5 Stunden, $30 pro Woche und $60 pro Monat (tatsächliche Anfragezahlen variieren je nach Modell und Nutzung).",
 
   "zen.api.error.rateLimitExceeded": "Ratenlimit überschritten. Bitte versuche es später erneut.",
   "zen.api.error.modelNotSupported": "Modell {{model}} wird nicht unterstützt",
@@ -362,8 +362,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "Fehlender API-Key.",
   "zen.api.error.invalidApiKey": "Ungültiger API-Key.",
   "zen.api.error.subscriptionQuotaExceeded": "Abonnement-Quote überschritten. Erneuter Versuch in {{retryIn}}.",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "Abonnement-Quote überschritten. Du kannst weiterhin kostenlose Modelle nutzen.",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "5-Stunden-Nutzungslimit erreicht. Wird in {{retryIn}} zurückgesetzt. Um dieses Modell jetzt weiter zu nutzen, aktiviere die Nutzung über dein verfügbares Guthaben: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "Wöchentliches Nutzungslimit erreicht. Wird in {{retryIn}} zurückgesetzt. Um dieses Modell jetzt weiter zu nutzen, aktiviere die Nutzung über dein verfügbares Guthaben: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "Monatliches Nutzungslimit erreicht. Wird in {{retryIn}} zurückgesetzt. Um dieses Modell jetzt weiter zu nutzen, aktiviere die Nutzung über dein verfügbares Guthaben: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "Keine Zahlungsmethode. Füge hier eine Zahlungsmethode hinzu: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "Unzureichendes Guthaben. Verwalte deine Abrechnung hier: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
@@ -371,6 +375,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "Du hast dein monatliches Ausgabenlimit von ${{amount}} erreicht. Verwalte deine Limits hier: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Modell ist deaktiviert",
+  "zen.api.error.trialEnded":
+    "Die kostenlose Aktion für {{model}} ist beendet. Du kannst das Modell weiterhin nutzen, indem du OpenCode Go abonnierst - {{link}}",
 
   "black.meta.title": "OpenCode Black | Zugriff auf die weltweit besten Coding-Modelle",
   "black.meta.description": "Erhalte Zugriff auf Claude, GPT, Gemini und mehr mit OpenCode Black Abos.",
@@ -549,6 +555,7 @@ export const dict = {
   "workspace.billing.addAction": "Hinzufügen",
   "workspace.billing.addBalance": "Guthaben aufladen",
   "workspace.billing.alipay": "Alipay",
+  "workspace.billing.wechat": "WeChat Pay",
   "workspace.billing.linkedToStripe": "Mit Stripe verbunden",
   "workspace.billing.manage": "Verwalten",
   "workspace.billing.enable": "Abrechnung aktivieren",
@@ -562,6 +569,13 @@ export const dict = {
   "workspace.monthlyLimit.noLimit": "Kein Nutzungslimit gesetzt.",
   "workspace.monthlyLimit.currentUsage.beforeMonth": "Aktuelle Nutzung für",
   "workspace.monthlyLimit.currentUsage.beforeAmount": "ist $",
+
+  "workspace.redeem.title": "Gutschein einlösen",
+  "workspace.redeem.subtitle": "Löse einen Gutscheincode ein, um Guthaben oder Vorteile zu erhalten.",
+  "workspace.redeem.placeholder": "Gutscheincode eingeben",
+  "workspace.redeem.redeem": "Einlösen",
+  "workspace.redeem.redeeming": "Wird eingelöst...",
+  "workspace.redeem.success": "Gutschein erfolgreich eingelöst.",
 
   "workspace.reload.title": "Auto-Reload",
   "workspace.reload.disabled.before": "Auto-Reload ist",
@@ -652,6 +666,8 @@ export const dict = {
     "Der Plan wurde hauptsächlich für internationale Nutzer entwickelt, wobei die Modelle in den USA, der EU und Singapur gehostet werden, um einen stabilen weltweiten Zugriff zu gewährleisten. Preise und Nutzungslimits können sich ändern, während wir aus der frühen Nutzung und dem Feedback lernen.",
   "workspace.lite.promo.subscribe": "Go abonnieren",
   "workspace.lite.promo.subscribing": "Leite weiter...",
+  "workspace.lite.promo.otherMethods": "Andere Zahlungsmethoden",
+  "workspace.lite.promo.selectMethod": "Zahlungsmethode auswählen",
 
   "download.title": "OpenCode | Download",
   "download.meta.description": "Lade OpenCode für macOS, Windows und Linux herunter",
@@ -698,8 +714,12 @@ export const dict = {
   "enterprise.form.name.placeholder": "Jeff Bezos",
   "enterprise.form.role.label": "Rolle",
   "enterprise.form.role.placeholder": "Executive Chairman",
+  "enterprise.form.company.label": "Unternehmen",
+  "enterprise.form.company.placeholder": "Acme Inc",
   "enterprise.form.email.label": "Firmen-E-Mail",
   "enterprise.form.email.placeholder": "jeff@amazon.com",
+  "enterprise.form.phone.label": "Telefonnummer",
+  "enterprise.form.phone.placeholder": "+1 234 567 8900",
   "enterprise.form.message.label": "Welches Problem versuchen Sie zu lösen?",
   "enterprise.form.message.placeholder": "Wir brauchen Hilfe bei...",
   "enterprise.form.send": "Senden",

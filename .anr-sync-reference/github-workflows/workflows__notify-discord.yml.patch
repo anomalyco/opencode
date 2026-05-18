@@ -1,0 +1,20 @@
+diff --git a/.github/workflows/notify-discord.yml b/.github/workflows/notify-discord.yml
+deleted file mode 100644
+index b1d805360..000000000
+--- a/.github/workflows/notify-discord.yml
++++ /dev/null
+@@ -1,14 +0,0 @@
+-name: notify-discord
+-
+-on:
+-  release:
+-    types: [released] # fires when a draft release is published
+-
+-jobs:
+-  notify:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    steps:
+-      - name: Send nicely-formatted embed to Discord
+-        uses: SethCohen/github-releases-to-discord@v1
+-        with:
+-          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}

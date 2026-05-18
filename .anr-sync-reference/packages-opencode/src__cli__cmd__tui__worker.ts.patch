@@ -1,0 +1,139 @@
+diff --git a/packages/opencode/src/cli/cmd/tui/worker.ts b/packages/opencode/src/cli/cmd/tui/worker.ts
+index 408350c52..7f0fe50bb 100644
+--- a/packages/opencode/src/cli/cmd/tui/worker.ts
++++ b/packages/opencode/src/cli/cmd/tui/worker.ts
+@@ -10,7 +10,13 @@ import { GlobalBus } from "@/bus/global"
+ import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
+ import type { BunWebSocketData } from "hono/bun"
+ import { Flag } from "@/flag/flag"
+-import { setTimeout as sleep } from "node:timers/promises"
++import {
++  loadANRConfig,
++  initializeOTEL,
++  shutdownOTEL,
++  reconstructTelemetryContextFromEnv,
++  initializeAuditLogger,
++} from "@opencode-ai/anr-core"
+ 
+ await Log.init({
+   print: process.argv.includes("--print-logs"),
+@@ -33,6 +39,34 @@ process.on("uncaughtException", (e) => {
+   })
+ })
+ 
++// Initialize OTEL and audit logger in the worker. The main thread's
++// MeterProvider and dynamoClient are not shared with Bun Workers.
++if (process.env.OPENCODE_FLAVOR === "anr") {
++  const config = await loadANRConfig(process.env.OPENCODE_ANR_ENV_FILE, true)
++
++  // OTEL: so token metrics from session processing are recorded
++  if (process.env.OPENCODE_ENABLE_TELEMETRY === "1") {
++    const workerContext = reconstructTelemetryContextFromEnv()
++    if (workerContext) {
++      initializeOTEL(config, workerContext)
++    }
++  }
++
++  // Audit logger: so logTokenUsage calls from processor.ts write to DynamoDB
++  if (
++    process.env.OPENCODE_ENABLE_AUDIT !== "0" &&
++    process.env.AWS_ACCESS_KEY_ID &&
++    process.env.AWS_SECRET_ACCESS_KEY &&
++    process.env.AWS_SESSION_TOKEN
++  ) {
++    initializeAuditLogger(config, {
++      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
++      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
++      sessionToken: process.env.AWS_SESSION_TOKEN,
++    })
++  }
++}
++
+ // Subscribe to global events and forward them via RPC
+ GlobalBus.on("event", (event) => {
+   Rpc.emit("global.event", event)
+@@ -44,7 +78,7 @@ const eventStream = {
+   abort: undefined as AbortController | undefined,
+ }
+ 
+-const startEventStream = (input: { directory: string; workspaceID?: string }) => {
++const startEventStream = (directory: string) => {
+   if (eventStream.abort) eventStream.abort.abort()
+   const abort = new AbortController()
+   eventStream.abort = abort
+@@ -59,8 +93,7 @@ const startEventStream = (input: { directory: string; workspaceID?: string }) =>
+ 
+   const sdk = createOpencodeClient({
+     baseUrl: "http://opencode.internal",
+-    directory: input.directory,
+-    experimental_workspaceID: input.workspaceID,
++    directory,
+     fetch: fetchFn,
+     signal,
+   })
+@@ -77,7 +110,7 @@ const startEventStream = (input: { directory: string; workspaceID?: string }) =>
+       ).catch(() => undefined)
+ 
+       if (!events) {
+-        await sleep(250)
++        await Bun.sleep(250)
+         continue
+       }
+ 
+@@ -86,7 +119,7 @@ const startEventStream = (input: { directory: string; workspaceID?: string }) =>
+       }
+ 
+       if (!signal.aborted) {
+-        await sleep(250)
++        await Bun.sleep(250)
+       }
+     }
+   })().catch((error) => {
+@@ -96,7 +129,7 @@ const startEventStream = (input: { directory: string; workspaceID?: string }) =>
+   })
+ }
+ 
+-startEventStream({ directory: process.cwd() })
++startEventStream(process.cwd())
+ 
+ export const rpc = {
+   async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
+@@ -136,15 +169,35 @@ export const rpc = {
+     Config.global.reset()
+     await Instance.disposeAll()
+   },
+-  async setWorkspace(input: { workspaceID?: string }) {
+-    startEventStream({ directory: process.cwd(), workspaceID: input.workspaceID })
++  async updateCredentials(input: {
++    accessKeyId: string
++    secretAccessKey: string
++    sessionToken: string
++    idToken?: string
++  }) {
++    process.env.AWS_ACCESS_KEY_ID = input.accessKeyId
++    process.env.AWS_SECRET_ACCESS_KEY = input.secretAccessKey
++    process.env.AWS_SESSION_TOKEN = input.sessionToken
++    if (input.idToken) process.env.OPENCODE_ANR_ID_TOKEN = input.idToken
++    Log.Default.info("worker credentials updated")
+   },
+   async shutdown() {
+     Log.Default.info("worker shutting down")
+     if (eventStream.abort) eventStream.abort.abort()
+-    await Instance.disposeAll()
++    // Flush any pending OTEL metrics before shutting down
++    await shutdownOTEL().catch(() => {})
++    await Promise.race([
++      Instance.disposeAll(),
++      new Promise((resolve) => {
++        setTimeout(resolve, 5000)
++      }),
++    ])
+     if (server) server.stop(true)
+   },
++  async setWorkspace(input: { workspaceID?: string }) {
++    // Restart the event stream for the new workspace
++    startEventStream(input.workspaceID ?? process.cwd())
++  },
+ }
+ 
+ Rpc.listen(rpc)

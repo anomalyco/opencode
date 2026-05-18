@@ -46,6 +46,15 @@ export const dict = {
   "ui.sessionTurn.error.freeUsageExceeded": "Limite de uso gratuito excedido",
   "ui.sessionTurn.error.addCredits": "Adicionar créditos",
 
+  "dialog.usageExceeded.freeTier.title": "Limite gratuito atingido",
+  "dialog.usageExceeded.freeTier.description":
+    "Assine o OpenCode Go para ter acesso confiável aos melhores modelos open-source, a partir de $5/mês.",
+  "dialog.usageExceeded.freeTier.actionLabel": "Assinar",
+  "dialog.usageExceeded.accountRateLimit.title": "Limite do Go atingido",
+  "dialog.usageExceeded.accountRateLimit.description":
+    "Limite de uso atingido. Para continuar usando este modelo agora, ative o uso a partir do seu saldo disponível",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "Abrir configurações",
+
   "ui.sessionTurn.status.delegating": "Delegando trabalho",
   "ui.sessionTurn.status.planning": "Planejando próximos passos",
   "ui.sessionTurn.status.gatheringContext": "Explorando",
@@ -60,7 +69,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Considerando próximos passos",
 
   "ui.messagePart.questions.dismissed": "Perguntas descartadas",
-  "ui.messagePart.compaction": "Histórico compactado",
+  "ui.messagePart.compaction": "Sessão compactada",
   "ui.messagePart.context.read.one": "{{count}} leitura",
   "ui.messagePart.context.read.other": "{{count}} leituras",
   "ui.messagePart.context.search.one": "{{count}} pesquisa",
@@ -95,7 +104,6 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Buscar Web",
   "ui.tool.websearch": "Pesquisa na Web",
-  "ui.tool.codesearch": "Pesquisa de Código",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Tarefas",
@@ -126,6 +134,8 @@ export const dict = {
   "ui.message.collapse": "Recolher mensagem",
   "ui.message.copy": "Copiar",
   "ui.message.copyMessage": "Copiar mensagem",
+  "ui.message.forkMessage": "Bifurcar para nova sessão",
+  "ui.message.revertMessage": "Redefinir para este ponto",
   "ui.message.copyResponse": "Copiar resposta",
   "ui.message.copied": "Copiado!",
   "ui.message.interrupted": "Interrompido",
@@ -143,4 +153,16 @@ export const dict = {
   "ui.question.multiHint": "Selecione todas que se aplicam",
   "ui.question.singleHint": "Selecione uma resposta",
   "ui.question.custom.placeholder": "Digite sua resposta...",
+
+  "ui.fileSearch.placeholder": "Localizar",
+  "ui.fileSearch.previousMatch": "Ocorrência anterior",
+  "ui.fileSearch.nextMatch": "Próxima ocorrência",
+  "ui.fileSearch.close": "Fechar busca",
+  "ui.tool.task": "Tarefa",
+  "ui.tool.skill": "Habilidade",
+  "ui.basicTool.called": "Chamou `{{tool}}`",
+  "ui.toolErrorCard.failed": "Falhou",
+  "ui.toolErrorCard.copyError": "Copiar erro",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 }

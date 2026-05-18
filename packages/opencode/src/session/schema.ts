@@ -1,41 +1,26 @@
 import { Schema } from "effect"
-import z from "zod"
 
-import { withStatics } from "@/util/schema"
 import { Identifier } from "@/id/id"
+import { Session as CoreSession } from "@opencode-ai/core/session"
+import { withStatics } from "@opencode-ai/core/schema"
 
-const sessionIdSchema = Schema.String.pipe(Schema.brand("SessionID"))
+export const SessionID = CoreSession.ID
+export type SessionID = Schema.Schema.Type<typeof SessionID>
 
-export type SessionID = typeof sessionIdSchema.Type
-
-export const SessionID = sessionIdSchema.pipe(
-  withStatics((schema: typeof sessionIdSchema) => ({
-    make: (id: string) => schema.makeUnsafe(id),
-    descending: (id?: string) => schema.makeUnsafe(Identifier.descending("session", id)),
-    zod: Identifier.schema("session").pipe(z.custom<SessionID>()),
+export const MessageID = Schema.String.check(Schema.isStartsWith("msg")).pipe(
+  Schema.brand("MessageID"),
+  withStatics((s) => ({
+    ascending: (id?: string) => s.make(Identifier.ascending("message", id)),
   })),
 )
 
-const messageIdSchema = Schema.String.pipe(Schema.brand("MessageID"))
+export type MessageID = Schema.Schema.Type<typeof MessageID>
 
-export type MessageID = typeof messageIdSchema.Type
-
-export const MessageID = messageIdSchema.pipe(
-  withStatics((schema: typeof messageIdSchema) => ({
-    make: (id: string) => schema.makeUnsafe(id),
-    ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("message", id)),
-    zod: Identifier.schema("message").pipe(z.custom<MessageID>()),
+export const PartID = Schema.String.check(Schema.isStartsWith("prt")).pipe(
+  Schema.brand("PartID"),
+  withStatics((s) => ({
+    ascending: (id?: string) => s.make(Identifier.ascending("part", id)),
   })),
 )
 
-const partIdSchema = Schema.String.pipe(Schema.brand("PartID"))
-
-export type PartID = typeof partIdSchema.Type
-
-export const PartID = partIdSchema.pipe(
-  withStatics((schema: typeof partIdSchema) => ({
-    make: (id: string) => schema.makeUnsafe(id),
-    ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("part", id)),
-    zod: Identifier.schema("part").pipe(z.custom<PartID>()),
-  })),
-)
+export type PartID = Schema.Schema.Type<typeof PartID>

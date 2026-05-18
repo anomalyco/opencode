@@ -1,17 +1,10 @@
 import { Schema } from "effect"
-import z from "zod"
 
 import { Identifier } from "@/id/id"
-import { withStatics } from "@/util/schema"
+import { Newtype } from "@opencode-ai/core/schema"
 
-const questionIdSchema = Schema.String.pipe(Schema.brand("QuestionID"))
-
-export type QuestionID = typeof questionIdSchema.Type
-
-export const QuestionID = questionIdSchema.pipe(
-  withStatics((schema: typeof questionIdSchema) => ({
-    make: (id: string) => schema.makeUnsafe(id),
-    ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("question", id)),
-    zod: Identifier.schema("question").pipe(z.custom<QuestionID>()),
-  })),
-)
+export class QuestionID extends Newtype<QuestionID>()("QuestionID", Schema.String.check(Schema.isStartsWith("que"))) {
+  static ascending(id?: string): QuestionID {
+    return this.make(Identifier.ascending("question", id))
+  }
+}

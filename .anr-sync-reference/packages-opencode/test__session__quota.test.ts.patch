@@ -1,0 +1,181 @@
+diff --git a/packages/opencode/test/session/quota.test.ts b/packages/opencode/test/session/quota.test.ts
+new file mode 100644
+index 000000000..3946276b7
+--- /dev/null
++++ b/packages/opencode/test/session/quota.test.ts
+@@ -0,0 +1,175 @@
++import { describe, expect, test } from "bun:test"
++import {
++  QuotaExceededError,
++  QuotaUnavailableError,
++  dailyResetInfo,
++  monthlyResetInfo,
++} from "@opencode-ai/anr-core"
++import type { QuotaPolicy, QuotaUsage } from "@opencode-ai/anr-core"
++
++function policy(overrides?: Partial<QuotaPolicy>): QuotaPolicy {
++  return {
++    enabled: true,
++    identifier: "test@example.com",
++    policyType: "default",
++    dailyTokenLimit: 5_000_000,
++    monthlyTokenLimit: 250_000_000,
++    dailyEnforcementMode: "block",
++    monthlyEnforcementMode: "block",
++    enforcementMode: "block",
++    warningThreshold80: 80,
++    warningThreshold90: 90,
++    ...overrides,
++  }
++}
++
++function usage(overrides?: Partial<QuotaUsage>): QuotaUsage {
++  return {
++    dailyTokens: 5_200_000,
++    monthlyTokens: 180_000_000,
++    dailyUsagePercent: 104,
++    monthlyUsagePercent: 72,
++    warningLevel: "critical",
++    allowed: false,
++    ...overrides,
++  }
++}
++
++describe("QuotaExceededError", () => {
++  test("has correct name", () => {
++    const err = new QuotaExceededError(usage(), policy())
++    expect(err.name).toBe("QuotaExceededError")
++  })
++
++  test("is instanceof Error", () => {
++    const err = new QuotaExceededError(usage(), policy())
++    expect(err).toBeInstanceOf(Error)
++  })
++
++  test("includes daily and monthly token counts in message", () => {
++    const err = new QuotaExceededError(usage(), policy())
++    expect(err.message).toContain("Daily:")
++    expect(err.message).toContain("5,200,000")
++    expect(err.message).toContain("5,000,000")
++    expect(err.message).toContain("104%")
++    expect(err.message).toContain("Monthly:")
++    expect(err.message).toContain("180,000,000")
++    expect(err.message).toContain("250,000,000")
++    expect(err.message).toContain("72%")
++  })
++
++  test("includes contact guidance", () => {
++    const err = new QuotaExceededError(usage(), policy())
++    expect(err.message).toContain("Contact your administrator for limit increases.")
++  })
++
++  test("includes reset info when present", () => {
++    const u = usage({
++      dailyResetInfo: "Daily quota resets in 3h 42m (midnight UTC).",
++      monthlyResetInfo: "Monthly quota resets in 11 days (1st of next month UTC).",
++    })
++    const err = new QuotaExceededError(u, policy())
++    expect(err.message).toContain("Daily quota resets in 3h 42m")
++    expect(err.message).toContain("Monthly quota resets in 11 days")
++  })
++
++  test("omits daily line when dailyTokenLimit is 0", () => {
++    const err = new QuotaExceededError(usage(), policy({ dailyTokenLimit: 0 }))
++    expect(err.message).not.toContain("Daily:")
++    expect(err.message).toContain("Monthly:")
++  })
++
++  test("omits monthly line when monthlyTokenLimit is 0", () => {
++    const err = new QuotaExceededError(usage(), policy({ monthlyTokenLimit: 0 }))
++    expect(err.message).toContain("Daily:")
++    expect(err.message).not.toContain("Monthly:")
++  })
++
++  test("stores usage and policy on the error", () => {
++    const u = usage()
++    const p = policy()
++    const err = new QuotaExceededError(u, p)
++    expect(err.usage).toBe(u)
++    expect(err.policy).toBe(p)
++  })
++})
++
++describe("QuotaUnavailableError", () => {
++  test("has correct name", () => {
++    const err = new QuotaUnavailableError("closed")
++    expect(err.name).toBe("QuotaUnavailableError")
++  })
++
++  test("closed mode mentions access denied", () => {
++    const err = new QuotaUnavailableError("closed")
++    expect(err.message).toContain("Access denied")
++    expect(err.message).toContain("Contact your administrator")
++  })
++
++  test("open mode mentions continuing", () => {
++    const err = new QuotaUnavailableError("open")
++    expect(err.message).toContain("Continuing with limited tracking")
++  })
++})
++
++describe("dailyResetInfo", () => {
++  test("returns string mentioning midnight UTC", () => {
++    const info = dailyResetInfo()
++    expect(info).toContain("midnight UTC")
++    expect(info).toContain("Daily quota resets in")
++  })
++
++  test("contains hours and minutes format", () => {
++    const info = dailyResetInfo()
++    expect(info).toMatch(/\d+h \d+m/)
++  })
++
++  test("hours are between 0 and 23", () => {
++    const info = dailyResetInfo()
++    const match = info.match(/(\d+)h/)
++    expect(match).toBeTruthy()
++    const hours = parseInt(match![1])
++    expect(hours).toBeGreaterThanOrEqual(0)
++    expect(hours).toBeLessThanOrEqual(23)
++  })
++
++  test("minutes are between 0 and 59", () => {
++    const info = dailyResetInfo()
++    const match = info.match(/(\d+)m/)
++    expect(match).toBeTruthy()
++    const mins = parseInt(match![1])
++    expect(mins).toBeGreaterThanOrEqual(0)
++    expect(mins).toBeLessThanOrEqual(59)
++  })
++})
++
++describe("monthlyResetInfo", () => {
++  test("returns string mentioning 1st of next month", () => {
++    const info = monthlyResetInfo()
++    expect(info).toContain("1st of next month UTC")
++    expect(info).toContain("Monthly quota resets in")
++  })
++
++  test("days are between 1 and 31", () => {
++    const info = monthlyResetInfo()
++    const match = info.match(/(\d+) day/)
++    expect(match).toBeTruthy()
++    const days = parseInt(match![1])
++    expect(days).toBeGreaterThanOrEqual(1)
++    expect(days).toBeLessThanOrEqual(31)
++  })
++
++  test("pluralizes days correctly for 1 day", () => {
++    // We can't control the date, but we can verify the format
++    const info = monthlyResetInfo()
++    const match = info.match(/(\d+) (day|days)/)
++    expect(match).toBeTruthy()
++    const days = parseInt(match![1])
++    if (days === 1) {
++      expect(info).toContain("1 day (")
++      expect(info).not.toContain("1 days")
++    } else {
++      expect(info).toContain(`${days} days`)
++    }
++  })
++})

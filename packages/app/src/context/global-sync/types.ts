@@ -2,18 +2,17 @@ import type {
   Agent,
   Command,
   Config,
-  FileDiff,
   LspStatus,
   McpStatus,
   Message,
   Part,
   Path,
   PermissionRequest,
-  Project,
   ProviderListResponse,
   QuestionRequest,
   Session,
   SessionStatus,
+  SnapshotFileDiff,
   Todo,
   VcsInfo,
 } from "@opencode-ai/sdk/v2/client"
@@ -38,6 +37,7 @@ export type State = {
   project: string
   projectMeta: ProjectMeta | undefined
   icon: string | undefined
+  provider_ready: boolean
   provider: ProviderListResponse
   config: Config
   path: Path
@@ -46,8 +46,9 @@ export type State = {
   session_status: {
     [sessionID: string]: SessionStatus
   }
+  session_working(id: string): boolean
   session_diff: {
-    [sessionID: string]: FileDiff[]
+    [sessionID: string]: SnapshotFileDiff[]
   }
   todo: {
     [sessionID: string]: Todo[]
@@ -58,9 +59,11 @@ export type State = {
   question: {
     [sessionID: string]: QuestionRequest[]
   }
+  mcp_ready: boolean
   mcp: {
     [name: string]: McpStatus
   }
+  lsp_ready: boolean
   lsp: LspStatus[]
   vcs: VcsInfo | undefined
   limit: number
@@ -69,6 +72,9 @@ export type State = {
   }
   part: {
     [messageID: string]: Part[]
+  }
+  part_text_accum_delta: {
+    [partID: string]: string
   }
 }
 

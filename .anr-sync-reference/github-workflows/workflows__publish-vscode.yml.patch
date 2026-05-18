@@ -1,0 +1,43 @@
+diff --git a/.github/workflows/publish-vscode.yml b/.github/workflows/publish-vscode.yml
+deleted file mode 100644
+index f49a10578..000000000
+--- a/.github/workflows/publish-vscode.yml
++++ /dev/null
+@@ -1,37 +0,0 @@
+-name: publish-vscode
+-
+-on:
+-  workflow_dispatch:
+-  push:
+-    tags:
+-      - "vscode-v*.*.*"
+-
+-concurrency: ${{ github.workflow }}-${{ github.ref }}
+-
+-permissions:
+-  contents: write
+-
+-jobs:
+-  publish:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
+-    steps:
+-      - uses: actions/checkout@v3
+-        with:
+-          fetch-depth: 0
+-
+-      - uses: ./.github/actions/setup-bun
+-
+-      - run: git fetch --force --tags
+-      - run: bun install -g @vscode/vsce
+-
+-      - name: Install extension dependencies
+-        run: bun install
+-        working-directory: ./sdks/vscode
+-
+-      - name: Publish
+-        run: |
+-          ./script/publish
+-        working-directory: ./sdks/vscode
+-        env:
+-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+-          OPENVSX_TOKEN: ${{ secrets.OPENVSX_TOKEN }}

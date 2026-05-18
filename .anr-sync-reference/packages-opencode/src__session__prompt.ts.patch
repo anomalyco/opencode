@@ -1,0 +1,35 @@
+diff --git a/packages/opencode/src/session/prompt.ts b/packages/opencode/src/session/prompt.ts
+index 171c4b448..3339dc7f9 100644
+--- a/packages/opencode/src/session/prompt.ts
++++ b/packages/opencode/src/session/prompt.ts
+@@ -373,8 +373,8 @@ export namespace SessionPrompt {
+             reasoning: 0,
+             cache: { read: 0, write: 0 },
+           },
+-          modelID: taskModel.id,
+-          providerID: taskModel.providerID,
++          modelID: ModelID.make(taskModel.id),
++          providerID: ProviderID.make(taskModel.providerID),
+           time: {
+             created: Date.now(),
+           },
+@@ -585,8 +585,8 @@ export namespace SessionPrompt {
+             reasoning: 0,
+             cache: { read: 0, write: 0 },
+           },
+-          modelID: model.id,
+-          providerID: model.providerID,
++          modelID: ModelID.make(model.id),
++          providerID: ProviderID.make(model.providerID),
+           time: {
+             created: Date.now(),
+           },
+@@ -788,7 +788,7 @@ export namespace SessionPrompt {
+     })
+ 
+     for (const item of await ToolRegistry.tools(
+-      { modelID: ModelID.make(input.model.api.id), providerID: input.model.providerID },
++      { modelID: ModelID.make(input.model.api.id), providerID: ProviderID.make(input.model.providerID) },
+       input.agent,
+     )) {
+       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))

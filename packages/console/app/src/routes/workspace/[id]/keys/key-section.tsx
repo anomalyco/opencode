@@ -12,18 +12,18 @@ import { formError, localizeError } from "~/lib/form-error"
 
 const removeKey = action(async (form: FormData) => {
   "use server"
-  const id = form.get("id")?.toString()
+  const id = form.get("id") as string | null
   if (!id) return { error: formError.idRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
+  const workspaceID = form.get("workspaceID") as string | null
   if (!workspaceID) return { error: formError.workspaceRequired }
   return json(await withActor(() => Key.remove({ id }), workspaceID), { revalidate: listKeys.key })
 }, "key.remove")
 
 const createKey = action(async (form: FormData) => {
   "use server"
-  const name = form.get("name")?.toString().trim()
+  const name = (form.get("name") as string | null)?.trim()
   if (!name) return { error: formError.nameRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
+  const workspaceID = form.get("workspaceID") as string | null
   if (!workspaceID) return { error: formError.workspaceRequired }
   return json(
     await withActor(

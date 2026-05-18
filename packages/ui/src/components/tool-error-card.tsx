@@ -1,4 +1,5 @@
-import { type ComponentProps, createMemo, createSignal, Show, splitProps } from "solid-js"
+import { type ComponentProps, createMemo, Show, splitProps } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Card, CardDescription } from "./card"
 import { Collapsible } from "./collapsible"
 import { Icon } from "./icon"
@@ -9,29 +10,38 @@ import { useI18n } from "../context/i18n"
 export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "children" | "variant"> {
   tool: string
   error: string
+  title?: string
   defaultOpen?: boolean
+  subtitle?: string
+  href?: string
 }
 
 export function ToolErrorCard(props: ToolErrorCardProps) {
   const i18n = useI18n()
-  const [open, setOpen] = createSignal(props.defaultOpen ?? false)
-  const [copied, setCopied] = createSignal(false)
-  const [split, rest] = splitProps(props, ["tool", "error", "defaultOpen"])
+  const [state, setState] = createStore({
+    open: props.defaultOpen ?? false,
+    copied: false,
+  })
+  const open = () => state.open
+  const copied = () => state.copied
+  const [split, rest] = splitProps(props, ["tool", "error", "title", "defaultOpen", "subtitle", "href"])
   const name = createMemo(() => {
+    if (split.title) return split.title
     const map: Record<string, string> = {
       read: "ui.tool.read",
       list: "ui.tool.list",
       glob: "ui.tool.glob",
       grep: "ui.tool.grep",
+      task: "ui.tool.task",
       webfetch: "ui.tool.webfetch",
       websearch: "ui.tool.websearch",
-      codesearch: "ui.tool.codesearch",
       bash: "ui.tool.shell",
       apply_patch: "ui.tool.patch",
       question: "ui.tool.questions",
     }
     const key = map[split.tool]
     if (!key) return split.tool
+    if (!key.includes(".")) return key
     return i18n.t(key)
   })
   const cleaned = createMemo(() => split.error.replace(/^Error:\s*/, "").trim())
@@ -43,11 +53,12 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
   })
 
   const subtitle = createMemo(() => {
+    if (split.subtitle) return split.subtitle
     const parts = tail().split(": ")
-    if (parts.length <= 1) return "Failed"
+    if (parts.length <= 1) return i18n.t("ui.toolErrorCard.failed")
     const head = (parts[0] ?? "").trim()
-    if (!head) return "Failed"
-    return head[0] ? head[0].toUpperCase() + head.slice(1) : "Failed"
+    if (!head) return i18n.t("ui.toolErrorCard.failed")
+    return head[0] ? head[0].toUpperCase() + head.slice(1) : i18n.t("ui.toolErrorCard.failed")
   })
 
   const body = createMemo(() => {
@@ -60,13 +71,18 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     const text = cleaned()
     if (!text) return
     await navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setState("copied", true)
+    setTimeout(() => setState("copied", false), 2000)
   }
 
   return (
     <Card {...rest} data-kind="tool-error-card" data-open={open() ? "true" : "false"} variant="error">
-      <Collapsible class="tool-collapsible" data-open={open() ? "true" : "false"} open={open()} onOpenChange={setOpen}>
+      <Collapsible
+        class="tool-collapsible"
+        data-open={open() ? "true" : "false"}
+        open={open()}
+        onOpenChange={(value) => setState("open", value)}
+      >
         <Collapsible.Trigger>
           <div data-component="tool-trigger">
             <div data-slot="basic-tool-tool-trigger-content">
@@ -77,7 +93,19 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                 <div data-slot="basic-tool-tool-info-structured">
                   <div data-slot="basic-tool-tool-info-main">
                     <span data-slot="basic-tool-tool-title">{name()}</span>
-                    <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
+                    <Show
+                      when={split.href && split.subtitle}
+                      fallback={<span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>}
+                    >
+                      <a
+                        data-slot="basic-tool-tool-subtitle"
+                        class="clickable subagent-link"
+                        href={split.href!}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {subtitle()}
+                      </a>
+                    </Show>
                   </div>
                 </div>
               </div>
@@ -89,7 +117,11 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
           <div data-slot="tool-error-card-content">
             <Show when={open()}>
               <div data-slot="tool-error-card-copy">
-                <Tooltip value={copied() ? i18n.t("ui.message.copied") : "Copy error"} placement="top" gutter={4}>
+                <Tooltip
+                  value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
+                  placement="top"
+                  gutter={4}
+                >
                   <IconButton
                     icon={copied() ? "check" : "copy"}
                     size="normal"
@@ -97,9 +129,9 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={(e) => {
                       e.stopPropagation()
-                      copy()
+                      void copy()
                     }}
-                    aria-label={copied() ? i18n.t("ui.message.copied") : "Copy error"}
+                    aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
                   />
                 </Tooltip>
               </div>

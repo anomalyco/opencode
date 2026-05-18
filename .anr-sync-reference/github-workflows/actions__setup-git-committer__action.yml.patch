@@ -1,0 +1,69 @@
+diff --git a/.github/actions/setup-git-committer/action.yml b/.github/actions/setup-git-committer/action.yml
+index 87d2f5d0d..e527de7f7 100644
+--- a/.github/actions/setup-git-committer/action.yml
++++ b/.github/actions/setup-git-committer/action.yml
+@@ -3,31 +3,51 @@ description: "Create app token and configure git user"
+ inputs:
+   opencode-app-id:
+     description: "OpenCode GitHub App ID"
+-    required: true
++    required: false
++    default: ""
+   opencode-app-secret:
+     description: "OpenCode GitHub App private key"
+-    required: true
++    required: false
++    default: ""
+ outputs:
+   token:
+-    description: "GitHub App token"
+-    value: ${{ steps.apptoken.outputs.token }}
++    description: "GitHub App token (or fallback GITHUB_TOKEN)"
++    value: ${{ steps.resolve.outputs.token }}
+   app-slug:
+     description: "GitHub App slug"
+-    value: ${{ steps.apptoken.outputs.app-slug }}
++    value: ${{ steps.resolve.outputs.app-slug }}
+ runs:
+   using: "composite"
+   steps:
+     - name: Create app token
+       id: apptoken
++      if: inputs.opencode-app-id != '' && inputs.opencode-app-secret != ''
+       uses: actions/create-github-app-token@v2
+       with:
+         app-id: ${{ inputs.opencode-app-id }}
+         private-key: ${{ inputs.opencode-app-secret }}
+         owner: ${{ github.repository_owner }}
+ 
++    - name: Resolve token
++      id: resolve
++      run: |
++        if [ -n "$APP_TOKEN" ]; then
++          echo "token=$APP_TOKEN" >> "$GITHUB_OUTPUT"
++          echo "app-slug=$APP_SLUG" >> "$GITHUB_OUTPUT"
++        else
++          echo "token=$FALLBACK_TOKEN" >> "$GITHUB_OUTPUT"
++          echo "app-slug=github-actions" >> "$GITHUB_OUTPUT"
++          echo "::notice::No GitHub App credentials found, falling back to GITHUB_TOKEN"
++        fi
++      shell: bash
++      env:
++        APP_TOKEN: ${{ steps.apptoken.outputs.token }}
++        APP_SLUG: ${{ steps.apptoken.outputs.app-slug }}
++        FALLBACK_TOKEN: ${{ github.token }}
++
+     - name: Configure git user
+       run: |
+-        slug="${{ steps.apptoken.outputs.app-slug }}"
++        slug="${{ steps.resolve.outputs.app-slug }}"
+         git config --global user.name "${slug}[bot]"
+         git config --global user.email "${slug}[bot]@users.noreply.github.com"
+       shell: bash
+@@ -39,5 +59,5 @@ runs:
+ 
+     - name: Configure git remote
+       run: |
+-        git remote set-url origin https://x-access-token:${{ steps.apptoken.outputs.token }}@github.com/${{ github.repository }}
++        git remote set-url origin https://x-access-token:${{ steps.resolve.outputs.token }}@github.com/${{ github.repository }}
+       shell: bash

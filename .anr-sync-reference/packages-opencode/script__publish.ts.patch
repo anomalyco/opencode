@@ -1,0 +1,13 @@
+diff --git a/packages/opencode/script/publish.ts b/packages/opencode/script/publish.ts
+index fbc1c83ba..c9a67df83 100755
+--- a/packages/opencode/script/publish.ts
++++ b/packages/opencode/script/publish.ts
+@@ -44,7 +44,7 @@ const tasks = Object.entries(binaries).map(async ([name]) => {
+     await $`chmod -R 755 .`.cwd(`./dist/${name}`)
+   }
+   await $`bun pm pack`.cwd(`./dist/${name}`)
+-  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(`./dist/${name}`)
++  // await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(`./dist/${name}`)
+ })
+ await Promise.all(tasks)
+ await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${Script.channel}`

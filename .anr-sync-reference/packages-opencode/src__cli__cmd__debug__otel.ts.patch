@@ -1,0 +1,462 @@
+diff --git a/packages/opencode/src/cli/cmd/debug/otel.ts b/packages/opencode/src/cli/cmd/debug/otel.ts
+new file mode 100644
+index 000000000..d2d11b75d
+--- /dev/null
++++ b/packages/opencode/src/cli/cmd/debug/otel.ts
+@@ -0,0 +1,456 @@
++/**
++ * OpenTelemetry debugging utilities
++ * 
++ * Commands:
++ *   opencode debug otel config          - Show OTEL configuration
++ *   opencode debug otel status          - Show OTEL status and diagnostics
++ *   opencode debug otel logs            - View OTEL log files
++ *   opencode debug otel validate        - Validate OTEL context
++ *   opencode debug otel metrics         - Preview metrics to be sent
++ *   opencode debug otel reset-stats     - Reset diagnostic counters
++ */
++
++import { EOL } from "os"
++import { readFileSync, existsSync, writeFileSync } from "fs"
++import { bootstrap } from "../../bootstrap"
++import { cmd } from "../cmd"
++import {
++  getOTELLogFilePath,
++  printOTELDiagnostics,
++  getOTELDiagnostics,
++  resetOTELDiagnostics,
++  getTelemetryContext,
++  getMetricsPreview,
++  printMetricsPreview,
++  printContextFlowDiagram,
++  getContextTraceEvents,
++} from "@opencode-ai/anr-core"
++import { printContextReport, validateContext } from "@opencode-ai/anr-core/util/metrics-validator"
++
++export const OtelCommand = cmd({
++  command: "otel",
++  describe: "OpenTelemetry debugging and diagnostic utilities",
++  builder: (yargs) =>
++    yargs
++      .command(StatusCommand)
++      .command(LogsCommand)
++      .command(ValidateCommand)
++      .command(PreviewCommand)
++      .command(TraceCommand)
++      .command(SimulateCommand)
++      .command(MetricsCommand)
++      .command(ResetStatsCommand)
++      .command(TestEndpointCommand)
++      .command(TestHarnessCommand)
++      .demandCommand(),
++  async handler() {},
++})
++
++const StatusCommand = cmd({
++  command: "status",
++  describe: "show OTEL initialization status and diagnostics",
++  async handler() {
++    await bootstrap(process.cwd(), async () => {
++      printOTELDiagnostics()
++    })
++  },
++})
++
++const LogsCommand = cmd({
++  command: "logs",
++  describe: "view OTEL log file with filtering",
++  builder: (yargs) =>
++    yargs
++      .option("tail", {
++        type: "number",
++        description: "show last N lines",
++        default: 50,
++      })
++      .option("grep", {
++        type: "string",
++        description: "filter logs by keyword",
++      })
++      .option("level", {
++        type: "string",
++        description: "filter by log level (trace, debug, info, warn, error)",
++        choices: ["trace", "debug", "info", "warn", "error"],
++      })
++      .option("export", {
++        type: "string",
++        description: "export logs to file (json, csv, txt)",
++        choices: ["json", "csv", "txt"],
++      })
++      .option("errors-only", {
++        type: "boolean",
++        description: "show only error and warning lines",
++        default: false,
++      })
++      .option("follow", {
++        type: "boolean",
++        description: "continuously follow log file (like tail -f)",
++        default: false,
++        alias: "f",
++      }),
++  handler(argv) {
++    const logFile = getOTELLogFilePath()
++
++    if (!existsSync(logFile)) {
++      console.log(`📄 Log file not found: ${logFile}`)
++      console.log("💡 Run 'opencode debug otel status' with OPENCODE_DEBUG_OTEL=1 to generate logs")
++      return
++    }
++
++    try {
++      const content = readFileSync(logFile, "utf-8")
++      let lines = content.split("\n")
++
++      // Filter by error/warning only
++      if (argv["errors-only"]) {
++        lines = lines.filter((line) => /❌|⚠️|error|warn/i.test(line))
++      }
++
++      // Filter by grep pattern
++      if (argv.grep) {
++        const pattern = new RegExp(argv.grep, "i")
++        lines = lines.filter((line) => pattern.test(line))
++      }
++
++      // Filter by log level
++      if (argv.level) {
++        lines = lines.filter((line) => line.includes(argv.level as string))
++      }
++
++      // Show last N lines
++      lines = lines.slice(-argv.tail)
++
++      // Export if requested
++      if (argv.export) {
++        const timestamp = new Date().toISOString().split("T")[0]
++        const exportFile =
++          argv.export === "json"
++            ? `otel-logs-${timestamp}.json`
++            : argv.export === "csv"
++              ? `otel-logs-${timestamp}.csv`
++              : `otel-logs-${timestamp}.txt`
++
++        if (argv.export === "json") {
++          const json = {
++            timestamp: new Date().toISOString(),
++            lineCount: lines.length,
++            filters: {
++              grep: argv.grep,
++              level: argv.level,
++              errorsOnly: argv["errors-only"],
++            },
++            logs: lines,
++          }
++          writeFileSync(exportFile, JSON.stringify(json, null, 2))
++        } else if (argv.export === "csv") {
++          writeFileSync(exportFile, lines.join("\n"))
++        } else {
++          writeFileSync(exportFile, lines.join("\n"))
++        }
++
++        console.log(`✅ Logs exported to ${exportFile}`)
++        return
++      }
++
++      // Display logs
++      console.log(`\n📄 OTEL Log File: ${logFile}`)
++      console.log(`📊 Showing ${Math.min(argv.tail, lines.length)} of ${lines.length} lines`)
++      console.log("═".repeat(70))
++
++      lines.forEach((line) => {
++        if (line.trim()) {
++          console.log(line)
++        }
++      })
++
++      console.log("═".repeat(70) + "\n")
++    } catch (error) {
++      console.error(`❌ Error reading log file: ${error instanceof Error ? error.message : error}`)
++    }
++  },
++})
++
++const ValidateCommand = cmd({
++  command: "validate",
++  describe: "validate OTEL context completeness",
++  builder: (yargs) =>
++    yargs.option("verbose", {
++      type: "boolean",
++      description: "show detailed validation report",
++      default: false,
++    }),
++  async handler(argv) {
++    await bootstrap(process.cwd(), async () => {
++      const context = getTelemetryContext()
++      const validation = validateContext(context)
++
++      console.log("\n📋 OTEL Context Validation")
++      console.log("═".repeat(60))
++
++      if (!context) {
++        console.log("❌ No telemetry context available")
++        console.log("💡 Initialize OTEL by running an opencode command with telemetry enabled")
++      } else {
++        // Print context report for more details
++        if (argv.verbose) {
++          printContextReport(context)
++        } else {
++          // Compact format
++          console.log(
++            `\n✓ Context Available (${Object.keys(context).filter((k) => (context as any)[k]).length} fields)`
++          )
++
++          if (validation.missing.length > 0) {
++            console.log(`\n⚠️  Missing Fields: ${validation.missing.slice(0, 5).join(", ")}`)
++            if (validation.missing.length > 5) {
++              console.log(`    ... and ${validation.missing.length - 5} more`)
++            }
++          }
++
++          const scorePercent = (validation.score * 100).toFixed(0)
++          const scoreBar = "█".repeat(Math.floor(validation.score * 20)) + "░".repeat(20 - Math.floor(validation.score * 20))
++          console.log(`\n📈 Completeness: ${scorePercent}% [${scoreBar}]`)
++        }
++      }
++
++      console.log("═".repeat(60) + "\n")
++    })
++  },
++})
++
++const PreviewCommand = cmd({
++  command: "preview",
++  describe: "preview metrics that will be sent with current context",
++  async handler() {
++    await bootstrap(process.cwd(), async () => {
++      printMetricsPreview()
++    })
++  },
++})
++
++const TraceCommand = cmd({
++  command: "trace",
++  describe: "show context flow trace through the system",
++  async handler() {
++    await bootstrap(process.cwd(), async () => {
++      const events = getContextTraceEvents()
++
++      if (events.length === 0) {
++        console.log("\n📋 Context Trace")
++        console.log("═".repeat(60))
++        console.log("❌ No trace events recorded")
++        console.log("💡 Run with OPENCODE_DEBUG_OTEL=1 to enable tracing")
++        console.log("═".repeat(60) + "\n")
++      } else {
++        printContextFlowDiagram()
++      }
++    })
++  },
++})
++
++const SimulateCommand = cmd({
++  command: "simulate",
++  describe: "simulate metric export (dry run)",
++  builder: (yargs) =>
++    yargs
++      .option("context", {
++        type: "boolean",
++        description: "show context that would be sent",
++        default: true,
++      })
++      .option("metrics", {
++        type: "number",
++        description: "number of metrics to simulate (default 3)",
++        default: 3,
++      })
++      .option("batch-size", {
++        type: "number",
++        description: "simulate batch size in bytes",
++      }),
++  async handler(argv) {
++    await bootstrap(process.cwd(), async () => {
++      console.log("\n📊 OTEL Metric Export Simulation (Dry Run)")
++      console.log("═".repeat(70))
++
++      const context = getTelemetryContext()
++      const validation = validateContext(context)
++
++      if (argv.context && context) {
++        console.log("\n🔹 Context to be sent:")
++        console.log(`   User ID: ${context.userId}`)
++        console.log(`   Session ID: ${context.sessionId || "(not set)"}`)
++        console.log(`   Department: ${context.department || "(not set)"}`)
++        console.log(`   Team: ${context.teamId || "(not set)"}`)
++        console.log(`   Completeness: ${(validation.score * 100).toFixed(0)}%`)
++      }
++
++      console.log(`\n🔹 Simulated metrics (${argv.metrics}):`);
++      for (let i = 1; i <= argv.metrics; i++) {
++        if (i === 1) {
++          console.log(`   1️⃣  opencode.model.calls.count = 1 (gauge)`)
++        } else if (i === 2) {
++          console.log(`   2️⃣  opencode.token.usage = 5000 (counter)`)
++        } else if (i === 3) {
++          console.log(`   3️⃣  opencode.command.duration_ms = 2456 (histogram)`)
++        }
++      }
++
++      const estimatedBatchSize = argv["batch-size"] || 2048
++      console.log(`\n🔹 Estimated Export:`)
++      console.log(`   Batch size: ~${estimatedBatchSize} bytes`)
++      console.log(`   HTTP method: POST`)
++      console.log(`   Endpoint: /v1/metrics`)
++      console.log(`   Headers: ${context ? "10-12" : "5-6"}`)
++
++      console.log(
++        `\n📝 Summary: Would export ${argv.metrics} metric(s) with ${context ? "full" : "limited"} context`
++      )
++      console.log("═".repeat(70) + "\n")
++    })
++  },
++})
++
++const MetricsCommand = cmd({
++  command: "metrics",
++  describe: "show current metric counters",
++  async handler() {
++    await bootstrap(process.cwd(), async () => {
++      const diags = getOTELDiagnostics()
++
++      console.log("\n📊 OTEL Metric Counters")
++      console.log("═".repeat(60))
++
++      console.log("\n Model API:")
++      console.log(`  Calls Tracked: ${diags.metrics.modelCallsTracked}`)
++      console.log(`  Tokens Tracked: ${diags.metrics.tokensTracked}`)
++
++      console.log("\n Context:")
++      const contextRate =
++        diags.metrics.modelCallsTracked > 0
++          ? ((diags.metrics.contextAvailableCalls / diags.metrics.modelCallsTracked) * 100).toFixed(0)
++          : "N/A"
++      console.log(`  Available: ${diags.metrics.contextAvailableCalls}/${diags.metrics.modelCallsTracked} (${contextRate}%)`)
++      console.log(`  Missing: ${diags.metrics.contextMissingCalls}`)
++
++      console.log("\n Export:")
++      const exportSuccess =
++        diags.metrics.exportsAttempted > 0
++          ? ((diags.metrics.exportsSuccessful / diags.metrics.exportsAttempted) * 100).toFixed(0)
++          : "N/A"
++      console.log(`  Attempts: ${diags.metrics.exportsAttempted}`)
++      console.log(`  Success: ${diags.metrics.exportsSuccessful} (${exportSuccess}%)`)
++
++      console.log("═".repeat(60) + "\n")
++    })
++  },
++})
++
++const ResetStatsCommand = cmd({
++  command: "reset-stats",
++  describe: "reset diagnostic counters",
++  async handler() {
++    await bootstrap(process.cwd(), async () => {
++      resetOTELDiagnostics()
++      console.log("✓ Diagnostic counters reset")
++    })
++  },
++})
++
++const TestEndpointCommand = cmd({
++  command: "test-endpoint",
++  describe: "test OTEL collector endpoint connectivity",
++  handler: async () => {
++    await bootstrap(process.cwd(), async () => {
++      const { loadANRConfig } = await import("@opencode-ai/anr-core")
++      const config = await loadANRConfig?.()
++      if (!config?.otelEndpoint) {
++        console.log("❌ OTEL endpoint not configured")
++        return
++      }
++
++      const url = `${config.otelEndpoint}/v1/metrics`
++      console.log(`\n🔍 Testing OTEL endpoint connectivity...`)
++      console.log(`   Endpoint: ${url}\n`)
++
++      try {
++        console.log(`📤 Sending HEAD request...`)
++        const response = await fetch(url, {
++          method: "HEAD",
++          headers: { "User-Agent": "opencode-anr" },
++        })
++
++        console.log(`📥 Response: ${response.status} ${response.statusText}`)
++        console.log(`   Headers:`)
++        response.headers.forEach((value, key) => {
++          console.log(`     ${key}: ${value}`)
++        })
++
++        if (response.ok) {
++          console.log(`\n✅ Endpoint is reachable and responding\n`)
++        } else {
++          console.log(`\n⚠️  Endpoint returned error status. Trying POST...\n`)
++
++          const postResponse = await fetch(url, {
++            method: "POST",
++            headers: { "Content-Type": "application/json" },
++            body: JSON.stringify({ test: true }),
++          })
++          console.log(`📥 POST Response: ${postResponse.status} ${postResponse.statusText}\n`)
++
++          if (postResponse.status === 400 || postResponse.status === 413) {
++            console.log(`✅ Endpoint is reachable (rejected test payload as expected)\n`)
++          } else if (postResponse.ok) {
++            console.log(`✅ Endpoint accepted POST request\n`)
++          } else {
++            console.log(`❌ Endpoint error: ${postResponse.status}\n`)
++          }
++        }
++      } catch (error) {
++        console.log(`❌ Connection failed: ${error instanceof Error ? error.message : String(error)}`)
++        console.log(`   Error type: ${error instanceof Error ? error.name : typeof error}`)
++        if (error instanceof Error && "code" in error) {
++          console.log(`   Error code: ${(error as any).code}`)
++        }
++        console.log()
++      }
++    })
++  },
++})
++
++const TestHarnessCommand = cmd({
++  command: "test-harness",
++  describe: "run end-to-end OTEL test with OIDC auth and metrics export",
++  handler: async () => {
++    await bootstrap(process.cwd(), async () => {
++      try {
++        const { runOTELTestHarness } = await import("@opencode-ai/anr-core/util/otel-test-harness")
++        console.log()
++        const result = await runOTELTestHarness()
++        console.log()
++
++        // Print summary
++        if (result.success) {
++          console.log(`\n✅ TEST PASSED - OTEL metrics successfully exported!\n`)
++        } else {
++          console.log(`\n❌ TEST FAILED\n`)
++          console.log("Summary:")
++          if (result.auth) console.log(`  ✅ OIDC Auth: OK (token length: ${result.auth.oidcToken?.length || 0})`)
++          else console.log(`  ❌ OIDC Auth: FAILED`)
++
++          if (result.aws) console.log(`  ✅ AWS Credentials: OK`)
++          else console.log(`  ❌ AWS Credentials: FAILED`)
++
++          if (result.otel?.httpStatus && result.otel.httpStatus < 500) console.log(`  ✅ HTTP Request: Sent (${result.otel.httpStatus})`)
++          else console.log(`  ❌ HTTP Request: Failed`)
++
++          if (result.otel?.error) console.log(`\nError: ${result.otel.error}`)
++        }
++      } catch (error) {
++        console.log(`\n❌ Test harness error: ${error instanceof Error ? error.message : String(error)}\n`)
++      }
++    })
++  },
++})

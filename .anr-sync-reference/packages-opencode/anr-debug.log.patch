@@ -1,0 +1,63 @@
+diff --git a/packages/opencode/anr-debug.log b/packages/opencode/anr-debug.log
+new file mode 100644
+index 000000000..336b63319
+--- /dev/null
++++ b/packages/opencode/anr-debug.log
+@@ -0,0 +1,57 @@
++ANR Debug Log - 2026-04-17T14:51:27.840Z
++
++🚀 OpenCode ANR
++
++🔐 Authenticating...
++✅ Authenticated
++📍 Debug: Received tokens from OIDC
++   - idToken length: 1103
++   - accessToken length: 992
++   - refreshToken: present
++   - expiresIn: 3600s
++💱 Exchanging token for AWS credentials...
++✅ AWS credentials obtained
++📍 Debug: AWS credentials exchanged
++   - accessKeyId length: 20
++   - secretAccessKey length: 40
++   - sessionToken length: 1060
++   - expiration: 2026-04-17T15:51:32.000Z
++🔄 Credential refresh scheduled ~55 min from now (credentials expire in 60 min)
++📍 Debug: Credentials set in environment
++   - AWS_ACCESS_KEY_ID set: true
++   - AWS_SECRET_ACCESS_KEY set: true
++   - AWS_SESSION_TOKEN set: true
++   - AWS_REGION: us-gov-west-1
++📊 Quota: 0% daily, 0% monthly
++
++[Bedrock Provider Init - 2026-04-17T14:51:35.594Z]
++  region: us-gov-west-1
++  baseURL: https://bedrock-runtime.us-gov-west-1.amazonaws.com
++  configRegion: (unset)
++  endpoint from config: (unset)
++  credentialProvider: fromEnv()
++  process.env.AWS_ACCESS_KEY_ID: ASIAY4DM...
++  process.env.AWS_SESSION_TOKEN: set (1060 chars)
++  process.env.AWS_REGION: us-gov-west-1
++  process.env.AWS_PROFILE: (unset)
++
++[getModel - 2026-04-17T14:51:39.254Z]
++  final modelID: amazon.nova-pro-v1:0
++  region: us-gov-west-1
++  isGovCloud: true
++  baseURL: https://bedrock-runtime.us-gov-west-1.amazonaws.com
++
++[Credential Provider Called - 2026-04-17T14:51:39.288Z]
++  accessKeyId: ASIAY4DM...
++  secretAccessKey: set
++  sessionToken: set (1060 chars)
++  (note: region is added by SDK, not by credentialProvider)
++
++[DNS Resolve - bedrock-runtime.us-gov-west-1.amazonaws.com]
++  IPs: 160.1.96.201, 56.137.41.72, 56.137.1.231
++
++[Credential Provider Called - 2026-04-17T14:51:43.404Z]
++  accessKeyId: ASIAY4DM...
++  secretAccessKey: set
++  sessionToken: set (1060 chars)
++  (note: region is added by SDK, not by credentialProvider)

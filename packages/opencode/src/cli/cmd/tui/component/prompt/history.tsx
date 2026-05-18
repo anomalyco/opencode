@@ -1,5 +1,5 @@
 import path from "path"
-import { Global } from "@/global"
+import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
 import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
@@ -26,6 +26,11 @@ export type PromptInfo = {
 }
 
 const MAX_HISTORY_ENTRIES = 50
+
+export function isDuplicateEntry(previous: PromptInfo | undefined, next: PromptInfo): boolean {
+  if (!previous) return false
+  return JSON.stringify(previous) === JSON.stringify(next)
+}
 
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
@@ -83,6 +88,10 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
       },
       append(item: PromptInfo) {
         const entry = structuredClone(unwrap(item))
+        if (isDuplicateEntry(store.history.at(-1), entry)) {
+          setStore("index", 0)
+          return
+        }
         let trimmed = false
         setStore(
           produce((draft) => {

@@ -1,0 +1,66 @@
+diff --git a/packages/opencode/otel-logs-2026-03-04.json b/packages/opencode/otel-logs-2026-03-04.json
+new file mode 100644
+index 000000000..9359e4a38
+--- /dev/null
++++ b/packages/opencode/otel-logs-2026-03-04.json
+@@ -0,0 +1,59 @@
++{
++  "timestamp": "2026-03-04T18:22:50.681Z",
++  "lineCount": 50,
++  "filters": {
++    "errorsOnly": false
++  },
++  "logs": [
++    "      \"os.type\": \"darwin\",",
++    "      \"os.version\": \"25.2.0\",",
++    "      \"host.arch\": \"arm64\",",
++    "      \"terminal.type\": \"xterm-256color\",",
++    "      \"session.id\": \"a6221e9d-eba6-4a39-8c17-cd5eeede5dd3\"",
++    "    }",
++    "  },",
++    "  \"scopeMetrics\": [",
++    "    {",
++    "      \"scope\": {",
++    "        \"name\": \"opencode-anr\",",
++    "        \"version\": \"\"",
++    "      },",
++    "      \"metrics\": [",
++    "        {",
++    "          \"descriptor\": {",
++    "            \"name\": \"claude_code.session.started\",",
++    "            \"type\": \"COUNTER\",",
++    "            \"description\": \"Number of sessions started\",",
++    "            \"unit\": \"\",",
++    "            \"valueType\": 1,",
++    "            \"advice\": {}",
++    "          },",
++    "          \"aggregationTemporality\": 1,",
++    "          \"dataPointType\": 3,",
++    "          \"dataPoints\": [",
++    "            {",
++    "              \"attributes\": {",
++    "                \"user_id\": \"c19bd550-7061-703b-4c54-466448de66cf\",",
++    "                \"session_id\": \"a6221e9d-eba6-4a39-8c17-cd5eeede5dd3\"",
++    "              },",
++    "              \"startTime\": [",
++    "                1772648488,",
++    "                281000000",
++    "              ],",
++    "              \"endTime\": [",
++    "                1772648568,",
++    "                337000000",
++    "              ],",
++    "              \"value\": 1",
++    "            }",
++    "          ],",
++    "          \"isMonotonic\": true",
++    "        }",
++    "      ]",
++    "    }",
++    "  ]",
++    "}",
++    "2026-03-04T18:22:48.388Z ❌ Export failed: [object Object]",
++    ""
++  ]
++}
+\ No newline at end of file

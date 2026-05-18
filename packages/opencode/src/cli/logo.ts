@@ -29,4 +29,9 @@ export const logo = new Proxy({} as typeof anrLogo, {
   },
 })
 
-export const marks = "_^~"
+export const go = {
+  left: ["    ", "█▀▀▀", "█_^█", "▀▀▀▀"],
+  right: ["    ", "█▀▀█", "█__█", "▀▀▀▀"],
+}
+
+export const marks = "_^~,"

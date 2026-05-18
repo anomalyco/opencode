@@ -1,33 +1,28 @@
 import { describe, expect, test } from "bun:test"
-import path from "path"
-import { Session } from "../../src/session"
+import { Effect, Layer } from "effect"
+import { Session } from "@/session/session"
 import { SessionPrompt } from "../../src/session/prompt"
-import { Log } from "../../src/util/log"
-import { Instance } from "../../src/project/instance"
+import * as Log from "@opencode-ai/core/util/log"
 import { MessageV2 } from "../../src/session/message-v2"
+import { testEffect } from "../lib/effect"
 
-const projectRoot = path.join(__dirname, "../..")
-Log.init({ print: false })
+void Log.init({ print: false })
 
 // Skip tests if no API key is available
 const hasApiKey = !!process.env.ANTHROPIC_API_KEY
-
-// Helper to run test within Instance context
-async function withInstance<T>(fn: () => Promise<T>): Promise<T> {
-  return Instance.provide({
-    directory: projectRoot,
-    fn,
-  })
-}
+const it = testEffect(Layer.mergeAll(SessionPrompt.defaultLayer, Session.defaultLayer))
+const live = hasApiKey ? it.instance : it.instance.skip
 
 describe("StructuredOutput Integration", () => {
-  test.skipIf(!hasApiKey)(
+  live(
     "produces structured output with simple schema",
-    async () => {
-      await withInstance(async () => {
-        const session = await Session.create({ title: "Structured Output Test" })
+    () =>
+      Effect.gen(function* () {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({ title: "Structured Output Test" })
 
-        const result = await SessionPrompt.prompt({
+        const result = yield* prompt.prompt({
           sessionID: session.id,
           parts: [
             {
@@ -64,18 +59,20 @@ describe("StructuredOutput Integration", () => {
 
         // Clean up
         // Note: Not removing session to avoid race with background SessionSummary.summarize
-      })
-    },
+      }),
+    { git: true },
     60000,
   )
 
-  test.skipIf(!hasApiKey)(
+  live(
     "produces structured output with nested objects",
-    async () => {
-      await withInstance(async () => {
-        const session = await Session.create({ title: "Nested Schema Test" })
+    () =>
+      Effect.gen(function* () {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({ title: "Nested Schema Test" })
 
-        const result = await SessionPrompt.prompt({
+        const result = yield* prompt.prompt({
           sessionID: session.id,
           parts: [
             {
@@ -127,18 +124,20 @@ describe("StructuredOutput Integration", () => {
 
         // Clean up
         // Note: Not removing session to avoid race with background SessionSummary.summarize
-      })
-    },
+      }),
+    { git: true },
     60000,
   )
 
-  test.skipIf(!hasApiKey)(
+  live(
     "works with text outputFormat (default)",
-    async () => {
-      await withInstance(async () => {
-        const session = await Session.create({ title: "Text Output Test" })
+    () =>
+      Effect.gen(function* () {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({ title: "Text Output Test" })
 
-        const result = await SessionPrompt.prompt({
+        const result = yield* prompt.prompt({
           sessionID: session.id,
           parts: [
             {
@@ -163,18 +162,20 @@ describe("StructuredOutput Integration", () => {
 
         // Clean up
         // Note: Not removing session to avoid race with background SessionSummary.summarize
-      })
-    },
+      }),
+    { git: true },
     60000,
   )
 
-  test.skipIf(!hasApiKey)(
+  live(
     "stores outputFormat on user message",
-    async () => {
-      await withInstance(async () => {
-        const session = await Session.create({ title: "OutputFormat Storage Test" })
+    () =>
+      Effect.gen(function* () {
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({ title: "OutputFormat Storage Test" })
 
-        await SessionPrompt.prompt({
+        yield* prompt.prompt({
           sessionID: session.id,
           parts: [
             {
@@ -196,7 +197,7 @@ describe("StructuredOutput Integration", () => {
         })
 
         // Get all messages from session
-        const messages = await Session.messages({ sessionID: session.id })
+        const messages = yield* sessions.messages({ sessionID: session.id })
         const userMessage = messages.find((m) => m.info.role === "user")
 
         // Verify outputFormat was stored on user message
@@ -211,8 +212,8 @@ describe("StructuredOutput Integration", () => {
 
         // Clean up
         // Note: Not removing session to avoid race with background SessionSummary.summarize
-      })
-    },
+      }),
+    { git: true },
     60000,
   )
 

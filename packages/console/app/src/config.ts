@@ -9,8 +9,8 @@ export const config = {
   github: {
     repoUrl: "https://github.com/anomalyco/opencode",
     starsFormatted: {
-      compact: "120K",
-      full: "120,000",
+      compact: "160K",
+      full: "160,000",
     },
   },
 
@@ -22,8 +22,8 @@ export const config = {
 
   // Static stats (used on landing page)
   stats: {
-    contributors: "800",
-    commits: "10,000",
-    monthlyUsers: "5M",
+    contributors: "900",
+    commits: "13,000",
+    monthlyUsers: "7.5M",
   },
 } as const

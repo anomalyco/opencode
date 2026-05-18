@@ -47,6 +47,15 @@ export const dict = {
   "ui.sessionTurn.error.freeUsageExceeded": "เกินขีดจำกัดการใช้งานฟรี",
   "ui.sessionTurn.error.addCredits": "เพิ่มเครดิต",
 
+  "dialog.usageExceeded.freeTier.title": "ถึงขีดจำกัดฟรีแล้ว",
+  "dialog.usageExceeded.freeTier.description":
+    "สมัครสมาชิก OpenCode Go เพื่อการเข้าถึงโมเดลโอเพนซอร์สที่ดีที่สุดอย่างเชื่อถือได้ เริ่มต้นที่ $5/เดือน",
+  "dialog.usageExceeded.freeTier.actionLabel": "สมัครสมาชิก",
+  "dialog.usageExceeded.accountRateLimit.title": "ถึงขีดจำกัดของ Go แล้ว",
+  "dialog.usageExceeded.accountRateLimit.description":
+    "ถึงขีดจำกัดการใช้งานแล้ว หากต้องการใช้โมเดลนี้ต่อในตอนนี้ ให้เปิดใช้งานจากยอดคงเหลือที่มี",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "เปิดการตั้งค่า",
+
   "ui.sessionTurn.status.delegating": "มอบหมายงาน",
   "ui.sessionTurn.status.planning": "วางแผนขั้นตอนถัดไป",
   "ui.sessionTurn.status.gatheringContext": "กำลังสำรวจ",
@@ -61,7 +70,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "พิจารณาขั้นตอนถัดไป",
 
   "ui.messagePart.questions.dismissed": "ละทิ้งคำถามแล้ว",
-  "ui.messagePart.compaction": "ประวัติถูกบีบอัด",
+  "ui.messagePart.compaction": "บีบอัดเซสชันแล้ว",
   "ui.messagePart.context.read.one": "อ่าน {{count}} รายการ",
   "ui.messagePart.context.read.other": "อ่าน {{count}} รายการ",
   "ui.messagePart.context.search.one": "ค้นหา {{count}} รายการ",
@@ -96,7 +105,6 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "ดึงจากเว็บ",
   "ui.tool.websearch": "ค้นหาเว็บ",
-  "ui.tool.codesearch": "ค้นหาโค้ด",
   "ui.tool.shell": "เชลล์",
   "ui.tool.patch": "แพตช์",
   "ui.tool.todos": "รายการงาน",
@@ -127,6 +135,8 @@ export const dict = {
   "ui.message.collapse": "ย่อข้อความ",
   "ui.message.copy": "คัดลอก",
   "ui.message.copyMessage": "คัดลอกข้อความ",
+  "ui.message.forkMessage": "แตกแขนงไปยังเซสชันใหม่",
+  "ui.message.revertMessage": "รีเซ็ตไปยังจุดนี้",
   "ui.message.copyResponse": "คัดลอกคำตอบ",
   "ui.message.copied": "คัดลอกแล้ว!",
   "ui.message.interrupted": "ถูกขัดจังหวะ",
@@ -144,4 +154,16 @@ export const dict = {
   "ui.question.multiHint": "เลือกทั้งหมดที่ใช้",
   "ui.question.singleHint": "เลือกหนึ่งคำตอบ",
   "ui.question.custom.placeholder": "พิมพ์คำตอบของคุณ...",
+
+  "ui.fileSearch.placeholder": "ค้นหา",
+  "ui.fileSearch.previousMatch": "ก่อนหน้า",
+  "ui.fileSearch.nextMatch": "ถัดไป",
+  "ui.fileSearch.close": "ปิดการค้นหา",
+  "ui.tool.task": "งาน",
+  "ui.tool.skill": "ทักษะ",
+  "ui.basicTool.called": "เรียกใช้ `{{tool}}`",
+  "ui.toolErrorCard.failed": "ล้มเหลว",
+  "ui.toolErrorCard.copyError": "คัดลอกข้อผิดพลาด",
+  "ui.message.duration.seconds": "{{count}}วิ",
+  "ui.message.duration.minutesSeconds": "{{minutes}}นาที {{seconds}}วิ",
 }
