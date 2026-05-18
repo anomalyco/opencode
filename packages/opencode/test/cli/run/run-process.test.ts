@@ -69,12 +69,8 @@ describe("opencode run (non-interactive subprocess)", () => {
         const result = yield* opencode.run("say hi", { format: "json" })
         opencode.expectExit(result, 0)
 
-        const lines = result.stdout
-          .split("\n")
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0)
-        expect(lines.length).toBeGreaterThan(0)
-        const events = lines.map((line) => JSON.parse(line) as Record<string, unknown>)
+        const events = opencode.parseJsonEvents(result.stdout)
+        expect(events.length).toBeGreaterThan(0)
         for (const evt of events) {
           expect(typeof evt.type).toBe("string")
           expect(typeof evt.sessionID).toBe("string")

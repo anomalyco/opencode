@@ -80,6 +80,11 @@ export type OpencodeCli = {
   // Convenience assertion. Dumps captured stderr/stdout on mismatch so CI
   // failures are debuggable without re-running locally.
   readonly expectExit: (result: RunResult, expected: number, label?: string) => void
+  // Parse `--format json` stdout into one event object per non-empty line.
+  // The CLI writes `JSON.stringify({ type, sessionID, ... }) + EOL` for each
+  // event (see src/cli/cmd/run.ts `emit`). Throws if any line is malformed
+  // so tests fail loudly rather than silently skipping data.
+  readonly parseJsonEvents: (stdout: string) => Array<Record<string, unknown>>
 }
 
 export type RunFixture = {
@@ -142,10 +147,18 @@ export function withRunFixture<A, E>(
       return spawn(argv, opts)
     }
 
-    const opencode: OpencodeCli = { run, spawn, expectExit }
+    const opencode: OpencodeCli = { run, spawn, expectExit, parseJsonEvents }
 
     return yield* fn({ llm, home, opencode })
   }).pipe(Effect.provide(TestLLMServer.layer))
+}
+
+function parseJsonEvents(stdout: string): Array<Record<string, unknown>> {
+  return stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
 }
 
 // Convenience for the common assertion pattern. Dumps stderr/stdout when
