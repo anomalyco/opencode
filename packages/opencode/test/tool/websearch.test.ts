@@ -102,25 +102,25 @@ describe("websearch model-facing schema (Parallel exposed)", () => {
     expect(() => decode(validInput)).not.toThrow()
   })
 
-  test("accepts the minimum batch size (1 additional query)", () => {
+  test("accepts a single additionalQueries entry", () => {
     expect(() => decode({ ...validInput, additionalQueries: ["ford q1 2026 earnings"] })).not.toThrow()
+  })
+
+  test("accepts an empty additionalQueries array", () => {
+    expect(() => decode({ ...validInput, additionalQueries: [] })).not.toThrow()
+  })
+
+  test("accepts a request with no additionalQueries (single-topic search)", () => {
+    const { additionalQueries: _omit, ...rest } = validInput
+    expect(() => decode(rest)).not.toThrow()
   })
 
   test("rejects more than 2 additionalQueries", () => {
     expect(() => decode({ ...validInput, additionalQueries: ["a", "b", "c"] })).toThrow()
   })
 
-  test("rejects an empty additionalQueries array", () => {
-    expect(() => decode({ ...validInput, additionalQueries: [] })).toThrow()
-  })
-
   test("rejects a request missing objective", () => {
     const { objective: _omit, ...rest } = validInput
-    expect(() => decode(rest)).toThrow()
-  })
-
-  test("rejects a request missing additionalQueries", () => {
-    const { additionalQueries: _omit, ...rest } = validInput
     expect(() => decode(rest)).toThrow()
   })
 })

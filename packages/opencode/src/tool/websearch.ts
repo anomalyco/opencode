@@ -7,7 +7,6 @@ import { checksum } from "@opencode-ai/core/util/encode"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
-const PARALLEL_ADDITIONAL_QUERIES_MIN = 1
 const PARALLEL_ADDITIONAL_QUERIES_MAX = 2
 
 const baseFields = {
@@ -27,20 +26,30 @@ const baseFields = {
   }),
 }
 
-const parallelOnlyFields = {
-  objective: Schema.String.annotate({
-    description:
-      "A natural-language description of what you're trying to accomplish (e.g. 'Compare Q1 2026 earnings and margin performance for Tesla, Ford, and GM'). Must include the key entities or topics being researched. The search engine uses this to rank results for reasoning utility rather than human engagement.",
-  }),
-  additionalQueries: Schema.Array(Schema.String)
-    .check(Schema.isMinLength(PARALLEL_ADDITIONAL_QUERIES_MIN), Schema.isMaxLength(PARALLEL_ADDITIONAL_QUERIES_MAX))
-    .annotate({
-      description: `${PARALLEL_ADDITIONAL_QUERIES_MIN}-${PARALLEL_ADDITIONAL_QUERIES_MAX} additional keyword search queries (3-6 words each) to run alongside \`query\` in a single batched call. Must be diverse — vary entity names, synonyms, and angles. Each query must include the key entity or topic. NEVER write sentences, instructions, or use site: operators. Use this instead of chaining separate websearch calls for multi-topic questions.`,
-    }),
-}
+const objectiveField = Schema.String.annotate({
+  description:
+    "A natural-language description of what you're trying to accomplish (e.g. 'Compare Q1 2026 earnings and margin performance for Tesla, Ford, and GM'). Must include the key entities or topics being researched. The search engine uses this to rank results for reasoning utility rather than human engagement.",
+})
 
-// Model-facing schema when Parallel is in play — both extras required.
-export const ParallelParameters = Schema.Struct({ ...baseFields, ...parallelOnlyFields })
+const additionalQueriesField = Schema.optional(
+  Schema.Array(Schema.String).check(Schema.isMaxLength(PARALLEL_ADDITIONAL_QUERIES_MAX)),
+).annotate({
+  description: `Optional. Up to ${PARALLEL_ADDITIONAL_QUERIES_MAX} additional keyword search queries (3-6 words each) to run alongside \`query\` in a single batched call. Use for multi-topic questions or distinct angles. Must be diverse — vary entity names, synonyms, and angles. Each query must include the key entity or topic. NEVER write sentences, instructions, or use site: operators. Prefer batching here over chaining separate websearch calls.`,
+})
+
+// Model-facing schema when Parallel is in play. `query` carries a keyword-style
+// primary query; `objective` carries the research intent; `additionalQueries`
+// is optional and lets the model batch related lookups.
+export const ParallelParameters = Schema.Struct({
+  ...baseFields,
+  // Override `query` description to match Parallel's keyword-style expectation.
+  query: Schema.String.annotate({
+    description:
+      "Primary keyword search query (3-6 words). Must include the key entity or topic. NEVER write a sentence here — use `objective` for natural-language intent.",
+  }),
+  objective: objectiveField,
+  additionalQueries: additionalQueriesField,
+})
 
 // Model-facing schema when Parallel is gated out — no extras at all.
 export const BaseParameters = Schema.Struct(baseFields)
@@ -49,8 +58,8 @@ export const BaseParameters = Schema.Struct(baseFields)
 // model-facing schema was active for the session.
 export const Parameters = Schema.Struct({
   ...baseFields,
-  objective: Schema.optional(parallelOnlyFields.objective),
-  additionalQueries: Schema.optional(parallelOnlyFields.additionalQueries),
+  objective: Schema.optional(objectiveField),
+  additionalQueries: additionalQueriesField,
 })
 
 const WebSearchProviderSchema = Schema.Literals(["exa", "parallel"])
@@ -155,9 +164,8 @@ export const WebSearchTool = Tool.define(
       "",
       "PREFER OVER REPEATED KEYWORD SEARCHES — one call covers the ground of 2-3 traditional queries with better relevance. Returns LLM-optimized excerpts (pre-compressed, citation-aware).",
       "",
-      "Required fields when calling:",
-      "  - `objective`: natural-language description of what you're trying to accomplish. Must name the key entities or topics.",
-      `  - \`additionalQueries\`: ${PARALLEL_ADDITIONAL_QUERIES_MIN}-${PARALLEL_ADDITIONAL_QUERIES_MAX} diverse keyword queries (3-6 words each) to run alongside \`query\` in a single batched call. Vary entities, synonyms, and angles. Do NOT chain multiple websearch calls when one batched call would do.`,
+      "Required: `objective` — a natural-language description of what you're trying to accomplish. Must name the key entities or topics.",
+      `Optional: \`additionalQueries\` — up to ${PARALLEL_ADDITIONAL_QUERIES_MAX} extra diverse keyword queries (3-6 words each) to run alongside \`query\` in a single batched call. Use this for multi-topic questions or distinct angles instead of chaining separate websearch calls.`,
     ].join("\n")
 
     return {

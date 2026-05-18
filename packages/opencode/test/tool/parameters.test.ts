@@ -54,7 +54,8 @@ describe("tool parameters", () => {
     test("task", () => expect(toJsonSchema(Task)).toMatchSnapshot())
     test("todo", () => expect(toJsonSchema(Todo)).toMatchSnapshot())
     test("webfetch", () => expect(toJsonSchema(WebFetch)).toMatchSnapshot())
-    test("websearch", () => expect(toJsonSchema(WebSearch)).toMatchSnapshot())
+    // The execute-side `Parameters` is an internal convenience type — the model only
+    // ever sees BaseParameters or ParallelParameters depending on provider gating.
     test("websearch (base, Exa-only mode)", () => expect(toJsonSchema(WebSearchBase)).toMatchSnapshot())
     test("websearch (parallel mode)", () => expect(toJsonSchema(WebSearchParallel)).toMatchSnapshot())
     test("write", () => expect(toJsonSchema(Write)).toMatchSnapshot())
