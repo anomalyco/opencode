@@ -325,7 +325,7 @@ export const dict = {
     "Go to niskokosztowa subskrypcja, która daje niezawodny dostęp do zdolnych modeli open source dla agentów kodujących.",
   "go.faq.q2": "Jakie modele zawiera Go?",
   "go.faq.a2": "Go obejmuje poniższe modele z wysokimi limitami i niezawodnym dostępem.",
-  "go.faq.q3": "Czy Go to to samo co Zen?",
+  "go.faq.q3": "Czy Go to samo co Zen?",
   "go.faq.a3":
     "Nie. Zen to model płatności za użycie, podczas gdy Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc, z hojnymi limitami i niezawodnym dostępem do modeli open source GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro i DeepSeek V4 Flash.",
   "go.faq.q4": "Ile kosztuje Go?",
