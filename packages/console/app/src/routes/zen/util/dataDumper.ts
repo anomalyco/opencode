@@ -1,6 +1,7 @@
 import { Resource, waitUntil } from "@opencode-ai/console-resource"
 
 export function createDataDumper(sessionId: string, requestId: string, projectId: string) {
+  return
   if (Resource.App.stage !== "production") return
   if (sessionId === "") return
 
