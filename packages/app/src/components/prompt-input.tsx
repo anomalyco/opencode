@@ -858,7 +858,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         ? rawParts[0].content
         : rawParts.map((p) => ("content" in p ? p.content : "")).join("")
     const hasNonText = rawParts.some((part) => part.type !== "text")
-    const shouldReset = rawText.length === 0 && !hasNonText && images.length === 0
+    const textContent = (editorRef.textContent ?? "").replace(/\u200B/g, "")
+    const shouldReset = textContent.length === 0 && rawText.replace(/\n/g, "").length === 0 && !hasNonText && images.length === 0
 
     if (shouldReset) {
       closePopover()
