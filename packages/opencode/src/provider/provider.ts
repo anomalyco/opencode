@@ -1144,9 +1144,9 @@ function mergeDiscoveredModel(existing: Model | undefined, discovered: Model): M
       ...existing.api,
     },
     limit: {
-      context: existing.limit.context || discovered.limit.context,
+      context: discovered.limit.context || existing.limit.context,
       input: existing.limit.input ?? discovered.limit.input,
-      output: existing.limit.output || discovered.limit.output,
+      output: discovered.limit.output || existing.limit.output,
     },
   }
 }
