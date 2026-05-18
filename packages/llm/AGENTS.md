@@ -8,6 +8,10 @@
 - In `Effect.gen`, yield yieldable errors directly (`return yield* new MyError(...)`) instead of `Effect.fail(new MyError(...))`.
 - Use `Effect.void` instead of `Effect.succeed(undefined)` when the successful value is intentionally void.
 
+## Conventions
+
+Per-type constructors live on the type's namespace, not as top-level re-exports. Use `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for the request-shaped call API: `LLM.request`, `LLM.generate`, `LLM.stream`, `LLM.model`, `LLM.updateRequest`, `LLM.generateObject`. Two ways to construct the same thing is one too many.
+
 ## Tests
 
 - Use `testEffect(...)` from `test/lib/effect.ts` for tests requiring Effect layers.
@@ -166,12 +170,12 @@ If you find yourself copying a 3-to-5-line snippet between two protocols, lift i
 Tool loops are represented in common messages and events:
 
 ```ts
-const call = LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })
-const result = LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } })
+const call = ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })
+const result = Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } })
 
 const followUp = LLM.request({
   model,
-  messages: [LLM.user("Weather?"), LLM.assistant([call]), result],
+  messages: [Message.user("Weather?"), Message.assistant([call]), result],
 })
 ```
 
@@ -289,6 +293,6 @@ Filters apply in replay and record mode. Combine them with `RECORD=true` when re
 
 **Binary response bodies.** Most providers stream text (SSE, JSON). AWS Bedrock streams binary AWS event-stream frames whose CRC32 fields would be mangled by a UTF-8 round-trip — those bodies are stored as base64 with `bodyEncoding: "base64"` on the response snapshot. Detection is by `Content-Type` in `@opencode-ai/http-recorder` (currently `application/vnd.amazon.eventstream` and `application/octet-stream`); cassettes for SSE/JSON routes omit the field and decode as text.
 
-**Matching strategies.** Replay defaults to structural matching, which finds an interaction by comparing method, URL, allow-listed headers, and the canonical JSON body. This is the right choice for tool loops because each round's request differs (the message history grows). For scenarios where successive requests are byte-identical and expect different responses (retries, polling), pass `dispatch: "sequential"` in `RecordReplayOptions` — replay then walks the cassette in record order via an internal cursor. `scriptedResponses` (in `test/lib/http.ts`) is the deterministic counterpart for tests that don't need a live provider; it scripts response bodies in order without reading from disk.
+**Matching strategy.** Replay walks the cassette in record order via an internal cursor: the Nth runtime request is served by the Nth recorded interaction, and each one is validated by comparing method, URL, allow-listed headers, and the canonical JSON body. This handles tool loops (each round's request differs as history grows) and retry/polling scenarios (successive byte-identical requests with different responses) uniformly. If a test reorders its requests, re-record the cassette. `scriptedResponses` (in `test/lib/http.ts`) is the deterministic counterpart for tests that don't need a live provider; it scripts response bodies in order without reading from disk.
 
 Do not blanket re-record an entire test file when adding one cassette. `RECORD=true` rewrites every recorded case that runs, and provider streams contain volatile IDs, timestamps, fingerprints, and obfuscation fields. Prefer deleting the one cassette you intend to refresh, or run a focused test pattern that only registers the scenario you want to record. Keep stable existing cassettes unchanged unless their request shape or expected behavior changed.

@@ -752,11 +752,11 @@ export type Project = {
 }
 
 export type BadRequestError = {
-  data: unknown
-  errors: Array<{
-    [key: string]: unknown
-  }>
-  success: false
+  name: "BadRequest"
+  data: {
+    message: string
+    kind?: "Params" | "Headers" | "Query" | "Body" | "Payload"
+  }
 }
 
 export type NotFoundError = {
@@ -1666,6 +1666,9 @@ export type OAuth = {
 export type ApiAuth = {
   type: "api"
   key: string
+  metadata?: {
+    [key: string]: string
+  }
 }
 
 export type WellKnownAuth = {

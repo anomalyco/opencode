@@ -96,6 +96,17 @@ function assistant(text: string, phase: StreamCommit["phase"] = "progress"): Str
   }
 }
 
+function reasoning(text: string, phase: StreamCommit["phase"] = "progress"): StreamCommit {
+  return {
+    kind: "reasoning",
+    text,
+    phase,
+    source: "reasoning",
+    messageID: "msg-r-1",
+    partID: "part-r-1",
+  }
+}
+
 function user(text: string): StreamCommit {
   return {
     kind: "user",
@@ -389,6 +400,39 @@ test("inserts spacers for new visible groups", async () => {
     }
   } finally {
     grouped.scrollback.destroy()
+  }
+})
+
+test("renders replayed user, reasoning, and assistant output after completion", async () => {
+  const out = await setup()
+
+  try {
+    const lines: string[] = []
+    const take = () => {
+      const commits = claim(out.renderer)
+      try {
+        lines.push(...commits.flatMap((commit) => renderRows(commit).flatMap((row) => row.split("\n"))))
+      } finally {
+        destroy(commits)
+      }
+    }
+
+    await out.scrollback.append(user("Hello you"))
+    take()
+    await out.scrollback.append(reasoning("Thinking: **Plan**\n\nSay hello.", "progress"))
+    await out.scrollback.complete()
+    take()
+    await out.scrollback.append(assistant("Hello.", "progress"))
+    await out.scrollback.complete()
+    take()
+
+    const output = lines.join("\n")
+    expect(output).toContain("› Hello you")
+    expect(output).toContain("Thinking:")
+    expect(output).toContain("Plan")
+    expect(output).toContain("Hello.")
+  } finally {
+    out.scrollback.destroy()
   }
 })
 

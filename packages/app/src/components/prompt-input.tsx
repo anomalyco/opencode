@@ -16,7 +16,6 @@ import {
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
-import { useGlobalSDK } from "@/context/global-sdk"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
@@ -56,7 +55,8 @@ import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { useQueries } from "@tanstack/solid-query"
-import { loadAgentsQuery, loadProvidersQuery } from "@/context/global-sync/bootstrap"
+import { useQueryOptions } from "@/context/global-sync"
+import { pathKey } from "@/utils/path-key"
 
 interface PromptInputProps {
   class?: string
@@ -99,11 +99,9 @@ const EXAMPLES = [
   "prompt.example.25",
 ] as const
 
-const NON_EMPTY_TEXT = /[^\s\u200B]/
-
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
-  const globalSDK = useGlobalSDK()
+  const queryOptions = useQueryOptions()
 
   const sync = useSync()
   const local = useLocal()
@@ -240,13 +238,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return paths
   })
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
-  const status = createMemo(
-    () =>
-      sync.data.session_status[params.id ?? ""] ?? {
-        type: "idle",
-      },
-  )
-  const working = createMemo(() => status()?.type !== "idle")
+  const working = createMemo(() => sync.data.session_working(params.id ?? ""))
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
@@ -866,7 +858,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         ? rawParts[0].content
         : rawParts.map((p) => ("content" in p ? p.content : "")).join("")
     const hasNonText = rawParts.some((part) => part.type !== "text")
-    const shouldReset = !NON_EMPTY_TEXT.test(rawText) && !hasNonText && images.length === 0
+    const textContent = (editorRef.textContent ?? "").replace(/\u200B/g, "")
+    const shouldReset =
+      textContent.length === 0 && rawText.replace(/\n/g, "").length === 0 && !hasNonText && images.length === 0
 
     if (shouldReset) {
       closePopover()
@@ -1256,9 +1250,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const [agentsQuery, globalProvidersQuery, providersQuery] = useQueries(() => ({
     queries: [
-      loadAgentsQuery(sdk.directory, sdk.client),
-      loadProvidersQuery(null, globalSDK.client),
-      loadProvidersQuery(sdk.directory, sdk.client),
+      queryOptions.agents(pathKey(sdk.directory)),
+      queryOptions.providers(null),
+      queryOptions.providers(pathKey(sdk.directory)),
     ],
   }))
 
