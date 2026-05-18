@@ -3,6 +3,7 @@ import { provideTmpdirInstance } from "../fixture/fixture"
 import { Effect, Layer, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Bus } from "../../src/bus"
+import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { SyncEvent } from "../../src/sync"
 import { Database, eq } from "@/storage/db"
 import { EventSequenceTable, EventTable } from "../../src/sync/event.sql"
@@ -135,6 +136,42 @@ describe("SyncEvent", () => {
             })
           } finally {
             dispose()
+          }
+        }),
+      ),
+    )
+
+    // Regression for the EffectBridge migration. GlobalBus.emit used to fire
+    // synchronously inside the Database.effect post-commit callback. After the
+    // migration it fires inside the forked publish Effect, AFTER bus.publish
+    // completes. Consumers don't care about microsecond-level ordering, but
+    // we still need to prove the emit actually fires.
+    it.live(
+      "emits sync events to GlobalBus after publishing to ProjectBus",
+      provideTmpdirInstance(() =>
+        Effect.gen(function* () {
+          const { Created } = setup()
+          const captured: GlobalEvent[] = []
+          const handler = (evt: GlobalEvent) => {
+            if (evt.payload?.type === "sync") captured.push(evt)
+          }
+          GlobalBus.on("event", handler)
+          try {
+            yield* SyncEvent.use.run(Created, { id: "evt_global_1", name: "global" })
+            // bridge.fork is fire-and-forget. Poll briefly so the forked
+            // publish has time to reach the GlobalBus.emit call.
+            const deadline = Date.now() + 1_000
+            while (captured.length === 0 && Date.now() < deadline) {
+              yield* Effect.sleep("10 millis")
+            }
+            expect(captured.length).toBeGreaterThanOrEqual(1)
+            const event = captured[0]
+            expect(event.payload).toMatchObject({
+              type: "sync",
+              syncEvent: { type: "item.created.1" },
+            })
+          } finally {
+            GlobalBus.off("event", handler)
           }
         }),
       ),
