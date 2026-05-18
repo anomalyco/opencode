@@ -12,7 +12,7 @@ export const WorkspaceTable = mysqlTable(
   },
   (table) => [
     uniqueIndex("slug").on(table.slug),
-    uniqueIndex("workspace_referral_code").on(table.referralCode),
+    uniqueIndex("referral_code").on(table.referralCode),
   ],
 )
 

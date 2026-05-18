@@ -226,9 +226,9 @@ function LimitsGraph(props: { href: string }) {
 export default function Home() {
   const location = useLocation()
   const workspaceID = createAsync(() => checkLoggedIn())
-  const inviteCode = createMemo(() => new URLSearchParams(location.search).get("invite") ?? undefined)
+  const inviteCode = createMemo(() => new URLSearchParams(location.search).get("ref") ?? undefined)
   const subscribeUrl = createMemo(() => {
-    const invite = inviteCode() ? `?invite=${encodeURIComponent(inviteCode()!)}` : ""
+    const invite = inviteCode() ? `?ref=${encodeURIComponent(inviteCode()!)}` : ""
     if (workspaceID()) return `/workspace/${workspaceID()}/go${invite}`
     return `/auth${invite}`
   })

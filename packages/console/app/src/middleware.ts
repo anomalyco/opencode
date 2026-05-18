@@ -14,7 +14,7 @@ export default createMiddleware({
       event.response.headers.append("set-cookie", cookie(locale))
     }
 
-    const inviteCode = normalizeInviteCode(url.searchParams.get("invite"))
+    const inviteCode = normalizeInviteCode(url.searchParams.get("ref"))
     if (inviteCode) event.response.headers.append("set-cookie", inviteCookie(inviteCode))
   },
 })
