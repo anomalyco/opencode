@@ -292,6 +292,34 @@ describe("session.llm-native.request", () => {
     ).toEqual({ type: "unsupported", reason: "OpenAI API key is not configured" })
   })
 
+  test("prefers console provider api key over stored opencode auth", () => {
+    expect(
+      LLMNativeRuntime.status({
+        model: { ...baseModel, providerID: ProviderID.make("opencode") },
+        provider: {
+          ...providerInfo,
+          id: ProviderID.make("opencode"),
+          options: { apiKey: "console-token" },
+          key: "zen-token",
+        },
+        auth: { type: "api", key: "zen-token" },
+      }),
+    ).toMatchObject({
+      type: "supported",
+      apiKey: "console-token",
+    })
+    expect(
+      LLMNativeRuntime.status({
+        model: baseModel,
+        provider: { ...providerInfo, options: {}, key: "provider-key" },
+        auth: undefined,
+      }),
+    ).toMatchObject({
+      type: "supported",
+      apiKey: "provider-key",
+    })
+  })
+
   test("native tool wrapper converts thrown errors into typed ToolFailure", async () => {
     const wrapped = LLMNativeRuntime.nativeTools(
       {
