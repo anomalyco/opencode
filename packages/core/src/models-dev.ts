@@ -105,6 +105,8 @@ export const Provider = Schema.Struct({
 
 export type Provider = Schema.Schema.Type<typeof Provider>
 
+declare const OPENCODE_MODELS_DEV: Record<string, Provider> | undefined
+
 export interface Interface {
   readonly get: () => Effect.Effect<Record<string, Provider>>
   readonly refresh: (force?: boolean) => Effect.Effect<void>
@@ -155,12 +157,9 @@ export const layer = Layer.effect(
       Effect.map((v) => v as Record<string, Provider> | undefined),
     )
 
-    // Bundled at build time; absent in dev — `tryPromise` covers both.
-    const loadSnapshot = Effect.tryPromise({
-      // @ts-ignore — generated at build time, may not exist in dev
-      try: () => import("./models-snapshot.js").then((m) => m.snapshot as Record<string, Provider> | undefined),
-      catch: () => undefined,
-    }).pipe(Effect.catch(() => Effect.succeed(undefined)))
+    const loadSnapshot = Effect.sync(() =>
+      typeof OPENCODE_MODELS_DEV === "undefined" ? undefined : OPENCODE_MODELS_DEV,
+    )
 
     const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
       const text = yield* fetchApi()
@@ -221,4 +220,4 @@ export const defaultLayer: Layer.Layer<Service> = layer.pipe(
   Layer.provide(AppFileSystem.defaultLayer),
 )
 
-export * as ModelsDev from "./models"
+export * as ModelsDev from "./models-dev"

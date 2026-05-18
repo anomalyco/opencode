@@ -10,6 +10,7 @@ import {
   runWithOwner,
   useContext,
   type JSX,
+  startTransition,
 } from "solid-js"
 import { Dialog as Kobalte } from "@kobalte/core/dialog"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -154,7 +155,7 @@ export function useDialog() {
     },
     show(element: DialogElement, onClose?: () => void) {
       const base = ctx.active?.owner ?? owner
-      ctx.show(element, base, onClose)
+      return startTransition(() => ctx.show(element, base, onClose))
     },
     close() {
       ctx.close()
