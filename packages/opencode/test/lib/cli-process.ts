@@ -1,23 +1,22 @@
-// Subprocess test harness for the `opencode run` CLI.
+// Subprocess test harness for the opencode CLI. Spawns the real binary against
+// a TestLLMServer running in-process at a random port, with full env isolation.
 //
-// This is the missing test tier: every other `cli/run/*.test.ts` is a unit
-// test of an extracted helper. Nothing actually exercises the `RunCommand`
-// handler end-to-end. Bugs that span argv parsing → server boot → SDK call →
-// event consumption → exit code (like the original /event race or the
-// non-interactive hang #27371) are invisible to in-process tests.
+// This is the missing test tier: in-process tests can't catch bugs that span
+// argv parsing → server boot → SDK call → event consumption → exit code (like
+// the original /event race or #27371's invalid-model hang).
 //
-// The harness uses opencode's built-in test affordances to spawn the real CLI
-// hermetically:
-//   - OPENCODE_CONFIG_CONTENT  : provider config inline, no files to find
-//   - OPENCODE_TEST_HOME       : pins os.homedir() → tmpdir
+// Configuration flows through opencode's built-in test affordances:
+//   - OPENCODE_CONFIG_CONTENT      : provider config inline, no files to find
+//   - OPENCODE_TEST_HOME           : pins os.homedir() → tmpdir
 //   - OPENCODE_DISABLE_PROJECT_CONFIG : skip walking up for opencode.json
-//   - OPENCODE_PURE            : skip external plugin discovery + install
+//   - OPENCODE_PURE                : skip external plugin discovery + install
 //   - OPENCODE_DISABLE_AUTOUPDATE / AUTOCOMPACT / MODELS_FETCH : no background work
-//
 // Plus HOME / XDG_* pointing at the tmpdir for belt-and-suspenders isolation.
 //
-// The custom `test` provider points at a TestLLMServer running in the same
-// process at a random port. The CLI subprocess talks to it over real HTTP.
+// Today only `opencode.run` is fully wired. The shape supports adding more
+// builders (`opencode.serve(opts)`, `opencode.acp(opts)`, `opencode.auth(...)`)
+// without changing the fixture. Long-lived commands like `serve` will need a
+// different return shape — see the TODO at the bottom of OpencodeCli.
 import type { TestOptions } from "bun:test"
 import * as Scope from "effect/Scope"
 import { Effect } from "effect"
@@ -59,10 +58,10 @@ export type RunResult = {
   readonly durationMs: number
 }
 
-type SpawnOpts = { readonly timeoutMs?: number; readonly env?: Record<string, string> }
+export type SpawnOpts = { readonly timeoutMs?: number; readonly env?: Record<string, string> }
 
-// A `RunOpts` is the typed equivalent of constructing argv for `opencode run`.
-// New flags should land here so tests stay grep-able and refactor-safe.
+// Typed equivalent of constructing argv for `opencode run`. New flags should
+// land here so tests stay grep-able and refactor-safe.
 export type RunOpts = SpawnOpts & {
   readonly model?: string
   readonly agent?: string
@@ -73,39 +72,41 @@ export type RunOpts = SpawnOpts & {
 }
 
 export type OpencodeCli = {
-  // High-level: run a single prompt against the test model.
+  // High-level: run a single prompt against the test model. Short-lived.
   readonly run: (message: string, opts?: RunOpts) => Effect.Effect<RunResult>
-  // Escape hatch: any CLI invocation with full control over argv.
+  // Escape hatch: any CLI invocation with full control over argv. Used to test
+  // commands that don't yet have a typed builder.
   readonly spawn: (args: string[], opts?: SpawnOpts) => Effect.Effect<RunResult>
   // Convenience assertion. Dumps captured stderr/stdout on mismatch so CI
   // failures are debuggable without re-running locally.
   readonly expectExit: (result: RunResult, expected: number, label?: string) => void
   // Parse `--format json` stdout into one event object per non-empty line.
   // The CLI writes `JSON.stringify({ type, sessionID, ... }) + EOL` for each
-  // event (see src/cli/cmd/run.ts `emit`). Throws if any line is malformed
-  // so tests fail loudly rather than silently skipping data.
+  // event (see src/cli/cmd/run.ts `emit`). Throws on a malformed line so
+  // tests fail loudly rather than silently skipping data.
   readonly parseJsonEvents: (stdout: string) => Array<Record<string, unknown>>
+  // TODO: long-lived builders for `serve` / `acp` / etc. need a different
+  // return shape — they yield a handle with .url / .kill and live inside the
+  // surrounding Scope. Add when the first long-lived command is tested.
 }
 
-export type RunFixture = {
+export type CliFixture = {
   readonly llm: TestLLMServer["Service"]
   readonly home: string
   readonly opencode: OpencodeCli
 }
 
-// `withRunFixture(fn)` provisions a TestLLMServer + tmpdir + spawn helper and
-// invokes fn. Cleans up the tmpdir on scope exit.
-//
-// Note on the R channel: TestLLMServer.layer is provided internally so the
-// caller doesn't need to wire it up. The fixture's lifetime is tied to the
-// surrounding Scope.
-export function withRunFixture<A, E>(
-  fn: (input: RunFixture) => Effect.Effect<A, E>,
+// Provisions a TestLLMServer + tmpdir + spawn helper and invokes fn. Cleans
+// up the tmpdir on scope exit. TestLLMServer.layer is provided internally so
+// the caller doesn't need to wire it up — the fixture's lifetime is tied to
+// the surrounding Scope.
+export function withCliFixture<A, E>(
+  fn: (input: CliFixture) => Effect.Effect<A, E>,
 ): Effect.Effect<A, E | unknown, Scope.Scope> {
   return Effect.gen(function* () {
     const llm = yield* TestLLMServer
 
-    const home = path.join(os.tmpdir(), "oc-run-" + Math.random().toString(36).slice(2))
+    const home = path.join(os.tmpdir(), "oc-cli-" + Math.random().toString(36).slice(2))
     yield* Effect.promise(() => fs.mkdir(home, { recursive: true }))
     yield* Effect.addFinalizer(() =>
       Effect.promise(() => fs.rm(home, { recursive: true, force: true }).catch(() => undefined)),
@@ -172,14 +173,14 @@ function expectExit(result: RunResult, expected: number, label = "opencode") {
   throw new Error(`${label}: expected exit ${expected}, got ${result.exitCode}`)
 }
 
-// `runIt.live(name, fixture => effect)` is the same as
-// `it.live(name, () => withRunFixture(fixture))` — one fewer nesting level at
+// `cliIt.live(name, fixture => effect)` is the same as
+// `it.live(name, () => withCliFixture(fixture))` — one fewer nesting level at
 // every call site. Use this for any test that needs the opencode CLI fixture.
 //
 // Only `.live` is exposed because subprocess tests must run against the real
 // clock — a TestClock-paused environment can't drive a child process. If you
-// need `.only` or `.skip`, fall back to `it.live` + `withRunFixture` directly.
-export const runIt = {
-  live: <A, E>(name: string, body: (input: RunFixture) => Effect.Effect<A, E>, opts?: number | TestOptions) =>
-    it.live(name, () => withRunFixture(body), opts),
+// need `.only` or `.skip`, fall back to `it.live` + `withCliFixture` directly.
+export const cliIt = {
+  live: <A, E>(name: string, body: (input: CliFixture) => Effect.Effect<A, E>, opts?: number | TestOptions) =>
+    it.live(name, () => withCliFixture(body), opts),
 }
