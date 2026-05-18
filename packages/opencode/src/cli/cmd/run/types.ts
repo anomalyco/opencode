@@ -34,6 +34,7 @@ export type RunProvider = NonNullable<Awaited<ReturnType<OpencodeClient["provide
 export type RunPrompt = {
   text: string
   parts: RunPromptPart[]
+  mode?: "shell"
   command?: {
     name: string
     arguments: string

@@ -626,6 +626,10 @@ function scrollBashStart(p: ToolProps<typeof BashTool>): string {
   const desc = p.input.description || "Shell"
   const wd = p.input.workdir ?? ""
   const dir = wd && wd !== "." ? toolPath(wd) : ""
+  if (cmd && desc === "Shell" && !dir) {
+    return `$ ${cmd}`
+  }
+
   const title = dir && !desc.includes(dir) ? `${desc} in ${dir}` : desc
 
   if (!cmd) {
