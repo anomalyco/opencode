@@ -1,80 +1,186 @@
-import { afterEach, describe, expect, test } from "bun:test"
-import type { UpgradeWebSocket } from "hono/ws"
-import path from "path"
+import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Instance } from "../../src/project/instance"
-import { InstanceRoutes } from "../../src/server/routes/instance"
-import { InstancePaths } from "../../src/server/routes/instance/httpapi/instance"
-import { Log } from "../../src/util"
+import { describe, expect } from "bun:test"
+import { Config, Context, Effect, FileSystem, Layer, Path } from "effect"
+import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
+import * as Socket from "effect/unstable/socket/Socket"
+import { WorkspaceID } from "../../src/control-plane/schema"
+import { ControlPaths } from "../../src/server/routes/instance/httpapi/groups/control"
+import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
+import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
+import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
+import { HEADER as FenceHeader } from "../../src/server/shared/fence"
 import { resetDatabase } from "../fixture/db"
-import { tmpdir } from "../fixture/fixture"
+import { tmpdirScoped } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
-void Log.init({ print: false })
+// Flip the experimental workspaces flag so SyncEvent.run actually writes to
+// EventSequenceTable (the source of truth the fence middleware reads). Reset
+// the database around the test so per-instance state does not leak between
+// runs. resetDatabase() already calls disposeAllInstances(), so we don't
+// repeat it.
+const testStateLayer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+    Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+    yield* Effect.promise(() => resetDatabase())
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(async () => {
+        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
+        await resetDatabase()
+      }),
+    )
+  }),
+)
 
-const original = Flag.OPENCODE_EXPERIMENTAL_HTTPAPI
-const websocket = (() => () => new Response(null, { status: 501 })) as unknown as UpgradeWebSocket
+// Mount the production HttpApi route tree on a real Node HTTP server bound to
+// 127.0.0.1:0 and a fetch-based HttpClient that prepends the server URL. This
+// keeps the test wired directly through the same route layer production uses.
+const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
+  HttpApiApp.routes,
+  { disableListenLog: true, disableLogger: true },
+)
 
-function app() {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = true
-  return InstanceRoutes(websocket)
-}
+const httpApiServerLayer = servedRoutes.pipe(
+  Layer.provide(Socket.layerWebSocketConstructorGlobal),
+  Layer.provideMerge(NodeHttpServer.layerTest),
+  Layer.provideMerge(NodeServices.layer),
+)
 
-afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_HTTPAPI = original
-  await Instance.disposeAll()
-  await resetDatabase()
-})
+const it = testEffect(Layer.mergeAll(testStateLayer, httpApiServerLayer))
+const handlerContext = Context.empty() as Context.Context<unknown>
+
+const directoryHeader = (dir: string) => HttpClientRequest.setHeader("x-opencode-directory", dir)
 
 describe("instance HttpApi", () => {
-  test("serves path and VCS read endpoints through Hono bridge", async () => {
-    await using tmp = await tmpdir({ git: true })
-    await Bun.write(path.join(tmp.path, "changed.txt"), "hello")
+  it.live("serves the OpenAPI document", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClient.get("/doc")
 
-    const vcsDiff = new URL(`http://localhost${InstancePaths.vcsDiff}`)
-    vcsDiff.searchParams.set("mode", "git")
+      expect(response.status).toBe(200)
+      expect(response.headers["content-type"]).toContain("application/json")
+      expect(yield* response.json).toMatchObject({
+        openapi: expect.any(String),
+        info: expect.any(Object),
+        paths: expect.objectContaining({
+          "/global/health": expect.any(Object),
+          "/session": expect.any(Object),
+        }),
+      })
+    }),
+  )
 
-    const [paths, vcs, diff] = await Promise.all([
-      app().request(InstancePaths.path, { headers: { "x-opencode-directory": tmp.path } }),
-      app().request(InstancePaths.vcs, { headers: { "x-opencode-directory": tmp.path } }),
-      app().request(vcsDiff, { headers: { "x-opencode-directory": tmp.path } }),
-    ])
+  it.live("emits a sync fence header for fixed-workspace mutations", () =>
+    Effect.gen(function* () {
+      const originalWorkspaceID = Flag.OPENCODE_WORKSPACE_ID
+      Flag.OPENCODE_WORKSPACE_ID = WorkspaceID.ascending()
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          Flag.OPENCODE_WORKSPACE_ID = originalWorkspaceID
+        }),
+      )
 
-    expect(paths.status).toBe(200)
-    expect(await paths.json()).toMatchObject({ directory: tmp.path, worktree: tmp.path })
+      const dir = yield* tmpdirScoped({ git: true })
+      const response = yield* HttpClientRequest.post(SessionPaths.create).pipe(
+        directoryHeader(dir),
+        HttpClientRequest.bodyJson({ title: "fenced" }),
+        Effect.flatMap(HttpClient.execute),
+      )
 
-    expect(vcs.status).toBe(200)
-    expect(await vcs.json()).toMatchObject({ branch: expect.any(String) })
+      expect(response.status).toBe(200)
+      expect(JSON.parse(response.headers[FenceHeader] ?? "{}")).not.toEqual({})
+    }),
+  )
 
-    expect(diff.status).toBe(200)
-    expect(await diff.json()).toContainEqual(
-      expect.objectContaining({ file: "changed.txt", additions: 1, status: "added" }),
-    )
-  })
+  it.live("does not emit sync fence headers for fixed-workspace reads or no-op mutations", () =>
+    Effect.gen(function* () {
+      const originalWorkspaceID = Flag.OPENCODE_WORKSPACE_ID
+      Flag.OPENCODE_WORKSPACE_ID = WorkspaceID.ascending()
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          Flag.OPENCODE_WORKSPACE_ID = originalWorkspaceID
+        }),
+      )
 
-  test("serves catalog read endpoints through Hono bridge", async () => {
-    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
+      const dir = yield* tmpdirScoped({ git: true })
+      const read = yield* HttpClientRequest.get(InstancePaths.path).pipe(directoryHeader(dir), HttpClient.execute)
+      const log = yield* HttpClientRequest.post(ControlPaths.log).pipe(
+        directoryHeader(dir),
+        HttpClientRequest.bodyJson({ service: "fence-test", level: "info", message: "noop" }),
+        Effect.flatMap(HttpClient.execute),
+      )
 
-    const [commands, agents, skills, lsp, formatter] = await Promise.all([
-      app().request(InstancePaths.command, { headers: { "x-opencode-directory": tmp.path } }),
-      app().request(InstancePaths.agent, { headers: { "x-opencode-directory": tmp.path } }),
-      app().request(InstancePaths.skill, { headers: { "x-opencode-directory": tmp.path } }),
-      app().request(InstancePaths.lsp, { headers: { "x-opencode-directory": tmp.path } }),
-      app().request(InstancePaths.formatter, { headers: { "x-opencode-directory": tmp.path } }),
-    ])
+      expect(read.status).toBe(200)
+      expect(read.headers[FenceHeader]).toBeUndefined()
+      expect(log.status).toBe(200)
+      expect(log.headers[FenceHeader]).toBeUndefined()
+    }),
+  )
 
-    expect(commands.status).toBe(200)
-    expect(await commands.json()).toContainEqual(expect.objectContaining({ name: "init", source: "command" }))
+  it.live("rejects malformed permission and question request ids", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const request = (path: string, init?: RequestInit) =>
+        Effect.promise(() =>
+          HttpApiApp.webHandler().handler(
+            new Request(`http://localhost${path}`, {
+              ...init,
+              headers: { "x-opencode-directory": dir, "content-type": "application/json", ...init?.headers },
+            }),
+            handlerContext,
+          ),
+        )
+      const [permission, questionReply, questionReject] = yield* Effect.all(
+        [
+          request("/permission/invalid-permission-id/reply", {
+            method: "POST",
+            body: JSON.stringify({ reply: "once" }),
+          }),
+          request("/question/invalid-question-id/reply", {
+            method: "POST",
+            body: JSON.stringify({ answers: [["Yes"]] }),
+          }),
+          request("/question/invalid-question-id/reject", { method: "POST" }),
+        ],
+        { concurrency: "unbounded" },
+      )
 
-    expect(agents.status).toBe(200)
-    expect(await agents.json()).toContainEqual(expect.objectContaining({ name: "build", mode: "primary" }))
+      expect(permission.status).toBe(400)
+      expect(questionReply.status).toBe(400)
+      expect(questionReject.status).toBe(400)
+    }),
+  )
 
-    expect(skills.status).toBe(200)
-    expect(await skills.json()).toBeArray()
+  it.live("serves path and VCS read endpoints", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const fs = yield* FileSystem.FileSystem
+      const path = yield* Path.Path
+      yield* fs.writeFileString(path.join(dir, "changed.txt"), "hello")
 
-    expect(lsp.status).toBe(200)
-    expect(await lsp.json()).toEqual([])
+      const [paths, vcs, diff] = yield* Effect.all(
+        [
+          HttpClientRequest.get(InstancePaths.path).pipe(directoryHeader(dir), HttpClient.execute),
+          HttpClientRequest.get(InstancePaths.vcs).pipe(directoryHeader(dir), HttpClient.execute),
+          HttpClientRequest.get(InstancePaths.vcsDiff).pipe(
+            HttpClientRequest.setUrlParam("mode", "git"),
+            directoryHeader(dir),
+            HttpClient.execute,
+          ),
+        ],
+        { concurrency: "unbounded" },
+      )
 
-    expect(formatter.status).toBe(200)
-    expect(await formatter.json()).toEqual([])
-  })
+      expect(paths.status).toBe(200)
+      expect(yield* paths.json).toMatchObject({ directory: dir, worktree: dir })
+
+      expect(vcs.status).toBe(200)
+      expect(yield* vcs.json).toMatchObject({ branch: expect.any(String) })
+
+      expect(diff.status).toBe(200)
+      expect(yield* diff.json).toContainEqual(
+        expect.objectContaining({ file: "changed.txt", additions: 1, status: "added" }),
+      )
+    }),
+  )
 })

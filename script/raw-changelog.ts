@@ -23,7 +23,7 @@ type Diff = {
 }
 
 const repo = process.env.GH_REPO ?? "anomalyco/opencode"
-const bot = ["actions-user", "opencode", "opencode-agent[bot]"]
+const bot = ["actions-user", "github-actions[bot]", "opencode", "opencode-agent[bot]"]
 const team = [
   ...(await Bun.file(new URL("../.github/TEAM_MEMBERS", import.meta.url))
     .text()
@@ -80,6 +80,11 @@ function section(areas: Set<string>) {
     if (areas.has(area)) return sections[area as keyof typeof sections]
   }
   return "Core"
+}
+
+function type(message: string) {
+  if (message.match(/fix/i)) return "Bugfixes"
+  return "Improvements"
 }
 
 function reverted(commits: Commit[]) {
@@ -193,13 +198,20 @@ async function thanks(from: string, to: string, reuse: boolean) {
 }
 
 function format(from: string, to: string, list: Commit[], thanks: string[]) {
-  const grouped = new Map<string, string[]>()
-  for (const title of order) grouped.set(title, [])
+  const grouped = new Map<string, Map<string, string[]>>()
+  for (const title of order) {
+    grouped.set(
+      title,
+      new Map([
+        ["Improvements", []],
+        ["Bugfixes", []],
+      ]),
+    )
+  }
 
   for (const commit of list) {
-    const title = section(commit.areas)
     const attr = commit.author && !team.includes(commit.author) ? ` (@${commit.author})` : ""
-    grouped.get(title)!.push(`- \`${commit.hash}\` ${commit.message}${attr}`)
+    grouped.get(section(commit.areas))!.get(type(commit.message))!.push(`- \`${commit.hash}\` ${commit.message}${attr}`)
   }
 
   const lines = [`Last release: ${ref(from)}`, `Target ref: ${to}`, ""]
@@ -209,11 +221,23 @@ function format(from: string, to: string, list: Commit[], thanks: string[]) {
   }
 
   for (const title of order) {
-    const entries = grouped.get(title)
-    if (!entries || entries.length === 0) continue
+    const groups = grouped.get(title)
+    if (!groups || [...groups.values()].every((entries) => entries.length === 0)) continue
     lines.push(`## ${title}`)
-    lines.push(...entries)
-    lines.push("")
+    const improvements = groups.get("Improvements")!
+    const bugfixes = groups.get("Bugfixes")!
+    if (bugfixes.length === 0) {
+      lines.push(...improvements)
+      lines.push("")
+      continue
+    }
+
+    for (const [subtitle, entries] of groups) {
+      if (entries.length === 0) continue
+      lines.push(`### ${subtitle}`)
+      lines.push(...entries)
+      lines.push("")
+    }
   }
 
   if (thanks.length > 0) {

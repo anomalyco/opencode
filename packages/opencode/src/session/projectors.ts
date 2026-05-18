@@ -1,9 +1,15 @@
-import { NotFoundError, eq, and } from "../storage"
+import { NotFoundError } from "@/storage/storage"
+import { eq } from "drizzle-orm"
+import { and } from "drizzle-orm"
+import { sql } from "drizzle-orm"
+import type { TxOrDb } from "@/storage/db"
 import { SyncEvent } from "@/sync"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
-import { Log } from "../util"
+import { WorkspaceTable } from "@/control-plane/workspace.sql"
+import { Log } from "@opencode-ai/core/util/log"
+import nextProjectors from "./projectors-next"
 
 const log = Log.create({ service: "session.projector" })
 
@@ -14,6 +20,29 @@ function foreign(err: unknown) {
 }
 
 export type DeepPartial<T> = T extends object ? { [K in keyof T]?: DeepPartial<T[K]> | null } : T
+
+type Usage = Pick<MessageV2.StepFinishPart, "cost" | "tokens">
+
+function usage(part: MessageV2.Part | (typeof PartTable.$inferSelect)["data"]): Usage | undefined {
+  if (part.type !== "step-finish") return undefined
+  if (!("cost" in part) || !("tokens" in part)) return undefined
+  return { cost: part.cost, tokens: part.tokens }
+}
+
+function applyUsage(db: TxOrDb, sessionID: Session.Info["id"], value: Usage, sign = 1) {
+  db.update(SessionTable)
+    .set({
+      cost: sql`${SessionTable.cost} + ${value.cost * sign}`,
+      tokens_input: sql`${SessionTable.tokens_input} + ${value.tokens.input * sign}`,
+      tokens_output: sql`${SessionTable.tokens_output} + ${value.tokens.output * sign}`,
+      tokens_reasoning: sql`${SessionTable.tokens_reasoning} + ${value.tokens.reasoning * sign}`,
+      tokens_cache_read: sql`${SessionTable.tokens_cache_read} + ${value.tokens.cache.read * sign}`,
+      tokens_cache_write: sql`${SessionTable.tokens_cache_write} + ${value.tokens.cache.write * sign}`,
+      time_updated: sql`${SessionTable.time_updated}`,
+    })
+    .where(eq(SessionTable.id, sessionID))
+    .run()
+}
 
 function grab<T extends object, K1 extends keyof T, X>(
   obj: T,
@@ -42,6 +71,7 @@ export function toPartialRow(info: DeepPartial<Session.Info>) {
     parent_id: grab(info, "parentID"),
     slug: grab(info, "slug"),
     directory: grab(info, "directory"),
+    path: grab(info, "path"),
     title: grab(info, "title"),
     version: grab(info, "version"),
     share_url: grab(info, "share", (v) => grab(v, "url")),
@@ -49,6 +79,12 @@ export function toPartialRow(info: DeepPartial<Session.Info>) {
     summary_deletions: grab(info, "summary", (v) => grab(v, "deletions")),
     summary_files: grab(info, "summary", (v) => grab(v, "files")),
     summary_diffs: grab(info, "summary", (v) => grab(v, "diffs")),
+    cost: grab(info, "cost"),
+    tokens_input: grab(info, "tokens", (v) => grab(v, "input")),
+    tokens_output: grab(info, "tokens", (v) => grab(v, "output")),
+    tokens_reasoning: grab(info, "tokens", (v) => grab(v, "reasoning")),
+    tokens_cache_read: grab(info, "tokens", (v) => grab(v, "cache", (cache) => grab(cache, "read"))),
+    tokens_cache_write: grab(info, "tokens", (v) => grab(v, "cache", (cache) => grab(cache, "write"))),
     revert: grab(info, "revert"),
     permission: grab(info, "permission"),
     time_created: grab(info, "time", (v) => grab(v, "created")),
@@ -65,13 +101,17 @@ export default [
     db.insert(SessionTable)
       .values(Session.toRow(data.info as Session.Info))
       .run()
+
+    if (data.info.workspaceID) {
+      db.update(WorkspaceTable).set({ time_used: Date.now() }).where(eq(WorkspaceTable.id, data.info.workspaceID)).run()
+    }
   }),
 
   SyncEvent.project(Session.Event.Updated, (db, data) => {
     const info = data.info
     const row = db
       .update(SessionTable)
-      .set(toPartialRow(info as Session.Patch))
+      .set({ time_updated: sql`${SessionTable.time_updated}`, ...toPartialRow(info as Session.Patch) })
       .where(eq(SessionTable.id, data.sessionID))
       .returning()
       .get()
@@ -103,12 +143,28 @@ export default [
   }),
 
   SyncEvent.project(MessageV2.Event.Removed, (db, data) => {
+    for (const row of db
+      .select()
+      .from(PartTable)
+      .where(and(eq(PartTable.message_id, data.messageID), eq(PartTable.session_id, data.sessionID)))
+      .all()) {
+      const previous = usage(row.data)
+      if (previous) applyUsage(db, data.sessionID, previous, -1)
+    }
     db.delete(MessageTable)
       .where(and(eq(MessageTable.id, data.messageID), eq(MessageTable.session_id, data.sessionID)))
       .run()
   }),
 
   SyncEvent.project(MessageV2.Event.PartRemoved, (db, data) => {
+    const row = db
+      .select()
+      .from(PartTable)
+      .where(and(eq(PartTable.id, data.partID), eq(PartTable.session_id, data.sessionID)))
+      .get()
+    const previous = row && usage(row.data)
+    if (previous) applyUsage(db, data.sessionID, previous, -1)
+
     db.delete(PartTable)
       .where(and(eq(PartTable.id, data.partID), eq(PartTable.session_id, data.sessionID)))
       .run()
@@ -116,6 +172,7 @@ export default [
 
   SyncEvent.project(MessageV2.Event.PartUpdated, (db, data) => {
     const { id, messageID, sessionID, ...rest } = data.part
+    const row = db.select().from(PartTable).where(eq(PartTable.id, id)).get()
 
     try {
       db.insert(PartTable)
@@ -128,9 +185,15 @@ export default [
         })
         .onConflictDoUpdate({ target: PartTable.id, set: { data: rest } })
         .run()
+      const previous = row && usage(row.data)
+      const next = usage(data.part)
+      if (previous) applyUsage(db, row.session_id, previous, -1)
+      if (next) applyUsage(db, sessionID, next)
     } catch (err) {
       if (!foreign(err)) throw err
       log.warn("ignored late part update", { partID: id, messageID, sessionID })
     }
   }),
+
+  ...nextProjectors,
 ]
