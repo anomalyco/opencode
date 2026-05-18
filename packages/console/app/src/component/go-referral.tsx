@@ -227,11 +227,9 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
                           <Show when={!applied} fallback={i18n.t("workspace.referral.reward.status.applied")}>
                             {pending
                               ? i18n.t(rewardPendingStatusKey(reward.source))
-                              : props.summary.hasActiveGo && !submission.pending
+                              : props.summary.hasActiveGo
                                 ? i18n.t("workspace.referral.apply.preview")
-                                : props.summary.hasActiveGo
-                                  ? i18n.t("workspace.referral.apply.action")
-                                  : i18n.t("workspace.referral.apply.noGo")}
+                                : i18n.t("workspace.referral.apply.noGo")}
                           </Show>
                         </button>
                       </td>
