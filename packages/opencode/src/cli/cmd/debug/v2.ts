@@ -1,11 +1,11 @@
 import { EOL } from "os"
 import { Effect, Layer, Option } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { InstanceServiceMap } from "@opencode-ai/core/instance-layer"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { effectCmd } from "../../effect-cmd"
 
-const Runtime = Layer.mergeAll(InstanceServiceMap.layer)
+const Runtime = Layer.mergeAll(LocationServiceMap.layer)
 
 export const V2Command = effectCmd({
   command: "v2",
@@ -37,7 +37,7 @@ export const V2Command = effectCmd({
       process.stdout.write(JSON.stringify(result, null, 2) + EOL)
     },
     Effect.provide(
-      InstanceServiceMap.get({
+      LocationServiceMap.get({
         directory: process.cwd(),
       }),
     ),

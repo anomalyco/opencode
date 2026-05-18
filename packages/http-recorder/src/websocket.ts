@@ -1,9 +1,10 @@
 import { Effect, Option, Ref, Scope, Stream } from "effect"
 import type { Headers } from "effect/unstable/http"
 import * as CassetteService from "./cassette"
-import { canonicalizeJson, decodeJson } from "./matching"
-import { appendOrFail, makeReplayState, resolveAutoMode } from "./recorder"
+import { canonicalizeJson, decodeJson, safeText } from "./matching"
+import { makeReplayState, resolveAutoMode } from "./recorder"
 import type { RecordReplayMode } from "./effect"
+import { redactUrl } from "./redaction"
 import { defaults, type Redactor } from "./redactor"
 import { webSocketInteractions, type CassetteMetadata, type WebSocketFrame } from "./schema"
 
@@ -53,7 +54,7 @@ const decodeFrameText = (frame: WebSocketFrame) =>
 const assertEqual = (message: string, actual: unknown, expected: unknown) =>
   Effect.sync(() => {
     if (JSON.stringify(actual) === JSON.stringify(expected)) return
-    throw new Error(`${message}: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`)
+    throw new Error(`${message}: expected ${safeText(expected)}, received ${safeText(actual)}`)
   })
 
 const jsonOrText = (value: string) => Option.match(decodeJson(value), { onNone: () => value, onSome: canonicalizeJson })
@@ -61,7 +62,7 @@ const jsonOrText = (value: string) => Option.match(decodeJson(value), { onNone: 
 const compareClientMessage = (actual: string, expected: WebSocketFrame | undefined, index: number, asJson: boolean) => {
   if (!expected)
     return Effect.sync(() => {
-      throw new Error(`Unexpected WebSocket client frame ${index + 1}: ${actual}`)
+      throw new Error(`Unexpected WebSocket client frame ${index + 1}: ${safeText(actual)}`)
     })
   const expectedText = decodeFrameText(expected)
   if (!asJson) return assertEqual(`WebSocket client frame ${index + 1}`, actual, expectedText)
@@ -98,12 +99,13 @@ export const makeWebSocketExecutor = <E>(
             const closeOnce = Effect.gen(function* () {
               if (yield* Ref.getAndSet(closed, true)) return
               yield* connection.close
-              yield* appendOrFail(
-                options.cassette,
-                options.name,
-                { transport: "websocket", open: openSnapshot(request), client, server },
-                options.metadata,
-              ).pipe(Effect.orDie)
+              yield* options.cassette
+                .append(
+                  options.name,
+                  { transport: "websocket", open: openSnapshot(request), client, server },
+                  options.metadata,
+                )
+                .pipe(Effect.orDie)
             })
             return {
               sendText: (message) =>
@@ -111,10 +113,7 @@ export const makeWebSocketExecutor = <E>(
                   .sendText(message)
                   .pipe(Effect.tap(() => Effect.sync(() => client.push(encodeFrame(message))))),
               messages: connection.messages.pipe(
-                Stream.map((message) => {
-                  server.push(encodeFrame(message))
-                  return message
-                }),
+                Stream.tap((message) => Effect.sync(() => server.push(encodeFrame(message)))),
               ),
               close: closeOnce,
             }
@@ -130,20 +129,22 @@ export const makeWebSocketExecutor = <E>(
           const interactions = yield* replay.load.pipe(Effect.orDie)
           const index = yield* replay.cursor
           const interaction = interactions[index]
-          if (!interaction) return yield* Effect.die(new Error(`No recorded WebSocket interaction for ${request.url}`))
+          if (!interaction)
+            return yield* Effect.die(new Error(`No recorded WebSocket interaction for ${redactUrl(request.url)}`))
           yield* replay.advance
           yield* assertEqual(`WebSocket open frame ${index + 1}`, openSnapshot(request), interaction.open)
           const messageIndex = yield* Ref.make(0)
           return {
             sendText: (message) =>
               Effect.gen(function* () {
-                const current = yield* Ref.getAndUpdate(messageIndex, (value) => value + 1)
+                const current = yield* Ref.get(messageIndex)
                 yield* compareClientMessage(
                   message,
                   interaction.client[current],
                   current,
                   options.compareClientMessagesAsJson === true,
                 )
+                yield* Ref.update(messageIndex, (value) => value + 1)
               }),
             messages: Stream.fromIterable(interaction.server).pipe(Stream.map(decodeFrameMessage)),
             close: Effect.gen(function* () {

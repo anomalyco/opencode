@@ -3,12 +3,13 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { bootstrap as cliBootstrap } from "../../src/cli/bootstrap"
 import { InstanceLayer } from "../../src/project/instance-layer"
 import { InstanceStore } from "../../src/project/instance-store"
 import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { waitGlobalBusEvent } from "../server/global-bus"
 
 const it = testEffect(Layer.mergeAll(InstanceLayer.layer, CrossSpawnSpawner.defaultLayer))
 
@@ -54,6 +55,13 @@ const bootstrapFixture = Effect.gen(function* () {
   return { directory: dir, marker }
 })
 
+function waitDisposed(directory: string) {
+  return waitGlobalBusEvent({
+    message: "timed out waiting for CLI bootstrap instance disposal",
+    predicate: (event) => event.payload.type === "server.instance.disposed" && event.directory === directory,
+  })
+}
+
 it.live("InstanceStore.provide runs InstanceBootstrap before effect", () =>
   Effect.gen(function* () {
     const tmp = yield* bootstrapFixture
@@ -72,6 +80,21 @@ it.live("CLI bootstrap runs InstanceBootstrap before callback", () =>
     yield* Effect.promise(() => cliBootstrap(tmp.directory, async () => "ok"))
 
     expect(existsSync(tmp.marker)).toBe(true)
+  }),
+)
+
+it.live("CLI bootstrap disposes the instance when the callback rejects", () =>
+  Effect.gen(function* () {
+    const tmp = yield* bootstrapFixture
+    const disposed = yield* waitDisposed(tmp.directory).pipe(Effect.forkScoped)
+
+    const exit = yield* Effect.promise(() =>
+      cliBootstrap(tmp.directory, async () => Promise.reject(new Error("boom"))),
+    ).pipe(Effect.exit)
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toMatchObject({ message: "boom" })
+    yield* Fiber.join(disposed)
   }),
 )
 

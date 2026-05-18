@@ -1,6 +1,6 @@
 import { WorkspaceID } from "@/control-plane/schema"
 import { SessionV2 } from "@/v2/session"
-import { Effect, Schema } from "effect"
+import { DateTime, Effect, Schema } from "effect"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
 
@@ -55,7 +55,13 @@ const sessionCursor = {
     filters: Pick<SessionCursor, "directory" | "path" | "workspaceID" | "roots" | "start" | "search">,
   ) {
     return Buffer.from(
-      JSON.stringify({ id: session.id, time: session.time.created, order, direction, ...filters }),
+      JSON.stringify({
+        ...filters,
+        id: session.id,
+        time: DateTime.toEpochMillis(session.time.updated),
+        order,
+        direction,
+      }),
     ).toString("base64url")
   },
   decode(input: string) {
