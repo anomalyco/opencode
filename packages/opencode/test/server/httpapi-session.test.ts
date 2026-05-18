@@ -434,6 +434,34 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "includes local legacy sessions when listing a workspace-scoped directory",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+        const project = yield* Project.use.fromDirectory(test.directory)
+        const workspace = yield* createLocalWorkspace({
+          projectID: project.project.id,
+          type: "session-list-workspace",
+          directory: path.join(test.directory, ".workspace-local"),
+        })
+
+        const legacy = yield* createSession({ title: "legacy visible" })
+        const workspaceSession = yield* createSession({ title: "workspace visible", workspaceID: workspace.id })
+
+        const params = new URLSearchParams({ workspace: workspace.id, directory: test.directory })
+        const response = yield* requestJson<{ items: Session.Info[] }>(`/api/session?${params}`, {
+          headers: { "x-opencode-directory": test.directory },
+        })
+        const ids = response.items.map((item) => item.id)
+
+        expect(ids).toContain(legacy.id)
+        expect(ids).toContain(workspaceSession.id)
+      }),
+    { git: true, config: { formatter: false, lsp: false, share: "disabled" } },
+  )
+
+  it.instance(
     "validates archived timestamp values",
     () =>
       Effect.gen(function* () {

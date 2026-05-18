@@ -3,7 +3,7 @@ import { SessionID } from "@/session/schema"
 import { WorkspaceID } from "@/control-plane/schema"
 import { and, asc, desc, eq, gt, gte, isNull, like, lt, or, type SQL } from "@/storage/db"
 import * as Database from "@/storage/db"
-import { Context, DateTime, Effect, Layer, Option, Schema } from "effect"
+import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { SessionMessage } from "@opencode-ai/core/session-message"
 import type { Prompt } from "@opencode-ai/core/session-prompt"
 import { ProjectID } from "@/project/schema"
@@ -186,7 +186,13 @@ export const layer = Layer.effect(
         if (input.directory) conditions.push(eq(SessionTable.directory, input.directory))
         if (input.path)
           conditions.push(or(eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`))!)
-        if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
+        if (input.workspaceID) {
+          conditions.push(
+            input.directory || input.path
+              ? or(eq(SessionTable.workspace_id, input.workspaceID), isNull(SessionTable.workspace_id))!
+              : eq(SessionTable.workspace_id, input.workspaceID),
+          )
+        }
         if (input.roots) conditions.push(isNull(SessionTable.parent_id))
         if (input.start) conditions.push(gte(sortColumn, input.start))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
