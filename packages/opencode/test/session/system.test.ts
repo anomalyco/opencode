@@ -4,6 +4,7 @@ import type { Agent } from "../../src/agent/agent"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Skill } from "../../src/skill"
 import { Permission } from "../../src/permission"
+import { Provider } from "../../src/provider/provider"
 import { SystemPrompt } from "../../src/session/system"
 import { testEffect } from "../lib/effect"
 
@@ -50,6 +51,20 @@ const it = testEffect(
           all: () => Effect.succeed(skills),
           dirs: () => Effect.succeed([]),
           available: () => Effect.succeed(skills),
+        }),
+      ),
+    ),
+    Layer.provide(
+      Layer.succeed(
+        Provider.Service,
+        Provider.Service.of({
+          list: () => Effect.die("not used in this test"),
+          getProvider: () => Effect.die("not used in this test"),
+          getModel: () => Effect.die("not used in this test"),
+          getLanguage: () => Effect.die("not used in this test"),
+          closest: () => Effect.die("not used in this test"),
+          getSmallModel: () => Effect.die("not used in this test"),
+          defaultModel: () => Effect.die("not used in this test"),
         }),
       ),
     ),

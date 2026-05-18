@@ -11,7 +11,7 @@ import PROMPT_KIMI from "./prompt/kimi.txt"
 
 import PROMPT_CODEX from "./prompt/codex.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
@@ -43,13 +43,17 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const skill = yield* Skill.Service
+    const providerService = yield* Provider.Service
 
     return Service.of({
       environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
         const ctx = yield* InstanceState.context
+        const providerInfo = yield* providerService.getProvider(model.providerID).pipe(Effect.option)
+        const providerName =
+          providerInfo._tag === "Some" ? providerInfo.value.name : model.providerID
         return [
           [
-            `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
+            `You are powered by the model named ${model.name} from provider ${providerName}. The exact model ID is ${model.providerID}/${model.api.id}`,
             `Here is some useful information about the environment you are running in:`,
             `<env>`,
             `  Working directory: ${ctx.directory}`,
@@ -79,6 +83,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Skill.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide(Skill.defaultLayer), Layer.provide(Provider.defaultLayer))
 
 export * as SystemPrompt from "./system"
