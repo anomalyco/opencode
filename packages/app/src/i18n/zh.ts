@@ -738,6 +738,7 @@ export const dict = {
   "sidebar.group.thisMonth": "本月",
   "sidebar.group.older": "更早",
   "sidebar.search.placeholder": "搜索会话...",
+  "sidebar.sessions.refresh.genericagent": "刷新 GenericAgent 会话",
 
   "app.name.desktop": "OpenCode Desktop",
 

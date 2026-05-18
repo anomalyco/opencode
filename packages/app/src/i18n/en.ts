@@ -813,6 +813,7 @@ export const dict = {
   "sidebar.group.thisMonth": "This Month",
   "sidebar.group.older": "Older",
   "sidebar.search.placeholder": "Search sessions...",
+  "sidebar.sessions.refresh.genericagent": "Refresh GenericAgent sessions",
 
   "debugBar.ariaLabel": "Development performance diagnostics",
   "debugBar.na": "n/a",

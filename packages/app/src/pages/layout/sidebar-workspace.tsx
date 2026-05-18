@@ -16,6 +16,7 @@ import { type Session } from "@opencode-ai/sdk/v2/client"
 import { type LocalProject } from "@/context/layout"
 import { useGlobalSync, useQueryOptions } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { extraAgentByDirectory } from "./extra-agents"
 import { NewSessionItem, SessionItem, SessionGroupHeader, SessionSearchBar } from "./sidebar-items"
 import { sessionGroupBoundaries, sortedProjectSessions, sortedRootSessions, type SessionGroupKey, workspaceKey } from "./helpers"
 
@@ -248,6 +249,8 @@ const WorkspaceSessionList = (props: {
   sessions: Accessor<Session[]>
   hasMore: Accessor<boolean>
   loadMore: () => Promise<void>
+  refresh?: () => Promise<void>
+  refreshing?: Accessor<boolean>
   language: ReturnType<typeof useLanguage>
   sortNow: Accessor<number>
 }): JSX.Element => {
@@ -255,6 +258,31 @@ const WorkspaceSessionList = (props: {
 
   return (
     <nav class="flex flex-col gap-1 px-3">
+      <Show when={!!props.refresh}>
+        <div class="px-2 pb-1">
+          <Tooltip value={props.language.t("sidebar.sessions.refresh.genericagent")} placement="top">
+            <Button
+              variant="ghost"
+              size="large"
+              class="flex h-8 w-full items-center justify-center rounded-lg border border-border bg-surface-raised-base/35 px-3 text-12-medium text-text-weak transition-colors hover:border-border-strong hover:bg-surface-raised-base-hover hover:text-text"
+              disabled={props.loading()}
+              aria-busy={props.refreshing?.() ? "true" : "false"}
+              onClick={(event: MouseEvent) => {
+                event.preventDefault()
+                console.debug("[genericagent-refresh] phase=click")
+                void props.refresh?.()
+              }}
+            >
+              <Icon
+                name="arrow-sync"
+                size="small"
+                classList={{ "genericagent-refresh-icon-spin": !!props.refreshing?.() }}
+              />
+              {props.language.t("sidebar.sessions.refresh.genericagent")}
+            </Button>
+          </Tooltip>
+        </div>
+      </Show>
       <Show when={props.showNew()}>
         <NewSessionItem
           slug={props.slug()}
@@ -494,6 +522,7 @@ export const LocalWorkspace = (props: {
   const queryOptions = useQueryOptions()
   const language = useLanguage()
   const [searchQuery, setSearchQuery] = createSignal("")
+  const [refreshing, setRefreshing] = createSignal(false)
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
   const stores = createMemo(() => dirs().map((directory) => globalSync.child(directory)))
   const slug = createMemo(() => base64Encode(props.project.worktree))
@@ -508,6 +537,33 @@ export const LocalWorkspace = (props: {
     () => !searchQuery() && stores().reduce((sum, item) => sum + item[0].sessionTotal, 0) > allSessions().length,
   )
   const issue = createMemo(() => stores().map((item) => item[0].session_error).find(Boolean))
+  const extraAgent = createMemo(() => extraAgentByDirectory(props.project.worktree))
+  const refresh = async () => {
+    if (refreshing()) {
+      console.debug("[genericagent-refresh] phase=ignored reason=already-refreshing")
+      return
+    }
+    const directories = dirs()
+    console.debug(`[genericagent-refresh] phase=start directories=${directories.join(",")} sessionCount=${allSessions().length}`)
+    setRefreshing(true)
+    window.setTimeout(() => {
+      console.debug(`[genericagent-refresh] phase=animation-state refreshing=${String(refreshing())}`)
+    }, 0)
+    try {
+      await Promise.all([
+        Promise.all(directories.map((directory) => globalSync.project.loadSessions(directory, { force: true }))),
+        new Promise((resolve) => window.setTimeout(resolve, 700)),
+      ])
+      console.debug(`[genericagent-refresh] phase=loaded sessionCount=${allSessions().length}`)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.debug(`[genericagent-refresh] phase=error message=${message}`)
+      throw err
+    } finally {
+      setRefreshing(false)
+      console.debug(`[genericagent-refresh] phase=complete sessionCount=${allSessions().length}`)
+    }
+  }
   const loadMore = async () => {
     stores().forEach((item) => item[1]("limit", (limit) => (limit ?? 0) + 5))
     await Promise.all(dirs().map((directory) => globalSync.project.loadSessions(directory)))
@@ -545,6 +601,8 @@ export const LocalWorkspace = (props: {
         sessions={sessions}
         hasMore={hasMore}
         loadMore={loadMore}
+        refresh={extraAgent()?.id === "genericagent" ? refresh : undefined}
+        refreshing={refreshing}
         language={language}
         sortNow={props.sortNow}
       />
