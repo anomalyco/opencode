@@ -424,8 +424,21 @@ export const layer = Layer.effect(
       key: string,
       mcp: ConfigMCP.Info & { type: "local" },
     ) {
-      const [cmd, ...args] = mcp.command
-      const cwd = yield* InstanceState.directory
+      const isWslMode = process.platform === "win32" && process.env.OPENCODE_WSL_ENABLED === "true"
+      let [cmd, ...args] = mcp.command
+      let cwd = yield* InstanceState.directory
+
+      // When the desktop sidecar runs on Windows with WSL mode enabled,
+      // MCP commands need to execute inside WSL where the expected
+      // Linux executables and environment exist. Wrap the command with
+      // wsl.exe so it runs in the default WSL distribution.
+      const originalCmd = cmd
+      if (isWslMode) {
+        args = ["-e", cmd, ...args]
+        cmd = "wsl.exe"
+        // wsl.exe auto-maps Windows paths; keep cwd as-is
+      }
+
       const transport = new StdioClientTransport({
         stderr: "pipe",
         command: cmd,
@@ -433,7 +446,7 @@ export const layer = Layer.effect(
         cwd,
         env: {
           ...process.env,
-          ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+          ...(originalCmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
           ...mcp.environment,
         },
       })

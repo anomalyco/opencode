@@ -235,6 +235,13 @@ function createSidecarEnv(): Record<string, string> {
   )
   delete env.DEBUG
   if (process.platform === "linux") delete env.LD_PRELOAD
+
+  // Pass WSL config to the sidecar so MCP commands can be wrapped with wsl.exe
+  const wslConfig = getWslConfig()
+  if (wslConfig.enabled) {
+    env.OPENCODE_WSL_ENABLED = "true"
+  }
+
   return env
 }
 
