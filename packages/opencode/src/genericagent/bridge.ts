@@ -817,22 +817,63 @@ export namespace GenericAgentBridge {
     const sessions = new Map<string, SessionInfo>()
     const messages = new Map<string, Message[]>()
     const sessionLock = new Map<string, Promise<unknown>>()
+    const historySessionIDs = new Set<string>()
 
     sessions.set("welcome", welcomeSession())
     messages.set("welcome", welcomeMessages())
 
-    void shim.listHistorySessions().then((historySessions) => {
+    const emit = (payload: Event["payload"]) => events.emit({ directory, payload })
+    const syncHistorySessions = async (emitEvents = false) => {
+      const historySessions = await shim.listHistorySessions()
+      const nextHistoryIDs = new Set<string>()
+      let created = 0
+      let updated = 0
+      let removed = 0
+
       for (const session of historySessions) {
-        if (sessions.has(session.id)) {
+        const info = historySessionInfo(session)
+        nextHistoryIDs.add(info.id)
+        historySessionIDs.add(info.id)
+        const existing = sessions.get(info.id)
+        if (!existing) {
+          sessions.set(info.id, info)
+          messages.delete(info.id)
+          created++
+          if (emitEvents) emit({ type: "session.created", properties: { info } })
           continue
         }
-        sessions.set(session.id, historySessionInfo(session))
+
+        if (existing.time.updated !== info.time.updated || existing.title !== info.title) {
+          sessions.set(info.id, info)
+          messages.delete(info.id)
+          updated++
+          if (emitEvents) emit({ type: "session.updated", properties: { info } })
+        }
       }
-    }).catch((e) => {
+
+      for (const id of Array.from(historySessionIDs)) {
+        if (nextHistoryIDs.has(id)) continue
+        const info = sessions.get(id)
+        sessions.delete(id)
+        messages.delete(id)
+        historySessionIDs.delete(id)
+        removed++
+        if (emitEvents && info) emit({ type: "session.deleted", properties: { info } })
+      }
+
+      log.debug("genericagent history synchronized", {
+        count: historySessions.length,
+        created,
+        updated,
+        removed,
+        emitEvents,
+      })
+    }
+
+    void syncHistorySessions().catch((e) => {
       log.warn("genericagent history initialization failed", { error: e instanceof Error ? e.message : String(e) })
     })
 
-    const emit = (payload: Event["payload"]) => events.emit({ directory, payload })
     const emitStatus = (sessionID: string, type: "busy" | "idle") =>
       emit({ type: "session.status", properties: { sessionID, status: { type } } })
 
@@ -984,7 +1025,8 @@ export namespace GenericAgentBridge {
       .get("/permission", (c) => c.json([]))
       .get("/question", (c) => c.json([]))
       .get("/session/status", (c) => c.json({}))
-      .get("/session", (c) => {
+      .get("/session", async (c) => {
+        await syncHistorySessions(true)
         const all = Array.from(sessions.values()).sort((a, b) => b.time.updated - a.time.updated)
         const limitParam = c.req.query("limit")
         const limit = limitParam ? Number.parseInt(limitParam, 10) : undefined
