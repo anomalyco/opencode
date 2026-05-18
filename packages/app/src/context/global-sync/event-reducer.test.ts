@@ -357,6 +357,41 @@ describe("applyDirectoryEvent", () => {
     expect(store.part.msg_2).toBeUndefined()
   })
 
+  test("replaces message cache from message list updates", () => {
+    const sessionID = "ses_1"
+    const oldMessage = userMessage("msg_old", sessionID)
+    const nextMessage = userMessage("msg_next", sessionID)
+    const [store, setStore] = createStore(
+      baseState({
+        message: { [sessionID]: [oldMessage] },
+        part: {
+          [oldMessage.id]: [textPart("prt_old", sessionID, oldMessage.id)],
+          unrelated: [textPart("prt_other", "ses_2", "unrelated")],
+        },
+      }),
+    )
+
+    applyDirectoryEvent({
+      event: {
+        type: "message.list.updated",
+        properties: {
+          sessionID,
+          messages: [{ info: nextMessage, parts: [textPart("prt_next", sessionID, nextMessage.id)] }],
+        },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.message[sessionID]?.map((x) => x.id)).toEqual(["msg_next"])
+    expect(store.part[oldMessage.id]).toBeUndefined()
+    expect(store.part[nextMessage.id]?.map((x) => x.id)).toEqual(["prt_next"])
+    expect(store.part.unrelated?.map((x) => x.id)).toEqual(["prt_other"])
+  })
+
   test("upserts and prunes message parts", () => {
     const sessionID = "ses_1"
     const messageID = "msg_1"

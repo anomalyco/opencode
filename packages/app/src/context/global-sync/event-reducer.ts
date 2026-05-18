@@ -18,6 +18,8 @@ import { diffs as list, message as clean } from "@/utils/diffs"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
+const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+
 export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }
   project: Project[]
@@ -199,6 +201,33 @@ export function applyDirectoryEvent(input: {
         info.sessionID,
         produce((draft) => {
           draft.splice(result.index, 0, info)
+        }),
+      )
+      break
+    }
+    case "message.list.updated": {
+      const props = event.properties as { sessionID: string; messages?: Array<{ info?: Message; parts?: Part[] }> }
+      if (!props.sessionID) break
+      const rows = Array.isArray(props.messages) ? props.messages : []
+      const messages = rows
+        .map((item) => item.info)
+        .filter((info): info is Message => !!info?.id)
+        .sort((a, b) => cmp(a.id, b.id))
+
+      input.setStore(
+        produce((draft) => {
+          for (const messageID of Object.keys(draft.part)) {
+            const parts = draft.part[messageID]
+            if (parts?.some((part) => part.sessionID === props.sessionID)) delete draft.part[messageID]
+          }
+          draft.message[props.sessionID] = messages
+          for (const row of rows) {
+            if (!row.info?.id) continue
+            const parts = (row.parts ?? [])
+              .filter((part) => !!part?.id && !SKIP_PARTS.has(part.type))
+              .sort((a, b) => cmp(a.id, b.id))
+            if (parts.length > 0) draft.part[row.info.id] = parts
+          }
         }),
       )
       break
