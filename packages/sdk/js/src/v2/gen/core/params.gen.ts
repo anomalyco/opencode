@@ -49,7 +49,17 @@ const extraPrefixesMap: Record<string, Slot> = {
   $query_: "query",
 }
 const extraPrefixes = Object.entries(extraPrefixesMap)
-
+const getParamSlot = (slot: unknown): Slot | undefined => {
+  switch (slot) {
+    case "body":
+    case "headers":
+    case "path":
+    case "query":
+      return slot
+    default:
+      return undefined
+  }
+}
 type KeyMap = Map<
   string,
   | {
@@ -69,16 +79,20 @@ const buildKeyMap = (fields: FieldsConfig, map?: KeyMap): KeyMap => {
 
   for (const config of fields) {
     if ("in" in config) {
-      if (config.key) {
+      const slot = getParamSlot(config.in)
+      if (config.key && slot) {
         map.set(config.key, {
-          in: config.in,
+          in: slot,
           map: config.map,
         })
       }
     } else if ("key" in config) {
-      map.set(config.key, {
-        map: config.map,
-      })
+      const slot = getParamSlot(config.map)
+      if (slot) {
+        map.set(config.key, {
+          map: slot,
+        })
+      }
     } else if (config.args) {
       buildKeyMap(config.args, map)
     }
@@ -125,12 +139,15 @@ export const buildClientParams = (args: ReadonlyArray<unknown>, fields: FieldsCo
 
     if ("in" in config) {
       if (config.key) {
-        const field = map.get(config.key)!
+        const field = map.get(config.key)
+        if (!field) {
+          continue
+        }
         const name = field.map || config.key
         if (field.in) {
           ;(params[field.in] as Record<string, unknown>)[name] = arg
         }
-      } else {
+      } else if (getParamSlot(config.in) === "body") {
         params.body = arg
       }
     } else {
@@ -152,8 +169,9 @@ export const buildClientParams = (args: ReadonlyArray<unknown>, fields: FieldsCo
             ;(params[slot] as Record<string, unknown>)[key.slice(prefix.length)] = value
           } else if ("allowExtra" in config && config.allowExtra) {
             for (const [slot, allowed] of Object.entries(config.allowExtra)) {
-              if (allowed) {
-                ;(params[slot as Slot] as Record<string, unknown>)[key] = value
+              const paramSlot = getParamSlot(slot)
+              if (allowed && paramSlot) {
+                ;(params[paramSlot] as Record<string, unknown>)[key] = value
                 break
               }
             }
