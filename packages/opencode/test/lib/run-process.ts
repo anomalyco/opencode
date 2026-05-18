@@ -18,6 +18,7 @@
 //
 // The custom `test` provider points at a TestLLMServer running in the same
 // process at a random port. The CLI subprocess talks to it over real HTTP.
+import type { TestOptions } from "bun:test"
 import * as Scope from "effect/Scope"
 import { Effect } from "effect"
 import path from "node:path"
@@ -25,6 +26,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import { Process } from "@/util/process"
 import { TestLLMServer } from "./llm-server"
+import { it } from "./effect"
 
 const opencodeRoot = path.resolve(import.meta.dir, "../../")
 const cliEntry = path.join(opencodeRoot, "src/index.ts")
@@ -86,14 +88,33 @@ export type RunResult = {
   readonly durationMs: number
 }
 
+type SpawnOpts = { readonly timeoutMs?: number; readonly env?: Record<string, string> }
+
+// A `RunOpts` is the typed equivalent of constructing argv for `opencode run`.
+// New flags should land here so tests stay grep-able and refactor-safe.
+export type RunOpts = SpawnOpts & {
+  readonly model?: string
+  readonly agent?: string
+  readonly format?: "default" | "json"
+  readonly command?: string
+  readonly printLogs?: boolean
+  readonly extraArgs?: string[]
+}
+
+export type OpencodeCli = {
+  // High-level: run a single prompt against the test model.
+  readonly run: (message: string, opts?: RunOpts) => Effect.Effect<RunResult>
+  // Escape hatch: any CLI invocation with full control over argv.
+  readonly spawn: (args: string[], opts?: SpawnOpts) => Effect.Effect<RunResult>
+  // Convenience assertion. Dumps captured stderr/stdout on mismatch so CI
+  // failures are debuggable without re-running locally.
+  readonly expectExit: (result: RunResult, expected: number, label?: string) => void
+}
+
 export type RunFixture = {
   readonly llm: TestLLMServer["Service"]
   readonly home: string
-  readonly modelID: string
-  readonly runOpencode: (
-    args: string[],
-    opts?: { readonly timeoutMs?: number; readonly env?: Record<string, string> },
-  ) => Effect.Effect<RunResult>
+  readonly opencode: OpencodeCli
 }
 
 // `withRunFixture(fn)` provisions a TestLLMServer + tmpdir + spawn helper and
@@ -117,9 +138,9 @@ export function withRunFixture<A, E>(
     const configJson = JSON.stringify(providerConfig(llm.url))
     const env = isolatedEnv(home, configJson)
 
-    const runOpencode = (
+    const spawn = (
       args: string[],
-      opts?: { readonly timeoutMs?: number; readonly env?: Record<string, string> },
+      opts?: SpawnOpts,
     ): Effect.Effect<RunResult> =>
       Effect.promise(async () => {
         const start = Date.now()
@@ -138,13 +159,27 @@ export function withRunFixture<A, E>(
         }
       })
 
-    return yield* fn({ llm, home, modelID: testModelID, runOpencode })
+    const run = (message: string, opts?: RunOpts): Effect.Effect<RunResult> => {
+      const argv: string[] = ["run"]
+      if (opts?.printLogs) argv.push("--print-logs")
+      argv.push("--model", opts?.model ?? testModelID)
+      if (opts?.agent) argv.push("--agent", opts.agent)
+      if (opts?.format) argv.push("--format", opts.format)
+      if (opts?.command) argv.push("--command", opts.command)
+      if (opts?.extraArgs) argv.push(...opts.extraArgs)
+      argv.push(message)
+      return spawn(argv, opts)
+    }
+
+    const opencode: OpencodeCli = { run, spawn, expectExit }
+
+    return yield* fn({ llm, home, opencode })
   }).pipe(Effect.provide(TestLLMServer.layer))
 }
 
 // Convenience for the common assertion pattern. Dumps stderr/stdout when
 // the exit code doesn't match — saves debugging time on CI failures.
-export function expectExit(result: RunResult, expected: number, label = "opencode") {
+function expectExit(result: RunResult, expected: number, label = "opencode") {
   if (result.exitCode === expected) return
   const tail = (s: string, n: number) => (s.length > n ? "..." + s.slice(-n) : s)
   // eslint-disable-next-line no-console
@@ -156,4 +191,15 @@ export function expectExit(result: RunResult, expected: number, label = "opencod
   // eslint-disable-next-line no-console
   console.error(`[${label}] stdout (last 500):\n${tail(result.stdout, 500)}`)
   throw new Error(`${label}: expected exit ${expected}, got ${result.exitCode}`)
+}
+
+// `runIt.live(name, fixture => effect)` is the same as
+// `it.live(name, () => withRunFixture(fixture))` — one fewer nesting level at
+// every call site. Use this for any test that needs the opencode CLI fixture.
+export const runIt = {
+  live: <A, E>(
+    name: string,
+    body: (input: RunFixture) => Effect.Effect<A, E>,
+    opts?: number | TestOptions,
+  ) => it.live(name, () => withRunFixture(body), opts),
 }
