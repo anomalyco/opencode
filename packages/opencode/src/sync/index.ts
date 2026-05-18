@@ -18,6 +18,7 @@ import { serviceUse } from "@/effect/service-use"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { attachWith } from "@/effect/run-service"
+import { EffectBridge } from "@/effect/bridge"
 
 // Keep `Event["data"]` mutable because projectors mutate the persisted shape
 // when writing to the database. Bus payloads (`Properties`) stay readonly —
@@ -77,6 +78,13 @@ export const layer = Layer.effect(Service)(
   Effect.gen(function* () {
     const flags = yield* RuntimeFlags.Service
     const bus = yield* ProjectBus.Service
+    // Capture the layer's full Effect context once at construction. Used by
+    // `process` below to fork the publish callback through the bridge, so the
+    // post-DB-commit fire-and-forget runs with the layer's services available
+    // (logger, telemetry, anything else the layer's deps provide). The
+    // previous `Effect.runPromise(attachWith(...))` shape only carried
+    // InstanceRef/WorkspaceRef and dropped everything else.
+    const bridge = yield* EffectBridge.make()
 
     const replay: Interface["replay"] = Effect.fn("SyncEvent.replay")(function* (event, options) {
       const def = registry.get(event.type)
@@ -115,6 +123,7 @@ export const layer = Layer.effect(Service)(
         : undefined
       process(def, event, {
         bus,
+        bridge,
         publish,
         context,
         ownerID: options?.ownerID,
@@ -175,7 +184,7 @@ export const layer = Layer.effect(Service)(
           const seq = row?.seq != null ? row.seq + 1 : 0
 
           const event = { id, seq, aggregateID: agg, data }
-          process(def, event, { bus, publish, context, experimentalWorkspaces: flags.experimentalWorkspaces })
+          process(def, event, { bus, bridge, publish, context, experimentalWorkspaces: flags.experimentalWorkspaces })
         },
         {
           behavior: "immediate",
@@ -308,6 +317,7 @@ function process<Def extends Definition>(
   event: Event<Def>,
   options: {
     bus: ProjectBus.Interface
+    bridge: EffectBridge.Shape
     publish: boolean
     context?: PublishContext
     ownerID?: string
@@ -358,7 +368,7 @@ function process<Def extends Definition>(
 
         const result = convertEvent(def.type, event.data)
         const publish = (data: unknown) =>
-          Effect.runPromise(
+          options.bridge.fork(
             attachWith(options.bus.publish(def, data as Properties<Def>, { id: event.id }), {
               instance: options.context?.instance,
               workspace: options.context?.workspace,
@@ -367,7 +377,7 @@ function process<Def extends Definition>(
         if (result instanceof Promise) {
           void result.then(publish)
         } else {
-          void publish(result)
+          publish(result)
         }
 
         GlobalBus.emit("event", {
