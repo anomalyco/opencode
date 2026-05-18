@@ -257,6 +257,11 @@ export const SettingsGeneral: Component = () => {
   const mono = () => monoInput(settings.appearance.font())
   const sans = () => sansInput(settings.appearance.uiFont())
   const terminal = () => terminalInput(settings.appearance.terminalFont())
+  const setNumber = (value: string, update: (value: number) => void) => {
+    const next = Number(value)
+    if (!Number.isFinite(next)) return
+    update(next)
+  }
 
   const soundSelectProps = (
     enabled: () => boolean,
@@ -535,6 +540,46 @@ export const SettingsGeneral: Component = () => {
               autocapitalize="off"
               class="text-12-regular"
               style={{ "font-family": sansFontFamily(settings.appearance.uiFont()) }}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.fontSize.title")}
+          description={language.t("settings.general.row.fontSize.description")}
+        >
+          <div class="w-full sm:w-[120px]">
+            <TextField
+              data-action="settings-font-size"
+              label={language.t("settings.general.row.fontSize.title")}
+              hideLabel
+              type="number"
+              min="11"
+              max="20"
+              step="1"
+              value={String(settings.appearance.fontSize())}
+              onChange={(value) => setNumber(value, (next) => settings.appearance.setFontSize(next))}
+              class="text-12-regular"
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.lineHeight.title")}
+          description={language.t("settings.general.row.lineHeight.description")}
+        >
+          <div class="w-full sm:w-[120px]">
+            <TextField
+              data-action="settings-line-height"
+              label={language.t("settings.general.row.lineHeight.title")}
+              hideLabel
+              type="number"
+              min="120"
+              max="220"
+              step="5"
+              value={String(settings.appearance.lineHeight())}
+              onChange={(value) => setNumber(value, (next) => settings.appearance.setLineHeight(next))}
+              class="text-12-regular"
             />
           </div>
         </SettingsRow>

@@ -38,6 +38,7 @@ export interface Settings {
   }
   appearance: {
     fontSize: number
+    lineHeight: number
     mono: string
     sans: string
     terminal: string
@@ -63,9 +64,18 @@ const terminalFallback =
 const monoBase = monoFallback
 const sansBase = sansFallback
 const terminalBase = terminalFallback
+const minFontSize = 11
+const maxFontSize = 20
+const minLineHeight = 120
+const maxLineHeight = 220
 
 function input(font: string | undefined) {
   return font ?? ""
+}
+
+function range(value: number | undefined, fallback: number, min: number, max: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback
+  return Math.min(Math.max(value, min), max)
 }
 
 function family(font: string) {
@@ -103,6 +113,14 @@ export function terminalFontFamily(font: string | undefined) {
   return stack(font, terminalBase)
 }
 
+export function typographyFontSize(value: number | undefined) {
+  return range(value, defaultSettings.appearance.fontSize, minFontSize, maxFontSize)
+}
+
+export function typographyLineHeight(value: number | undefined) {
+  return range(value, defaultSettings.appearance.lineHeight, minLineHeight, maxLineHeight)
+}
+
 const defaultSettings: Settings = {
   general: {
     autoSave: true,
@@ -123,6 +141,7 @@ const defaultSettings: Settings = {
   },
   appearance: {
     fontSize: 14,
+    lineHeight: 150,
     mono: "",
     sans: "",
     terminal: "",
@@ -158,8 +177,18 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     createEffect(() => {
       if (typeof document === "undefined") return
       const root = document.documentElement
+      const fontSize = typographyFontSize(store.appearance?.fontSize)
+      const lineHeight = typographyLineHeight(store.appearance?.lineHeight)
       root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.mono))
       root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans))
+      root.style.setProperty("--font-size-small", `${Math.max(fontSize - 1, minFontSize)}px`)
+      root.style.setProperty("--font-size-base", `${fontSize}px`)
+      root.style.setProperty("--font-size-large", `${fontSize + 2}px`)
+      root.style.setProperty("--font-size-x-large", `${fontSize + 6}px`)
+      root.style.setProperty("--line-height-normal", `${Math.max(lineHeight - 20, minLineHeight)}%`)
+      root.style.setProperty("--line-height-large", `${lineHeight}%`)
+      root.style.setProperty("--line-height-x-large", `${Math.min(lineHeight + 30, maxLineHeight)}%`)
+      root.style.setProperty("--line-height-2x-large", `${Math.min(lineHeight + 50, maxLineHeight)}%`)
     })
 
     createEffect(() => {
@@ -246,7 +275,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       appearance: {
         fontSize: withFallback(() => store.appearance?.fontSize, defaultSettings.appearance.fontSize),
         setFontSize(value: number) {
-          setStore("appearance", "fontSize", value)
+          setStore("appearance", "fontSize", typographyFontSize(value))
+        },
+        lineHeight: withFallback(() => store.appearance?.lineHeight, defaultSettings.appearance.lineHeight),
+        setLineHeight(value: number) {
+          setStore("appearance", "lineHeight", typographyLineHeight(value))
         },
         font: withFallback(() => store.appearance?.mono, defaultSettings.appearance.mono),
         setFont(value: string) {
