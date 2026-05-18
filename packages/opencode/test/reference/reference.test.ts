@@ -9,6 +9,7 @@ import { ConfigReference } from "../../src/config/reference"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Git } from "../../src/git"
 import { Reference } from "../../src/reference/reference"
+import { RepositoryCache } from "../../src/reference/repository-cache"
 import { disposeAllInstances, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -19,8 +20,7 @@ afterEach(async () => {
 const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Reference.layer.pipe(
     Layer.provide(Config.defaultLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(Git.defaultLayer),
+    Layer.provide(RepositoryCache.defaultLayer),
     Layer.provide(RuntimeFlags.layer(flags)),
   )
 

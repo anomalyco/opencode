@@ -6,7 +6,6 @@ import { Config } from "@/config/config"
 import { ConfigReference } from "@/config/reference"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { Git } from "@/git"
 import { parseRepositoryReference, repositoryCachePath, type RemoteReference } from "@/util/repository"
 import { RepositoryCache } from "./repository-cache"
 
@@ -130,8 +129,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
-    const fs = yield* AppFileSystem.Service
-    const git = yield* Git.Service
+    const cache = yield* RepositoryCache.Service
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
 
@@ -154,10 +152,7 @@ export const layer = Layer.effect(
           gitReferences,
           Effect.fnUntraced(function* (reference) {
             const run = yield* Effect.cached(
-              RepositoryCache.ensure(
-                { reference: reference.reference, branch: reference.branch, refresh: true },
-                { fs, git },
-              ).pipe(
+              cache.ensure({ reference: reference.reference, branch: reference.branch, refresh: true }).pipe(
                 Effect.asVoid,
                 Effect.catchCause((cause) =>
                   Effect.logWarning("failed to materialize reference repository").pipe(
@@ -223,8 +218,7 @@ export const layer = Layer.effect(
 
 export const defaultLayer = layer.pipe(
   Layer.provide(Config.defaultLayer),
-  Layer.provide(AppFileSystem.defaultLayer),
-  Layer.provide(Git.defaultLayer),
+  Layer.provide(RepositoryCache.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )
 

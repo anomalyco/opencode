@@ -14,6 +14,7 @@ import { Ripgrep } from "../../src/file/ripgrep"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { testEffect } from "../lib/effect"
 import { Reference } from "@/reference/reference"
+import { RepositoryCache } from "@/reference/repository-cache"
 import { Permission } from "../../src/permission"
 import type * as Tool from "../../src/tool/tool"
 import { Config } from "@/config/config"
@@ -24,8 +25,7 @@ import { Filesystem } from "@/util/filesystem"
 const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Reference.layer.pipe(
     Layer.provide(Config.defaultLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(Git.defaultLayer),
+    Layer.provide(RepositoryCache.defaultLayer),
     Layer.provide(RuntimeFlags.layer(flags)),
   )
 

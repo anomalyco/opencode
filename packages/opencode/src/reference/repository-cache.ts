@@ -1,5 +1,5 @@
 import path from "path"
-import { Effect } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Flock } from "@opencode-ai/core/util/flock"
 import { Git } from "@/git"
@@ -20,6 +20,18 @@ export type Result = {
   head?: string
   branch?: string
 }
+
+export type EnsureInput = {
+  reference: RemoteReference
+  refresh?: boolean
+  branch?: string
+}
+
+export interface Interface {
+  ensure: (input: EnsureInput) => Effect.Effect<Result, unknown>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/RepositoryCache") {}
 
 function statusForRepository(input: { reuse: boolean; refresh?: boolean; branchMatches?: boolean }) {
   if (!input.reuse) return "cloned" as const
@@ -43,12 +55,8 @@ function resetTarget(input: {
   return "HEAD"
 }
 
-export const ensure = Effect.fn("RepositoryCache.ensure")(function* (
-  input: {
-    reference: RemoteReference
-    refresh?: boolean
-    branch?: string
-  },
+const ensureWithServices = Effect.fn("RepositoryCache.ensureWithServices")(function* (
+  input: EnsureInput,
   services: {
     fs: AppFileSystem.Interface
     git: Git.Interface
@@ -142,6 +150,30 @@ export const ensure = Effect.fn("RepositoryCache.ensure")(function* (
       }),
     (lock) => Effect.promise(() => lock.release()).pipe(Effect.ignore),
   )
+})
+
+export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Service> = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const fs = yield* AppFileSystem.Service
+    const git = yield* Git.Service
+
+    return Service.of({
+      ensure: Effect.fn("RepositoryCache.ensure")(function* (input) {
+        return yield* ensureWithServices(input, { fs, git })
+      }),
+    })
+  }),
+)
+
+export const defaultLayer: Layer.Layer<Service> = layer.pipe(
+  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(Git.defaultLayer),
+)
+
+export const ensure = Effect.fn("RepositoryCache.ensure")(function* (input: EnsureInput) {
+  const cache = yield* Service
+  return yield* cache.ensure(input)
 })
 
 export * as RepositoryCache from "./repository-cache"

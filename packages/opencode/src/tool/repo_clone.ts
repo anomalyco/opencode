@@ -1,6 +1,4 @@
 import { Effect, Schema } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Git } from "@/git"
 import DESCRIPTION from "./repo_clone.txt"
 import * as Tool from "./tool"
 import { parseRemoteRepositoryReference, repositoryCachePath, validateRepositoryBranch } from "@/util/repository"
@@ -28,11 +26,10 @@ type Metadata = {
   branch?: string
 }
 
-export const RepoCloneTool = Tool.define<typeof Parameters, Metadata, AppFileSystem.Service | Git.Service>(
+export const RepoCloneTool = Tool.define<typeof Parameters, Metadata, RepositoryCache.Service>(
   "repo_clone",
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
-    const git = yield* Git.Service
+    const cache = yield* RepositoryCache.Service
 
     return {
       description: DESCRIPTION,
@@ -59,10 +56,7 @@ export const RepoCloneTool = Tool.define<typeof Parameters, Metadata, AppFileSys
             },
           })
 
-          const result = yield* RepositoryCache.ensure(
-            { reference, refresh: params.refresh, branch: params.branch },
-            { fs, git },
-          )
+          const result = yield* cache.ensure({ reference, refresh: params.refresh, branch: params.branch })
           return {
             title: repository,
             metadata: result,
