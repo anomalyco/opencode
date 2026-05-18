@@ -177,6 +177,8 @@ export const layer = Layer.effect(
       list: Effect.fn("V2Session.list")(function* (input) {
         const direction = input.cursor?.direction ?? "next"
         let order = input.order ?? "desc"
+        // This is a load bearing sort, desktop relies on this
+        const sortColumn = SessionTable.time_updated
         // Query the adjacent rows in reverse, then flip them back into the requested order below.
         if (direction === "previous" && order === "asc") order = "desc"
         if (direction === "previous" && order === "desc") order = "asc"
@@ -186,18 +188,18 @@ export const layer = Layer.effect(
           conditions.push(or(eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`))!)
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if (input.roots) conditions.push(isNull(SessionTable.parent_id))
-        if (input.start) conditions.push(gte(SessionTable.time_created, input.start))
+        if (input.start) conditions.push(gte(sortColumn, input.start))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
         if (input.cursor) {
           conditions.push(
             order === "asc"
               ? or(
-                  gt(SessionTable.time_created, input.cursor.time),
-                  and(eq(SessionTable.time_created, input.cursor.time), gt(SessionTable.id, input.cursor.id)),
+                  gt(sortColumn, input.cursor.time),
+                  and(eq(sortColumn, input.cursor.time), gt(SessionTable.id, input.cursor.id)),
                 )!
               : or(
-                  lt(SessionTable.time_created, input.cursor.time),
-                  and(eq(SessionTable.time_created, input.cursor.time), lt(SessionTable.id, input.cursor.id)),
+                  lt(sortColumn, input.cursor.time),
+                  and(eq(sortColumn, input.cursor.time), lt(SessionTable.id, input.cursor.id)),
                 )!,
           )
         }
@@ -206,7 +208,7 @@ export const layer = Layer.effect(
           .from(SessionTable)
           .where(conditions.length > 0 ? and(...conditions) : undefined)
           .orderBy(
-            order === "asc" ? asc(SessionTable.time_created) : desc(SessionTable.time_created),
+            order === "asc" ? asc(sortColumn) : desc(sortColumn),
             order === "asc" ? asc(SessionTable.id) : desc(SessionTable.id),
           )
 
