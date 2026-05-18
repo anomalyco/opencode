@@ -18,8 +18,7 @@
 // without changing the fixture. Long-lived commands like `serve` will need a
 // different return shape — see the TODO at the bottom of OpencodeCli.
 import type { TestOptions } from "bun:test"
-import * as Scope from "effect/Scope"
-import { Effect } from "effect"
+import { Deferred, Duration, Effect, Scope, Stream } from "effect"
 import path from "node:path"
 import fs from "node:fs/promises"
 import os from "node:os"
@@ -173,112 +172,94 @@ export function withCliFixture<A, E>(
       return spawn(argv, opts)
     }
 
-    const serve = (opts?: ServeOpts): Effect.Effect<ServeHandle, Error, Scope.Scope> =>
-      Effect.acquireRelease(
-        Effect.tryPromise({
-          try: async () => {
-            const argv = ["serve"]
-            // Default port 0 — let the OS pick a free port, parse the actual
-            // one off stdout. Hard-coded ports flake under parallel tests.
-            argv.push("--port", String(opts?.port ?? 0))
-            if (opts?.hostname) argv.push("--hostname", opts.hostname)
-            if (opts?.extraArgs) argv.push(...opts.extraArgs)
+    const serve = Effect.fn("opencode.serve")(function* (opts?: ServeOpts) {
+      const argv = ["serve"]
+      // Default port 0 — let the OS pick a free port, parse the actual one
+      // off stdout. Hard-coded ports flake under parallel tests.
+      argv.push("--port", String(opts?.port ?? 0))
+      if (opts?.hostname) argv.push("--hostname", opts.hostname)
+      if (opts?.extraArgs) argv.push(...opts.extraArgs)
 
-            const proc = Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...argv], {
-              cwd: home,
-              env: { ...process.env, ...env, ...opts?.env },
-              stdout: "pipe",
-              stderr: "pipe",
-            })
-
-            // Drain stderr in background so the OS pipe buffer can't fill and
-            // wedge the child. We don't surface it on success; on failure the
-            // caller can read it from the kill path or test assertion.
-            const stderrChunks: string[] = []
-            void (async () => {
-              const reader = proc.stderr.getReader()
-              const decoder = new TextDecoder()
-              try {
-                while (true) {
-                  const { done, value } = await reader.read()
-                  if (done) return
-                  stderrChunks.push(decoder.decode(value, { stream: true }))
-                }
-              } catch {
-                // Stream closed — fine.
-              }
-            })()
-
-            // Watch stdout for the listening-line. Format (see serve.ts):
-            //   "opencode server listening on http://<host>:<port>"
-            const readyRe = /listening on (http:\/\/([^\s:]+):(\d+))/
-            const reader = proc.stdout.getReader()
-            const decoder = new TextDecoder()
-            let buf = ""
-            const readyTimeoutMs = opts?.readyTimeoutMs ?? 15_000
-
-            const timeout = new Promise<never>((_resolve, reject) =>
-              setTimeout(
-                () => reject(new Error(`opencode serve did not become ready within ${readyTimeoutMs}ms`)),
-                readyTimeoutMs,
-              ),
-            )
-            const findReady = (async () => {
-              while (true) {
-                const { done, value } = await reader.read()
-                if (done) throw new Error("opencode serve exited before becoming ready")
-                buf += decoder.decode(value, { stream: true })
-                const m = buf.match(readyRe)
-                if (m) return { url: m[1], hostname: m[2], port: Number(m[3]) }
-              }
-            })()
-            let match: { url: string; hostname: string; port: number }
-            try {
-              match = await Promise.race([findReady, timeout])
-            } catch (err) {
-              proc.kill()
-              try {
-                await proc.exited
-              } catch {
-                // ignore
-              }
-              const stderrTail = stderrChunks.join("").slice(-2000)
-              throw new Error(`${(err as Error).message}\nstderr (last 2000):\n${stderrTail}`)
-            }
-
-            // Continue draining stdout post-startup. Without this, the OS pipe
-            // buffer eventually fills and the server blocks on its next log.
-            void (async () => {
-              try {
-                while (true) {
-                  const { done } = await reader.read()
-                  if (done) return
-                }
-              } catch {
-                // Stream closed — fine.
-              }
-            })()
-
-            return {
-              url: match.url,
-              hostname: match.hostname,
-              port: match.port,
-              kill: () => proc.kill(),
-              exited: proc.exited as Promise<number>,
-            }
-          },
-          catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-        }),
-        (handle) =>
-          Effect.promise(async () => {
-            handle.kill()
-            try {
-              await handle.exited
-            } catch {
-              // ignore
-            }
+      // Acquire the subprocess; release sends SIGTERM and awaits exit on
+      // scope close. Wrapped in Effect.ignore so a flaky kill doesn't surface
+      // as a finalizer error during test teardown.
+      const proc = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...argv], {
+            cwd: home,
+            env: { ...process.env, ...env, ...opts?.env },
+            stdout: "pipe",
+            stderr: "pipe",
           }),
+        ),
+        (p) =>
+          Effect.promise(() => {
+            p.kill()
+            return p.exited
+          }).pipe(Effect.ignore),
       )
+
+      // Drain stderr in a scope-bound fork. Without this the OS pipe buffer
+      // eventually fills and the child blocks on its next log call. Kept as a
+      // tail buffer so timeout failures can include context.
+      const stderrChunks: string[] = []
+      yield* Effect.forkScoped(
+        Stream.fromReadableStream({
+          evaluate: () => proc.stderr,
+          onError: () => new Error("stderr stream error"),
+        }).pipe(
+          Stream.decodeText(),
+          Stream.runForEach((chunk) => Effect.sync(() => stderrChunks.push(chunk))),
+          Effect.ignore,
+        ),
+      )
+
+      // Watch stdout line-by-line for the listening sentinel. Format
+      // (see src/cli/cmd/serve.ts):
+      //   "opencode server listening on http://<host>:<port>"
+      const readyRe = /listening on (http:\/\/([^\s:]+):(\d+))/
+      const readyDeferred = yield* Deferred.make<{ url: string; hostname: string; port: number }>()
+      yield* Effect.forkScoped(
+        Stream.fromReadableStream({
+          evaluate: () => proc.stdout,
+          onError: () => new Error("stdout stream error"),
+        }).pipe(
+          Stream.decodeText(),
+          Stream.splitLines,
+          Stream.runForEach((line) => {
+            const m = line.match(readyRe)
+            return m
+              ? Deferred.succeed(readyDeferred, { url: m[1], hostname: m[2], port: Number(m[3]) })
+              : Effect.void
+          }),
+          Effect.ignore,
+        ),
+      )
+
+      const readyTimeoutMs = opts?.readyTimeoutMs ?? 15_000
+      const match = yield* Deferred.await(readyDeferred).pipe(
+        Effect.timeoutOrElse({
+          duration: Duration.millis(readyTimeoutMs),
+          orElse: () =>
+            Effect.fail(
+              new Error(
+                `opencode serve did not become ready within ${readyTimeoutMs}ms\n` +
+                  `stderr (last 2000):\n${stderrChunks.join("").slice(-2000)}`,
+              ),
+            ),
+        }),
+      )
+
+      return {
+        url: match.url,
+        hostname: match.hostname,
+        port: match.port,
+        kill: () => {
+          proc.kill()
+        },
+        exited: proc.exited as Promise<number>,
+      } satisfies ServeHandle
+    })
 
     const opencode: OpencodeCli = { run, serve, spawn, expectExit, parseJsonEvents }
 
