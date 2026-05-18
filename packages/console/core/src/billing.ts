@@ -156,33 +156,32 @@ export namespace Billing {
   }
 
   export const redeemCoupon = async (email: string, type: (typeof CouponType)[number]) => {
-    const coupon = await Database.use((tx) =>
-      tx
-        .select()
-        .from(CouponTable)
-        .where(and(eq(CouponTable.email, email), eq(CouponTable.type, type)))
-        .then((rows) => rows[0]),
-    )
-    if (!coupon) throw new Error("Invalid coupon code")
-    if (coupon.timeRedeemed) throw new Error("Coupon already redeemed")
+    // validate coupon type
+    await (async () => {
+      if (type === "GO1MONTH50") return
+      const coupon = await Database.use((tx) =>
+        tx
+          .select()
+          .from(CouponTable)
+          .where(and(eq(CouponTable.email, email), eq(CouponTable.type, type)))
+          .then((rows) => rows[0]),
+      )
+      if (!coupon) throw new Error("Invalid coupon code")
+      if (coupon.timeRedeemed) throw new Error("Coupon already redeemed")
+    })()
 
+    // handle coupon type
     if (type === "BUILDATHON") await grantCredit(Actor.workspace(), 500)
 
     await Database.use((tx) =>
       tx
-        .update(CouponTable)
-        .set({ timeRedeemed: sql`now()` })
-        .where(and(eq(CouponTable.email, email), eq(CouponTable.type, type))),
-    )
-  }
-
-  export const getCoupons = async (email: string) => {
-    return await Database.use((tx) =>
-      tx
-        .select({ type: CouponTable.type, timeRedeemed: CouponTable.timeRedeemed })
-        .from(CouponTable)
-        .where(and(eq(CouponTable.email, email), isNull(CouponTable.timeRedeemed)))
-        .then((rows) => rows.map((row) => row.type)),
+        .insert(CouponTable)
+        .values({ email, type, timeRedeemed: sql`now()` })
+        .onDuplicateKeyUpdate({
+          set: {
+            timeRedeemed: sql`now()`,
+          },
+        }),
     )
   }
 
@@ -290,20 +289,29 @@ export namespace Billing {
       if (billing.subscriptionID) throw new Error("Already subscribed to Black")
       if (billing.liteSubscriptionID) throw new Error("Already subscribed to Lite")
 
-      const coupons = await Billing.getCoupons(email)
-      const coupon = coupons.includes("GO12MONTHS100")
-        ? LiteData.twelveMonths100Coupon
-        : coupons.includes("GO6MONTHS100")
-          ? LiteData.sixMonths100Coupon
-          : coupons.includes("GO3MONTHS100")
-            ? LiteData.threeMonths100Coupon
-            : coupons.includes("GOFREEMONTH")
-              ? LiteData.firstMonth100Coupon
-              : LiteData.firstMonth50Coupon
+      const coupons = await Database.use((tx) =>
+        tx
+          .select({ type: CouponTable.type, timeRedeemed: CouponTable.timeRedeemed })
+          .from(CouponTable)
+          .where(eq(CouponTable.email, email)),
+      )
+
+      const coupon = (() => {
+        if (coupons.some((coupon) => coupon.type === "GO12MONTHS100" && !coupon.timeRedeemed))
+          return LiteData.twelveMonths100Coupon
+        if (coupons.some((coupon) => coupon.type === "GO6MONTHS100" && !coupon.timeRedeemed))
+          return LiteData.sixMonths100Coupon
+        if (coupons.some((coupon) => coupon.type === "GO3MONTHS100" && !coupon.timeRedeemed))
+          return LiteData.threeMonths100Coupon
+        if (coupons.some((coupon) => coupon.type === "GOFREEMONTH" && !coupon.timeRedeemed))
+          return LiteData.firstMonth100Coupon
+        if (!coupons.some((coupon) => coupon.type === "GO1MONTH50")) return LiteData.firstMonth50Coupon
+        return undefined
+      })()
       const createSession = () =>
         Billing.stripe().checkout.sessions.create({
           mode: "subscription",
-          discounts: [{ coupon }],
+          discounts: coupon ? [{ coupon }] : undefined,
           ...(billing.customerID
             ? {
                 customer: billing.customerID,
