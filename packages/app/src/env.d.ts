@@ -16,6 +16,16 @@ interface ImportMetaEnv {
    * @example VITE_SESSION_HEADER=hidden
    */
   readonly VITE_SESSION_HEADER: string
+  /**
+   * Disable @ mention / file popover, / slash-command popover, and leading `!` shell shortcut.
+   * @example VITE_DISABLE_PROMPT_TRIGGERS=true
+   */
+  readonly VITE_DISABLE_PROMPT_TRIGGERS: string
+  /**
+   * Hide the prompt dock auto-accept permissions control.
+   * @example VITE_DISABLE_PROMPT_PERMISSIONS=true
+   */
+  readonly VITE_DISABLE_PROMPT_PERMISSIONS: string
 }
 
 interface ImportMeta {

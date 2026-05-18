@@ -575,6 +575,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     ...(import.meta.env.DEV ? modelCmds() : []),
     ...mcpCmds(),
     ...agentCmds(),
-    ...permissionsCmds(),
+    ...(import.meta.env.VITE_DISABLE_PROMPT_PERMISSIONS === "true" ? [] : permissionsCmds()),
   ])
 }
