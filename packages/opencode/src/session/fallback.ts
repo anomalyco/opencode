@@ -140,6 +140,43 @@ export function isRetryable(error: Err, provider: string): boolean {
   return SessionRetry.retryable(error, provider) !== undefined
 }
 
+export type FallbackOnErrorsConfig = {
+  patterns?: string[]
+  status_codes?: number[]
+}
+
+// Resolve a user-configured override for "this error should trigger
+// fallback". Returns a synthetic Retryable when the error message /
+// response body matches a configured pattern, or the response status
+// matches a configured status code. Returns undefined otherwise — the
+// caller then falls through to SessionRetry's default heuristics.
+export function matchUserFallbackConfig(
+  err: { data?: { message?: string; responseBody?: string; statusCode?: number } } | undefined,
+  cfgOverrides: FallbackOnErrorsConfig | undefined,
+): SessionRetry.Retryable | undefined {
+  if (!cfgOverrides) return undefined
+  const data = err?.data
+  const status = data?.statusCode
+  if (status !== undefined && cfgOverrides.status_codes?.includes(status)) {
+    return { message: `HTTP ${status}` }
+  }
+  const haystack = `${data?.message ?? ""}\n${data?.responseBody ?? ""}`
+  for (const pat of cfgOverrides.patterns ?? []) {
+    let hit = false
+    try {
+      hit = new RegExp(pat, "i").test(haystack)
+    } catch {
+      // invalid regex → fall back to plain substring match (case-insensitive)
+      hit = haystack.toLowerCase().includes(pat.toLowerCase())
+    }
+    if (hit) {
+      const summary = (data?.message ?? "").trim()
+      return { message: summary.length > 0 ? summary.split("\n")[0] : `matched pattern: ${pat}` }
+    }
+  }
+  return undefined
+}
+
 function noticeChunks(text: string, id: string): StreamChunk[] {
   return [
     { type: "text-start", id },

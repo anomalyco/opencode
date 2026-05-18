@@ -9,6 +9,7 @@ import {
   FALLBACK_USING_ID,
   FallbackTriggered,
   FallbackUsed,
+  matchUserFallbackConfig,
   NOTICE_REASON_MAX_LENGTH,
   QUOTA_COOLDOWN_MS,
   SessionFallbackState,
@@ -17,6 +18,7 @@ import {
   type ClassifiedError,
   type FallbackDeps,
   type FallbackInput,
+  type FallbackOnErrorsConfig,
   type ProviderStreamResult,
   type StreamChunk,
 } from "../../src/session/fallback"
@@ -398,5 +400,103 @@ describe("withFallback", () => {
   test("FallbackTriggered / FallbackUsed events are defined and have stable types", () => {
     expect(FallbackTriggered.type).toBe("llm.fallback.triggered")
     expect(FallbackUsed.type).toBe("llm.fallback.used")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// matchUserFallbackConfig — user-extensible error → fallback mapping.
+// Covers the scenario where a non-English provider returns a quota error
+// that SessionRetry's built-in heuristics can't recognise.
+// ---------------------------------------------------------------------------
+
+describe("matchUserFallbackConfig", () => {
+  const makeErr = (data: { message?: string; responseBody?: string; statusCode?: number }) => ({ data })
+
+  test("returns undefined when no overrides are configured", () => {
+    expect(matchUserFallbackConfig(makeErr({ message: "boom" }), undefined)).toBeUndefined()
+  })
+
+  test("returns undefined when overrides are empty", () => {
+    expect(matchUserFallbackConfig(makeErr({ message: "boom" }), { patterns: [], status_codes: [] })).toBeUndefined()
+  })
+
+  test("matches a status code from status_codes list", () => {
+    const got = matchUserFallbackConfig(makeErr({ statusCode: 402 }), { status_codes: [402, 451] })
+    expect(got).toEqual({ message: "HTTP 402" })
+  })
+
+  test("does NOT match a status code that is not in the list", () => {
+    expect(matchUserFallbackConfig(makeErr({ statusCode: 418 }), { status_codes: [402] })).toBeUndefined()
+  })
+
+  test("matches a substring pattern against error.data.message (case-insensitive)", () => {
+    const got = matchUserFallbackConfig(
+      makeErr({ message: "INSUFFICIENT balance for account" }),
+      { patterns: ["insufficient balance"] },
+    )
+    expect(got?.message).toBe("INSUFFICIENT balance for account")
+  })
+
+  test("matches a non-ASCII substring (real Zhipu/DeepSeek-style quota error)", () => {
+    const got = matchUserFallbackConfig(
+      makeErr({ message: "用户额度不足, 剩余额度: ＄0.000000" }),
+      { patterns: ["额度不足"] },
+    )
+    expect(got?.message).toBe("用户额度不足, 剩余额度: ＄0.000000")
+  })
+
+  test("matches against responseBody when message is empty", () => {
+    const got = matchUserFallbackConfig(
+      makeErr({ message: "", responseBody: '{"error":"quota exceeded for current plan"}' }),
+      { patterns: ["quota exceeded"] },
+    )
+    // Empty message means we fall back to the "matched pattern" summary.
+    expect(got?.message).toBe("matched pattern: quota exceeded")
+  })
+
+  test("uses regex semantics when the pattern compiles", () => {
+    const got = matchUserFallbackConfig(
+      makeErr({ message: "Error 402: Payment Required" }),
+      { patterns: ["^Error \\d+: Payment"] },
+    )
+    expect(got).toBeDefined()
+  })
+
+  test("falls back to substring match when the pattern is an invalid regex", () => {
+    // `[abc` is unterminated character class — RegExp constructor throws.
+    const got = matchUserFallbackConfig(
+      makeErr({ message: "weird input with [abc inside" }),
+      { patterns: ["[abc"] },
+    )
+    expect(got).toBeDefined()
+  })
+
+  test("takes only the first line of a multi-line error message for the notice", () => {
+    const got = matchUserFallbackConfig(
+      makeErr({ message: "Quota exceeded\nstack trace:\n  at ..." }),
+      { patterns: ["quota"] },
+    )
+    expect(got?.message).toBe("Quota exceeded")
+  })
+
+  test("status_codes wins before patterns (cheaper check)", () => {
+    // Both would match — make sure we don't crash trying to evaluate patterns
+    // after a status code match.
+    const got = matchUserFallbackConfig(
+      makeErr({ statusCode: 402, message: "anything" }),
+      { status_codes: [402], patterns: ["anything"] },
+    )
+    expect(got).toEqual({ message: "HTTP 402" })
+  })
+
+  test("returns undefined for err = undefined / data = undefined", () => {
+    expect(matchUserFallbackConfig(undefined, { patterns: ["x"] })).toBeUndefined()
+    expect(matchUserFallbackConfig({}, { patterns: ["x"] })).toBeUndefined()
+  })
+
+  test("type FallbackOnErrorsConfig is structurally compatible with the cfg schema", () => {
+    const cfg: FallbackOnErrorsConfig = { patterns: ["a"], status_codes: [402] }
+    expect(cfg.patterns?.length).toBe(1)
+    expect(cfg.status_codes?.[0]).toBe(402)
   })
 })

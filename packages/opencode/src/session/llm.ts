@@ -26,9 +26,10 @@ import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import {
   CooldownManager,
   SessionFallbackState,
-  isRetryable,
+  matchUserFallbackConfig,
   withFallback,
   type ClassifiedError,
+  type FallbackOnErrorsConfig,
 } from "./fallback"
 import { ProviderID } from "@/provider/schema"
 import { SessionRetry } from "./retry"
@@ -86,39 +87,45 @@ const live: Layer.Layer<
     const cooldown = new CooldownManager()
     const sessionFallbackState = new SessionFallbackState()
 
-    const classifyError = (
-      cause: Cause.Cause<unknown>,
-      prevProviderID: string,
-      _prevModelID: string,
-      _cooldownSeconds: number,
-    ): ClassifiedError | null => {
-      const error = Cause.squash(cause)
-      let err = MessageV2.fromError(error, { providerID: ProviderID.make(prevProviderID) })
-      if (
-        !MessageV2.APIError.isInstance(err) &&
-        !MessageV2.ContextOverflowError.isInstance(err) &&
-        !MessageV2.AbortedError.isInstance(err)
-      ) {
-        err = new MessageV2.APIError({
-          message:
-            typeof error === "string"
-              ? error
-              : error instanceof Error
-                ? error.message
-                : "Unknown stream error",
+    // Build a request-scoped classifyError that closes over the current
+    // config snapshot. We need a snapshot here (not a live read) so that
+    // chainFallback's cause handler — which runs inside a Stream pipeline
+    // — has zero async dependencies on the config service.
+    const makeClassifyError = (overrides: FallbackOnErrorsConfig | undefined) =>
+      (cause: Cause.Cause<unknown>, prevProviderID: string, _prevModelID: string, _cooldownSeconds: number):
+        | ClassifiedError
+        | null => {
+        const error = Cause.squash(cause)
+        let err = MessageV2.fromError(error, { providerID: ProviderID.make(prevProviderID) })
+        if (
+          !MessageV2.APIError.isInstance(err) &&
+          !MessageV2.ContextOverflowError.isInstance(err) &&
+          !MessageV2.AbortedError.isInstance(err)
+        ) {
+          err = new MessageV2.APIError({
+            message:
+              typeof error === "string"
+                ? error
+                : error instanceof Error
+                  ? error.message
+                  : "Unknown stream error",
+            isRetryable: true,
+          }).toObject()
+        }
+        if (MessageV2.AbortedError.isInstance(err)) return null
+
+        // 1) User-configured overrides win.
+        const userMatch = matchUserFallbackConfig(err, overrides)
+        // 2) Otherwise, fall through to SessionRetry's built-in heuristics.
+        const retryInfo = userMatch ?? SessionRetry.retryable(err as unknown as SessionRetry.Err, prevProviderID)
+        if (!retryInfo) return null
+        return {
+          error: err,
           isRetryable: true,
-        }).toObject()
+          retryInfo,
+          reason: retryInfo.message ?? "error",
+        }
       }
-      if (MessageV2.AbortedError.isInstance(err)) return null
-      if (!isRetryable(err, prevProviderID)) return null
-      const retryInfo = SessionRetry.retryable(err as unknown as SessionRetry.Err, prevProviderID)
-      return {
-        error: err,
-        isRetryable: true,
-        retryInfo,
-        reason: retryInfo?.message ?? "error",
-      }
-    }
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
       const l = log
@@ -462,7 +469,7 @@ const live: Layer.Layer<
           },
           bus,
           config: { get: () => config.get() as Effect.Effect<{ cooldown_seconds?: number }, unknown> },
-          classifyError,
+          classifyError: makeClassifyError(cfg.fallback_on_errors),
           call: tryProvider,
           log: l,
           cooldown,

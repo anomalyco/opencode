@@ -171,6 +171,20 @@ export const Info = Schema.Struct({
   cooldown_seconds: Schema.optional(Schema.Number.check(Schema.isGreaterThan(0))).annotate({
     description: "Duration in seconds to put a provider/model in cooldown after a retryable error (default: 300)",
   }),
+  fallback_on_errors: Schema.optional(
+    Schema.Struct({
+      patterns: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+        description:
+          "Extra substrings/regex (JS RegExp source) matched against the error message and response body. Any match triggers fallback.",
+      }),
+      status_codes: Schema.optional(Schema.mutable(Schema.Array(Schema.Number))).annotate({
+        description: "Extra HTTP status codes that should trigger fallback (e.g. 402 for payment-required).",
+      }),
+    }),
+  ).annotate({
+    description:
+      "Extend fallback triggers with custom error patterns and status codes (e.g. for providers that report quota errors in non-English).",
+  }),
   small_model: Schema.optional(ConfigModelID).annotate({
     description: "Small model to use for tasks like title generation in the format of provider/model",
   }),
