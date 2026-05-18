@@ -74,7 +74,7 @@
       "shiki": "3.20.0",
       "solid-list": "0.3.0",
       "tailwindcss": "4.1.11",
-      "virtua": "0.42.3",
+      "virtua": "0.49.1",
       "vite": "7.1.4",
       "@solidjs/meta": "0.29.4",
       "@solidjs/router": "0.15.4",
