@@ -1,3 +1,5 @@
+import { Schema } from "effect"
+
 export const REDACTED = "[REDACTED]"
 
 const DEFAULT_REDACT_HEADERS = [
@@ -94,8 +96,6 @@ export const redactHeaders = (
       .toSorted(([a], [b]) => a.localeCompare(b)),
   )
 }
-
-import { Schema } from "effect"
 
 export const SecretFindingSchema = Schema.Struct({
   path: Schema.String,

@@ -4,8 +4,6 @@ import { Snapshot } from "../snapshot"
 import { Storage } from "@/storage/storage"
 import { SyncEvent } from "../sync"
 import * as Log from "@opencode-ai/core/util/log"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { withStatics } from "@opencode-ai/core/schema"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID, PartID } from "./schema"
@@ -18,12 +16,12 @@ export const RevertInput = Schema.Struct({
   sessionID: SessionID,
   messageID: MessageID,
   partID: Schema.optional(PartID),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 export type RevertInput = Schema.Schema.Type<typeof RevertInput>
 
 export interface Interface {
-  readonly revert: (input: RevertInput) => Effect.Effect<Session.Info>
-  readonly unrevert: (input: { sessionID: SessionID }) => Effect.Effect<Session.Info>
+  readonly revert: (input: RevertInput) => Effect.Effect<Session.Info, Session.BusyError>
+  readonly unrevert: (input: { sessionID: SessionID }) => Effect.Effect<Session.Info, Session.BusyError>
   readonly cleanup: (session: Session.Info) => Effect.Effect<void>
 }
 
@@ -42,7 +40,7 @@ export const layer = Layer.effect(
 
     const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
       yield* state.assertNotBusy(input.sessionID)
-      const all = yield* sessions.messages({ sessionID: input.sessionID })
+      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
       let lastUser: MessageV2.User | undefined
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
 
@@ -105,7 +103,7 @@ export const layer = Layer.effect(
     const cleanup = Effect.fn("SessionRevert.cleanup")(function* (session: Session.Info) {
       if (!session.revert) return
       const sessionID = session.id
-      const msgs = yield* sessions.messages({ sessionID })
+      const msgs = yield* sessions.messages({ sessionID }).pipe(Effect.orDie)
       const messageID = session.revert.messageID
       const remove = [] as MessageV2.WithParts[]
       let target: MessageV2.WithParts | undefined
