@@ -323,18 +323,6 @@ const waitForBusy = (sessionID: SessionID, duration: Duration.Input = "2 seconds
     duration,
   )
 
-// Busy status is the deterministic signal that shell cancellation will hit a registered runner.
-const waitForBusy = (sessionID: SessionID, duration: Duration.Input = "2 seconds") =>
-  pollWithTimeout(
-    Effect.gen(function* () {
-      const status = yield* SessionStatus.Service
-      const s = yield* status.get(sessionID)
-      return s.type === "busy" ? (true as const) : undefined
-    }),
-    `session ${sessionID} never became busy`,
-    duration,
-  )
-
 const hasBash = Effect.sync(() => Bun.which("bash") !== null)
 
 const deferredAsPromise = <A>(deferred: Deferred.Deferred<A>): PromiseLike<A> => ({
