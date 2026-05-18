@@ -1,64 +1,34 @@
 # E2E tests
 
-Playwright drives the app; **`packages/app/script/e2e-local.ts`** starts everything else.
+Playwright drives the app; **`vitest.e2e.config.ts`** runs the browser suite (`test/browser/**/*.test.ts`). Each spec’s **`useE2eStack()`** hook starts **Postgres + MinIO + univer-compat** (Testcontainers), the **OpenCode** API container, **Vite**, and patches `process.env` for Playwright. **Ollama** must run on the **host** (`llama3.2:1b` at `http://127.0.0.1:11434`); the OpenCode container reaches it via `host.docker.internal`.
 
-## Infrastructure
+**Requirements:** Docker running; **WorkOS** + **COOKIE_PASSWORD** in `.env.development` / `.env.e2e` (see `assert-univer-workos-env.ts`). First cold run pulls images — often several minutes.
 
-`test:e2e:local` / `test:e2e:local-univer` provision dependencies automatically:
+### Docker context (macOS / Colima)
 
-- **Postgres** + **Ollama** (when `ollama` is in `OPENCODE_E2E_INFRA`) via **Testcontainers** — `script/e2e-testcontainers.ts`.
-- **MinIO + univer-compat** when `univer` is in infra — `script/e2e-testcontainers.ts` (`startUniverE2e`).
-- **OpenCode API** runs **in-process** (not containerized).
+Vitest **`setupFiles`** runs `test/support/tc-wire-setup.ts` → `wire-docker-context-for-tc.ts`: when `DOCKER_HOST` is unset, it follows the active **`docker context`** so Node/Testcontainers use the same daemon as the CLI. For Colima, `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` uses the in-VM `/var/run/docker.sock` for Ryuk mounts ([Testcontainers configuration](https://node.testcontainers.org/configuration)). Skip wiring: `OPENCODE_SKIP_DOCKER_CONTEXT_WIRE=1`.
 
-**Requirements:** Docker daemon running (Desktop or Linux). First cold run pulls images and the `llama3.2:1b` model inside Ollama — often several minutes.
+**Reuse:** pass **`useE2eStack({ reuse: true })`** (default) for `.withReuse()` and stable network `opencode-e2e-bridge`; **`{ reuse: false }`** for an isolated run. The hook toggles `TESTCONTAINERS_REUSE_ENABLE` for the file only.
 
-## Running
+**Verbose stderr:** `OPENCODE_E2E_LOG=1`.
 
-From **repo root** (recommended):
+## Scripts (`packages/app`)
 
-```bash
-bun run test:e2e:local
-bun run test:e2e:local-univer
-bun run test:e2e:infra-smoke
-```
+| Script | Purpose |
+|--------|---------|
+| `bun run test` | Unit tests (`./src`) |
+| `bun run test:integration` | Vitest integration |
+| `bun run test:browser` | Browser Vitest only (expects stack already up **or** specs that self-provision via hooks) |
+| `bun run e2e` | Loads `.env.development` + `.env.e2e`, asserts WorkOS in `vitest.e2e.config.ts`, runs Vitest with `vitest.e2e.config.ts` (full browser suite by `include`) |
+| `bun run playwright:install` | Install Chromium for Playwright |
 
-Same scripts exist under **`packages/app`** if you `cd` there.
+From **repo root**: `bun run app:e2e`, `bun run app:playwright`.
 
-```bash
-# Full Playwright + OpenCode + infra
-bun run test:e2e:local
+**Subset / grep:** `bun run e2e -- test/browser/integration/foo.test.ts` or Vitest flags after `--`.
 
-# Postgres + MinIO + compat + Univer layers (no default `ollama` — set layers if you need it)
-bun run test:e2e:local-univer
-
-# Extra args go to Playwright after --
-bun run test:e2e:local -- e2e/integration/foo.spec.ts
-```
-
-## Prove Testcontainers without Playwright
-
-Useful in CI or when you only want to see Docker layers come up:
-
-```bash
-bun run test:e2e:infra-smoke
-```
-
-Uses the same `OPENCODE_E2E_INFRA` as `e2e-local` (default `postgres,ollama`). Prints Postgres / Ollama / compat URLs, then stops containers.
-
-**Faster check** (Postgres only, no Ollama pull):
-
-```bash
-OPENCODE_E2E_INFRA=postgres bun run test:e2e:infra-smoke
-```
-
-**Univer stack smoke** (includes MinIO + compat):
-
-```bash
-OPENCODE_E2E_INFRA=postgres,univer bun run test:e2e:infra-smoke
-```
+**Infra smoke** (start Postgres + Univer stack then stop, no app): `bun run test:browser -- test/browser/infra/infra-smoke.test.ts` (with the same env files as `e2e` if WorkOS vars are not already exported).
 
 ## Troubleshooting
 
-- **Docker not reachable**: Testcontainers fails — start Docker Desktop / `docker info`.
-- **Slow first run**: Normal — large images (`ollama/ollama`) and model download.
-- Optional manual Compose (fixed ports): `./script/setup-e2e.sh` — only for debugging outside Testcontainers.
+- **`docker info`** / **`docker context`** — daemon must match what you expect (Colima: `colima start`, `docker context use colima`).
+- **Slow first run** — image pulls and MinIO/compat startup are normal.

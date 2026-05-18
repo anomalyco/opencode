@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { execSync, spawn, spawnSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
-import { resolve } from "node:path"
+import { basename, resolve } from "node:path"
 
 const root = import.meta.dir
 const state = resolve(root, ".local-dev")
@@ -63,14 +63,58 @@ function clear(port: number, file?: string) {
   } catch {}
 }
 
+const infraComposeFile = "docker/infra-deps-local-debugging.yml"
+
+let memoInfraComposeArgv: string[] | undefined
+
+function composeProbeOk(cmd: string, args: string[]) {
+  return spawnSync(cmd, args, { cwd: root, stdio: "ignore" }).status === 0
+}
+
+/** `docker compose` / `podman compose` / `docker-compose` — whatever speaks to your runtime (OrbStack, Colima, Podman, …). */
+function infraComposeArgv(): string[] {
+  if (memoInfraComposeArgv) return memoInfraComposeArgv
+  const f = infraComposeFile
+  const tail = ["-f", f, "up", "-d"]
+  const bin = process.env.VERITLY_DEV_COMPOSE_BIN?.trim()
+  let out: string[]
+  if (bin) {
+    const base = basename(bin)
+    if (base === "docker-compose" || base.startsWith("docker-compose")) out = [bin, ...tail]
+    else out = [bin, "compose", ...tail]
+  } else if (composeProbeOk("docker", ["compose", "version"])) out = ["docker", "compose", ...tail]
+  else if (composeProbeOk("podman", ["compose", "version"])) out = ["podman", "compose", ...tail]
+  else if (composeProbeOk("docker-compose", ["version"])) out = ["docker-compose", ...tail]
+  else {
+    console.error(
+      "No Compose CLI found. Install a Docker-compatible engine with Compose v2 (`docker compose`), Podman (`podman compose`), or standalone `docker-compose`.",
+    )
+    console.error("Override: VERITLY_DEV_COMPOSE_BIN=docker | podman | /path/to/docker-compose")
+    process.exit(1)
+  }
+  memoInfraComposeArgv = out
+  return out
+}
+
+function infraComposeLabel() {
+  const a = infraComposeArgv()
+  return a[1] === "compose" ? `${a[0]} compose` : a[0]
+}
+
 function ensureInfra() {
-  console.log("Starting infrastructure (Postgres + MinIO)...")
-  const run = spawnSync("docker", ["compose", "-f", "docker/infra-deps-local-debugging.yml", "up", "-d"], {
+  const argv = infraComposeArgv()
+  const cmd = argv[0]
+  if (!cmd) {
+    console.error("internal: empty compose argv")
+    process.exit(1)
+  }
+  console.log(`Starting infrastructure (Postgres + MinIO) via ${cmd}…`)
+  const run = spawnSync(cmd, argv.slice(1), {
     cwd: root,
     stdio: "inherit",
   })
   if (run.status !== 0) {
-    console.error("Failed to start infrastructure. Is Docker running?")
+    console.error("Failed to start infrastructure. Is the container engine running and reachable?")
     process.exit(1)
   }
   console.log("Infrastructure started successfully")
@@ -175,7 +219,7 @@ const svc = {
     const host = compatListenHost()
     clear(port, pid)
     console.log(
-      `Starting univer-compat on http://${host}:${port} (needs UNIVER_COMPAT_S3_*; local MinIO = docker/infra-deps-local-debugging.yml; prod = S3 e.g. DigitalOcean Spaces)`,
+      `Starting univer-compat on http://${host}:${port} (needs UNIVER_COMPAT_S3_*; local MinIO = ${infraComposeFile}; prod = S3 e.g. DigitalOcean Spaces)`,
     )
     await boot(resolve(root, "packages/univer-compat/script/serve.ts"), [], {
       PORT: String(port),
@@ -195,7 +239,7 @@ if (name === "all") {
   const bun = process.execPath
   const order = ["backend", "relay", "compat", "frontend"] as const
   console.log(
-    `[dev:all] Starting backend, relay, univer-compat (http://${compatListenHost()}:${compatListenPort()}), frontend — Postgres + MinIO: docker/infra-deps-local-debugging.yml.`,
+    `[dev:all] Starting backend, relay, univer-compat (http://${compatListenHost()}:${compatListenPort()}), frontend — Postgres + MinIO: ${infraComposeFile} (${infraComposeLabel()}).`,
   )
   const childRest = rest.filter((a) => a !== "all")
   const children: ReturnType<typeof spawn>[] = []

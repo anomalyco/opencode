@@ -4,7 +4,7 @@ const localHosts = ["127.0.0.1", "localhost", "host.docker.internal"]
 
 const esc = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
-/** Vitest on the host calls the mapped OpenCode port on loopback while Selenium Chrome uses `PLAYWRIGHT_SERVER_HOST` (often `host.docker.internal`). */
+/** Vitest on the host calls the mapped OpenCode port on loopback; `OPENCODE_E2E_API_HOST` wins when set. */
 export function serverHost() {
   const api = process.env.OPENCODE_E2E_API_HOST?.trim()
   if (api) return api
@@ -23,7 +23,7 @@ export function serverUrl() {
   return `http://${serverHost()}:${serverPort()}`
 }
 
-/** Host segment for UI labels (uses `PLAYWRIGHT_SERVER_HOST` when set; may differ from API `serverHost()` in Docker-Selenium E2E). */
+/** Host segment for UI labels (`PLAYWRIGHT_SERVER_HOST` when set). */
 export function serverUiHost() {
   const v = process.env.PLAYWRIGHT_SERVER_HOST?.trim()
   if (v) return v

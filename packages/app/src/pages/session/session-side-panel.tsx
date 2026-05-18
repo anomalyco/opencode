@@ -238,7 +238,6 @@ export function SessionSidePanel(props: {
       setDragCounter(count)
       if (count === 1 && e.dataTransfer?.types.includes("Files")) {
         setIsDraggingOverFileTree(true)
-        console.log("[FILE TREE] drag started, overlay shown")
       }
     }
 
@@ -257,7 +256,6 @@ export function SessionSidePanel(props: {
 
       if (count <= 0) {
         setIsDraggingOverFileTree(false)
-        console.log("[FILE TREE] drag ended, overlay hidden")
       }
     }
 
@@ -278,7 +276,6 @@ export function SessionSidePanel(props: {
       const dt = e.dataTransfer
       if (!dt || dt.files.length === 0) return
 
-      console.log("[FILE TREE] uploading", dt.files.length, "files")
       for (let i = 0; i < dt.files.length; i++) {
         const f = dt.files.item(i)
         if (!f) continue

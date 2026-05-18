@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Legacy helper: run Postgres + Ollama on fixed ports via Compose (optional manual debugging).
-# Normal E2E (`bun run --cwd packages/app test:e2e:local`) uses Testcontainers — you do not need this script.
+# Normal E2E (`bun run --cwd packages/app e2e`) uses Testcontainers — you do not need this script.
 
 set -e
 

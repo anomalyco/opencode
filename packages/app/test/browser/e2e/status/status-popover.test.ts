@@ -1,80 +1,98 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
+import { openStatusPopover } from "../../../../e2e/actions"
 
-import { By } from "selenium-webdriver"
-import type { WebElement } from "selenium-webdriver"
-import { waitAbsent } from "../../support/wd-wait"
-import { wdOpenStatusPopover, wdPressEscape, wdStatusPopoverBy } from "../../support/wd-actions"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
-
-function tab(pop: WebElement, needle: string) {
-  return pop.findElement(
-    By.xpath(
-      `.//*[@role="tab"][contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "${needle}")]`,
-    ),
-  )
-}
-
-describe("status popover (webdriver migration)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("status popover", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("opens and shows tabs", async () => {
     await app.gotoSession()
-    const pop = await wdOpenStatusPopover(app.driver)
-    for (const needle of ["server", "mcp", "lsp", "plugin"] as const) {
-      expect(await (await tab(pop, needle)).isDisplayed()).toBe(true)
-    }
-    await wdPressEscape(app.driver)
-    await waitAbsent(app.driver, wdStatusPopoverBy)
+    const page = app.page
+    const { popoverBody } = await openStatusPopover(page)
+
+    await popoverBody.getByRole("tab", { name: /servers/i }).waitFor({ state: "visible" })
+    await popoverBody.getByRole("tab", { name: /mcp/i }).waitFor({ state: "visible" })
+    await popoverBody.getByRole("tab", { name: /lsp/i }).waitFor({ state: "visible" })
+    await popoverBody.getByRole("tab", { name: /plugins/i }).waitFor({ state: "visible" })
+
+    await page.keyboard.press("Escape")
+    expect(await popoverBody.count()).toBe(0)
   })
 
   test("servers tab shows current server", async () => {
     await app.gotoSession()
-    const pop = await wdOpenStatusPopover(app.driver)
-    const servers = await tab(pop, "server")
-    expect(await servers.getAttribute("aria-selected")).toBe("true")
-    const panel = (await pop.findElements(By.css('[role="tabpanel"]')))[0]
-    if (!panel) throw new Error("tabpanel missing")
-    const btn = await panel.findElement(By.css("button"))
-    expect(await btn.isDisplayed()).toBe(true)
+    const page = app.page
+    const { popoverBody } = await openStatusPopover(page)
+
+    const serversTab = popoverBody.getByRole("tab", { name: /servers/i })
+    expect(await serversTab.getAttribute("aria-selected")).toBe("true")
+
+    const serverList = popoverBody.locator('[role="tabpanel"]').first()
+    await serverList.locator("button").first().waitFor({ state: "visible" })
   })
 
   test("can switch to mcp tab", async () => {
     await app.gotoSession()
-    const pop = await wdOpenStatusPopover(app.driver)
-    const mcp = await tab(pop, "mcp")
-    await mcp.click()
-    expect(await mcp.getAttribute("aria-selected")).toBe("true")
+    const page = app.page
+    const { popoverBody } = await openStatusPopover(page)
+
+    const mcpTab = popoverBody.getByRole("tab", { name: /mcp/i })
+    await mcpTab.click()
+
+    expect(await mcpTab.getAttribute("aria-selected")).toBe("true")
+
+    const mcpContent = popoverBody.locator('[role="tabpanel"]:visible').first()
+    await mcpContent.waitFor({ state: "visible" })
   })
 
   test("can switch to lsp tab", async () => {
     await app.gotoSession()
-    const pop = await wdOpenStatusPopover(app.driver)
-    const lsp = await tab(pop, "lsp")
-    await lsp.click()
-    expect(await lsp.getAttribute("aria-selected")).toBe("true")
+    const page = app.page
+    const { popoverBody } = await openStatusPopover(page)
+
+    const lspTab = popoverBody.getByRole("tab", { name: /lsp/i })
+    await lspTab.click()
+
+    expect(await lspTab.getAttribute("aria-selected")).toBe("true")
+
+    const lspContent = popoverBody.locator('[role="tabpanel"]:visible').first()
+    await lspContent.waitFor({ state: "visible" })
   })
 
   test("can switch to plugins tab", async () => {
     await app.gotoSession()
-    const pop = await wdOpenStatusPopover(app.driver)
-    const plugins = await tab(pop, "plugin")
-    await plugins.click()
-    expect(await plugins.getAttribute("aria-selected")).toBe("true")
+    const page = app.page
+    const { popoverBody } = await openStatusPopover(page)
+
+    const pluginsTab = popoverBody.getByRole("tab", { name: /plugins/i })
+    await pluginsTab.click()
+
+    expect(await pluginsTab.getAttribute("aria-selected")).toBe("true")
+
+    const pluginsContent = popoverBody.locator('[role="tabpanel"]:visible').first()
+    await pluginsContent.waitFor({ state: "visible" })
   })
 
   test("closes on escape", async () => {
     await app.gotoSession()
-    await wdOpenStatusPopover(app.driver)
-    await wdPressEscape(app.driver)
-    await waitAbsent(app.driver, wdStatusPopoverBy)
+    const page = app.page
+    const { popoverBody } = await openStatusPopover(page)
+    await popoverBody.waitFor({ state: "visible" })
+
+    await page.keyboard.press("Escape")
+    expect(await popoverBody.count()).toBe(0)
   })
 
   test("closes when clicking outside", async () => {
     await app.gotoSession()
-    await wdOpenStatusPopover(app.driver)
-    await app.driver.findElement(By.css("main")).click()
-    await waitAbsent(app.driver, wdStatusPopoverBy)
+    const page = app.page
+    const { popoverBody } = await openStatusPopover(page)
+    await popoverBody.waitFor({ state: "visible" })
+
+    await page.getByRole("main").click({ position: { x: 5, y: 5 } })
+
+    expect(await popoverBody.count()).toBe(0)
   })
 })

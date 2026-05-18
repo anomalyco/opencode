@@ -1,323 +1,331 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
-
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
-import { By, Key } from "selenium-webdriver"
-import type { WebDriver, WebElement } from "selenium-webdriver"
-import { withSession } from "../../../../e2e/actions"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
+import { closeDialog, openSettings, withSession } from "../../../../e2e/actions"
 import { keybindButtonSelector } from "../../../../e2e/selectors"
-import { createSdk, serverUrl } from "../../../../e2e/utils"
-import { wdCloseDialog, wdOpenSettings } from "../../support/wd-actions"
-import { waitVisible } from "../../support/wd-wait"
-import { openProjectSession, useAppWebDriver } from "../../support/use-app-webdriver"
+import { modKey } from "../../../../e2e/utils"
 
-function mod() {
-  return process.platform === "darwin" ? Key.META : Key.CONTROL
-}
-
-async function delay() {
-  await new Promise((r) => setTimeout(r, 100))
-}
-
-async function chordModShift(driver: WebDriver, letter: string) {
-  const m = mod()
-  await driver.actions().keyDown(m).keyDown(Key.SHIFT).sendKeys(letter).keyUp(Key.SHIFT).keyUp(m).perform()
-}
-
-async function chordModB(driver: WebDriver) {
-  const m = mod()
-  await driver.actions().keyDown(m).sendKeys("b").keyUp(m).perform()
-}
-
-async function chordModSlash(driver: WebDriver) {
-  const m = mod()
-  await driver.actions().keyDown(m).sendKeys("/").keyUp(m).perform()
-}
-
-async function chordModShiftF(driver: WebDriver) {
-  await chordModShift(driver, "f")
-}
-
-async function chordModShiftK(driver: WebDriver) {
-  await chordModShift(driver, "k")
-}
-
-async function chordModShiftN(driver: WebDriver) {
-  await chordModShift(driver, "n")
-}
-
-async function chordModShiftP(driver: WebDriver) {
-  await chordModShift(driver, "p")
-}
-
-async function firstKeybind(dialog: WebElement, id: string) {
-  const xs = await dialog.findElements(By.css(keybindButtonSelector(id)))
-  const el = xs[0]
-  if (!el) throw new Error(`missing keybind ${id}`)
-  return el
-}
-
-async function readSettingsV3(driver: WebDriver) {
-  return driver.executeScript(() => {
-    const raw = localStorage.getItem("settings.v3")
-    if (!raw) return null
-    return JSON.parse(raw) as { keybinds?: Record<string, string> }
-  }) as Promise<{ keybinds?: Record<string, string> } | null>
-}
-
-async function shortcutsTab(dialog: WebElement) {
-  await dialog.findElement(By.xpath(`.//button[@role="tab" and contains(., "Shortcuts")]`)).click()
-}
-
-describe("settings keybinds (webdriver migration)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("settings keybinds", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("changing sidebar toggle keybind works", async () => {
+    const page = app.page
     await app.gotoSession()
-    const dialog = await wdOpenSettings(app.driver)
-    await shortcutsTab(dialog)
 
-    const keybindButton = await firstKeybind(dialog, "sidebar.toggle")
-    expect(await keybindButton.getText()).toContain("B")
+  const dialog = await openSettings(page)
+  await dialog.getByRole("tab", { name: "Shortcuts" }).click()
 
-    await keybindButton.click()
-    await app.driver.wait(async () => /press/i.test(await keybindButton.getText()), 5000)
+  const keybindButton = dialog.locator(keybindButtonSelector("sidebar.toggle")).first()
+  await keybindButton.waitFor({ state: "visible" })
 
-    await chordModShift(app.driver, "h")
-    await delay()
-    expect(await keybindButton.getText()).toContain("H")
+  const initialKeybind = await keybindButton.textContent()
+  expect(initialKeybind).toContain("B")
 
-    const stored = await readSettingsV3(app.driver)
-    expect(stored?.keybinds?.["sidebar.toggle"]).toBe("mod+shift+h")
+  await keybindButton.click()
+  await expect.poll(async () => (await keybindButton.textContent()) ?? "").toMatch(/press/i)
 
-    await wdCloseDialog(app.driver)
+  await page.keyboard.press(`${modKey}+Shift+KeyH`)
+  await new Promise((r) => setTimeout(r, 100))
 
-    const toggle = await waitVisible(
-      app.driver,
-      By.xpath(
-        `//button[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "toggle sidebar")]`,
-      ),
-    )
-    const initiallyClosed = (await toggle.getAttribute("aria-expanded")) !== "true"
+  const newKeybind = await keybindButton.textContent()
+  expect(newKeybind).toContain("H")
 
-    await chordModShift(app.driver, "h")
-    await app.driver.wait(async () => (await toggle.getAttribute("aria-expanded")) === (initiallyClosed ? "true" : "false"), 5000)
-
-    const afterToggleClosed = (await toggle.getAttribute("aria-expanded")) !== "true"
-    expect(afterToggleClosed).toBe(!initiallyClosed)
-
-    await chordModShift(app.driver, "h")
-    await app.driver.wait(async () => (await toggle.getAttribute("aria-expanded")) === (initiallyClosed ? "false" : "true"), 5000)
-
-    const finalClosed = (await toggle.getAttribute("aria-expanded")) !== "true"
-    expect(finalClosed).toBe(initiallyClosed)
+  const stored = await page.evaluate(() => {
+    const raw = localStorage.getItem("settings.v3")
+    return raw ? JSON.parse(raw) : null
   })
+  expect(stored?.keybinds?.["sidebar.toggle"]).toBe("mod+shift+h")
+
+  await closeDialog(page, dialog)
+
+  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
+  const initiallyClosed = (await button.getAttribute("aria-expanded")) !== "true"
+
+  await page.keyboard.press(`${modKey}+Shift+H`)
+  await expect.poll(async () => await button.getAttribute("aria-expanded")).toBe(initiallyClosed ? "true" : "false")
+
+  const afterToggleClosed = (await button.getAttribute("aria-expanded")) !== "true"
+  expect(afterToggleClosed).toBe(!initiallyClosed)
+
+  await page.keyboard.press(`${modKey}+Shift+H`)
+  await expect.poll(async () => await button.getAttribute("aria-expanded")).toBe(initiallyClosed ? "false" : "true")
+
+  const finalClosed = (await button.getAttribute("aria-expanded")) !== "true"
+  expect(finalClosed).toBe(initiallyClosed)
+})
 
   test("sidebar toggle keybind guards against shortcut conflicts", async () => {
+    const page = app.page
     await app.gotoSession()
-    const dialog = await wdOpenSettings(app.driver)
-    await shortcutsTab(dialog)
 
-    const keybindButton = await firstKeybind(dialog, "sidebar.toggle")
-    expect(await keybindButton.getText()).toContain("B")
+  const dialog = await openSettings(page)
+  await dialog.getByRole("tab", { name: "Shortcuts" }).click()
 
-    await keybindButton.click()
-    await app.driver.wait(async () => /press/i.test(await keybindButton.getText()), 5000)
+  const keybindButton = dialog.locator(keybindButtonSelector("sidebar.toggle"))
+  await keybindButton.waitFor({ state: "visible" })
 
-    await chordModShiftP(app.driver)
-    await delay()
+  const initialKeybind = await keybindButton.textContent()
+  expect(initialKeybind).toContain("B")
 
-    const toast = await waitVisible(app.driver, By.css('[data-component="toast"]'), 10_000)
-    expect(await toast.getText()).toMatch(/already/i)
+  await keybindButton.click()
+  await expect.poll(async () => (await keybindButton.textContent()) ?? "").toMatch(/press/i)
 
-    await keybindButton.click()
-    expect(await keybindButton.getText()).toContain("B")
+  await page.keyboard.press(`${modKey}+Shift+KeyP`)
+  await new Promise((r) => setTimeout(r, 100))
 
-    const stored = await readSettingsV3(app.driver)
-    expect(stored?.keybinds?.["sidebar.toggle"]).toBeUndefined()
+  const toast = page.locator('[data-component="toast"]').last()
+  await toast.waitFor({ state: "visible" })
+  await expect.poll(async () => (await toast.textContent()) ?? "").toMatch(/already/i)
 
-    await wdCloseDialog(app.driver)
+  await keybindButton.click()
+  await expect.poll(async () => (await keybindButton.textContent()) ?? "").toMatch("B")
+
+  const stored = await page.evaluate(() => {
+    const raw = localStorage.getItem("settings.v3")
+    return raw ? JSON.parse(raw) : null
   })
+  expect(stored?.keybinds?.["sidebar.toggle"]).toBeUndefined()
+
+  await closeDialog(page, dialog)
+})
 
   test("resetting all keybinds to defaults works", async () => {
-    await app.driver.get(app.origin)
-    await app.driver.executeScript(
-      `localStorage.setItem("settings.v3", arguments[0])`,
-      JSON.stringify({ keybinds: { "sidebar.toggle": "mod+shift+x" } }),
-    )
+    const page = app.page
+  await page.addInitScript(() => {
+    localStorage.setItem("settings.v3", JSON.stringify({ keybinds: { "sidebar.toggle": "mod+shift+x" } }))
+  })
+
     await app.gotoSession()
 
-    const dialog = await wdOpenSettings(app.driver)
-    await shortcutsTab(dialog)
+  const dialog = await openSettings(page)
+  await dialog.getByRole("tab", { name: "Shortcuts" }).click()
 
-    const keybindButton = await firstKeybind(dialog, "sidebar.toggle")
-    expect(await keybindButton.getText()).toContain("X")
+  const keybindButton = dialog.locator(keybindButtonSelector("sidebar.toggle"))
+  await keybindButton.waitFor({ state: "visible" })
 
-    const reset = await dialog.findElement(By.xpath(`.//button[contains(., "Reset to defaults")]`))
-    expect(await reset.isEnabled()).toBe(true)
-    await reset.click()
-    await delay()
+  const customKeybind = await keybindButton.textContent()
+  expect(customKeybind).toContain("X")
 
-    expect(await keybindButton.getText()).toContain("B")
+  const resetButton = dialog.getByRole("button", { name: "Reset to defaults" })
+  await resetButton.waitFor({ state: "visible" })
+  expect(await resetButton.isEnabled()).toBe(true)
+  await resetButton.click()
+  await new Promise((r) => setTimeout(r, 100))
 
-    const stored = await readSettingsV3(app.driver)
-    expect(stored?.keybinds?.["sidebar.toggle"]).toBeUndefined()
+  const restoredKeybind = await keybindButton.textContent()
+  expect(restoredKeybind).toContain("B")
 
-    await wdCloseDialog(app.driver)
+  const stored = await page.evaluate(() => {
+    const raw = localStorage.getItem("settings.v3")
+    return raw ? JSON.parse(raw) : null
   })
+  expect(stored?.keybinds?.["sidebar.toggle"]).toBeUndefined()
+
+  await closeDialog(page, dialog)
+})
 
   test("clearing a keybind works", async () => {
+    const page = app.page
     await app.gotoSession()
-    const dialog = await wdOpenSettings(app.driver)
-    await shortcutsTab(dialog)
 
-    const keybindButton = await firstKeybind(dialog, "sidebar.toggle")
-    expect(await keybindButton.getText()).toContain("B")
+  const dialog = await openSettings(page)
+  await dialog.getByRole("tab", { name: "Shortcuts" }).click()
 
-    await keybindButton.click()
-    await app.driver.wait(async () => /press/i.test(await keybindButton.getText()), 5000)
+  const keybindButton = dialog.locator(keybindButtonSelector("sidebar.toggle"))
+  await keybindButton.waitFor({ state: "visible" })
 
-    await app.driver.actions().sendKeys(Key.DELETE).perform()
-    await delay()
+  const initialKeybind = await keybindButton.textContent()
+  expect(initialKeybind).toContain("B")
 
-    const cleared = await keybindButton.getText()
-    expect(cleared).toMatch(/unassigned|press/i)
+  await keybindButton.click()
+  await expect.poll(async () => (await keybindButton.textContent()) ?? "").toMatch(/press/i)
 
-    const stored = await readSettingsV3(app.driver)
-    expect(stored?.keybinds?.["sidebar.toggle"]).toBe("none")
+  await page.keyboard.press("Delete")
+  await new Promise((r) => setTimeout(r, 100))
 
-    await wdCloseDialog(app.driver)
+  const clearedKeybind = await keybindButton.textContent()
+  expect(clearedKeybind).toMatch(/unassigned|press/i)
 
-    await chordModB(app.driver)
-    await delay()
-    expect(await app.driver.getCurrentUrl()).toContain("/session")
+  const stored = await page.evaluate(() => {
+    const raw = localStorage.getItem("settings.v3")
+    return raw ? JSON.parse(raw) : null
   })
+  expect(stored?.keybinds?.["sidebar.toggle"]).toBe("none")
+
+  await closeDialog(page, dialog)
+
+  await page.keyboard.press(`${modKey}+B`)
+  await new Promise((r) => setTimeout(r, 100))
+
+  const stillOnSession = page.url().includes("/session")
+  expect(stillOnSession).toBe(true)
+})
 
   test("changing settings open keybind works", async () => {
+    const page = app.page
     await app.gotoSession()
-    const dialog = await wdOpenSettings(app.driver)
-    await shortcutsTab(dialog)
 
-    const keybindButton = await firstKeybind(dialog, "settings.open")
-    expect(await keybindButton.getText()).toContain(",")
+  const dialog = await openSettings(page)
+  await dialog.getByRole("tab", { name: "Shortcuts" }).click()
 
-    await keybindButton.click()
-    await app.driver.wait(async () => /press/i.test(await keybindButton.getText()), 5000)
+  const keybindButton = dialog.locator(keybindButtonSelector("settings.open"))
+  await keybindButton.waitFor({ state: "visible" })
 
-    await chordModSlash(app.driver)
-    await delay()
+  const initialKeybind = await keybindButton.textContent()
+  expect(initialKeybind).toContain(",")
 
-    expect(await keybindButton.getText()).toContain("/")
+  await keybindButton.click()
+  await expect.poll(async () => (await keybindButton.textContent()) ?? "").toMatch(/press/i)
 
-    const stored = await readSettingsV3(app.driver)
-    expect(stored?.keybinds?.["settings.open"]).toBe("mod+/")
+  await page.keyboard.press(`${modKey}+Slash`)
+  await new Promise((r) => setTimeout(r, 100))
 
-    await wdCloseDialog(app.driver)
-    expect((await app.driver.findElements(By.css('[role="dialog"]'))).length).toBe(0)
+  const newKeybind = await keybindButton.textContent()
+  expect(newKeybind).toContain("/")
 
-    await chordModSlash(app.driver)
-    await delay()
-    await waitVisible(app.driver, By.css('[role="dialog"]'))
-
-    await wdCloseDialog(app.driver)
+  const stored = await page.evaluate(() => {
+    const raw = localStorage.getItem("settings.v3")
+    return raw ? JSON.parse(raw) : null
   })
+  expect(stored?.keybinds?.["settings.open"]).toBe("mod+/")
+
+  await closeDialog(page, dialog)
+
+  const settingsDialog = page.getByRole("dialog")
+  expect(await settingsDialog.count()).toBe(0)
+
+  await page.keyboard.press(`${modKey}+Slash`)
+  await new Promise((r) => setTimeout(r, 100))
+
+  await settingsDialog.waitFor({ state: "visible" })
+
+  await closeDialog(page, settingsDialog)
+})
 
   test("changing new session keybind works", async () => {
-    const listSdk = createOpencodeClient({ baseUrl: serverUrl(), throwOnError: true })
-    const created = await listSdk.project.create({ name: `e2e keybind ${Date.now()}` })
-    if (!created.data?.project?.id) throw new Error("project create failed")
-    const pid = created.data.project.id
-    const sdk = createSdk({ id: pid })
+    const page = app.page
+  await withSession(app.sdk, "test session for keybind", async (session) => {
+    await app.gotoSession(session.id)
 
-    await withSession(sdk, "test session for keybind", async (session) => {
-      await openProjectSession(app.driver, app.origin, pid, session.id)
-      expect(await app.driver.getCurrentUrl()).toContain(`/session/${session.id}`)
+    const initialUrl = page.url()
+    expect(initialUrl).toContain(`/session/${session.id}`)
 
-      const dialog = await wdOpenSettings(app.driver)
-      await shortcutsTab(dialog)
+    const dialog = await openSettings(page)
+    await dialog.getByRole("tab", { name: "Shortcuts" }).click()
 
-      const keybindButton = await firstKeybind(dialog, "session.new")
-      await keybindButton.click()
-      await app.driver.wait(async () => /press/i.test(await keybindButton.getText()), 5000)
+    const keybindButton = dialog.locator(keybindButtonSelector("session.new"))
+    await keybindButton.waitFor({ state: "visible" })
 
-      await chordModShiftN(app.driver)
-      await delay()
-      expect(await keybindButton.getText()).toContain("N")
+    await keybindButton.click()
+    await expect.poll(async () => (await keybindButton.textContent()) ?? "").toMatch(/press/i)
 
-      const stored = await readSettingsV3(app.driver)
-      expect(stored?.keybinds?.["session.new"]).toBe("mod+shift+n")
+    await page.keyboard.press(`${modKey}+Shift+KeyN`)
+    await new Promise((r) => setTimeout(r, 100))
 
-      await wdCloseDialog(app.driver)
+    const newKeybind = await keybindButton.textContent()
+    expect(newKeybind).toContain("N")
 
-      await chordModShiftN(app.driver)
-      await new Promise((r) => setTimeout(r, 200))
-
-      const u = await app.driver.getCurrentUrl()
-      expect(u).toMatch(/\/session\/?$/)
-      expect(u).not.toContain(session.id)
+    const stored = await page.evaluate(() => {
+      const raw = localStorage.getItem("settings.v3")
+      return raw ? JSON.parse(raw) : null
     })
+    expect(stored?.keybinds?.["session.new"]).toBe("mod+shift+n")
+
+    await closeDialog(page, dialog)
+
+    await page.keyboard.press(`${modKey}+Shift+N`)
+    await new Promise((r) => setTimeout(r, 200))
+
+    const newUrl = page.url()
+    expect(newUrl).toMatch(/\/session\/?$/)
+    expect(newUrl).not.toContain(session.id)
   })
+})
 
   test("changing file open keybind works", async () => {
+    const page = app.page
     await app.gotoSession()
-    const dialog = await wdOpenSettings(app.driver)
-    await shortcutsTab(dialog)
 
-    const keybindButton = await firstKeybind(dialog, "file.open")
-    expect(await keybindButton.getText()).toContain("P")
+  const dialog = await openSettings(page)
+  await dialog.getByRole("tab", { name: "Shortcuts" }).click()
 
-    await keybindButton.click()
-    await app.driver.wait(async () => /press/i.test(await keybindButton.getText()), 5000)
+  const keybindButton = dialog.locator(keybindButtonSelector("file.open"))
+  await keybindButton.waitFor({ state: "visible" })
 
-    await chordModShiftF(app.driver)
-    await delay()
-    expect(await keybindButton.getText()).toContain("F")
+  const initialKeybind = await keybindButton.textContent()
+  expect(initialKeybind).toContain("P")
 
-    const stored = await readSettingsV3(app.driver)
-    expect(stored?.keybinds?.["file.open"]).toBe("mod+shift+f")
+  await keybindButton.click()
+  await expect.poll(async () => (await keybindButton.textContent()) ?? "").toMatch(/press/i)
 
-    await wdCloseDialog(app.driver)
+  await page.keyboard.press(`${modKey}+Shift+KeyF`)
+  await new Promise((r) => setTimeout(r, 100))
 
-    await chordModShiftF(app.driver)
-    await delay()
-    await waitVisible(
-      app.driver,
-      By.xpath(
-        `//*[@role="dialog"][.//*[contains(translate(@placeholder, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "search file")]]`,
-      ),
-    )
+  const newKeybind = await keybindButton.textContent()
+  expect(newKeybind).toContain("F")
 
-    await app.driver.actions().sendKeys(Key.ESCAPE).perform()
-    await app.driver.wait(async () => (await app.driver.findElements(By.css('[role="dialog"]'))).length === 0, 10_000)
+  const stored = await page.evaluate(() => {
+    const raw = localStorage.getItem("settings.v3")
+    return raw ? JSON.parse(raw) : null
   })
+  expect(stored?.keybinds?.["file.open"]).toBe("mod+shift+f")
+
+  await closeDialog(page, dialog)
+
+  const filePickerDialog = page.getByRole("dialog").filter({ has: page.getByPlaceholder(/search files/i) })
+  expect(await filePickerDialog.count()).toBe(0)
+
+  await page.keyboard.press(`${modKey}+Shift+F`)
+  await new Promise((r) => setTimeout(r, 100))
+
+  await filePickerDialog.waitFor({ state: "visible" })
+
+  await page.keyboard.press("Escape")
+  expect(await filePickerDialog.count()).toBe(0)
+})
 
   test("changing command palette keybind works", async () => {
+    const page = app.page
     await app.gotoSession()
-    const dialog = await wdOpenSettings(app.driver)
-    await shortcutsTab(dialog)
 
-    const keybindButton = await firstKeybind(dialog, "command.palette")
-    expect(await keybindButton.getText()).toContain("P")
+  const dialog = await openSettings(page)
+  await dialog.getByRole("tab", { name: "Shortcuts" }).click()
 
-    await keybindButton.click()
-    await app.driver.wait(async () => /press/i.test(await keybindButton.getText()), 5000)
+  const keybindButton = dialog.locator(keybindButtonSelector("command.palette"))
+  await keybindButton.waitFor({ state: "visible" })
 
-    await chordModShiftK(app.driver)
-    await delay()
-    expect(await keybindButton.getText()).toContain("K")
+  const initialKeybind = await keybindButton.textContent()
+  expect(initialKeybind).toContain("P")
 
-    const stored = await readSettingsV3(app.driver)
-    expect(stored?.keybinds?.["command.palette"]).toBe("mod+shift+k")
+  await keybindButton.click()
+  await expect.poll(async () => (await keybindButton.textContent()) ?? "").toMatch(/press/i)
 
-    await wdCloseDialog(app.driver)
+  await page.keyboard.press(`${modKey}+Shift+KeyK`)
+  await new Promise((r) => setTimeout(r, 100))
 
-    await chordModShiftK(app.driver)
-    await delay()
-    await waitVisible(app.driver, By.css('[role="dialog"]'))
-    await waitVisible(app.driver, By.css('[role="dialog"] [role="textbox"], [role="dialog"] textarea'))
+  const newKeybind = await keybindButton.textContent()
+  expect(newKeybind).toContain("K")
 
-    await app.driver.actions().sendKeys(Key.ESCAPE).perform()
-    await app.driver.wait(async () => (await app.driver.findElements(By.css('[role="dialog"]'))).length === 0, 10_000)
+  const stored = await page.evaluate(() => {
+    const raw = localStorage.getItem("settings.v3")
+    return raw ? JSON.parse(raw) : null
   })
+  expect(stored?.keybinds?.["command.palette"]).toBe("mod+shift+k")
+
+  await closeDialog(page, dialog)
+
+  const palette = page.getByRole("dialog").filter({ has: page.getByRole("textbox").first() })
+  expect(await palette.count()).toBe(0)
+
+  await page.keyboard.press(`${modKey}+Shift+K`)
+  await new Promise((r) => setTimeout(r, 100))
+
+  await palette.waitFor({ state: "visible" })
+  await palette.getByRole("textbox").first().waitFor({ state: "visible" })
+
+  await page.keyboard.press("Escape")
+  expect(await palette.count()).toBe(0)
+})
+
 })

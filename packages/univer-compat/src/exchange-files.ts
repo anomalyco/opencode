@@ -48,12 +48,19 @@ export interface ExchangeFileBackend {
   listKeysWithPrefix(prefix: string): Promise<string[]>
 }
 
+function optionalEnv(name: string): string | undefined {
+  const v = process.env[name]?.trim()
+  if (!v) return undefined
+  return v
+}
+
 export function exchangeFilesFromEnv(): S3ExchangeFiles {
   const endpoint = requiredEnv("UNIVER_COMPAT_S3_ENDPOINT")
   const region = requiredEnv("UNIVER_COMPAT_S3_REGION")
   const access = requiredEnv("UNIVER_COMPAT_S3_ACCESS_KEY")
   const secret = requiredEnv("UNIVER_COMPAT_S3_SECRET_KEY")
   const bucket = requiredEnv("UNIVER_COMPAT_S3_BUCKET")
+  const presignEndpoint = optionalEnv("UNIVER_COMPAT_S3_PRESIGN_ENDPOINT")
   const bun = new S3Client({
     accessKeyId: access,
     secretAccessKey: secret,
@@ -61,27 +68,48 @@ export function exchangeFilesFromEnv(): S3ExchangeFiles {
     endpoint,
     region,
   })
-  const signer = new AwsJsS3Client({
+  const creds = { accessKeyId: access, secretAccessKey: secret }
+  /** Presigned browser PUT/GET must not add default CRC query params (browser `fetch` will not satisfy them; MinIO then has no object → import 404). */
+  const checksumRelaxed = { requestChecksumCalculation: "WHEN_REQUIRED" as const }
+  const signerOps = new AwsJsS3Client({
     region,
     endpoint,
-    credentials: { accessKeyId: access, secretAccessKey: secret },
+    credentials: creds,
     forcePathStyle: true,
+    ...checksumRelaxed,
   })
-  return new S3ExchangeFiles(bun, signer, bucket)
+  const signerPresign =
+    presignEndpoint && presignEndpoint !== endpoint
+      ? new AwsJsS3Client({
+          region,
+          endpoint: presignEndpoint,
+          credentials: creds,
+          forcePathStyle: true,
+          ...checksumRelaxed,
+        })
+      : undefined
+  return new S3ExchangeFiles(bun, signerOps, bucket, signerPresign)
 }
 
 export class S3ExchangeFiles implements ExchangeFileBackend {
+  private readonly presign: AwsJsS3Client
+
   constructor(
     private readonly bun: S3Client,
-    private readonly signer: AwsJsS3Client,
+    /** ListObjects and other calls from this process (reachable from univer-compat). */
+    private readonly signerOps: AwsJsS3Client,
     private readonly bucket: string,
-  ) {}
+    /** Presigned PUT/GET host must match what browsers use; SigV4 signs `Host`. Omit to use `signerOps` endpoint. */
+    signerPresign?: AwsJsS3Client,
+  ) {
+    this.presign = signerPresign ?? signerOps
+  }
 
   async ensureReady() {
     const stamp = () => new Date().toISOString()
     console.error(`[univer-compat] ${stamp()} S3 ensureReady: ListObjectsV2 bucket=${this.bucket} (30s abort)`)
     /** Bun `S3Client.list` has hung indefinitely against MinIO in Linux Testcontainers; AWS SDK matches presign path. */
-    await this.signer.send(
+    await this.signerOps.send(
       new ListObjectsV2Command({ Bucket: this.bucket, MaxKeys: 1 }),
       { abortSignal: AbortSignal.timeout(30_000) },
     )
@@ -111,13 +139,13 @@ export class S3ExchangeFiles implements ExchangeFileBackend {
       Key: id,
       ContentType: contentType,
     })
-    const url = await getSignedUrl(this.signer, cmd, { expiresIn: ttlSec })
+    const url = await getSignedUrl(this.presign, cmd, { expiresIn: ttlSec })
     return { url, headers: { "Content-Type": contentType } }
   }
 
   async presignedGet(id: string, ttlSec: number, _owner: string) {
     const cmd = new GetObjectCommand({ Bucket: this.bucket, Key: id })
-    const url = await getSignedUrl(this.signer, cmd, { expiresIn: ttlSec })
+    const url = await getSignedUrl(this.presign, cmd, { expiresIn: ttlSec })
     return { url }
   }
 
@@ -125,7 +153,7 @@ export class S3ExchangeFiles implements ExchangeFileBackend {
     const out: string[] = []
     let token: string | undefined
     do {
-      const r = await this.signer.send(
+      const r = await this.signerOps.send(
         new ListObjectsV2Command({
           Bucket: this.bucket,
           Prefix: prefix,

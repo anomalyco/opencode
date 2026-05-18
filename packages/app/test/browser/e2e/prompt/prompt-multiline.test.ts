@@ -1,29 +1,27 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
-
-import { By, Key } from "selenium-webdriver"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
 import { promptSelector } from "../../../../e2e/selectors"
-import { waitUrlMatches } from "../../support/wd-wait"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
 
-describe("prompt multiline (webdriver migration)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("prompt multiline", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("shift+enter inserts a newline without submitting", async () => {
     await app.gotoSession()
+    const page = app.page
 
-    await waitUrlMatches(app.driver, /\/session\/?$/)
+    expect(page.url()).toMatch(/\/session\/?$/)
 
-    const prompt = await app.driver.findElement(By.css(promptSelector))
+    const prompt = page.locator(promptSelector)
     await prompt.click()
-    await prompt.sendKeys("line one")
-    await app.driver.actions().keyDown(Key.SHIFT).sendKeys(Key.ENTER).keyUp(Key.SHIFT).perform()
-    await prompt.sendKeys("line two")
+    await page.keyboard.type("line one")
+    await page.keyboard.press("Shift+Enter")
+    await page.keyboard.type("line two")
 
-    await waitUrlMatches(app.driver, /\/session\/?$/)
-    const body = await prompt.getText()
-    expect(body).toContain("line one")
-    expect(body).toContain("line two")
+    expect(page.url()).toMatch(/\/session\/?$/)
+    const t = (await prompt.textContent()) ?? ""
+    expect(t).toContain("line one")
+    expect(t).toContain("line two")
   })
 })

@@ -7,12 +7,13 @@ const p = "veritly"
 const d = "veritly"
 
 /** File-scoped Postgres (Testcontainers): registers `beforeAll` / `afterAll` and sets `process.env.DATABASE_URL`. */
-export function useIsolatedDatabase() {
+export function useIsolatedDatabase(opts?: { reuse?: boolean }) {
+  const reuse = opts?.reuse === true
   let c: StartedTestContainer | undefined
   const cfg = { url: "" }
 
   beforeAll(async () => {
-    c = await new GenericContainer("postgres:16-alpine")
+    let g = new GenericContainer("postgres:16-alpine")
       .withEnvironment({
         POSTGRES_USER: u,
         POSTGRES_PASSWORD: p,
@@ -21,7 +22,8 @@ export function useIsolatedDatabase() {
       .withExposedPorts(5432)
       .withWaitStrategy(Wait.forLogMessage(/database system is ready to accept connections/))
       .withStartupTimeout(120_000)
-      .start()
+    if (reuse) g = g.withReuse()
+    c = await g.start()
 
     cfg.url = `postgresql://${u}:${p}@${c.getHost()}:${c.getMappedPort(5432)}/${d}`
 

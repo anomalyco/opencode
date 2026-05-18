@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Smoke: WorkOS password → sealed session cookie, then **HTTP** GET the app root with that cookie.
- * Catches obvious deploy/auth/HTML failures without a browser driver (Playwright removed from this package).
+ * Catches obvious deploy/auth/HTML failures without launching a browser (no Playwright in this script).
  *
  *   bun run smoke:browser
  *   SMOKE_BASE_URL=http://127.0.0.1:4445/ bun run smoke:browser

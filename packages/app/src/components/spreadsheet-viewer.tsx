@@ -189,9 +189,6 @@ export function SpreadsheetViewer(props: Props) {
     const wsUrl = `${wsBase}${join}role=browser`
     const ws = new WebSocket(wsUrl)
     relaySocket = ws
-    if (import.meta.env.DEV) {
-      console.info("[veritly] univer sdk relay connecting", wsUrl)
-    }
     const sdk = veritlySdk(cur)
 
     ws.onopen = () => {

@@ -1,75 +1,75 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
-
-import { By } from "selenium-webdriver"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
+import { clickMenuItem, closeDialog } from "../../../../e2e/actions"
 import { serverNamePattern, serverUrls } from "../../../../e2e/utils"
-import { dropdownMenuContentSelector } from "../../../../e2e/selectors"
-import {
-  wdClickMenuItem,
-  wdCloseDialog,
-  wdEnsureServerManagePopover,
-} from "../../support/wd-actions"
-import { waitVisible } from "../../support/wd-wait"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 
-describe("default server (webdriver migration)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("default server", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("can set a default server on web", async () => {
-    await app.driver.executeScript((k: string) => {
-      try {
-        localStorage.removeItem(k)
-      } catch {
-        return
-      }
-    }, DEFAULT_SERVER_URL_KEY)
+    await app.page.addInitScript(
+      (key: string) => {
+        try {
+          localStorage.removeItem(key)
+        } catch {
+          return
+        }
+      },
+      DEFAULT_SERVER_URL_KEY,
+    )
 
     await app.gotoSession()
 
-    const pop = await wdEnsureServerManagePopover(app.driver)
-    await pop.findElement(By.xpath(`.//button[contains(., "Manage servers")]`)).click()
+    const status = app.page.getByRole("button", { name: "Status" })
+    await status.waitFor({ state: "visible" })
+    const popover = app.page
+      .locator('[data-component="popover-content"]')
+      .filter({ hasText: "Manage servers" })
 
-    const trigger = await waitVisible(
-      app.driver,
-      By.css('[data-slot="dialog-body"] [data-component="icon-button"][data-icon="dot-grid"]'),
-      30_000,
-    )
-    const dialog = await trigger.findElement(By.xpath("./ancestor::*[@data-slot='dialog-content'][1]"))
-    expect(await dialog.getText()).toMatch(serverNamePattern())
-    await trigger.click()
-
-    const menu = await waitVisible(app.driver, By.css(dropdownMenuContentSelector))
-    await wdClickMenuItem(menu, /set as default/i)
-
-    await app.driver.wait(async () => {
-      const v = await app.driver.executeScript<string | null>(
-        (k: string) => localStorage.getItem(k),
-        DEFAULT_SERVER_URL_KEY,
-      )
-      if (!v) return false
-      return serverUrls().includes(v)
-    }, 20_000)
-
-    await waitVisible(
-      app.driver,
-      By.xpath(`//*[@data-slot="dialog-content"]//*[normalize-space(.)='Default']`),
-    )
-
-    await wdCloseDialog(app.driver)
-
-    const pop2 = await wdEnsureServerManagePopover(app.driver)
-    let rowText = ""
-    for (const b of await pop2.findElements(By.css("button"))) {
-      const t = await b.getText()
-      if (serverNamePattern().test(t)) {
-        rowText = t
-        break
-      }
+    const open = async () => {
+      if (await popover.isVisible()) return
+      await status.click()
+      await popover.waitFor({ state: "visible" })
     }
-    expect(rowText).toMatch(serverNamePattern())
-    expect(rowText).toContain("Default")
+
+    await open()
+    await popover.getByRole("button", { name: "Manage servers" }).click()
+
+    const dialog = app.page.getByRole("dialog")
+    await dialog.waitFor({ state: "visible" })
+
+    await dialog.getByText(serverNamePattern()).first().waitFor({ state: "visible" })
+
+    const trigger = dialog.locator('[data-slot="dropdown-menu-trigger"]').first()
+    await trigger.waitFor({ state: "visible" })
+    await trigger.click({ force: true })
+
+    const menu = app.page.locator('[data-component="dropdown-menu-content"]').first()
+    await menu.waitFor({ state: "visible" })
+    await clickMenuItem(menu, /set as default/i)
+
+    await expect
+      .poll(async () => {
+        const v = await app.page.evaluate(
+          (key: string) => localStorage.getItem(key),
+          DEFAULT_SERVER_URL_KEY,
+        )
+        return v ? serverUrls().includes(v) : false
+      }, { timeout: 20_000 })
+      .toBe(true)
+
+    await dialog.getByText("Default", { exact: true }).waitFor({ state: "visible" })
+
+    await closeDialog(app.page, dialog)
+
+    await open()
+
+    const serverRow = popover.locator("button").filter({ hasText: serverNamePattern() }).first()
+    await serverRow.waitFor({ state: "visible" })
+    await serverRow.getByText("Default", { exact: true }).waitFor({ state: "visible" })
   })
 })

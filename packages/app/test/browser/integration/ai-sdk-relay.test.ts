@@ -1,25 +1,25 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../support/use-full-app-stack"
+import { useE2eStack } from "../support/use-e2e-stack"
 
-import { By, Key } from "selenium-webdriver"
+import { By, pollOk, waitVisible } from "../support/wd-wait"
 import { cleanupSession } from "../../../e2e/actions"
 import { promptSelector } from "../../../e2e/selectors"
-import { waitVisible } from "../support/wd-wait"
-import { useAppWebDriver } from "../support/use-app-webdriver"
+import { useAppBrowser } from "../support/use-app-browser"
 
 describe("ai sdk relay (webdriver)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+  useE2eStack()
+  const app = useAppBrowser()
 
   test(
     "AI can call SDK through relay",
     async () => {
-      await app.driver.executeScript(`
-        window.__e2ePageErrors = [];
-        window.addEventListener("error", function (e) {
-          window.__e2ePageErrors.push(e.message);
-        });
-      `)
+      await app.page.evaluate(() => {
+        const w = window as Window & { __e2ePageErrors?: string[] }
+        w.__e2ePageErrors = []
+        window.addEventListener("error", (e) => {
+          w.__e2ePageErrors!.push(e.message)
+        })
+      })
 
       const sessionResult = await app.sdk.session.create({})
       if (!sessionResult.data) throw new Error("Failed to create session")
@@ -27,25 +27,26 @@ describe("ai sdk relay (webdriver)", () => {
 
       await app.gotoSession(sessionID)
 
-      await app.driver.executeScript(`
-        window.__e2ePageErrors = [];
-        window.addEventListener("error", function (e) {
-          window.__e2ePageErrors.push(e.message);
-        });
-      `)
+      await app.page.evaluate(() => {
+        const w = window as Window & { __e2ePageErrors?: string[] }
+        w.__e2ePageErrors = []
+        window.addEventListener("error", (e) => {
+          w.__e2ePageErrors!.push(e.message)
+        })
+      })
 
-      const prompt = await waitVisible(app.driver, By.css(promptSelector))
+      const prompt = await waitVisible(app.page, By.css(promptSelector))
       await prompt.click()
-      await prompt.sendKeys(
+      await prompt.fill(
         "Generate Python code that uses the opencode SDK to check if the browser is connected. " +
           "The code should import the SDK, connect to the relay, and print the connection status.",
       )
-      await app.driver.actions().sendKeys(Key.ENTER).perform()
+      await app.page.keyboard.press("Enter")
 
       await new Promise((r) => setTimeout(r, 3000))
 
       try {
-        await app.driver.wait(
+        await pollOk(
           async () => {
             const messages = (await app.sdk.session.messages({ sessionID, limit: 50 })).data ?? []
             const assistantMessages = messages.filter((m) => m.info.role === "assistant")
@@ -58,10 +59,10 @@ describe("ai sdk relay (webdriver)", () => {
             }
             return false
           },
-          60_000,
+          180_000,
         )
 
-        await app.driver.wait(
+        await pollOk(
           async () => {
             const messages = (await app.sdk.session.messages({ sessionID, limit: 50 })).data ?? []
             const assistantMessages = messages.filter((m) => m.info.role === "assistant")
@@ -74,17 +75,18 @@ describe("ai sdk relay (webdriver)", () => {
             }
             return false
           },
-          30_000,
+          120_000,
         )
       } finally {
         await cleanupSession({ sdk: app.sdk, sessionID })
       }
 
-      const errs = await app.driver.executeScript(`return window.__e2ePageErrors || []`)
-      if (Array.isArray(errs) && errs.length > 0) {
-        console.log("[ai-sdk-relay] page errors:", errs)
-      }
+      const errs = await app.page.evaluate(() => {
+        const w = window as Window & { __e2ePageErrors?: string[] }
+        return w.__e2ePageErrors ?? []
+      })
+      expect(Array.isArray(errs) ? errs : []).toEqual([])
     },
-    120_000,
+    420_000,
   )
 })

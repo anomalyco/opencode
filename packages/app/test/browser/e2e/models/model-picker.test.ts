@@ -1,67 +1,57 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
-
-import { By, Key } from "selenium-webdriver"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
+import { clickListItem } from "../../../../e2e/actions"
 import { promptSelector } from "../../../../e2e/selectors"
-import { waitVisible } from "../../support/wd-wait"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
-import { wdClickListItemByKey } from "../../support/wd-actions"
 
-describe("model picker (webdriver migration)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("model picker", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("smoke model selection updates prompt footer", async () => {
     await app.gotoSession()
 
-    const prompt = await waitVisible(app.driver, By.css(promptSelector))
-    await prompt.click()
-    await prompt.sendKeys("/model")
+    await app.page.locator(promptSelector).click()
+    await app.page.keyboard.type("/model")
 
-    const command = await waitVisible(app.driver, By.css('[data-slash-id="model.choose"]'))
-    await app.driver.actions().move({ origin: command }).perform()
-    await app.driver.actions().sendKeys(Key.ENTER).perform()
+    const command = app.page.locator('[data-slash-id="model.choose"]')
+    await command.waitFor({ state: "visible" })
+    await command.hover()
 
-    const dialog = await waitVisible(app.driver, By.css('[role="dialog"]'))
-    const inputs = await dialog.findElements(By.xpath(`.//*[@role="textbox"] | .//input[@type="text"]`))
-    const input = inputs[0]
-    if (!input) throw new Error("dialog input missing")
+    await app.page.keyboard.press("Enter")
 
-    const items = await dialog.findElements(By.css('[data-slot="list-item"]'))
-    let target = items[0]
-    for (const el of items) {
-      if ((await el.getAttribute("data-selected")) !== "true") {
-        target = el
-        break
-      }
-    }
-    if (!target) throw new Error("no list item")
+    const dialog = app.page.getByRole("dialog")
+    await dialog.waitFor({ state: "visible" })
+
+    const input = dialog.getByRole("textbox").first()
+
+    const selected = dialog.locator('[data-slot="list-item"][data-selected="true"]').first()
+    await selected.waitFor({ state: "visible" })
+
+    const other = dialog.locator('[data-slot="list-item"]:not([data-selected="true"])').first()
+    const target = (await other.count()) > 0 ? other : selected
 
     const key = await target.getAttribute("data-key")
-    if (!key) throw new Error("data-key missing")
+    if (!key) throw new Error("Failed to resolve model key from list item")
 
     const model = key.split(":").slice(1).join(":")
-    await input.clear()
-    await input.sendKeys(model)
 
-    await wdClickListItemByKey(dialog, key)
+    await input.fill(model)
 
-    await app.driver.wait(async () => (await app.driver.findElements(By.css('[role="dialog"]'))).length === 0, 10_000)
+    await clickListItem(dialog, { key })
 
-    await prompt.click()
-    await prompt.sendKeys("/model")
-    const command2 = await waitVisible(app.driver, By.css('[data-slash-id="model.choose"]'))
-    await app.driver.actions().move({ origin: command2 }).perform()
-    await app.driver.actions().sendKeys(Key.ENTER).perform()
+    await expect.poll(async () => await dialog.count(), { timeout: 10_000 }).toBe(0)
 
-    const again = await waitVisible(app.driver, By.css('[role="dialog"]'))
-    let selected = false
-    for (const el of await again.findElements(By.css('[data-slot="list-item"]'))) {
-      if ((await el.getAttribute("data-key")) === key && (await el.getAttribute("data-selected")) === "true") {
-        selected = true
-        break
-      }
-    }
-    expect(selected).toBe(true)
+    await app.page.locator(promptSelector).click()
+    await app.page.keyboard.type("/model")
+    await command.waitFor({ state: "visible" })
+    await command.hover()
+    await app.page.keyboard.press("Enter")
+
+    const dialogAgain = app.page.getByRole("dialog")
+    await dialogAgain.waitFor({ state: "visible" })
+    await dialogAgain.locator(`[data-slot="list-item"][data-key="${key}"][data-selected="true"]`).waitFor({
+      state: "visible",
+    })
   })
 })

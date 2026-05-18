@@ -1,5 +1,13 @@
-/** Playwright workers / Bun often buffer `console.log`; stderr is line-buffered and shows up immediately in CI and local TTYs. */
+/**
+ * E2E verbosity: stderr progress (`[file-e2e]`, `[e2e-tc]`) and Vitest forwarding of `console.*`
+ * from browser tests stay **off** unless `OPENCODE_E2E_LOG=1` (see `vitest.e2e.config.ts` `silent`).
+ */
+export function e2eLogEnabled() {
+  return process.env.OPENCODE_E2E_LOG === "1"
+}
+
 export function e2eEmit(msg: string) {
+  if (!e2eLogEnabled()) return
   process.stderr.write(`${msg}\n`)
 }
 

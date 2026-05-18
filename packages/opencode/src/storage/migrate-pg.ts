@@ -14,7 +14,7 @@ export async function runPostgresMigrations() {
     .sort()
 
   if (entries.length === 0) {
-    console.log("No migrations found")
+    console.error("No migrations found")
     return
   }
 
@@ -33,7 +33,7 @@ export async function runPostgresMigrations() {
 
   for (const entry of entries) {
     if (appliedHashes.has(entry)) {
-      console.log(`Skipping already applied migration: ${entry}`)
+      console.error(`Skipping already applied migration: ${entry}`)
       continue
     }
 
@@ -42,7 +42,7 @@ export async function runPostgresMigrations() {
     try {
       sql = readFileSync(sqlPath, "utf8")
     } catch {
-      console.warn(`No migration.sql found in ${entry}, skipping`)
+      console.error(`No migration.sql found in ${entry}, skipping`)
       continue
     }
 
@@ -52,7 +52,7 @@ export async function runPostgresMigrations() {
       .map((s) => s.trim())
       .filter(Boolean)
 
-    console.log(`Applying migration: ${entry} (${statements.length} statements)`)
+    console.error(`Applying migration: ${entry} (${statements.length} statements)`)
 
     for (const statement of statements) {
       if (!statement) continue
@@ -63,7 +63,7 @@ export async function runPostgresMigrations() {
     await pool.query('INSERT INTO "__drizzle_migrations" (hash) VALUES ($1)', [entry])
   }
 
-  console.log("PostgreSQL migrations completed successfully")
+  console.error("PostgreSQL migrations completed successfully")
 }
 
 if (import.meta.main) {

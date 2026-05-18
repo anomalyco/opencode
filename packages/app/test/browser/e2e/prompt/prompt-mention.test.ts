@@ -1,40 +1,34 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
-
-import { By, Key } from "selenium-webdriver"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
 import { promptSelector } from "../../../../e2e/selectors"
-import { waitVisible } from "../../support/wd-wait"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
 
-describe("prompt mention (webdriver migration)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("prompt mention", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("smoke @mention inserts file pill token", async () => {
     await app.gotoSession()
+    const page = app.page
 
-    const prompt = await waitVisible(app.driver, By.css(promptSelector))
-    await prompt.click()
+    await page.locator(promptSelector).click()
     const sep = process.platform === "win32" ? "\\" : "/"
     const file = ["packages", "app", "package.json"].join(sep)
-    const pathRe = /packages[\\/]+app[\\/]+package\.json/
+    const filePattern = /packages[\\/]+app[\\/]+\s*package\.json/
 
-    await prompt.sendKeys(`@${file}`)
+    await page.keyboard.type(`@${file}`)
 
-    const suggestion = await waitVisible(
-      app.driver,
-      By.xpath(
-        `//button[.//span[contains(., "packages")]][.//span[contains(., "package.json")]]`,
-      ),
-      30_000,
-    )
-    await app.driver.actions().move({ origin: suggestion }).pause(50).perform()
-    await app.driver.actions().sendKeys(Key.TAB).perform()
+    const suggestion = page.getByRole("button", { name: filePattern }).first()
+    await suggestion.waitFor({ state: "visible" })
+    await suggestion.hover()
 
-    const pill = await waitVisible(app.driver, By.css(`${promptSelector} [data-type="file"]`))
-    expect(await pill.getAttribute("data-path")).toMatch(pathRe)
+    await page.keyboard.press("Tab")
 
-    await prompt.sendKeys(" ok")
-    expect(await prompt.getText()).toContain("ok")
+    const pill = page.locator(`${promptSelector} [data-type="file"]`).first()
+    await pill.waitFor({ state: "visible" })
+    expect(await pill.getAttribute("data-path")).toMatch(filePattern)
+
+    await page.keyboard.type(" ok")
+    await expect.poll(async () => (await page.locator(promptSelector).textContent()) ?? "").toContain("ok")
   })
 })

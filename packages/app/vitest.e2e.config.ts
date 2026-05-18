@@ -3,11 +3,11 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { loadEnv } from "vite"
 import { defineConfig } from "vitest/config"
+import { assertHostWorkosForUniverE2e } from "./e2e/assert-univer-workos-env"
 
 const appDir = path.dirname(fileURLToPath(import.meta.url))
 const repoDir = path.resolve(appDir, "..", "..")
 
-/** `.env.e2e` is not a Vite mode file; merge KEY=value lines without overriding the shell. */
 function mergeEnvFile(file: string) {
   if (!existsSync(file)) return
   const raw = readFileSync(file, "utf8")
@@ -36,13 +36,22 @@ function wireE2eEnv() {
 }
 
 wireE2eEnv()
+assertHostWorkosForUniverE2e()
 
+const e2eLog = process.env.OPENCODE_E2E_LOG === "1"
+
+/**
+ * E2E specs use Node Vitest + the `playwright` package (`useAppBrowser` → `chromium.launch`).
+ * Do not set `test.browser.enabled`: that runs test code inside Chromium and breaks Testcontainers,
+ * `node:child_process`, and Playwright’s Node entry.
+ */
 export default defineConfig({
   test: {
     include: ["test/browser/**/*.test.ts"],
+    setupFiles: [path.join(appDir, "test/support/tc-wire-setup.ts")],
     testTimeout: 120_000,
     hookTimeout: 420_000,
     pool: "forks",
-    maxForks: 1,
+    silent: !e2eLog,
   },
 })

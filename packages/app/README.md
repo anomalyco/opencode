@@ -35,9 +35,9 @@ Playwright starts the Vite dev server automatically via `webServer`, and UI test
 Use the local runner to create a temp sandbox, seed data, and run the tests.
 
 ```bash
-bunx playwright install
-bun run test:e2e:local
-bun run test:e2e:local -- --grep "settings"
+bunx playwright install chromium
+bun run e2e
+bun run e2e -- --grep "settings"
 ```
 
 Environment options:

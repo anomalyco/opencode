@@ -1,13 +1,10 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
-
-import { By } from "selenium-webdriver"
-import { waitSessionIdle, withSession } from "../../../../e2e/actions"
-import { createSdk, serverUrl } from "../../../../e2e/utils"
-import { wdToggleReviewPanel } from "../../support/wd-actions"
-import { waitVisible } from "../../support/wd-wait"
-import { openProjectSession, useAppWebDriver } from "../../support/use-app-webdriver"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
+import { defocus, waitSessionIdle, withSession } from "../../../../e2e/actions"
+import { createSdk, modKey, serverUrl } from "../../../../e2e/utils"
+import { openProjectSession } from "../../support/use-app-browser"
 
 const count = 14
 
@@ -62,14 +59,56 @@ async function patch(sdk: ReturnType<typeof createSdk>, sessionID: string, patch
   await waitSessionIdle(sdk, sessionID, 120_000)
 }
 
-describe("session review scroll (webdriver)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+async function waitMark(page: import("playwright").Page, file: string, mark: string) {
+  await page.waitForFunction(
+    ({ file: f, mark: m }) => {
+      const view = document.querySelector('[data-slot="session-review-scroll"] .scroll-view__viewport')
+      if (!(view instanceof HTMLElement)) return false
+
+      const head = Array.from(view.querySelectorAll("h3")).find(
+        (node) => node instanceof HTMLElement && node.textContent?.includes(f),
+      )
+      if (!(head instanceof HTMLElement)) return false
+
+      return Array.from(head.parentElement?.querySelectorAll("diffs-container") ?? []).some((host) => {
+        if (!(host instanceof HTMLElement)) return false
+        const root = host.shadowRoot
+        return root?.textContent?.includes(`mark ${m}`) ?? false
+      })
+    },
+    { file, mark },
+    { timeout: 60_000 },
+  )
+}
+
+async function spot(page: import("playwright").Page, file: string) {
+  return page.evaluate((f: string) => {
+    const view = document.querySelector('[data-slot="session-review-scroll"] .scroll-view__viewport')
+    if (!(view instanceof HTMLElement)) return null
+
+    const row = Array.from(view.querySelectorAll("h3")).find(
+      (node) => node instanceof HTMLElement && node.textContent?.includes(f),
+    )
+    if (!(row instanceof HTMLElement)) return null
+
+    const a = row.getBoundingClientRect()
+    const b = view.getBoundingClientRect()
+    return {
+      top: a.top - b.top,
+      y: view.scrollTop,
+    }
+  }, file)
+}
+
+describe("session review scroll", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test.skipIf(Boolean(process.env.CI))(
     "review keeps scroll position after a live diff update",
     async () => {
-      await app.driver.manage().window().setRect({ width: 1600, height: 1000, x: 0, y: 0 })
+      const page = app.page
+      await page.setViewportSize({ width: 1600, height: 1000 })
 
       const tag = `review-${Date.now()}`
       const list = files(tag)
@@ -85,148 +124,73 @@ describe("session review scroll (webdriver)", () => {
       await withSession(sdk, `e2e review ${tag}`, async (session) => {
         await patch(sdk, session.id, seed(list))
 
-        await app.driver.wait(
-          async () => {
+        await expect
+          .poll(async () => {
             const info = await sdk.session.get({ sessionID: session.id }).then((res) => res.data)
-            const n = info?.summary?.files
-            return n === list.length
-          },
-          60_000,
-        )
+            return info?.summary?.files ?? 0
+          }, { timeout: 60_000 })
+          .toBe(list.length)
 
-        await app.driver.wait(
-          async () => {
+        await expect
+          .poll(async () => {
             const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
-            return diff.length === list.length
-          },
-          60_000,
-        )
+            return diff.length
+          }, { timeout: 60_000 })
+          .toBe(list.length)
 
-        await openProjectSession(app.driver, app.origin, pid, session.id)
+        await openProjectSession(page, app.origin, pid, session.id)
 
-        await wdToggleReviewPanel(app.driver)
+        await defocus(page)
+        await page.keyboard.press(`${modKey}+Shift+R`)
 
-        const tab = await waitVisible(app.driver, By.xpath(`//button[@role="tab" and contains(., "Review")]`))
+        const tab = page.getByRole("tab", { name: /Review/i }).first()
+        await tab.waitFor({ state: "visible" })
         await tab.click()
 
-        await waitVisible(app.driver, By.css('[data-slot="session-review-scroll"] .scroll-view__viewport'))
+        const view = page.locator('[data-slot="session-review-scroll"] .scroll-view__viewport').first()
+        await view.waitFor({ state: "visible" })
+        const heads = page.getByRole("heading", { level: 3 }).filter({ hasText: /^review-scroll-/ })
+        await expect.poll(async () => await heads.count(), { timeout: 60_000 }).toBe(list.length)
 
-        await app.driver.wait(
-          async () => (await app.driver.findElements(By.css('[data-slot="session-review-scroll"] .scroll-view__viewport h3'))).length === list.length,
-          60_000,
-        )
-
-        const expandAll = await waitVisible(app.driver, By.xpath(`//button[contains(., "Expand all")]`))
+        const expandAll = page.getByRole("button", { name: /^Expand all$/i }).first()
+        await expandAll.waitFor({ state: "visible" })
         await expandAll.click()
-        await waitVisible(app.driver, By.xpath(`//button[contains(., "Collapse all")]`))
+        await page.getByRole("button", { name: /^Collapse all$/i }).first().waitFor({ state: "visible" })
 
-        await app.driver.wait(
-          async () =>
-            (await app.driver.executeScript(
-              `
-            const file = arguments[0];
-            const mark = arguments[1];
-            const view = document.querySelector('[data-slot="session-review-scroll"] .scroll-view__viewport');
-            if (!(view instanceof HTMLElement)) return false;
-            const head = Array.from(view.querySelectorAll("h3")).find(
-              (node) => node instanceof HTMLElement && node.textContent && node.textContent.includes(file),
-            );
-            if (!(head instanceof HTMLElement)) return false;
-            const hosts = Array.from(head.parentElement?.querySelectorAll("diffs-container") ?? []);
-            return hosts.some(function (host) {
-              if (!(host instanceof HTMLElement)) return false;
-              const root = host.shadowRoot;
-              return root && root.textContent && root.textContent.includes("mark " + mark);
-            });
-          `,
-              hit.file,
-              hit.mark,
-            )) === true,
-          60_000,
-        )
+        await waitMark(page, hit.file, hit.mark)
 
-        const esc = hit.file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-        const row = await waitVisible(app.driver, By.xpath(`//*[contains(@class,"scroll-view__viewport")]//h3[contains(., "${esc}")]`))
-        await app.driver.executeScript(`arguments[0].scrollIntoView({ block: "center" })`, row)
+        const row = page
+          .getByRole("heading", { level: 3, name: new RegExp(hit.file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) })
+          .first()
+        await row.waitFor({ state: "visible" })
+        await row.evaluate((el) => el.scrollIntoView({ block: "center" }))
 
-        const prev = (await app.driver.executeScript(
-          `
-          const file = arguments[0];
-          const view = document.querySelector('[data-slot="session-review-scroll"] .scroll-view__viewport');
-          if (!(view instanceof HTMLElement)) return null;
-          const row = Array.from(view.querySelectorAll("h3")).find(
-            (node) => node instanceof HTMLElement && node.textContent && node.textContent.includes(file),
-          );
-          if (!(row instanceof HTMLElement)) return null;
-          const a = row.getBoundingClientRect();
-          const b = view.getBoundingClientRect();
-          return { top: a.top - b.top, y: view.scrollTop };
-        `,
-          hit.file,
-        )) as { top: number; y: number }
-
-        expect(prev.y).toBeGreaterThan(200)
+        await expect.poll(async () => (await spot(page, hit.file))?.y ?? 0).toBeGreaterThan(200)
+        const prev = await spot(page, hit.file)
+        if (!prev) throw new Error(`missing review row for ${hit.file}`)
 
         await patch(sdk, session.id, edit(hit.file, hit.mark, nextMark))
 
-        await app.driver.wait(
-          async () => {
+        await expect
+          .poll(async () => {
             const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
-            const item = diff.find((d) => d.file === hit.file)
-            const after = typeof item?.after === "string" ? item.after : ""
-            return after.includes(`mark ${nextMark}`)
-          },
-          60_000,
-        )
+            const item = diff.find((item) => item.file === hit.file)
+            return typeof item?.after === "string" ? item.after : ""
+          }, { timeout: 60_000 })
+          .toContain(`mark ${nextMark}`)
 
-        await app.driver.wait(
-          async () =>
-            (await app.driver.executeScript(
-              `
-            const file = arguments[0];
-            const mark = arguments[1];
-            const view = document.querySelector('[data-slot="session-review-scroll"] .scroll-view__viewport');
-            if (!(view instanceof HTMLElement)) return false;
-            const head = Array.from(view.querySelectorAll("h3")).find(
-              (node) => node instanceof HTMLElement && node.textContent && node.textContent.includes(file),
-            );
-            if (!(head instanceof HTMLElement)) return false;
-            const hosts = Array.from(head.parentElement?.querySelectorAll("diffs-container") ?? []);
-            return hosts.some(function (host) {
-              if (!(host instanceof HTMLElement)) return false;
-              const root = host.shadowRoot;
-              return root && root.textContent && root.textContent.includes("mark " + mark);
-            });
-          `,
-              hit.file,
-              nextMark,
-            )) === true,
-          60_000,
-        )
+        await waitMark(page, hit.file, nextMark)
 
-        await app.driver.wait(
-          async () => {
-            const spot = (await app.driver.executeScript(
-              `
-              const file = arguments[0];
-              const view = document.querySelector('[data-slot="session-review-scroll"] .scroll-view__viewport');
-              if (!(view instanceof HTMLElement)) return null;
-              const row = Array.from(view.querySelectorAll("h3")).find(
-                (node) => node instanceof HTMLElement && node.textContent && node.textContent.includes(file),
-              );
-              if (!(row instanceof HTMLElement)) return null;
-              const a = row.getBoundingClientRect();
-              const b = view.getBoundingClientRect();
-              return { top: a.top - b.top, y: view.scrollTop };
-            `,
-              hit.file,
-            )) as { top: number; y: number } | null
-            if (!spot) return false
-            const d = Math.max(Math.abs(spot.top - prev.top), Math.abs(spot.y - prev.y))
-            return d <= 32
-          },
-          60_000,
-        )
+        await expect
+          .poll(
+            async () => {
+              const nextSpot = await spot(page, hit.file)
+              if (!nextSpot) return Number.POSITIVE_INFINITY
+              return Math.max(Math.abs(nextSpot.top - prev.top), Math.abs(nextSpot.y - prev.y))
+            },
+            { timeout: 60_000 },
+          )
+          .toBeLessThanOrEqual(32)
       })
     },
     180_000,

@@ -1,109 +1,157 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
+import { closeDialog, openSettings } from "../../../../e2e/actions"
 
-import { By, Key } from "selenium-webdriver"
-import type { WebDriver } from "selenium-webdriver"
-import { wdCloseDialog, wdOpenSettings } from "../../support/wd-actions"
-import { waitAbsent, waitVisible } from "../../support/wd-wait"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
-
-async function openCustomProviderDialog(driver: WebDriver) {
-  const settings = await wdOpenSettings(driver)
-  await settings.findElement(By.xpath(`.//button[@role="tab" and contains(., "Providers")]`)).click()
-  const section = await waitVisible(driver, By.css('[data-component="custom-provider-section"]'))
-  await section.findElement(By.xpath(`.//button[contains(., "Connect")]`)).click()
-  return waitVisible(driver, By.xpath(`//*[@role="dialog"][.//*[contains(., "Custom provider")]]`))
-}
-
-describe("settings providers (webdriver)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("settings providers", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("custom provider form can be filled and validates input", async () => {
+    const page = app.page
     await app.gotoSession()
-    const dialog = await openCustomProviderDialog(app.driver)
 
-    await dialog.findElement(By.xpath(`//label[contains(., "Provider ID")]//following::input[1]`)).sendKeys("test-provider")
-    await dialog.findElement(By.xpath(`//label[contains(., "Display name")]//following::input[1]`)).sendKeys("Test Provider")
-    await dialog.findElement(By.xpath(`//label[contains(., "Base URL")]//following::input[1]`)).sendKeys("http://localhost:9999/fake")
-    await dialog.findElement(By.xpath(`//label[contains(., "API key")]//following::input[1]`)).sendKeys("fake-key")
-    await dialog.findElement(By.xpath(`(.//input[@placeholder="model-id"])[1]`)).sendKeys("test-model")
-    await dialog.findElement(By.xpath(`(.//input[@placeholder="Display Name"])[1]`)).sendKeys("Test Model")
+    const settings = await openSettings(page)
+    await settings.getByRole("tab", { name: "Providers" }).click()
 
-    const providerId = await dialog.findElement(By.xpath(`//input[@aria-label="Provider ID"]`)).getAttribute("value")
-    expect(providerId).toBe("test-provider")
+    const customProviderSection = settings.locator('[data-component="custom-provider-section"]')
+    await customProviderSection.waitFor({ state: "visible" })
 
-    await app.driver.actions().sendKeys(Key.ESCAPE).perform()
-    await waitAbsent(app.driver, By.xpath(`//*[@role="dialog"][.//*[contains(., "Custom provider")]]`), 5000)
-    await wdCloseDialog(app.driver)
+    const connectButton = customProviderSection.getByRole("button", { name: "Connect" })
+    await connectButton.click()
+
+    const providerDialog = page.getByRole("dialog").filter({ has: page.getByText("Custom provider") })
+    await providerDialog.waitFor({ state: "visible" })
+
+    await providerDialog.getByLabel("Provider ID").fill("test-provider")
+    await providerDialog.getByLabel("Display name").fill("Test Provider")
+    await providerDialog.getByLabel("Base URL").fill("http://localhost:9999/fake")
+    await providerDialog.getByLabel("API key").fill("fake-key")
+
+    await providerDialog.getByPlaceholder("model-id").first().fill("test-model")
+    await providerDialog.getByPlaceholder("Display Name").first().fill("Test Model")
+
+    expect(await providerDialog.getByRole("textbox", { name: "Provider ID" }).inputValue()).toBe("test-provider")
+    expect(await providerDialog.getByRole("textbox", { name: "Display name" }).inputValue()).toBe("Test Provider")
+    expect(await providerDialog.getByRole("textbox", { name: "Base URL" }).inputValue()).toBe(
+      "http://localhost:9999/fake",
+    )
+    expect(await providerDialog.getByRole("textbox", { name: "API key" }).inputValue()).toBe("fake-key")
+    expect(await providerDialog.getByPlaceholder("model-id").first().inputValue()).toBe("test-model")
+    expect(await providerDialog.getByPlaceholder("Display Name").first().inputValue()).toBe("Test Model")
+
+    await page.keyboard.press("Escape")
+    expect(await providerDialog.count()).toBe(0)
+
+    await closeDialog(page, settings)
   })
 
   test("custom provider form shows validation errors", async () => {
+    const page = app.page
     await app.gotoSession()
-    const dialog = await openCustomProviderDialog(app.driver)
-    await dialog.findElement(By.xpath(`//label[contains(., "Provider ID")]//following::input[1]`)).sendKeys("invalid provider id")
-    await dialog.findElement(By.xpath(`//label[contains(., "Base URL")]//following::input[1]`)).sendKeys("not-a-url")
 
-    const submit = await dialog.findElement(
-      By.xpath(`.//button[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "save") or contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "submit")]`),
-    )
-    await submit.click()
+    const settings = await openSettings(page)
+    await settings.getByRole("tab", { name: "Providers" }).click()
 
-    await waitVisible(app.driver, By.xpath(`//*[@data-slot="input-error"][contains(., "lowercase")]`))
-    await waitVisible(app.driver, By.xpath(`//*[@data-slot="input-error"][contains(., "http")]`))
+    const customProviderSection = settings.locator('[data-component="custom-provider-section"]')
+    await customProviderSection.getByRole("button", { name: "Connect" }).click()
 
-    await app.driver.actions().sendKeys(Key.ESCAPE).perform()
-    await waitAbsent(app.driver, By.xpath(`//*[@role="dialog"][.//*[contains(., "Custom provider")]]`), 5000)
-    await wdCloseDialog(app.driver)
+    const providerDialog = page.getByRole("dialog").filter({ has: page.getByText("Custom provider") })
+    await providerDialog.waitFor({ state: "visible" })
+
+    await providerDialog.getByLabel("Provider ID").fill("invalid provider id")
+    await providerDialog.getByLabel("Base URL").fill("not-a-url")
+
+    await providerDialog.getByRole("button", { name: /submit|save/i }).click()
+
+    await providerDialog
+      .locator('[data-slot="input-error"]')
+      .filter({ hasText: /lowercase/i })
+      .first()
+      .waitFor({ state: "visible" })
+    await providerDialog
+      .locator('[data-slot="input-error"]')
+      .filter({ hasText: /http/i })
+      .first()
+      .waitFor({ state: "visible" })
+
+    await page.keyboard.press("Escape")
+    expect(await providerDialog.count()).toBe(0)
+
+    await closeDialog(page, settings)
   })
 
   test("custom provider form can add and remove models", async () => {
+    const page = app.page
     await app.gotoSession()
-    const dialog = await openCustomProviderDialog(app.driver)
-    await dialog.findElement(By.xpath(`//label[contains(., "Provider ID")]//following::input[1]`)).sendKeys("multi-model-test")
-    await dialog.findElement(By.xpath(`//label[contains(., "Display name")]//following::input[1]`)).sendKeys("Multi Model Test")
-    await dialog.findElement(By.xpath(`//label[contains(., "Base URL")]//following::input[1]`)).sendKeys("http://localhost:9999/multi")
-    await dialog.findElement(By.xpath(`(.//input[@placeholder="model-id"])[1]`)).sendKeys("model-1")
-    await dialog.findElement(By.xpath(`(.//input[@placeholder="Display Name"])[1]`)).sendKeys("Model 1")
 
-    const before = (await dialog.findElements(By.xpath(`.//input[@placeholder="model-id"]`))).length
-    await dialog.findElement(By.xpath(`.//button[contains(., "Add model")]`)).click()
-    await app.driver.wait(async () => (await dialog.findElements(By.xpath(`.//input[@placeholder="model-id"]`))).length === before + 1, 5000)
+    const settings = await openSettings(page)
+    await settings.getByRole("tab", { name: "Providers" }).click()
 
-    const ids = await dialog.findElements(By.xpath(`.//input[@placeholder="model-id"]`))
-    await ids[1]!.sendKeys("model-2")
-    const names = await dialog.findElements(By.xpath(`.//input[@placeholder="Display Name"]`))
-    await names[1]!.sendKeys("Model 2")
-    expect(await ids[1]!.getAttribute("value")).toBe("model-2")
-    expect(await names[1]!.getAttribute("value")).toBe("Model 2")
+    const customProviderSection = settings.locator('[data-component="custom-provider-section"]')
+    await customProviderSection.getByRole("button", { name: "Connect" }).click()
 
-    await app.driver.actions().sendKeys(Key.ESCAPE).perform()
-    await waitAbsent(app.driver, By.xpath(`//*[@role="dialog"][.//*[contains(., "Custom provider")]]`), 5000)
-    await wdCloseDialog(app.driver)
+    const providerDialog = page.getByRole("dialog").filter({ has: page.getByText("Custom provider") })
+    await providerDialog.waitFor({ state: "visible" })
+
+    await providerDialog.getByLabel("Provider ID").fill("multi-model-test")
+    await providerDialog.getByLabel("Display name").fill("Multi Model Test")
+    await providerDialog.getByLabel("Base URL").fill("http://localhost:9999/multi")
+
+    await providerDialog.getByPlaceholder("model-id").first().fill("model-1")
+    await providerDialog.getByPlaceholder("Display Name").first().fill("Model 1")
+
+    const idInputsBefore = await providerDialog.getByPlaceholder("model-id").count()
+    await providerDialog.getByRole("button", { name: "Add model" }).click()
+    const idInputsAfter = await providerDialog.getByPlaceholder("model-id").count()
+    expect(idInputsAfter).toBe(idInputsBefore + 1)
+
+    await providerDialog.getByPlaceholder("model-id").nth(1).fill("model-2")
+    await providerDialog.getByPlaceholder("Display Name").nth(1).fill("Model 2")
+
+    expect(await providerDialog.getByPlaceholder("model-id").nth(1).inputValue()).toBe("model-2")
+    expect(await providerDialog.getByPlaceholder("Display Name").nth(1).inputValue()).toBe("Model 2")
+
+    await page.keyboard.press("Escape")
+    expect(await providerDialog.count()).toBe(0)
+
+    await closeDialog(page, settings)
   })
 
   test("custom provider form can add and remove headers", async () => {
+    const page = app.page
     await app.gotoSession()
-    const dialog = await openCustomProviderDialog(app.driver)
-    await dialog.findElement(By.xpath(`//label[contains(., "Provider ID")]//following::input[1]`)).sendKeys("header-test")
-    await dialog.findElement(By.xpath(`//label[contains(., "Display name")]//following::input[1]`)).sendKeys("Header Test")
-    await dialog.findElement(By.xpath(`//label[contains(., "Base URL")]//following::input[1]`)).sendKeys("http://localhost:9999/headers")
-    await dialog.findElement(By.xpath(`(.//input[@placeholder="model-id"])[1]`)).sendKeys("model-x")
-    await dialog.findElement(By.xpath(`(.//input[@placeholder="Display Name"])[1]`)).sendKeys("Model X")
 
-    const before = (await dialog.findElements(By.xpath(`.//input[@placeholder="Header-Name"]`))).length
-    await dialog.findElement(By.xpath(`.//button[contains(., "Add header")]`)).click()
-    await app.driver.wait(async () => (await dialog.findElements(By.xpath(`.//input[@placeholder="Header-Name"]`))).length === before + 1, 5000)
+    const settings = await openSettings(page)
+    await settings.getByRole("tab", { name: "Providers" }).click()
 
-    const hn = await dialog.findElements(By.xpath(`.//input[@placeholder="Header-Name"]`))
-    const vv = await dialog.findElements(By.xpath(`.//input[@placeholder="value"]`))
-    await hn[0]!.sendKeys("Authorization")
-    await vv[0]!.sendKeys("Bearer token123")
-    expect(await hn[0]!.getAttribute("value")).toBe("Authorization")
-    expect(await vv[0]!.getAttribute("value")).toBe("Bearer token123")
+    const customProviderSection = settings.locator('[data-component="custom-provider-section"]')
+    await customProviderSection.getByRole("button", { name: "Connect" }).click()
 
-    await app.driver.actions().sendKeys(Key.ESCAPE).perform()
-    await waitAbsent(app.driver, By.xpath(`//*[@role="dialog"][.//*[contains(., "Custom provider")]]`), 5000)
-    await wdCloseDialog(app.driver)
+    const providerDialog = page.getByRole("dialog").filter({ has: page.getByText("Custom provider") })
+    await providerDialog.waitFor({ state: "visible" })
+
+    await providerDialog.getByLabel("Provider ID").fill("header-test")
+    await providerDialog.getByLabel("Display name").fill("Header Test")
+    await providerDialog.getByLabel("Base URL").fill("http://localhost:9999/headers")
+
+    await providerDialog.getByPlaceholder("model-id").first().fill("model-x")
+    await providerDialog.getByPlaceholder("Display Name").first().fill("Model X")
+
+    const headerInputsBefore = await providerDialog.getByPlaceholder("Header-Name").count()
+    await providerDialog.getByRole("button", { name: "Add header" }).click()
+    const headerInputsAfter = await providerDialog.getByPlaceholder("Header-Name").count()
+    expect(headerInputsAfter).toBe(headerInputsBefore + 1)
+
+    await providerDialog.getByPlaceholder("Header-Name").first().fill("Authorization")
+    await providerDialog.getByPlaceholder("value").first().fill("Bearer token123")
+
+    expect(await providerDialog.getByPlaceholder("Header-Name").first().inputValue()).toBe("Authorization")
+    expect(await providerDialog.getByPlaceholder("value").first().inputValue()).toBe("Bearer token123")
+
+    await page.keyboard.press("Escape")
+    expect(await providerDialog.count()).toBe(0)
+
+    await closeDialog(page, settings)
   })
 })

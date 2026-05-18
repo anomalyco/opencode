@@ -1,0 +1,17 @@
+[2026-05-18T06:17:19.309Z] Error: Error parsing /Users/Apple/Documents/Github/opencode-veritly/packages/sdk/js/openapi.json: end of the stream or a document separator is expected (1:1)
+
+ 1 | @opentelemetry/api: Registered a ...
+-----^
+ 2 | [veritly] OTLP traces configured {
+ 3 |   target: "https://api.axiom.co/ ...
+Stack:
+JSONParserError: Error parsing /Users/Apple/Documents/Github/opencode-veritly/packages/sdk/js/openapi.json: end of the stream or a document separator is expected (1:1)
+
+ 1 | @opentelemetry/api: Registered a ...
+-----^
+ 2 | [veritly] OTLP traces configured {
+ 3 |   target: "https://api.axiom.co/ ...
+    at handler (/Users/Apple/Documents/Github/opencode-veritly/node_modules/.bun/@hey-api+json-schema-ref-parser@1.2.2/node_modules/@hey-api/json-schema-ref-parser/dist/lib/parsers/yaml.js:24:35)
+    at <anonymous> (/Users/Apple/Documents/Github/opencode-veritly/node_modules/.bun/@hey-api+json-schema-ref-parser@1.2.2/node_modules/@hey-api/json-schema-ref-parser/dist/lib/util/plugins.js:24:45)
+    at <anonymous> (/Users/Apple/Documents/Github/opencode-veritly/node_modules/.bun/@hey-api+json-schema-ref-parser@1.2.2/node_modules/@hey-api/json-schema-ref-parser/dist/lib/util/plugins.js:40:17)
+    at processTicksAndRejections (native:7:39)

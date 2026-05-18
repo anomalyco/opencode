@@ -1,34 +1,30 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
-
-import { By } from "selenium-webdriver"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
 import { modelVariantCycleSelector } from "../../../../e2e/selectors"
-import { waitVisible } from "../../support/wd-wait"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
 
-describe("thinking level / model variant (webdriver migration)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("thinking level / model variant", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("smoke model variant cycle updates label", async () => {
     await app.gotoSession()
 
-    await app.driver.executeScript((sel: string) => {
-      const s = document.createElement("style")
-      s.textContent = `${sel} { display: inline-block !important; }`
-      document.head.appendChild(s)
-    }, modelVariantCycleSelector)
+    await app.page.addStyleTag({
+      content: `${modelVariantCycleSelector} { display: inline-block !important; }`,
+    })
 
-    const xs = await app.driver.findElements(By.css(modelVariantCycleSelector))
-    if (xs.length === 0) return
+    const button = app.page.locator(modelVariantCycleSelector)
+    if ((await button.count()) === 0) return
 
-    const button = await waitVisible(app.driver, By.css(modelVariantCycleSelector))
-    const before = (await button.getText()).trim()
+    await button.waitFor({ state: "visible" })
+
+    const before = (await button.innerText()).trim()
     await button.click()
-    expect((await button.getText()).trim()).not.toBe(before)
+    await expect.poll(async () => (await button.innerText()).trim()).not.toBe(before)
 
-    const mid = (await button.getText()).trim()
+    const mid = (await button.innerText()).trim()
     await button.click()
-    expect((await button.getText()).trim()).not.toBe(mid)
+    await expect.poll(async () => (await button.innerText()).trim()).not.toBe(mid)
   })
 })

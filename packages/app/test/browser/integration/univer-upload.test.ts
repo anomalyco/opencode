@@ -1,69 +1,18 @@
 import { Buffer } from "node:buffer"
-import * as XLSX from "xlsx"
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../support/use-full-app-stack"
+import { useE2eStack } from "../support/use-e2e-stack"
 
-import { By } from "selenium-webdriver"
-import { sessionIDFromUrl } from "../../../e2e/actions"
-import { fileTreeAllTabTriggerSelector, fileTreeToggleSelector, promptSelector } from "../../../e2e/selectors"
-import { waitVisible } from "../support/wd-wait"
-import { openProjectSession, useAppWebDriver } from "../support/use-app-webdriver"
+import { By, waitVisible } from "../support/wd-wait"
+import { promptSelector } from "../../../e2e/selectors"
+import { openProjectSession, useAppBrowser } from "../support/use-app-browser"
+import { dropXlsx, expandFileTree, minimalXlsx, noVisibleLoadingSpreadsheet, assertSpreadsheetImportOk } from "../support/xlsx-tree"
 
-function minimalXlsx(): Uint8Array {
-  const wb = XLSX.utils.book_new()
-  const ws = XLSX.utils.aoa_to_sheet([["ok"]])
-  XLSX.utils.book_append_sheet(wb, ws, "Sheet1")
-  return new Uint8Array(XLSX.write(wb, { type: "array", bookType: "xlsx" }))
-}
+/** Playwright / poll waits only; Vitest test budget stays high for Docker stack. */
+const wait = 5_000
 
-async function expandFileTree(driver: WebDriverLike) {
-  const toggle = await waitVisible(driver, By.css(fileTreeToggleSelector))
-  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click()
-  await driver.wait(async () => (await toggle.getAttribute("aria-expanded")) === "true", 10_000)
-  await driver.wait(
-    async () =>
-      Number(
-        await driver.executeScript(
-          `return document.getElementById("file-tree-panel")?.getBoundingClientRect().width ?? 0`,
-        ),
-      ) > 100,
-    15_000,
-  )
-  const panel = await waitVisible(driver, By.css("#file-tree-panel"))
-  const allTab = await waitVisible(driver, By.css(fileTreeAllTabTriggerSelector))
-  await allTab.click()
-  return panel
-}
-
-type WebDriverLike = import("selenium-webdriver").WebDriver
-
-async function dropXlsx(driver: WebDriverLike, name: string, b64: string) {
-  await driver.executeScript(
-    `
-    const payload = arguments[0];
-    const panel = document.querySelector("#file-tree-panel");
-    const tree = panel?.querySelector('[data-component="filetree"]');
-    if (!(tree instanceof HTMLElement)) throw new Error("file tree droppable root missing");
-    const raw = atob(payload.data);
-    const u = new Uint8Array(raw.length);
-    for (let i = 0; i < raw.length; i++) u[i] = raw.charCodeAt(i);
-    const file = new File([u], payload.filename, {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    const data = new DataTransfer();
-    data.items.add(file);
-    const ev = { bubbles: true, cancelable: true, dataTransfer: data };
-    tree.dispatchEvent(new DragEvent("dragenter", ev));
-    tree.dispatchEvent(new DragEvent("dragover", ev));
-    tree.dispatchEvent(new DragEvent("drop", ev));
-  `,
-    { data: b64, filename: name },
-  )
-}
-
-describe("univer upload (webdriver)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("univer upload", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test(
     "drop xlsx on file tree completes univer-compat exchange import",
@@ -72,27 +21,18 @@ describe("univer upload (webdriver)", () => {
       const name = "e2e-univer-upload.xlsx"
       const b64 = Buffer.from(minimalXlsx()).toString("base64")
 
-      await expandFileTree(app.driver)
-      await dropXlsx(app.driver, name, b64)
+      await expandFileTree(app.page)
+      await dropXlsx(app.page, name, b64)
 
-      const row = await waitVisible(app.driver, By.xpath(`//*[@id="file-tree-panel"]//button[normalize-space(.)="${name}"]`), 120_000)
+      const row = app.page.locator("#file-tree-panel").getByRole("button", { name })
+      await row.waitFor({ state: "visible", timeout: wait })
       await row.click()
 
-      await waitVisible(app.driver, By.xpath(`//button[@role="tab" and normalize-space(.)="${name}"]`), 120_000)
-      await app.driver.wait(
-        async () => {
-          const els = await app.driver.findElements(By.xpath(`//*[contains(., "Loading spreadsheet…")]`))
-          if (els.length === 0) return true
-          for (const el of els) {
-            if (await el.isDisplayed()) return false
-          }
-          return true
-        },
-        120_000,
-      )
-      await waitVisible(app.driver, By.xpath(`//button[@role="tab" and normalize-space(.)="Sheet1"]`), 120_000)
+      await app.page.getByRole("tab", { name }).waitFor({ state: "visible", timeout: wait })
+      await noVisibleLoadingSpreadsheet(app.page, wait)
+      await assertSpreadsheetImportOk(app.page, wait)
     },
-    180_000,
+    60_000,
   )
 
   test(
@@ -102,99 +42,59 @@ describe("univer upload (webdriver)", () => {
       const name = "e2e-univer-refresh.xlsx"
       const b64 = Buffer.from(minimalXlsx()).toString("base64")
 
-      await expandFileTree(app.driver)
-      await dropXlsx(app.driver, name, b64)
+      await expandFileTree(app.page)
+      await dropXlsx(app.page, name, b64)
 
-      const row = await waitVisible(app.driver, By.xpath(`//*[@id="file-tree-panel"]//button[normalize-space(.)="${name}"]`), 120_000)
+      const row = app.page.locator("#file-tree-panel").getByRole("button", { name })
+      await row.waitFor({ state: "visible", timeout: wait })
       await row.click()
 
-      await waitVisible(app.driver, By.xpath(`//button[@role="tab" and normalize-space(.)="${name}"]`), 120_000)
-      await app.driver.wait(
-        async () => {
-          const els = await app.driver.findElements(By.xpath(`//*[contains(., "Loading spreadsheet…")]`))
-          if (els.length === 0) return true
-          for (const el of els) {
-            if (await el.isDisplayed()) return false
-          }
-          return true
-        },
-        120_000,
-      )
-      await waitVisible(app.driver, By.xpath(`//button[@role="tab" and normalize-space(.)="Sheet1"]`), 120_000)
+      await app.page.getByRole("tab", { name }).waitFor({ state: "visible", timeout: wait })
+      await noVisibleLoadingSpreadsheet(app.page, wait)
+      await assertSpreadsheetImportOk(app.page, wait)
 
-      await app.driver.navigate().refresh()
-      await waitVisible(app.driver, By.css(promptSelector))
-      await waitVisible(app.driver, By.xpath(`//button[@role="tab" and normalize-space(.)="${name}"]`), 120_000)
-      await app.driver.wait(
-        async () => {
-          const els = await app.driver.findElements(By.xpath(`//*[contains(., "Loading spreadsheet…")]`))
-          if (els.length === 0) return true
-          for (const el of els) {
-            if (await el.isDisplayed()) return false
-          }
-          return true
-        },
-        120_000,
-      )
-      await waitVisible(app.driver, By.xpath(`//button[@role="tab" and normalize-space(.)="Sheet1"]`), 120_000)
+      await app.page.reload()
+      await waitVisible(app.page, By.css(promptSelector), wait)
+      await app.page.getByRole("tab", { name }).waitFor({ state: "visible", timeout: wait })
+      await noVisibleLoadingSpreadsheet(app.page, wait)
+      await assertSpreadsheetImportOk(app.page, wait)
     },
-    180_000,
+    60_000,
   )
 
   test(
     "persisted sheet lists after new browser context (no localStorage)",
     async () => {
-      await app.gotoSession()
+      const created = await app.sdk.session.create({})
+      if (!created.data) throw new Error("session create failed")
+      const sid = created.data.id
+      // `gotoSession()` without id stays on `/:project/session` (no `/session/:id` segment);
+      // `sessionIDFromUrl` only works after that segment exists (e.g. explicit create + navigate).
+      await app.gotoSession(sid)
       const name = "e2e-univer-fresh-context.xlsx"
       const b64 = Buffer.from(minimalXlsx()).toString("base64")
 
-      await expandFileTree(app.driver)
-      await dropXlsx(app.driver, name, b64)
+      await expandFileTree(app.page)
+      await dropXlsx(app.page, name, b64)
 
-      const row = await waitVisible(app.driver, By.xpath(`//*[@id="file-tree-panel"]//button[normalize-space(.)="${name}"]`), 120_000)
+      const row = app.page.locator("#file-tree-panel").getByRole("button", { name })
+      await row.waitFor({ state: "visible", timeout: wait })
       await row.click()
-      await app.driver.wait(
-        async () => {
-          const els = await app.driver.findElements(By.xpath(`//*[contains(., "Loading spreadsheet…")]`))
-          if (els.length === 0) return true
-          for (const el of els) {
-            if (await el.isDisplayed()) return false
-          }
-          return true
-        },
-        120_000,
-      )
-      await waitVisible(app.driver, By.xpath(`//button[@role="tab" and normalize-space(.)="Sheet1"]`), 120_000)
+      await noVisibleLoadingSpreadsheet(app.page, wait)
+      await assertSpreadsheetImportOk(app.page, wait)
 
-      const sessionUrl = await app.driver.getCurrentUrl()
-      const sid = sessionIDFromUrl(sessionUrl)
-      if (!sid) throw new Error("session id missing from url")
+      await app.page.context().clearCookies()
+      await app.page.evaluate(() => localStorage.clear())
+      await openProjectSession(app.page, app.origin, app.project.id, sid)
 
-      await app.driver.manage().deleteAllCookies()
-      await app.driver.executeScript(`localStorage.clear()`)
-      await openProjectSession(app.driver, app.origin, app.project.id, sid)
+      await expandFileTree(app.page)
 
-      await expandFileTree(app.driver)
-
-      const imported = await waitVisible(
-        app.driver,
-        By.xpath(`//*[@id="file-tree-panel"]//button[normalize-space(.)="Imported Workbook.xlsx"]`),
-        120_000,
-      )
+      const imported = app.page.locator("#file-tree-panel").getByRole("button", { name: "Imported Workbook.xlsx" })
+      await imported.waitFor({ state: "visible", timeout: wait })
       await imported.click()
-      await app.driver.wait(
-        async () => {
-          const els = await app.driver.findElements(By.xpath(`//*[contains(., "Loading spreadsheet…")]`))
-          if (els.length === 0) return true
-          for (const el of els) {
-            if (await el.isDisplayed()) return false
-          }
-          return true
-        },
-        120_000,
-      )
-      await waitVisible(app.driver, By.xpath(`//button[@role="tab" and normalize-space(.)="Sheet1"]`), 120_000)
+      await noVisibleLoadingSpreadsheet(app.page, wait)
+      await assertSpreadsheetImportOk(app.page, wait)
     },
-    180_000,
+    60_000,
   )
 })

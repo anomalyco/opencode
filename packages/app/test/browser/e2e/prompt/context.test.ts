@@ -1,107 +1,99 @@
+import type { Page } from "playwright"
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
-
-import { By, Key } from "selenium-webdriver"
-import type { WebDriver } from "selenium-webdriver"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
 import { withSession } from "../../../../e2e/actions"
 import { promptSelector } from "../../../../e2e/selectors"
-import { waitAbsent, waitVisible } from "../../support/wd-wait"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
 
-type Sdk = Parameters<typeof withSession>[0]
+function contextButton(page: Page) {
+  return page
+    .locator('[data-component="button"]')
+    .filter({ has: page.locator('[data-component="progress-circle"]').first() })
+    .first()
+}
 
-async function seedContextSession(driver: WebDriver, sdk: Sdk, sessionID: string) {
-  await sdk.session.promptAsync({
-    sessionID,
+async function seedContextSession(input: { sessionID: string; sdk: Parameters<typeof withSession>[0] }) {
+  await input.sdk.session.promptAsync({
+    sessionID: input.sessionID,
     noReply: true,
     parts: [{ type: "text", text: "seed context" }],
   })
-  await driver.wait(async () => {
-    const messages = await sdk.session.messages({ sessionID, limit: 1 }).then((r) => r.data ?? [])
-    return messages.length > 0
-  }, 30_000)
+
+  await expect
+    .poll(
+      async () =>
+        input.sdk.session.messages({ sessionID: input.sessionID, limit: 1 }).then((r) => (r.data ?? []).length),
+      { timeout: 30_000 },
+    )
+    .toBeGreaterThan(0)
 }
 
-describe("context panel (webdriver migration)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("context panel", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("context panel can be opened from the prompt", async () => {
+    const page = app.page
     const title = `e2e smoke context ${Date.now()}`
 
     await withSession(app.sdk, title, async (session) => {
-      await seedContextSession(app.driver, app.sdk, session.id)
+      await seedContextSession({ sessionID: session.id, sdk: app.sdk })
+
       await app.gotoSession(session.id)
 
-      const trigger = await waitVisible(
-        app.driver,
-        By.xpath(`(//*[@data-component="button"][.//*[@data-component="progress-circle"]])[1]`),
-      )
+      const trigger = contextButton(page)
+      await trigger.waitFor({ state: "visible" })
       await trigger.click()
 
-      await waitVisible(app.driver, By.xpath(`//*[@data-component="tabs"][@data-variant="normal"]//*[@role="tab" and contains(., "Context")]`))
+      const tabs = page.locator('[data-component="tabs"][data-variant="normal"]')
+      await tabs.getByRole("tab", { name: "Context" }).waitFor({ state: "visible" })
     })
   })
 
   test("context panel can be closed from the context tab close action", async () => {
+    const page = app.page
     await withSession(app.sdk, `e2e context toggle ${Date.now()}`, async (session) => {
-      await seedContextSession(app.driver, app.sdk, session.id)
+      await seedContextSession({ sessionID: session.id, sdk: app.sdk })
       await app.gotoSession(session.id)
 
-      await app.driver.findElement(By.css(promptSelector)).click()
+      await page.locator(promptSelector).click()
 
-      const trigger = await waitVisible(
-        app.driver,
-        By.xpath(`(//*[@data-component="button"][.//*[@data-component="progress-circle"]])[1]`),
-      )
+      const trigger = contextButton(page)
+      await trigger.waitFor({ state: "visible" })
       await trigger.click()
 
-      const context = await waitVisible(
-        app.driver,
-        By.xpath(`//*[@data-component="tabs"][@data-variant="normal"]//*[@role="tab" and contains(., "Context")]`),
-      )
-      expect(await context.isDisplayed()).toBe(true)
+      const tabs = page.locator('[data-component="tabs"][data-variant="normal"]')
+      const context = tabs.getByRole("tab", { name: "Context" })
+      await context.waitFor({ state: "visible" })
 
-      const close = await app.driver.findElement(By.xpath(`(//button[contains(., "Close tab")])[1]`))
-      await close.click()
-
-      await app.driver.wait(async () => {
-        const xs = await app.driver.findElements(
-          By.xpath(`//*[@data-component="tabs"][@data-variant="normal"]//*[@role="tab" and contains(., "Context")]`),
-        )
-        return xs.length === 0
-      }, 5000)
+      await page.getByRole("button", { name: "Close tab" }).first().click()
+      expect(await context.count()).toBe(0)
     })
   })
 
   test("context panel can open file picker from context actions", async () => {
+    const page = app.page
     await withSession(app.sdk, `e2e context tabs ${Date.now()}`, async (session) => {
-      await seedContextSession(app.driver, app.sdk, session.id)
+      await seedContextSession({ sessionID: session.id, sdk: app.sdk })
       await app.gotoSession(session.id)
 
-      await app.driver.findElement(By.css(promptSelector)).click()
+      await page.locator(promptSelector).click()
 
-      const trigger = await waitVisible(
-        app.driver,
-        By.xpath(`(//*[@data-component="button"][.//*[@data-component="progress-circle"]])[1]`),
-      )
+      const trigger = contextButton(page)
+      await trigger.waitFor({ state: "visible" })
       await trigger.click()
 
-      await waitVisible(app.driver, By.xpath(`//*[@role="tab" and contains(., "Context")]`))
-      const openFile = await app.driver.findElement(By.xpath(`(//button[contains(., "Open file")])[1]`))
-      await openFile.click()
+      await page.getByRole("tab", { name: "Context" }).waitFor({ state: "visible" })
+      await page.getByRole("button", { name: "Open file" }).first().click()
 
-      await waitVisible(
-        app.driver,
-        By.xpath(`//*[@role="dialog"][.//input[contains(translate(@placeholder, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "search file")]]`),
-      )
+      const dialog = page
+        .getByRole("dialog")
+        .filter({ has: page.getByPlaceholder(/search files/i) })
+        .first()
+      await dialog.waitFor({ state: "visible" })
 
-      await app.driver.actions().sendKeys(Key.ESCAPE).perform()
-      await waitAbsent(
-        app.driver,
-        By.xpath(`//*[@role="dialog"][.//input[contains(translate(@placeholder, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "search file")]]`),
-        10_000,
-      )
+      await page.keyboard.press("Escape")
+      expect(await dialog.count()).toBe(0)
     })
   })
 })

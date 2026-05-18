@@ -1,156 +1,128 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
-
-import { By, Key } from "selenium-webdriver"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
+import { closeDialog, openSettings } from "../../../../e2e/actions"
 import { promptSelector } from "../../../../e2e/selectors"
-import { waitVisible } from "../../support/wd-wait"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
-import { wdCloseDialog, wdOpenSettings, wdPressEscape } from "../../support/wd-actions"
 
-describe("models visibility (webdriver migration)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("models visibility", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("hiding a model removes it from the model picker", async () => {
     await app.gotoSession()
 
-    const prompt = await waitVisible(app.driver, By.css(promptSelector))
-    await prompt.click()
-    await prompt.sendKeys("/model")
+    await app.page.locator(promptSelector).click()
+    await app.page.keyboard.type("/model")
 
-    const command = await waitVisible(app.driver, By.css('[data-slash-id="model.choose"]'))
-    await app.driver.actions().move({ origin: command }).perform()
-    await app.driver.actions().sendKeys(Key.ENTER).perform()
+    const command = app.page.locator('[data-slash-id="model.choose"]')
+    await command.waitFor({ state: "visible" })
+    await command.hover()
+    await app.page.keyboard.press("Enter")
 
-    const picker = await waitVisible(app.driver, By.css('[role="dialog"]'))
-    const target = await picker.findElement(By.css('[data-slot="list-item"]'))
+    const picker = app.page.getByRole("dialog")
+    await picker.waitFor({ state: "visible" })
+
+    const target = picker.locator('[data-slot="list-item"]').first()
+    await target.waitFor({ state: "visible" })
+
     const key = await target.getAttribute("data-key")
-    if (!key) throw new Error("data-key missing")
+    if (!key) throw new Error("Failed to resolve model key from list item")
 
-    const spans = await target.findElements(By.css("span"))
-    let name = ""
-    if (spans.length > 0) name = (await spans[0].getText()).trim()
-    if (!name) {
-      const raw = (await target.getText()).trim().split("\n")[0]
-      if (raw) name = raw.trim()
-    }
-    if (!name) throw new Error("model name missing")
+    const name = (await target.locator("span").first().innerText()).trim()
+    if (!name) throw new Error("Failed to resolve model name from list item")
 
-    await wdPressEscape(app.driver)
-    await app.driver.wait(async () => (await app.driver.findElements(By.css('[role="dialog"]'))).length === 0, 5000)
+    await app.page.keyboard.press("Escape")
+    await expect.poll(async () => await picker.count(), { timeout: 5000 }).toBe(0)
 
-    const settings = await wdOpenSettings(app.driver)
-    await settings.findElement(By.xpath(`.//*[@role="tab" and contains(., "Models")]`)).click()
+    const settings = await openSettings(app.page)
 
-    const search = await waitVisible(app.driver, By.css('input[placeholder="Search models"]'))
-    await search.clear()
-    await search.sendKeys(name)
+    await settings.getByRole("tab", { name: "Models" }).click()
+    const search = settings.getByPlaceholder("Search models")
+    await search.waitFor({ state: "visible" })
+    await search.fill(name)
 
-    const switches = await settings.findElements(By.css('[data-component="switch"]'))
-    let hit: (typeof switches)[0] | undefined
-    for (const sw of switches) {
-      if ((await sw.getText()).includes(name)) {
-        hit = sw
-        break
-      }
-    }
-    if (!hit) throw new Error("switch not found")
-    const toggleInput = await hit.findElement(By.css('[data-slot="switch-input"]'))
-    expect(await toggleInput.getAttribute("aria-checked")).toBe("true")
-    await hit.findElement(By.css('[data-slot="switch-control"]')).click()
-    expect(await toggleInput.getAttribute("aria-checked")).toBe("false")
+    const toggle = settings.locator('[data-component="switch"]').filter({ hasText: name }).first()
+    const sw = toggle.locator('[data-slot="switch-input"]')
+    await toggle.waitFor({ state: "visible" })
+    expect(await sw.getAttribute("aria-checked")).toBe("true")
+    await toggle.locator('[data-slot="switch-control"]').click()
+    expect(await sw.getAttribute("aria-checked")).toBe("false")
 
-    await wdCloseDialog(app.driver)
+    await closeDialog(app.page, settings)
 
-    await prompt.click()
-    await prompt.sendKeys("/model")
-    const command2 = await waitVisible(app.driver, By.css('[data-slash-id="model.choose"]'))
-    await app.driver.actions().move({ origin: command2 }).perform()
-    await app.driver.actions().sendKeys(Key.ENTER).perform()
+    await app.page.locator(promptSelector).click()
+    await app.page.keyboard.type("/model")
+    await command.waitFor({ state: "visible" })
+    await command.hover()
+    await app.page.keyboard.press("Enter")
 
-    const pickerAgain = await waitVisible(app.driver, By.css('[role="dialog"]'))
-    await waitVisible(app.driver, By.css('[data-slot="list-item"]'))
-    let count = 0
-    for (const el of await pickerAgain.findElements(By.css('[data-slot="list-item"]'))) {
-      if ((await el.getAttribute("data-key")) === key) count += 1
-    }
-    expect(count).toBe(0)
+    const pickerAgain = app.page.getByRole("dialog")
+    await pickerAgain.waitFor({ state: "visible" })
+    await pickerAgain.locator('[data-slot="list-item"]').first().waitFor({ state: "visible" })
 
-    await wdPressEscape(app.driver)
+    expect(await pickerAgain.locator(`[data-slot="list-item"][data-key="${key}"]`).count()).toBe(0)
+
+    await app.page.keyboard.press("Escape")
+    await expect.poll(async () => await pickerAgain.count()).toBe(0)
   })
 
   test("showing a hidden model restores it to the model picker", async () => {
     await app.gotoSession()
 
-    const prompt = await waitVisible(app.driver, By.css(promptSelector))
-    await prompt.click()
-    await prompt.sendKeys("/model")
+    await app.page.locator(promptSelector).click()
+    await app.page.keyboard.type("/model")
 
-    const command = await waitVisible(app.driver, By.css('[data-slash-id="model.choose"]'))
-    await app.driver.actions().move({ origin: command }).perform()
-    await app.driver.actions().sendKeys(Key.ENTER).perform()
+    const command = app.page.locator('[data-slash-id="model.choose"]')
+    await command.waitFor({ state: "visible" })
+    await command.hover()
+    await app.page.keyboard.press("Enter")
 
-    const picker = await waitVisible(app.driver, By.css('[role="dialog"]'))
-    const target = await picker.findElement(By.css('[data-slot="list-item"]'))
+    const picker = app.page.getByRole("dialog")
+    await picker.waitFor({ state: "visible" })
+
+    const target = picker.locator('[data-slot="list-item"]').first()
+    await target.waitFor({ state: "visible" })
+
     const key = await target.getAttribute("data-key")
-    if (!key) throw new Error("data-key missing")
+    if (!key) throw new Error("Failed to resolve model key from list item")
 
-    const spans = await target.findElements(By.css("span"))
-    let name = ""
-    if (spans.length > 0) name = (await spans[0].getText()).trim()
-    if (!name) {
-      const raw = (await target.getText()).trim().split("\n")[0]
-      if (raw) name = raw.trim()
-    }
-    if (!name) throw new Error("model name missing")
+    const name = (await target.locator("span").first().innerText()).trim()
+    if (!name) throw new Error("Failed to resolve model name from list item")
 
-    await wdPressEscape(app.driver)
-    await app.driver.wait(async () => (await app.driver.findElements(By.css('[role="dialog"]'))).length === 0, 5000)
+    await app.page.keyboard.press("Escape")
+    await expect.poll(async () => await picker.count(), { timeout: 5000 }).toBe(0)
 
-    const settings = await wdOpenSettings(app.driver)
-    await settings.findElement(By.xpath(`.//*[@role="tab" and contains(., "Models")]`)).click()
+    const settings = await openSettings(app.page)
 
-    const search = await waitVisible(app.driver, By.css('input[placeholder="Search models"]'))
-    await search.clear()
-    await search.sendKeys(name)
+    await settings.getByRole("tab", { name: "Models" }).click()
+    const search = settings.getByPlaceholder("Search models")
+    await search.waitFor({ state: "visible" })
+    await search.fill(name)
 
-    const switches = await settings.findElements(By.css('[data-component="switch"]'))
-    let hit: (typeof switches)[0] | undefined
-    for (const sw of switches) {
-      if ((await sw.getText()).includes(name)) {
-        hit = sw
-        break
-      }
-    }
-    if (!hit) throw new Error("switch not found")
-    const toggleInput = await hit.findElement(By.css('[data-slot="switch-input"]'))
-    expect(await toggleInput.getAttribute("aria-checked")).toBe("true")
+    const toggle = settings.locator('[data-component="switch"]').filter({ hasText: name }).first()
+    const sw = toggle.locator('[data-slot="switch-input"]')
+    await toggle.waitFor({ state: "visible" })
+    expect(await sw.getAttribute("aria-checked")).toBe("true")
 
-    await hit.findElement(By.css('[data-slot="switch-control"]')).click()
-    expect(await toggleInput.getAttribute("aria-checked")).toBe("false")
+    await toggle.locator('[data-slot="switch-control"]').click()
+    expect(await sw.getAttribute("aria-checked")).toBe("false")
 
-    await hit.findElement(By.css('[data-slot="switch-control"]')).click()
-    expect(await toggleInput.getAttribute("aria-checked")).toBe("true")
+    await toggle.locator('[data-slot="switch-control"]').click()
+    expect(await sw.getAttribute("aria-checked")).toBe("true")
 
-    await wdCloseDialog(app.driver)
+    await closeDialog(app.page, settings)
 
-    await prompt.click()
-    await prompt.sendKeys("/model")
-    const command2 = await waitVisible(app.driver, By.css('[data-slash-id="model.choose"]'))
-    await app.driver.actions().move({ origin: command2 }).perform()
-    await app.driver.actions().sendKeys(Key.ENTER).perform()
+    await app.page.locator(promptSelector).click()
+    await app.page.keyboard.type("/model")
+    await command.waitFor({ state: "visible" })
+    await command.hover()
+    await app.page.keyboard.press("Enter")
 
-    const pickerAgain = await waitVisible(app.driver, By.css('[role="dialog"]'))
-    await waitVisible(app.driver, By.css('[data-slot="list-item"]'))
-    let found = false
-    for (const el of await pickerAgain.findElements(By.css('[data-slot="list-item"]'))) {
-      if ((await el.getAttribute("data-key")) === key) {
-        found = true
-        break
-      }
-    }
-    expect(found).toBe(true)
+    const pickerAgain = app.page.getByRole("dialog")
+    await pickerAgain.waitFor({ state: "visible" })
+    await pickerAgain.locator(`[data-slot="list-item"][data-key="${key}"]`).waitFor({ state: "visible" })
 
-    await wdPressEscape(app.driver)
+    await app.page.keyboard.press("Escape")
+    await expect.poll(async () => await pickerAgain.count()).toBe(0)
   })
 })

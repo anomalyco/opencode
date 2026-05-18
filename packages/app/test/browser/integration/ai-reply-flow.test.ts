@@ -1,17 +1,16 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../support/use-full-app-stack"
+import { useE2eStack } from "../support/use-e2e-stack"
 
-import { By, Key } from "selenium-webdriver"
+import { By, pollOk, waitVisible } from "../support/wd-wait"
 import { cleanupSession } from "../../../e2e/actions"
 import { promptSelector } from "../../../e2e/selectors"
 import { createSdk, serverUrl } from "../../../e2e/utils"
-import { waitVisible } from "../support/wd-wait"
-import { useAppWebDriver } from "../support/use-app-webdriver"
+import { useAppBrowser } from "../support/use-app-browser"
 
 describe("ai reply flow (webdriver)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+  useE2eStack()
+  const app = useAppBrowser()
 
   test(
     "AI responds to user input",
@@ -22,13 +21,13 @@ describe("ai reply flow (webdriver)", () => {
 
       await app.gotoSession(sessionID)
 
-      const prompt = await waitVisible(app.driver, By.css(promptSelector))
+      const prompt = await waitVisible(app.page, By.css(promptSelector))
       await prompt.click()
-      await prompt.sendKeys("Say hello")
-      await app.driver.actions().sendKeys(Key.ENTER).perform()
+      await prompt.fill("Say hello")
+      await app.page.keyboard.press("Enter")
 
       try {
-        await app.driver.wait(
+        await pollOk(
           async () => {
             const messages = (await app.sdk.session.messages({ sessionID, limit: 50 })).data ?? []
             const assistantMessages = messages.filter((m) => m.info.role === "assistant")
@@ -60,23 +59,24 @@ describe("ai reply flow (webdriver)", () => {
 
       await app.gotoSession(session.id)
 
-      await app.driver.executeScript(`
-        window.__e2ePageErrors = [];
-        window.addEventListener("error", function (e) {
-          window.__e2ePageErrors.push(e.message);
-        });
-      `)
+      await app.page.evaluate(() => {
+        const w = window as Window & { __e2ePageErrors?: string[] }
+        w.__e2ePageErrors = []
+        window.addEventListener("error", (e) => {
+          w.__e2ePageErrors!.push(e.message)
+        })
+      })
 
       const token = `E2E_REPLY_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
       const promptText = `Reply with exactly this token: ${token}`
 
-      const prompt = await waitVisible(app.driver, By.css(promptSelector))
+      const prompt = await waitVisible(app.page, By.css(promptSelector))
       await prompt.click()
-      await prompt.sendKeys(promptText)
-      await app.driver.actions().sendKeys(Key.ENTER).perform()
+      await prompt.fill(promptText)
+      await app.page.keyboard.press("Enter")
 
       try {
-        await app.driver.wait(
+        await pollOk(
           async () => {
             const messages = (await app.sdk.session.messages({ sessionID: session.id, limit: 50 })).data ?? []
             const assistantMessages = messages.filter((m) => m.info.role === "assistant")
@@ -93,7 +93,10 @@ describe("ai reply flow (webdriver)", () => {
         await cleanupSession({ sdk: app.sdk, sessionID: session.id })
       }
 
-      const errs = await app.driver.executeScript(`return window.__e2ePageErrors || []`)
+      const errs = await app.page.evaluate(() => {
+        const w = window as Window & { __e2ePageErrors?: string[] }
+        return w.__e2ePageErrors ?? []
+      })
       expect(Array.isArray(errs) ? errs.length : 0).toBe(0)
     },
     120_000,
@@ -113,18 +116,18 @@ describe("ai reply flow (webdriver)", () => {
 
       try {
         await app.gotoSession(session1.id)
-        const p1 = await waitVisible(app.driver, By.css(promptSelector))
+        const p1 = await waitVisible(app.page, By.css(promptSelector))
         await p1.click()
-        await p1.sendKeys(`Say: ${token1}`)
-        await app.driver.actions().sendKeys(Key.ENTER).perform()
+        await p1.fill(`Say: ${token1}`)
+        await app.page.keyboard.press("Enter")
 
         await app.gotoSession(session2.id)
-        const p2 = await waitVisible(app.driver, By.css(promptSelector))
+        const p2 = await waitVisible(app.page, By.css(promptSelector))
         await p2.click()
-        await p2.sendKeys(`Say: ${token2}`)
-        await app.driver.actions().sendKeys(Key.ENTER).perform()
+        await p2.fill(`Say: ${token2}`)
+        await app.page.keyboard.press("Enter")
 
-        await app.driver.wait(
+        await pollOk(
           async () => {
             const messages = (await app.sdk.session.messages({ sessionID: session1.id, limit: 50 })).data ?? []
             const texts = messages
@@ -138,7 +141,7 @@ describe("ai reply flow (webdriver)", () => {
           90_000,
         )
 
-        await app.driver.wait(
+        await pollOk(
           async () => {
             const messages = (await app.sdk.session.messages({ sessionID: session2.id, limit: 50 })).data ?? []
             const texts = messages

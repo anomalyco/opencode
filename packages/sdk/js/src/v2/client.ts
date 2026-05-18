@@ -18,9 +18,7 @@ const headerGetterSetter = {
   },
 }
 
-export function createOpencodeClient(
-  config?: Config & { projectId?: string },
-) {
+export function createOpencodeClient(config?: Config & { projectId?: string }) {
   if (!config?.fetch) {
     const customFetch: any = (req: any) => {
       if (req instanceof Request && trace.getActiveSpan()) {
@@ -28,7 +26,7 @@ export function createOpencodeClient(
         propagation.inject(context.active(), headers, headerGetterSetter)
         req = new Request(req, { headers })
       }
-      
+
       // @ts-ignore
       req.timeout = false
       return fetch(req)

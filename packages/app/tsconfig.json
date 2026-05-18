@@ -31,7 +31,7 @@
     "e2e/selectors.ts",
     "e2e/actions.ts",
     "test",
-    "script/e2e-infra-parse.ts",
+    "script/wire-docker-context-for-tc.ts",
     "script/e2e-testcontainers.ts",
     "package.json"
   ],

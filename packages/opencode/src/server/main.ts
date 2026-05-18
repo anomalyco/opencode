@@ -35,6 +35,18 @@ if (!process.env.DATABASE_URL?.startsWith("postgresql://")) {
 await Database.initialize()
 await runPostgresMigrations()
 
+if (args.includes("generate")) {
+  const spec = await Server.openapi()
+  const body = JSON.stringify(spec) + "\n"
+  const out = pick("--openapi-out", "").trim()
+  if (out) await Bun.write(out, body)
+  else {
+    process.stdout.write(body)
+  }
+  await Database.close()
+  process.exit(0)
+}
+
 const server = Server.listen({
   hostname: host,
   port,

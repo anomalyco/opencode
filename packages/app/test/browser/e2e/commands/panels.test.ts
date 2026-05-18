@@ -1,10 +1,10 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
+import { useE2eStack } from "../../support/use-e2e-stack"
 
-import { By } from "selenium-webdriver"
+import { By } from "../../support/wd-wait"
 import { fileTreeToggleSelector } from "../../../../e2e/selectors"
 import { waitVisible } from "../../support/wd-wait"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
+import { useAppBrowser } from "../../support/use-app-browser"
 import { wdToggleReviewPanel } from "../../support/wd-actions"
 
 async function expanded(el: { getAttribute(name: string): Promise<string | null> }) {
@@ -14,31 +14,29 @@ async function expanded(el: { getAttribute(name: string): Promise<string | null>
 }
 
 describe("panels (webdriver migration)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("review panel can be toggled via keybind", async () => {
     await app.gotoSession()
 
-    const reviewPanel = await waitVisible(app.driver, By.css("#review-panel"))
+    const reviewPanel = await waitVisible(app.page, By.css("#review-panel"))
 
-    const treeToggle = await waitVisible(app.driver, By.css(fileTreeToggleSelector))
+    const treeToggle = await waitVisible(app.page, By.css(fileTreeToggleSelector))
     if (await expanded(treeToggle)) await treeToggle.click()
     expect(await treeToggle.getAttribute("aria-expanded")).toBe("false")
 
-    const reviewToggle = await waitVisible(
-      app.driver,
-      By.xpath(`(//button[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "toggle review")])[1]`),
-    )
+    const reviewToggle = app.page.getByRole("button", { name: /toggle review/i })
+    await reviewToggle.waitFor({ state: "visible" })
     if (await expanded(reviewToggle)) await reviewToggle.click()
     expect(await reviewToggle.getAttribute("aria-expanded")).toBe("false")
     expect(await reviewPanel.getAttribute("aria-hidden")).toBe("true")
 
-    await wdToggleReviewPanel(app.driver)
+    await wdToggleReviewPanel(app.page)
     expect(await reviewToggle.getAttribute("aria-expanded")).toBe("true")
     expect(await reviewPanel.getAttribute("aria-hidden")).toBe("false")
 
-    await wdToggleReviewPanel(app.driver)
+    await wdToggleReviewPanel(app.page)
     expect(await reviewToggle.getAttribute("aria-expanded")).toBe("false")
     expect(await reviewPanel.getAttribute("aria-hidden")).toBe("true")
   })

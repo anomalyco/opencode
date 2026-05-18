@@ -1,20 +1,24 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../support/use-full-app-stack"
+import { useE2eStack } from "../support/use-e2e-stack"
 
-import { useAppWebDriver } from "../support/use-app-webdriver"
+import { pollOk } from "../support/wd-wait"
+import { useAppBrowser } from "../support/use-app-browser"
 
 describe("pyodide hook (webdriver)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+  useE2eStack()
+  const app = useAppBrowser()
 
   test(
     "Pyodide print output is captured as a string via executeAsyncScript",
     async () => {
-      await app.driver.get(`${app.origin}/`)
+      await app.page.goto(`${app.origin}/`)
 
-      await app.driver.wait(
+      await pollOk(
         async () =>
-          (await app.driver.executeScript(`return typeof window.__veritlyE2ePyodide?.run === "function"`)) === true,
+          (await app.page.evaluate(
+            () => typeof (window as Window & { __veritlyE2ePyodide?: { run?: unknown } }).__veritlyE2ePyodide?.run ===
+              "function",
+          )) === true,
         90_000,
       )
 
@@ -27,19 +31,19 @@ describe("pyodide hook (webdriver)", () => {
       ].join("\n")
 
       type RunResult = { exitCode?: number; output?: string; error?: string }
-      const run = (await app.driver.executeAsyncScript(
-        `
-        const cb = arguments[arguments.length - 1];
-        const payload = arguments[0];
-        const hook = window.__veritlyE2ePyodide;
-        if (!hook || typeof hook.run !== "function") {
-          cb({ error: "Pyodide e2e hook missing" });
-          return;
-        }
-        hook.run(payload.code, payload.timeoutMs).then(function (r) { cb(r); }).catch(function (e) {
-          cb({ error: String(e) });
-        });
-      `,
+      const run = (await app.page.evaluate(
+        async (payload: { code: string; timeoutMs: number }) => {
+          const hook = (window as Window & { __veritlyE2ePyodide?: { run: (c: string, t: number) => Promise<RunResult> } })
+            .__veritlyE2ePyodide
+          if (!hook || typeof hook.run !== "function") {
+            return { error: "Pyodide e2e hook missing" }
+          }
+          try {
+            return await hook.run(payload.code, payload.timeoutMs)
+          } catch (e) {
+            return { error: String(e) }
+          }
+        },
         { code: userSnippet, timeoutMs: 180_000 },
       )) as RunResult
 

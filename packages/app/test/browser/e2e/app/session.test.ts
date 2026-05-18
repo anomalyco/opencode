@@ -1,26 +1,24 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
-
-import { By, waitVisible } from "../../support/wd-wait"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
 import { withSession } from "../../../../e2e/actions"
+import { promptSelector } from "../../../../e2e/selectors"
 
-describe("session prompt (webdriver migration)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("session prompt", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("can open an existing session and type into the prompt", async () => {
-    const title = `e2e wd smoke ${Date.now()}`
+    const title = `e2e smoke ${Date.now()}`
     await withSession(app.sdk, title, async (session) => {
       await app.gotoSession(session.id)
-      const prompt = await waitVisible(app.driver, By.css('[data-component="prompt-input"]'))
+
+      const prompt = app.page.locator(promptSelector)
       await prompt.click()
-      await prompt.sendKeys("hello from e2e wd")
-      const body = await app.driver.executeScript(`
-        const el = document.querySelector('[data-component="prompt-input"]')
-        return el ? el.innerText : ""
-      `)
-      expect(body).toContain("hello from e2e wd")
+      await app.page.keyboard.type("hello from e2e")
+      await expect
+        .poll(async () => (await prompt.textContent()) ?? "", { timeout: 15_000 })
+        .toContain("hello from e2e")
     })
   })
 })

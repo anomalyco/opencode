@@ -218,7 +218,6 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     )
 
     const locale = createMemo<Locale>(() => normalizeLocale(store.locale))
-    console.log("locale", locale())
     const intl = createMemo(() => INTL[locale()])
 
     const dict = createMemo<Dictionary>(() => DICT[locale()])

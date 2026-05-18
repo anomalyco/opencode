@@ -1,6 +1,6 @@
-import type { WebDriver } from "selenium-webdriver"
+import type { BrowserContext, Page } from "playwright"
 
-const hooked = new WeakSet<WebDriver>()
+const hooked = new WeakSet<BrowserContext>()
 
 const SHIM = `(function(){
   if (window.__e2ePromptFetchShim) return
@@ -25,29 +25,23 @@ const SHIM = `(function(){
   }
 })()`
 
-type Cdp = { executeCdpCommand(cmd: string, params: Record<string, unknown>): Promise<unknown> }
-
-export async function ensureWdPromptFetchShim(driver: WebDriver) {
-  if (hooked.has(driver)) return
-  const cdp = driver as unknown as Cdp
-  if (typeof cdp.executeCdpCommand !== "function") {
-    throw new Error("executeCdpCommand missing — prompt fetch mock needs Chromium WebDriver")
-  }
-  await cdp.executeCdpCommand("Page.addScriptToEvaluateOnNewDocument", { source: SHIM })
-  hooked.add(driver)
+export async function ensureWdPromptFetchShim(ctx: BrowserContext) {
+  if (hooked.has(ctx)) return
+  await ctx.addInitScript({ content: SHIM })
+  hooked.add(ctx)
 }
 
-export async function prepareWdPromptFetchAbort(driver: WebDriver) {
-  await driver.executeScript(`sessionStorage.setItem("__e2e_prompt_fetch", JSON.stringify({ abortSyncMessage: true }))`)
+export async function prepareWdPromptFetchAbort(page: Page) {
+  await page.evaluate(() => sessionStorage.setItem("__e2e_prompt_fetch", JSON.stringify({ abortSyncMessage: true })))
 }
 
-export async function prepareWdPromptFetchAsync500(driver: WebDriver, sessionId: string) {
-  await driver.executeScript(
-    `sessionStorage.setItem("__e2e_prompt_fetch", JSON.stringify({ promptAsync500: arguments[0] }))`,
+export async function prepareWdPromptFetchAsync500(page: Page, sessionId: string) {
+  await page.evaluate(
+    (id: string) => sessionStorage.setItem("__e2e_prompt_fetch", JSON.stringify({ promptAsync500: id })),
     sessionId,
   )
 }
 
-export async function clearWdPromptFetch(driver: WebDriver) {
-  await driver.executeScript(`sessionStorage.removeItem("__e2e_prompt_fetch")`)
+export async function clearWdPromptFetch(page: Page) {
+  await page.evaluate(() => sessionStorage.removeItem("__e2e_prompt_fetch"))
 }

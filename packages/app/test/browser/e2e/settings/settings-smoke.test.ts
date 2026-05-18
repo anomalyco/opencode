@@ -1,30 +1,23 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
+import { closeDialog, openSettings } from "../../../../e2e/actions"
 
-import { By } from "selenium-webdriver"
-import { wdChordModF, wdCloseDialog, wdOpenSettings } from "../../support/wd-actions"
-import { waitVisible } from "../../support/wd-wait"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
-
-describe("settings smoke (webdriver migration)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("settings smoke", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("smoke settings dialog opens, switches tabs, closes", async () => {
     await app.gotoSession()
+    const page = app.page
 
-    const dialog = await wdOpenSettings(app.driver)
-    await dialog.findElement(By.xpath(`.//button[@role="tab" and contains(., "Shortcuts")]`)).click()
+    const dialog = await openSettings(page)
 
-    await waitVisible(app.driver, By.xpath(`//*[@role="dialog"]//button[contains(., "Reset to defaults")]`))
-    await waitVisible(
-      app.driver,
-      By.xpath(
-        `//*[@role="dialog"]//*[self::input or self::textarea][contains(translate(@placeholder, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "search shortcuts")]`,
-      ),
-    )
+    await dialog.getByRole("tab", { name: "Shortcuts" }).click()
+    await dialog.getByRole("button", { name: "Reset to defaults" }).waitFor({ state: "visible" })
+    await dialog.getByPlaceholder("Search shortcuts").waitFor({ state: "visible" })
 
-    await wdCloseDialog(app.driver)
-    expect((await app.driver.findElements(By.css('[role="dialog"]'))).length).toBe(0)
+    await closeDialog(page, dialog)
+    expect(await page.locator('[role="dialog"]').count()).toBe(0)
   })
 })

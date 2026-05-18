@@ -207,7 +207,7 @@ export default function FileTree(props: {
   draggable?: boolean
   onFileClick?: (file: FileNode) => void
   droppable?: boolean
-  onUpload?: (files: FileList) => void
+  onUpload?: (files: FileList | File[]) => void
   emptyActions?: boolean
 
   _filter?: Filter
@@ -414,10 +414,22 @@ export default function FileTree(props: {
     e.stopPropagation()
     setIsDragging(false)
 
-    const files = e.dataTransfer?.files
-    if (!files || files.length === 0) return
+    const dt = e.dataTransfer
+    if (!dt) return
 
-    props.onUpload?.(files)
+    const fromList = dt.files.length > 0 ? Array.from(dt.files) : []
+    const fromItems =
+      fromList.length > 0
+        ? []
+        : Array.from({ length: dt.items.length }, (_, i) => dt.items[i])
+            .filter((item) => item.kind === "file")
+            .map((item) => item.getAsFile())
+            .filter((f): f is File => f !== null)
+
+    const next = fromList.length > 0 ? fromList : fromItems
+    if (next.length === 0) return
+
+    props.onUpload?.(next)
   }
 
   const handleNewFolder = async () => {

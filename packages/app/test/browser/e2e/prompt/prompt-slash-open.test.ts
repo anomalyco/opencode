@@ -1,30 +1,30 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
-
-import { By, Key } from "selenium-webdriver"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
 import { promptSelector } from "../../../../e2e/selectors"
-import { waitAbsent, waitVisible } from "../../support/wd-wait"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
 
-describe("prompt slash open (webdriver migration)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("prompt slash open", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("smoke /open opens file picker dialog", async () => {
     await app.gotoSession()
+    const page = app.page
 
-    const prompt = await waitVisible(app.driver, By.css(promptSelector))
-    await prompt.click()
-    await prompt.sendKeys("/open")
+    await page.locator(promptSelector).click()
+    await page.keyboard.type("/open")
 
-    const command = await waitVisible(app.driver, By.css('[data-slash-id="file.open"]'))
-    await app.driver.actions().move({ origin: command }).perform()
-    await app.driver.actions().sendKeys(Key.ENTER).perform()
+    const command = page.locator('[data-slash-id="file.open"]')
+    await command.waitFor({ state: "visible" })
+    await command.hover()
 
-    const dialog = await waitVisible(app.driver, By.css('[role="dialog"]'))
-    await waitVisible(app.driver, By.css('[role="dialog"] [role="textbox"], [role="dialog"] input'))
+    await page.keyboard.press("Enter")
 
-    await app.driver.actions().sendKeys(Key.ESCAPE).perform()
-    await waitAbsent(app.driver, By.css('[role="dialog"]'), 10_000)
+    const dialog = page.getByRole("dialog")
+    await dialog.waitFor({ state: "visible" })
+    await dialog.getByRole("textbox").first().waitFor({ state: "visible" })
+
+    await page.keyboard.press("Escape")
+    expect(await dialog.count()).toBe(0)
   })
 })

@@ -70,8 +70,11 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      - name: Install Playwright Chromium
+        run: bun --cwd packages/app run playwright:install
+
       - name: Run app e2e tests
-        run: bun --cwd packages/app test:e2e:local
+        run: bun --cwd packages/app run e2e
         env:
           CI: true
         timeout-minutes: 30

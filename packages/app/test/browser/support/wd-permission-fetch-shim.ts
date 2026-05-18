@@ -1,6 +1,6 @@
-import type { WebDriver } from "selenium-webdriver"
+import type { BrowserContext, Page } from "playwright"
 
-const hooked = new WeakSet<WebDriver>()
+const hooked = new WeakSet<BrowserContext>()
 
 const SHIM = `(function(){
   if (window.__e2ePermFetchShim) return
@@ -71,32 +71,29 @@ const SHIM = `(function(){
   }
 })()`
 
-type Cdp = { executeCdpCommand(cmd: string, params: Record<string, unknown>): Promise<unknown> }
-
-/** Registers a one-per-driver `Page.addScriptToEvaluateOnNewDocument` hook (Chrome). */
-export async function ensureWdPermissionFetchShim(driver: WebDriver) {
-  if (hooked.has(driver)) return
-  const cdp = driver as unknown as Cdp
-  if (typeof cdp.executeCdpCommand !== "function") {
-    throw new Error("executeCdpCommand missing — permission mock needs Chromium WebDriver")
-  }
-  await cdp.executeCdpCommand("Page.addScriptToEvaluateOnNewDocument", { source: SHIM })
-  hooked.add(driver)
+export async function ensureWdPermissionFetchShim(ctx: BrowserContext) {
+  if (hooked.has(ctx)) return
+  await ctx.addInitScript({ content: SHIM })
+  hooked.add(ctx)
 }
 
 export async function prepareWdPermissionMock(
-  driver: WebDriver,
+  page: Page,
   input: { pending: Record<string, unknown>[]; child?: Record<string, unknown> },
 ) {
-  await driver.executeScript(
-    `sessionStorage.setItem("__e2e_perm_pending", JSON.stringify(arguments[0]));
-     if (arguments[1]) sessionStorage.setItem("__e2e_session_child", JSON.stringify(arguments[1]));
-     else sessionStorage.removeItem("__e2e_session_child");`,
-    input.pending,
-    input.child ? input.child : null,
+  await page.evaluate(
+    (args: { pending: Record<string, unknown>[]; child: Record<string, unknown> | null }) => {
+      sessionStorage.setItem("__e2e_perm_pending", JSON.stringify(args.pending))
+      if (args.child) sessionStorage.setItem("__e2e_session_child", JSON.stringify(args.child))
+      else sessionStorage.removeItem("__e2e_session_child")
+    },
+    { pending: input.pending, child: input.child ? input.child : null },
   )
 }
 
-export async function clearWdPermissionMock(driver: WebDriver) {
-  await driver.executeScript(`sessionStorage.removeItem("__e2e_perm_pending"); sessionStorage.removeItem("__e2e_session_child");`)
+export async function clearWdPermissionMock(page: Page) {
+  await page.evaluate(() => {
+    sessionStorage.removeItem("__e2e_perm_pending")
+    sessionStorage.removeItem("__e2e_session_child")
+  })
 }

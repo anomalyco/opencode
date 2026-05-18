@@ -1,18 +1,16 @@
-import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
+import { describe, test } from "vitest"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
+import { openPalette } from "../../../../e2e/actions"
 
-import { By } from "selenium-webdriver"
-import { wdOpenPalette, wdPressEscape } from "../../support/wd-actions"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
-
-describe("palette (webdriver migration)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("palette", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("search palette opens and closes", async () => {
     await app.gotoSession()
-    await wdOpenPalette(app.driver)
-    await wdPressEscape(app.driver)
-    await app.driver.wait(async () => (await app.driver.findElements(By.css('[role="dialog"]'))).length === 0, 10_000)
+    const dialog = await openPalette(app.page)
+    await app.page.keyboard.press("Escape")
+    await dialog.waitFor({ state: "detached", timeout: 10_000 })
   })
 })

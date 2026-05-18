@@ -1,8 +1,7 @@
-import { beforeAll, describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
-
-import { By } from "selenium-webdriver"
-import type { WebDriver } from "selenium-webdriver"
+import type { Page, Route } from "playwright"
+import { describe, expect, test } from "vitest"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
 import {
   cleanupSession,
   clearSessionDockSeed,
@@ -18,16 +17,8 @@ import {
   sessionTodoListSelector,
   sessionTodoToggleButtonSelector,
 } from "../../../../e2e/selectors"
-import {
-  clearWdPermissionMock,
-  ensureWdPermissionFetchShim,
-  prepareWdPermissionMock,
-} from "../../support/wd-permission-fetch-shim"
-import { waitVisible } from "../../support/wd-wait"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
 
 type Sdk = Parameters<typeof clearSessionDockSeed>[0]
-
 type PermissionRule = { permission: string; pattern: string; action: "allow" | "deny" | "ask" }
 
 async function withDockSession<T>(
@@ -55,32 +46,25 @@ async function withDockSeed<T>(sdk: Sdk, sessionID: string, fn: () => Promise<T>
   }
 }
 
-async function clearPermissionDock(driver: WebDriver, label: RegExp) {
+async function clearPermissionDock(page: Page, label: RegExp) {
+  const dock = page.locator(permissionDockSelector)
   for (let i = 0; i < 3; i++) {
-    const docks = await driver.findElements(By.css(permissionDockSelector))
-    if (docks.length === 0) return
-    const buttons = await docks[0]!.findElements(By.css("button"))
-    for (const b of buttons) {
-      const t = await b.getText()
-      if (label.test(t)) {
-        await b.click()
-        await new Promise((r) => setTimeout(r, 150))
-        break
-      }
-    }
+    const c = await dock.count()
+    if (c === 0) return
+    await dock.getByRole("button", { name: label }).click()
+    await new Promise((r) => setTimeout(r, 150))
   }
 }
 
-async function setAutoAccept(driver: WebDriver, enabled: boolean) {
-  const button = await waitVisible(driver, By.css('[data-action="prompt-permissions"]'))
+async function setAutoAccept(page: Page, enabled: boolean) {
+  const button = page.locator('[data-action="prompt-permissions"]').first()
+  await button.waitFor({ state: "visible" })
   const pressed = (await button.getAttribute("aria-pressed")) === "true"
   if (pressed === enabled) return
   await button.click()
-  await driver.wait(async () => {
-    const btn = await driver.findElement(By.css('[data-action="prompt-permissions"]'))
-    const p = (await btn.getAttribute("aria-pressed")) === "true"
-    return p === enabled
-  }, 3000)
+  await expect
+    .poll(async () => button.getAttribute("aria-pressed"))
+    .toBe(enabled ? "true" : "false")
 }
 
 type MockReq = {
@@ -92,50 +76,101 @@ type MockReq = {
   always?: string[]
 }
 
-async function withMockPermissionWd(
-  driver: WebDriver,
+async function withMockPermission<T>(
+  page: Page,
   request: MockReq,
-  child: Record<string, unknown> | undefined,
-  fn: () => Promise<void>,
+  opts: { child?: Record<string, unknown> } | undefined,
+  fn: () => Promise<T>,
 ) {
-  const pending = [
+  let pending: Record<string, unknown>[] = [
     {
       ...request,
-      always: request.always ? request.always : ["*"],
-      metadata: request.metadata ? request.metadata : {},
+      always: request.always ?? ["*"],
+      metadata: request.metadata ?? {},
     },
   ]
-  await prepareWdPermissionMock(driver, { pending, child })
-  const url = await driver.getCurrentUrl()
-  await driver.get(url)
+
+  const list = async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(pending),
+    })
+  }
+
+  const reply = async (route: Route) => {
+    const url = new URL(route.request().url())
+    const id = url.pathname.split("/").pop()
+    pending = pending.filter((item) => item.id !== id)
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(true),
+    })
+  }
+
+  await page.route("**/permission", list)
+  await page.route("**/session/*/permissions/*", reply)
+
+  const sessionList = opts?.child
+    ? async (route: Route) => {
+        const res = await route.fetch()
+        const json = await res.json()
+        let list: Record<string, unknown>[] | undefined
+        if (Array.isArray(json)) list = json as Record<string, unknown>[]
+        else if (json && typeof json === "object" && Array.isArray((json as { data?: unknown[] }).data))
+          list = (json as { data: Record<string, unknown>[] }).data
+        if (!list) {
+          await route.fulfill({ response: res })
+          return
+        }
+        const cid = (opts.child as { id?: string }).id
+        if (!list.some((item) => item?.id === cid)) list.push(opts.child as Record<string, unknown>)
+        const body = Array.isArray(json)
+          ? JSON.stringify(list)
+          : JSON.stringify({ ...(json as Record<string, unknown>), data: list })
+        await route.fulfill({
+          status: res.status(),
+          headers: res.headers(),
+          contentType: "application/json",
+          body,
+        })
+      }
+    : undefined
+
+  if (sessionList) await page.route("**/session?*", sessionList)
+
   try {
-    await fn()
+    return await fn()
   } finally {
-    await clearWdPermissionMock(driver)
+    await page.unroute("**/permission", list)
+    await page.unroute("**/session/*/permissions/*", reply)
+    if (sessionList) await page.unroute("**/session?*", sessionList)
   }
 }
 
-describe("session composer dock (webdriver)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
-
-  beforeAll(async () => {
-    await ensureWdPermissionFetchShim(app.driver)
-  })
+describe("session composer dock", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test(
     "default dock shows prompt input",
     async () => {
       await withDockSession(app.sdk, "e2e composer dock default", async (session) => {
         await app.gotoSession(session.id)
+        const page = app.page
 
-        await waitVisible(app.driver, By.css(sessionComposerDockSelector))
-        await waitVisible(app.driver, By.css(promptSelector))
-        expect((await app.driver.findElements(By.css(questionDockSelector))).length).toBe(0)
-        expect((await app.driver.findElements(By.css(permissionDockSelector))).length).toBe(0)
+        await page.locator(sessionComposerDockSelector).waitFor({ state: "visible" })
+        await page.locator(promptSelector).waitFor({ state: "visible" })
+        expect(await page.locator(questionDockSelector).count()).toBe(0)
+        expect(await page.locator(permissionDockSelector).count()).toBe(0)
 
-        const prompt = await waitVisible(app.driver, By.css(promptSelector))
-        await prompt.click()
+        await page.locator(promptSelector).click()
+        await expect
+          .poll(async () =>
+            page.locator(promptSelector).evaluate((el) => document.activeElement === el),
+          )
+          .toBe(true)
       })
     },
     120_000,
@@ -143,12 +178,14 @@ describe("session composer dock (webdriver)", () => {
 
   test("auto-accept toggle works before first submit", async () => {
     await app.gotoSession()
+    const page = app.page
 
-    const button = await waitVisible(app.driver, By.css('[data-action="prompt-permissions"]'))
+    const button = page.locator('[data-action="prompt-permissions"]').first()
+    await button.waitFor({ state: "visible" })
     expect(await button.getAttribute("aria-pressed")).toBe("false")
 
-    await setAutoAccept(app.driver, true)
-    await setAutoAccept(app.driver, false)
+    await setAutoAccept(page, true)
+    await setAutoAccept(page, false)
   })
 
   test(
@@ -157,6 +194,7 @@ describe("session composer dock (webdriver)", () => {
       await withDockSession(app.sdk, "e2e composer dock question", async (session) => {
         await withDockSeed(app.sdk, session.id, async () => {
           await app.gotoSession(session.id)
+          const page = app.page
 
           await seedSessionQuestion(app.sdk, {
             sessionID: session.id,
@@ -172,15 +210,15 @@ describe("session composer dock (webdriver)", () => {
             ],
           })
 
-          await app.driver.wait(async () => (await app.driver.findElements(By.css(questionDockSelector))).length === 1, 10_000)
-          expect((await app.driver.findElements(By.css(promptSelector))).length).toBe(0)
+          const dock = page.locator(questionDockSelector)
+          await expect.poll(async () => await dock.count(), { timeout: 10_000 }).toBe(1)
+          expect(await page.locator(promptSelector).count()).toBe(0)
 
-          const dock = await waitVisible(app.driver, By.css(questionDockSelector))
-          await dock.findElement(By.css('[data-slot="question-option"]')).click()
-          await dock.findElement(By.xpath(`.//button[contains(translate(., "SUBMIT", "submit"), "submit")]`)).click()
+          await dock.locator('[data-slot="question-option"]').first().click()
+          await dock.getByRole("button", { name: /submit/i }).click()
 
-          await app.driver.wait(async () => (await app.driver.findElements(By.css(questionDockSelector))).length === 0, 10_000)
-          await waitVisible(app.driver, By.css(promptSelector))
+          await expect.poll(async () => await page.locator(questionDockSelector).count(), { timeout: 10_000 }).toBe(0)
+          await page.locator(promptSelector).waitFor({ state: "visible" })
         })
       })
     },
@@ -192,9 +230,10 @@ describe("session composer dock (webdriver)", () => {
     async () => {
       await withDockSession(app.sdk, "e2e composer dock permission once", async (session) => {
         await app.gotoSession(session.id)
-        await setAutoAccept(app.driver, false)
-        await withMockPermissionWd(
-          app.driver,
+        const page = app.page
+        await setAutoAccept(page, false)
+        await withMockPermission(
+          page,
           {
             id: "per_e2e_once",
             sessionID: session.id,
@@ -204,13 +243,18 @@ describe("session composer dock (webdriver)", () => {
           },
           undefined,
           async () => {
-            await app.driver.wait(async () => (await app.driver.findElements(By.css(permissionDockSelector))).length === 1, 10_000)
-            expect((await app.driver.findElements(By.css(promptSelector))).length).toBe(0)
+            await page.goto(page.url())
+            await expect.poll(async () => await page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(
+              1,
+            )
+            expect(await page.locator(promptSelector).count()).toBe(0)
 
-            await clearPermissionDock(app.driver, /allow once/i)
-            await app.driver.get(await app.driver.getCurrentUrl())
-            await app.driver.wait(async () => (await app.driver.findElements(By.css(permissionDockSelector))).length === 0, 10_000)
-            await waitVisible(app.driver, By.css(promptSelector))
+            await clearPermissionDock(page, /allow once/i)
+            await page.goto(page.url())
+            await expect.poll(async () => await page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(
+              0,
+            )
+            await page.locator(promptSelector).waitFor({ state: "visible" })
           },
         )
       })
@@ -223,9 +267,10 @@ describe("session composer dock (webdriver)", () => {
     async () => {
       await withDockSession(app.sdk, "e2e composer dock permission reject", async (session) => {
         await app.gotoSession(session.id)
-        await setAutoAccept(app.driver, false)
-        await withMockPermissionWd(
-          app.driver,
+        const page = app.page
+        await setAutoAccept(page, false)
+        await withMockPermission(
+          page,
           {
             id: "per_e2e_reject",
             sessionID: session.id,
@@ -234,13 +279,18 @@ describe("session composer dock (webdriver)", () => {
           },
           undefined,
           async () => {
-            await app.driver.wait(async () => (await app.driver.findElements(By.css(permissionDockSelector))).length === 1, 10_000)
-            expect((await app.driver.findElements(By.css(promptSelector))).length).toBe(0)
+            await page.goto(page.url())
+            await expect.poll(async () => await page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(
+              1,
+            )
+            expect(await page.locator(promptSelector).count()).toBe(0)
 
-            await clearPermissionDock(app.driver, /deny/i)
-            await app.driver.get(await app.driver.getCurrentUrl())
-            await app.driver.wait(async () => (await app.driver.findElements(By.css(permissionDockSelector))).length === 0, 10_000)
-            await waitVisible(app.driver, By.css(promptSelector))
+            await clearPermissionDock(page, /deny/i)
+            await page.goto(page.url())
+            await expect.poll(async () => await page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(
+              0,
+            )
+            await page.locator(promptSelector).waitFor({ state: "visible" })
           },
         )
       })
@@ -253,9 +303,10 @@ describe("session composer dock (webdriver)", () => {
     async () => {
       await withDockSession(app.sdk, "e2e composer dock permission always", async (session) => {
         await app.gotoSession(session.id)
-        await setAutoAccept(app.driver, false)
-        await withMockPermissionWd(
-          app.driver,
+        const page = app.page
+        await setAutoAccept(page, false)
+        await withMockPermission(
+          page,
           {
             id: "per_e2e_always",
             sessionID: session.id,
@@ -265,13 +316,18 @@ describe("session composer dock (webdriver)", () => {
           },
           undefined,
           async () => {
-            await app.driver.wait(async () => (await app.driver.findElements(By.css(permissionDockSelector))).length === 1, 10_000)
-            expect((await app.driver.findElements(By.css(promptSelector))).length).toBe(0)
+            await page.goto(page.url())
+            await expect.poll(async () => await page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(
+              1,
+            )
+            expect(await page.locator(promptSelector).count()).toBe(0)
 
-            await clearPermissionDock(app.driver, /allow always/i)
-            await app.driver.get(await app.driver.getCurrentUrl())
-            await app.driver.wait(async () => (await app.driver.findElements(By.css(permissionDockSelector))).length === 0, 10_000)
-            await waitVisible(app.driver, By.css(promptSelector))
+            await clearPermissionDock(page, /allow always/i)
+            await page.goto(page.url())
+            await expect.poll(async () => await page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(
+              0,
+            )
+            await page.locator(promptSelector).waitFor({ state: "visible" })
           },
         )
       })
@@ -284,6 +340,7 @@ describe("session composer dock (webdriver)", () => {
     async () => {
       await withDockSession(app.sdk, "e2e composer dock child question parent", async (session) => {
         await app.gotoSession(session.id)
+        const page = app.page
 
         const child = await app.sdk.session
           .create({
@@ -309,15 +366,15 @@ describe("session composer dock (webdriver)", () => {
               ],
             })
 
-            await app.driver.wait(async () => (await app.driver.findElements(By.css(questionDockSelector))).length === 1, 10_000)
-            expect((await app.driver.findElements(By.css(promptSelector))).length).toBe(0)
+            const dock = page.locator(questionDockSelector)
+            await expect.poll(async () => await dock.count(), { timeout: 10_000 }).toBe(1)
+            expect(await page.locator(promptSelector).count()).toBe(0)
 
-            const dock = await waitVisible(app.driver, By.css(questionDockSelector))
-            await dock.findElement(By.css('[data-slot="question-option"]')).click()
-            await dock.findElement(By.xpath(`.//button[contains(translate(., "SUBMIT", "submit"), "submit")]`)).click()
+            await dock.locator('[data-slot="question-option"]').first().click()
+            await dock.getByRole("button", { name: /submit/i }).click()
 
-            await app.driver.wait(async () => (await app.driver.findElements(By.css(questionDockSelector))).length === 0, 10_000)
-            await waitVisible(app.driver, By.css(promptSelector))
+            await expect.poll(async () => await page.locator(questionDockSelector).count(), { timeout: 10_000 }).toBe(0)
+            await page.locator(promptSelector).waitFor({ state: "visible" })
           })
         } finally {
           await cleanupSession({ sdk: app.sdk, sessionID: child.id })
@@ -332,7 +389,8 @@ describe("session composer dock (webdriver)", () => {
     async () => {
       await withDockSession(app.sdk, "e2e composer dock child permission parent", async (session) => {
         await app.gotoSession(session.id)
-        await setAutoAccept(app.driver, false)
+        const page = app.page
+        await setAutoAccept(page, false)
 
         const child = await app.sdk.session
           .create({
@@ -343,8 +401,8 @@ describe("session composer dock (webdriver)", () => {
         if (!child?.id) throw new Error("Child session create did not return an id")
 
         try {
-          await withMockPermissionWd(
-            app.driver,
+          await withMockPermission(
+            page,
             {
               id: "per_e2e_child",
               sessionID: child.id,
@@ -352,16 +410,20 @@ describe("session composer dock (webdriver)", () => {
               patterns: ["/tmp/opencode-e2e-perm-child"],
               metadata: { description: "Need child permission" },
             },
-            child as unknown as Record<string, unknown>,
+            { child: child as unknown as Record<string, unknown> },
             async () => {
-              await app.driver.wait(async () => (await app.driver.findElements(By.css(permissionDockSelector))).length === 1, 10_000)
-              expect((await app.driver.findElements(By.css(promptSelector))).length).toBe(0)
+              await page.goto(page.url())
+              const dock = page.locator(permissionDockSelector)
+              await expect.poll(async () => await dock.count(), { timeout: 10_000 }).toBe(1)
+              expect(await page.locator(promptSelector).count()).toBe(0)
 
-              await clearPermissionDock(app.driver, /allow once/i)
-              await app.driver.get(await app.driver.getCurrentUrl())
+              await clearPermissionDock(page, /allow once/i)
+              await page.goto(page.url())
 
-              await app.driver.wait(async () => (await app.driver.findElements(By.css(permissionDockSelector))).length === 0, 10_000)
-              await waitVisible(app.driver, By.css(promptSelector))
+              await expect.poll(async () => await page.locator(permissionDockSelector).count(), { timeout: 10_000 }).toBe(
+                0,
+              )
+              await page.locator(promptSelector).waitFor({ state: "visible" })
             },
           )
         } finally {
@@ -378,6 +440,7 @@ describe("session composer dock (webdriver)", () => {
       await withDockSession(app.sdk, "e2e composer dock todo", async (session) => {
         await withDockSeed(app.sdk, session.id, async () => {
           await app.gotoSession(session.id)
+          const page = app.page
 
           await seedSessionTodos(app.sdk, {
             sessionID: session.id,
@@ -387,18 +450,16 @@ describe("session composer dock (webdriver)", () => {
             ],
           })
 
-          await app.driver.wait(async () => (await app.driver.findElements(By.css(sessionTodoDockSelector))).length === 1, 10_000)
-          await waitVisible(app.driver, By.css(sessionTodoListSelector))
+          await expect.poll(async () => await page.locator(sessionTodoDockSelector).count(), { timeout: 10_000 }).toBe(
+            1,
+          )
+          await page.locator(sessionTodoListSelector).waitFor({ state: "visible" })
 
-          await app.driver.findElement(By.css(sessionTodoToggleButtonSelector)).click()
-          await app.driver.wait(async () => {
-            const el = await app.driver.findElements(By.css(sessionTodoListSelector))
-            if (el.length === 0) return true
-            return !(await el[0]!.isDisplayed())
-          }, 5000)
+          await page.locator(sessionTodoToggleButtonSelector).click()
+          await expect.poll(async () => await page.locator(sessionTodoListSelector).isHidden()).toBe(true)
 
-          await app.driver.findElement(By.css(sessionTodoToggleButtonSelector)).click()
-          await waitVisible(app.driver, By.css(sessionTodoListSelector))
+          await page.locator(sessionTodoToggleButtonSelector).click()
+          await page.locator(sessionTodoListSelector).waitFor({ state: "visible" })
 
           await seedSessionTodos(app.sdk, {
             sessionID: session.id,
@@ -408,7 +469,9 @@ describe("session composer dock (webdriver)", () => {
             ],
           })
 
-          await app.driver.wait(async () => (await app.driver.findElements(By.css(sessionTodoDockSelector))).length === 0, 10_000)
+          await expect.poll(async () => await page.locator(sessionTodoDockSelector).count(), { timeout: 10_000 }).toBe(
+            0,
+          )
         })
       })
     },
@@ -421,6 +484,7 @@ describe("session composer dock (webdriver)", () => {
       await withDockSession(app.sdk, "e2e composer dock keyboard", async (session) => {
         await withDockSeed(app.sdk, session.id, async () => {
           await app.gotoSession(session.id)
+          const page = app.page
 
           await seedSessionQuestion(app.sdk, {
             sessionID: session.id,
@@ -433,13 +497,12 @@ describe("session composer dock (webdriver)", () => {
             ],
           })
 
-          await app.driver.wait(async () => (await app.driver.findElements(By.css(questionDockSelector))).length === 1, 10_000)
-          expect((await app.driver.findElements(By.css(promptSelector))).length).toBe(0)
+          await expect.poll(async () => await page.locator(questionDockSelector).count(), { timeout: 10_000 }).toBe(1)
+          expect(await page.locator(promptSelector).count()).toBe(0)
 
-          const main = await waitVisible(app.driver, By.css("main"))
-          await app.driver.actions().move({ origin: main, x: 5, y: 5 }).click().perform()
-          await app.driver.actions().sendKeys("abc").perform()
-          expect((await app.driver.findElements(By.css(promptSelector))).length).toBe(0)
+          await page.locator("main").click({ position: { x: 5, y: 5 } })
+          await page.keyboard.type("abc")
+          expect(await page.locator(promptSelector).count()).toBe(0)
         })
       })
     },

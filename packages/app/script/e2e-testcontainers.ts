@@ -1,28 +1,27 @@
 /**
- * All Docker-backed E2E **composition** for this package: Postgres, optional Ollama, optional MinIO + univer-compat,
- * and the OpenCode API Testcontainer. **Browser Vitest** specs call `useFullAppStack()` (see `test/browser/support/use-full-app-stack.ts`)
- * per file, or use `script/e2e-local.ts` as a thin `vitest -c vitest.e2e.config.ts` forwarder with the same `OPENCODE_E2E_INFRA` env.
+ * Docker-backed E2E for this package: **Postgres** (Testcontainers) + **Univer** (MinIO + univer-compat on the same network),
+ * plus the OpenCode API Testcontainer. **Browser Vitest** specs call `useE2eStack()` (`test/browser/support/use-e2e-stack.ts`).
+ * **Ollama** is expected on the **host** (`host.docker.internal:11434` from the OpenCode container).
  *
- * **Runner contract:** `OPENCODE_E2E_INFRA` (default `postgres,ollama`; add `univer` for MinIO + compat on the same Docker network as OpenCode).
- * Vitest `useFullAppStack` always starts Univer in Testcontainers; it skips Testcontainers Ollama unless `OPENCODE_E2E_TC_OLLAMA=1` (host Ollama via `host.docker.internal` otherwise).
+ * **Debugging:** `DEBUG=testcontainers*` on the same command as Vitest. Progress to stderr when `OPENCODE_E2E_LOG=1` (`e2e/emit.ts`).
  *
- * **Debugging compat startup:** run with `DEBUG=testcontainers*` on the **same** shell command as Vitest (prefix env, do not use `DEBUG=… cd …` — env applies only to `cd`).
- * This file also emits `[e2e-tc]` lines and tails `docker logs -f` for the compat container from `containerCreated` until `containerStarted`.
+ * **Docker wiring:** `test/support/tc-wire-setup.ts` calls `wire-docker-context-for-tc.ts` (Colima Ryuk uses in-VM `/var/run/docker.sock`). Skip: `OPENCODE_SKIP_DOCKER_CONTEXT_WIRE=1`.
+ *
+ * **Reuse:** `{ reuse: true | false }` on `startE2eDockerDeps` / `useE2eStack` — `.withReuse()` and stable `opencode-e2e-bridge` when true; attach existing network on 409.
  */
 import { spawn, type ChildProcess } from "node:child_process"
 import path from "node:path"
 import {
   GenericContainer,
   Network,
+  type Uuid,
   Wait,
+  getContainerRuntimeClient,
+  StartedNetwork,
   type InspectResult,
-  type StartedNetwork,
   type StartedTestContainer,
 } from "testcontainers"
 import { e2eEmit, e2eEmitElapsed } from "../e2e/emit"
-import type { E2eInfraLayer } from "./e2e-infra-parse"
-export type { E2eInfraLayer } from "./e2e-infra-parse"
-export { parseOpencodeE2eInfra } from "./e2e-infra-parse"
 
 const pgUser = "veritly"
 const pgPass = "veritly"
@@ -37,6 +36,38 @@ const e2eBunImage = "oven/bun:1.3.10"
 /** Pinned: `latest` shifts behavior; log-based waits break across releases. */
 const minioServerImage = "minio/minio:RELEASE.2025-09-07T16-13-09Z"
 
+const bridgeName = "opencode-e2e-bridge"
+const e2eBridge: Uuid = { nextUuid: () => bridgeName }
+
+function is409(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false
+  const o = e as { statusCode?: number; message?: string; json?: { message?: string } }
+  if (o.statusCode === 409) return true
+  const m = `${o.message ?? ""} ${o.json?.message ?? ""}`
+  return m.includes("409") || m.toLowerCase().includes("already exists")
+}
+
+function applyReuse(c: GenericContainer, reuse: boolean): GenericContainer {
+  if (!reuse) return c
+  return c.withReuse()
+}
+
+async function startE2eNet(reuse: boolean): Promise<StartedNetwork> {
+  if (!reuse) return new Network().start()
+  try {
+    return await new Network(e2eBridge).start()
+  } catch (e) {
+    if (!is409(e)) throw e
+    const client = await getContainerRuntimeClient()
+    const d = client.container.dockerode
+    const nets = await d.listNetworks()
+    const hit = nets.find((n) => n.Name === bridgeName)
+    if (!hit?.Id) throw new AggregateError([e as Error], `network ${bridgeName}: create conflict but network not found`)
+    const raw = d.getNetwork(hit.Id)
+    return new StartedNetwork(client, bridgeName, raw)
+  }
+}
+
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
 }
@@ -45,46 +76,33 @@ function e2ePhase(t0: number, msg: string) {
   e2eEmitElapsed(t0, "e2e-tc", msg)
 }
 
-async function waitHttp(url: string, timeoutMs: number) {
-  const end = Date.now() + timeoutMs
-  while (Date.now() < end) {
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(5_000) })
-      if (res.ok) return
-    } catch {}
-    await sleep(400)
-  }
-  throw new Error(`timeout waiting for ${url}`)
-}
-
 export type E2eTcLayer = {
   databaseUrl: string
   databaseUrlInternal: string
-  /** Present when `infra` included `ollama` — `http://127.0.0.1:<port>` */
-  ollamaBaseUrl?: string
-  /** `http://ollama:11434` when Ollama runs on the same Docker network (sibling containers). */
-  ollamaInternalBaseUrl?: string
   network: StartedNetwork
   stop(): Promise<void>
 }
 
 async function startPostgresOnNetwork(
   net: StartedNetwork,
+  reuse: boolean,
 ): Promise<{ databaseUrl: string; databaseUrlInternal: string; c: StartedTestContainer }> {
   const t0 = Date.now()
   e2eEmit("[e2e-tc] → Postgres: pulling / starting postgres:16-alpine (usually quick if cached)…")
-  const c = await new GenericContainer("postgres:16-alpine")
-    .withEnvironment({
-      POSTGRES_USER: pgUser,
-      POSTGRES_PASSWORD: pgPass,
-      POSTGRES_DB: pgDb,
-    })
-    .withNetwork(net)
-    .withNetworkAliases("postgres")
-    .withExposedPorts(5432)
-    .withWaitStrategy(Wait.forLogMessage(/database system is ready to accept connections/))
-    .withStartupTimeout(120_000)
-    .start()
+  const c = await applyReuse(
+    new GenericContainer("postgres:16-alpine")
+      .withEnvironment({
+        POSTGRES_USER: pgUser,
+        POSTGRES_PASSWORD: pgPass,
+        POSTGRES_DB: pgDb,
+      })
+      .withNetwork(net)
+      .withNetworkAliases("postgres")
+      .withExposedPorts(5432)
+      .withWaitStrategy(Wait.forLogMessage(/database system is ready to accept connections/))
+      .withStartupTimeout(120_000),
+    reuse,
+  ).start()
   e2ePhase(t0, "Postgres container ready (wait strategy passed).")
   const host = c.getHost()
   const port = c.getMappedPort(5432)
@@ -94,82 +112,18 @@ async function startPostgresOnNetwork(
   return { databaseUrl, databaseUrlInternal, c }
 }
 
-async function startOllamaOnNetwork(
-  net: StartedNetwork,
-): Promise<{ baseUrl: string; internalBase: string; c: StartedTestContainer }> {
+/** Postgres only (same credentials as `docker-compose.e2e.yml`). Ollama is host-only for browser E2E. */
+export async function startE2eTestcontainers(reuse: boolean): Promise<E2eTcLayer> {
   const t0 = Date.now()
-  e2eEmit(
-    "[e2e-tc] → Ollama: pulling / starting ollama/ollama:latest — first-time image pull is often multi-GB and silent here; use Activity Monitor or `docker stats`.",
-  )
-  const c = await new GenericContainer("ollama/ollama:latest")
-    .withNetwork(net)
-    .withNetworkAliases("ollama")
-    .withExposedPorts(11434)
-    .withStartupTimeout(300_000)
-    .start()
-  e2ePhase(t0, "Ollama container started (image + port bind).")
-  const host = c.getHost()
-  const port = c.getMappedPort(11434)
-  const baseUrl = `http://${host}:${port}`
-  const internalBase = "http://ollama:11434"
-  e2eEmit("[e2e-tc] → Ollama: container up; waiting for HTTP API…")
-  await waitHttp(`${baseUrl}/api/tags`, 120_000)
-  e2ePhase(t0, "Ollama HTTP /api/tags OK.")
-  e2eEmit("[e2e-tc] → Ollama: pulling model llama3.2:1b inside container (minutes on first run; no progress bar here)…")
-  const pull = await c.exec(["ollama", "pull", "llama3.2:1b"])
-  if (pull.exitCode !== 0) {
-    throw new Error(`ollama pull failed (exit ${pull.exitCode}): ${pull.stderr || pull.output}`)
-  }
-  if (pull.output.trim()) e2eEmit(`[e2e-tc] ollama pull output tail:\n${pull.output.slice(-2000)}`)
-  const tags = await fetch(`${baseUrl}/api/tags`)
-  if (!tags.ok) throw new Error(`ollama tags after pull: HTTP ${tags.status}`)
-  const body = (await tags.json()) as { models?: Array<{ name: string }> }
-  if (!body.models) throw new Error("ollama tags: missing models array")
-  const names = body.models.map((m) => m.name)
-  e2eEmit(`[e2e-tc] Ollama models: ${names.join(", ")}`)
-  if (!names.some((n) => n.includes("llama3.2:1b"))) {
-    throw new Error("llama3.2:1b not listed after pull")
-  }
-  e2ePhase(t0, "Ollama model llama3.2:1b ready.")
-  return { baseUrl, internalBase, c }
-}
-
-/**
- * Postgres (+ Ollama when in `infra`). Same credentials as `docker-compose.e2e.yml`.
- */
-export async function startE2eTestcontainers(infra: ReadonlySet<E2eInfraLayer>): Promise<E2eTcLayer> {
-  const t0 = Date.now()
-  const needOllama = infra.has("ollama")
   const containers: StartedTestContainer[] = []
-  const net = await new Network().start()
+  const net = await startE2eNet(reuse)
   e2ePhase(t0, "Docker network created for E2E.")
 
-  e2eEmit(
-    `[e2e-tc] Testcontainers: Postgres${needOllama ? " + Ollama" : ""} on shared Docker network. Next lines explain each blocking step.`,
-  )
+  e2eEmit(`[e2e-tc] Testcontainers: Postgres on shared Docker network (reuse=${reuse}).`)
 
   try {
-    if (needOllama) {
-      const [pg, om] = await Promise.all([startPostgresOnNetwork(net), startOllamaOnNetwork(net)])
-      e2ePhase(t0, "Postgres + Ollama parallel start finished.")
-      containers.push(pg.c, om.c)
-      e2eEmit(`[e2e-tc] Postgres (Testcontainers): ${pg.databaseUrl}`)
-      e2eEmit(`[e2e-tc] Ollama (Testcontainers): ${om.baseUrl}`)
-      return {
-        databaseUrl: pg.databaseUrl,
-        databaseUrlInternal: pg.databaseUrlInternal,
-        ollamaBaseUrl: om.baseUrl,
-        ollamaInternalBaseUrl: om.internalBase,
-        network: net,
-        async stop() {
-          for (const c of containers.reverse()) await c.stop()
-          await net.stop()
-        },
-      }
-    }
-
-    const pg = await startPostgresOnNetwork(net)
-    e2ePhase(t0, "Postgres-only path finished.")
+    const pg = await startPostgresOnNetwork(net, reuse)
+    e2ePhase(t0, "Postgres ready.")
     containers.push(pg.c)
     e2eEmit(`[e2e-tc] Postgres (Testcontainers): ${pg.databaseUrl}`)
     return {
@@ -178,21 +132,24 @@ export async function startE2eTestcontainers(infra: ReadonlySet<E2eInfraLayer>):
       network: net,
       async stop() {
         for (const c of containers.reverse()) await c.stop()
-        await net.stop()
+        // Reuse uses a fixed bridge name; other workers or leftover containers may still be attached.
+        if (!reuse) await net.stop()
       },
     }
   } catch (e) {
     const cleanup: unknown[] = []
     for (const c of containers.reverse()) {
       await c.stop().catch((err: unknown) => {
-        e2eEmit(`[e2e-tc] Postgres/Ollama container stop failed: ${String(err)}`)
+        e2eEmit(`[e2e-tc] Postgres container stop failed: ${String(err)}`)
         cleanup.push(err)
       })
     }
-    await net.stop().catch((err: unknown) => {
-      e2eEmit(`[e2e-tc] Docker network stop failed: ${String(err)}`)
-      cleanup.push(err)
-    })
+    if (!reuse) {
+      await net.stop().catch((err: unknown) => {
+        e2eEmit(`[e2e-tc] Docker network stop failed: ${String(err)}`)
+        cleanup.push(err)
+      })
+    }
     if (cleanup.length) throw new AggregateError([e, ...cleanup], "startE2eTestcontainers failed; cleanup also failed")
     throw e
   }
@@ -227,7 +184,7 @@ function workosEnvForCompatContainer(): Record<string, string> {
 }
 
 /**
- * OpenCode API in Docker: migrate → seed-e2e → HTTP server (same network as Postgres / Ollama).
+ * OpenCode API in Docker: migrate → seed-e2e → HTTP server (same Docker network as Postgres / Univer).
  * Host binds `hostApiPort` → container `:4096`.
  *
  * The repo is bind-mounted **read-write** at `/app` so `bun run db:migrate` / tooling can create dirs
@@ -242,6 +199,7 @@ export async function startOpencodeE2eContainer(opts: {
   env: Record<string, string | undefined>
   /** When true, add `host.docker.internal` → `host-gateway` so the container can call Ollama on the host. */
   hostOllama: boolean
+  reuse: boolean
 }): Promise<{ c: StartedTestContainer; stop(): Promise<void> }> {
   // Must stay one line: `JSON.stringify` + `sh -c` turns real newlines into a literal `\n` token Bun rejects.
   const serverBun = `import { Server } from "./src/server/server"; Server.listen({ port: ${opencodeInternalApiPort}, hostname: "0.0.0.0" })`
@@ -274,7 +232,7 @@ export async function startOpencodeE2eContainer(opts: {
   if (opts.hostOllama) {
     box = box.withExtraHosts([{ host: "host.docker.internal", ipAddress: "host-gateway" }])
   }
-  const c = await box.start()
+  const c = await applyReuse(box, opts.reuse).start()
   e2ePhase(t0, "OpenCode Testcontainer is up (Testcontainers /readyz wait passed).")
 
   e2eEmit(`[e2e-tc] OpenCode (Testcontainer) → http://127.0.0.1:${opts.hostApiPort}`)
@@ -286,39 +244,43 @@ export async function startOpencodeE2eContainer(opts: {
   }
 }
 
-async function minioOnNetwork(appsNetwork: StartedNetwork) {
+async function minioOnNetwork(appsNetwork: StartedNetwork, reuse: boolean) {
   let child: StartedTestContainer | undefined
   let init: StartedTestContainer | undefined
   const t0 = Date.now()
 
   try {
-    child = await new GenericContainer(minioServerImage)
-      .withExposedPorts(9000)
-      .withEnvironment({
-        MINIO_ROOT_USER: minioAccess,
-        MINIO_ROOT_PASSWORD: minioSecret,
-        MINIO_API_CORS_ALLOW_ORIGIN: "*",
-      })
-      .withNetwork(appsNetwork)
-      .withNetworkAliases("minio")
-      .withCommand(["server", "/data", "--address", ":9000", "--console-address", ":9001"])
-      // `forListeningPorts` also runs an *internal* port probe (`exec` + awk/nc/bash). MinIO’s image
-      // often fails that probe while the host mapping is already up → hangs until startup timeout.
-      .withWaitStrategy(Wait.forLogMessage(/MinIO Object Storage Server/))
-      .withStartupTimeout(180_000)
-      .start()
+    child = await applyReuse(
+      new GenericContainer(minioServerImage)
+        .withExposedPorts(9000)
+        .withEnvironment({
+          MINIO_ROOT_USER: minioAccess,
+          MINIO_ROOT_PASSWORD: minioSecret,
+          MINIO_API_CORS_ALLOW_ORIGIN: "*",
+        })
+        .withNetwork(appsNetwork)
+        .withNetworkAliases("minio")
+        .withCommand(["server", "/data", "--address", ":9000", "--console-address", ":9001"])
+        // `forListeningPorts` also runs an *internal* port probe (`exec` + awk/nc/bash). MinIO’s image
+        // often fails that probe while the host mapping is already up → hangs until startup timeout.
+        .withWaitStrategy(Wait.forLogMessage(/MinIO Object Storage Server/))
+        .withStartupTimeout(180_000),
+      reuse,
+    ).start()
 
     e2ePhase(t0, "MinIO server container ready.")
 
-    init = await new GenericContainer("minio/mc:latest")
-      .withNetwork(appsNetwork)
-      .withEntrypoint(["sh", "-c"])
-      .withCommand([
-        `for i in $(seq 1 60); do mc alias set local http://minio:9000 ${minioAccess} ${minioSecret} && break; sleep 1; done; mc mb local/${bucket} --ignore-existing`,
-      ])
-      .withWaitStrategy(Wait.forOneShotStartup())
-      .withStartupTimeout(60_000)
-      .start()
+    init = await applyReuse(
+      new GenericContainer("minio/mc:latest")
+        .withNetwork(appsNetwork)
+        .withEntrypoint(["sh", "-c"])
+        .withCommand([
+          `for i in $(seq 1 60); do mc alias set local http://minio:9000 ${minioAccess} ${minioSecret} && break; sleep 1; done; mc mb local/${bucket} --ignore-existing`,
+        ])
+        .withWaitStrategy(Wait.forOneShotStartup())
+        .withStartupTimeout(60_000),
+      reuse,
+    ).start()
     e2ePhase(t0, "MinIO mc one-shot (alias + mb) finished.")
   } catch (err) {
     await init?.stop()
@@ -402,6 +364,7 @@ export type UniverE2eRuntime = {
 export async function startUniverE2e(
   root = path.resolve(import.meta.dir, "../../.."),
   appsNetwork?: StartedNetwork,
+  reuse = true,
 ): Promise<UniverE2eRuntime> {
   const ownedNet = appsNetwork ? undefined : await new Network().start()
   const net = appsNetwork ?? ownedNet
@@ -413,7 +376,7 @@ export async function startUniverE2e(
   try {
     const t0 = Date.now()
     e2eEmit(`[e2e-tc] → Univer: MinIO on Docker network + bucket init (${minioServerImage})…`)
-    minio = await minioOnNetwork(net)
+    minio = await minioOnNetwork(net, reuse)
     e2ePhase(t0, "MinIO + mc init containers started.")
     await minioReady(minio.endpoint)
     e2ePhase(t0, "MinIO health ready.")
@@ -426,6 +389,8 @@ export async function startUniverE2e(
       PORT: String(veritlyUniverInternalPort),
       LISTEN_HOST: "0.0.0.0",
       UNIVER_COMPAT_S3_ENDPOINT: "http://minio:9000",
+      /** Presigned PUT/GET must use a host the browser resolves; SigV4 signs this `Host`. */
+      UNIVER_COMPAT_S3_PRESIGN_ENDPOINT: minio.endpoint,
       UNIVER_COMPAT_S3_REGION: s3Region,
       UNIVER_COMPAT_S3_ACCESS_KEY: minioAccess,
       UNIVER_COMPAT_S3_SECRET_KEY: minioSecret,
@@ -442,17 +407,19 @@ export async function startUniverE2e(
     )
 
     e2ePhase(t0, "compat: calling GenericContainer.start() (blocks: pull if needed → create → connect net → start → port inspect → http /readyz).")
-    compat = await new UniverCompatE2eContainer(t0)
-      .withNetwork(net)
-      .withNetworkAliases("veritly-univer")
-      .withExposedPorts(veritlyUniverInternalPort)
-      .withBindMounts([{ source: root, target: "/app", mode: "rw" }])
-      .withWorkingDir("/app/packages/univer-compat")
-      .withEnvironment(compatEnv)
-      .withCommand(["bun", "./script/serve.ts"])
-      .withWaitStrategy(Wait.forHttp("/readyz", veritlyUniverInternalPort))
-      .withStartupTimeout(600_000)
-      .start()
+    compat = await applyReuse(
+      new UniverCompatE2eContainer(t0)
+        .withNetwork(net)
+        .withNetworkAliases("veritly-univer")
+        .withExposedPorts(veritlyUniverInternalPort)
+        .withBindMounts([{ source: root, target: "/app", mode: "rw" }])
+        .withWorkingDir("/app/packages/univer-compat")
+        .withEnvironment(compatEnv)
+        .withCommand(["bun", "./script/serve.ts"])
+        .withWaitStrategy(Wait.forHttp("/readyz", veritlyUniverInternalPort))
+        .withStartupTimeout(600_000),
+      reuse,
+    ).start()
     e2ePhase(t0, "univer-compat container /readyz wait passed.")
 
     const mapped = compat.getMappedPort(veritlyUniverInternalPort)
@@ -510,41 +477,28 @@ async function minioReady(endpoint: string) {
   throw new Error(`MinIO not ready at ${probe}`)
 }
 
-/** All Docker-backed E2E deps: Postgres (+ Ollama) + optional Univer MinIO stack + shared network for OpenCode-in-Docker. */
+/** Postgres + Univer (MinIO + compat) on one network for OpenCode-in-Docker. Ollama is host-only. */
 export type E2eDockerDeps = {
   databaseUrl: string
   databaseUrlInternal: string
-  ollamaBaseUrl?: string
-  ollamaInternalBaseUrl?: string
   network: StartedNetwork
-  univer?: UniverE2eRuntime
+  univer: UniverE2eRuntime
   stop(): Promise<void>
 }
 
-export async function startE2eDockerDeps(infra: ReadonlySet<E2eInfraLayer>, repoDir: string): Promise<E2eDockerDeps> {
+export async function startE2eDockerDeps(
+  repoDir: string,
+  opts: { reuse: boolean } = { reuse: true },
+): Promise<E2eDockerDeps> {
   const t0 = Date.now()
-  const layers = [...infra].sort().join(",")
-  e2eEmit(`[e2e-tc] startE2eDockerDeps layers: ${layers}`)
-  const tc = await startE2eTestcontainers(infra)
-  e2ePhase(t0, "Core Testcontainers (Postgres ± Ollama) ready.")
-  if (!infra.has("univer")) {
-    return {
-      databaseUrl: tc.databaseUrl,
-      databaseUrlInternal: tc.databaseUrlInternal,
-      ollamaBaseUrl: tc.ollamaBaseUrl,
-      ollamaInternalBaseUrl: tc.ollamaInternalBaseUrl,
-      network: tc.network,
-      univer: undefined,
-      stop: () => tc.stop(),
-    }
-  }
-  const uv = await startUniverE2e(repoDir, tc.network)
+  e2eEmit(`[e2e-tc] startE2eDockerDeps (postgres + univer) reuse=${opts.reuse}`)
+  const tc = await startE2eTestcontainers(opts.reuse)
+  e2ePhase(t0, "Postgres Testcontainer ready.")
+  const uv = await startUniverE2e(repoDir, tc.network, opts.reuse)
   e2ePhase(t0, "Univer stack (MinIO + compat) ready.")
   return {
     databaseUrl: tc.databaseUrl,
     databaseUrlInternal: tc.databaseUrlInternal,
-    ollamaBaseUrl: tc.ollamaBaseUrl,
-    ollamaInternalBaseUrl: tc.ollamaInternalBaseUrl,
     network: tc.network,
     univer: uv,
     async stop() {

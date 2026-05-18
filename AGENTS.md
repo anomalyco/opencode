@@ -120,9 +120,10 @@ const table = sqliteTable("session", {
 ## Testing
 
 - Avoid mocks as much as possible
+- STOP USING 120_000 MS timeouts, use like 3-5seconds, more as necessary, i dont wanna find out 2 min later every time sth is broken
 - Test actual implementation, do not duplicate logic into tests
 - Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package dirs like `packages/opencode`.
-- Always run tests with "DEBUG=testcontainers*" if sth is sketchy
+- run tests with "DEBUG=testcontainers*" if sth is sketchy
 
 ## Type Checking
 

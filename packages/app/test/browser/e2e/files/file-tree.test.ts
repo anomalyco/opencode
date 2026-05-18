@@ -1,51 +1,40 @@
 import { describe, expect, test } from "vitest"
-import { useFullAppStack } from "../../support/use-full-app-stack"
+import { useE2eStack } from "../../support/use-e2e-stack"
+import { useAppBrowser } from "../../support/use-app-browser"
 
-import { By, until } from "selenium-webdriver"
-import { fileTreeToggleSelector } from "../../../../e2e/selectors"
-import { waitVisible } from "../../support/wd-wait"
-import { useAppWebDriver } from "../../support/use-app-webdriver"
-
-describe("file tree (webdriver migration)", () => {
-  useFullAppStack()
-  const app = useAppWebDriver()
+describe("file tree", () => {
+  useE2eStack()
+  const app = useAppBrowser()
 
   test("file tree can expand folders and open a file", async () => {
     await app.gotoSession()
+    const { page } = app
 
-    const toggle = await waitVisible(app.driver, By.css(fileTreeToggleSelector))
+    const toggle = page.getByRole("button", { name: "Toggle file tree" })
+    const panel = page.locator("#file-tree-panel")
+    const treeTabs = panel.locator('[data-component="tabs"][data-variant="pill"][data-scope="filetree"]')
+
+    await toggle.waitFor({ state: "visible" })
     if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click()
-    await app.driver.wait(async () => (await toggle.getAttribute("aria-expanded")) === "true", 10_000)
+    await expect.poll(async () => await toggle.getAttribute("aria-expanded"), { timeout: 10_000 }).toBe("true")
+    await panel.waitFor({ state: "visible" })
+    await treeTabs.waitFor({ state: "visible" })
 
-    await waitVisible(app.driver, By.id("file-tree-panel"))
-    await waitVisible(
-      app.driver,
-      By.css('#file-tree-panel [data-component="tabs"][data-variant="pill"][data-scope="filetree"]'),
-    )
-
-    const treeTabs = await app.driver.findElement(
-      By.css('#file-tree-panel [data-component="tabs"][data-variant="pill"][data-scope="filetree"]'),
-    )
-
-    const allTab = await treeTabs.findElement(By.css('button[data-slot="tabs-trigger"][data-value="all"]'))
-    await app.driver.wait(until.elementIsVisible(allTab), 30_000)
+    const allTab = treeTabs.getByRole("tab", { name: /^all files$/i })
+    await allTab.waitFor({ state: "visible" })
     await allTab.click()
-    await app.driver.wait(async () => (await allTab.getAttribute("aria-selected")) === "true", 10_000)
+    await expect.poll(async () => await allTab.getAttribute("aria-selected"), { timeout: 10_000 }).toBe("true")
 
-    const tree = await app.driver.findElement(
-      By.css(
-        '#file-tree-panel [data-component="tabs"][data-variant="pill"][data-scope="filetree"] [data-slot="tabs-content"]:not([hidden])',
-      ),
-    )
-    await app.driver.wait(until.elementIsVisible(tree), 30_000)
+    const tree = treeTabs.locator('[data-slot="tabs-content"]:not([hidden])')
+    await tree.waitFor({ state: "visible" })
 
-    const expand = async (n: string) => {
-      const folder = await tree.findElement(
-        By.xpath(`.//button[@aria-expanded][.//span[normalize-space(.)='${n}']]`),
-      )
-      await app.driver.wait(until.elementIsVisible(folder), 30_000)
-      if ((await folder.getAttribute("aria-expanded")) === "false") await folder.click()
-      await app.driver.wait(async () => (await folder.getAttribute("aria-expanded")) === "true", 15_000)
+    const expand = async (name: string) => {
+      const folder = tree.getByRole("button", { name, exact: true }).first()
+      await folder.waitFor({ state: "visible" })
+      const exp = await folder.getAttribute("aria-expanded")
+      if (exp !== "true" && exp !== "false") throw new Error("folder missing aria-expanded")
+      if (exp === "false") await folder.click()
+      await expect.poll(async () => await folder.getAttribute("aria-expanded"), { timeout: 15_000 }).toBe("true")
     }
 
     await expand("packages")
@@ -53,29 +42,26 @@ describe("file tree (webdriver migration)", () => {
     await expand("src")
     await expand("components")
 
-    const fileBtn = await tree.findElement(
-      By.xpath(`.//button[.//span[normalize-space(.)='file-tree.tsx']]`),
-    )
-    await app.driver.wait(until.elementIsVisible(fileBtn), 30_000)
-    await fileBtn.click()
+    const file = tree.getByRole("button", { name: "file-tree.tsx", exact: true }).first()
+    await file.waitFor({ state: "visible" })
+    await file.click()
 
-    const tabs = await app.driver.findElements(
-      By.xpath(`//button[@role="tab" and normalize-space(.)="file-tree.tsx"]`),
-    )
-    if (tabs.length === 0) throw new Error("expected editor tab for file-tree.tsx")
-    const tab = tabs[0]!
-    await app.driver.wait(until.elementIsVisible(tab), 30_000)
+    const tab = page.getByRole("tab", { name: "file-tree.tsx" })
+    await tab.waitFor({ state: "visible" })
     await tab.click()
-    await app.driver.wait(async () => (await tab.getAttribute("aria-selected")) === "true", 10_000)
+    await expect.poll(async () => await tab.getAttribute("aria-selected"), { timeout: 10_000 }).toBe("true")
 
     await toggle.click()
-    await app.driver.wait(async () => (await toggle.getAttribute("aria-expanded")) === "false", 10_000)
+    await expect.poll(async () => await toggle.getAttribute("aria-expanded"), { timeout: 10_000 }).toBe("false")
 
     await toggle.click()
-    await app.driver.wait(async () => (await toggle.getAttribute("aria-expanded")) === "true", 10_000)
-    await app.driver.wait(async () => (await allTab.getAttribute("aria-selected")) === "true", 10_000)
+    await expect.poll(async () => await toggle.getAttribute("aria-expanded"), { timeout: 10_000 }).toBe("true")
+    await expect.poll(async () => await allTab.getAttribute("aria-selected"), { timeout: 10_000 }).toBe("true")
 
-    const viewer = await waitVisible(app.driver, By.css('[data-component="file"][data-mode="text"]'))
-    expect(await viewer.getText()).toContain("export default function FileTree")
+    const viewer = page.locator('[data-component="file"][data-mode="text"]').first()
+    await viewer.waitFor({ state: "visible" })
+    await expect.poll(async () => (await viewer.innerText()).includes("export default function FileTree"), {
+      timeout: 15_000,
+    }).toBe(true)
   })
 })
