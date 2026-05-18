@@ -1672,7 +1672,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             lastAssistant?.finish &&
             !["tool-calls"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
-            lastUser.id < lastAssistant.id
+            (lastUser.time.created < lastAssistant.time.created ||
+              (lastUser.time.created === lastAssistant.time.created && lastUser.id < lastAssistant.id))
           ) {
             yield* slog.info("exiting loop")
             break
@@ -1791,7 +1792,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
             if (step > 1 && lastFinished) {
               for (const m of msgs) {
-                if (m.info.role !== "user" || m.info.id <= lastFinished.id) continue
+                if (
+                  m.info.role !== "user" ||
+                  m.info.time.created < lastFinished.time.created ||
+                  (m.info.time.created === lastFinished.time.created && m.info.id <= lastFinished.id)
+                )
+                  continue
                 for (const p of m.parts) {
                   if (p.type !== "text" || p.ignored || p.synthetic) continue
                   if (!p.text.trim()) continue
