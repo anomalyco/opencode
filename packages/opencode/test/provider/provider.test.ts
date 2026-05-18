@@ -87,20 +87,12 @@ async function getModel(providerID: ProviderID, modelID: ModelID, ctx: InstanceC
   return run(ctx, (provider) => provider.getModel(providerID, modelID))
 }
 
-async function getLanguage(model: Provider.Model, ctx: InstanceContext) {
-  return run(ctx, (provider) => provider.getLanguage(model))
-}
-
 async function closest(providerID: ProviderID, query: string[], ctx: InstanceContext) {
   return run(ctx, (provider) => provider.closest(providerID, query))
 }
 
 async function getSmallModel(providerID: ProviderID, ctx: InstanceContext) {
   return run(ctx, (provider) => provider.getSmallModel(providerID))
-}
-
-async function defaultModel(ctx: InstanceContext) {
-  return run(ctx, (provider) => provider.defaultModel())
 }
 
 function paid(providers: Awaited<ReturnType<typeof list>>) {
@@ -361,62 +353,42 @@ it.instance(
   },
 )
 
-test("env variable takes precedence, config merges options", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            anthropic: {
-              options: {
-                timeout: 60000,
-                chunkTimeout: 15000,
-              },
-            },
+it.instance(
+  "env variable takes precedence, config merges options",
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "env-api-key")
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    expect(providers[ProviderID.anthropic]).toBeDefined()
+    // Config options should be merged
+    expect(providers[ProviderID.anthropic].options.timeout).toBe(60000)
+    expect(providers[ProviderID.anthropic].options.chunkTimeout).toBe(15000)
+  }),
+  {
+    config: {
+      provider: {
+        anthropic: {
+          options: {
+            timeout: 60000,
+            chunkTimeout: 15000,
           },
-        }),
-      )
+        },
+      },
     },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      await set(ctx, "ANTHROPIC_API_KEY", "env-api-key")
-      const providers = await list(ctx)
-      expect(providers[ProviderID.anthropic]).toBeDefined()
-      // Config options should be merged
-      expect(providers[ProviderID.anthropic].options.timeout).toBe(60000)
-      expect(providers[ProviderID.anthropic].options.chunkTimeout).toBe(15000)
-    },
-  })
-})
+  },
+)
 
-test("getModel returns model for valid provider/model", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
-      const model = await getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"), ctx)
-      expect(model).toBeDefined()
-      expect(String(model.providerID)).toBe("anthropic")
-      expect(String(model.id)).toBe("claude-sonnet-4-20250514")
-      const language = await getLanguage(model, ctx)
-      expect(language).toBeDefined()
-    },
-  })
-})
+it.instance("getModel returns model for valid provider/model", () =>
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+    const provider = yield* Provider.Service
+    const model = yield* provider.getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"))
+    expect(model).toBeDefined()
+    expect(String(model.providerID)).toBe("anthropic")
+    expect(String(model.id)).toBe("claude-sonnet-4-20250514")
+    const language = yield* provider.getLanguage(model)
+    expect(language).toBeDefined()
+  }),
+)
 
 test("getModel throws ModelNotFoundError for invalid model", async () => {
   await using tmp = await tmpdir({
@@ -469,50 +441,25 @@ test("parseModel handles model IDs with slashes", () => {
   expect(String(result.modelID)).toBe("anthropic/claude-3-opus")
 })
 
-test("defaultModel returns first available model when no config set", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
-      const model = await defaultModel(ctx)
-      expect(model.providerID).toBeDefined()
-      expect(model.modelID).toBeDefined()
-    },
-  })
-})
+it.instance("defaultModel returns first available model when no config set", () =>
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+    const model = yield* Provider.Service.use((provider) => provider.defaultModel())
+    expect(model.providerID).toBeDefined()
+    expect(model.modelID).toBeDefined()
+  }),
+)
 
-test("defaultModel respects config model setting", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          model: "anthropic/claude-sonnet-4-20250514",
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
-      const model = await defaultModel(ctx)
-      expect(String(model.providerID)).toBe("anthropic")
-      expect(String(model.modelID)).toBe("claude-sonnet-4-20250514")
-    },
-  })
-})
+it.instance(
+  "defaultModel respects config model setting",
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+    const model = yield* Provider.Service.use((provider) => provider.defaultModel())
+    expect(String(model.providerID)).toBe("anthropic")
+    expect(String(model.modelID)).toBe("claude-sonnet-4-20250514")
+  }),
+  { config: { model: "anthropic/claude-sonnet-4-20250514" } },
+)
 
 it.instance(
   "provider with baseURL from config",

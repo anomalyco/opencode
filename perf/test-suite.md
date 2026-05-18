@@ -70,6 +70,7 @@ Repeated setup work, long sleeps/timeouts, serial integration tests, filesystem/
 | File watcher readiness can write before async native subscriptions are active                             | Retried short readiness writes and accepted symlink-realpath HEAD events                       | failed    | 4.62s   | keep     | Three sequential focused watcher runs passed: 4.62s, 4.57s, 4.64s; full suite no longer failed in `watcher.test.ts`.        |
 | First provider config/env/filtering block can use Effect-aware instance fixtures                          | Migrated six `tmpdir` + `withTestInstance` cases to `it.instance`                              | 6.06s     | 6.07s   | keep     | Neutral timing, but removes manual config file writes and instance plumbing; use as the pattern for later provider slices.  |
 | Custom provider/model config cases can use Effect-aware instance fixtures                                 | Migrated three more config-heavy provider cases to `it.instance`                               | 6.07s     | 6.12s   | keep     | Neutral timing within noise, but continues removing manual config file writes on top of the first provider fixture PR.      |
+| Provider env precedence and model lookup cases can use Effect-aware instance fixtures                     | Migrated four more provider lookup/default-model cases to `it.instance`                        | 6.12s     | 6.36s   | keep     | Noisy 5-run median; kept as a small stacked cleanup slice but do not claim speedup from this migration.                     |
 
 ## Profiling Results
 
