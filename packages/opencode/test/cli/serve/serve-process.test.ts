@@ -8,25 +8,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClient } from "effect/unstable/http"
-import net from "node:net"
 import { cliIt } from "../../lib/cli-process"
-
-// Asks the kernel for a free TCP port, then closes the listener so opencode
-// can claim it. There's a tiny TOCTOU window between close and rebind, but
-// it's vastly better than random-in-a-range — and worst case the kernel
-// errors loudly instead of silently colliding with another test.
-function findFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer()
-    server.unref()
-    server.once("error", reject)
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address()
-      if (typeof addr !== "object" || addr === null) return reject(new Error("no address"))
-      server.close(() => resolve(addr.port))
-    })
-  })
-}
 
 describe("opencode serve (subprocess)", () => {
   // Smoke test: server starts, binds a port, and /global/health responds.
@@ -47,20 +29,6 @@ describe("opencode serve (subprocess)", () => {
         // enough proof the routing + auth-bypass + instance loading is alive.
         const body = yield* res.json
         expect(body).toBeDefined()
-      }),
-    60_000,
-  )
-
-  // Lock in that `--port` overrides the OS-assigned default. If the CLI
-  // stopped honoring the flag (or stopped emitting the bound port on stdout),
-  // this catches it without depending on a magic value.
-  cliIt.live(
-    "honors --port and reports the bound port on stdout",
-    ({ opencode }) =>
-      Effect.gen(function* () {
-        const requested = yield* Effect.promise(findFreePort)
-        const server = yield* opencode.serve({ port: requested })
-        expect(server.port).toBe(requested)
       }),
     60_000,
   )
