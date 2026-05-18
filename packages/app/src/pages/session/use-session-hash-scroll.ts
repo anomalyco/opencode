@@ -2,6 +2,7 @@ import type { UserMessage } from "@opencode-ai/sdk/v2"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { messageIdFromHash } from "./message-id-from-hash"
+import { applyNoHashScroll, resolvePendingMessage } from "./use-session-hash-scroll-default"
 
 export const useSessionHashScroll = (input: {
   sessionKey: () => string
@@ -21,6 +22,11 @@ export const useSessionHashScroll = (input: {
   revealMessage?: (id: string) => void
   scheduleScrollState: (el: HTMLDivElement) => void
   consumePendingMessage: (key: string) => string | undefined
+  defaultScrollReady?: () => boolean
+  canRestoreScroll?: () => boolean
+  restoreScroll?: () => boolean | undefined
+  consumeDefaultScroll?: () => void
+  markProgrammaticScroll?: () => void
 }) => {
   const visibleUserMessages = createMemo(() => input.visibleUserMessages())
   const messageById = createMemo(() => new Map(visibleUserMessages().map((m) => [m.id, m])))
@@ -61,6 +67,19 @@ export const useSessionHashScroll = (input: {
     })
   }
 
+  const pendingTarget = () => {
+    const pending = resolvePendingMessage({
+      sessionKey: input.sessionKey(),
+      pendingKey,
+      pendingMessage: input.pendingMessage(),
+      consumePendingMessage: input.consumePendingMessage,
+      setPendingMessage: input.setPendingMessage,
+    })
+    pendingKey = pending.pendingKey
+    if (pending.target) input.consumeDefaultScroll?.()
+    return pending.target
+  }
+
   const scrollToElement = (el: HTMLElement, behavior: ScrollBehavior) => {
     const root = input.scroller()
     if (!root) return false
@@ -70,6 +89,7 @@ export const useSessionHashScroll = (input: {
     const sticky = root.querySelector("[data-session-title]")
     const inset = sticky instanceof HTMLElement ? sticky.offsetHeight : 0
     const top = Math.max(0, a.top - b.top + root.scrollTop - inset)
+    input.markProgrammaticScroll?.()
     root.scrollTo({ top, behavior })
     return true
   }
@@ -101,11 +121,25 @@ export const useSessionHashScroll = (input: {
   const applyHash = (behavior: ScrollBehavior) => {
     const hash = location.hash.slice(1)
     if (!hash) {
-      input.autoScroll.forceScrollToBottom()
-      const el = input.scroller()
-      if (el) input.scheduleScrollState(el)
+      const next = applyNoHashScroll({
+        sessionKey: input.sessionKey(),
+        pendingKey,
+        pendingMessage: input.pendingMessage(),
+        consumePendingMessage: input.consumePendingMessage,
+        setPendingMessage: input.setPendingMessage,
+        canRestoreScroll: input.canRestoreScroll,
+        restoreScroll: input.restoreScroll,
+        consumeDefaultScroll: input.consumeDefaultScroll,
+        markProgrammaticScroll: input.markProgrammaticScroll,
+        forceScrollToBottom: input.autoScroll.forceScrollToBottom,
+        scroller: input.scroller,
+        scheduleScrollState: input.scheduleScrollState,
+      })
+      pendingKey = next.pendingKey
       return
     }
+
+    input.consumeDefaultScroll?.()
 
     const messageId = messageIdFromHash(hash)
     if (messageId) {
@@ -125,6 +159,7 @@ export const useSessionHashScroll = (input: {
       return
     }
 
+    input.markProgrammaticScroll?.()
     input.autoScroll.forceScrollToBottom()
     const el = input.scroller()
     if (el) input.scheduleScrollState(el)
@@ -132,8 +167,9 @@ export const useSessionHashScroll = (input: {
 
   createEffect(() => {
     const hash = location.hash
+    const ready = hash ? true : (input.defaultScrollReady?.() ?? true)
     if (!hash) clearing = false
-    if (!input.sessionID() || !input.messagesReady()) return
+    if (!input.sessionID() || !input.messagesReady() || !ready) return
     cancel()
     queue(() => applyHash("auto"))
   })
@@ -143,18 +179,7 @@ export const useSessionHashScroll = (input: {
 
     visibleUserMessages()
 
-    let targetId = input.pendingMessage()
-    if (!targetId) {
-      const key = input.sessionKey()
-      if (pendingKey !== key) {
-        pendingKey = key
-        const next = input.consumePendingMessage(key)
-        if (next) {
-          input.setPendingMessage(next)
-          targetId = next
-        }
-      }
-    }
+    let targetId = pendingTarget()
 
     if (!targetId && !clearing) targetId = messageIdFromHash(location.hash)
     if (!targetId) return
