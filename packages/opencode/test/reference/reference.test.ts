@@ -81,7 +81,7 @@ const waitForContent = (
   })
 
 describe("reference", () => {
-  it.live("resolves local and git references", () =>
+  it.live("resolves supported local and git config forms", () =>
     Effect.gen(function* () {
       const root = path.resolve("opencode-reference-root")
       const local = Reference.resolve({
@@ -96,16 +96,61 @@ describe("reference", () => {
         directory: path.join(root, "packages", "app"),
         worktree: root,
       })
+      const localString = Reference.resolve({
+        name: "notes",
+        reference: "./notes",
+        directory: path.join(root, "packages", "app"),
+        worktree: root,
+      })
+      const repoString = Reference.resolve({
+        name: "repo",
+        reference: "owner/repo",
+        directory: path.join(root, "packages", "app"),
+        worktree: root,
+      })
 
       expect(local.kind).toBe("local")
       if (local.kind === "local") expect(local.path).toBe(path.resolve(root, "../docs"))
+      expect(localString.kind).toBe("local")
+      if (localString.kind === "local") expect(localString.path).toBe(path.resolve(root, "notes"))
       expect(repo.kind).toBe("git")
       if (repo.kind === "git") {
         expect(repo.repository).toBe("Effect-TS/effect")
         expect(repo.branch).toBe("main")
         expect(repo.path).toBe(path.join(Global.Path.repos, "github.com", "Effect-TS", "effect"))
       }
+      expect(repoString.kind).toBe("git")
+      if (repoString.kind === "git") {
+        expect(repoString.repository).toBe("owner/repo")
+        expect(repoString.path).toBe(path.join(Global.Path.repos, "github.com", "owner", "repo"))
+      }
     }),
+  )
+
+  it.live("keeps invalid repository references visible without materializing", () =>
+    provideTmpdirInstance(
+      (_dir) =>
+        Effect.gen(function* () {
+          const reference = yield* Reference.Service
+          const references = yield* reference.list()
+          const invalid = yield* reference.get("bad")
+
+          expect(references.map((item) => item.name)).toEqual(["bad"])
+          expect(invalid).toMatchObject({
+            name: "bad",
+            kind: "invalid",
+            repository: "not-a-repo",
+          })
+          if (invalid?.kind === "invalid") expect(invalid.message).toContain("Repository must be a git URL")
+        }),
+      {
+        config: {
+          reference: {
+            bad: "not-a-repo",
+          },
+        },
+      },
+    ),
   )
 
   it.live("marks same-cache references with different branches invalid", () =>
