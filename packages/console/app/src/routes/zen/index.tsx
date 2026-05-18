@@ -1,5 +1,5 @@
 import "./index.css"
-import { createAsync, query, redirect } from "@solidjs/router"
+import { createAsync, query } from "@solidjs/router"
 import { Title, Meta } from "@solidjs/meta"
 //import { HttpHeader } from "@solidjs/start"
 import zenLogoLight from "../../asset/zen-ornate-light.svg"
@@ -24,8 +24,7 @@ import { LocaleLinks } from "~/component/locale-links"
 
 const checkLoggedIn = query(async () => {
   "use server"
-  const workspaceID = await getLastSeenWorkspaceID().catch(() => {})
-  if (workspaceID) throw redirect(`/workspace/${workspaceID}`)
+  return await getLastSeenWorkspaceID().catch(() => {})
 }, "checkLoggedIn.get")
 
 export default function Home() {

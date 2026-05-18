@@ -1,10 +1,11 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
+import { ServerConnection } from "./server"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
-type OpenFilePickerOptions = { title?: string; multiple?: boolean }
+type OpenFilePickerOptions = { title?: string; multiple?: boolean; accept?: string[]; extensions?: string[] }
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type UpdateInfo = { updateAvailable: boolean; version?: string }
 
@@ -48,20 +49,20 @@ export type Platform = {
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage
 
-  /** Check for updates (Tauri only) */
+  /** Check for a downloadable desktop update */
   checkUpdate?(): Promise<UpdateInfo>
 
-  /** Install updates (Tauri only) */
-  update?(): Promise<void>
+  /** Install the downloaded update using the platform restart flow */
+  updateAndRestart?(): Promise<void>
 
   /** Fetch override */
   fetch?: typeof fetch
 
   /** Get the configured default server URL (platform-specific) */
-  getDefaultServerUrl?(): Promise<string | null>
+  getDefaultServer?(): Promise<ServerConnection.Key | null>
 
   /** Set the default server URL to use on app startup (platform-specific) */
-  setDefaultServerUrl?(url: string | null): Promise<void> | void
+  setDefaultServer?(url: ServerConnection.Key | null): Promise<void> | void
 
   /** Get the configured WSL integration (desktop only) */
   getWslEnabled?(): Promise<boolean>

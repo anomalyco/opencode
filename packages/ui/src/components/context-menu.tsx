@@ -33,7 +33,7 @@ function ContextMenuTrigger(props: ParentProps<ContextMenuTriggerProps>) {
       {...rest}
       data-slot="context-menu-trigger"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -49,7 +49,7 @@ function ContextMenuIcon(props: ParentProps<ContextMenuIconProps>) {
       {...rest}
       data-slot="context-menu-icon"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -69,7 +69,7 @@ function ContextMenuContent(props: ParentProps<ContextMenuContentProps>) {
       {...rest}
       data-component="context-menu-content"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -85,7 +85,7 @@ function ContextMenuArrow(props: ContextMenuArrowProps) {
       {...rest}
       data-slot="context-menu-arrow"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     />
@@ -99,7 +99,7 @@ function ContextMenuSeparator(props: ContextMenuSeparatorProps) {
       {...rest}
       data-slot="context-menu-separator"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     />
@@ -113,7 +113,7 @@ function ContextMenuGroup(props: ParentProps<ContextMenuGroupProps>) {
       {...rest}
       data-slot="context-menu-group"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -129,7 +129,7 @@ function ContextMenuGroupLabel(props: ParentProps<ContextMenuGroupLabelProps>) {
       {...rest}
       data-slot="context-menu-group-label"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -145,7 +145,7 @@ function ContextMenuItem(props: ParentProps<ContextMenuItemProps>) {
       {...rest}
       data-slot="context-menu-item"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -161,7 +161,7 @@ function ContextMenuItemLabel(props: ParentProps<ContextMenuItemLabelProps>) {
       {...rest}
       data-slot="context-menu-item-label"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -177,7 +177,7 @@ function ContextMenuItemDescription(props: ParentProps<ContextMenuItemDescriptio
       {...rest}
       data-slot="context-menu-item-description"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -193,7 +193,7 @@ function ContextMenuItemIndicator(props: ParentProps<ContextMenuItemIndicatorPro
       {...rest}
       data-slot="context-menu-item-indicator"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -209,7 +209,7 @@ function ContextMenuRadioGroup(props: ParentProps<ContextMenuRadioGroupProps>) {
       {...rest}
       data-slot="context-menu-radio-group"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -225,7 +225,7 @@ function ContextMenuRadioItem(props: ParentProps<ContextMenuRadioItemProps>) {
       {...rest}
       data-slot="context-menu-radio-item"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -241,7 +241,7 @@ function ContextMenuCheckboxItem(props: ParentProps<ContextMenuCheckboxItemProps
       {...rest}
       data-slot="context-menu-checkbox-item"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -261,7 +261,7 @@ function ContextMenuSubTrigger(props: ParentProps<ContextMenuSubTriggerProps>) {
       {...rest}
       data-slot="context-menu-sub-trigger"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >
@@ -277,7 +277,7 @@ function ContextMenuSubContent(props: ParentProps<ContextMenuSubContentProps>) {
       {...rest}
       data-component="context-menu-sub-content"
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
     >

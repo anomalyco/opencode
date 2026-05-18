@@ -6,6 +6,14 @@ import { formatDateUTC, formatDateForTable } from "../../common"
 import styles from "./payment-section.module.css"
 import { useI18n } from "~/context/i18n"
 
+function money(amount: number, currency?: string) {
+  const formatter =
+    currency === "inr"
+      ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" })
+      : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+  return formatter.format(amount / 100_000_000)
+}
+
 const getPaymentsInfo = query(async (workspaceID: string) => {
   "use server"
   return withActor(async () => {
@@ -81,6 +89,10 @@ export function PaymentSection() {
                   const date = new Date(payment.timeCreated)
                   const amount =
                     payment.enrichment?.type === "subscription" && payment.enrichment.couponID ? 0 : payment.amount
+                  const currency =
+                    payment.enrichment?.type === "subscription" || payment.enrichment?.type === "lite"
+                      ? payment.enrichment.currency
+                      : undefined
                   return (
                     <tr>
                       <td data-slot="payment-date" title={formatDateUTC(date)}>
@@ -88,7 +100,7 @@ export function PaymentSection() {
                       </td>
                       <td data-slot="payment-id">{payment.id}</td>
                       <td data-slot="payment-amount" data-refunded={!!payment.timeRefunded}>
-                        ${((amount ?? 0) / 100000000).toFixed(2)}
+                        {money(amount, currency)}
                         <Switch>
                           <Match when={payment.enrichment?.type === "credit"}>
                             {" "}

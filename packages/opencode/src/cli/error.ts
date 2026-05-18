@@ -1,57 +1,118 @@
-import { ConfigMarkdown } from "@/config/markdown"
-import { Config } from "../config/config"
-import { MCP } from "../mcp"
-import { Provider } from "../provider/provider"
-import { UI } from "./ui"
+import { NamedError } from "@opencode-ai/core/util/error"
+import { errorFormat } from "@/util/error"
+import { isRecord } from "@/util/record"
 
-export function FormatError(input: unknown) {
-  if (MCP.Failed.isInstance(input))
-    return `MCP server "${input.data.name}" failed. Note, opencode does not support MCP authentication yet.`
-  if (Provider.ModelNotFoundError.isInstance(input)) {
-    const { providerID, modelID, suggestions } = input.data
+type ConfigIssue = { message: string; path: string[] }
+
+function isTaggedError(error: unknown, tag: string): error is Record<string, unknown> {
+  return isRecord(error) && error._tag === tag
+}
+
+function configData(input: unknown, tag: string): Record<string, unknown> | undefined {
+  if (!isRecord(input)) return undefined
+  if (input.name === tag && isRecord(input.data)) return input.data
+  if (input._tag === tag) return input
+  return undefined
+}
+
+function stringField(input: Record<string, unknown>, key: string): string | undefined {
+  return typeof input[key] === "string" ? input[key] : undefined
+}
+
+function configIssues(input: Record<string, unknown>): ConfigIssue[] {
+  return Array.isArray(input.issues)
+    ? input.issues.filter((issue): issue is ConfigIssue => {
+        if (!isRecord(issue)) return false
+        return (
+          typeof issue.message === "string" &&
+          Array.isArray(issue.path) &&
+          issue.path.every((x) => typeof x === "string")
+        )
+      })
+    : []
+}
+
+export function FormatError(input: unknown): string | undefined {
+  if (input instanceof Error && isRecord(input.cause) && "body" in input.cause) {
+    const formatted = FormatError(input.cause.body)
+    if (formatted) return formatted
+  }
+
+  // CliError: domain failure surfaced from an effectCmd handler via fail("...")
+  if (isTaggedError(input, "CliError")) {
+    if (typeof input.exitCode === "number") process.exitCode = input.exitCode
+    return stringField(input, "message") ?? ""
+  }
+
+  // MCPFailed: { name: string }
+  if (NamedError.hasName(input, "MCPFailed")) {
+    const data = isRecord(input) && isRecord(input.data) ? stringField(input.data, "name") : undefined
+    return `MCP server "${data}" failed. Note, opencode does not support MCP authentication yet.`
+  }
+
+  // AccountServiceError, AccountTransportError: TaggedErrorClass
+  if (isTaggedError(input, "AccountServiceError") || isTaggedError(input, "AccountTransportError")) {
+    return stringField(input, "message") ?? ""
+  }
+
+  // ProviderModelNotFoundError: { providerID: string, modelID: string, suggestions?: string[] }
+  const providerModelNotFound = configData(input, "ProviderModelNotFoundError")
+  if (providerModelNotFound) {
+    const suggestions = Array.isArray(providerModelNotFound.suggestions)
+      ? providerModelNotFound.suggestions.filter((x) => typeof x === "string")
+      : []
     return [
-      `Model not found: ${providerID}/${modelID}`,
-      ...(Array.isArray(suggestions) && suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
+      `Model not found: ${stringField(providerModelNotFound, "providerID")}/${stringField(providerModelNotFound, "modelID")}`,
+      ...(suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
       `Try: \`opencode models\` to list available models`,
       `Or check your config (opencode.json) provider/model names`,
     ].join("\n")
   }
-  if (Provider.InitError.isInstance(input)) {
-    return `Failed to initialize provider "${input.data.providerID}". Check credentials and configuration.`
-  }
-  if (Config.JsonError.isInstance(input)) {
-    return (
-      `Config file at ${input.data.path} is not valid JSON(C)` + (input.data.message ? `: ${input.data.message}` : "")
-    )
-  }
-  if (Config.ConfigDirectoryTypoError.isInstance(input)) {
-    return `Directory "${input.data.dir}" in ${input.data.path} is not valid. Rename the directory to "${input.data.suggestion}" or remove it. This is a common typo.`
-  }
-  if (ConfigMarkdown.FrontmatterError.isInstance(input)) {
-    return input.data.message
-  }
-  if (Config.InvalidError.isInstance(input))
-    return [
-      `Configuration is invalid${input.data.path && input.data.path !== "config" ? ` at ${input.data.path}` : ""}` +
-        (input.data.message ? `: ${input.data.message}` : ""),
-      ...(input.data.issues?.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")) ?? []),
-    ].join("\n")
 
-  if (UI.CancelledError.isInstance(input)) return ""
+  // ProviderInitError: { providerID: string }
+  const providerInit = configData(input, "ProviderInitError")
+  if (providerInit) {
+    return `Failed to initialize provider "${stringField(providerInit, "providerID")}". Check credentials and configuration.`
+  }
+
+  // ConfigJsonError: { path: string, message?: string }
+  const configJson = configData(input, "ConfigJsonError")
+  if (configJson) {
+    const message = stringField(configJson, "message")
+    return `Config file at ${stringField(configJson, "path")} is not valid JSON(C)` + (message ? `: ${message}` : "")
+  }
+
+  // ConfigDirectoryTypoError: { dir: string, path: string, suggestion: string }
+  const configDirectoryTypo = configData(input, "ConfigDirectoryTypoError")
+  if (configDirectoryTypo) {
+    return `Directory "${stringField(configDirectoryTypo, "dir")}" in ${stringField(configDirectoryTypo, "path")} is not valid. Rename the directory to "${stringField(configDirectoryTypo, "suggestion")}" or remove it. This is a common typo.`
+  }
+
+  // ConfigFrontmatterError: { message: string }
+  const configFrontmatter = configData(input, "ConfigFrontmatterError")
+  if (configFrontmatter) {
+    return stringField(configFrontmatter, "message") ?? ""
+  }
+
+  // ConfigInvalidError: { path?: string, message?: string, issues?: Array<{ message: string, path: string[] }> }
+  const configInvalid = configData(input, "ConfigInvalidError")
+  if (configInvalid) {
+    const path = stringField(configInvalid, "path")
+    const message = stringField(configInvalid, "message")
+    const issues = configIssues(configInvalid)
+    return [
+      `Configuration is invalid${path && path !== "config" ? ` at ${path}` : ""}` + (message ? `: ${message}` : ""),
+      ...issues.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")),
+    ].join("\n")
+  }
+
+  // UICancelledError: user cancelled an interactive CLI prompt
+  if (isTaggedError(input, "UICancelledError") || NamedError.hasName(input, "UICancelledError")) {
+    return ""
+  }
+  return undefined
 }
 
 export function FormatUnknownError(input: unknown): string {
-  if (input instanceof Error) {
-    return input.stack ?? `${input.name}: ${input.message}`
-  }
-
-  if (typeof input === "object" && input !== null) {
-    try {
-      return JSON.stringify(input, null, 2)
-    } catch {
-      return "Unexpected error (unserializable)"
-    }
-  }
-
-  return String(input)
+  return errorFormat(input)
 }
