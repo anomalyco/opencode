@@ -1,10 +1,8 @@
 export * as ConfigAgent from "./agent"
 
 import { Exit, Schema, SchemaGetter } from "effect"
-import { Bus } from "@/bus"
 import { PositiveInt } from "@opencode-ai/core/schema"
 import * as Log from "@opencode-ai/core/util/log"
-import { NamedError } from "@opencode-ai/core/util/error"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { configEntryNameFromPath } from "./entry-name"
 import * as ConfigMarkdown from "./markdown"
@@ -112,12 +110,7 @@ export async function load(dir: string) {
     dot: true,
     symlink: true,
   })) {
-    const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-      const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-        ? err.data.message
-        : `Failed to parse agent ${item}`
-      const { Session } = await import("@/session/session")
-      void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+    const md = await ConfigMarkdown.parse(item).catch((err) => {
       log.error("failed to load agent", { agent: item, err })
       return undefined
     })
@@ -144,12 +137,7 @@ export async function loadMode(dir: string) {
     dot: true,
     symlink: true,
   })) {
-    const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-      const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-        ? err.data.message
-        : `Failed to parse mode ${item}`
-      const { Session } = await import("@/session/session")
-      void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+    const md = await ConfigMarkdown.parse(item).catch((err) => {
       log.error("failed to load mode", { mode: item, err })
       return undefined
     })
