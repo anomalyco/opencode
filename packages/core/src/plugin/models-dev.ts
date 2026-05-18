@@ -1,7 +1,7 @@
 import { DateTime, Effect } from "effect"
 import { Catalog } from "../catalog"
 import { ModelV2 } from "../model"
-import { ModelsDev } from "../models"
+import { ModelsDev } from "../models-dev"
 import { PluginV2 } from "../plugin"
 import { ProviderV2 } from "../provider"
 

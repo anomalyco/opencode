@@ -26,4 +26,13 @@ describe("Database.getChannelPath", () => {
       expect(Database.getChannelPath(flags)).toBe(path.join(Global.Path.data, "opencode.db"))
     }).pipe(Effect.provide(RuntimeFlags.layer({ disableChannelDb: true }))),
   )
+
+  it.effect("accepts RuntimeFlags with skipMigrations for database callers", () =>
+    Effect.gen(function* () {
+      const flags = yield* RuntimeFlags.Service
+
+      expect(flags.skipMigrations).toBe(true)
+      expect(Database.getChannelPath(flags)).toBe(Database.getChannelPath({ disableChannelDb: flags.disableChannelDb }))
+    }).pipe(Effect.provide(RuntimeFlags.layer({ skipMigrations: true }))),
+  )
 })

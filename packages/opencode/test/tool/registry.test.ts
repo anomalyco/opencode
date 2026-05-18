@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { pathToFileURL } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import { Effect, Layer, Result, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
@@ -261,6 +261,73 @@ describe("tool.registry", () => {
         required: ["query"],
       })
     }),
+  )
+
+  it.instance(
+    "preserves Zod arg descriptions from older config-scoped plugin packages",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const opencode = path.join(test.directory, ".opencode")
+        const customTools = path.join(opencode, "tools")
+        const plugin = path.join(opencode, "node_modules", "@opencode-ai", "plugin")
+        yield* Effect.promise(() => fs.mkdir(path.join(plugin, "dist"), { recursive: true }))
+        yield* Effect.promise(() => fs.mkdir(customTools, { recursive: true }))
+        yield* Effect.promise(() =>
+          fs.cp(path.dirname(fileURLToPath(import.meta.resolve("zod"))), path.join(opencode, "node_modules", "zod"), {
+            dereference: true,
+            recursive: true,
+          }),
+        )
+        yield* Effect.promise(() =>
+          Bun.write(
+            path.join(plugin, "package.json"),
+            JSON.stringify({ name: "@opencode-ai/plugin", type: "module", exports: { ".": "./dist/index.js" } }),
+          ),
+        )
+        yield* Effect.promise(() =>
+          Bun.write(
+            path.join(plugin, "dist", "index.js"),
+            [
+              "import { z } from 'zod'",
+              "export function tool(input) {",
+              "  return input",
+              "}",
+              "tool.schema = z",
+              "",
+            ].join("\n"),
+          ),
+        )
+        yield* Effect.promise(() =>
+          Bun.write(
+            path.join(customTools, "addition.ts"),
+            [
+              'import { tool } from "@opencode-ai/plugin"',
+              "export default tool({",
+              "  description: 'Use this tool to add two numbers and return their sum.',",
+              "  args: {",
+              "    left: tool.schema.number().describe('The first number to add'),",
+              "    right: tool.schema.number().describe('The second number to add'),",
+              "  },",
+              "  execute: async (args) => `${args.left} + ${args.right} = ${args.left + args.right}`,",
+              "})",
+              "",
+            ].join("\n"),
+          ),
+        )
+
+        const registry = yield* ToolRegistry.Service
+        const loaded = (yield* registry.all()).find((tool) => tool.id === "addition")
+        if (!loaded) throw new Error("custom addition tool was not loaded")
+
+        expect(ToolJsonSchema.fromTool(loaded)).toMatchObject({
+          properties: {
+            left: { type: "number", description: "The first number to add" },
+            right: { type: "number", description: "The second number to add" },
+          },
+        })
+      }),
+    20_000,
   )
 
   it.instance("preserves attachments from structured custom tool results", () =>
