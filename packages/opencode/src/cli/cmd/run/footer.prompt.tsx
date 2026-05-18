@@ -6,8 +6,15 @@
 // while the footer view renders the current menu state below it.
 /** @jsxImportSource @opentui/solid */
 import { pathToFileURL } from "bun"
-import { StyledText, bg, fg, type KeyBinding, type KeyEvent, type TextareaRenderable } from "@opentui/core"
-import { useKeyboard } from "@opentui/solid"
+import {
+  StyledText,
+  bg,
+  fg,
+  type KeyBinding,
+  type KeyEvent,
+  type TextareaRenderable,
+} from "@opentui/core"
+import { useKeyboard, useRenderer } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
@@ -197,13 +204,45 @@ export function RunPromptBody(props: {
   onContentChange: () => void
   bind: (area?: TextareaRenderable) => void
 }) {
+  const renderer = useRenderer()
   let area: TextareaRenderable | undefined
+  let pasteTick: ReturnType<typeof setTimeout> | undefined
+
+  const refreshPasteLayout = () => {
+    if (pasteTick) {
+      clearTimeout(pasteTick)
+    }
+
+    pasteTick = setTimeout(() => {
+      pasteTick = undefined
+      if (!area || area.isDestroyed) {
+        return
+      }
+
+      // Paste can leave the textarea layout stale until the next edit.
+      area.getLayoutNode().markDirty()
+      renderer.requestRender()
+      void renderer
+        .idle()
+        .then(() => {
+          if (!area || area.isDestroyed) {
+            return
+          }
+
+          props.onContentChange()
+        })
+        .catch(() => {})
+    }, 0)
+  }
 
   onMount(() => {
     props.bind(area)
   })
 
   onCleanup(() => {
+    if (pasteTick) {
+      clearTimeout(pasteTick)
+    }
     props.bind(undefined)
   })
 
@@ -226,6 +265,9 @@ export function RunPromptBody(props: {
           keyBindings={props.bindings()}
           onSubmit={props.onSubmit}
           onKeyDown={props.onKeyDown}
+          onPaste={() => {
+            refreshPasteLayout()
+          }}
           onContentChange={props.onContentChange}
           ref={(next) => {
             area = next
