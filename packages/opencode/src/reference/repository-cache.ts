@@ -311,9 +311,4 @@ export const defaultLayer: Layer.Layer<Service> = layer.pipe(
   Layer.provide(Git.defaultLayer),
 )
 
-export const ensure = Effect.fn("RepositoryCache.ensure")(function* (input: EnsureInput) {
-  const cache = yield* Service
-  return yield* cache.ensure(input)
-})
-
 export * as RepositoryCache from "./repository-cache"
