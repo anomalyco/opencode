@@ -577,7 +577,7 @@ export function MessageTimeline(props: {
         >
           <button
             data-component="codle-scroll-bottom"
-            class="pointer-events-auto size-8 flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
+            class="pointer-events-auto flex items-center justify-center"
             onClick={props.onResumeScroll}
             aria-label={language.t("session.messages.jumpToLatest")}
           >

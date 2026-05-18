@@ -53,71 +53,23 @@ test("changing language updates settings labels", async ({ page, gotoSession }) 
   await expect(heading).toHaveText("General")
 })
 
-test("changing color scheme persists in localStorage", async ({ page, gotoSession }) => {
+test("appearance controls stay pinned to codle and system", async ({ page, gotoSession }) => {
   await gotoSession()
 
   const dialog = await openSettings(page)
-  const select = dialog.locator(settingsColorSchemeSelector)
-  await expect(select).toBeVisible()
+  const themeSelect = dialog.locator(settingsThemeSelector)
+  const schemeSelect = dialog.locator(settingsColorSchemeSelector)
+  await expect(themeSelect).toBeVisible()
+  await expect(schemeSelect).toBeVisible()
+  await expect(themeSelect.locator('[data-slot="select-select-trigger"]')).toBeDisabled()
+  await expect(schemeSelect.locator('[data-slot="select-select-trigger"]')).toBeDisabled()
 
-  await select.locator('[data-slot="select-select-trigger"]').click()
-  await page.locator('[data-slot="select-select-item"]').filter({ hasText: "Dark" }).click()
-
-  const colorScheme = await page.evaluate(() => {
-    return document.documentElement.getAttribute("data-color-scheme")
-  })
-  expect(colorScheme).toBe("dark")
-
-  await select.locator('[data-slot="select-select-trigger"]').click()
-  await page.locator('[data-slot="select-select-item"]').filter({ hasText: "Light" }).click()
-
-  const lightColorScheme = await page.evaluate(() => {
-    return document.documentElement.getAttribute("data-color-scheme")
-  })
-  expect(lightColorScheme).toBe("light")
+  expect(await page.evaluate(() => localStorage.getItem("opencode-theme-id"))).toBe("codle")
+  expect(await page.evaluate(() => localStorage.getItem("opencode-color-scheme"))).toBe("system")
+  expect(await page.evaluate(() => document.documentElement.getAttribute("data-theme"))).toBe("codle")
 })
 
-test("changing theme persists in localStorage", async ({ page, gotoSession }) => {
-  await gotoSession()
-
-  const dialog = await openSettings(page)
-  const select = dialog.locator(settingsThemeSelector)
-  await expect(select).toBeVisible()
-
-  const currentThemeId = await page.evaluate(() => {
-    return document.documentElement.getAttribute("data-theme")
-  })
-  const currentTheme = (await select.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
-
-  await select.locator('[data-slot="select-select-trigger"]').click()
-
-  const items = page.locator('[data-slot="select-select-item"]')
-  const count = await items.count()
-  expect(count).toBeGreaterThan(1)
-
-  const nextTheme = (await items.locator('[data-slot="select-select-item-label"]').allTextContents())
-    .map((x) => x.trim())
-    .find((x) => x && x !== currentTheme)
-  expect(nextTheme).toBeTruthy()
-
-  await items.filter({ hasText: nextTheme! }).first().click()
-
-  await page.keyboard.press("Escape")
-
-  const storedThemeId = await page.evaluate(() => {
-    return localStorage.getItem("opencode-theme-id")
-  })
-
-  expect(storedThemeId).not.toBeNull()
-  expect(storedThemeId).not.toBe(currentThemeId)
-
-  const dataTheme = await page.evaluate(() => {
-    return document.documentElement.getAttribute("data-theme")
-  })
-  expect(dataTheme).toBe(storedThemeId)
-})
-
-test("legacy oc-1 theme migrates to oc-2", async ({ page, gotoSession }) => {
+test("legacy oc-1 theme migrates to codle", async ({ page, gotoSession }) => {
   await page.addInitScript(() => {
     localStorage.setItem("opencode-theme-id", "oc-1")
     localStorage.setItem("opencode-theme-css-light", "--background-base:#fff;")
@@ -126,7 +78,7 @@ test("legacy oc-1 theme migrates to oc-2", async ({ page, gotoSession }) => {
 
   await gotoSession()
 
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "oc-2")
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "codle")
 
   await expect
     .poll(async () => {
@@ -134,23 +86,15 @@ test("legacy oc-1 theme migrates to oc-2", async ({ page, gotoSession }) => {
         return localStorage.getItem("opencode-theme-id")
       })
     })
-    .toBe("oc-2")
+    .toBe("codle")
 
   await expect
     .poll(async () => {
       return await page.evaluate(() => {
-        return localStorage.getItem("opencode-theme-css-light")
+        return localStorage.getItem("opencode-color-scheme")
       })
     })
-    .toBeNull()
-
-  await expect
-    .poll(async () => {
-      return await page.evaluate(() => {
-        return localStorage.getItem("opencode-theme-css-dark")
-      })
-    })
-    .toBeNull()
+    .toBe("system")
 })
 
 test("typing a code font with spaces persists and updates CSS variable", async ({ page, gotoSession }) => {

@@ -1,27 +1,25 @@
 ;(function () {
-  var key = "opencode-theme-id"
-  var themeId = localStorage.getItem(key) || "codle"
+  // Keep in sync with packages/ui/src/theme/pin.ts
+  var THEME_ID = "codle"
+  var COLOR_SCHEME = "system"
+  var themeKey = "opencode-theme-id"
+  var schemeKey = "opencode-color-scheme"
 
-  if (themeId === "oc-1") {
-    themeId = "oc-2"
-    localStorage.setItem(key, themeId)
-    localStorage.removeItem("opencode-theme-css-light")
-    localStorage.removeItem("opencode-theme-css-dark")
+  if (localStorage.getItem(themeKey) !== THEME_ID) {
+    localStorage.setItem(themeKey, THEME_ID)
   }
 
-  if (themeId === "lovable") {
-    themeId = "codle"
-    localStorage.setItem(key, themeId)
+  if (localStorage.getItem(schemeKey) !== COLOR_SCHEME) {
+    localStorage.setItem(schemeKey, COLOR_SCHEME)
   }
 
-  var scheme = localStorage.getItem("opencode-color-scheme") || "system"
-  var isDark = scheme === "dark" || (scheme === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
+  var isDark =
+    COLOR_SCHEME === "dark" ||
+    (COLOR_SCHEME === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
   var mode = isDark ? "dark" : "light"
 
-  document.documentElement.dataset.theme = themeId
+  document.documentElement.dataset.theme = THEME_ID
   document.documentElement.dataset.colorScheme = mode
-
-  if (themeId === "oc-2") return
 
   var css = localStorage.getItem("opencode-theme-css-" + mode)
   if (css) {
