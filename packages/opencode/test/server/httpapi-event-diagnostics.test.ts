@@ -66,10 +66,12 @@ async function readChunk(reader: ReadableStreamDefaultReader<Uint8Array>, timeou
   }
 }
 
+const textDecoder = new TextDecoder()
+
 function decodeFrame(value: Uint8Array): SseEvent[] {
   // SSE frames are separated by blank lines and each starts with "data: ".
   // For our happy-path tests one chunk == one frame, but be defensive.
-  const text = new TextDecoder().decode(value)
+  const text = textDecoder.decode(value)
   return text
     .split(/\n\n+/)
     .map((part) => part.trim())

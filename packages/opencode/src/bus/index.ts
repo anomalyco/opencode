@@ -37,11 +37,12 @@ export interface Interface {
     properties: BusProperties<D>,
     options?: { id?: string },
   ) => Effect.Effect<void>
-  // Subscribe eagerly: the PubSub subscription is acquired in the caller's
-  // Scope at `yield*` time. Any publish after the yield is delivered, even if
-  // stream consumption starts later. The old Stream-returning shape lazily
-  // acquired the subscription on first pull, opening a race window during which
-  // publishes were lost (see test/bus/bus-effect.test.ts RACE tests).
+  // subscribe / subscribeAll are eager: the underlying PubSub subscription is
+  // acquired in the caller's Scope at `yield*` time. Any publish after the
+  // yield is delivered, even if stream consumption starts later. The previous
+  // Stream-returning shape acquired the subscription lazily on first pull,
+  // opening a race window during which publishes were lost — see
+  // test/bus/bus-effect.test.ts RACE tests.
   readonly subscribe: <D extends BusEvent.Definition>(
     def: D,
   ) => Effect.Effect<Stream.Stream<Payload<D>>, never, Scope.Scope>
