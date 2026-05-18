@@ -1043,6 +1043,14 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   return result
 }
 
+function modelsDevApiNpm(provider: ModelsDev.Provider, model: ModelsDev.Model) {
+  const npm = model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible"
+  if (provider.id === "opencode" && model.id === "big-pickle" && npm === "@ai-sdk/anthropic") {
+    return "@ai-sdk/openai-compatible"
+  }
+  return npm
+}
+
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
   const base: Model = {
     id: ModelID.make(model.id),
@@ -1052,7 +1060,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     api: {
       id: model.id,
       url: model.provider?.api ?? provider.api ?? "",
-      npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
+      npm: modelsDevApiNpm(provider, model),
     },
     status: model.status ?? "active",
     headers: {},

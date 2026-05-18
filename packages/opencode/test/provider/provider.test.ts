@@ -2160,6 +2160,34 @@ test("models.dev normalization fills required response fields", () => {
   expect(model.release_date).toBe("")
 })
 
+test("models.dev normalization keeps opencode big-pickle on chat completions format", () => {
+  const provider = {
+    id: "opencode",
+    name: "opencode",
+    env: [],
+    npm: "@ai-sdk/anthropic",
+    models: {
+      "big-pickle": {
+        id: "big-pickle",
+        name: "Big Pickle",
+        family: "big-pickle",
+        cost: {
+          input: 0,
+          output: 0,
+        },
+        limit: {
+          context: 256_000,
+          input: 128_000,
+          output: 16_384,
+        },
+      },
+    },
+  } as unknown as ModelsDev.Provider
+
+  const model = Provider.fromModelsDevProvider(provider).models["big-pickle"]
+  expect(model.api.npm).toBe("@ai-sdk/openai-compatible")
+})
+
 test("model variants are generated for reasoning models", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
