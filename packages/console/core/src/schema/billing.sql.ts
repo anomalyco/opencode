@@ -133,7 +133,14 @@ export const UsageTable = mysqlTable(
   (table) => [...workspaceIndexes(table), index("usage_time_created").on(table.workspaceID, table.timeCreated)],
 )
 
-export const CouponType = ["BUILDATHON", "GOFREEMONTH", "GO3MONTHS100", "GO6MONTHS100", "GO12MONTHS100"] as const
+export const CouponType = [
+  "BUILDATHON",
+  "GO1MONTH50",
+  "GOFREEMONTH",
+  "GO3MONTHS100",
+  "GO6MONTHS100",
+  "GO12MONTHS100",
+] as const
 export const CouponTable = mysqlTable(
   "coupon",
   {

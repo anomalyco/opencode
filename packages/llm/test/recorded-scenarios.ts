@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMEvent, LLMResponse, type LLMRequest, type ModelRef } from "../src"
+import { LLM, LLMEvent, LLMResponse, ToolChoice, ToolDefinition, type LLMRequest, type ModelRef } from "../src"
 import { LLMClient } from "../src/route"
 import { tool } from "../src/tool"
 
@@ -18,7 +18,7 @@ export const LARGE_CACHEABLE_SYSTEM = (() => {
   return sentence.repeat(250)
 })()
 
-export const weatherTool = LLM.toolDefinition({
+export const weatherTool = ToolDefinition.make({
   name: weatherToolName,
   description: "Get current weather for a city.",
   inputSchema: {
@@ -70,7 +70,7 @@ export const weatherToolRequest = (input: {
     system: "Call tools exactly as requested.",
     prompt: "Call get_weather with city exactly Paris.",
     tools: [weatherTool],
-    toolChoice: LLM.toolChoice(weatherTool),
+    toolChoice: ToolChoice.make(weatherTool),
     cache: "none",
     generation:
       input.temperature === false
@@ -120,8 +120,8 @@ export const runWeatherToolLoop = (request: LLMRequest) =>
 
 export const expectFinish = (
   events: ReadonlyArray<LLMEvent>,
-  reason: Extract<LLMEvent, { readonly type: "request-finish" }>["reason"],
-) => expect(events.at(-1)).toMatchObject({ type: "request-finish", reason })
+  reason: Extract<LLMEvent, { readonly type: "finish" }>["reason"],
+) => expect(events.at(-1)).toMatchObject({ type: "finish", reason })
 
 export const expectWeatherToolCall = (response: LLMResponse) =>
   expect(response.toolCalls).toMatchObject([
@@ -129,10 +129,12 @@ export const expectWeatherToolCall = (response: LLMResponse) =>
   ])
 
 export const expectWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => {
-  const finishes = events.filter(LLMEvent.is.requestFinish)
-  expect(finishes).toHaveLength(2)
-  expect(finishes[0]?.reason).toBe("tool-calls")
-  expect(finishes.at(-1)?.reason).toBe("stop")
+  const finishes = events.filter(LLMEvent.is.finish)
+  expect(finishes).toHaveLength(1)
+  expect(finishes[0]?.reason).toBe("stop")
+
+  const stepFinishes = events.filter(LLMEvent.is.stepFinish)
+  expect(stepFinishes.map((event) => event.reason)).toEqual(["tool-calls", "stop"])
 
   const toolCalls = events.filter(LLMEvent.is.toolCall)
   expect(toolCalls).toHaveLength(1)
@@ -272,7 +274,7 @@ export const eventSummary = (events: ReadonlyArray<LLMEvent>) => {
       summary.push({ type: "tool-error", name: event.name, message: event.message })
       continue
     }
-    if (event.type === "request-finish") {
+    if (event.type === "finish") {
       summary.push({ type: "finish", reason: event.reason, usage: usageSummary(event.usage) })
     }
   }

@@ -3,9 +3,7 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { SessionID, MessageID } from "@/session/schema"
-import { zod } from "@opencode-ai/core/effect-zod"
 import * as Log from "@opencode-ai/core/util/log"
-import { withStatics } from "@opencode-ai/core/schema"
 import { QuestionID } from "./schema"
 
 const log = Log.create({ service: "question" })
@@ -19,9 +17,7 @@ export class Option extends Schema.Class<Option>("QuestionOption")({
   description: Schema.String.annotate({
     description: "Explanation of choice",
   }),
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
 const base = {
   question: Schema.String.annotate({
@@ -43,20 +39,14 @@ export class Info extends Schema.Class<Info>("QuestionInfo")({
   custom: Schema.optional(Schema.Boolean).annotate({
     description: "Allow typing a custom answer (default: true)",
   }),
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
-export class Prompt extends Schema.Class<Prompt>("QuestionPrompt")(base) {
-  static readonly zod = zod(this)
-}
+export class Prompt extends Schema.Class<Prompt>("QuestionPrompt")(base) {}
 
 export class Tool extends Schema.Class<Tool>("QuestionTool")({
   messageID: MessageID,
   callID: Schema.String,
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
 export class Request extends Schema.Class<Request>("QuestionRequest")({
   id: QuestionID,
@@ -65,22 +55,16 @@ export class Request extends Schema.Class<Request>("QuestionRequest")({
     description: "Questions to ask",
   }),
   tool: Schema.optional(Tool),
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
-export const Answer = Schema.Array(Schema.String)
-  .annotate({ identifier: "QuestionAnswer" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+export const Answer = Schema.Array(Schema.String).annotate({ identifier: "QuestionAnswer" })
 export type Answer = Schema.Schema.Type<typeof Answer>
 
 export class Reply extends Schema.Class<Reply>("QuestionReply")({
   answers: Schema.Array(Answer).annotate({
     description: "User answers in order of questions (each answer is an array of selected labels)",
   }),
-}) {
-  static readonly zod = zod(this)
-}
+}) {}
 
 class Replied extends Schema.Class<Replied>("QuestionReplied")({
   sessionID: SessionID,
