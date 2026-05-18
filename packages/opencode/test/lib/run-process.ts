@@ -26,42 +26,13 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import { Process } from "@/util/process"
 import { TestLLMServer } from "./llm-server"
+import { testProviderConfig } from "./test-provider"
 import { it } from "./effect"
 
 const opencodeRoot = path.resolve(import.meta.dir, "../../")
 const cliEntry = path.join(opencodeRoot, "src/index.ts")
 
 export const testModelID = "test/test-model"
-
-function providerConfig(llmUrl: string) {
-  return {
-    formatter: false,
-    lsp: false,
-    provider: {
-      test: {
-        name: "Test",
-        id: "test",
-        env: [],
-        npm: "@ai-sdk/openai-compatible",
-        models: {
-          "test-model": {
-            id: "test-model",
-            name: "Test Model",
-            attachment: false,
-            reasoning: false,
-            temperature: false,
-            tool_call: true,
-            release_date: "2025-01-01",
-            limit: { context: 100_000, output: 10_000 },
-            cost: { input: 0, output: 0 },
-            options: {},
-          },
-        },
-        options: { apiKey: "test-key", baseURL: llmUrl },
-      },
-    },
-  }
-}
 
 function isolatedEnv(home: string, configJson: string): Record<string, string> {
   return {
@@ -135,7 +106,7 @@ export function withRunFixture<A, E>(
       Effect.promise(() => fs.rm(home, { recursive: true, force: true }).catch(() => undefined)),
     )
 
-    const configJson = JSON.stringify(providerConfig(llm.url))
+    const configJson = JSON.stringify(testProviderConfig(llm.url))
     const env = isolatedEnv(home, configJson)
 
     const spawn = (
@@ -196,6 +167,10 @@ function expectExit(result: RunResult, expected: number, label = "opencode") {
 // `runIt.live(name, fixture => effect)` is the same as
 // `it.live(name, () => withRunFixture(fixture))` — one fewer nesting level at
 // every call site. Use this for any test that needs the opencode CLI fixture.
+//
+// Only `.live` is exposed because subprocess tests must run against the real
+// clock — a TestClock-paused environment can't drive a child process. If you
+// need `.only` or `.skip`, fall back to `it.live` + `withRunFixture` directly.
 export const runIt = {
   live: <A, E>(
     name: string,
