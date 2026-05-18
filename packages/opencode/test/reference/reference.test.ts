@@ -5,6 +5,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "../../src/config/config"
+import { ConfigReference } from "../../src/config/reference"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Git } from "../../src/git"
 import { Reference } from "../../src/reference/reference"
@@ -86,25 +87,25 @@ describe("reference", () => {
       const root = path.resolve("opencode-reference-root")
       const local = Reference.resolve({
         name: "docs",
-        reference: { path: "../docs" },
+        reference: ConfigReference.normalizeEntry({ path: "../docs" }),
         directory: path.join(root, "packages", "app"),
         worktree: root,
       })
       const repo = Reference.resolve({
         name: "effect",
-        reference: { repository: "Effect-TS/effect", branch: "main" },
+        reference: ConfigReference.normalizeEntry({ repository: "Effect-TS/effect", branch: "main" }),
         directory: path.join(root, "packages", "app"),
         worktree: root,
       })
       const localString = Reference.resolve({
         name: "notes",
-        reference: "./notes",
+        reference: ConfigReference.normalizeEntry("./notes"),
         directory: path.join(root, "packages", "app"),
         worktree: root,
       })
       const repoString = Reference.resolve({
         name: "repo",
-        reference: "owner/repo",
+        reference: ConfigReference.normalizeEntry("owner/repo"),
         directory: path.join(root, "packages", "app"),
         worktree: root,
       })
@@ -159,11 +160,11 @@ describe("reference", () => {
       const references = Reference.resolveAll({
         directory: root,
         worktree: root,
-        references: {
+        references: ConfigReference.normalize({
           main: { repository: "owner/repo", branch: "main" },
           dev: { repository: "github.com/owner/repo", branch: "dev" },
           alsoMain: { repository: "https://github.com/owner/repo", branch: "main" },
-        },
+        }),
       })
 
       expect(references.map((reference) => reference.kind)).toEqual(["git", "invalid", "git"])
@@ -172,6 +173,27 @@ describe("reference", () => {
         expect(references[1].message).toContain("conflicts with @main")
         expect(references[1].message).toContain("@dev requests dev")
       }
+    }),
+  )
+
+  it.live("represents invalid aliases as invalid references", () =>
+    Effect.gen(function* () {
+      const root = path.resolve("opencode-reference-root")
+      const references = Reference.resolveAll({
+        directory: root,
+        worktree: root,
+        references: ConfigReference.normalize({
+          "bad/name": "owner/repo",
+        }),
+      })
+
+      expect(references).toEqual([
+        {
+          name: "bad/name",
+          kind: "invalid",
+          message: "Reference alias must not contain /, whitespace, comma, or backtick",
+        },
+      ])
     }),
   )
 
