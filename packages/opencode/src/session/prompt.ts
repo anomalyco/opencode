@@ -8,17 +8,15 @@ import * as Session from "./session"
 import { Agent } from "../agent/agent"
 import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
-import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
+import { type Tool as AITool, tool, jsonSchema } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import { SessionCompaction } from "./compaction"
 import { Bus } from "../bus"
-import { ProviderTransform } from "@/provider/transform"
 import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { ToolRegistry } from "@/tool/registry"
-import { ToolJsonSchema } from "@/tool/json-schema"
 import { MCP } from "../mcp"
 import { LSP } from "@/lsp/lsp"
 import { ulid } from "ulid"
@@ -48,7 +46,6 @@ import * as EffectLogger from "@opencode-ai/core/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
-import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -63,6 +60,7 @@ import * as Database from "@/storage/db"
 import { SessionTable } from "./session.sql"
 import { referencePromptMetadata, referenceTextPart } from "./prompt/reference"
 import { SessionReminders } from "./reminders"
+import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
 
 // @ts-ignore
@@ -126,9 +124,6 @@ export const layer = Layer.effect(
     const references = yield* Reference.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
-    const runner = Effect.fn("SessionPrompt.runner")(function* () {
-      return yield* EffectBridge.make()
-    })
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
         cancel: (sessionID: SessionID) => cancel(sessionID),
@@ -299,186 +294,6 @@ export const layer = Layer.effect(
       yield* sessions
         .setTitle({ sessionID: input.session.id, title: t })
         .pipe(Effect.catchCause((cause) => elog.error("failed to generate title", { error: Cause.squash(cause) })))
-    })
-
-    const resolveTools = Effect.fn("SessionPrompt.resolveTools")(function* (input: {
-      agent: Agent.Info
-      model: Provider.Model
-      session: Session.Info
-      tools?: Record<string, boolean>
-      processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
-      bypassAgentCheck: boolean
-      messages: MessageV2.WithParts[]
-    }) {
-      using _ = log.time("resolveTools")
-      const tools: Record<string, AITool> = {}
-      const run = yield* runner()
-      const promptOps = yield* ops()
-
-      const context = (args: any, options: ToolExecutionOptions): Tool.Context => ({
-        sessionID: input.session.id,
-        abort: options.abortSignal!,
-        messageID: input.processor.message.id,
-        callID: options.toolCallId,
-        extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps },
-        agent: input.agent.name,
-        messages: input.messages,
-        metadata: (val) =>
-          input.processor.updateToolCall(options.toolCallId, (match) => {
-            if (!["running", "pending"].includes(match.state.status)) return match
-            return {
-              ...match,
-              state: {
-                title: val.title,
-                metadata: val.metadata,
-                status: "running",
-                input: args,
-                time: { start: Date.now() },
-              },
-            }
-          }),
-        ask: (req) =>
-          permission
-            .ask({
-              ...req,
-              sessionID: input.session.id,
-              tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-              ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
-            })
-            .pipe(Effect.orDie),
-      })
-
-      for (const item of yield* registry.tools({
-        modelID: ModelID.make(input.model.api.id),
-        providerID: input.model.providerID,
-        agent: input.agent,
-      })) {
-        const schema = ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))
-        tools[item.id] = tool({
-          description: item.description,
-          inputSchema: jsonSchema(schema),
-          execute(args, options) {
-            return run.promise(
-              Effect.gen(function* () {
-                const ctx = context(args, options)
-                yield* plugin.trigger(
-                  "tool.execute.before",
-                  { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
-                  { args },
-                )
-                const result = yield* item.execute(args, ctx)
-                const output = {
-                  ...result,
-                  attachments: result.attachments?.map((attachment) => ({
-                    ...attachment,
-                    id: PartID.ascending(),
-                    sessionID: ctx.sessionID,
-                    messageID: input.processor.message.id,
-                  })),
-                }
-                yield* plugin.trigger(
-                  "tool.execute.after",
-                  { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
-                  output,
-                )
-                if (options.abortSignal?.aborted) {
-                  yield* input.processor.completeToolCall(options.toolCallId, output)
-                }
-                return output
-              }),
-            )
-          },
-        })
-      }
-
-      for (const [key, item] of Object.entries(yield* mcp.tools())) {
-        const execute = item.execute
-        if (!execute) continue
-
-        const schema = yield* Effect.promise(() => Promise.resolve(asSchema(item.inputSchema).jsonSchema))
-        const transformed = ProviderTransform.schema(input.model, schema)
-        item.inputSchema = jsonSchema(transformed)
-        item.execute = (args, opts) =>
-          run.promise(
-            Effect.gen(function* () {
-              const ctx = context(args, opts)
-              yield* plugin.trigger(
-                "tool.execute.before",
-                { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
-                { args },
-              )
-              const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
-                yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-                return yield* Effect.promise(() => execute(args, opts))
-              }).pipe(
-                Effect.withSpan("Tool.execute", {
-                  attributes: {
-                    "tool.name": key,
-                    "tool.call_id": opts.toolCallId,
-                    "session.id": ctx.sessionID,
-                    "message.id": input.processor.message.id,
-                  },
-                }),
-              )
-              yield* plugin.trigger(
-                "tool.execute.after",
-                { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
-                result,
-              )
-
-              const textParts: string[] = []
-              const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
-              for (const contentItem of result.content) {
-                if (contentItem.type === "text") textParts.push(contentItem.text)
-                else if (contentItem.type === "image") {
-                  attachments.push({
-                    type: "file",
-                    mime: contentItem.mimeType,
-                    url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
-                  })
-                } else if (contentItem.type === "resource") {
-                  const { resource } = contentItem
-                  if (resource.text) textParts.push(resource.text)
-                  if (resource.blob) {
-                    attachments.push({
-                      type: "file",
-                      mime: resource.mimeType ?? "application/octet-stream",
-                      url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
-                      filename: resource.uri,
-                    })
-                  }
-                }
-              }
-
-              const truncated = yield* truncate.output(textParts.join("\n\n"), {}, input.agent)
-              const metadata = {
-                ...result.metadata,
-                truncated: truncated.truncated,
-                ...(truncated.truncated && { outputPath: truncated.outputPath }),
-              }
-
-              const output = {
-                title: "",
-                metadata,
-                output: truncated.content,
-                attachments: attachments.map((attachment) => ({
-                  ...attachment,
-                  id: PartID.ascending(),
-                  sessionID: ctx.sessionID,
-                  messageID: input.processor.message.id,
-                })),
-                content: result.content,
-              }
-              if (opts.abortSignal?.aborted) {
-                yield* input.processor.completeToolCall(opts.toolCallId, output)
-              }
-              return output
-            }),
-          )
-        tools[key] = item
-      }
-
-      return tools
     })
 
     const handleSubtask = Effect.fn("SessionPrompt.handleSubtask")(function* (input: {
@@ -1552,16 +1367,23 @@ export const layer = Layer.effect(
           const outcome: "break" | "continue" = yield* Effect.gen(function* () {
             const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
             const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
+            const promptOps = yield* ops()
 
-            const tools = yield* resolveTools({
+            const tools = yield* SessionTools.resolve({
               agent,
               session,
               model,
-              tools: lastUser.tools,
               processor: handle,
               bypassAgentCheck,
               messages: msgs,
-            })
+              promptOps,
+            }).pipe(
+              Effect.provideService(Plugin.Service, plugin),
+              Effect.provideService(Permission.Service, permission),
+              Effect.provideService(ToolRegistry.Service, registry),
+              Effect.provideService(MCP.Service, mcp),
+              Effect.provideService(Truncate.Service, truncate),
+            )
 
             if (lastUser.format?.type === "json_schema") {
               tools["StructuredOutput"] = createStructuredOutputTool({
