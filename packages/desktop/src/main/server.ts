@@ -70,10 +70,8 @@ export async function spawnLocalServer(
   hostname: string,
   port: number,
   password: string,
-  configureEnv: () => void,
   options: SpawnLocalServerOptions,
 ) {
-  configureEnv?.()
   const sidecar = join(dirname(fileURLToPath(import.meta.url)), "sidecar.js")
   const child = utilityProcess.fork(sidecar, [], {
     cwd: process.cwd(),
