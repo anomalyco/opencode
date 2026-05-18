@@ -616,11 +616,41 @@ function googleThinkingBudgetMax(apiId: string) {
   return 24_576
 }
 
+const LILAC_CHAT_TEMPLATE_THINKING_MODEL_IDS = new Set([
+  "zai-org/glm-5.1",
+  "moonshotai/kimi-k2.6",
+  "minimaxai/minimax-m2.7",
+  "google/gemma-4-31b-it",
+])
+
+function lilacChatTemplateThinkingModel(model: Provider.Model) {
+  if (model.providerID !== "lilac") return false
+  if (!model.capabilities.reasoning) return false
+
+  const ids = [model.id, model.api.id].map((id) => id.toLowerCase())
+  return ids.some((id) => LILAC_CHAT_TEMPLATE_THINKING_MODEL_IDS.has(id))
+}
+
+function lilacChatTemplateThinkingOptions(enabled: boolean) {
+  return {
+    chat_template_kwargs: {
+      thinking: enabled,
+      enable_thinking: enabled,
+    },
+  }
+}
+
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
 
   const id = model.id.toLowerCase()
   const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
+  if (lilacChatTemplateThinkingModel(model)) {
+    return {
+      "non-reasoning": lilacChatTemplateThinkingOptions(false),
+    }
+  }
+
   if (
     id.includes("deepseek-chat") ||
     id.includes("deepseek-reasoner") ||
@@ -1072,6 +1102,10 @@ export function options(input: {
     (input.model.providerID === "opencode" && ["kimi-k2-thinking", "glm-4.6"].includes(input.model.api.id))
   ) {
     result["chat_template_args"] = { enable_thinking: true }
+  }
+
+  if (lilacChatTemplateThinkingModel(input.model)) {
+    Object.assign(result, lilacChatTemplateThinkingOptions(true))
   }
 
   if (

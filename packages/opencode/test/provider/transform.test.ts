@@ -172,6 +172,78 @@ describe("ProviderTransform.options - zai/zhipuai thinking", () => {
   }
 })
 
+describe("ProviderTransform.options - lilac chat template thinking", () => {
+  const sessionID = "test-session-123"
+
+  const createModel = (id: string, providerID = "lilac", reasoning = true) =>
+    ({
+      id,
+      providerID,
+      api: {
+        id,
+        url: "https://api.getlilac.com/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: id,
+      capabilities: {
+        temperature: true,
+        reasoning,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0.001,
+        output: 0.002,
+        cache: { read: 0.0001, write: 0.0002 },
+      },
+      limit: {
+        context: 200_000,
+        output: 64_000,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  for (const id of ["zai-org/glm-5.1", "moonshotai/kimi-k2.6", "minimaxai/minimax-m2.7", "google/gemma-4-31b-it"]) {
+    test(`${id} enables thinking by default`, () => {
+      const result = ProviderTransform.options({
+        model: createModel(id),
+        sessionID,
+        providerOptions: {},
+      })
+
+      expect(result.chat_template_kwargs).toEqual({
+        thinking: true,
+        enable_thinking: true,
+      })
+    })
+  }
+
+  test("does not set chat template thinking for non-lilac models", () => {
+    const result = ProviderTransform.options({
+      model: createModel("zai-org/glm-5.1", "zai"),
+      sessionID,
+      providerOptions: {},
+    })
+
+    expect(result.chat_template_kwargs).toBeUndefined()
+  })
+
+  test("does not set chat template thinking when reasoning is disabled", () => {
+    const result = ProviderTransform.options({
+      model: createModel("zai-org/glm-5.1", "lilac", false),
+      sessionID,
+      providerOptions: {},
+    })
+
+    expect(result.chat_template_kwargs).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.options - google thinkingConfig gating", () => {
   const sessionID = "test-session-123"
 
@@ -475,6 +547,34 @@ describe("ProviderTransform.providerOptions", () => {
 
     expect(ProviderTransform.providerOptions(model, { cachePoint: { type: "default" } })).toEqual({
       bedrock: { cachePoint: { type: "default" } },
+    })
+  })
+
+  test("routes lilac openai-compatible options under lilac key", () => {
+    const model = createModel({
+      id: "zai-org/glm-5.1",
+      providerID: "lilac",
+      api: {
+        id: "zai-org/glm-5.1",
+        url: "https://api.getlilac.com/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+
+    expect(
+      ProviderTransform.providerOptions(model, {
+        chat_template_kwargs: {
+          thinking: true,
+          enable_thinking: true,
+        },
+      }),
+    ).toEqual({
+      lilac: {
+        chat_template_kwargs: {
+          thinking: true,
+          enable_thinking: true,
+        },
+      },
     })
   })
 
@@ -2436,6 +2536,57 @@ describe("ProviderTransform.variants", () => {
     })
     const result = ProviderTransform.variants(model)
     expect(result).toEqual({})
+  })
+
+  test("kimi returns empty object", () => {
+    const model = createMockModel({
+      id: "moonshotai/kimi-k2.6",
+      providerID: "moonshotai",
+      api: {
+        id: "moonshotai/kimi-k2.6",
+        url: "https://api.moonshot.ai",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({})
+  })
+
+  test("lilac chat-template thinking models expose non-reasoning variants", () => {
+    for (const id of ["zai-org/glm-5.1", "moonshotai/kimi-k2.6", "minimaxai/minimax-m2.7", "google/gemma-4-31b-it"]) {
+      const model = createMockModel({
+        id,
+        providerID: "lilac",
+        api: {
+          id,
+          url: "https://api.getlilac.com/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({
+        "non-reasoning": {
+          chat_template_kwargs: {
+            thinking: false,
+            enable_thinking: false,
+          },
+        },
+      })
+    }
+  })
+
+  test("lilac gemma does not use generic reasoning effort variants", () => {
+    const model = createMockModel({
+      id: "google/gemma-4-31b-it",
+      providerID: "lilac",
+      api: {
+        id: "google/gemma-4-31b-it",
+        url: "https://api.getlilac.com/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(Object.keys(result)).toEqual(["non-reasoning"])
   })
 
   test("mistral models with reasoning support return variants", () => {
