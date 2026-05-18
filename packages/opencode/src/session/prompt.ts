@@ -61,6 +61,7 @@ import * as DateTime from "effect/DateTime"
 import { eq } from "@/storage/db"
 import * as Database from "@/storage/db"
 import { SessionTable } from "./session.sql"
+import { referencePromptMetadata, referenceTextPart } from "./prompt/reference"
 import { SessionReminders } from "./reminders"
 
 // @ts-ignore
@@ -81,88 +82,6 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
-
-type ReferencePromptMetadata = {
-  name: string
-  kind: "local" | "git" | "invalid"
-  path?: string
-  repository?: string
-  branch?: string
-  target?: string
-  targetPath?: string
-  problem?: string
-  source: { value: string; start: number; end: number }
-}
-
-function stringField(record: Record<string, unknown>, key: string) {
-  return typeof record[key] === "string" ? record[key] : undefined
-}
-
-function referencePromptMetadata(input: unknown): ReferencePromptMetadata | undefined {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return
-  const record = input as Record<string, unknown>
-  const name = stringField(record, "name")
-  const kind = stringField(record, "kind")
-  if (!name || (kind !== "local" && kind !== "git" && kind !== "invalid")) return
-  if (!record.source || typeof record.source !== "object" || Array.isArray(record.source)) return
-  const source = record.source as Record<string, unknown>
-  const value = stringField(source, "value")
-  if (!value || typeof source.start !== "number" || typeof source.end !== "number") return
-  return {
-    name,
-    kind,
-    path: stringField(record, "path"),
-    repository: stringField(record, "repository"),
-    branch: stringField(record, "branch"),
-    target: stringField(record, "target"),
-    targetPath: stringField(record, "targetPath"),
-    problem: stringField(record, "problem"),
-    source: { value, start: source.start, end: source.end },
-  }
-}
-
-function referenceTextPart(input: {
-  reference: Reference.Resolved
-  source: ReferencePromptMetadata["source"]
-  target?: string
-  targetPath?: string
-  problem?: string
-}): MessageV2.TextPartInput {
-  const metadata: ReferencePromptMetadata = {
-    name: input.reference.name,
-    kind: input.reference.kind,
-    ...(input.reference.kind === "invalid"
-      ? { repository: input.reference.repository }
-      : { path: input.reference.path }),
-    ...(input.reference.kind === "git"
-      ? { repository: input.reference.repository, branch: input.reference.branch }
-      : {}),
-    ...(input.target === undefined ? {} : { target: input.target }),
-    ...(input.targetPath ? { targetPath: input.targetPath } : {}),
-    problem: input.problem ?? (input.reference.kind === "invalid" ? input.reference.message : undefined),
-    source: input.source,
-  }
-  const label = metadata.target === undefined ? `@${metadata.name}` : `@${metadata.name}/${metadata.target}`
-  return {
-    type: "text",
-    synthetic: true,
-    text: [
-      `Referenced configured reference ${label}.`,
-      ...(metadata.kind === "local" ? ["Kind: local directory"] : []),
-      ...(metadata.kind === "git" ? ["Kind: git repository"] : []),
-      ...(metadata.repository ? [`Repository: ${metadata.repository}`] : []),
-      ...(metadata.branch ? [`Branch/ref: ${metadata.branch}`] : []),
-      ...(metadata.path ? [`Reference root: ${metadata.path}`] : []),
-      ...(metadata.targetPath ? [`Resolved path: ${metadata.targetPath}`] : []),
-      ...(metadata.problem
-        ? [`Problem: ${metadata.problem}`]
-        : [
-            "For targeted context, inspect the reference path directly with Read, Glob, and Grep. For broader research, call the task tool with subagent scout and include this reference path.",
-          ]),
-    ].join("\n"),
-    metadata: { reference: metadata },
-  }
-}
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
