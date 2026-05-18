@@ -20,16 +20,11 @@ function eventData(data: unknown): Sse.Event {
 
 function eventResponse(bus: Bus.Interface) {
   return Effect.gen(function* () {
-    const context = yield* Effect.context()
-
-    // Acquire the bus subscription eagerly in the request scope. From this
-    // point any publish is buffered into the subscription queue, even before
-    // the body-pump fiber starts draining it. Fixes the race where
-    // `Stream.concat(server.connected, lazy-subscribe)` lost publishes in the
-    // window between client receiving server.connected and the body fiber
-    // first pulling from the events stream.
+    // Subscribe eagerly: the bus subscription is acquired in the request scope
+    // at this yield, so any publish from now on is queued for the body-pump
+    // fiber to drain — closing the race where Stream.concat(server.connected,
+    // lazy-subscribe) used to drop publishes in the prefix-consume window.
     const events = (yield* bus.subscribeAll()).pipe(
-      Stream.provideContext(context),
       Stream.takeUntil((event) => event.type === Bus.InstanceDisposed.type),
     )
     const heartbeat = Stream.tick("10 seconds").pipe(
