@@ -531,7 +531,11 @@ export const LocalWorkspace = (props: {
   const issue = createMemo(() => stores().map((item) => item[0].session_error).find(Boolean))
   const extraAgent = createMemo(() => extraAgentByDirectory(props.project.worktree))
   const refresh = async () => {
-    await Promise.all(dirs().map((directory) => globalSync.project.loadSessions(directory, { force: true })))
+    const directories = dirs()
+    for (const [store, setStore] of stores()) {
+      setStore("limit", Math.max(store.limit, store.sessionTotal, store.session.length + 20))
+    }
+    await Promise.all(directories.map((directory) => globalSync.project.loadSessions(directory, { force: true })))
   }
   const loadMore = async () => {
     stores().forEach((item) => item[1]("limit", (limit) => (limit ?? 0) + 5))
