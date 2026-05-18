@@ -485,6 +485,47 @@ function toolName(part: { tool: string }) {
   return normalizeTool(part.tool)
 }
 
+function isGenericAgentMessage(message: MessageType) {
+  return "agent" in message && message.agent === "genericagent"
+}
+
+type GenericAgentTextSegment =
+  | { type: "text"; text: string }
+  | { type: "tool"; tool: string; input: Record<string, unknown>; output: string }
+
+function parseGenericAgentToolInput(input: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(input)
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>
+  } catch {
+    return { input }
+  }
+  return { input }
+}
+
+function parseGenericAgentToolText(text: string): GenericAgentTextSegment[] {
+  const pattern = /🛠️\s+Tool:\s*`([^`]+)`\s*📥\s*args:[ \t]*\n`{4}text\n([\s\S]*?)\n`{4}[ \t]*(?:\n`{5}\n([\s\S]*?)\n`{5})?/g
+  const segments: GenericAgentTextSegment[] = []
+  let cursor = 0
+
+  for (const match of text.matchAll(pattern)) {
+    const start = match.index ?? 0
+    const before = text.slice(cursor, start).replace(/\n{3,}/g, "\n\n").trim()
+    if (before) segments.push({ type: "text", text: before })
+    segments.push({
+      type: "tool",
+      tool: match[1] || "tool",
+      input: parseGenericAgentToolInput(match[2] || "{}"),
+      output: match[3] || "",
+    })
+    cursor = start + match[0].length
+  }
+
+  const rest = text.slice(cursor).replace(/\n{3,}/g, "\n\n").trim()
+  if (rest) segments.push({ type: "text", text: rest })
+  return segments
+}
+
 function customPart(part: ToolPart) {
   const metadata = part.state.status === "pending" ? {} : (part.state.metadata ?? {})
   const input = part.state.input ?? {}
@@ -1596,6 +1637,11 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   })
 
   const body = createMemo(() => renderText())
+  const genericAgentSegments = createMemo(() => {
+    if (!isGenericAgentMessage(props.message)) return []
+    return parseGenericAgentToolText(body())
+  })
+  const hasGenericAgentToolSegments = createMemo(() => genericAgentSegments().some((segment) => segment.type === "tool"))
   const plain = createMemo(() => streaming() && isLastTextPart() && end())
   const showCopy = createMemo(() => {
     if (props.message.role !== "assistant") return isLastTextPart()
@@ -1618,19 +1664,56 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     <Show when={body()}>
       <div data-component="text-part">
         <div data-slot="text-part-body">
-          <Markdown
-            text={body()}
-            cacheKey={plain() ? `${part.id}:stream` : part.id}
-            stage={props.markdownStage}
-            onStage={props.onMarkdownStage}
-            plain={plain()}
-            streaming={plain()}
-            instant={streaming()}
-            eager={props.markdownEager}
-            viewport={props.markdownViewport}
-            highlight={props.markdownHighlight}
-            math={props.markdownMath}
-          />
+          <Show
+            when={hasGenericAgentToolSegments()}
+            fallback={
+              <Markdown
+                text={body()}
+                cacheKey={plain() ? `${part.id}:stream` : part.id}
+                stage={props.markdownStage}
+                onStage={props.onMarkdownStage}
+                plain={plain()}
+                streaming={plain()}
+                instant={streaming()}
+                eager={props.markdownEager}
+                viewport={props.markdownViewport}
+                highlight={props.markdownHighlight}
+                math={props.markdownMath}
+              />
+            }
+          >
+            <For each={genericAgentSegments()}>
+              {(segment, index) => (
+                <Switch>
+                  <Match when={segment.type === "text" ? segment.text : undefined}>
+                    {(text) => (
+                      <Markdown
+                        text={text()}
+                        cacheKey={`${part.id}:ga-text:${index()}`}
+                        stage={props.markdownStage}
+                        onStage={props.onMarkdownStage}
+                        eager={props.markdownEager}
+                        viewport={props.markdownViewport}
+                        highlight={props.markdownHighlight}
+                        math={props.markdownMath}
+                      />
+                    )}
+                  </Match>
+                  <Match when={segment.type === "tool" ? segment : undefined}>
+                    {(tool) => (
+                      <GenericTool
+                        tool={tool().tool}
+                        input={tool().input}
+                        output={tool().output}
+                        status="completed"
+                        hideDetails={props.hideDetails}
+                      />
+                    )}
+                  </Match>
+                </Switch>
+              )}
+            </For>
+          </Show>
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
