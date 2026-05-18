@@ -99,8 +99,6 @@ const EXAMPLES = [
   "prompt.example.25",
 ] as const
 
-const NON_EMPTY_TEXT = /[^\s\u200B]/
-
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
   const queryOptions = useQueryOptions()
@@ -860,7 +858,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         ? rawParts[0].content
         : rawParts.map((p) => ("content" in p ? p.content : "")).join("")
     const hasNonText = rawParts.some((part) => part.type !== "text")
-    const shouldReset = !NON_EMPTY_TEXT.test(rawText) && !hasNonText && images.length === 0
+    const shouldReset = rawText.length === 0 && !hasNonText && images.length === 0
 
     if (shouldReset) {
       closePopover()
