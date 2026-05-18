@@ -21,6 +21,18 @@ type Store = {
   extmarkToPartIndex: Map<number, number>
 }
 
+function makeMockInput(initialText: string, cursorOffset: number): TextInput & { cursorOffset: number } {
+  let text = initialText
+  let cursor = cursorOffset
+  return {
+    get plainText() { return text },
+    get cursorOffset() { return cursor },
+    insertText(insert: string) {
+      text = text.slice(0, cursor) + insert + text.slice(cursor)
+      cursor += insert.length
+    },
+  }
+}
 
 function handleSkillSelect(input: TextInput, store: Store, syncExtmarks: () => void, skill: string) {
   input.insertText(`/${skill} `)
@@ -30,15 +42,7 @@ function handleSkillSelect(input: TextInput, store: Store, syncExtmarks: () => v
 
 describe("Prompt skill picker onSelect", () => {
   test("inserts skill name without wiping existing prompt text", () => {
-    let text = "some existing text"
-    const input: TextInput = {
-      get plainText() {
-        return text
-      },
-      insertText(insert: string) {
-        text = text + insert
-      },
-    }
+    const input = makeMockInput("some existing text", 18)
     const store: Store = {
       prompt: { input: "some existing text", parts: [] },
       extmarkToPartIndex: new Map(),
@@ -53,16 +57,38 @@ describe("Prompt skill picker onSelect", () => {
     expect(synced).toBe(true)
   })
 
-  test("inserts skill name into empty prompt", () => {
-    let text = ""
-    const input: TextInput = {
-      get plainText() {
-        return text
-      },
-      insertText(insert: string) {
-        text = text + insert
-      },
+  test("inserts skill name at cursor position when cursor is at start", () => {
+    const input = makeMockInput("existing question here?", 0)
+    const store: Store = {
+      prompt: { input: "existing question here?", parts: [] },
+      extmarkToPartIndex: new Map(),
     }
+    let synced = false
+
+    handleSkillSelect(input, store, () => { synced = true }, "test-skill")
+
+    expect(input.plainText).toBe("/test-skill existing question here?")
+    expect(store.prompt.input).toBe("/test-skill existing question here?")
+    expect(synced).toBe(true)
+  })
+
+  test("inserts skill name at cursor position mid-text", () => {
+    const input = makeMockInput("hello world", 5)
+    const store: Store = {
+      prompt: { input: "hello world", parts: [] },
+      extmarkToPartIndex: new Map(),
+    }
+    let synced = false
+
+    handleSkillSelect(input, store, () => { synced = true }, "my-skill")
+
+    expect(input.plainText).toBe("hello/my-skill  world")
+    expect(store.prompt.input).toBe("hello/my-skill  world")
+    expect(synced).toBe(true)
+  })
+
+  test("inserts skill name into empty prompt", () => {
+    const input = makeMockInput("", 0)
     const store: Store = {
       prompt: { input: "", parts: [] },
       extmarkToPartIndex: new Map(),
