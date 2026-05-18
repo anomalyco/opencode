@@ -11,6 +11,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Wildcard } from "@/util/wildcard"
 import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import os from "os"
+import * as path from "path"
 import { evaluate as evalRule } from "./evaluate"
 import { PermissionID } from "./schema"
 
@@ -125,7 +126,7 @@ interface State {
   approved: Ruleset
 }
 
-export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
+export function evaluate(permission: string, pattern: string | string[], ...rulesets: Ruleset[]): Rule {
   return evalRule(permission, pattern, ...rulesets)
 }
 
@@ -160,11 +161,14 @@ export const layer = Layer.effect(
 
     const ask = Effect.fn("Permission.ask")(function* (input: AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
+      const { worktree } = yield* InstanceState.context
       const { ruleset, ...request } = input
       let needsAsk = false
 
       for (const pattern of request.patterns) {
-        const rule = evaluate(request.permission, pattern, ruleset, approved)
+        const absPattern = path.isAbsolute(pattern) ? pattern : path.resolve(worktree, pattern)
+        const candidates = absPattern !== pattern ? [pattern, absPattern] : [pattern]
+        const rule = evaluate(request.permission, candidates, ruleset, approved)
         log.info("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny") {
           return yield* new DeniedError({

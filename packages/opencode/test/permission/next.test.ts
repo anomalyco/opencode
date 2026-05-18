@@ -448,6 +448,36 @@ test("evaluate - merges multiple rulesets", () => {
   expect(result.action).toBe("deny")
 })
 
+test("evaluate - array of candidates: absolute pattern matches absolute candidate", () => {
+  const home = os.homedir()
+  const ruleset: Permission.Ruleset = [
+    { permission: "read", pattern: "*", action: "deny" },
+    { permission: "read", pattern: `${home}/.config/opencode/**`, action: "allow" },
+  ]
+  const relPath = "../../.config/opencode/opencode.jsonc"
+  const absPath = `${home}/.config/opencode/opencode.jsonc`
+  const result = Permission.evaluate("read", [relPath, absPath], ruleset)
+  expect(result.action).toBe("allow")
+})
+
+test("evaluate - array of candidates: relative pattern still matches relative candidate", () => {
+  const ruleset: Permission.Ruleset = [
+    { permission: "read", pattern: "*", action: "allow" },
+    { permission: "read", pattern: "src/secret.ts", action: "deny" },
+  ]
+  const result = Permission.evaluate("read", ["src/secret.ts", "/abs/project/src/secret.ts"], ruleset)
+  expect(result.action).toBe("deny")
+})
+
+test("evaluate - array of candidates: findLast config order respected across both candidates", () => {
+  const ruleset: Permission.Ruleset = [
+    { permission: "read", pattern: "*", action: "deny" },
+    { permission: "read", pattern: "src/ok.ts", action: "allow" },
+  ]
+  const result = Permission.evaluate("read", ["src/ok.ts", "/abs/project/src/ok.ts"], ruleset)
+  expect(result.action).toBe("allow")
+})
+
 // disabled tests
 
 test("disabled - returns empty set when all tools allowed", () => {
