@@ -86,7 +86,7 @@ export function ToolStatusTitle(props: {
       finish()
       return
     }
-    fonts.ready.finally(() => {
+    void fonts.ready.finally(() => {
       measure()
       finish()
     })

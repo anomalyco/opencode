@@ -1,10 +1,10 @@
 import type {
-  FileDiff,
   Message,
   Part,
   PermissionRequest,
   QuestionRequest,
   SessionStatus,
+  SnapshotFileDiff,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 
@@ -12,7 +12,7 @@ export const SESSION_CACHE_LIMIT = 40
 
 type SessionCache = {
   session_status: Record<string, SessionStatus | undefined>
-  session_diff: Record<string, FileDiff[] | undefined>
+  session_diff: Record<string, SnapshotFileDiff[] | undefined>
   todo: Record<string, Todo[] | undefined>
   message: Record<string, Message[] | undefined>
   part: Record<string, Part[] | undefined>

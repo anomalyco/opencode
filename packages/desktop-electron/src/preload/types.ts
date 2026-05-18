@@ -15,10 +15,16 @@ export type TitlebarTheme = {
   mode: "light" | "dark"
 }
 
+export type WindowConfig = {
+  updaterEnabled: boolean
+}
+
 export type ElectronAPI = {
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
   awaitInitialization: (onStep: (step: InitStep) => void) => Promise<ServerReadyData>
+  getWindowConfig: () => Promise<WindowConfig>
+  consumeInitialDeepLinks: () => Promise<string[]>
   getDefaultServerUrl: () => Promise<string | null>
   setDefaultServerUrl: (url: string | null) => Promise<void>
   getWslConfig: () => Promise<WslConfig>
@@ -50,6 +56,8 @@ export type ElectronAPI = {
     multiple?: boolean
     title?: string
     defaultPath?: string
+    accept?: string[]
+    extensions?: string[]
   }) => Promise<string | string[] | null>
   saveFilePicker: (opts?: { title?: string; defaultPath?: string }) => Promise<string | null>
   openLink: (url: string) => void

@@ -8,6 +8,7 @@
 - 思考は英語でもよいが、外に出す文章は特段の理由がない限り日本語に統一すること。
 - コード、外部 API、OSS 由来の識別子、既存の英語 UI 文言、標準的な技術用語は無理に翻訳しない。
 - 英語を使うのは、ユーザーが明示的に要求した場合、外部プロジェクトの規約が英語必須な場合、または翻訳すると正確さが落ちる場合に限る。
+- securecode は `anomalyco/opencode` の fork として運用しており、新規機能 / 修正は upstream owned のソース (`packages/opencode/**`, `packages/core/**` 等) を直接触らない方針を優先する。実装場所の判断基準は [specs/upstream-policy.md](./specs/upstream-policy.md)、tag 単位の取り込み手順は [specs/upstream-sync.md](./specs/upstream-sync.md) を参照。
 
 ## Style Guide
 
@@ -16,35 +17,10 @@
 - Keep things in one function unless composable or reusable
 - Avoid `try`/`catch` where possible
 - Avoid using the `any` type
-- Prefer single word variable names where possible
 - Use Bun APIs when possible, like `Bun.file()`
 - Rely on type inference when possible; avoid explicit type annotations or interfaces unless necessary for exports or clarity
 - Prefer functional array methods (flatMap, filter, map) over for loops; use type guards on filter to maintain type inference downstream
-
-### Naming
-
-Prefer single word names for variables and functions. Only use multiple words if necessary.
-
-### Naming Enforcement (Read This)
-
-THIS RULE IS MANDATORY FOR AGENT WRITTEN CODE.
-
-- Use single word names by default for new locals, params, and helper functions.
-- Multi-word names are allowed only when a single word would be unclear or ambiguous.
-- Do not introduce new camelCase compounds when a short single-word alternative is clear.
-- Before finishing edits, review touched lines and shorten newly introduced identifiers where possible.
-- Good short names to prefer: `pid`, `cfg`, `err`, `opts`, `dir`, `root`, `child`, `state`, `timeout`.
-- Examples to avoid unless truly required: `inputPID`, `existingClient`, `connectTimeout`, `workerPath`.
-
-```ts
-// Good
-const foo = 1
-function journal(dir: string) {}
-
-// Bad
-const fooBar = 1
-function prepareJournal(dir: string) {}
-```
+- In `src/config`, follow the existing self-export pattern at the top of the file (for example `export * as ConfigAgent from "./agent"`) when adding a new config module.
 
 Reduce total variable count by inlining when a value is only used once.
 

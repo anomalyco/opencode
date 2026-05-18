@@ -1,10 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "opencode": {
-      "options": {},
-    },
-  },
+  "provider": {},
   "permission": {
     "edit": {
       "packages/opencode/migration/*": "deny",

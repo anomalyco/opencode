@@ -6,7 +6,7 @@
   color: var(--text-strong);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base); /* 14px */
-  line-height: var(--line-height-x-large);
+  line-height: 160%;
 
   /* Spacing for flow */
   > *:first-child {
@@ -23,11 +23,11 @@
   h4,
   h5,
   h6 {
-    font-size: var(--font-size-base);
+    font-size: 14px;
     color: var(--text-strong);
     font-weight: var(--font-weight-medium);
-    margin-top: 2rem;
-    margin-bottom: 0.75rem;
+    margin-top: 0px;
+    margin-bottom: 24px;
     line-height: var(--line-height-large);
   }
 
@@ -40,7 +40,7 @@
 
   /* Paragraphs */
   p {
-    margin-bottom: 1rem;
+    margin-bottom: 12px;
   }
 
   /* Links */
@@ -58,10 +58,10 @@
   /* Lists */
   ul,
   ol {
-    margin-top: 0.5rem;
-    margin-bottom: 1rem;
+    margin-top: 8px;
+    margin-bottom: 12px;
     margin-left: 0;
-    padding-left: 1.5rem;
+    padding-left: 32px;
     list-style-position: outside;
   }
 
@@ -75,7 +75,7 @@
   }
 
   li {
-    margin-bottom: 0.5rem;
+    margin-bottom: 8px;
   }
 
   li > p:first-child {
@@ -117,12 +117,12 @@
   hr {
     border: none;
     height: 0;
-    margin: 2.5rem 0;
+    margin: 40px 0;
   }
 
   .shiki {
     font-size: 13px;
-    padding: 8px 12px;
+    padding: 12px;
     border-radius: 6px;
     border: 0.5px solid var(--border-weak-base);
   }
@@ -201,8 +201,8 @@
   }
 
   pre {
-    margin-top: 2rem;
-    margin-bottom: 2rem;
+    margin-top: 12px;
+    margin-bottom: 32px;
     overflow: auto;
 
     scrollbar-width: none;
@@ -229,7 +229,7 @@
   table {
     width: 100%;
     border-collapse: collapse;
-    margin: 1.5rem 0;
+    margin: 24px 0;
     font-size: var(--font-size-base);
     display: block;
     overflow-x: auto;
@@ -239,7 +239,7 @@
   td {
     /* Minimal borders for structure, matching TUI "lines" roughly but keeping it web-clean */
     border-bottom: 1px solid var(--border-weaker-base);
-    padding: 0.75rem 0.5rem;
+    padding: 12px;
     text-align: left;
     vertical-align: top;
   }

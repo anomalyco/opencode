@@ -81,6 +81,25 @@ $env:Path += ";$PWD"
 .\SecureCode.exe run "hello"
 ```
 
+After extracting the archive, run the bundled installer once to seed the
+SecureCode user config (Acompany Qwen3.6 endpoint template + tui.json):
+
+```bash
+# from inside the extracted directory
+bash setup/install.sh
+```
+
+The installer:
+
+- seeds `~/.config/securecode/securecode.json` with the Acompany Qwen3.6 endpoint template (preserves an existing config).
+- seeds `~/.config/securecode/tui.json` (preserves an existing config).
+
+Branding (the SecureCode wordmark in the home logo and the `•Acompany SecureCode`
+sidebar badge) ships inside the binary itself, so no separate plugin file is
+copied.
+
+Re-running the installer is safe: existing configs are kept. Windows users can copy the files in `setup/` to `%APPDATA%\securecode\` manually.
+
 Prerequisites:
 
 - `git` should be available in your PATH.

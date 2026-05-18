@@ -1,4 +1,4 @@
-import { Global } from "../../../global"
+import { Global } from "@opencode-ai/core/global"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 import { ConfigCommand } from "./config"
@@ -9,6 +9,7 @@ import { ScrapCommand } from "./scrap"
 import { SkillCommand } from "./skill"
 import { SnapshotCommand } from "./snapshot"
 import { AgentCommand } from "./agent"
+import { StartupCommand } from "./startup"
 
 export const DebugCommand = cmd({
   command: "debug",
@@ -22,6 +23,7 @@ export const DebugCommand = cmd({
       .command(ScrapCommand)
       .command(SkillCommand)
       .command(SnapshotCommand)
+      .command(StartupCommand)
       .command(AgentCommand)
       .command(PathsCommand)
       .command({

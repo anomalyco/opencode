@@ -2,14 +2,27 @@ import { execFile } from "node:child_process"
 import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 
-import type { InitStep, ServerReadyData, SqliteMigrationProgress, TitlebarTheme, WslConfig } from "../preload/types"
+import type {
+  InitStep,
+  ServerReadyData,
+  SqliteMigrationProgress,
+  TitlebarTheme,
+  WindowConfig,
+  WslConfig,
+} from "../preload/types"
 import { getStore } from "./store"
 import { setTitlebar } from "./windows"
 
+const pickerFilters = (ext?: string[]) => {
+  if (!ext || ext.length === 0) return undefined
+  return [{ name: "Files", extensions: ext }]
+}
+
 type Deps = {
   killSidecar: () => void
-  installCli: () => Promise<string>
   awaitInitialization: (sendStep: (step: InitStep) => void) => Promise<ServerReadyData>
+  getWindowConfig: () => Promise<WindowConfig> | WindowConfig
+  consumeInitialDeepLinks: () => Promise<string[]> | string[]
   getDefaultServerUrl: () => Promise<string | null> | string | null
   setDefaultServerUrl: (url: string | null) => Promise<void> | void
   getWslConfig: () => Promise<WslConfig>
@@ -29,11 +42,12 @@ type Deps = {
 
 export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
-  ipcMain.handle("install-cli", () => deps.installCli())
   ipcMain.handle("await-initialization", (event: IpcMainInvokeEvent) => {
     const send = (step: InitStep) => event.sender.send("init-step", step)
     return deps.awaitInitialization(send)
   })
+  ipcMain.handle("get-window-config", () => deps.getWindowConfig())
+  ipcMain.handle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
   ipcMain.handle("get-default-server-url", () => deps.getDefaultServerUrl())
   ipcMain.handle("set-default-server-url", (_event: IpcMainInvokeEvent, url: string | null) =>
     deps.setDefaultServerUrl(url),
@@ -83,7 +97,7 @@ export function registerIpcHandlers(deps: Deps) {
     "open-directory-picker",
     async (_event: IpcMainInvokeEvent, opts?: { multiple?: boolean; title?: string; defaultPath?: string }) => {
       const result = await dialog.showOpenDialog({
-        properties: ["openDirectory", ...(opts?.multiple ? ["multiSelections" as const] : [])],
+        properties: ["openDirectory", ...(opts?.multiple ? ["multiSelections" as const] : []), "createDirectory"],
         title: opts?.title ?? "Choose a folder",
         defaultPath: opts?.defaultPath,
       })
@@ -94,11 +108,15 @@ export function registerIpcHandlers(deps: Deps) {
 
   ipcMain.handle(
     "open-file-picker",
-    async (_event: IpcMainInvokeEvent, opts?: { multiple?: boolean; title?: string; defaultPath?: string }) => {
+    async (
+      _event: IpcMainInvokeEvent,
+      opts?: { multiple?: boolean; title?: string; defaultPath?: string; accept?: string[]; extensions?: string[] },
+    ) => {
       const result = await dialog.showOpenDialog({
         properties: ["openFile", ...(opts?.multiple ? ["multiSelections" as const] : [])],
         title: opts?.title ?? "Choose a file",
         defaultPath: opts?.defaultPath,
+        filters: pickerFilters(opts?.extensions),
       })
       if (result.canceled) return null
       return opts?.multiple ? result.filePaths : result.filePaths[0]

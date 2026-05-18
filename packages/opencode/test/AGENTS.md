@@ -79,3 +79,55 @@ await using tmp = await tmpdir({
 - Directories are created in the system temp folder with prefix `opencode-test-`
 - Use `await using` for automatic cleanup when the variable goes out of scope
 - Paths are sanitized to strip null bytes (defensive fix for CI environments)
+
+## Testing With Effects
+
+Use `testEffect(...)` from `test/lib/effect.ts` for tests that exercise Effect services or Effect-based workflows.
+
+### Core Pattern
+
+```typescript
+import { describe, expect } from "bun:test"
+import { Effect, Layer } from "effect"
+import { provideTmpdirInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
+
+const it = testEffect(Layer.mergeAll(MyService.defaultLayer))
+
+describe("my service", () => {
+  it.live("does the thing", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const svc = yield* MyService.Service
+        const out = yield* svc.run()
+        expect(out).toEqual("ok")
+      }),
+    ),
+  )
+})
+```
+
+### `it.effect` vs `it.live`
+
+- Use `it.effect(...)` when the test should run with `TestClock` and `TestConsole`.
+- Use `it.live(...)` when the test depends on real time, filesystem mtimes, child processes, git, locks, or other live OS behavior.
+- Most integration-style tests in this package use `it.live(...)`.
+
+### Effect Fixtures
+
+Prefer the Effect-aware helpers from `fixture/fixture.ts` instead of building a manual runtime in each test.
+
+- `tmpdirScoped(options?)` creates a scoped temp directory and cleans it up when the Effect scope closes.
+- `provideInstance(dir)(effect)` is the low-level helper. It does not create a directory; it just runs an Effect with `Instance.current` bound to `dir`.
+- `provideTmpdirInstance((dir) => effect, options?)` is the convenience helper. It creates a temp directory, binds it as the active instance, and disposes the instance on cleanup.
+- `provideTmpdirServer((input) => effect, options?)` does the same, but also provides the test LLM server.
+
+Use `provideTmpdirInstance(...)` by default when a test only needs one temp instance. Use `tmpdirScoped()` plus `provideInstance(...)` when a test needs multiple directories, custom setup before binding, or needs to switch instance context within one test.
+
+### Style
+
+- Define `const it = testEffect(...)` near the top of the file.
+- Keep the test body inside `Effect.gen(function* () { ... })`.
+- Yield services directly with `yield* MyService.Service` or `yield* MyTool`.
+- Avoid custom `ManagedRuntime`, `attach(...)`, or ad hoc `run(...)` wrappers when `testEffect(...)` already provides the runtime.
+- When a test needs instance-local state, prefer `provideTmpdirInstance(...)` or `provideInstance(...)` over manual `Instance.provide(...)` inside Promise-style tests.

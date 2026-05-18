@@ -20,7 +20,7 @@ export function wslPath(path: string, mode: "windows" | "linux" | null): string 
   try {
     if (path.startsWith("~")) {
       const suffix = path.slice(1)
-      const cmd = `wslpath ${flag} \"$HOME${suffix.replace(/\"/g, '\\"')}\"`
+      const cmd = `wslpath ${flag} "$HOME${suffix.replace(/"/g, '\\"')}"`
       const output = execFileSync("wsl", ["-e", "sh", "-lc", cmd])
       return output.toString().trim()
     }
@@ -28,7 +28,7 @@ export function wslPath(path: string, mode: "windows" | "linux" | null): string 
     const output = execFileSync("wsl", ["-e", "wslpath", flag, path])
     return output.toString().trim()
   } catch (error) {
-    throw new Error(`Failed to run wslpath: ${String(error)}`)
+    throw new Error(`Failed to run wslpath: ${String(error)}`, { cause: error })
   }
 }
 

@@ -60,7 +60,7 @@
     "diffAddedBg": { "dark": "#15241c", "light": "#e0eee5" },
     "diffRemovedBg": { "dark": "#241515", "light": "#eee0e0" },
     "diffContextBg": { "dark": "darkBg1", "light": "lightBg1" },
-    "diffLineNumber": { "dark": "darkBg3", "light": "lightBg3" },
+    "diffLineNumber": { "dark": "#828b87", "light": "#5f5e4f" },
     "diffAddedLineNumberBg": { "dark": "#121f18", "light": "#d5e5da" },
     "diffRemovedLineNumberBg": { "dark": "#1f1212", "light": "#e5d5d5" },
     "markdownText": { "dark": "darkFg0", "light": "lightFg0" },

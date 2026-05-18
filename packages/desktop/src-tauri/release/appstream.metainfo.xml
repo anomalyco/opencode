@@ -28,11 +28,14 @@
 
   <screenshots>
     <screenshot type="default">
-      <image>https://opencode.ai/docs/_astro/screenshot.Bs5D4atL_ZvsvFu.webp</image>
+      <image>https://raw.githubusercontent.com/anomalyco/opencode/b75d4d1c5ec449585d515c756fc81f080a157a9a/packages/web/src/assets/lander/screenshot.png</image>
     </screenshot>
   </screenshots>
 
   <releases>
+    <release version="1.4.0" date="2026-04-08">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.4.0</url>
+    </release>
     <release version="1.0.223" date="2026-01-01">
       <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.223</url>
     </release>

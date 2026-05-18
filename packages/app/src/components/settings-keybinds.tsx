@@ -1,5 +1,6 @@
 import { Component, For, Show, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -250,8 +251,7 @@ function useKeyCapture(input: {
       input.stop()
     }
 
-    document.addEventListener("keydown", handle, true)
-    onCleanup(() => document.removeEventListener("keydown", handle, true))
+    makeEventListener(document, "keydown", handle, { capture: true })
   })
 }
 

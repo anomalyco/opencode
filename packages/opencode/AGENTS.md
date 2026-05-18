@@ -9,36 +9,129 @@
 - **Output**: creates `migration/<timestamp>_<slug>/migration.sql` and `snapshot.json`.
 - **Tests**: migration tests should read the per-folder layout (no `_journal.json`).
 
-# opencode Effect guide
+# Module shape
 
-Instructions to follow when writing Effect.
+Do not use `export namespace Foo { ... }` for module organization. It is not
+standard ESM, it prevents tree-shaking, and it breaks Node's native TypeScript
+runner. Use flat top-level exports combined with a self-reexport at the bottom
+of the file:
 
-## Schemas
+```ts
+// src/foo/foo.ts
+export interface Interface { ... }
+export class Service extends Context.Service<Service, Interface>()("@opencode/Foo") {}
+export const layer = Layer.effect(Service, ...)
+export const defaultLayer = layer.pipe(...)
 
-- Use `Schema.Class` for data types with multiple fields.
-- Use branded schemas (`Schema.brand`) for single-value types.
+export * as Foo from "./foo"
+```
 
-## Services
+Consumers import the namespace projection:
 
-- Services use `ServiceMap.Service<ServiceName, ServiceName.Service>()("@console/<Name>")`.
-- In `Layer.effect`, always return service implementations with `ServiceName.of({ ... })`, never a plain object.
+```ts
+import { Foo } from "@/foo/foo"
 
-## Errors
+yield * Foo.Service
+Foo.layer
+Foo.defaultLayer
+```
 
-- Use `Schema.TaggedErrorClass` for typed errors.
-- For defect-like causes, use `Schema.Defect` instead of `unknown`.
-- In `Effect.gen`, prefer `yield* new MyError(...)` over `yield* Effect.fail(new MyError(...))` for direct early-failure branches.
+Namespace-private helpers stay as non-exported top-level declarations in the
+same file — they remain inaccessible to consumers (they are not projected by
+`export * as`) but are usable by the file's own code.
 
-## Effects
+## When the file is an `index.ts`
+
+If the module is `foo/index.ts` (single-namespace directory), use `"."` for
+the self-reexport source rather than `"./index"`:
+
+```ts
+// src/foo/index.ts
+export const thing = ...
+
+export * as Foo from "."
+```
+
+## Multi-sibling directories
+
+For directories with several independent modules (e.g. `src/session/`,
+`src/config/`), keep each sibling as its own file with its own self-reexport,
+and do not add a barrel `index.ts`. Consumers import the specific sibling:
+
+```ts
+import { SessionRetry } from "@/session/retry"
+import { SessionStatus } from "@/session/status"
+```
+
+Barrels in multi-sibling directories force every import through the barrel to
+evaluate every sibling, which defeats tree-shaking and slows module load.
+
+# opencode Effect rules
+
+Use these rules when writing or migrating Effect code.
+
+See `specs/effect/migration.md` for the compact pattern reference and examples.
+
+## Core
 
 - Use `Effect.gen(function* () { ... })` for composition.
-- Use `Effect.fn("ServiceName.method")` for named/traced effects and `Effect.fnUntraced` for internal helpers.
-- `Effect.fn` / `Effect.fnUntraced` accept pipeable operators as extra arguments, so avoid unnecessary `flow` or outer `.pipe()` wrappers.
-
-## Time
-
+- Use `Effect.fn("Domain.method")` for named/traced effects and `Effect.fnUntraced` for internal helpers.
+- `Effect.fn` / `Effect.fnUntraced` accept pipeable operators as extra arguments, so avoid unnecessary outer `.pipe()` wrappers.
+- Use `Effect.callback` for callback-based APIs.
+- Use `Effect.void` instead of `Effect.succeed(undefined)` or `Effect.succeed(void 0)`.
 - Prefer `DateTime.nowAsDate` over `new Date(yield* Clock.currentTimeMillis)` when you need a `Date`.
 
-## Errors
+## Module conventions
 
-- In `Effect.gen/fn`, prefer `yield* new MyError(...)` over `yield* Effect.fail(new MyError(...))` for direct early-failure branches.
+- In `src/config`, follow the existing self-export pattern at the top of the file (for example `export * as ConfigAgent from "./agent"`) when adding a new config module.
+
+## Schemas and errors
+
+- Use `Schema.Class` for multi-field data.
+- Use branded schemas (`Schema.brand`) for single-value types.
+- Use `Schema.TaggedErrorClass` for typed errors.
+- Use `Schema.Defect` instead of `unknown` for defect-like causes.
+- In `Effect.gen` / `Effect.fn`, prefer `yield* new MyError(...)` over `yield* Effect.fail(new MyError(...))` for direct early-failure branches.
+
+## Runtime vs InstanceState
+
+- Use `makeRuntime` (from `src/effect/run-service.ts`) for all services. It returns `{ runPromise, runFork, runCallback }` backed by a shared `memoMap` that deduplicates layers.
+- Use `InstanceState` (from `src/effect/instance-state.ts`) for per-directory or per-project state that needs per-instance cleanup. It uses `ScopedCache` keyed by directory — each open project gets its own state, automatically cleaned up on disposal.
+- If two open directories should not share one copy of the service, it needs `InstanceState`.
+- Do the work directly in the `InstanceState.make` closure — `ScopedCache` handles run-once semantics. Don't add fibers, `ensure()` callbacks, or `started` flags on top.
+- Use `Effect.addFinalizer` or `Effect.acquireRelease` inside the `InstanceState.make` closure for cleanup (subscriptions, process teardown, etc.).
+- Use `Effect.forkScoped` inside the closure for background stream consumers — the fiber is interrupted when the instance is disposed.
+- To make a service's `init()` non-blocking, fork `InstanceState.get(state)` at the `init()` call site (e.g. `Effect.forkIn(scope)`), not by forking work inside the `InstanceState.make` closure. Forking inside the closure leaves state incomplete for other methods that read it.
+- `src/project/bootstrap.ts` already wraps every service `init()` in `Effect.forkDetach`, so `init()` is fire-and-forget in production. Keep `init()` methods synchronous internally; the caller controls concurrency.
+
+## Effect v4 beta API
+
+- `Effect.fork` and `Effect.forkDaemon` do not exist. Use `Effect.forkIn(scope)` to fork a fiber into a specific scope.
+
+## Preferred Effect services
+
+- In effectified services, prefer yielding existing Effect services over dropping down to ad hoc platform APIs.
+- Prefer `FileSystem.FileSystem` instead of raw `fs/promises` for effectful file I/O.
+- Prefer `ChildProcessSpawner.ChildProcessSpawner` with `ChildProcess.make(...)` instead of custom process wrappers.
+- Prefer `HttpClient.HttpClient` instead of raw `fetch`.
+- Prefer `Path.Path`, `Config`, `Clock`, and `DateTime` when those concerns are already inside Effect code.
+- For background loops or scheduled tasks, use `Effect.repeat` or `Effect.schedule` with `Effect.forkScoped` in the layer definition.
+
+## Effect.cached for deduplication
+
+Use `Effect.cached` when multiple concurrent callers should share a single in-flight computation rather than storing `Fiber | undefined` or `Promise | undefined` manually. See `specs/effect/migration.md` for the full pattern.
+
+## Instance.bind — ALS for native callbacks
+
+`Instance.bind(fn)` captures the current Instance AsyncLocalStorage context and restores it synchronously when called.
+
+Use it for native addon callbacks (`@parcel/watcher`, `node-pty`, native `fs.watch`, etc.) that need to call `Bus.publish` or anything that reads `Instance.directory`.
+
+You do not need it for `setTimeout`, `Promise.then`, `EventEmitter.on`, or Effect fibers.
+
+```typescript
+const cb = Instance.bind((err, evts) => {
+  Bus.publish(MyEvent, { ... })
+})
+nativeAddon.subscribe(dir, cb)
+```

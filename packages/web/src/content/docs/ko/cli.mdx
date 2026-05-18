@@ -573,7 +573,6 @@ OpenCode는 환경 변수로도 구성할 수 있습니다.
 | `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | `.claude/skills` 로드 비활성화                 |
 | `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | 원격 소스에서 모델 목록 가져오기 비활성화      |
 | `OPENCODE_FAKE_VCS`                   | string  | 테스트용 가짜 VCS provider                     |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | 최적화를 위한 파일 시간 검사 비활성화          |
 | `OPENCODE_CLIENT`                     | string  | 클라이언트 식별자(기본값: `cli`)               |
 | `OPENCODE_ENABLE_EXA`                 | boolean | Exa 웹 검색 도구 활성화                        |
 | `OPENCODE_SERVER_PASSWORD`            | string  | `serve`/`web` 기본 인증 활성화                 |
@@ -586,18 +585,18 @@ OpenCode는 환경 변수로도 구성할 수 있습니다.
 
 아래 환경 변수는 변경되거나 제거될 수 있는 실험 기능을 활성화합니다.
 
-| 변수                                            | 타입    | 설명                           |
-| ----------------------------------------------- | ------- | ------------------------------ |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | 모든 실험 기능 활성화          |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 아이콘 탐색 활성화             |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | TUI에서 선택 시 복사 비활성화  |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | bash 명령 기본 타임아웃(ms)    |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM 응답 최대 출력 토큰 수     |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | 전체 디렉터리 파일 감시 활성화 |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | oxfmt 포매터 활성화            |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | 실험적 LSP 도구 활성화         |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | 파일 감시 비활성화             |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | 실험적 Exa 기능 활성화         |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | 실험적 LSP 타입 검사 활성화    |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | 실험적 Markdown 기능 활성화    |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Plan mode 활성화               |
+| 변수                                            | 타입    | 설명                             |
+| ----------------------------------------------- | ------- | -------------------------------- |
+| `OPENCODE_EXPERIMENTAL`                         | boolean | 모든 실험 기능 활성화            |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | 아이콘 탐색 활성화               |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | TUI에서 선택 시 복사 비활성화    |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | bash 명령 기본 타임아웃(ms)      |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | LLM 응답 최대 출력 토큰 수       |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | 전체 디렉터리 파일 감시 활성화   |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | oxfmt 포매터 활성화              |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | 실험적 LSP 도구 활성화           |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | 파일 감시 비활성화               |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | 실험적 Exa 기능 활성화           |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | python 파일에 대해 TY LSP 활성화 |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | 실험적 Markdown 기능 활성화      |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Plan mode 활성화                 |

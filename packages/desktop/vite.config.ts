@@ -15,9 +15,9 @@ export default defineConfig({
     // Improves production stack traces
     keepNames: true,
   },
-  // build: {
-  // sourcemap: true,
-  // },
+  build: {
+    sourcemap: true,
+  },
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port: 1420,

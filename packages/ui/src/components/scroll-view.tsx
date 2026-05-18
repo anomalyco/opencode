@@ -1,4 +1,5 @@
-import { onCleanup, onMount, splitProps, type ComponentProps, Show, mergeProps } from "solid-js"
+import { onMount, splitProps, type ComponentProps, Show, mergeProps } from "solid-js"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 import { useI18n } from "../context/i18n"
 
@@ -97,19 +98,7 @@ export function ScrollView(props: ScrollViewProps) {
       local.viewportRef(viewportRef)
     }
 
-    const observer = new ResizeObserver(() => {
-      updateThumb()
-    })
-
-    observer.observe(viewportRef)
-    // Also observe the first child if possible to catch content changes
-    if (viewportRef.firstElementChild) {
-      observer.observe(viewportRef.firstElementChild)
-    }
-
-    onCleanup(() => {
-      observer.disconnect()
-    })
+    createResizeObserver([viewportRef, viewportRef.firstElementChild], updateThumb)
 
     updateThumb()
   })
