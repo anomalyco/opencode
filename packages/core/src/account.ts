@@ -268,7 +268,7 @@ export const layer = Layer.effect(
           { from: data.active[account.serviceID], to: id, cancel: false },
         )
         if (updated.cancel) return
-        yield* SynchronizedRef.modifyEffect(
+        const activated = yield* SynchronizedRef.modifyEffect(
           state,
           Effect.fnUntraced(function* (data) {
             const nextAccount = data.accounts[updated.to]
@@ -276,9 +276,10 @@ export const layer = Layer.effect(
 
             const next = { ...data, active: { ...data.active, [nextAccount.serviceID]: updated.to } }
             yield* write(next)
-            return [undefined, next] as const
+            return [{ from: updated.from, to: updated.to }, next] as const
           }),
         )
+        if (activated) yield* plugin.trigger("account.activated", activated, {})
       }),
     }
 

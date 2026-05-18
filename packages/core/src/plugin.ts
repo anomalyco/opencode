@@ -38,6 +38,13 @@ type HookSpec = {
       cancel: boolean
     }
   }
+  "account.activated": {
+    input: {
+      from?: AccountV2.ID
+      to: AccountV2.ID
+    }
+    output: {}
+  }
   "provider.update": {
     input: {}
     output: {

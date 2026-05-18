@@ -2,6 +2,7 @@ import { Npm } from "@opencode-ai/core/npm"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -15,6 +16,27 @@ export const npmLayer = Layer.succeed(
     add: () => Effect.succeed({ directory: "", entrypoint: Option.none<string>() }),
     install: () => Effect.void,
     which: () => Effect.succeed(Option.none<string>()),
+  }),
+)
+
+export const catalogLayer = Layer.succeed(
+  Catalog.Service,
+  Catalog.Service.of({
+    provider: {
+      get: () => Effect.die("unexpected provider.get"),
+      update: () => Effect.void,
+      all: () => Effect.succeed([]),
+      available: () => Effect.succeed([]),
+    },
+    model: {
+      get: () => Effect.die("unexpected model.get"),
+      update: () => Effect.die("unexpected model.update"),
+      all: () => Effect.succeed([]),
+      available: () => Effect.succeed([]),
+      default: () => Effect.succeed(Option.none<ModelV2.Info>()),
+      setDefault: () => Effect.die("unexpected model.setDefault"),
+      small: () => Effect.succeed(Option.none<ModelV2.Info>()),
+    },
   }),
 )
 

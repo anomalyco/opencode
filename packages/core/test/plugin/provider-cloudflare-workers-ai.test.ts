@@ -1,14 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AccountV2 } from "@opencode-ai/core/account"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { AccountPlugin } from "@opencode-ai/core/plugin/account"
 import { CloudflareWorkersAIPlugin } from "@opencode-ai/core/plugin/provider/cloudflare-workers-ai"
 import { testEffect } from "../lib/effect"
-import { fakeSelectorSdk, it, model, npmLayer, provider, withEnv } from "./provider-helper"
+import { catalogLayer, fakeSelectorSdk, it, model, npmLayer, provider, withEnv } from "./provider-helper"
 
-const itWithAccount = testEffect(Layer.mergeAll(PluginV2.defaultLayer, AccountV2.defaultLayer, npmLayer))
+const itWithAccount = testEffect(Layer.mergeAll(PluginV2.defaultLayer, AccountV2.defaultLayer, catalogLayer, npmLayer))
 
 function cloudflareLanguage(sdk: unknown, modelID = "@cf/model") {
   return (sdk as { languageModel: (id: string) => { config: CloudflareConfig; provider: string } }).languageModel(
@@ -114,6 +115,7 @@ describe("CloudflareWorkersAIPlugin", () => {
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
           const accounts = yield* AccountV2.Service
+          const catalog = yield* Catalog.Service
           yield* accounts.create({
             serviceID: AccountV2.ServiceID.make("cloudflare-workers-ai"),
             credential: new AccountV2.ApiKeyCredential({
@@ -125,7 +127,10 @@ describe("CloudflareWorkersAIPlugin", () => {
           })
           yield* plugin.add({
             ...AccountPlugin,
-            effect: AccountPlugin.effect.pipe(Effect.provideService(AccountV2.Service, accounts)),
+            effect: AccountPlugin.effect.pipe(
+              Effect.provideService(AccountV2.Service, accounts),
+              Effect.provideService(Catalog.Service, catalog),
+            ),
           })
           yield* plugin.add(CloudflareWorkersAIPlugin)
           const updated = yield* plugin.trigger(

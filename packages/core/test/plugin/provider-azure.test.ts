@@ -1,13 +1,14 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AccountV2 } from "@opencode-ai/core/account"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { AccountPlugin } from "@opencode-ai/core/plugin/account"
 import { AzurePlugin } from "@opencode-ai/core/plugin/provider/azure"
 import { testEffect } from "../lib/effect"
-import { fakeSelectorSdk, it, model, npmLayer, provider, withEnv } from "./provider-helper"
+import { catalogLayer, fakeSelectorSdk, it, model, npmLayer, provider, withEnv } from "./provider-helper"
 
-const itWithAccount = testEffect(Layer.mergeAll(PluginV2.defaultLayer, AccountV2.defaultLayer, npmLayer))
+const itWithAccount = testEffect(Layer.mergeAll(PluginV2.defaultLayer, AccountV2.defaultLayer, catalogLayer, npmLayer))
 
 describe("AzurePlugin", () => {
   it.effect("resolves resourceName from env", () =>
@@ -52,6 +53,7 @@ describe("AzurePlugin", () => {
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
           const accounts = yield* AccountV2.Service
+          const catalog = yield* Catalog.Service
           yield* accounts.create({
             serviceID: AccountV2.ServiceID.make("azure"),
             credential: new AccountV2.ApiKeyCredential({
@@ -63,7 +65,10 @@ describe("AzurePlugin", () => {
           })
           yield* plugin.add({
             ...AccountPlugin,
-            effect: AccountPlugin.effect.pipe(Effect.provideService(AccountV2.Service, accounts)),
+            effect: AccountPlugin.effect.pipe(
+              Effect.provideService(AccountV2.Service, accounts),
+              Effect.provideService(Catalog.Service, catalog),
+            ),
           })
           yield* plugin.add(AzurePlugin)
           const result = yield* plugin.trigger("provider.update", {}, { provider: provider("azure"), cancel: false })

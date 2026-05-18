@@ -1,11 +1,12 @@
 import { describe, expect, mock } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AccountV2 } from "@opencode-ai/core/account"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { AccountPlugin } from "@opencode-ai/core/plugin/account"
 import { GitLabPlugin } from "@opencode-ai/core/plugin/provider/gitlab"
 import { testEffect } from "../lib/effect"
-import { it, model, npmLayer, provider, withEnv } from "./provider-helper"
+import { catalogLayer, it, model, npmLayer, provider, withEnv } from "./provider-helper"
 
 const gitlabSDKOptions: Record<string, unknown>[] = []
 
@@ -22,7 +23,7 @@ void mock.module("gitlab-ai-provider", () => ({
   isWorkflowModel: (id: string) => id === "duo-workflow" || id === "duo-workflow-exact",
 }))
 
-const itWithAccount = testEffect(Layer.mergeAll(PluginV2.defaultLayer, AccountV2.defaultLayer, npmLayer))
+const itWithAccount = testEffect(Layer.mergeAll(PluginV2.defaultLayer, AccountV2.defaultLayer, catalogLayer, npmLayer))
 
 describe("GitLabPlugin", () => {
   it.effect("creates SDKs with legacy default instance URL, token env, headers, and feature flags", () =>
@@ -151,6 +152,7 @@ describe("GitLabPlugin", () => {
           gitlabSDKOptions.length = 0
           const plugin = yield* PluginV2.Service
           const accounts = yield* AccountV2.Service
+          const catalog = yield* Catalog.Service
           yield* accounts.create({
             serviceID: AccountV2.ServiceID.make("gitlab"),
             credential: new AccountV2.ApiKeyCredential({ type: "api", key: "account-token" }),
@@ -158,7 +160,10 @@ describe("GitLabPlugin", () => {
           })
           yield* plugin.add({
             ...AccountPlugin,
-            effect: AccountPlugin.effect.pipe(Effect.provideService(AccountV2.Service, accounts)),
+            effect: AccountPlugin.effect.pipe(
+              Effect.provideService(AccountV2.Service, accounts),
+              Effect.provideService(Catalog.Service, catalog),
+            ),
           })
           yield* plugin.add(GitLabPlugin)
           const updated = yield* plugin.trigger("provider.update", {}, { provider: provider("gitlab"), cancel: false })
@@ -186,6 +191,7 @@ describe("GitLabPlugin", () => {
           gitlabSDKOptions.length = 0
           const plugin = yield* PluginV2.Service
           const accounts = yield* AccountV2.Service
+          const catalog = yield* Catalog.Service
           yield* accounts.create({
             serviceID: AccountV2.ServiceID.make("gitlab"),
             credential: new AccountV2.OAuthCredential({
@@ -198,7 +204,10 @@ describe("GitLabPlugin", () => {
           })
           yield* plugin.add({
             ...AccountPlugin,
-            effect: AccountPlugin.effect.pipe(Effect.provideService(AccountV2.Service, accounts)),
+            effect: AccountPlugin.effect.pipe(
+              Effect.provideService(AccountV2.Service, accounts),
+              Effect.provideService(Catalog.Service, catalog),
+            ),
           })
           yield* plugin.add(GitLabPlugin)
           const updated = yield* plugin.trigger("provider.update", {}, { provider: provider("gitlab"), cancel: false })
