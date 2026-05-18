@@ -1,6 +1,6 @@
 import path from "path"
 import { Effect } from "effect"
-import type { Info as AgentInfo } from "@/agent/agent"
+import { Agent } from "@/agent/agent"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -13,7 +13,7 @@ import PLAN_MODE from "./prompt/plan-mode.txt"
 
 export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   messages: MessageV2.WithParts[]
-  agent: AgentInfo
+  agent: Agent.Info
   session: Session.Info
 }) {
   const flags = yield* RuntimeFlags.Service
