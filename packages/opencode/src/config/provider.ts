@@ -66,6 +66,14 @@ export const Model = Schema.Struct({
       ),
     ).annotate({ description: "Variant-specific configuration" }),
   ),
+  maxConcurrency: Schema.optional(PositiveInt).annotate({
+    description:
+      "Maximum number of concurrent requests for this specific model. When set, uses an independent semaphore and overrides the provider-level maxConcurrency for this model.",
+  }),
+  concurrencyCost: Schema.optional(PositiveInt).annotate({
+    description:
+      "Number of concurrency permits this model consumes per request against the provider-level maxConcurrency budget. Defaults to 1. Useful for providers like Featherless where larger models cost more units.",
+  }),
 })
 
 export const Info = Schema.Struct({

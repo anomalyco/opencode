@@ -921,6 +921,8 @@ export const Model = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,
   variants: optionalOmitUndefined(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
+  maxConcurrency: optionalOmitUndefined(Schema.Number),
+  concurrencyCost: optionalOmitUndefined(Schema.Number),
 }).annotate({ identifier: "Model" })
 export type Model = Types.DeepMutable<Schema.Schema.Type<typeof Model>>
 
@@ -1338,6 +1340,8 @@ export const layer = Layer.effect(
               family: model.family ?? existingModel?.family ?? "",
               release_date: model.release_date ?? existingModel?.release_date ?? "",
               variants: {},
+              maxConcurrency: model.maxConcurrency ?? existingModel?.maxConcurrency,
+              concurrencyCost: model.concurrencyCost ?? existingModel?.concurrencyCost,
             }
             const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
             parsedModel.variants = mapValues(

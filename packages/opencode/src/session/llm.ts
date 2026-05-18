@@ -422,7 +422,13 @@ const live: Layer.Layer<
             )
 
             const item = yield* provider.getProvider(input.model.providerID)
-            yield* providerConcurrency.acquire(input.model.providerID, item.options?.maxConcurrency)
+            yield* providerConcurrency.acquire({
+              providerID: input.model.providerID,
+              modelID: input.model.id,
+              providerMaxConcurrency: item.options?.maxConcurrency,
+              modelMaxConcurrency: input.model.maxConcurrency,
+              concurrencyCost: input.model.concurrencyCost,
+            })
 
             const result = yield* run({ ...input, abort: ctrl.signal })
 
