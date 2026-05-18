@@ -160,6 +160,7 @@ export interface Interface {
     workspaceID: WorkspaceID,
     state: Record<string, number>,
     signal?: AbortSignal,
+    timeout?: number,
   ) => Effect.Effect<void, WaitForSyncError>
   readonly startWorkspaceSyncing: (projectID: ProjectID) => Effect.Effect<void>
 }
@@ -946,12 +947,13 @@ export const layer = Layer.effect(
       workspaceID: WorkspaceID,
       state: Record<string, number>,
       signal?: AbortSignal,
+      timeout = TIMEOUT,
     ) {
       if (synced(state)) return
 
       yield* Effect.catch(
         waitEvent({
-          timeout: TIMEOUT,
+          timeout,
           signal,
           fn(event) {
             if (event.workspace !== workspaceID && event.payload.type !== "sync") {
