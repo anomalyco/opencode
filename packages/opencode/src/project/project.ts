@@ -425,7 +425,7 @@ export const layer: Layer.Layer<
 
     const initState = yield* InstanceState.make(
       Effect.fn("Project.initState")(function* (ctx) {
-        yield* bus.subscribe(Command.Event.Executed).pipe(
+        yield* (yield* bus.subscribe(Command.Event.Executed)).pipe(
           Stream.runForEach((payload) =>
             payload.properties.name === Command.Default.INIT ? setInitialized(ctx.project.id) : Effect.void,
           ),

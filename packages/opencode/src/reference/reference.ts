@@ -7,7 +7,7 @@ import { ConfigReference } from "@/config/reference"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Git } from "@/git"
-import { parseRepositoryReference, repositoryCachePath, type Reference as RepositoryReference } from "@/util/repository"
+import { parseRepositoryReference, repositoryCachePath, type RemoteReference } from "@/util/repository"
 import { RepositoryCache } from "./repository-cache"
 
 export type Resolved =
@@ -20,7 +20,7 @@ export type Resolved =
       name: string
       kind: "git"
       repository: string
-      reference: RepositoryReference
+      reference: RemoteReference
       path: string
       branch?: string
     }

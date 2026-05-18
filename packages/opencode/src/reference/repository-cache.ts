@@ -8,7 +8,7 @@ import {
   sameRepositoryReference,
   parseRepositoryReference,
   validateRepositoryBranch,
-  type Reference as RepositoryReference,
+  type RemoteReference,
 } from "@/util/repository"
 
 export type Result = {
@@ -45,7 +45,7 @@ function resetTarget(input: {
 
 export const ensure = Effect.fn("RepositoryCache.ensure")(function* (
   input: {
-    reference: RepositoryReference
+    reference: RemoteReference
     refresh?: boolean
     branch?: string
   },
