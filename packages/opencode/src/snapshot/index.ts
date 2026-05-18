@@ -126,7 +126,14 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
                 stdin: feed(files),
               },
             )
-            if (check.code !== 0 && check.code !== 1) return new Set<string>()
+            if (check.code !== 0 && check.code !== 1) {
+              log.warn("git check-ignore failed, treating all candidates as ignored for safety", {
+                exitCode: check.code,
+                stderr: check.stderr,
+                fileCount: files.length,
+              })
+              return new Set(files)
+            }
             return new Set(check.text.split("\0").filter(Boolean))
           })
 
@@ -376,6 +383,11 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
                     })
                   }
                 }
+
+                const ignoredNow = yield* ignore(ops.map((op) => op.rel))
+                const filteredOps = ops.filter((op) => !ignoredNow.has(op.rel))
+                ops.length = 0
+                ops.push(...filteredOps)
 
                 const single = Effect.fnUntraced(function* (op: (typeof ops)[number]) {
                   log.info("reverting", { file: op.file, hash: op.hash })
