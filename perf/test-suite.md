@@ -68,6 +68,7 @@ Repeated setup work, long sleeps/timeouts, serial integration tests, filesystem/
 | Session processor effect tests do not require repository state                                            | Removed git setup from all processor-effect temp server fixtures                               | 12.500s   | 9.230s  | keep     | Two targeted reruns passed after the change: 9.61s, 9.23s.                                                                  |
 | HTTP listen PTY ticket tests restart the same listener topology twice                                     | Folded directory-scoped ticket regression into the broader unsafe-ticket test                  | 7.051s    | 6.170s  | keep     | Two targeted reruns passed after the change: 6.76s, 6.17s; still covers mint failure and successful same-directory upgrade. |
 | File watcher readiness can write before async native subscriptions are active                             | Retried short readiness writes and accepted symlink-realpath HEAD events                       | failed    | 4.62s   | keep     | Three sequential focused watcher runs passed: 4.62s, 4.57s, 4.64s; full suite no longer failed in `watcher.test.ts`.        |
+| First provider config/env/filtering block can use Effect-aware instance fixtures                          | Migrated six `tmpdir` + `withTestInstance` cases to `it.instance`                              | 6.06s     | 6.07s   | keep     | Neutral timing, but removes manual config file writes and instance plumbing; use as the pattern for later provider slices.  |
 
 ## Profiling Results
 
