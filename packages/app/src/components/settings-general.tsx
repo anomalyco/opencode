@@ -458,26 +458,6 @@ export const SettingsGeneral: Component = () => {
     </div>
   )
 
-  const ModelsSection = () => (
-    <div class="flex flex-col gap-1">
-      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.models")}</h3>
-
-      <SettingsList>
-        <SettingsRow
-          title={language.t("settings.general.row.autoReview.title")}
-          description={language.t("settings.general.row.autoReview.description")}
-        >
-          <div data-action="settings-auto-review">
-            <Switch
-              checked={settings.models.autoReview()}
-              onChange={(checked) => settings.models.setAutoReview(checked)}
-            />
-          </div>
-        </SettingsRow>
-      </SettingsList>
-    </div>
-  )
-
   const AppearanceSection = () => (
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.appearance")}</h3>
@@ -761,7 +741,6 @@ export const SettingsGeneral: Component = () => {
       <div class="flex flex-col gap-8 w-full">
         <GeneralSection />
 
-        <ModelsSection />
 
         <AppearanceSection />
 

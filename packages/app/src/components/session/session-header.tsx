@@ -6,6 +6,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { showToast } from "@opencode-ai/ui/toast"
+import { copyToClipboard } from "@opencode-ai/ui/copy-to-clipboard"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
@@ -256,17 +257,23 @@ export function SessionHeader() {
   const copyPath = () => {
     const directory = projectDirectory()
     if (!directory) return
-    navigator.clipboard
-      .writeText(directory)
-      .then(() => {
+
+    void copyToClipboard(directory).then((copied) => {
+      if (!copied) {
         showToast({
-          variant: "success",
-          icon: "circle-check",
-          title: language.t("session.share.copy.copied"),
-          description: directory,
+          variant: "error",
+          title: language.t("common.requestFailed"),
         })
+        return
+      }
+
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("session.share.copy.copied"),
+        description: directory,
       })
-      .catch((err: unknown) => showRequestError(language, err))
+    })
   }
 
   const [centerMount, setCenterMount] = createSignal<HTMLElement | null>(null)

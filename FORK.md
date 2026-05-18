@@ -346,3 +346,58 @@ Environment=OPENCODE_INSTANCE_IDLE_MS=1800000
 - **Service takes ~60s to stop** — MCP child processes need time to terminate. Be patient.
 - **SSH restart may hang** — use `nohup` wrapper if restarting via SSH: `nohup bash -c "systemctl --user restart opencode-serve" &`
 - **Verify after deploy** — `curl http://100.108.64.76:4096/` should return 200, then run the Browser Smoke Test.
+
+---
+
+## 🔐 Security Review (2026-05-13)
+
+Deep audit of every outbound HTTP call, the sharing pipeline, LLM request headers, remote config, MCP tools, and bundled web UI. All critical claims verified against source code. Full report: https://github.com/dzianisv/opencode/issues/198
+
+**Verdict: No backdoors. No always-on telemetry. Several conditional data-egress paths documented below.**
+
+### Conditional data leaks (all require explicit opt-in)
+
+| Finding | Risk | Trigger | What leaves the machine |
+|---|---|---|---|
+| **Session sharing** | MEDIUM | `share: "auto"` or manual share | Full user prompts, assistant responses, tool I/O, code diffs (unified patch, changed lines only) → `opncd.ai` |
+| **`opencode` provider** | MEDIUM | Explicit `provider.opencode.options.apiKey` config | All LLM requests route through `opncd.ai`; headers include pseudonymous project ID + session UUID |
+| **GitHub token exchange** | MEDIUM | `opencode github` in CI | GitHub PAT/OIDC token POSTed to `api.opencode.ai` to get a GitHub App token |
+| **Web search tool** | LOW | LLM tool invocation (permission prompt) | Search query → `exa.ai`; query + session UUID + model name → `parallel.ai` |
+| **Enterprise wellknown remote config** | MEDIUM | Wellknown auth entry configured | `remote_config.url` is now constrained to same-origin and rejects embedded URL credentials; cross-origin token/header forwarding is blocked |
+
+### Always-on background calls (no user data)
+
+| Call | Frequency | Data sent |
+|---|---|---|
+| `models.dev/api.json` — model list refresh | Startup + every 60 min | `User-Agent: opencode/{channel}/{version}/{client}` only |
+| npm/brew version check | TUI startup | `User-Agent` only — reveals version/channel. Disable: `autoupdate: false` or `OPENCODE_DISABLE_AUTOUPDATE=1` |
+
+### Not present in the CLI binary (cloud/desktop only)
+
+- **Sentry** — requires `VITE_SENTRY_DSN` at build time; not in distributed binary
+- **Honeycomb** — cloud Cloudflare Workers backend (`packages/console`) only
+- **PostHog** — manual maintainer script (`script/stats.ts`) only
+
+### Safe paths confirmed
+
+- API keys: only sent as `Authorization` headers to their respective LLM providers, never shared elsewhere
+- OpenTelemetry: disabled unless `OTEL_EXPORTER_OTLP_ENDPOINT` env var is set
+- Share default: `share: "auto"` is NOT the default; no implicit sharing on session creation
+
+### Recommendations
+
+1. `autoupdate: false` in config to stop version pings on every TUI launch.
+2. Use your own provider API keys (Anthropic, OpenAI, etc.) — prompts go directly to the provider with no opencode.ai intermediary.
+3. Never set `share: "auto"` unless you want full prompt/response/diff history uploaded to opncd.ai.
+4. Enterprise users: keep `.well-known/opencode` and remote config on trusted infrastructure; same-origin and credentialed-URL guards are enforced in code.
+
+### Remediation update (2026-05-14)
+
+- Implemented guardrails in `packages/opencode/src/config/config.ts`:
+  - reject `remote_config.url` with embedded `username/password`
+  - reject cross-origin `remote_config.url` relative to the wellknown base URL
+- Added regression tests in `packages/opencode/test/config/config.test.ts`:
+  - `wellknown remote_config rejects cross-origin URL`
+  - `wellknown remote_config rejects URL with embedded credentials`
+
+> Audited: `packages/core/src/effect/observability.ts`, `packages/opencode/src/share/`, `packages/opencode/src/snapshot/index.ts`, `packages/opencode/src/installation/index.ts`, `packages/opencode/src/control-plane/workspace.ts`, `packages/opencode/src/cli/upgrade.ts`, `packages/opencode/src/session/llm.ts`, `packages/opencode/src/provider/models.ts`, `packages/opencode/src/tool/`, `packages/opencode/src/config/config.ts`, all install scripts.

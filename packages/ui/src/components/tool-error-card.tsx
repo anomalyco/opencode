@@ -6,6 +6,7 @@ import { Icon } from "./icon"
 import { IconButton } from "./icon-button"
 import { Tooltip } from "./tooltip"
 import { useI18n } from "../context/i18n"
+import { copyToClipboard } from "./copy-to-clipboard"
 
 export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "children" | "variant"> {
   tool: string
@@ -70,7 +71,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
   const copy = async () => {
     const text = cleaned()
     if (!text) return
-    await navigator.clipboard.writeText(text)
+    if (!(await copyToClipboard(text))) return
     setState("copied", true)
     setTimeout(() => setState("copied", false), 2000)
   }

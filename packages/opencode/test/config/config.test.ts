@@ -1986,7 +1986,7 @@ test("wellknown remote_config supports templated env vars in headers", async () 
         new Response(
           JSON.stringify({
             remote_config: {
-              url: "https://config.example.com/opencode.json",
+              url: "https://example.com/config/opencode.json",
               headers: {
                 Authorization: "Bearer {env:TEST_TOKEN}",
               },
@@ -1996,7 +1996,7 @@ test("wellknown remote_config supports templated env vars in headers", async () 
         ),
       )
     }
-    if (urlStr.includes("config.example.com")) {
+    if (urlStr.includes("/config/opencode.json")) {
       remoteFetchedUrl = urlStr
       remoteHeaders = init?.headers
       return Promise.resolve(
@@ -2035,7 +2035,7 @@ test("wellknown remote_config supports templated env vars in headers", async () 
           Effect.gen(function* () {
             const config = yield* svc.get()
             expect(wellknownFetchedUrl).toBe("https://example.com/.well-known/opencode")
-            expect(remoteFetchedUrl).toBe("https://config.example.com/opencode.json")
+            expect(remoteFetchedUrl).toBe("https://example.com/config/opencode.json")
             expect(remoteHeaders).toEqual({ Authorization: "Bearer test-token" })
             expect(config.mcp?.confluence?.enabled).toBe(true)
           }),
@@ -2046,6 +2046,113 @@ test("wellknown remote_config supports templated env vars in headers", async () 
     globalThis.fetch = originalFetch
     if (originalToken === undefined) delete process.env.TEST_TOKEN
     else process.env.TEST_TOKEN = originalToken
+  }
+})
+
+test("wellknown remote_config rejects cross-origin URL", async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = mock((url: string | URL | Request) => {
+    const urlStr = url instanceof Request ? url.url : url instanceof URL ? url.href : url
+    if (urlStr.includes(".well-known/opencode")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            remote_config: {
+              url: "https://config.example.com/opencode.json",
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+    }
+    return originalFetch(url)
+  }) as unknown as typeof fetch
+
+  const fakeAuth = Layer.mock(Auth.Service)({
+    all: () =>
+      Effect.succeed({
+        "https://example.com": new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
+      }),
+  })
+
+  const layer = Config.layer.pipe(
+    Layer.provide(testFlock),
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Env.defaultLayer),
+    Layer.provide(fakeAuth),
+    Layer.provide(emptyAccount),
+    Layer.provideMerge(infra),
+    Layer.provide(noopNpm),
+  )
+
+  try {
+    await expect(
+      provideTmpdirInstance(
+        () =>
+          Config.Service.use((svc) =>
+            Effect.gen(function* () {
+              yield* svc.get()
+            }),
+          ),
+        { git: true },
+      ).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise),
+    ).rejects.toThrow("wellknown remote_config.url origin must match https://example.com")
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+
+test("wellknown remote_config rejects URL with embedded credentials", async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = mock((url: string | URL | Request) => {
+    const urlStr = url instanceof Request ? url.url : url instanceof URL ? url.href : url
+    if (urlStr.includes(".well-known/opencode")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            remote_config: {
+              url: "https://user:pass@example.com/config/opencode.json",
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+    }
+    return originalFetch(url)
+  }) as unknown as typeof fetch
+
+  const fakeAuth = Layer.mock(Auth.Service)({
+    all: () =>
+      Effect.succeed({
+        "https://example.com": new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
+      }),
+  })
+
+  const layer = Config.layer.pipe(
+    Layer.provide(testFlock),
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Env.defaultLayer),
+    Layer.provide(fakeAuth),
+    Layer.provide(emptyAccount),
+    Layer.provideMerge(infra),
+    Layer.provide(noopNpm),
+  )
+
+  try {
+    await expect(
+      provideTmpdirInstance(
+        () =>
+          Config.Service.use((svc) =>
+            Effect.gen(function* () {
+              yield* svc.get()
+            }),
+          ),
+        { git: true },
+      ).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise),
+    ).rejects.toThrow("must not include username/password credentials")
+  } finally {
+    globalThis.fetch = originalFetch
   }
 })
 

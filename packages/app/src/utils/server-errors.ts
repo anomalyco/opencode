@@ -34,6 +34,25 @@ export function formatServerError(error: unknown, translate?: Translator, fallba
   return tr(translate, "error.chain.unknown", "Unknown error")
 }
 
+export function isSessionNotFoundError(error: unknown) {
+  if (typeof error !== "object" || error === null) return false
+  const value = error as {
+    name?: unknown
+    message?: unknown
+    data?: {
+      message?: unknown
+    }
+  }
+  if (value.name !== "NotFoundError") return false
+  const message =
+    typeof value.message === "string"
+      ? value.message
+      : typeof value.data?.message === "string"
+        ? value.data.message
+        : ""
+  return /^session not found(?::|\b)/i.test(message.trim())
+}
+
 function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {
   if (typeof error !== "object" || error === null) return false
   const o = error as Record<string, unknown>

@@ -34,6 +34,7 @@ export type FollowupDraft = {
   agent: string
   model: { providerID: string; modelID: string }
   variant?: string
+  disabledPlugins?: string[]
 }
 
 type FollowupSendInput = {
@@ -190,6 +191,7 @@ type PromptSubmitInput = {
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
+  disabledPlugins?: Accessor<string[]>
 }
 
 type CommentItem = {
@@ -403,6 +405,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       agent,
       model,
       variant,
+      disabledPlugins: input.disabledPlugins?.(),
     }
 
     const clearInput = () => {

@@ -71,15 +71,37 @@ function normalizeLoadedConfig(data: unknown, source: string) {
   return copy
 }
 
-async function substituteWellKnownRemoteConfig(input: { value: unknown; dir: string; source: string }) {
+async function substituteWellKnownRemoteConfig(input: {
+  value: unknown
+  dir: string
+  source: string
+  wellknown_origin: string
+}) {
   if (!isRecord(input.value) || typeof input.value.url !== "string") return
 
-  const url = await ConfigVariable.substitute({
-    text: input.value.url,
-    type: "virtual",
-    dir: input.dir,
-    source: input.source,
-  })
+  const substitutedUrl = (
+    await ConfigVariable.substitute({
+      text: input.value.url,
+      type: "virtual",
+      dir: input.dir,
+      source: input.source,
+    })
+  ).trim()
+  if (!substitutedUrl) throw new Error("wellknown remote_config.url must not be empty")
+  if (!URL.canParse(substitutedUrl))
+    throw new Error(`wellknown remote_config.url must be a valid URL: ${substitutedUrl}`)
+  const parsedUrl = new URL(substitutedUrl)
+  if (parsedUrl.username || parsedUrl.password) {
+    throw new Error("wellknown remote_config.url must not include username/password credentials")
+  }
+  if (parsedUrl.origin !== input.wellknown_origin) {
+    throw new Error(
+      `wellknown remote_config.url origin must match ${input.wellknown_origin}; got ${parsedUrl.origin}`,
+    )
+  }
+  parsedUrl.hash = ""
+
+  const url = parsedUrl.toString()
   const headers = isRecord(input.value.headers)
     ? Object.fromEntries(
         await Promise.all(
@@ -538,6 +560,8 @@ export const layer = Layer.effect(
         for (const [key, value] of Object.entries(auth)) {
           if (value.type === "wellknown") {
             const url = key.replace(/\/+$/, "")
+            if (!URL.canParse(url)) throw new Error(`wellknown auth URL must be a valid URL: ${url}`)
+            const wellknownOrigin = new URL(url).origin
             process.env[value.key] = value.token
             log.debug("fetching remote config", { url: `${url}/.well-known/opencode` })
             const response = yield* Effect.promise(() => fetch(`${url}/.well-known/opencode`))
@@ -553,6 +577,7 @@ export const layer = Layer.effect(
                 value: wellknown.remote_config,
                 dir: url,
                 source: `${url}/.well-known/opencode`,
+                wellknown_origin: wellknownOrigin,
               }),
             )
             const fetchedConfig = remote

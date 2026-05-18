@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./server-errors"
-import { formatServerError, parseReadableConfigInvalidError } from "./server-errors"
+import { formatServerError, isSessionNotFoundError, parseReadableConfigInvalidError } from "./server-errors"
 
 function fill(text: string, vars?: Record<string, string | number>) {
   if (!vars) return text
@@ -127,5 +127,43 @@ describe("formatServerError", () => {
     expect(formatServerError(error, language.t)).toBe(
       ["Modelo nao encontrado: x/y", "Voce quis dizer: x/y2, x/y3", "Revise provider/model no config"].join("\n"),
     )
+  })
+})
+
+describe("isSessionNotFoundError", () => {
+  test("detects plain object not found with nested message", () => {
+    expect(
+      isSessionNotFoundError({
+        name: "NotFoundError",
+        data: { message: "Session not found: abc123" },
+      }),
+    ).toBe(true)
+  })
+
+  test("detects error-like message shape", () => {
+    expect(
+      isSessionNotFoundError({
+        name: "NotFoundError",
+        message: "Session not found",
+      }),
+    ).toBe(true)
+  })
+
+  test("rejects other not found semantics", () => {
+    expect(
+      isSessionNotFoundError({
+        name: "NotFoundError",
+        data: { message: "File not found" },
+      }),
+    ).toBe(false)
+  })
+
+  test("rejects wrong error name", () => {
+    expect(
+      isSessionNotFoundError({
+        name: "ValidationError",
+        data: { message: "Session not found: abc123" },
+      }),
+    ).toBe(false)
   })
 })

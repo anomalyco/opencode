@@ -8,12 +8,14 @@ import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { decode64 } from "@/utils/base64"
+import { formatServerError, isSessionNotFoundError } from "@/utils/server-errors"
 
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const location = useLocation()
   const navigate = useNavigate()
   const params = useParams()
   const sync = useSync()
+  const language = useLanguage()
   const slug = createMemo(() => base64Encode(props.directory))
 
   createEffect(() => {
@@ -25,7 +27,18 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
 
   createResource(
     () => params.id,
-    (id) => sync.session.sync(id),
+    (id) =>
+      sync.session.sync(id).catch((error) => {
+        if (!isSessionNotFoundError(error)) throw error
+        if (params.id === id) {
+          showToast({
+            variant: "error",
+            title: language.t("common.requestFailed"),
+            description: formatServerError(error, language.t),
+          })
+          navigate(`/${params.dir}/session`, { replace: true })
+        }
+      }),
   )
 
   return (

@@ -4,6 +4,7 @@ import type { ComponentProps } from "solid-js"
 import { useI18n } from "../context/i18n"
 import { IconButton } from "./icon-button"
 import { Tooltip } from "./tooltip"
+import { copyToClipboard } from "./copy-to-clipboard"
 
 export interface TextFieldProps
   extends ComponentProps<typeof Kobalte.Input>,
@@ -69,7 +70,7 @@ export function TextField(props: TextFieldProps) {
 
   async function handleCopy() {
     const value = local.value ?? local.defaultValue ?? ""
-    await navigator.clipboard.writeText(value)
+    if (!(await copyToClipboard(value))) return
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }

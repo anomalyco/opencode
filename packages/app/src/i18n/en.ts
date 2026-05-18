@@ -722,7 +722,6 @@ export const dict = {
 
   "settings.general.section.appearance": "Appearance",
   "settings.general.section.advanced": "Advanced",
-  "settings.general.section.models": "Models",
   "settings.general.section.notifications": "System notifications",
   "settings.general.section.updates": "Updates",
   "settings.general.section.sounds": "Sound effects",
@@ -782,8 +781,6 @@ export const dict = {
   "settings.general.row.releaseNotes.title": "Release notes",
   "settings.general.row.releaseNotes.description": "Show What's New popups after updates",
 
-  "settings.general.row.autoReview.title": "Auto review",
-  "settings.general.row.autoReview.description": "Automatically run supervisor and cross-review after each assistant response",
 
   "settings.updates.row.startup.title": "Check for updates on startup",
   "settings.updates.row.startup.description": "Automatically check for updates when OpenCode launches",
