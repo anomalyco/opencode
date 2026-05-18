@@ -6,6 +6,7 @@ import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Hash } from "@opencode-ai/core/util/hash"
+import { Flock } from "@opencode-ai/core/util/flock"
 import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
 import * as Log from "@opencode-ai/core/util/log"
@@ -163,7 +164,14 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | AppProce
           const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
           const read = (file: string) => fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
           const remove = (file: string) => fs.remove(file).pipe(Effect.catch(() => Effect.void))
-          const locked = <A, E, R>(fx: Effect.Effect<A, E, R>) => lock(state.gitdir).withPermits(1)(fx)
+          const locked = <A, E, R>(fx: Effect.Effect<A, E, R>) =>
+            lock(state.gitdir).withPermits(1)(
+              Effect.acquireUseRelease(
+                Effect.promise((signal) => Flock.acquire(`snapshot:${state.gitdir}`, { signal, staleMs: 30_000 })),
+                () => fx,
+                (lease) => Effect.promise(() => lease.release()),
+              ),
+            )
 
           const enabled = Effect.fnUntraced(function* () {
             if (state.vcs !== "git") return false

@@ -17,6 +17,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Flock } from "@opencode-ai/core/util/flock"
 import * as Bom from "@/util/bom"
 
 function normalizeLineEndings(text: string): string {
@@ -34,7 +35,7 @@ function convertToLineEnding(text: string, ending: "\n" | "\r\n"): string {
 
 const locks = new Map<string, Semaphore.Semaphore>()
 
-function lock(filePath: string) {
+function inProcessLock(filePath: string) {
   const resolvedFilePath = AppFileSystem.resolve(filePath)
   const hit = locks.get(resolvedFilePath)
   if (hit) return hit
@@ -42,6 +43,17 @@ function lock(filePath: string) {
   const next = Semaphore.makeUnsafe(1)
   locks.set(resolvedFilePath, next)
   return next
+}
+
+function lock<A, E, R>(filePath: string, fx: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+  const resolved = AppFileSystem.resolve(filePath)
+  return inProcessLock(resolved).withPermits(1)(
+    Effect.acquireUseRelease(
+      Effect.promise((signal) => Flock.acquire(`edit:${resolved}`, { signal, staleMs: 30_000 })),
+      () => fx,
+      (lease) => Effect.promise(() => lease.release()),
+    ),
+  )
 }
 
 export const Parameters = Schema.Struct({
@@ -85,7 +97,7 @@ export const EditTool = Tool.define(
           let diff = ""
           let contentOld = ""
           let contentNew = ""
-          yield* lock(filePath).withPermits(1)(
+          yield* lock(filePath,
             Effect.gen(function* () {
               if (params.oldString === "") {
                 const existed = yield* afs.existsSafe(filePath)

@@ -10,6 +10,7 @@ import { assertExternalDirectoryEffect } from "./external-directory"
 import { trimDiff } from "./edit"
 import { LSP } from "@/lsp/lsp"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Flock } from "@opencode-ai/core/util/flock"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
 import { Format } from "../format"
@@ -217,45 +218,58 @@ export const ApplyPatchTool = Tool.define(
       // Apply the changes
       const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
 
-      for (const change of fileChanges) {
-        const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
-        switch (change.type) {
-          case "add":
-            // Create parent directories (recursive: true is safe on existing/root dirs)
+      // Acquire cross-process locks for all affected files to prevent races with parallel sessions
+      const affectedFiles = Array.from(
+        new Set(fileChanges.flatMap((c) => [c.filePath, ...(c.movePath ? [c.movePath] : [])])),
+      ).sort()
+      yield* Effect.acquireUseRelease(
+        Effect.forEach(affectedFiles, (file) =>
+          Effect.promise((signal) => Flock.acquire(`edit:${file}`, { signal, staleMs: 30_000 })),
+        ),
+        (leases) =>
+          Effect.gen(function* () {
+            for (const change of fileChanges) {
+              const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
+              switch (change.type) {
+                case "add":
+                  // Create parent directories (recursive: true is safe on existing/root dirs)
 
-            yield* afs.writeWithDirs(change.filePath, Bom.join(change.newContent, change.bom))
-            updates.push({ file: change.filePath, event: "add" })
-            break
+                  yield* afs.writeWithDirs(change.filePath, Bom.join(change.newContent, change.bom))
+                  updates.push({ file: change.filePath, event: "add" })
+                  break
 
-          case "update":
-            yield* afs.writeWithDirs(change.filePath, Bom.join(change.newContent, change.bom))
-            updates.push({ file: change.filePath, event: "change" })
-            break
+                case "update":
+                  yield* afs.writeWithDirs(change.filePath, Bom.join(change.newContent, change.bom))
+                  updates.push({ file: change.filePath, event: "change" })
+                  break
 
-          case "move":
-            if (change.movePath) {
-              // Create parent directories (recursive: true is safe on existing/root dirs)
+                case "move":
+                  if (change.movePath) {
+                    // Create parent directories (recursive: true is safe on existing/root dirs)
 
-              yield* afs.writeWithDirs(change.movePath!, Bom.join(change.newContent, change.bom))
-              yield* afs.remove(change.filePath)
-              updates.push({ file: change.filePath, event: "unlink" })
-              updates.push({ file: change.movePath, event: "add" })
+                    yield* afs.writeWithDirs(change.movePath!, Bom.join(change.newContent, change.bom))
+                    yield* afs.remove(change.filePath)
+                    updates.push({ file: change.filePath, event: "unlink" })
+                    updates.push({ file: change.movePath, event: "add" })
+                  }
+                  break
+
+                case "delete":
+                  yield* afs.remove(change.filePath)
+                  updates.push({ file: change.filePath, event: "unlink" })
+                  break
+              }
+
+              if (edited) {
+                if (yield* format.file(edited)) {
+                  yield* Bom.syncFile(afs, edited, change.bom)
+                }
+                yield* bus.publish(File.Event.Edited, { file: edited })
+              }
             }
-            break
-
-          case "delete":
-            yield* afs.remove(change.filePath)
-            updates.push({ file: change.filePath, event: "unlink" })
-            break
-        }
-
-        if (edited) {
-          if (yield* format.file(edited)) {
-            yield* Bom.syncFile(afs, edited, change.bom)
-          }
-          yield* bus.publish(File.Event.Edited, { file: edited })
-        }
-      }
+          }),
+        (leases) => Effect.promise(() => Promise.all(leases.map((l) => l.release().catch(() => {})))),
+      )
 
       // Publish file change events
       for (const update of updates) {
