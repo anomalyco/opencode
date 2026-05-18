@@ -1,0 +1,86 @@
+{
+  "name": "babel-plugin-module-resolver",
+  "version": "5.0.2",
+  "main": "lib/index.js",
+  "description": "Module resolver plugin for Babel",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tleunen/babel-plugin-module-resolver.git"
+  },
+  "files": [
+    "lib"
+  ],
+  "author": {
+    "name": "Tommy Leunen",
+    "email": "tommy.leunen@gmail.com",
+    "url": "http://tommyleunen.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "babel",
+    "babel-plugin",
+    "module",
+    "resolver",
+    "alias",
+    "rewrite",
+    "resolve",
+    "rename",
+    "mapping",
+    "require",
+    "import"
+  ],
+  "dependencies": {
+    "find-babel-config": "^2.1.1",
+    "glob": "^9.3.3",
+    "pkg-up": "^3.1.0",
+    "reselect": "^4.1.7",
+    "resolve": "^1.22.8"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.20.7",
+    "@babel/core": "^7.20.12",
+    "@babel/plugin-syntax-dynamic-import": "^7.8.3",
+    "@babel/plugin-transform-modules-commonjs": "^7.20.11",
+    "@babel/preset-env": "^7.20.2",
+    "babel-core": "^7.0.0-bridge.0",
+    "babel-jest": "^29.3.1",
+    "common-tags": "^1.8.2",
+    "eslint": "^6.7.2",
+    "eslint-config-airbnb-base": "^14.0.0",
+    "eslint-config-prettier": "^6.7.0",
+    "eslint-plugin-import": "^2.19.1",
+    "husky": "^4.3.6",
+    "jest": "^29.7.0",
+    "lint-staged": "^10.5.3",
+    "prettier-eslint-cli": "^5.0.0",
+    "standard-version": "^9.5.0"
+  },
+  "scripts": {
+    "lint": "eslint src test",
+    "compile": "babel src --out-dir lib",
+    "pretest": "npm run lint",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "test:watch": "jest --watch",
+    "prepublish": "npm run compile",
+    "release": "standard-version"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
+  },
+  "lint-staged": {
+    "*.{js}": [
+      "prettier-eslint --write"
+    ]
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testRegex": "/test/.*\\.test\\.js$",
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/log.js"
+    ]
+  }
+}

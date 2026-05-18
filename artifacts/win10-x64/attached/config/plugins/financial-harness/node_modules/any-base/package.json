@@ -1,0 +1,40 @@
+{
+  "name": "any-base",
+  "version": "1.1.0",
+  "description": "Converter from any base to other any base",
+  "main": "index.js",
+  "scripts": {
+    "start": "./node_modules/.bin/watchify . -s AnyBase -o dist/any-base.js -v -d",
+    "build": "./node_modules/.bin/browserify . -s AnyBase | ./node_modules/.bin/uglifyjs -cm > dist/any-base.min.js",
+    "test": "node tests/test.js"
+  },
+  "keywords": [
+    "number",
+    "convert",
+    "base",
+    "alphabet",
+    "short number",
+    "long numbers",
+    "dec",
+    "hex",
+    "bin",
+    "oct",
+    "any"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HarasimowiczKamil/any-base.git"
+  },
+  "author": {
+    "name": "Kamil Harasimowicz",
+    "email": "mifczu@gmail.com"
+  },
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "browserify": "^13.1.1",
+    "punycode": "^2.1.0",
+    "uglify-js": "^2.7.4",
+    "watchify": "^3.7.0"
+  }
+}
