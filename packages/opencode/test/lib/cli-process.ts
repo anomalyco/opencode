@@ -18,7 +18,8 @@
 // without changing the fixture. Long-lived commands like `serve` will need a
 // different return shape — see the TODO at the bottom of OpencodeCli.
 import type { TestOptions } from "bun:test"
-import { Deferred, Duration, Effect, Scope, Stream } from "effect"
+import { Deferred, Duration, Effect, Layer, Scope, Stream } from "effect"
+import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import path from "node:path"
 import fs from "node:fs/promises"
 import os from "node:os"
@@ -128,7 +129,7 @@ export type CliFixture = {
 // the caller doesn't need to wire it up — the fixture's lifetime is tied to
 // the surrounding Scope.
 export function withCliFixture<A, E>(
-  fn: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope>,
+  fn: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope | HttpClient.HttpClient>,
 ): Effect.Effect<A, E | unknown, Scope.Scope> {
   return Effect.gen(function* () {
     const llm = yield* TestLLMServer
@@ -264,7 +265,9 @@ export function withCliFixture<A, E>(
     const opencode: OpencodeCli = { run, serve, spawn, expectExit, parseJsonEvents }
 
     return yield* fn({ llm, home, opencode })
-  }).pipe(Effect.provide(TestLLMServer.layer))
+    // FetchHttpClient is provided so test bodies can `yield* HttpClient.HttpClient`
+    // and hit endpoints on `opencode.serve()` without rolling their own fetch.
+  }).pipe(Effect.provide(Layer.mergeAll(TestLLMServer.layer, FetchHttpClient.layer)))
 }
 
 function parseJsonEvents(stdout: string): Array<Record<string, unknown>> {
@@ -302,7 +305,7 @@ function expectExit(result: RunResult, expected: number, label = "opencode") {
 export const cliIt = {
   live: <A, E>(
     name: string,
-    body: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope>,
+    body: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope | HttpClient.HttpClient>,
     opts?: number | TestOptions,
   ) => it.live(name, () => withCliFixture(body), opts),
 }

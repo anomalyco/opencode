@@ -7,6 +7,7 @@
 // parsed off the "listening on http://..." line.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { HttpClient } from "effect/unstable/http"
 import { cliIt } from "../../lib/cli-process"
 
 describe("opencode serve (subprocess)", () => {
@@ -20,12 +21,13 @@ describe("opencode serve (subprocess)", () => {
         expect(server.port).toBeGreaterThan(0)
         expect(server.url).toMatch(/^http:\/\//)
 
-        const res = yield* Effect.promise(() => fetch(`${server.url}/global/health`))
+        const client = yield* HttpClient.HttpClient
+        const res = yield* client.get(`${server.url}/global/health`)
         expect(res.status).toBe(200)
-        const body = (yield* Effect.promise(() => res.json())) as Record<string, unknown>
         // GlobalHealth schema is { success: true, ... } | { success: false, error }.
         // We don't lock in further shape here — any 200 with parseable JSON is
         // enough proof the routing + auth-bypass + instance loading is alive.
+        const body = yield* res.json
         expect(body).toBeDefined()
       }),
     60_000,
