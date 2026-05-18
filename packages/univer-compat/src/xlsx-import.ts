@@ -1,5 +1,11 @@
+import { createRequire } from "node:module"
 import ExcelJS from "exceljs"
 import { WORKBOOK_SCHEMA_VERSION } from "./workbook"
+
+const req = createRequire(import.meta.url)
+const xlCol = req("exceljs/lib/utils/col-cache") as {
+  decodeEx: (s: string) => { top: number; left: number; bottom: number; right: number }
+}
 
 function b64(s: string) {
   return Buffer.from(s, "utf8").toString("base64")
@@ -90,10 +96,27 @@ export async function xlsxToWorkbookJson(unitID: string, buf: Uint8Array) {
     sheetOrder.push(sid)
     const cellData: Record<string, Record<string, { v?: unknown; t?: number; s?: string }>> = {}
 
+    const rawMerges = (sheet as { model?: { merges?: string[] } }).model?.merges
+    const mergeData =
+      rawMerges && Array.isArray(rawMerges)
+        ? rawMerges.map((spec) => {
+            const d = xlCol.decodeEx(spec)
+            // Univer `IRange` endRow/endColumn are inclusive (A1:B2 → endRow 1, endColumn 1).
+            return {
+              startRow: d.top - 1,
+              endRow: d.bottom - 1,
+              startColumn: d.left - 1,
+              endColumn: d.right - 1,
+            }
+          })
+        : []
+
     sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
       const r0 = rowNumber - 1
       const rs = String(r0)
       row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        // ExcelJS merge slaves repeat the master value; skip so merged headers are not written per column.
+        if (cell.type === ExcelJS.ValueType.Merge) return
         const c0 = colNumber - 1
         const payload = cellPayload(cell)
         if (!payload) return
@@ -119,6 +142,7 @@ export async function xlsxToWorkbookJson(unitID: string, buf: Uint8Array) {
       columnData: {},
       showGridlines: 1,
       rightToLeft: 0,
+      mergeData,
     }
   })
 
