@@ -602,118 +602,87 @@ it.instance("handles agent configuration", () =>
   }),
 )
 
-test("treats agent variant as model-scoped setting (not provider option)", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        agent: {
-          test_agent: {
-            model: "openai/gpt-5.2",
-            variant: "xhigh",
-            max_tokens: 123,
-          },
+it.instance("treats agent variant as model-scoped setting (not provider option)", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      agent: {
+        test_agent: {
+          model: "openai/gpt-5.2",
+          variant: "xhigh",
+          max_tokens: 123,
         },
-      })
-    },
-  })
+      },
+    })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    const agent = config.agent?.["test_agent"]
 
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      const agent = config.agent?.["test_agent"]
+    expect(agent?.variant).toBe("xhigh")
+    expect(agent?.options).toMatchObject({
+      max_tokens: 123,
+    })
+    expect(agent?.options).not.toHaveProperty("variant")
+  }),
+)
 
-      expect(agent?.variant).toBe("xhigh")
-      expect(agent?.options).toMatchObject({
-        max_tokens: 123,
-      })
-      expect(agent?.options).not.toHaveProperty("variant")
-    },
-  })
-})
-
-test("handles command configuration", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        command: {
-          test_command: {
-            template: "test template",
-            description: "test command",
-            agent: "test_agent",
-          },
+it.instance("handles command configuration", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      command: {
+        test_command: {
+          template: "test template",
+          description: "test command",
+          agent: "test_agent",
         },
-      })
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.command?.["test_command"]).toEqual({
-        template: "test template",
-        description: "test command",
-        agent: "test_agent",
-      })
-    },
-  })
-})
+      },
+    })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.command?.["test_command"]).toEqual({
+      template: "test template",
+      description: "test command",
+      agent: "test_agent",
+    })
+  }),
+)
 
-test("migrates autoshare to share field", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          autoshare: true,
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.share).toBe("auto")
-      expect(config.autoshare).toBe(true)
-    },
-  })
-})
+it.instance("migrates autoshare to share field", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      autoshare: true,
+    })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.share).toBe("auto")
+    expect(config.autoshare).toBe(true)
+  }),
+)
 
-test("migrates mode field to agent field", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          mode: {
-            test_mode: {
-              model: "test/model",
-              temperature: 0.5,
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test_mode"]).toEqual({
-        model: "test/model",
-        temperature: 0.5,
-        mode: "primary",
-        options: {},
-        permission: {},
-      })
-    },
-  })
-})
+it.instance("migrates mode field to agent field", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      mode: {
+        test_mode: {
+          model: "test/model",
+          temperature: 0.5,
+        },
+      },
+    })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test_mode"]).toEqual({
+      model: "test/model",
+      temperature: 0.5,
+      mode: "primary",
+      options: {},
+      permission: {},
+    })
+  }),
+)
 
 test("loads config from .opencode directory", async () => {
   await using tmp = await tmpdir({

@@ -73,6 +73,7 @@ Repeated setup work, long sleeps/timeouts, serial integration tests, filesystem/
 | Provider env precedence and model lookup cases can use Effect-aware instance fixtures                     | Migrated four more provider lookup/default-model cases to `it.instance`                        | 6.12s     | 6.36s   | keep     | Noisy 5-run median; kept as a small stacked cleanup slice but do not claim speedup from this migration.                     |
 | Simple config load cases can use Effect-aware instance fixtures                                           | Migrated JSON, shell, formatter, and lsp config load cases to `it.instance`                    | 14.18s    | 3.93s   | keep     | Three-run medians before/after; removes manual `tmpdir` + `withTestInstance` setup from the first simple config block.      |
 | Config template, file include, and simple agent cases can use Effect-aware instance fixtures              | Migrated JSONC, env/file substitution, invalid config, and agent config cases to `it.instance` | 1.87s     | 1.90s   | keep     | Stacked on the first config slice; neutral timing but removes more manual `tmpdir` + instance plumbing.                     |
+| Agent option, command, and legacy migration config cases can use Effect-aware instance fixtures           | Migrated agent variant, command, autoshare, and mode migration cases to `it.instance`          | 1.90s     | 1.83s   | keep     | Stacked on the config template slice; small neutral-to-positive timing and less manual setup.                               |
 
 ## Profiling Results
 
