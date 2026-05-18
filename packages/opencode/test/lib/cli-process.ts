@@ -71,9 +71,40 @@ export type RunOpts = SpawnOpts & {
   readonly extraArgs?: string[]
 }
 
+// `opencode serve` is a long-lived process — it never exits on its own.
+// `serve(opts)` therefore returns a handle inside the caller's Scope: the
+// subprocess is killed when the scope closes (test end), and the URL the
+// server actually bound to (port 0 means OS-assigned) is parsed off stdout.
+export type ServeOpts = SpawnOpts & {
+  readonly port?: number
+  readonly hostname?: string
+  readonly extraArgs?: string[]
+  // How long to wait for the "listening on http://..." line before failing.
+  // Default 15s — startup is dominated by bun's transpile + plugin init, not
+  // the actual listen() call.
+  readonly readyTimeoutMs?: number
+}
+
+export type ServeHandle = {
+  // Full URL the server is bound to, e.g. "http://127.0.0.1:54321". Use this
+  // as the base for HTTP requests in tests — never assume the port.
+  readonly url: string
+  readonly hostname: string
+  readonly port: number
+  // Sends SIGTERM. The scope finalizer also calls this, so tests rarely need
+  // to invoke it directly — useful for tests that assert exit behavior.
+  readonly kill: () => void
+  // Resolves with the exit code once the process exits. Bun returns a number.
+  readonly exited: Promise<number>
+}
+
 export type OpencodeCli = {
   // High-level: run a single prompt against the test model. Short-lived.
   readonly run: (message: string, opts?: RunOpts) => Effect.Effect<RunResult>
+  // Spawn `opencode serve` and wait until it's listening. Long-lived: the
+  // returned handle is killed when the caller's Scope closes. Fails if the
+  // listening line doesn't appear within `readyTimeoutMs`.
+  readonly serve: (opts?: ServeOpts) => Effect.Effect<ServeHandle, Error, Scope.Scope>
   // Escape hatch: any CLI invocation with full control over argv. Used to test
   // commands that don't yet have a typed builder.
   readonly spawn: (args: string[], opts?: SpawnOpts) => Effect.Effect<RunResult>
@@ -85,9 +116,6 @@ export type OpencodeCli = {
   // event (see src/cli/cmd/run.ts `emit`). Throws on a malformed line so
   // tests fail loudly rather than silently skipping data.
   readonly parseJsonEvents: (stdout: string) => Array<Record<string, unknown>>
-  // TODO: long-lived builders for `serve` / `acp` / etc. need a different
-  // return shape — they yield a handle with .url / .kill and live inside the
-  // surrounding Scope. Add when the first long-lived command is tested.
 }
 
 export type CliFixture = {
@@ -101,7 +129,7 @@ export type CliFixture = {
 // the caller doesn't need to wire it up — the fixture's lifetime is tied to
 // the surrounding Scope.
 export function withCliFixture<A, E>(
-  fn: (input: CliFixture) => Effect.Effect<A, E>,
+  fn: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope>,
 ): Effect.Effect<A, E | unknown, Scope.Scope> {
   return Effect.gen(function* () {
     const llm = yield* TestLLMServer
@@ -145,7 +173,114 @@ export function withCliFixture<A, E>(
       return spawn(argv, opts)
     }
 
-    const opencode: OpencodeCli = { run, spawn, expectExit, parseJsonEvents }
+    const serve = (opts?: ServeOpts): Effect.Effect<ServeHandle, Error, Scope.Scope> =>
+      Effect.acquireRelease(
+        Effect.tryPromise({
+          try: async () => {
+            const argv = ["serve"]
+            // Default port 0 — let the OS pick a free port, parse the actual
+            // one off stdout. Hard-coded ports flake under parallel tests.
+            argv.push("--port", String(opts?.port ?? 0))
+            if (opts?.hostname) argv.push("--hostname", opts.hostname)
+            if (opts?.extraArgs) argv.push(...opts.extraArgs)
+
+            const proc = Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...argv], {
+              cwd: home,
+              env: { ...process.env, ...env, ...opts?.env },
+              stdout: "pipe",
+              stderr: "pipe",
+            })
+
+            // Drain stderr in background so the OS pipe buffer can't fill and
+            // wedge the child. We don't surface it on success; on failure the
+            // caller can read it from the kill path or test assertion.
+            const stderrChunks: string[] = []
+            void (async () => {
+              const reader = proc.stderr.getReader()
+              const decoder = new TextDecoder()
+              try {
+                while (true) {
+                  const { done, value } = await reader.read()
+                  if (done) return
+                  stderrChunks.push(decoder.decode(value, { stream: true }))
+                }
+              } catch {
+                // Stream closed — fine.
+              }
+            })()
+
+            // Watch stdout for the listening-line. Format (see serve.ts):
+            //   "opencode server listening on http://<host>:<port>"
+            const readyRe = /listening on (http:\/\/([^\s:]+):(\d+))/
+            const reader = proc.stdout.getReader()
+            const decoder = new TextDecoder()
+            let buf = ""
+            const readyTimeoutMs = opts?.readyTimeoutMs ?? 15_000
+
+            const timeout = new Promise<never>((_resolve, reject) =>
+              setTimeout(
+                () => reject(new Error(`opencode serve did not become ready within ${readyTimeoutMs}ms`)),
+                readyTimeoutMs,
+              ),
+            )
+            const findReady = (async () => {
+              while (true) {
+                const { done, value } = await reader.read()
+                if (done) throw new Error("opencode serve exited before becoming ready")
+                buf += decoder.decode(value, { stream: true })
+                const m = buf.match(readyRe)
+                if (m) return { url: m[1], hostname: m[2], port: Number(m[3]) }
+              }
+            })()
+            let match: { url: string; hostname: string; port: number }
+            try {
+              match = await Promise.race([findReady, timeout])
+            } catch (err) {
+              proc.kill()
+              try {
+                await proc.exited
+              } catch {
+                // ignore
+              }
+              const stderrTail = stderrChunks.join("").slice(-2000)
+              throw new Error(`${(err as Error).message}\nstderr (last 2000):\n${stderrTail}`)
+            }
+
+            // Continue draining stdout post-startup. Without this, the OS pipe
+            // buffer eventually fills and the server blocks on its next log.
+            void (async () => {
+              try {
+                while (true) {
+                  const { done } = await reader.read()
+                  if (done) return
+                }
+              } catch {
+                // Stream closed — fine.
+              }
+            })()
+
+            return {
+              url: match.url,
+              hostname: match.hostname,
+              port: match.port,
+              kill: () => proc.kill(),
+              exited: proc.exited as Promise<number>,
+            }
+          },
+          catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+        }),
+        (handle) =>
+          Effect.promise(async () => {
+            handle.kill()
+            try {
+              await handle.exited
+            } catch {
+              // ignore
+            }
+          }),
+      )
+
+    const opencode: OpencodeCli = { run, serve, spawn, expectExit, parseJsonEvents }
 
     return yield* fn({ llm, home, opencode })
   }).pipe(Effect.provide(TestLLMServer.layer))
@@ -180,7 +315,13 @@ function expectExit(result: RunResult, expected: number, label = "opencode") {
 // Only `.live` is exposed because subprocess tests must run against the real
 // clock — a TestClock-paused environment can't drive a child process. If you
 // need `.only` or `.skip`, fall back to `it.live` + `withCliFixture` directly.
+// Body's R is `Scope.Scope | never` so tests can yield* scope-requiring
+// resources (e.g. `opencode.serve`) without an extra `Effect.scoped` wrapper —
+// `withCliFixture`'s outer scope is the natural lifetime.
 export const cliIt = {
-  live: <A, E>(name: string, body: (input: CliFixture) => Effect.Effect<A, E>, opts?: number | TestOptions) =>
-    it.live(name, () => withCliFixture(body), opts),
+  live: <A, E>(
+    name: string,
+    body: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope>,
+    opts?: number | TestOptions,
+  ) => it.live(name, () => withCliFixture(body), opts),
 }
