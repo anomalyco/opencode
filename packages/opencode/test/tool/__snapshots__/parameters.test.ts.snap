@@ -425,6 +425,60 @@ exports[`tool parameters JSON Schema (wire shape) websearch 1`] = `
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "additionalQueries": {
+      "description": "1-2 additional keyword search queries (3-6 words each) to run alongside \`query\` in a single batched call. Must be diverse — vary entity names, synonyms, and angles. Each query must include the key entity or topic. NEVER write sentences, instructions, or use site: operators. Use this instead of chaining separate websearch calls for multi-topic questions.",
+      "items": {
+        "type": "string",
+      },
+      "maxItems": 2,
+      "minItems": 1,
+      "type": "array",
+    },
+    "contextMaxCharacters": {
+      "description": "Maximum characters for context string optimized for LLMs (default: 10000)",
+      "type": "number",
+    },
+    "livecrawl": {
+      "description": "Live crawl mode - 'fallback': use live crawling as backup if cached content unavailable, 'preferred': prioritize live crawling (default: 'fallback')",
+      "enum": [
+        "fallback",
+        "preferred",
+      ],
+      "type": "string",
+    },
+    "numResults": {
+      "description": "Number of search results to return (default: 8)",
+      "type": "number",
+    },
+    "objective": {
+      "description": "A natural-language description of what you're trying to accomplish (e.g. 'Compare Q1 2026 earnings and margin performance for Tesla, Ford, and GM'). Must include the key entities or topics being researched. The search engine uses this to rank results for reasoning utility rather than human engagement.",
+      "type": "string",
+    },
+    "query": {
+      "description": "Websearch query",
+      "type": "string",
+    },
+    "type": {
+      "description": "Search type - 'auto': balanced search (default), 'fast': quick results, 'deep': comprehensive search",
+      "enum": [
+        "auto",
+        "fast",
+        "deep",
+      ],
+      "type": "string",
+    },
+  },
+  "required": [
+    "query",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) websearch (base, Exa-only mode) 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
     "contextMaxCharacters": {
       "description": "Maximum characters for context string optimized for LLMs (default: 10000)",
       "type": "number",
@@ -457,6 +511,62 @@ exports[`tool parameters JSON Schema (wire shape) websearch 1`] = `
   },
   "required": [
     "query",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`tool parameters JSON Schema (wire shape) websearch (parallel mode) 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "additionalQueries": {
+      "description": "1-2 additional keyword search queries (3-6 words each) to run alongside \`query\` in a single batched call. Must be diverse — vary entity names, synonyms, and angles. Each query must include the key entity or topic. NEVER write sentences, instructions, or use site: operators. Use this instead of chaining separate websearch calls for multi-topic questions.",
+      "items": {
+        "type": "string",
+      },
+      "maxItems": 2,
+      "minItems": 1,
+      "type": "array",
+    },
+    "contextMaxCharacters": {
+      "description": "Maximum characters for context string optimized for LLMs (default: 10000)",
+      "type": "number",
+    },
+    "livecrawl": {
+      "description": "Live crawl mode - 'fallback': use live crawling as backup if cached content unavailable, 'preferred': prioritize live crawling (default: 'fallback')",
+      "enum": [
+        "fallback",
+        "preferred",
+      ],
+      "type": "string",
+    },
+    "numResults": {
+      "description": "Number of search results to return (default: 8)",
+      "type": "number",
+    },
+    "objective": {
+      "description": "A natural-language description of what you're trying to accomplish (e.g. 'Compare Q1 2026 earnings and margin performance for Tesla, Ford, and GM'). Must include the key entities or topics being researched. The search engine uses this to rank results for reasoning utility rather than human engagement.",
+      "type": "string",
+    },
+    "query": {
+      "description": "Websearch query",
+      "type": "string",
+    },
+    "type": {
+      "description": "Search type - 'auto': balanced search (default), 'fast': quick results, 'deep': comprehensive search",
+      "enum": [
+        "auto",
+        "fast",
+        "deep",
+      ],
+      "type": "string",
+    },
+  },
+  "required": [
+    "query",
+    "objective",
+    "additionalQueries",
   ],
   "type": "object",
 }

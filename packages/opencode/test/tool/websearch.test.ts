@@ -1,8 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { parseResponse } from "../../src/tool/mcp-websearch"
-import { selectWebSearchProvider, webSearchModelName, webSearchProviderLabel } from "../../src/tool/websearch"
-
+import {
+  Parameters,
+  ParallelParameters,
+  selectWebSearchProvider,
+  shouldExposeParallelExtras,
+  webSearchModelName,
+  webSearchProviderLabel,
+} from "../../src/tool/websearch"
 import { webSearchEnabled } from "../../src/tool/registry"
 import { it } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -59,6 +65,81 @@ describe("websearch provider", () => {
         },
       }),
     ).toBe("claude-opus-4.7")
+  })
+})
+
+describe("websearch Parallel-only schema gating", () => {
+  test("exposes Parallel extras when the env override forces Parallel", () => {
+    expect(shouldExposeParallelExtras({ exa: false, parallel: false }, "parallel")).toBe(true)
+  })
+
+  test("hides Parallel extras when the env override forces Exa", () => {
+    expect(shouldExposeParallelExtras({ exa: false, parallel: true }, "exa")).toBe(false)
+  })
+
+  test("exposes Parallel extras when the Parallel flag is on and no override", () => {
+    expect(shouldExposeParallelExtras({ exa: false, parallel: true }, undefined)).toBe(true)
+  })
+
+  test("hides Parallel extras when only the Exa flag is on", () => {
+    expect(shouldExposeParallelExtras({ exa: true, parallel: false }, undefined)).toBe(false)
+  })
+
+  test("hides Parallel extras in the 50/50 rollout fallback", () => {
+    expect(shouldExposeParallelExtras({ exa: false, parallel: false }, undefined)).toBe(false)
+  })
+})
+
+describe("websearch model-facing schema (Parallel exposed)", () => {
+  const decode = Schema.decodeUnknownSync(ParallelParameters)
+  const validInput = {
+    query: "tesla q1 earnings",
+    objective: "Compare Q1 2026 earnings for major US automakers",
+    additionalQueries: ["ford q1 2026 earnings", "gm q1 2026 earnings"],
+  }
+
+  test("accepts a fully populated request", () => {
+    expect(() => decode(validInput)).not.toThrow()
+  })
+
+  test("accepts the minimum batch size (1 additional query)", () => {
+    expect(() => decode({ ...validInput, additionalQueries: ["ford q1 2026 earnings"] })).not.toThrow()
+  })
+
+  test("rejects more than 2 additionalQueries", () => {
+    expect(() => decode({ ...validInput, additionalQueries: ["a", "b", "c"] })).toThrow()
+  })
+
+  test("rejects an empty additionalQueries array", () => {
+    expect(() => decode({ ...validInput, additionalQueries: [] })).toThrow()
+  })
+
+  test("rejects a request missing objective", () => {
+    const { objective: _omit, ...rest } = validInput
+    expect(() => decode(rest)).toThrow()
+  })
+
+  test("rejects a request missing additionalQueries", () => {
+    const { additionalQueries: _omit, ...rest } = validInput
+    expect(() => decode(rest)).toThrow()
+  })
+})
+
+describe("websearch execute-side schema (extras tolerated as optional)", () => {
+  const decode = Schema.decodeUnknownSync(Parameters)
+
+  test("accepts a call with only query (Exa shape)", () => {
+    expect(() => decode({ query: "tesla q1 earnings" })).not.toThrow()
+  })
+
+  test("accepts a fully populated Parallel call", () => {
+    expect(() =>
+      decode({
+        query: "tesla q1 earnings",
+        objective: "Compare Q1 2026 earnings",
+        additionalQueries: ["ford q1 2026 earnings"],
+      }),
+    ).not.toThrow()
   })
 })
 

@@ -23,7 +23,11 @@ import { Parameters as Skill } from "../../src/tool/skill"
 import { Parameters as Task } from "../../src/tool/task"
 import { Parameters as Todo } from "../../src/tool/todo"
 import { Parameters as WebFetch } from "../../src/tool/webfetch"
-import { Parameters as WebSearch } from "../../src/tool/websearch"
+import {
+  Parameters as WebSearch,
+  BaseParameters as WebSearchBase,
+  ParallelParameters as WebSearchParallel,
+} from "../../src/tool/websearch"
 import { Parameters as Write } from "../../src/tool/write"
 
 const parse = <S extends Schema.Decoder<unknown>>(schema: S, input: unknown): S["Type"] =>
@@ -51,6 +55,8 @@ describe("tool parameters", () => {
     test("todo", () => expect(toJsonSchema(Todo)).toMatchSnapshot())
     test("webfetch", () => expect(toJsonSchema(WebFetch)).toMatchSnapshot())
     test("websearch", () => expect(toJsonSchema(WebSearch)).toMatchSnapshot())
+    test("websearch (base, Exa-only mode)", () => expect(toJsonSchema(WebSearchBase)).toMatchSnapshot())
+    test("websearch (parallel mode)", () => expect(toJsonSchema(WebSearchParallel)).toMatchSnapshot())
     test("write", () => expect(toJsonSchema(Write)).toMatchSnapshot())
 
     test("inlines named child schemas for provider compatibility", () => {
@@ -241,10 +247,6 @@ describe("tool parameters", () => {
     test("accepts description + prompt + subagent_type", () => {
       const parsed = parse(Task, { description: "d", prompt: "p", subagent_type: "general" })
       expect(parsed.subagent_type).toBe("general")
-    })
-    test("accepts optional background flag", () => {
-      const parsed = parse(Task, { description: "d", prompt: "p", subagent_type: "general", background: true })
-      expect(parsed.background).toBe(true)
     })
     test("rejects missing prompt", () => {
       expect(accepts(Task, { description: "d", subagent_type: "general" })).toBe(false)
