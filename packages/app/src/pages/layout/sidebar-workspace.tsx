@@ -250,6 +250,7 @@ const WorkspaceSessionList = (props: {
   hasMore: Accessor<boolean>
   loadMore: () => Promise<void>
   refresh?: () => Promise<void>
+  refreshing?: Accessor<boolean>
   language: ReturnType<typeof useLanguage>
   sortNow: Accessor<number>
 }): JSX.Element => {
@@ -263,14 +264,19 @@ const WorkspaceSessionList = (props: {
             <Button
               variant="ghost"
               size="large"
-              icon="arrow-sync"
               class="flex h-8 w-full items-center justify-center rounded-lg border border-border bg-surface-raised-base/35 px-3 text-12-medium text-text-weak transition-colors hover:border-border-strong hover:bg-surface-raised-base-hover hover:text-text"
               disabled={props.loading()}
+              aria-busy={props.refreshing?.() ? "true" : "false"}
               onClick={(event: MouseEvent) => {
                 event.preventDefault()
                 void props.refresh?.()
               }}
             >
+              <Icon
+                name="arrow-sync"
+                size="small"
+                classList={{ "genericagent-refresh-icon-spin": !!props.refreshing?.() }}
+              />
               {props.language.t("sidebar.sessions.refresh.genericagent")}
             </Button>
           </Tooltip>
@@ -515,6 +521,7 @@ export const LocalWorkspace = (props: {
   const queryOptions = useQueryOptions()
   const language = useLanguage()
   const [searchQuery, setSearchQuery] = createSignal("")
+  const [refreshing, setRefreshing] = createSignal(false)
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
   const stores = createMemo(() => dirs().map((directory) => globalSync.child(directory)))
   const slug = createMemo(() => base64Encode(props.project.worktree))
@@ -531,11 +538,20 @@ export const LocalWorkspace = (props: {
   const issue = createMemo(() => stores().map((item) => item[0].session_error).find(Boolean))
   const extraAgent = createMemo(() => extraAgentByDirectory(props.project.worktree))
   const refresh = async () => {
+    if (refreshing()) return
     const directories = dirs()
     for (const [store, setStore] of stores()) {
       setStore("limit", Math.max(store.limit, store.sessionTotal, store.session.length + 20))
     }
-    await Promise.all(directories.map((directory) => globalSync.project.loadSessions(directory, { force: true })))
+    setRefreshing(true)
+    try {
+      await Promise.all([
+        Promise.all(directories.map((directory) => globalSync.project.loadSessions(directory, { force: true }))),
+        new Promise((resolve) => window.setTimeout(resolve, 700)),
+      ])
+    } finally {
+      setRefreshing(false)
+    }
   }
   const loadMore = async () => {
     stores().forEach((item) => item[1]("limit", (limit) => (limit ?? 0) + 5))
@@ -575,6 +591,7 @@ export const LocalWorkspace = (props: {
         hasMore={hasMore}
         loadMore={loadMore}
         refresh={extraAgent()?.id === "genericagent" ? refresh : undefined}
+        refreshing={refreshing}
         language={language}
         sortNow={props.sortNow}
       />
