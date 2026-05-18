@@ -121,11 +121,11 @@ export type OpenAIResponsesFileSearchToolComparisonFilter = {
 }
 
 /**
- * Combine multiple filters using and or or.
+ * Combine multiple filters using `and` or `or`.
  */
 export type OpenAIResponsesFileSearchToolCompoundFilter = {
   /**
-   * Type of operation: and or or.
+   * Type of operation: `and` or `or`.
    */
   type: "and" | "or"
 
