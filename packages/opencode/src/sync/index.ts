@@ -101,9 +101,6 @@ export const layer = Layer.effect(Service)(
       }
 
       const publish = !!options?.publish
-      // Assert InstanceRef is set before going async — surfaces "missing
-      // instance" failures synchronously instead of inside the forked publish.
-      if (publish) yield* InstanceState.context
       // Bridge captures handler-fiber refs (InstanceRef/WorkspaceRef) and the
       // full Effect context, so the forked publish + GlobalBus emit run with
       // the right state without a per-call attachWith.
@@ -149,7 +146,6 @@ export const layer = Layer.effect(Service)(
       }
 
       const { publish = true } = options || {}
-      if (publish) yield* InstanceState.context
       const bridge = yield* EffectBridge.make()
 
       // Note that this is an "immediate" transaction which is critical.
