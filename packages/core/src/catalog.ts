@@ -5,7 +5,8 @@ import { produce, type Draft } from "immer"
 import { ModelV2 } from "./model"
 import { PluginV2 } from "./plugin"
 import { ProviderV2 } from "./provider"
-import { Instance } from "./instance"
+import { Location } from "./location"
+import { EventV2 } from "./event"
 
 type ProviderRecord = {
   provider: ProviderV2.Info
@@ -23,6 +24,15 @@ export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundErr
   providerID: ProviderV2.ID,
   modelID: ModelV2.ID,
 }) {}
+
+export const Event = {
+  ModelUpdated: EventV2.define({
+    type: "catalog.model.updated",
+    schema: {
+      model: ModelV2.Info,
+    },
+  }),
+}
 
 export interface Interface {
   readonly provider: {
@@ -57,10 +67,11 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    yield* Instance.Service
+    yield* Location.Service
     let records = HashMap.empty<ProviderV2.ID, ProviderRecord>()
     let defaultModel: { providerID: ProviderV2.ID; modelID: ModelV2.ID } | undefined
     const plugin = yield* PluginV2.Service
+    const events = yield* EventV2.Service
 
     const resolve = (model: ModelV2.Info) => {
       const provider = Option.getOrThrow(HashMap.get(records, model.providerID)).provider
@@ -157,14 +168,12 @@ export const layer = Layer.effect(
           )
           const updated = yield* plugin.trigger("model.update", {}, { model, cancel: false })
           if (updated.cancel) return
+          const next = new ModelV2.Info({ ...updated.model, id: modelID, providerID })
           records = HashMap.set(records, providerID, {
             provider: record.provider,
-            models: HashMap.set(
-              record.models,
-              modelID,
-              new ModelV2.Info({ ...updated.model, id: modelID, providerID }),
-            ),
+            models: HashMap.set(record.models, modelID, next),
           })
+          yield* events.publish(Event.ModelUpdated, { model: resolve(next) })
           return
         }),
 
@@ -257,4 +266,4 @@ export const layer = Layer.effect(
 
 const SMALL_MODEL_RE = /\b(nano|flash|lite|mini|haiku|small|fast)\b/
 
-export const defaultLayer = layer.pipe(Layer.provide(PluginV2.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provideMerge(EventV2.defaultLayer), Layer.provide(PluginV2.defaultLayer))

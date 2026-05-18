@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -10,7 +10,6 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Git } from "@/git"
 import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
-import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
@@ -364,6 +363,38 @@ describe("tool.read truncation", () => {
       expect(result.metadata.truncated).toBe(true)
       expect(result.output).toContain("Output capped at")
       expect(result.output).toContain("Use offset=")
+    }),
+  )
+
+  it.instance("stops streaming after the byte cap", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const filepath = path.join(test.directory, "huge.txt")
+      const content = `${"x".repeat(80)}\n`.repeat(50_000)
+      yield* put(filepath, content)
+
+      const fs = yield* AppFileSystem.Service
+      const counter = { bytes: 0 }
+      const result = yield* run({ filePath: filepath }).pipe(
+        Effect.provideService(
+          AppFileSystem.Service,
+          AppFileSystem.Service.of({
+            ...fs,
+            stream: (file, options) =>
+              fs.stream(file, options).pipe(
+                Stream.tap((chunk) =>
+                  Effect.sync(() => {
+                    counter.bytes += chunk.length
+                  }),
+                ),
+              ),
+          }),
+        ),
+      )
+
+      expect(result.metadata.truncated).toBe(true)
+      expect(result.output).toContain("Output capped at")
+      expect(counter.bytes).toBeLessThan(Buffer.byteLength(content, "utf-8") / 2)
     }),
   )
 
