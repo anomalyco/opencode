@@ -6,6 +6,8 @@ import { GlobalBus } from "./global"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Identifier } from "@/id/id"
+import type { InstanceContext } from "@/project/instance-context"
+import { InstanceRef } from "@/effect/instance-ref"
 
 const log = Log.create({ service: "bus" })
 
@@ -185,11 +187,12 @@ export function createID() {
 }
 
 export async function publish<D extends BusEvent.Definition>(
+  ctx: InstanceContext,
   def: D,
   properties: BusProperties<D>,
   options?: { id?: string },
 ) {
-  return runPromise((svc) => svc.publish(def, properties, options))
+  return runPromise((svc) => svc.publish(def, properties, options).pipe(Effect.provideService(InstanceRef, ctx)))
 }
 
 export function subscribe<D extends BusEvent.Definition>(def: D, callback: (event: Payload<D>) => unknown) {

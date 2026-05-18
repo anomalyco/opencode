@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { ConfigProvider, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
-import { Instance } from "../../src/project/instance"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
