@@ -186,6 +186,20 @@ describe("tool.shell", () => {
     ),
   )
 
+  each("passes OPENCODE_SESSION_ID to child process", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const result = yield* run({
+          command: `${bin} -e "process.stdout.write(process.env.OPENCODE_SESSION_ID || '')"`,
+          description: "Print session ID env var",
+        })
+        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.output).toContain(ctx.sessionID)
+      }),
+    ),
+  )
+
   it.live("falls back from terminal-only configured shell", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped({ config: { shell: "fish" } })
