@@ -179,6 +179,34 @@ function normalizeMessages(
       .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
   }
 
+  // Bedrock Z.ai GLM: coerce any string toolUse.input back into a JSON
+  // object. When we replay the history, GLM streams tool-call args as
+  // partial strings; if a prior assistant turn stored a not-yet-parsed
+  // string, Bedrock Converse rejects the next turn with
+  // "The format of the value at messages.N.content.K.toolUse.input
+  //  is invalid. Provide a json object for the field and try again."
+  if (
+    model.api.npm === "@ai-sdk/amazon-bedrock" &&
+    (model.api.id.toLowerCase().includes("glm") ||
+      model.api.id.toLowerCase().includes("zai_glm"))
+  ) {
+    msgs = msgs.map((msg) => {
+      if (msg.role !== "assistant" || !Array.isArray(msg.content)) return msg
+      return {
+        ...msg,
+        content: msg.content.map((part: any) => {
+          if (part?.type !== "tool-call") return part
+          if (part.input == null) return { ...part, input: {} }
+          try {
+            return { ...part, input: JSON.parse(part.input || "{}") }
+          } catch {
+            return { ...part, input: {} }
+          }
+        }),
+      }
+    })
+  }
+
   if (model.api.id.includes("claude")) {
     const scrub = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "_")
     msgs = msgs.map((msg) => {
@@ -494,6 +522,7 @@ export function temperature(model: Provider.Model) {
 export function topP(model: Provider.Model) {
   const id = model.id.toLowerCase()
   if (id.includes("qwen")) return 1
+  if (id.includes("glm") || id.includes("zai_glm")) return 0.95
   if (["minimax-m2", "gemini", "kimi-k2.5", "kimi-k2p5", "kimi-k2-5"].some((s) => id.includes(s))) {
     return 0.95
   }
@@ -627,7 +656,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     id.includes("deepseek-r1") ||
     id.includes("deepseek-v3") ||
     id.includes("minimax") ||
-    id.includes("glm") ||
+    (id.includes("glm") && model.api.npm !== "@ai-sdk/amazon-bedrock") ||
     id.includes("kimi") ||
     id.includes("k2p") ||
     id.includes("qwen") ||
@@ -894,17 +923,33 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       }
 
       // For Amazon Nova models, use reasoningConfig with maxReasoningEffort
-      return Object.fromEntries(
-        WIDELY_SUPPORTED_EFFORTS.map((effort) => [
-          effort,
-          {
-            reasoningConfig: {
-              type: "enabled",
-              maxReasoningEffort: effort,
+      if (id.includes("nova")) {
+        return Object.fromEntries(
+          WIDELY_SUPPORTED_EFFORTS.map((effort) => [
+            effort,
+            {
+              reasoningConfig: {
+                type: "enabled",
+                maxReasoningEffort: effort,
+              },
             },
-          },
-        ]),
-      )
+          ]),
+        )
+      }
+
+      // GLM on other paths (Z.ai direct, opencode gateway) it doesn't, so fall through only for Bedrock.
+      // Shape: options() returns options FLAT at the top level (no { bedrock: ... }).
+      // downstream providerOptions() wrapper nests it under { bedrock: ... }.
+      if (id.includes("glm") && model.api.npm === "@ai-sdk/amazon-bedrock") {
+        return {
+          default: { additionalModelRequestFields: { reasoning_config: "medium" } },
+          low:     { additionalModelRequestFields: { reasoning_config: "low"    } },
+          medium:  { additionalModelRequestFields: { reasoning_config: "medium" } },
+          high:    { additionalModelRequestFields: { reasoning_config: "high"   } },
+        }
+      }
+
+      return {}
 
     case "@ai-sdk/google-vertex":
     // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex
@@ -1088,6 +1133,27 @@ export function options(input: {
     result["promptCacheKey"] = input.sessionID
   }
 
+  // Bedrock-hosted Z.ai GLM: reasoning is enabled via Converse's
+  // additionalModelRequestFields using `reasoning_config` (Bedrock-native
+  // shape). Confirmed from Bedrock invocation logs — when set, responses
+  // include <thinking> / reasoning_content blocks in the text.
+  // The actual value (low/medium/high) is supplied by the variant system —
+  // see variants() above. This block is a safety fallback for when no
+  // variant is selected (older sessions, direct API callers).
+  if (
+    input.model.api.npm === "@ai-sdk/amazon-bedrock" &&
+    (input.model.api.id.toLowerCase().includes("glm") ||
+      input.model.api.id.toLowerCase().includes("zai_glm"))
+  ) {
+    // options() returns a FLAT object; the downstream providerOptions()
+    // wrapper puts the whole thing under { bedrock: ... }
+    // additionalModelRequestFields is how we send it.
+    const amrf = (result["additionalModelRequestFields"] as Record<string, unknown> | undefined) ?? {}
+    if (!("reasoning_config" in amrf)) {
+      result["additionalModelRequestFields"] = { ...amrf, reasoning_config: "medium" }
+    }
+  }
+
   if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
     if (input.model.capabilities.reasoning) {
       result["thinkingConfig"] = {
@@ -1189,6 +1255,20 @@ export function smallOptions(model: Provider.Model) {
   if (model.providerID === "venice") {
     if (Object.keys(small).length > 0) return small
     return { veniceParameters: { disableThinking: true } }
+  }
+
+  // Bedrock-hosted Z.ai GLM small-model calls (title, summary) bypass the
+  // variant system entirely, so without this the call goes to Bedrock with
+  // no reasoning_config at all. Use "low" — cheap and still emits a light trace.
+  if (
+    model.api.npm === "@ai-sdk/amazon-bedrock" &&
+    (model.api.id.toLowerCase().includes("glm") ||
+      model.api.id.toLowerCase().includes("zai_glm"))
+  ) {
+    // FLAT object; providerOptions() wrapper handles the { bedrock: ... } shell.
+    return {
+      additionalModelRequestFields: { reasoning_config: "low" },
+    }
   }
 
   return small
