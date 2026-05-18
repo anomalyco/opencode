@@ -19,6 +19,7 @@ import type * as Tool from "../../src/tool/tool"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Git } from "@/git"
+import { Filesystem } from "@/util/filesystem"
 
 const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Reference.layer.pipe(
@@ -54,6 +55,7 @@ const ctx = {
 }
 
 const root = path.join(__dirname, "../..")
+const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
 
 const githubBase = <A, E, R>(url: string, self: Effect.Effect<A, E, R>) =>
   Effect.acquireUseRelease(
@@ -248,7 +250,7 @@ describe("tool.grep", () => {
         )
 
         expect(result.metadata.matches).toBe(1)
-        expect(result.output).toContain(path.join(cache, "src", "notes.md"))
+        expect(full(result.output)).toContain(full(path.join(cache, "src", "notes.md")))
         expect(requests.find((req) => req.permission === "external_directory")).toBeUndefined()
       }),
     {
