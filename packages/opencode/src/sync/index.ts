@@ -17,7 +17,6 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { serviceUse } from "@/effect/service-use"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { attachWith } from "@/effect/run-service"
 import { EffectBridge } from "@/effect/bridge"
 
 // Keep `Event["data"]` mutable because projectors mutate the persisted shape
@@ -78,13 +77,6 @@ export const layer = Layer.effect(Service)(
   Effect.gen(function* () {
     const flags = yield* RuntimeFlags.Service
     const bus = yield* ProjectBus.Service
-    // Capture the layer's full Effect context once at construction. Used by
-    // `process` below to fork the publish callback through the bridge, so the
-    // post-DB-commit fire-and-forget runs with the layer's services available
-    // (logger, telemetry, anything else the layer's deps provide). The
-    // previous `Effect.runPromise(attachWith(...))` shape only carried
-    // InstanceRef/WorkspaceRef and dropped everything else.
-    const bridge = yield* EffectBridge.make()
 
     const replay: Interface["replay"] = Effect.fn("SyncEvent.replay")(function* (event, options) {
       const def = registry.get(event.type)
@@ -121,6 +113,10 @@ export const layer = Layer.effect(Service)(
             workspace: yield* InstanceState.workspaceID,
           }
         : undefined
+      // Bridge captures handler-fiber refs (InstanceRef/WorkspaceRef) and the
+      // full Effect context, so the forked publish runs with the right state
+      // without an explicit attachWith.
+      const bridge = publish ? yield* EffectBridge.make() : undefined
       process(def, event, {
         bus,
         bridge,
@@ -169,6 +165,7 @@ export const layer = Layer.effect(Service)(
             workspace: yield* InstanceState.workspaceID,
           }
         : undefined
+      const bridge = publish ? yield* EffectBridge.make() : undefined
 
       // Note that this is an "immediate" transaction which is critical.
       // We need to make sure we can safely read and write with nothing
@@ -317,7 +314,7 @@ function process<Def extends Definition>(
   event: Event<Def>,
   options: {
     bus: ProjectBus.Interface
-    bridge: EffectBridge.Shape
+    bridge: EffectBridge.Shape | undefined
     publish: boolean
     context?: PublishContext
     ownerID?: string
@@ -367,13 +364,12 @@ function process<Def extends Definition>(
         }
 
         const result = convertEvent(def.type, event.data)
+        // The bridge was built inside the caller's fiber so it already carries
+        // InstanceRef/WorkspaceRef and the full Effect context — no per-call
+        // attachWith needed.
+        const bridge = options.bridge!
         const publish = (data: unknown) =>
-          options.bridge.fork(
-            attachWith(options.bus.publish(def, data as Properties<Def>, { id: event.id }), {
-              instance: options.context?.instance,
-              workspace: options.context?.workspace,
-            }),
-          )
+          bridge.fork(options.bus.publish(def, data as Properties<Def>, { id: event.id }))
         if (result instanceof Promise) {
           void result.then(publish)
         } else {
