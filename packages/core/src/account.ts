@@ -4,26 +4,25 @@ import { Identifier } from "./util/identifier"
 import { NonNegativeInt, withStatics } from "./schema"
 import { Global } from "./global"
 import { AppFileSystem } from "./filesystem"
+import { PluginV2 } from "./plugin"
 
-export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
-
-const AccountID = Schema.String.pipe(
-  Schema.brand("AccountID"),
+export const ID = Schema.String.pipe(
+  Schema.brand("AccountV2.ID"),
   withStatics((schema) => ({ create: () => schema.make("acc_" + Identifier.ascending()) })),
 )
-export type AccountID = typeof AccountID.Type
+export type ID = typeof ID.Type
 
 export const ServiceID = Schema.String.pipe(Schema.brand("ServiceID"))
 export type ServiceID = typeof ServiceID.Type
 
-export class OAuthCredential extends Schema.Class<OAuthCredential>("AuthV2.OAuthCredential")({
+export class OAuthCredential extends Schema.Class<OAuthCredential>("AccountV2.OAuthCredential")({
   type: Schema.Literal("oauth"),
   refresh: Schema.String,
   access: Schema.String,
   expires: NonNegativeInt,
 }) {}
 
-export class ApiKeyCredential extends Schema.Class<ApiKeyCredential>("AuthV2.ApiKeyCredential")({
+export class ApiKeyCredential extends Schema.Class<ApiKeyCredential>("AccountV2.ApiKeyCredential")({
   type: Schema.Literal("api"),
   key: Schema.String,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -32,87 +31,85 @@ export class ApiKeyCredential extends Schema.Class<ApiKeyCredential>("AuthV2.Api
 export const Credential = Schema.Union([OAuthCredential, ApiKeyCredential])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({
-    identifier: "AuthV2.Credential",
+    identifier: "AccountV2.Credential",
   })
 export type Credential = Schema.Schema.Type<typeof Credential>
 
-export class Account extends Schema.Class<Account>("AuthV2.Account")({
-  id: AccountID,
+export class Info extends Schema.Class<Info>("AccountV2.Info")({
+  id: ID,
   serviceID: ServiceID,
   description: Schema.String,
   credential: Credential,
 }) {}
 
-export class AuthFileWriteError extends Schema.TaggedErrorClass<AuthFileWriteError>()("AuthV2.FileWriteError", {
+export class FileWriteError extends Schema.TaggedErrorClass<FileWriteError>()("AccountV2.FileWriteError", {
   operation: Schema.Union([Schema.Literal("migrate"), Schema.Literal("write")]),
   cause: Schema.Defect,
 }) {}
 
-export type AuthError = AuthFileWriteError
+export type Error = FileWriteError
 
 interface Writable {
   version: 2
-  accounts: Record<string, Account>
-  active: Record<string, AccountID>
+  accounts: Record<string, Info>
+  active: Record<string, ID>
 }
 
 const decodeV1 = Schema.decodeUnknownOption(Schema.Record(Schema.String, Credential))
 
 function migrate(old: Record<string, unknown>): Writable {
-  const accounts: Record<string, Account> = {}
-  const active: Record<string, AccountID> = {}
+  const accounts: Record<string, Info> = {}
+  const active: Record<string, ID> = {}
   for (const [serviceID, value] of Object.entries(old)) {
     const decoded = Option.getOrElse(decodeV1({ [serviceID]: value }), () => ({}))
     const parsed = (decoded as Record<string, Credential>)[serviceID]
     if (!parsed) continue
     const id = Identifier.ascending()
-    const accountID = AccountID.make(id)
+    const account = ID.make(id)
     const brandedServiceID = ServiceID.make(serviceID)
-    accounts[id] = new Account({
-      id: accountID,
+    accounts[id] = new Info({
+      id: account,
       serviceID: brandedServiceID,
       description: "default",
       credential: parsed,
     })
-    active[brandedServiceID] = accountID
+    active[brandedServiceID] = account
   }
   return { version: 2, accounts, active }
 }
 
 export interface Interface {
-  readonly get: (accountID: AccountID) => Effect.Effect<Account | undefined, AuthError>
-  readonly all: () => Effect.Effect<Account[], AuthError>
+  readonly get: (id: ID) => Effect.Effect<Info | undefined, Error>
+  readonly all: () => Effect.Effect<Info[], Error>
   readonly create: (input: {
     serviceID: ServiceID
     credential: Credential
     description?: string
     active?: boolean
-  }) => Effect.Effect<Account, AuthError>
-  readonly update: (
-    accountID: AccountID,
-    updates: Partial<Pick<Account, "description" | "credential">>,
-  ) => Effect.Effect<void, AuthError>
-  readonly remove: (accountID: AccountID) => Effect.Effect<void, AuthError>
-  readonly activate: (accountID: AccountID) => Effect.Effect<void, AuthError>
-  readonly active: (serviceID: ServiceID) => Effect.Effect<Account | undefined, AuthError>
-  readonly forService: (serviceID: ServiceID) => Effect.Effect<Account[], AuthError>
+  }) => Effect.Effect<Info | undefined, Error>
+  readonly update: (id: ID, updates: Partial<Pick<Info, "description" | "credential">>) => Effect.Effect<void, Error>
+  readonly remove: (id: ID) => Effect.Effect<void, Error>
+  readonly activate: (id: ID) => Effect.Effect<void, Error>
+  readonly active: (serviceID: ServiceID) => Effect.Effect<Info | undefined, Error>
+  readonly forService: (serviceID: ServiceID) => Effect.Effect<Info[], Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Auth") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Account") {}
 
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fsys = yield* AppFileSystem.Service
     const global = yield* Global.Service
-    const file = path.join(global.data, "auth-v2.json")
+    const plugin = yield* PluginV2.Service
+    const file = path.join(global.data, "account.json")
     const legacyFile = path.join(global.data, "auth.json")
 
     const writeMigrated = Effect.fnUntraced(function* (raw: Record<string, unknown>) {
       const migrated = migrate(raw)
       yield* fsys
         .writeJson(file, migrated, 0o600)
-        .pipe(Effect.mapError((cause) => new AuthFileWriteError({ operation: "migrate", cause })))
+        .pipe(Effect.mapError((cause) => new FileWriteError({ operation: "migrate", cause })))
       return migrated
     })
 
@@ -122,7 +119,7 @@ export const layer = Layer.effect(
       } catch {}
     }
 
-    const load: () => Effect.Effect<Writable, AuthError> = Effect.fnUntraced(function* () {
+    const load: () => Effect.Effect<Writable, Error> = Effect.fnUntraced(function* () {
       if (process.env.OPENCODE_AUTH_CONTENT) {
         const raw = parseAuthContent()
         if (raw && typeof raw === "object") {
@@ -148,40 +145,47 @@ export const layer = Layer.effect(
     const write = (data: Writable) =>
       fsys
         .writeJson(file, data, 0o600)
-        .pipe(Effect.mapError((cause) => new AuthFileWriteError({ operation: "write", cause })))
+        .pipe(Effect.mapError((cause) => new FileWriteError({ operation: "write", cause })))
 
     const state = SynchronizedRef.makeUnsafe(yield* load())
 
     const result: Interface = {
-      get: Effect.fn("AuthV2.get")(function* (accountID) {
-        return (yield* SynchronizedRef.get(state)).accounts[accountID]
+      get: Effect.fn("AccountV2.get")(function* (id) {
+        return (yield* SynchronizedRef.get(state)).accounts[id]
       }),
 
-      all: Effect.fn("AuthV2.all")(function* () {
+      all: Effect.fn("AccountV2.all")(function* () {
         return Object.values((yield* SynchronizedRef.get(state)).accounts)
       }),
 
-      active: Effect.fn("AuthV2.active")(function* (serviceID) {
+      active: Effect.fn("AccountV2.active")(function* (serviceID) {
         const data = yield* SynchronizedRef.get(state)
         return (
           data.accounts[data.active[serviceID]] ?? Object.values(data.accounts).find((a) => a.serviceID === serviceID)
         )
       }),
 
-      forService: Effect.fn("AuthV2.list")(function* (serviceID) {
+      forService: Effect.fn("AccountV2.list")(function* (serviceID) {
         return Object.values((yield* SynchronizedRef.get(state)).accounts).filter((a) => a.serviceID === serviceID)
       }),
 
-      create: Effect.fn("AuthV2.add")(function* (input) {
+      create: Effect.fn("AccountV2.add")(function* (input) {
+        const id = ID.make(Identifier.ascending())
+        const updated = yield* plugin.trigger(
+          "account.update",
+          { id, serviceID: input.serviceID },
+          { description: input.description ?? "default", credential: input.credential, cancel: false },
+        )
+        if (updated.cancel) return undefined
+        const account = new Info({
+          id,
+          serviceID: input.serviceID,
+          description: updated.description,
+          credential: updated.credential,
+        })
         return yield* SynchronizedRef.modifyEffect(
           state,
           Effect.fnUntraced(function* (data) {
-            const account = new Account({
-              id: AccountID.make(Identifier.ascending()),
-              serviceID: input.serviceID,
-              description: input.description ?? "default",
-              credential: input.credential,
-            })
             const next = {
               ...data,
               accounts: { ...data.accounts, [account.id]: account },
@@ -197,22 +201,33 @@ export const layer = Layer.effect(
         )
       }),
 
-      update: Effect.fn("AuthV2.update")(function* (accountID, updates) {
+      update: Effect.fn("AccountV2.update")(function* (id, updates) {
+        const existing = (yield* SynchronizedRef.get(state)).accounts[id]
+        if (!existing) return
+        const updated = yield* plugin.trigger(
+          "account.update",
+          { id, serviceID: existing.serviceID },
+          {
+            description: updates.description ?? existing.description,
+            credential: updates.credential ?? existing.credential,
+            cancel: false,
+          },
+        )
+        if (updated.cancel) return
         yield* SynchronizedRef.modifyEffect(
           state,
           Effect.fnUntraced(function* (data) {
-            const existing = data.accounts[accountID]
-            if (!existing) return [undefined, data] as const
+            if (!data.accounts[id]) return [undefined, data] as const
 
             const next = {
               ...data,
               accounts: {
                 ...data.accounts,
-                [accountID]: new Account({
-                  id: accountID,
+                [id]: new Info({
+                  id,
                   serviceID: existing.serviceID,
-                  description: updates.description ?? existing.description,
-                  credential: updates.credential ?? existing.credential,
+                  description: updated.description,
+                  credential: updated.credential,
                 }),
               },
             }
@@ -223,15 +238,18 @@ export const layer = Layer.effect(
         )
       }),
 
-      remove: Effect.fn("AuthV2.remove")(function* (accountID) {
+      remove: Effect.fn("AccountV2.remove")(function* (id) {
+        const account = (yield* SynchronizedRef.get(state)).accounts[id]
+        if (!account) return
+        if ((yield* plugin.trigger("account.remove", { account }, { cancel: false })).cancel) return
         yield* SynchronizedRef.modifyEffect(
           state,
           Effect.fnUntraced(function* (data) {
             const accounts = { ...data.accounts }
             const active = { ...data.active }
-            if (accounts[accountID] && active[accounts[accountID].serviceID] === accountID)
-              delete active[accounts[accountID].serviceID]
-            delete accounts[accountID]
+            if (!accounts[id]) return [undefined, data] as const
+            if (accounts[id] && active[accounts[id].serviceID] === id) delete active[accounts[id].serviceID]
+            delete accounts[id]
 
             const next = { ...data, accounts, active }
             yield* write(next)
@@ -240,14 +258,23 @@ export const layer = Layer.effect(
         )
       }),
 
-      activate: Effect.fn("AuthV2.activate")(function* (accountID) {
+      activate: Effect.fn("AccountV2.activate")(function* (id) {
+        const data = yield* SynchronizedRef.get(state)
+        const account = data.accounts[id]
+        if (!account) return
+        const updated = yield* plugin.trigger(
+          "account.activate",
+          {},
+          { from: data.active[account.serviceID], to: id, cancel: false },
+        )
+        if (updated.cancel) return
         yield* SynchronizedRef.modifyEffect(
           state,
           Effect.fnUntraced(function* (data) {
-            const account = data.accounts[accountID]
-            if (!account) return [undefined, data] as const
+            const nextAccount = data.accounts[updated.to]
+            if (!nextAccount) return [undefined, data] as const
 
-            const next = { ...data, active: { ...data.active, [account.serviceID]: accountID } }
+            const next = { ...data, active: { ...data.active, [nextAccount.serviceID]: updated.to } }
             yield* write(next)
             return [undefined, next] as const
           }),
@@ -259,6 +286,10 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(Global.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(Global.defaultLayer),
+  Layer.provideMerge(PluginV2.defaultLayer),
+)
 
-export * as AuthV2 from "./auth"
+export * as AccountV2 from "./account"

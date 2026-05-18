@@ -5,11 +5,39 @@ import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { type ProviderV2 } from "./provider"
 import { Context, Effect, Layer, Schema } from "effect"
 import type { ModelV2 } from "./model"
+import type { AccountV2 } from "./account"
 
 export const ID = Schema.String.pipe(Schema.brand("Plugin.ID"))
 export type ID = typeof ID.Type
 
 type HookSpec = {
+  "account.update": {
+    input: {
+      id: AccountV2.ID
+      serviceID: AccountV2.ServiceID
+    }
+    output: {
+      description: string
+      credential: AccountV2.Credential
+      cancel: boolean
+    }
+  }
+  "account.remove": {
+    input: {
+      account: AccountV2.Info
+    }
+    output: {
+      cancel: boolean
+    }
+  }
+  "account.activate": {
+    input: {}
+    output: {
+      from?: AccountV2.ID
+      to: AccountV2.ID
+      cancel: boolean
+    }
+  }
   "provider.update": {
     input: {}
     output: {

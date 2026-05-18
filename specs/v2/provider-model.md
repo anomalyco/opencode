@@ -256,6 +256,38 @@ const available = provider.enabled && model.status !== "deprecated"
 ## Plugin Interface
 
 ```ts
+type HookSpec = {
+  "account.update": {
+    input: {
+      id: AccountV2.ID
+      serviceID: AccountV2.ServiceID
+    }
+    output: {
+      description: string
+      credential: AccountV2.Credential
+      cancel: boolean
+    }
+  }
+
+  "account.remove": {
+    input: {
+      account: AccountV2.Info
+    }
+    output: {
+      cancel: boolean
+    }
+  }
+
+  "account.activate": {
+    input: {}
+    output: {
+      from?: AccountV2.ID
+      to: AccountV2.ID
+      cancel: boolean
+    }
+  }
+}
+
 export type Definition<R = never> = Effect.Effect<
   {
     readonly order: number
@@ -294,21 +326,21 @@ export const ModelsDevPlugin: PluginV2.Definition<ProviderV2.Service | ModelV2.S
 
 export const EnvPlugin: PluginV2.Definition<ProviderV2.Service | Env.Service>
 
-export const AuthPlugin: PluginV2.Definition<ProviderV2.Service | AuthV2.Service>
+export const AuthPlugin: PluginV2.Definition<ProviderV2.Service | AccountV2.Service>
 
 export const ConfigPlugin: PluginV2.Definition<ProviderV2.Service | ModelV2.Service | Config.Service>
 
-export const AnthropicPlugin: PluginV2.Definition<ProviderV2.Service | AuthV2.Service>
+export const AnthropicPlugin: PluginV2.Definition<ProviderV2.Service | AccountV2.Service>
 
 export const OpenRouterPlugin: PluginV2.Definition<ProviderV2.Service>
 
-export const AmazonBedrockPlugin: PluginV2.Definition<ProviderV2.Service | AuthV2.Service | Env.Service>
+export const AmazonBedrockPlugin: PluginV2.Definition<ProviderV2.Service | AccountV2.Service | Env.Service>
 
-export const GoogleVertexPlugin: PluginV2.Definition<ProviderV2.Service | AuthV2.Service | Env.Service>
+export const GoogleVertexPlugin: PluginV2.Definition<ProviderV2.Service | AccountV2.Service | Env.Service>
 
-export const GitLabPlugin: PluginV2.Definition<ProviderV2.Service | AuthV2.Service | Env.Service>
+export const GitLabPlugin: PluginV2.Definition<ProviderV2.Service | AccountV2.Service | Env.Service>
 
-export const GitLabDiscoveryPlugin: PluginV2.Definition<ProviderV2.Service | ModelV2.Service | AuthV2.Service>
+export const GitLabDiscoveryPlugin: PluginV2.Definition<ProviderV2.Service | ModelV2.Service | AccountV2.Service>
 ```
 
 ## Plugin Hooks

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { AuthV2 } from "@opencode-ai/core/auth"
+import { AccountV2 } from "@opencode-ai/core/account"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { AuthPlugin } from "@opencode-ai/core/plugin/auth"
@@ -8,7 +8,7 @@ import { CloudflareWorkersAIPlugin } from "@opencode-ai/core/plugin/provider/clo
 import { testEffect } from "../lib/effect"
 import { fakeSelectorSdk, it, model, npmLayer, provider, withEnv } from "./provider-helper"
 
-const itWithAuth = testEffect(Layer.mergeAll(PluginV2.defaultLayer, AuthV2.defaultLayer, npmLayer))
+const itWithAccount = testEffect(Layer.mergeAll(PluginV2.defaultLayer, AccountV2.defaultLayer, npmLayer))
 
 function cloudflareLanguage(sdk: unknown, modelID = "@cf/model") {
   return (sdk as { languageModel: (id: string) => { config: CloudflareConfig; provider: string } }).languageModel(
@@ -104,7 +104,7 @@ describe("CloudflareWorkersAIPlugin", () => {
     ),
   )
 
-  itWithAuth.effect("falls back to auth account metadata when account env is absent", () =>
+  itWithAccount.effect("falls back to account metadata when account env is absent", () =>
     withEnv(
       {
         CLOUDFLARE_ACCOUNT_ID: undefined,
@@ -113,19 +113,19 @@ describe("CloudflareWorkersAIPlugin", () => {
       () =>
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
-          const auth = yield* AuthV2.Service
-          yield* auth.create({
-            serviceID: AuthV2.ServiceID.make("cloudflare-workers-ai"),
-            credential: new AuthV2.ApiKeyCredential({
+          const accounts = yield* AccountV2.Service
+          yield* accounts.create({
+            serviceID: AccountV2.ServiceID.make("cloudflare-workers-ai"),
+            credential: new AccountV2.ApiKeyCredential({
               type: "api",
-              key: "auth-key",
-              metadata: { accountId: "auth-acct" },
+              key: "account-key",
+              metadata: { accountId: "account-acct" },
             }),
             active: true,
           })
           yield* plugin.add({
             ...AuthPlugin,
-            effect: AuthPlugin.effect.pipe(Effect.provideService(AuthV2.Service, auth)),
+            effect: AuthPlugin.effect.pipe(Effect.provideService(AccountV2.Service, accounts)),
           })
           yield* plugin.add(CloudflareWorkersAIPlugin)
           const updated = yield* plugin.trigger(
@@ -136,7 +136,7 @@ describe("CloudflareWorkersAIPlugin", () => {
           expect(updated.provider.endpoint).toEqual({
             type: "aisdk",
             package: "test-provider",
-            url: "https://api.cloudflare.com/client/v4/accounts/auth-acct/ai/v1",
+            url: "https://api.cloudflare.com/client/v4/accounts/account-acct/ai/v1",
           })
         }),
     ),

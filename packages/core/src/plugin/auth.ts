@@ -1,14 +1,14 @@
 import { Effect } from "effect"
-import { AuthV2 } from "../auth"
+import { AccountV2 } from "../account"
 import { PluginV2 } from "../plugin"
 
 export const AuthPlugin = PluginV2.define({
   id: PluginV2.ID.make("auth"),
   effect: Effect.gen(function* () {
-    const auth = yield* AuthV2.Service
+    const accounts = yield* AccountV2.Service
     return {
       "provider.update": Effect.fn(function* (evt) {
-        const account = yield* auth.active(AuthV2.ServiceID.make(evt.provider.id)).pipe(Effect.orDie)
+        const account = yield* accounts.active(AccountV2.ServiceID.make(evt.provider.id)).pipe(Effect.orDie)
         if (!account) return
         evt.provider.enabled = {
           via: "auth",
