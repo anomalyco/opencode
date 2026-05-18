@@ -51,13 +51,15 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
     const ctx = yield* InstanceState.context
     const plan = Session.plan(input.session, ctx)
-    if (!(yield* fsys.existsSafe(plan))) return input.messages
+    const exists = yield* fsys.existsSafe(plan)
     const part = yield* sessions.updatePart({
       id: PartID.ascending(),
       messageID: userMessage.info.id,
       sessionID: userMessage.info.sessionID,
       type: "text",
-      text: `${BUILD_SWITCH}\n\nA plan file exists at ${plan}. You should execute on the plan defined within it`,
+      text: exists
+        ? `${BUILD_SWITCH}\n\nA plan file exists at ${plan}. You should execute on the plan defined within it`
+        : BUILD_SWITCH,
       synthetic: true,
     })
     userMessage.parts.push(part)
