@@ -2,12 +2,13 @@ import { describe, expect, test, vi } from "bun:test"
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
-  createDebouncedCallback,
   createOpenReviewFile,
+  createVcsRefreshScheduler,
   createOpenSessionFileTab,
   createSessionTabs,
   focusTerminalById,
   getTabReorderIndex,
+  isGitHeadPath,
   isGitMetadataPath,
   shouldFocusTerminalOnKeyDown,
 } from "./helpers"
@@ -119,22 +120,116 @@ describe("getTabReorderIndex", () => {
   })
 })
 
-describe("createDebouncedCallback", () => {
-  test("coalesces scheduled calls", () => {
+describe("createVcsRefreshScheduler", () => {
+  test("batches scheduled calls without extending the first refresh window", async () => {
     vi.useFakeTimers()
     try {
       let calls = 0
-      const debounced = createDebouncedCallback(() => calls++, 100)
+      const scheduler = createVcsRefreshScheduler(() => calls++, 100)
 
-      debounced.schedule()
-      debounced.schedule()
-      debounced.schedule()
+      scheduler.schedule()
+      vi.advanceTimersByTime(50)
+      scheduler.schedule()
+      scheduler.schedule()
       vi.advanceTimersByTime(99)
-      expect(calls).toBe(0)
-
-      vi.advanceTimersByTime(1)
+      await Promise.resolve()
       expect(calls).toBe(1)
-      debounced.dispose()
+
+      vi.advanceTimersByTime(100)
+      await Promise.resolve()
+      expect(calls).toBe(1)
+      scheduler.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test("runs one trailing refresh when changes arrive while refresh is in flight", async () => {
+    vi.useFakeTimers()
+    try {
+      let calls = 0
+      let resolveRefresh: (() => void) | undefined
+      const scheduler = createVcsRefreshScheduler(() => {
+        calls++
+        return new Promise<void>((resolve) => {
+          resolveRefresh = resolve
+        })
+      }, 100)
+
+      scheduler.schedule()
+      vi.advanceTimersByTime(100)
+      expect(calls).toBe(1)
+
+      scheduler.schedule()
+      scheduler.schedule()
+      vi.advanceTimersByTime(100)
+      await Promise.resolve()
+      expect(calls).toBe(1)
+
+      resolveRefresh?.()
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(calls).toBe(1)
+
+      vi.advanceTimersByTime(100)
+      await Promise.resolve()
+      expect(calls).toBe(2)
+      scheduler.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test("recovers when the refresh throws synchronously", async () => {
+    vi.useFakeTimers()
+    try {
+      let calls = 0
+      const scheduler = createVcsRefreshScheduler(() => {
+        calls++
+        if (calls === 1) throw new Error("refresh failed")
+      }, 100)
+
+      scheduler.schedule()
+      vi.advanceTimersByTime(100)
+      await Promise.resolve()
+      await Promise.resolve()
+
+      scheduler.schedule()
+      vi.advanceTimersByTime(100)
+      await Promise.resolve()
+      expect(calls).toBe(2)
+      scheduler.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test("does not run a trailing refresh after dispose during an active refresh", async () => {
+    vi.useFakeTimers()
+    try {
+      let calls = 0
+      let resolveRefresh: (() => void) | undefined
+      const scheduler = createVcsRefreshScheduler(() => {
+        calls++
+        return new Promise<void>((resolve) => {
+          resolveRefresh = resolve
+        })
+      }, 100)
+
+      scheduler.schedule()
+      vi.advanceTimersByTime(100)
+      await Promise.resolve()
+      expect(calls).toBe(1)
+
+      scheduler.schedule()
+      scheduler.dispose()
+      resolveRefresh?.()
+      await Promise.resolve()
+      await Promise.resolve()
+      vi.advanceTimersByTime(100)
+
+      expect(calls).toBe(1)
     } finally {
       vi.useRealTimers()
     }
@@ -144,10 +239,10 @@ describe("createDebouncedCallback", () => {
     vi.useFakeTimers()
     try {
       let calls = 0
-      const debounced = createDebouncedCallback(() => calls++, 100)
+      const scheduler = createVcsRefreshScheduler(() => calls++, 100)
 
-      debounced.schedule()
-      debounced.dispose()
+      scheduler.schedule()
+      scheduler.dispose()
       vi.advanceTimersByTime(100)
 
       expect(calls).toBe(0)
@@ -170,6 +265,27 @@ describe("isGitMetadataPath", () => {
   test("does not match regular file paths containing git in the name", () => {
     expect(isGitMetadataPath("src/git/index.ts")).toBe(false)
     expect(isGitMetadataPath("src/.github/workflows/test.yml")).toBe(false)
+  })
+})
+
+describe("isGitHeadPath", () => {
+  test("matches main and worktree git HEAD signal paths", () => {
+    expect(isGitHeadPath(".git/HEAD")).toBe(true)
+    expect(isGitHeadPath(".git/logs/HEAD")).toBe(true)
+    expect(isGitHeadPath("/repo/.git/HEAD")).toBe(true)
+    expect(isGitHeadPath("/repo/.git/logs/HEAD")).toBe(true)
+    expect(isGitHeadPath("/repo/.git/worktrees/feature/HEAD")).toBe(true)
+    expect(isGitHeadPath("/repo/.git/worktrees/feature/logs/HEAD")).toBe(true)
+    expect(isGitHeadPath("C:\\repo\\.git\\HEAD")).toBe(true)
+    expect(isGitHeadPath("C:\\repo\\.git\\logs\\HEAD")).toBe(true)
+    expect(isGitHeadPath("C:\\repo\\.git\\worktrees\\feature\\HEAD")).toBe(true)
+    expect(isGitHeadPath("C:\\repo\\.git\\worktrees\\feature\\logs\\HEAD")).toBe(true)
+  })
+
+  test("does not match non-HEAD git metadata paths or regular HEAD files", () => {
+    expect(isGitHeadPath(".git/index")).toBe(false)
+    expect(isGitHeadPath("/repo/.git/refs/heads/dev")).toBe(false)
+    expect(isGitHeadPath("src/HEAD")).toBe(false)
   })
 })
 

@@ -45,10 +45,11 @@ import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import {
   createOpenReviewFile,
-  createDebouncedCallback,
+  createVcsRefreshScheduler,
   createSessionTabs,
   createSizing,
   focusTerminalById,
+  isGitHeadPath,
   isGitMetadataPath,
   shouldFocusTerminalOnKeyDown,
 } from "@/pages/session/helpers"
@@ -593,8 +594,9 @@ export default function Page() {
   const vcsMode = createMemo<VcsMode | undefined>(() => {
     if (store.changes === "git" || store.changes === "branch") return store.changes
   })
+  const vcsQueryPrefix = createMemo(() => ["session-vcs", sdk.directory] as const)
   const vcsKey = createMemo(
-    () => ["session-vcs", sdk.directory, sync.data.vcs?.branch ?? "", sync.data.vcs?.default_branch ?? ""] as const,
+    () => [...vcsQueryPrefix(), sync.data.vcs?.branch ?? "", sync.data.vcs?.default_branch ?? ""] as const,
   )
   const vcsQuery = createQuery(() => {
     const mode = vcsMode()
@@ -617,8 +619,8 @@ export default function Page() {
         : skipToken,
     }
   })
-  const refreshVcs = () => void queryClient.invalidateQueries({ queryKey: vcsKey() })
-  const watcherRefreshVcs = createDebouncedCallback(refreshVcs, 100)
+  const refreshVcs = () => queryClient.invalidateQueries({ queryKey: vcsQueryPrefix() })
+  const watcherRefreshVcs = createVcsRefreshScheduler(refreshVcs, 100)
   onCleanup(watcherRefreshVcs.dispose)
   const reviewDiffs = () => {
     if (store.changes === "git" || store.changes === "branch")
@@ -852,13 +854,18 @@ export default function Page() {
   )
 
   const stopVcs = sdk.event.listen((evt) => {
+    if (evt.details.type === "vcs.branch.updated") {
+      watcherRefreshVcs.schedule()
+      return
+    }
     if (evt.details.type !== "file.watcher.updated") return
     const props =
       typeof evt.details.properties === "object" && evt.details.properties
         ? (evt.details.properties as Record<string, unknown>)
         : undefined
     const file = typeof props?.file === "string" ? props.file : undefined
-    if (!file || isGitMetadataPath(file)) return
+    if (!file) return
+    if (isGitMetadataPath(file) && !isGitHeadPath(file)) return
     watcherRefreshVcs.schedule()
   })
   onCleanup(stopVcs)

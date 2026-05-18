@@ -95,16 +95,16 @@ export const layer = Layer.effect(
             Effect.promise(() => Promise.allSettled(subs.map((sub) => sub.unsubscribe()))),
           )
 
-          const cb: ParcelWatcher.SubscribeCallback = InstanceState.bind((err, evts) => {
-            if (err) return
-            for (const evt of evts) {
-              if (evt.type === "create") void Bus.publish(Event.Updated, { file: evt.path, event: "add" })
-              if (evt.type === "update") void Bus.publish(Event.Updated, { file: evt.path, event: "change" })
-              if (evt.type === "delete") void Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })
-            }
-          })
-
-          const subscribe = (dir: string, ignore: string[]) => {
+          const subscribe = (dir: string, ignore: string[], include: (file: string) => boolean = () => true) => {
+            const cb: ParcelWatcher.SubscribeCallback = InstanceState.bind((err, evts) => {
+              if (err) return
+              for (const evt of evts) {
+                if (!include(evt.path)) continue
+                if (evt.type === "create") void Bus.publish(Event.Updated, { file: evt.path, event: "add" })
+                if (evt.type === "update") void Bus.publish(Event.Updated, { file: evt.path, event: "change" })
+                if (evt.type === "delete") void Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })
+              }
+            })
             const pending = w.subscribe(dir, cb, { ignore, backend })
             return Effect.gen(function* () {
               const sub = yield* Effect.promise(() => pending)
@@ -135,9 +135,13 @@ export const layer = Layer.effect(
             const vcsDir = result.exitCode === 0 ? path.resolve(ctx.worktree, result.text().trim()) : undefined
             if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
               const ignore = (yield* Effect.promise(() => readdir(vcsDir).catch(() => []))).filter(
-                (entry) => entry !== "HEAD",
+                (entry) => entry !== "HEAD" && entry !== "logs",
               )
-              yield* Effect.forkScoped(subscribe(vcsDir, ignore))
+              const include = (file: string) => {
+                const rel = path.relative(vcsDir, file).replaceAll(path.sep, "/")
+                return rel === "HEAD" || rel === "logs/HEAD"
+              }
+              yield* Effect.forkScoped(subscribe(vcsDir, ignore, include))
             }
           }
         },

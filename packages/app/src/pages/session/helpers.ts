@@ -151,18 +151,50 @@ export const getTabReorderIndex = (tabs: readonly string[], from: string, to: st
   return toIndex
 }
 
-export const createDebouncedCallback = (fn: () => void, wait: number) => {
+export const createVcsRefreshScheduler = (fn: () => Promise<unknown> | unknown, wait: number) => {
   let timer: ReturnType<typeof setTimeout> | undefined
+  let running = false
+  let dirty = false
+  let disposed = false
+
+  const run = () => {
+    timer = undefined
+    if (disposed) return
+    if (running) {
+      dirty = true
+      return
+    }
+    running = true
+    Promise.resolve()
+      .then(fn)
+      .catch(() => {})
+      .finally(() => {
+        running = false
+        if (disposed) {
+          dirty = false
+          return
+        }
+        if (!dirty) return
+        dirty = false
+        schedule()
+      })
+  }
+
+  const schedule = () => {
+    if (disposed) return
+    if (running) {
+      dirty = true
+      return
+    }
+    if (timer !== undefined) return
+    timer = setTimeout(run, wait)
+  }
 
   return {
-    schedule() {
-      if (timer !== undefined) clearTimeout(timer)
-      timer = setTimeout(() => {
-        timer = undefined
-        fn()
-      }, wait)
-    },
+    schedule,
     dispose() {
+      disposed = true
+      dirty = false
       if (timer === undefined) return
       clearTimeout(timer)
       timer = undefined
@@ -173,6 +205,17 @@ export const createDebouncedCallback = (fn: () => void, wait: number) => {
 export const isGitMetadataPath = (file: string) => {
   const normalized = file.replaceAll("\\", "/")
   return normalized === ".git" || normalized.endsWith("/.git") || normalized.startsWith(".git/") || normalized.includes("/.git/")
+}
+
+export const isGitHeadPath = (file: string) => {
+  const normalized = file.replaceAll("\\", "/")
+  return (
+    normalized === ".git/HEAD" ||
+    normalized === ".git/logs/HEAD" ||
+    normalized.endsWith("/.git/HEAD") ||
+    normalized.endsWith("/.git/logs/HEAD") ||
+    /(^|\/)\.git\/worktrees\/[^/]+\/(logs\/)?HEAD$/.test(normalized)
+  )
 }
 
 export const createSizing = () => {

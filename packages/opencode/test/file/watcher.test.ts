@@ -247,4 +247,29 @@ describeWatcher("FileWatcher", () => {
       ),
     )
   })
+
+  test("publishes .git/logs/HEAD events for same-branch head movement", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const headLog = path.join(tmp.path, ".git", "logs", "HEAD")
+
+    await withWatcher(
+      tmp.path,
+      nextUpdate(
+        tmp.path,
+        (evt) => evt.file === headLog && evt.event !== "unlink",
+        Effect.promise(async () => {
+          await fs.writeFile(path.join(tmp.path, "tracked.txt"), "same branch update")
+          await $`git add tracked.txt`.cwd(tmp.path).quiet()
+          await $`git commit -m "same branch update"`.cwd(tmp.path).quiet()
+        }),
+      ).pipe(
+        Effect.tap((evt) =>
+          Effect.sync(() => {
+            expect(evt.file).toBe(headLog)
+            expect(["add", "change"]).toContain(evt.event)
+          }),
+        ),
+      ),
+    )
+  })
 })
