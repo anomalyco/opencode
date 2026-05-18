@@ -257,7 +257,9 @@ export const GithubInstallCommand = effectCmd({
           )
           const parsed = parseGitHubRemote(info)
           if (!parsed) {
-            prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
+            prompts.log.error(
+              `Could not detect a GitHub repository from your Git remote. Please set \`origin\` to a GitHub repo and try again.`,
+            )
             throw new UI.CancelledError()
           }
           return { owner: parsed.owner, repo: parsed.repo, root: ctx.worktree }
