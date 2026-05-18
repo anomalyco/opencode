@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Truth-Teller Consensus is a multi-model verification gate. Three AI models from **different vendors and architectures** independently review the same findings, then the AMMO Team Lead synthesizes their perspectives into a single recommendation.
+The Truth-Teller Consensus is a multi-model verification gate. Three AI models with **different architectures and optimization targets** independently review the same findings, then the AMMO Team Lead synthesizes their perspectives into a single recommendation.
 
 This ensures no single model's blind spots, biases, or training gaps go unchecked.
 
@@ -12,7 +12,7 @@ This ensures no single model's blind spots, biases, or training gaps go unchecke
 |-------------|-------|--------|-------------------|
 | **Sonnet** | Claude Sonnet | Anthropic | Nuanced reasoning, catches subtle architectural risks, strong at reading between the lines |
 | **Nova** | Amazon Nova Pro | Amazon | Practical, infrastructure-aware, AWS-native perspective |
-| **Llama** | Llama 3 70B Instruct | Meta | Direct, opinionated, trained on different data — surfaces findings the others miss |
+| **Lite** | Amazon Nova Lite | Amazon | Lightweight, fast, cost-efficient model — different parameter scale surfaces different findings |
 
 ## Consensus Flow
 
@@ -30,7 +30,7 @@ graph TD
         direction LR
         TT1["🟣 Claude Sonnet<br/>(Anthropic)<br/>Nuanced reasoning"]
         TT2["🟠 Nova Pro<br/>(Amazon)<br/>Practical / infra-aware"]
-        TT3["🔵 Llama 3 70B<br/>(Meta)<br/>Direct / opinionated"]
+        TT3["🔵 Nova Lite<br/>(Amazon)<br/>Lightweight / efficient"]
     end
 
     subgraph Synthesis
@@ -83,12 +83,12 @@ graph TD
 | One model identifies a factual error | **Corrected** — errors are fixed before the report is written |
 | All three disagree | **Escalated to user** — the user decides; the platform doesn't guess |
 
-## Why Three Different Vendors
+## Why Two Amazon Models Plus Anthropic
 
-Using three models from the **same vendor** (e.g., three Amazon Nova variants) produces correlated blind spots — they share training data, architecture, and failure modes. Genuine diversity requires different model families:
+Using three models from the **same vendor and same size class** produces correlated blind spots. Nova Pro and Nova Lite differ in parameter scale and optimization target, which means they diverge on cost-sensitivity, complexity thresholds, and infrastructure trade-offs. Combined with Claude's constitutional AI perspective, the trio still provides meaningful signal diversity:
 
-- **Anthropic** (Claude) — Constitutional AI training, strong on safety and nuance
-- **Amazon** (Nova) — Built for AWS workloads, pragmatic
-- **Meta** (Llama) — Open-weight, community-tuned, different training corpus
+- **Anthropic** (Claude Sonnet) — Constitutional AI training, strong on safety and nuance
+- **Amazon** (Nova Pro) — Built for AWS workloads, pragmatic, full-capability model
+- **Amazon** (Nova Lite) — Lightweight variant; catches different cost/complexity trade-offs than Nova Pro
 
-When all three independently reach the same conclusion from different starting points, confidence is high. When they diverge, that divergence itself is valuable signal.
+When all three independently reach the same conclusion, confidence is high. When they diverge, that divergence itself is valuable signal.
