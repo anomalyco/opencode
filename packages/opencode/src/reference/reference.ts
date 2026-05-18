@@ -3,13 +3,12 @@ import { Effect, Context, Layer, Scope } from "effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@/config/config"
+import { ConfigReference } from "@/config/reference"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Git } from "@/git"
 import { parseRepositoryReference, repositoryCachePath, type Reference as RepositoryReference } from "@/util/repository"
 import { RepositoryCache } from "./repository-cache"
-
-type ReferenceEntry = NonNullable<Config.Info["reference"]>[string]
 
 export type Resolved =
   | {
@@ -28,7 +27,7 @@ export type Resolved =
   | {
       name: string
       kind: "invalid"
-      repository: string
+      repository?: string
       message: string
     }
 
@@ -92,26 +91,21 @@ function containsReferencePath(referencePath: string, target: string) {
 
 export function resolve(input: {
   name: string
-  reference: ReferenceEntry
+  reference: ConfigReference.NormalizedEntry
   directory: string
   worktree: string
 }): Resolved {
-  if (typeof input.reference === "string") {
-    if (input.reference.startsWith(".") || input.reference.startsWith("/") || input.reference.startsWith("~")) {
-      return { name: input.name, kind: "local", path: referencePath({ ...input, value: input.reference }) }
-    }
-    return resolveGit({ name: input.name, repository: input.reference })
+  if (input.reference.kind === "invalid") {
+    return { name: input.name, kind: "invalid", message: input.reference.message }
   }
-
-  if ("path" in input.reference) {
+  if (input.reference.kind === "local") {
     return { name: input.name, kind: "local", path: referencePath({ ...input, value: input.reference.path }) }
   }
-
   return resolveGit({ name: input.name, repository: input.reference.repository, branch: input.reference.branch })
 }
 
 export function resolveAll(input: {
-  references: NonNullable<Config.Info["reference"]>
+  references: ConfigReference.NormalizedInfo
   directory: string
   worktree: string
 }) {
@@ -149,7 +143,7 @@ export const layer = Layer.effect(
       Effect.fn("Reference.state")(function* (ctx) {
         const cfg = yield* config.get()
         const references = resolveAll({
-          references: cfg.reference ?? {},
+          references: ConfigReference.normalize(cfg.reference ?? {}),
           directory: ctx.directory,
           worktree: ctx.worktree,
         })

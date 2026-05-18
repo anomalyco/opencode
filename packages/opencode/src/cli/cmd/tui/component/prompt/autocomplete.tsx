@@ -19,7 +19,7 @@ import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
 import { useBindings } from "../../keymap"
 import { Reference } from "@/reference/reference"
-import type { Config } from "@/config/config"
+import { ConfigReference } from "@/config/reference"
 import { displayCharAt, mentionTriggerIndex } from "@/cli/cmd/prompt-display"
 
 function removeLineRange(input: string) {
@@ -310,7 +310,7 @@ export function Autocomplete(props: {
       `Referenced configured reference @${reference.name}.`,
       ...(reference.kind === "local" ? ["Kind: local directory"] : []),
       ...(reference.kind === "git" ? ["Kind: git repository"] : []),
-      ...(reference.kind === "invalid" ? [`Repository: ${reference.repository}`] : []),
+      ...(reference.kind === "invalid" && reference.repository ? [`Repository: ${reference.repository}`] : []),
       ...(reference.kind === "git" ? [`Repository: ${reference.repository}`] : []),
       ...(reference.kind === "git" && reference.branch ? [`Branch/ref: ${reference.branch}`] : []),
       ...(reference.kind === "invalid" ? [] : [`Reference root: ${reference.path}`]),
@@ -324,7 +324,7 @@ export function Autocomplete(props: {
 
   const references = createMemo(() =>
     Reference.resolveAll({
-      references: (sync.data.config.reference ?? {}) as NonNullable<Config.Info["reference"]>,
+      references: ConfigReference.normalize(sync.data.config.reference ?? {}),
       directory: sync.path.directory || process.cwd(),
       worktree: sync.path.worktree || sync.path.directory || process.cwd(),
     }),
