@@ -1,6 +1,5 @@
 import { action, createAsync, json, query, useAction, useSubmission } from "@solidjs/router"
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
-import { getRequestEvent } from "solid-js/web"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { Referral } from "@opencode-ai/console-core/referral.js"
 import { withActor } from "~/context/auth.withActor"
 import { Modal } from "~/component/modal"
@@ -11,38 +10,10 @@ import { formatResetTime, liteResetTimeKeys } from "~/lib/format-reset-time"
 import { queryLiteSubscription } from "~/routes/workspace/[id]/go/lite-section"
 import "./go-referral.css"
 
-type GoReferralReward = {
-  id: string
-  amount: number
-  email: string
-  source: "inviter" | "invitee"
-  status: "pending" | "available" | "applied"
-  timeCreated: string | Date
-  timeApplied: string | Date | null
-}
-
-type GoReferralSummary = {
-  inviteCode: string
-  inviteUrl: string
-  validInviteCount: number
-  hasActiveGo: boolean
-  rewardAmount: number
-  totalEarned: number
-  totalApplied: number
-  rewards: GoReferralReward[]
-}
-
-type GoReferralUsagePreview = {
-  rollingUsage: GoReferralUsagePreviewItem
-  weeklyUsage: GoReferralUsagePreviewItem
-  monthlyUsage: GoReferralUsagePreviewItem
-}
-
-type GoReferralUsagePreviewItem = {
-  beforePercent: number
-  afterPercent: number
-  resetInSec: number
-}
+type GoReferralSummary = Awaited<ReturnType<typeof Referral.summary>>
+type GoReferralReward = GoReferralSummary["rewards"][number]
+type GoReferralUsagePreview = NonNullable<Awaited<ReturnType<typeof Referral.usagePreview>>>
+type GoReferralUsagePreviewItem = GoReferralUsagePreview["rollingUsage"]
 
 const emptyUsagePreview = {
   rollingUsage: { beforePercent: 0, afterPercent: 0, resetInSec: 0 },
@@ -52,13 +23,7 @@ const emptyUsagePreview = {
 
 export const queryGoReferral = query(async (workspaceID: string) => {
   "use server"
-  return withActor(async () => {
-    const summary = await Referral.summary()
-    return {
-      ...summary,
-      inviteUrl: new URL(`/go?invite=${summary.inviteCode}`, getRequestEvent()!.request.url).toString(),
-    } satisfies GoReferralSummary
-  }, workspaceID)
+  return withActor(() => Referral.summary(), workspaceID)
 }, "go.referral.get")
 
 export const queryGoReferralUsagePreview = query(async (workspaceID: string, referralID?: string) => {
@@ -70,13 +35,7 @@ export const queryGoReferralUsagePreview = query(async (workspaceID: string, ref
 export const applyGoReferralReward = action(async (workspaceID: string, referralID: string) => {
   "use server"
   return json(
-    await withActor(
-      () =>
-        Referral.applyReward({ referralID })
-          .then((data) => ({ error: undefined, data }))
-          .catch((e) => ({ error: e.message as string, data: undefined })),
-      workspaceID,
-    ),
+    await withActor(() => Referral.applyReward({ referralID }), workspaceID),
     { revalidate: [queryGoReferral.key, queryGoReferralUsagePreview.key, queryLiteSubscription.key] },
   )
 }, "go.referral.reward.apply")
@@ -114,10 +73,18 @@ function rewardPendingStatusKey(source: GoReferralReward["source"]) {
 function CopyInviteLink(props: { summary: GoReferralSummary }) {
   const i18n = useI18n()
   const [copied, setCopied] = createSignal(false)
+  const [origin, setOrigin] = createSignal("")
+  const inviteUrl = createMemo(() => {
+    const path = `/go?invite=${props.summary.inviteCode}`
+    if (!origin()) return path
+    return new URL(path, origin()).toString()
+  })
+
+  onMount(() => setOrigin(window.location.origin))
 
   async function copy() {
     if (typeof navigator !== "object") return
-    await navigator.clipboard.writeText(props.summary.inviteUrl)
+    await navigator.clipboard.writeText(inviteUrl())
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1600)
   }
@@ -125,7 +92,7 @@ function CopyInviteLink(props: { summary: GoReferralSummary }) {
   return (
     <div data-slot="invite-link-box">
       <div>
-        <code title={props.summary.inviteUrl}>{props.summary.inviteUrl}</code>
+        <code title={inviteUrl()}>{inviteUrl()}</code>
         <button type="button" data-color="primary" onClick={copy}>
           <Show
             when={copied()}
@@ -187,7 +154,7 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
     const reward = selected()
     if (!reward) return
     const result = await apply(props.workspaceID, reward.id)
-    if (result.data) setSelected(undefined)
+    if (result.applied) setSelected(undefined)
   }
 
   return (
