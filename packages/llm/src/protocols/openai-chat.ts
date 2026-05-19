@@ -187,11 +187,10 @@ const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
 
 const openAICompatibleReasoningContent = (native: unknown) => {
   if (!isRecord(native)) return undefined
-  const po = native["providerOptions"]
-  if (!isRecord(po)) return undefined
-  const oc = po["openaiCompatible"]
-  if (!isRecord(oc)) return undefined
-  return typeof oc["reasoning_content"] === "string" ? oc["reasoning_content"] : undefined
+  if (!isRecord(native["providerOptions"])) return undefined
+  if (!isRecord(native["providerOptions"]["openaiCompatible"])) return undefined
+  const reasoning = native["providerOptions"]["openaiCompatible"]["reasoning_content"]
+  return typeof reasoning === "string" ? reasoning : undefined
 }
 
 const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (message: OpenAIChatRequestMessage) {
