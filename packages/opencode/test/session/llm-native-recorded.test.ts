@@ -24,12 +24,14 @@ import { testEffect } from "../lib/effect"
 
 const OPENAI_CASSETTE = "session/native-openai-tool-call"
 const ZEN_CASSETTE = "session/native-zen-tool-call"
+const ANTHROPIC_CASSETTE = "session/native-anthropic-tool-call"
 const FIXTURES_DIR = path.join(import.meta.dir, "../fixtures/recordings")
 const OPENAI_API_KEY = process.env.OPENCODE_RECORD_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY
 const CONSOLE_TOKEN = process.env.OPENCODE_RECORD_CONSOLE_TOKEN
 const ZEN_ORG_ID = process.env.OPENCODE_RECORD_ZEN_ORG_ID
 const ZEN_API_URL =
   process.env.OPENCODE_RECORD_ZEN_API_URL ?? "https://console.opencode.ai/proxy/connections/fixture/v1"
+const ANTHROPIC_API_KEY = process.env.OPENCODE_RECORD_ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY
 
 const shouldRecord = process.env.RECORD === "true"
 const canRunOpenAI = shouldRecord
@@ -38,6 +40,9 @@ const canRunOpenAI = shouldRecord
 const canRunZen = shouldRecord
   ? Boolean(CONSOLE_TOKEN && ZEN_ORG_ID)
   : HttpRecorder.hasCassetteSync(ZEN_CASSETTE, { directory: FIXTURES_DIR })
+const canRunAnthropic = shouldRecord
+  ? Boolean(ANTHROPIC_API_KEY)
+  : HttpRecorder.hasCassetteSync(ANTHROPIC_CASSETTE, { directory: FIXTURES_DIR })
 
 async function loadFixture(providerID: string, modelID: string) {
   const data = await Filesystem.readJson<Record<string, ModelsDev.Provider>>(
@@ -66,6 +71,27 @@ const openAIConfig = (model: ModelsDev.Provider["models"][string]): Partial<Conf
       options: {
         apiKey: OPENAI_API_KEY ?? "fixture-openai-key",
         baseURL: "https://api.openai.com/v1",
+      },
+    },
+  },
+})
+
+const anthropicConfig = (model: ModelsDev.Provider["models"][string]): Partial<Config.Info> => ({
+  enabled_providers: ["anthropic"],
+  provider: {
+    anthropic: {
+      name: "Anthropic",
+      env: ["ANTHROPIC_API_KEY"],
+      npm: "@ai-sdk/anthropic",
+      api: "https://api.anthropic.com/v1",
+      models: {
+        [model.id]: JSON.parse(JSON.stringify(model)) as NonNullable<
+          NonNullable<Config.Info["provider"]>[string]["models"]
+        >[string],
+      },
+      options: {
+        apiKey: ANTHROPIC_API_KEY ?? "fixture-anthropic-key",
+        baseURL: "https://api.anthropic.com/v1",
       },
     },
   },
@@ -150,8 +176,17 @@ const zenIt = testEffect(
     tags: ["opencode", "zen", "native", "tool-call"],
   }),
 )
+const anthropicIt = testEffect(
+  recordedNativeLLMLayer(ANTHROPIC_CASSETTE, {
+    provider: "anthropic",
+    protocol: "anthropic-messages",
+    route: "anthropic-messages",
+    tags: ["opencode", "native", "tool-call"],
+  }),
+)
 const recordedOpenAIInstance = canRunOpenAI ? openAIIt.instance : openAIIt.instance.skip
 const recordedZenInstance = canRunZen ? zenIt.instance : zenIt.instance.skip
+const recordedAnthropicInstance = canRunAnthropic ? anthropicIt.instance : anthropicIt.instance.skip
 
 const writeConfig = (
   directory: string,
@@ -255,6 +290,58 @@ describe("session.llm native recorded", () => {
           time: { created: 0 },
           agent: agent.name,
           model: { providerID: ProviderID.opencode, modelID: ModelID.make(model.id) },
+        } satisfies MessageV2.User,
+        sessionID,
+        model: resolved,
+        agent,
+        system: ["You must call the lookup tool exactly once with query weather. Do not answer in text."],
+        messages: [{ role: "user", content: "Use lookup." }],
+        toolChoice: "required",
+        tools: {
+          lookup: tool({
+            description: "Lookup data.",
+            inputSchema: z.object({ query: z.string() }),
+            execute: async (args, options) => {
+              executed = { args, toolCallId: options.toolCallId }
+              return { output: "looked up" }
+            },
+          }),
+        },
+      })
+
+      expect(events.filter((event) => event.type === "step-finish")).toHaveLength(1)
+      expect(events.filter((event) => event.type === "finish")).toHaveLength(1)
+      expect(events.some((event) => event.type === "tool-result")).toBe(true)
+      expect(executed).toMatchObject({ args: { query: "weather" }, toolCallId: expect.any(String) })
+    }),
+  )
+
+  recordedAnthropicInstance("uses real RequestExecutor with HTTP recorder for native Anthropic tools", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const model = yield* Effect.promise(() => loadFixture("anthropic", "claude-haiku-4-5-20251001"))
+      yield* writeConfig(test.directory, model, anthropicConfig)
+
+      const sessionID = SessionID.make("session-recorded-native-anthropic-tool")
+      const agent = {
+        name: "test",
+        mode: "primary",
+        prompt: "Call tools exactly as instructed.",
+        options: {},
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        temperature: 0,
+      } satisfies Agent.Info
+      const resolved = yield* getModel(ProviderID.anthropic, ModelID.make(model.id))
+      let executed: unknown
+
+      const events = yield* collect({
+        user: {
+          id: MessageID.make("msg_user-recorded-native-anthropic-tool"),
+          sessionID,
+          role: "user",
+          time: { created: 0 },
+          agent: agent.name,
+          model: { providerID: ProviderID.anthropic, modelID: ModelID.make(model.id) },
         } satisfies MessageV2.User,
         sessionID,
         model: resolved,
