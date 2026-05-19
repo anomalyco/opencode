@@ -98,6 +98,7 @@ const EXAMPLES = [
 ] as const
 
 const promptTriggersOff = import.meta.env.VITE_DISABLE_PROMPT_TRIGGERS === "true"
+const permissionsOff = import.meta.env.VITE_DISABLE_PROMPT_PERMISSIONS === "true"
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
 
@@ -1579,28 +1580,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </TooltipKeybind>
                   </div>
                 </Show>
-                <TooltipKeybind
-                  placement="top"
-                  gutter={8}
-                  title={acceptLabel()}
-                  keybind={command.keybind("permissions.autoaccept")}
-                >
-                  <Button
-                    data-action="prompt-permissions"
-                    variant="ghost"
-                    onClick={toggleAccept}
-                    classList={{
-                      "h-7 w-7 p-0 shrink-0 flex items-center justify-center": true,
-                      "text-text-base": !accepting(),
-                      "hover:bg-surface-success-base": accepting(),
-                    }}
-                    style={control()}
-                    aria-label={acceptLabel()}
-                    aria-pressed={accepting()}
+                <Show when={!permissionsOff}>
+                  <TooltipKeybind
+                    placement="top"
+                    gutter={8}
+                    title={acceptLabel()}
+                    keybind={command.keybind("permissions.autoaccept")}
                   >
-                    <Icon name="shield" size="small" classList={{ "text-icon-success-base": accepting() }} />
-                  </Button>
-                </TooltipKeybind>
+                    <Button
+                      data-action="prompt-permissions"
+                      variant="ghost"
+                      onClick={toggleAccept}
+                      classList={{
+                        "h-7 w-7 p-0 shrink-0 flex items-center justify-center": true,
+                        "text-text-base": !accepting(),
+                        "hover:bg-surface-success-base": accepting(),
+                      }}
+                      style={control()}
+                      aria-label={acceptLabel()}
+                      aria-pressed={accepting()}
+                    >
+                      <Icon name="shield" size="small" classList={{ "text-icon-success-base": accepting() }} />
+                    </Button>
+                  </TooltipKeybind>
+                </Show>
               </div>
             </div>
           </div>

@@ -22,6 +22,11 @@ interface ImportMetaEnv {
    * @example VITE_DISABLE_PROMPT_TRIGGERS=true
    */
   readonly VITE_DISABLE_PROMPT_TRIGGERS?: string
+  /**
+   * Hide the prompt dock auto-accept permissions control.
+   * @example VITE_DISABLE_PROMPT_PERMISSIONS=true
+   */
+  readonly VITE_DISABLE_PROMPT_PERMISSIONS?: string
 }
 
 interface ImportMeta {
