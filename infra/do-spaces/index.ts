@@ -1,7 +1,7 @@
 import * as digitalocean from "@pulumi/digitalocean"
 import * as pulumi from "@pulumi/pulumi"
 
-/** Set `DIGITALOCEAN_TOKEN` in the environment. Stack config: `pulumi config set region nyc3` and `pulumi config set bucketName your-bucket-name`. */
+/** Set `DIGITALOCEAN_TOKEN` in the environment. Stack config: `pulumi config set region ams3` and `pulumi config set bucketName your-bucket-name`. */
 
 const cfg = new pulumi.Config()
 const region = cfg.require("region")

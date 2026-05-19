@@ -1,7 +1,9 @@
 # Veritly Kubernetes Deployment
 
-Two separate ingresses for clean separation of concerns:
-- **app.veritly.co.uk** - OpenCode API + Frontend (HTTP)
+Ingresses:
+- **app.veritly.co.uk** - Frontend (HTTP)
+- **api.veritly.co.uk** - OpenCode API (HTTP)
+- **univer.veritly.co.uk** - Univer compat / universer-api (HTTP, presigned exchange)
 - **relay.veritly.co.uk** - WebSocket Relay (WSS) with sticky sessions
 
 ## Architecture
@@ -26,7 +28,13 @@ Two separate ingresses for clean separation of concerns:
                               │Local dev     │
                               └─────────────┘
 
-External: univer.veritly.co.uk (already deployed)
+    ┌─────────────┐
+    │univer-compat│  ClusterIP :8080
+    │    :8080    │
+    └─────────────┘
+           ▲
+     [univer.veritly.co.uk]
+     (HTTPS ingress)
 ```
 
 ## Why Two Ingresses?
@@ -218,9 +226,10 @@ Install cert-manager:
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
 ```
 
-## External Dependencies
+## Univer + Spaces
 
-- **Univer**: Already deployed at `univer.veritly.co.uk`
-- **USIP**: Part of Univer deployment
+1. Provision the private exchange bucket: `infra/do-spaces` (Pulumi). See `infra/do-spaces/README.md`.
+2. Create DigitalOcean Spaces keys and set `UNIVER_COMPAT_S3_*` in `.env.production`.
+3. `./deploy/k8s/sync-env.sh` then `./deploy/k8s/deploy-production.sh` (builds `univer-compat` image).
 
-These are configured in the ConfigMap and must be accessible from the cluster.
+`univer-compat` runs in-cluster as **ClusterIP** service `univer-compat:8080`; browsers use `https://univer.veritly.co.uk` via ingress.

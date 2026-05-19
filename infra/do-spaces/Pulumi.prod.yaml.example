@@ -1,0 +1,7 @@
+# Copy to Pulumi.prod.yaml (gitignored) or set via CLI:
+#   pulumi stack init prod
+#   pulumi config set region ams3
+#   pulumi config set bucketName veritly-univer-exchange
+config:
+  veritly-do-spaces:region: ams3
+  veritly-do-spaces:bucketName: veritly-univer-exchange

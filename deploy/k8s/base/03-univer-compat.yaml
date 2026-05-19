@@ -1,71 +1,73 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: opencode-api
+  name: univer-compat
   namespace: veritly
   labels:
-    app: opencode-api
+    app: univer-compat
 spec:
   replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 1
-      maxSurge: 0
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
-      app: opencode-api
+      app: univer-compat
   template:
     metadata:
       labels:
-        app: opencode-api
+        app: univer-compat
     spec:
       containers:
-        - name: opencode-api
-          image: opencode-veritly-api:latest
+        - name: univer-compat
+          image: opencode-veritly-univer-compat:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 3000
+            - containerPort: 8080
               name: http
           env:
             - name: PORT
-              value: "3000"
-            - name: NODE_ENV
-              value: "production"
-            - name: OPENCODE_SERVER_USERNAME
+              value: "8080"
+            - name: LISTEN_HOST
+              value: "0.0.0.0"
+            - name: UNIVER_COMPAT_PERSIST_EVERY_REV
               valueFrom:
                 configMapKeyRef:
                   name: veritly-config
-                  key: OPENCODE_SERVER_USERNAME
-            - name: OPENCODE_SERVER_PASSWORD
+                  key: UNIVER_COMPAT_PERSIST_EVERY_REV
+            - name: UNIVER_COMPAT_S3_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: veritly-config
+                  key: UNIVER_COMPAT_S3_ENDPOINT
+            - name: UNIVER_COMPAT_S3_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: veritly-config
+                  key: UNIVER_COMPAT_S3_REGION
+            - name: UNIVER_COMPAT_S3_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: veritly-config
+                  key: UNIVER_COMPAT_S3_BUCKET
+            - name: UNIVER_COMPAT_S3_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   name: veritly-secrets
-                  key: OPENCODE_SERVER_PASSWORD
-            - name: DEPLOYMENT_ENVIRONMENT
-              valueFrom:
-                configMapKeyRef:
-                  name: veritly-config
-                  key: DEPLOYMENT_ENVIRONMENT
-            - name: VITE_UNIVER_BACKEND_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: veritly-config
-                  key: VITE_UNIVER_BACKEND_URL
-            - name: VERITLY_HEALTH_UNIVER_URL
-              value: "http://univer-compat:8080/readyz"
-            - name: VERITLY_WS_DEBUG
-              value: "0"
-            - name: DATABASE_URL
+                  key: UNIVER_COMPAT_S3_ACCESS_KEY
+            - name: UNIVER_COMPAT_S3_SECRET_KEY
               valueFrom:
                 secretKeyRef:
                   name: veritly-secrets
-                  key: DATABASE_URL
-            - name: VERITLY_TENANT_USER_ID
+                  key: UNIVER_COMPAT_S3_SECRET_KEY
+            - name: UNIVER_COMPAT_S3_PRESIGN_ENDPOINT
               valueFrom:
                 configMapKeyRef:
                   name: veritly-config
-                  key: VERITLY_TENANT_USER_ID
+                  key: UNIVER_COMPAT_S3_PRESIGN_ENDPOINT
+                  optional: true
             - name: WORKOS_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -76,11 +78,6 @@ spec:
                 secretKeyRef:
                   name: veritly-secrets
                   key: WORKOS_CLIENT_ID
-            - name: WORKOS_REDIRECT_URI
-              valueFrom:
-                configMapKeyRef:
-                  name: veritly-config
-                  key: WORKOS_REDIRECT_URI
             - name: COOKIE_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -91,24 +88,18 @@ spec:
                 configMapKeyRef:
                   name: veritly-config
                   key: OPENCODE_WORKOS_ENABLED
-            - name: PUBLIC_BASE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: veritly-config
-                  key: PUBLIC_BASE_URL
-            - name: VERITLY_HEALTH_RELAY_URL
-              value: "http://relay:8080/readyz"
+                  optional: true
           livenessProbe:
             httpGet:
               path: /livez
-              port: 3000
-            initialDelaySeconds: 30
+              port: 8080
+            initialDelaySeconds: 15
             periodSeconds: 15
           readinessProbe:
             httpGet:
               path: /readyz
-              port: 3000
-            initialDelaySeconds: 10
+              port: 8080
+            initialDelaySeconds: 5
             periodSeconds: 5
           resources:
             requests:
@@ -116,17 +107,18 @@ spec:
               cpu: "100m"
             limits:
               memory: "1Gi"
-              cpu: "500m"
+              cpu: "1000m"
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: opencode-api
+  name: univer-compat
   namespace: veritly
 spec:
+  type: ClusterIP
   selector:
-    app: opencode-api
+    app: univer-compat
   ports:
-    - port: 3000
-      targetPort: 3000
+    - port: 8080
+      targetPort: 8080
       name: http

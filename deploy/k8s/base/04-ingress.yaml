@@ -53,6 +53,34 @@ spec:
             port:
               number: 3000
 ---
+# Ingress for Univer compat (universer-api + presigned exchange)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: veritly-univer
+  namespace: veritly
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - univer.veritly.co.uk
+      secretName: univer-tls
+  rules:
+    - host: univer.veritly.co.uk
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: univer-compat
+                port:
+                  number: 8080
+---
 # Ingress for Relay (WebSocket only - public for browsers)
 apiVersion: networking.k8s.io/v1
 kind: Ingress

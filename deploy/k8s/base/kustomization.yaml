@@ -9,6 +9,7 @@ resources:
   - 01-relay.yaml
   - 02-opencode-api.yaml
   - 02b-opencode-frontend.yaml
+  - 03-univer-compat.yaml
   - 04-ingress.yaml
 
 images:
@@ -20,4 +21,7 @@ images:
     newTag: latest
   - name: opencode-veritly-frontend
     newName: registry.digitalocean.com/veritly-registry/opencode-frontend
+    newTag: latest
+  - name: opencode-veritly-univer-compat
+    newName: registry.digitalocean.com/veritly-registry/univer-compat
     newTag: latest

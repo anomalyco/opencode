@@ -15,8 +15,8 @@ NC='\033[0m' # No Color
 REGISTRY="registry.digitalocean.com/veritly-registry"
 CLUSTER_ID="602c73dd-37fe-4c00-a23e-1aa027878fa2"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-REPOS=("relay" "opencode-api" "opencode-frontend")
-APPS=("relay" "opencode-api" "opencode-frontend")
+REPOS=("relay" "opencode-api" "opencode-frontend" "univer-compat")
+APPS=("relay" "opencode-api" "opencode-frontend" "univer-compat")
 
 clean_repo() {
     local repo="$1"
@@ -100,6 +100,10 @@ docker buildx build --platform linux/amd64 -f docker/Dockerfile.api -t $REGISTRY
 echo "Building opencode-frontend..."
 docker buildx build --platform linux/amd64 -f docker/Dockerfile.frontend -t $REGISTRY/opencode-frontend:latest --push .
 
+# Build univer-compat (Univer as a service)
+echo "Building univer-compat..."
+docker buildx build --platform linux/amd64 -f docker/Dockerfile.univer-compat -t $REGISTRY/univer-compat:latest --push .
+
 echo -e "${GREEN}✅ Images built${NC}"
 echo ""
 
@@ -173,6 +177,7 @@ echo ""
 
 echo "🌐 Your app will be available at:"
 echo "   - https://app.veritly.co.uk (main app)"
+echo "   - https://univer.veritly.co.uk (Univer compat / universer-api)"
 echo "   - wss://relay.veritly.co.uk/ws (WebSocket relay)"
 echo ""
 echo "⚠️  Make sure your DNS points to the ingress IP:"

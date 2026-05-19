@@ -68,8 +68,6 @@ export function createCompatApp(store: Store, auth: SessionResolver) {
 
   app.use("*", univerCompatAuthMiddleware(auth))
 
-  app.get("/healthz", (c) => c.json({ ok: true }))
-  app.get("/health", (c) => c.json({ ok: true }))
   app.get("/livez", (c) => c.text("ok"))
   app.get("/readyz", (c) => c.json({ ok: true }))
 

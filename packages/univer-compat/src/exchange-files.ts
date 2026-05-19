@@ -54,6 +54,22 @@ function optionalEnv(name: string): string | undefined {
   return v
 }
 
+/** AWS presign client config. DO Spaces: regional endpoint + virtual-hosted URLs. MinIO: path-style on the published host. */
+export function presignSignerConfig(endpoint: string, bucket: string) {
+  const u = new URL(endpoint)
+  const host = u.hostname.toLowerCase()
+  const prefix = `${bucket.toLowerCase()}.`
+  if (host === "localhost" || host === "127.0.0.1" || host === "minio") {
+    return { endpoint, pathStyle: true }
+  }
+  /** Bucket is already in the hostname; SDK would emit `bucket.bucket.region…` if we kept it. */
+  if (host.startsWith(prefix)) {
+    u.hostname = host.slice(prefix.length)
+    return { endpoint: u.origin, pathStyle: false }
+  }
+  return { endpoint, pathStyle: false }
+}
+
 export function exchangeFilesFromEnv(): S3ExchangeFiles {
   const endpoint = requiredEnv("UNIVER_COMPAT_S3_ENDPOINT")
   const region = requiredEnv("UNIVER_COMPAT_S3_REGION")
@@ -78,16 +94,14 @@ export function exchangeFilesFromEnv(): S3ExchangeFiles {
     forcePathStyle: true,
     ...checksumRelaxed,
   })
-  const signerPresign =
-    presignEndpoint && presignEndpoint !== endpoint
-      ? new AwsJsS3Client({
-          region,
-          endpoint: presignEndpoint,
-          credentials: creds,
-          forcePathStyle: true,
-          ...checksumRelaxed,
-        })
-      : undefined
+  const presign = presignSignerConfig(presignEndpoint ?? endpoint, bucket)
+  const signerPresign = new AwsJsS3Client({
+    region,
+    endpoint: presign.endpoint,
+    credentials: creds,
+    forcePathStyle: presign.pathStyle,
+    ...checksumRelaxed,
+  })
   return new S3ExchangeFiles(bun, signerOps, bucket, signerPresign)
 }
 

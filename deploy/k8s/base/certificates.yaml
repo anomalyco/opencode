@@ -36,3 +36,16 @@ spec:
     kind: ClusterIssuer
   dnsNames:
   - api.veritly.co.uk
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: univer-tls
+  namespace: veritly
+spec:
+  secretName: univer-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+  - univer.veritly.co.uk

@@ -211,7 +211,7 @@ export function useE2eStack(opts?: E2eStackOpts) {
       DATABASE_URL: ctx.deps.databaseUrlInternal,
     }
 
-    containerEnv.VERITLY_HEALTH_UNIVER_URL = univer.clusterUniverHttpOrigin
+    containerEnv.VERITLY_HEALTH_UNIVER_URL = `${univer.clusterUniverHttpOrigin}/readyz`
 
     delete containerEnv.VITE_UNIVER_SDK_WS
     delete containerEnv.VERITLY_HEALTH_RELAY_URL

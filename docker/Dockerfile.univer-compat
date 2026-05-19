@@ -1,0 +1,22 @@
+FROM oven/bun:1.3.10-slim AS production
+
+WORKDIR /app
+
+ENV BUN_INSTALL_CACHE_DIR=/tmp/bun-cache
+ENV BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
+
+COPY package.json bun.lock tsconfig.json ./
+COPY patches ./patches
+COPY packages/univer-compat ./packages/univer-compat
+COPY packages/auth-shared ./packages/auth-shared
+
+RUN rm -f bun.lock && bun -e 'const fs=require("fs");const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));pkg.dependencies={};pkg.devDependencies={};pkg.workspaces={packages:["packages/univer-compat","packages/auth-shared"],catalog:pkg.workspaces.catalog};fs.writeFileSync("package.json",JSON.stringify(pkg,null,2));'
+
+RUN bun install --production --no-save --ignore-scripts --filter @opencode-ai/univer-compat
+
+ENV PORT=8080
+ENV LISTEN_HOST=0.0.0.0
+
+EXPOSE 8080
+
+CMD ["bun", "packages/univer-compat/script/serve.ts"]

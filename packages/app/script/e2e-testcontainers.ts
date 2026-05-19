@@ -429,7 +429,7 @@ export async function startUniverE2e(
     const viteUniverEnv: Record<string, string> = {
       VITE_UNIVER_BACKEND_URL: "same-origin",
       DEV_UNIVER_COMPAT_URL: origin,
-      VERITLY_HEALTH_UNIVER_URL: origin,
+      VERITLY_HEALTH_UNIVER_URL: `${origin}/readyz`,
     }
 
     e2eEmit(`[e2e-tc] ✓ univer-compat ready (host: ${origin} cluster: ${clusterUniverHttpOrigin})`)

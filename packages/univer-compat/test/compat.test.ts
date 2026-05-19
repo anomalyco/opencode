@@ -168,7 +168,7 @@ describe("univer-compat exchange + snapshot", () => {
 describe("optional remote compat URL", () => {
   test.skipIf(!process.env.EXCHANGE_COMPAT_TEST_URL)("health on remote", async () => {
     const root = process.env.EXCHANGE_COMPAT_TEST_URL!.replace(/\/$/, "")
-    const r = await fetch(`${root}/healthz`)
+    const r = await fetch(`${root}/readyz`)
     expect(r.ok).toBe(true)
   })
 })

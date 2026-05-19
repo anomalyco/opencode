@@ -67,10 +67,6 @@ async function timedCheck(
   }
 }
 
-function normalizeBaseUrl(input: string) {
-  return input.replace(/\/+$/, "")
-}
-
 /** `http(s)://.../readyz` from VITE_UNIVER_SDK_WS; relay serves this in `packages/relay/server.ts`. */
 function relayHttpHealthFromViteUniverSdkWs(): string | undefined {
   const ws = process.env.VITE_UNIVER_SDK_WS?.trim()
@@ -88,10 +84,9 @@ function relayHttpHealthFromViteUniverSdkWs(): string | undefined {
 }
 
 function univerReadyzUrl() {
-  const raw = process.env.VERITLY_HEALTH_UNIVER_URL?.trim() || process.env.VITE_UNIVER_BACKEND_URL?.trim()
-  if (!raw) return undefined
-  const base = normalizeBaseUrl(raw)
-  return `${base}/readyz`
+  const v = process.env.VERITLY_HEALTH_UNIVER_URL
+  if (!v) return undefined
+  return v
 }
 
 async function checkDatabase() {

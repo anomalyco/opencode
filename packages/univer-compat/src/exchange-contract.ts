@@ -3,8 +3,6 @@
  * — universer-style routes used by Veritly OSS (`snapshot/save`, exchange import, optional comb stubs).
  */
 export const universerRoutes = [
-  "GET /healthz",
-  "GET /health",
   "GET /livez",
   "GET /readyz",
   "GET /universer-api/user/session-ticket",

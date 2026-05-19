@@ -1,1 +1,4 @@
 node_modules/
+Pulumi.*.yaml
+!Pulumi.yaml
+!Pulumi.prod.yaml.example
