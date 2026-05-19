@@ -75,23 +75,6 @@ type StreamInput = {
   signal?: AbortSignal
 }
 
-type ShellMessage = NonNullable<Awaited<ReturnType<OpencodeClient["session"]["shell"]>>["data"]>
-type SessionMessage = NonNullable<Awaited<ReturnType<OpencodeClient["session"]["messages"]>>["data"]>[number]
-
-function isShellMessage(value: unknown): value is ShellMessage {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false
-  }
-
-  const info = Reflect.get(value, "info")
-  const parts = Reflect.get(value, "parts")
-  if (!info || typeof info !== "object" || !Array.isArray(parts)) {
-    return false
-  }
-
-  return Reflect.get(info, "role") === "assistant" && typeof Reflect.get(info, "sessionID") === "string"
-}
-
 type Wait = {
   tick: number
   armed: boolean
@@ -149,6 +132,8 @@ function sid(event: Event): string | undefined {
   }
 
   if (
+    event.type === "session.next.shell.started" ||
+    event.type === "session.next.shell.ended" ||
     event.type === "permission.asked" ||
     event.type === "permission.replied" ||
     event.type === "question.asked" ||
@@ -529,81 +514,6 @@ function createLayer(input: StreamInput) {
           )
           state.footerView = current
         }
-
-        const applyMessage = (event: Event) => {
-          const next = reduceSessionData({
-            data: state.data,
-            event,
-            sessionID: input.sessionID,
-            thinking: input.thinking,
-            limits: input.limits(),
-          })
-          state.data = next.data
-          syncFooter(next.commits, next.footer?.patch)
-        }
-
-        const applyShellResponse = (message: ShellMessage | SessionMessage | undefined) => {
-          if (!message || message.info.role !== "assistant" || message.info.sessionID !== input.sessionID) {
-            return
-          }
-
-          input.trace?.write("recv.shell", {
-            messageID: message.info.id,
-            parts: message.parts.length,
-          })
-          applyMessage({
-            type: "message.updated",
-            properties: {
-              sessionID: message.info.sessionID,
-              info: message.info,
-            },
-          } as Event)
-
-          for (const part of message.parts) {
-            if (part.type !== "tool") {
-              continue
-            }
-
-            applyMessage({
-              type: "message.part.updated",
-              properties: {
-                part,
-              },
-            } as Event)
-          }
-        }
-
-        const resolveShellMessage = Effect.fn("RunStreamTransport.resolveShellMessage")(function* (result: unknown) {
-          if (result && typeof result === "object") {
-            const data = Reflect.get(result, "data")
-            if (isShellMessage(data)) {
-              return data
-            }
-
-            if (isShellMessage(result)) {
-              return result
-            }
-          }
-
-          for (let attempt = 0; attempt < 5; attempt += 1) {
-            const list = yield* Effect.promise(() =>
-              input.sdk.session.messages({
-                sessionID: input.sessionID,
-                limit: 1,
-              }),
-            ).pipe(Effect.map((item) => item.data ?? []), Effect.orElseSucceed(() => []))
-            const message = list.find(isShellMessage)
-            if (message) {
-              return message
-            }
-
-            if (attempt < 4) {
-              yield* Effect.sleep("50 millis")
-            }
-          }
-
-          return undefined
-        })
 
         const resolveShellAgent = Effect.fn("RunStreamTransport.resolveShellAgent")(function* (agent: string | undefined) {
           if (agent) {
@@ -1143,17 +1053,6 @@ function createLayer(input: StreamInput) {
                         })
                         item.armed = true
                         item.live = true
-                      }),
-                    ),
-                    Effect.tap((result) =>
-                      Effect.gen(function* () {
-                        const message = yield* resolveShellMessage(result)
-                        if (!message) {
-                          input.trace?.write("recv.shell.miss")
-                          return
-                        }
-
-                        applyShellResponse(message)
                       }),
                     ),
                     Effect.flatMap(() => Deferred.succeed(item.done, undefined).pipe(Effect.ignore)),
