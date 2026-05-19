@@ -18,12 +18,12 @@
 // without changing the fixture. Long-lived commands like `serve` will need a
 // different return shape — see the TODO at the bottom of OpencodeCli.
 import type { TestOptions } from "bun:test"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppProcess } from "@opencode-ai/core/process"
 import { Deferred, Duration, Effect, Layer, Queue, Scope, Stream } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
+import { ChildProcess } from "effect/unstable/process"
 import path from "node:path"
-import fs from "node:fs/promises"
-import os from "node:os"
-import { Process } from "@/util/process"
 import { TestLLMServer } from "./llm-server"
 import { testProviderConfig } from "./test-provider"
 import { it } from "./effect"
@@ -182,28 +182,54 @@ export function withCliFixture<A, E>(
 ): Effect.Effect<A, E | unknown, Scope.Scope> {
   return Effect.gen(function* () {
     const llm = yield* TestLLMServer
+    const fs = yield* AppFileSystem.Service
+    const appProc = yield* AppProcess.Service
 
-    const home = path.join(os.tmpdir(), "oc-cli-" + Math.random().toString(36).slice(2))
-    yield* Effect.promise(() => fs.mkdir(home, { recursive: true }))
-    yield* Effect.addFinalizer(() =>
-      Effect.promise(() => fs.rm(home, { recursive: true, force: true }).catch(() => undefined)),
-    )
+    // FileSystem.makeTempDirectoryScoped handles both creation and scope-tied
+    // cleanup — replaces the old mkdir + addFinalizer pair.
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "oc-cli-" })
 
     const configJson = JSON.stringify(testProviderConfig(llm.url))
     const env = isolatedEnv(home, configJson)
 
     const spawn = (args: string[], opts?: SpawnOpts): Effect.Effect<RunResult> =>
-      Effect.promise(async () => {
+      Effect.gen(function* () {
         const start = Date.now()
-        // Process.run pipes stdout/stderr by default and returns them as Buffers.
-        const result = await Process.run(["bun", "run", "--conditions=browser", cliEntry, ...args], {
+        const timeoutMs = opts?.timeoutMs ?? 30_000
+        // stdin: "ignore" so the child doesn't see a piped stdin and block
+        // on `Bun.stdin.text()` (see src/cli/cmd/run.ts — non-TTY stdin is
+        // consumed as the prompt). The old Process.run wrapper defaulted to
+        // ignore; ChildProcess.make defaults to pipe, so we set it explicitly.
+        const command = ChildProcess.make("bun", ["run", "--conditions=browser", cliEntry, ...args], {
           cwd: home,
-          timeout: opts?.timeoutMs ?? 30_000,
-          env: { ...process.env, ...env, ...opts?.env },
-          nothrow: true,
+          env: { ...env, ...opts?.env },
+          extendEnv: true,
+          stdin: "ignore",
         })
+        // appProc.run collects stdout/stderr as Buffers and returns the exit
+        // code without throwing on non-zero — same contract the old
+        // `Process.run({ nothrow: true })` call had. A timeout surfaces as an
+        // AppProcessError, which we convert to a synthetic non-zero result so
+        // the test sees it through the normal `expectExit` path.
+        const result = yield* appProc.run(command).pipe(
+          Effect.timeoutOrElse({
+            duration: Duration.millis(timeoutMs),
+            orElse: () =>
+              Effect.succeed({
+                command: "",
+                exitCode: -1,
+                stdout: Buffer.alloc(0),
+                stderr: Buffer.from(`TIMED OUT after ${timeoutMs}ms\n`),
+                stdoutTruncated: false,
+                stderrTruncated: false,
+              }),
+          }),
+          // AppProcessError without timeout/signal/stdin opts only fires on
+          // spawn failure (binary missing, etc.) — treat as defect.
+          Effect.orDie,
+        )
         return {
-          exitCode: result.code,
+          exitCode: result.exitCode,
           stdout: result.stdout.toString(),
           stderr: result.stderr.toString(),
           durationMs: Date.now() - start,
@@ -380,7 +406,16 @@ export function withCliFixture<A, E>(
     return yield* fn({ llm, home, opencode })
     // FetchHttpClient is provided so test bodies can `yield* HttpClient.HttpClient`
     // and hit endpoints on `opencode.serve()` without rolling their own fetch.
-  }).pipe(Effect.provide(Layer.mergeAll(TestLLMServer.layer, FetchHttpClient.layer)))
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        TestLLMServer.layer,
+        FetchHttpClient.layer,
+        AppFileSystem.defaultLayer,
+        AppProcess.defaultLayer,
+      ),
+    ),
+  )
 }
 
 function parseJsonEvents(stdout: string): Array<Record<string, unknown>> {
