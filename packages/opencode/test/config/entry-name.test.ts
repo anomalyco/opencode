@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import path from "path"
+import { posix } from "path"
 import { configEntryNameFromPath } from "@/config/entry-name"
+
+// Use POSIX semantics so the test is deterministic regardless of host OS —
+// production code passes paths through `path.relative` on the runtime
+// platform, but the helper normalizes via `replaceAll("\\", "/")`, so the
+// regression assertion ("the helper returns the bare name") holds on either
+// platform as long as we feed it a relative path. Using `posix.relative`
+// keeps the intermediate values stable across CI runners.
 
 // The prefixes shipped by config/agent.ts after the relative-path refactor.
 const AGENT_PREFIXES = ["agent/", "agents/"]
@@ -36,7 +43,7 @@ describe("configEntryNameFromPath", () => {
   test("regression #25713: caller passes relative path; parent /agent/ segment is irrelevant", () => {
     const dir = "/home/agent/.config/opencode"
     const item = "/home/agent/.config/opencode/agents/build.md"
-    const relative = path.relative(dir, item)
+    const relative = posix.relative(dir, item)
     expect(relative).toBe("agents/build.md")
     expect(configEntryNameFromPath(relative, AGENT_PREFIXES)).toBe("build")
   })
@@ -44,7 +51,7 @@ describe("configEntryNameFromPath", () => {
   test("regression #25713: parent /agents/ segment is irrelevant", () => {
     const dir = "/srv/agents/team/.config/opencode"
     const item = "/srv/agents/team/.config/opencode/agents/build.md"
-    const relative = path.relative(dir, item)
+    const relative = posix.relative(dir, item)
     expect(configEntryNameFromPath(relative, AGENT_PREFIXES)).toBe("build")
   })
 })
