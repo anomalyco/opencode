@@ -262,11 +262,11 @@ describe("session.llm-native.request", () => {
     })
     expect(
       LLMNativeRuntime.status({
-        model: { ...baseModel, providerID: ProviderID.make("anthropic") },
-        provider: { ...providerInfo, id: ProviderID.make("anthropic") },
+        model: { ...baseModel, providerID: ProviderID.make("google") },
+        provider: { ...providerInfo, id: ProviderID.make("google") },
         auth: undefined,
       }),
-    ).toEqual({ type: "unsupported", reason: "provider is not openai or opencode" })
+    ).toEqual({ type: "unsupported", reason: "provider is not openai, opencode, or anthropic" })
     expect(
       LLMNativeRuntime.status({
         model: baseModel,
@@ -277,11 +277,11 @@ describe("session.llm-native.request", () => {
 
     expect(
       LLMNativeRuntime.status({
-        model: { ...baseModel, api: { ...baseModel.api, npm: "@ai-sdk/anthropic" } },
+        model: { ...baseModel, api: { ...baseModel.api, npm: "@ai-sdk/google" } },
         provider: providerInfo,
         auth: undefined,
       }),
-    ).toEqual({ type: "unsupported", reason: "provider package is not OpenAI" })
+    ).toEqual({ type: "unsupported", reason: "provider package is not OpenAI or Anthropic" })
 
     expect(
       LLMNativeRuntime.status({
@@ -289,7 +289,27 @@ describe("session.llm-native.request", () => {
         provider: { ...providerInfo, options: {} },
         auth: undefined,
       }),
-    ).toEqual({ type: "unsupported", reason: "OpenAI API key is not configured" })
+    ).toEqual({ type: "unsupported", reason: "API key is not configured" })
+  })
+
+  test("enables native runtime for Anthropic API-key models", () => {
+    expect(
+      LLMNativeRuntime.status({
+        model: {
+          ...baseModel,
+          providerID: ProviderID.make("anthropic"),
+          api: { ...baseModel.api, npm: "@ai-sdk/anthropic", url: "https://api.anthropic.com/v1" },
+        },
+        provider: {
+          ...providerInfo,
+          id: ProviderID.make("anthropic"),
+          name: "Anthropic",
+          env: ["ANTHROPIC_API_KEY"],
+          options: { apiKey: "test-anthropic-key" },
+        },
+        auth: undefined,
+      }),
+    ).toMatchObject({ type: "supported", apiKey: "test-anthropic-key" })
   })
 
   test("prefers console provider api key over stored opencode auth", () => {
