@@ -1,4 +1,5 @@
 import { Agent } from "@/agent/agent"
+import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { MCP } from "@/mcp"
@@ -200,6 +201,36 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         }),
       )
     tools[key] = item
+  }
+
+  const cfg = yield* Config.Service
+  const info = yield* cfg.get()
+  const orst = info.experimental?.openrouter_server_tools
+
+  if (input.model.providerID === "openrouter" && orst?.enabled) {
+    const { openrouter } = yield* Effect.promise(() => import("@openrouter/ai-sdk-provider"))
+
+    if (orst.web_search !== false) {
+      const args: Record<string, unknown> = {}
+      if (typeof orst.web_search === "object" && orst.web_search !== null) {
+        if (orst.web_search.engine) args.engine = orst.web_search.engine
+        if (orst.web_search.max_results) args.maxResults = orst.web_search.max_results
+      }
+      tools["web_search"] = openrouter.tools.webSearch(args)
+    }
+
+    if (orst.web_fetch !== false) {
+      const args: Record<string, unknown> = {}
+      if (typeof orst.web_fetch === "object" && orst.web_fetch !== null) {
+        if (orst.web_fetch.engine) args.engine = orst.web_fetch.engine
+        if (orst.web_fetch.max_uses) args.maxUses = orst.web_fetch.max_uses
+      }
+      tools["web_fetch"] = tool({
+        type: "provider",
+        id: "openrouter.web_fetch",
+        args,
+      } as any)
+    }
   }
 
   return tools

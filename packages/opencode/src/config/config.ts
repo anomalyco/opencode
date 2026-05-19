@@ -286,6 +286,29 @@ export const Info = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      openrouter_server_tools: Schema.optional(
+        Schema.Struct({
+          enabled: Schema.Boolean,
+          web_search: Schema.optional(
+            Schema.Union([
+              Schema.Boolean,
+              Schema.Struct({
+                engine: Schema.optional(Schema.String),
+                max_results: Schema.optional(Schema.Number),
+              }),
+            ]),
+          ),
+          web_fetch: Schema.optional(
+            Schema.Union([
+              Schema.Boolean,
+              Schema.Struct({
+                engine: Schema.optional(Schema.String),
+                max_uses: Schema.optional(Schema.Number),
+              }),
+            ]),
+          ),
+        }),
+      ).annotate({ description: "Enable OpenRouter server-side tools" }),
     }),
   ),
 }).annotate({ identifier: "Config" })

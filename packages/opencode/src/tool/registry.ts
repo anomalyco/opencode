@@ -320,9 +320,19 @@ export const layer: Layer.Layer<
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
+      const cfg = yield* config.get()
+      const orst = cfg.experimental?.openrouter_server_tools
+      const useServerTools = input.providerID === "openrouter" && orst?.enabled === true
+
       const filtered = (yield* all()).filter((tool) => {
         if (tool.id === WebSearchTool.id) {
+          if (useServerTools) return false
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
+        }
+
+        if (tool.id === WebFetchTool.id) {
+          if (useServerTools) return false
+          return true
         }
 
         const usePatch =

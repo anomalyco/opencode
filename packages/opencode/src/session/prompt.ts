@@ -1383,6 +1383,7 @@ export const layer = Layer.effect(
               Effect.provideService(ToolRegistry.Service, registry),
               Effect.provideService(MCP.Service, mcp),
               Effect.provideService(Truncate.Service, truncate),
+              Effect.provideService(Config.Service, config),
             )
 
             if (lastUser.format?.type === "json_schema") {

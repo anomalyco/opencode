@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Effect, Layer, Result, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Config } from "@/config/config"
 import { ToolRegistry } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
@@ -43,12 +44,16 @@ const configLayer = TestConfig.layer({
 type RegistryLayerOptions = {
   flags?: Partial<RuntimeFlags.Info>
   plugin?: Layer.Layer<Plugin.Service>
+  config?: Partial<Config.Interface>
 }
 
 const registryLayer = (opts: RegistryLayerOptions = {}) =>
   ToolRegistry.layer
     .pipe(
-      Layer.provide(configLayer),
+      Layer.provide(TestConfig.layer({
+        directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
+        ...opts.config,
+      })),
       Layer.provide(opts.plugin ?? Plugin.defaultLayer),
       Layer.provide(Question.defaultLayer),
       Layer.provide(Todo.defaultLayer),
@@ -566,6 +571,55 @@ describe("tool.registry", () => {
       const registry = yield* ToolRegistry.Service
       const ids = yield* registry.ids()
       expect(ids).toContain("cowsay")
+    }),
+  )
+
+  const withOpenRouterServerTools = testEffect(
+    Layer.mergeAll(
+      registryLayer({
+        config: {
+          get: () =>
+            Effect.succeed({
+              experimental: { openrouter_server_tools: { enabled: true } },
+            }),
+        },
+      }),
+      node,
+      Agent.defaultLayer,
+    ),
+  )
+
+  withOpenRouterServerTools.instance("hides local websearch and webfetch for openrouter when server tools enabled", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agent = yield* Agent.Service
+      const build = yield* agent.get("build")
+      if (!build) throw new Error("build agent not found")
+      const tools = yield* registry.tools({
+        providerID: ProviderID.openrouter,
+        modelID: ModelID.make("test"),
+        agent: build,
+      })
+      const ids = tools.map((t) => t.id)
+      expect(ids).not.toContain("websearch")
+      expect(ids).not.toContain("webfetch")
+    }),
+  )
+
+  withOpenRouterServerTools.instance("keeps local websearch and webfetch for non-openrouter providers", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agent = yield* Agent.Service
+      const build = yield* agent.get("build")
+      if (!build) throw new Error("build agent not found")
+      const tools = yield* registry.tools({
+        providerID: ProviderID.opencode,
+        modelID: ModelID.make("test"),
+        agent: build,
+      })
+      const ids = tools.map((t) => t.id)
+      expect(ids).toContain("websearch")
+      expect(ids).toContain("webfetch")
     }),
   )
 })
