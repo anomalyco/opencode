@@ -181,7 +181,7 @@ export namespace Referral {
         )
         .then((rows) => rows[0])
       if (!reward) throw new Error("Referral reward not found")
-      if (reward.timeApplied) return { applied: false }
+      if (reward.timeApplied) throw new Error("Referral reward already applied")
 
       const update = await tx
         .update(ReferralRewardTable)
@@ -196,11 +196,11 @@ export namespace Referral {
             isNull(ReferralRewardTable.timeDeleted),
           ),
         )
-      if (update.rowsAffected === 0) return { applied: false }
+      if (update.rowsAffected === 0) throw new Error("Referral reward already applied")
 
       await Billing.subtractLiteUsage(workspaceID, reward.amount)
 
-      return { applied: true, amount: microCentsToCents(reward.amount) }
+      return { amount: microCentsToCents(reward.amount) }
     })
   })
 
@@ -282,7 +282,7 @@ export namespace Referral {
     referralCode?: string
   }) {
     const referralCode = normalizeCode(input.referralCode)
-    if (!referralCode) return { status: "missing-code" as const }
+    if (!referralCode) return
 
     return Database.transaction(async (tx) => {
       const code = await tx
@@ -290,14 +290,14 @@ export namespace Referral {
         .from(WorkspaceTable)
         .where(and(eq(WorkspaceTable.referralCode, referralCode), isNull(WorkspaceTable.timeDeleted)))
         .then((rows) => rows[0])
-      if (!code) return { status: "invalid-code" as const }
+      if (!code) throw new Error("Referral code invalid")
 
       const existingReferral = await tx
         .select({ id: ReferralTable.id })
         .from(ReferralTable)
         .where(and(eq(ReferralTable.inviteeAccountID, input.accountID), isNull(ReferralTable.timeDeleted)))
         .then((rows) => rows[0])
-      if (existingReferral) return { status: "already-redeemed" as const }
+      if (existingReferral) throw new Error("Referral already redeemed")
 
       const selfReferral = await tx
         .select({ id: UserTable.id })
@@ -310,20 +310,16 @@ export namespace Referral {
           ),
         )
         .then((rows) => rows[0])
-      if (selfReferral) return { status: "self-referral" as const }
+      if (selfReferral) throw new Error("Self-referral is not allowed")
 
       const referralID = Identifier.create("referral")
       await tx
         .insert(ReferralTable)
+        .ignore()
         .values({
           workspaceID: code.workspaceID,
           id: referralID,
           inviteeAccountID: input.accountID,
-        })
-        .onDuplicateKeyUpdate({
-          set: {
-            inviteeAccountID: sql`${ReferralTable.inviteeAccountID}`,
-          },
         })
 
       const referral = await tx
@@ -331,10 +327,8 @@ export namespace Referral {
         .from(ReferralTable)
         .where(and(eq(ReferralTable.inviteeAccountID, input.accountID), isNull(ReferralTable.timeDeleted)))
         .then((rows) => rows[0])
-      if (!referral) return { status: "duplicate" as const }
-      if (referral.id !== referralID) return { status: "already-redeemed" as const }
-
-      return { status: "created" as const }
+      if (!referral) throw new Error("Referral not created")
+      if (referral.id !== referralID) throw new Error("Referral already redeemed")
     })
   }
 
@@ -350,17 +344,18 @@ export namespace Referral {
           and(eq(UserTable.workspaceID, input.workspaceID), eq(UserTable.id, input.userID), isNull(UserTable.timeDeleted)),
         )
         .then((rows) => rows[0])
-      if (!invitee?.accountID) return { status: "missing-account" as const }
+      if (!invitee?.accountID) throw new Error("Referral invitee account missing")
 
       const referral = await tx
         .select({ id: ReferralTable.id, workspaceID: ReferralTable.workspaceID })
         .from(ReferralTable)
         .where(and(eq(ReferralTable.inviteeAccountID, invitee.accountID), isNull(ReferralTable.timeDeleted)))
         .then((rows) => rows[0])
-      if (!referral) return { status: "missing-referral" as const }
+      if (!referral) throw new Error("Referral not found")
 
       const result = await tx
         .insert(ReferralRewardTable)
+        .ignore()
         .values([
           {
             workspaceID: referral.workspaceID,
@@ -373,14 +368,8 @@ export namespace Referral {
             amount: REWARD_AMOUNT,
           },
         ])
-        .onDuplicateKeyUpdate({
-          set: {
-            amount: sql`${ReferralRewardTable.amount}`,
-          },
-        })
 
-      if (result.rowsAffected === 0) return { status: "already-completed" as const }
-      return { status: "created" as const }
+      if (result.rowsAffected === 0) throw new Error("Referral already completed")
     })
   }
 

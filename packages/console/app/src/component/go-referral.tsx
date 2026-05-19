@@ -154,8 +154,8 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
   async function onApply() {
     const reward = selected()
     if (!reward) return
-    const result = await apply(props.workspaceID, reward.id)
-    if (result.applied) setSelected(undefined)
+    await apply(props.workspaceID, reward.id)
+    setSelected(undefined)
   }
 
   return (
