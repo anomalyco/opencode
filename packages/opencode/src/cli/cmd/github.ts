@@ -193,7 +193,7 @@ export const GithubInstallCommand = effectCmd({
   describe: "install the GitHub agent",
   handler: Effect.fn("Cli.github.install")(function* () {
     const maybeCtx = yield* InstanceRef
-    if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
+    if (!maybeCtx) return yield* Effect.die(new Error("InstanceRef not provided in 'github install' — command requires a project instance"))
     const ctx = maybeCtx
     const modelsDev = yield* ModelsDev.Service
     const gitSvc = yield* Git.Service
@@ -430,7 +430,7 @@ export const GithubRunCommand = effectCmd({
       }),
   handler: Effect.fn("Cli.github.run")(function* (args) {
     const ctx = yield* InstanceRef
-    if (!ctx) return yield* Effect.die("InstanceRef not provided")
+    if (!ctx) return yield* Effect.die(new Error("InstanceRef not provided in 'github run' — command requires a project instance"))
     const gitSvc = yield* Git.Service
     const sessionSvc = yield* Session.Service
     const sessionShare = yield* SessionShare.Service

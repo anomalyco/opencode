@@ -436,7 +436,7 @@ export const McpAddCommand = effectCmd({
   describe: "add an MCP server",
   handler: Effect.fn("Cli.mcp.add")(function* () {
     const maybeCtx = yield* InstanceRef
-    if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
+    if (!maybeCtx) return yield* Effect.die(new Error("InstanceRef not provided in 'mcp add' — command requires a project instance"))
     const ctx = maybeCtx
     yield* Effect.promise(async () => {
       UI.empty()

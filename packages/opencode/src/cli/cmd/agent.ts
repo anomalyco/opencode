@@ -63,7 +63,7 @@ const AgentCreateCommand = effectCmd({
       }),
   handler: Effect.fn("Cli.agent.create")(function* (args) {
     const maybeCtx = yield* InstanceRef
-    if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
+    if (!maybeCtx) return yield* Effect.die(new Error("InstanceRef not provided in 'agent create' — command requires a project instance (cannot run with --attach)"))
     const ctx = maybeCtx
     const agentSvc = yield* Agent.Service
     yield* Effect.promise(async () => {
