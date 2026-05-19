@@ -140,17 +140,24 @@ function handleCollabRequestInner(req: Request): Promise<Response> | Response {
   if (req.method === "GET" && path === "/collab/auth/github") {
     const c = cfg()
     const state = randomBytes(16).toString("hex")
+    const next = url.searchParams.get("next") ?? ""
     const oauthUrl = buildOAuthUrl({
       clientId: c.clientId,
       redirectUri: `${c.baseUrl}/collab/auth/github/callback`,
       state,
       scopes: ["read:org", "read:user"],
     })
+    const cookies = [
+      `collab_oauth_state=${state}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`,
+    ]
+    if (next) {
+      cookies.push(`collab_next=${encodeURIComponent(next)}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`)
+    }
     return new Response(null, {
       status: 302,
       headers: {
         Location: oauthUrl,
-        "Set-Cookie": `collab_oauth_state=${state}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`,
+        "Set-Cookie": cookies.join(", "),
       },
     })
   }
@@ -218,9 +225,11 @@ async function handleOAuthCallback(req: Request, url: URL): Promise<Response> {
       githubAvatarUrl: ghUser.avatar_url,
     })
 
-    // Check for pending invite redirect
-    const pending = parseCookies(req.headers.get("cookie") ?? "")["collab_pending_invite"]
-    const location = pending ? `/collab/invite/${pending}` : "/"
+    // Determine post-auth redirect: pending invite > ?next param > /collab/new
+    const cookies = parseCookies(req.headers.get("cookie") ?? "")
+    const pending = cookies["collab_pending_invite"]
+    const nextParam = cookies["collab_next"] ? decodeURIComponent(cookies["collab_next"]) : null
+    const location = pending ? `/collab/invite/${pending}` : (nextParam ?? "/collab/new")
 
     return new Response(null, {
       status: 302,

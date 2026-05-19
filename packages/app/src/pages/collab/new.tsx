@@ -2,16 +2,8 @@
  * /collab/new — Create a new Collab Session
  */
 
-import { createSignal, createResource, For, Show } from "solid-js"
+import { createSignal, onMount, For, Show } from "solid-js"
 import { useNavigate } from "@solidjs/router"
-
-async function fetchOrgRepos(): Promise<Array<{ full_name: string; name: string }>> {
-  // Fetch repos via the collab API (requires auth — will redirect to GitHub OAuth if not logged in)
-  // Use a dummy session ID for repo listing; the router handles auth
-  const res = await fetch("/collab/session/repos-preview")
-  if (!res.ok) return []
-  return res.json()
-}
 
 export default function NewCollabSession() {
   const navigate = useNavigate()
@@ -21,18 +13,17 @@ export default function NewCollabSession() {
   const [queueMode, setQueueMode] = createSignal("fifo")
   const [submitting, setSubmitting] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
+  const [authed, setAuthed] = createSignal(false)
 
-  async function loadRepos() {
+  // Check auth immediately on mount — redirect to GitHub OAuth if not logged in
+  onMount(async () => {
     const res = await fetch("/collab/session")
     if (res.status === 401) {
       window.location.href = "/collab/auth/github?next=/collab/new"
-      return []
+      return
     }
-    // Re-use a known session to get repos — for new sessions just list org repos
-    const orgRes = await fetch("/collab/session/org-repos")
-    if (!orgRes.ok) return []
-    return orgRes.json()
-  }
+    setAuthed(true)
+  })
 
   async function handleSubmit(e: Event) {
     e.preventDefault()
@@ -50,6 +41,10 @@ export default function NewCollabSession() {
           queueMode: queueMode(),
         }),
       })
+      if (res.status === 401) {
+        window.location.href = "/collab/auth/github?next=/collab/new"
+        return
+      }
       if (!res.ok) {
         const err = await res.json()
         setError(err.error ?? "Failed to create session")
