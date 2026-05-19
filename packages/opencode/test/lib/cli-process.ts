@@ -192,49 +192,49 @@ export function withCliFixture<A, E>(
     const configJson = JSON.stringify(testProviderConfig(llm.url))
     const env = isolatedEnv(home, configJson)
 
-    const spawn = (args: string[], opts?: SpawnOpts): Effect.Effect<RunResult> =>
-      Effect.gen(function* () {
-        const start = Date.now()
-        const timeoutMs = opts?.timeoutMs ?? 30_000
-        // stdin: "ignore" so the child doesn't see a piped stdin and block
-        // on `Bun.stdin.text()` (see src/cli/cmd/run.ts — non-TTY stdin is
-        // consumed as the prompt). The old Process.run wrapper defaulted to
-        // ignore; ChildProcess.make defaults to pipe, so we set it explicitly.
-        const command = ChildProcess.make("bun", ["run", "--conditions=browser", cliEntry, ...args], {
-          cwd: home,
-          env: { ...env, ...opts?.env },
-          extendEnv: true,
-          stdin: "ignore",
-        })
-        // appProc.run collects stdout/stderr as Buffers and returns the exit
-        // code without throwing on non-zero — same contract the old
-        // `Process.run({ nothrow: true })` call had. A timeout surfaces as an
-        // AppProcessError, which we convert to a synthetic non-zero result so
-        // the test sees it through the normal `expectExit` path.
-        const result = yield* appProc.run(command).pipe(
-          Effect.timeoutOrElse({
-            duration: Duration.millis(timeoutMs),
-            orElse: () =>
-              Effect.succeed({
-                command: "",
-                exitCode: -1,
-                stdout: Buffer.alloc(0),
-                stderr: Buffer.from(`TIMED OUT after ${timeoutMs}ms\n`),
-                stdoutTruncated: false,
-                stderrTruncated: false,
-              }),
-          }),
-          // AppProcessError without timeout/signal/stdin opts only fires on
-          // spawn failure (binary missing, etc.) — treat as defect.
-          Effect.orDie,
-        )
-        return {
-          exitCode: result.exitCode,
-          stdout: result.stdout.toString(),
-          stderr: result.stderr.toString(),
-          durationMs: Date.now() - start,
-        }
+    const spawn = Effect.fn("opencode.spawn")(function* (args: string[], opts?: SpawnOpts) {
+      const start = Date.now()
+      const timeoutMs = opts?.timeoutMs ?? 30_000
+      // stdin: "ignore" so the child doesn't see a piped stdin and block
+      // on `Bun.stdin.text()` (see src/cli/cmd/run.ts — non-TTY stdin is
+      // consumed as the prompt). The old Process.run wrapper defaulted to
+      // ignore; ChildProcess.make defaults to pipe, so we set it explicitly.
+      const command = ChildProcess.make("bun", ["run", "--conditions=browser", cliEntry, ...args], {
+        cwd: home,
+        env: { ...env, ...opts?.env },
+        extendEnv: true,
+        stdin: "ignore",
       })
+      // Pass timeout to appProc.run rather than wrapping with
+      // Effect.timeoutOrElse externally: AppProcess.run is itself scoped, so
+      // its built-in timeout triggers the acquireRelease kill finalizer
+      // inside cross-spawn-spawner *before* surfacing the AppProcessError —
+      // guaranteeing the child is dead by the time the test continues.
+      // External timeoutOrElse interrupts the run fiber but races the
+      // scope close, which can leak the child past the test boundary.
+      //
+      // Catch AppProcessError (timeout OR spawn failure) and synthesize a
+      // non-zero result so the test sees it via the usual `expectExit`
+      // path rather than as an unhandled Effect failure.
+      const result = yield* appProc.run(command, { timeout: Duration.millis(timeoutMs) }).pipe(
+        Effect.catchTag("AppProcessError", (err) =>
+          Effect.succeed({
+            command: err.command,
+            exitCode: err.exitCode ?? -1,
+            stdout: Buffer.alloc(0),
+            stderr: Buffer.from((err.stderr ?? String(err.cause ?? err.message)) + "\n"),
+            stdoutTruncated: false,
+            stderrTruncated: false,
+          } satisfies AppProcess.RunResult),
+        ),
+      )
+      return {
+        exitCode: result.exitCode,
+        stdout: result.stdout.toString(),
+        stderr: result.stderr.toString(),
+        durationMs: Date.now() - start,
+      }
+    })
 
     const run = (message: string, opts?: RunOpts): Effect.Effect<RunResult> => {
       const argv: string[] = ["run"]
