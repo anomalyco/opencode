@@ -41,6 +41,10 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # github_token を明示すると Action は OIDC を使わない。指定しない場合
+          # Claude GitHub App との OIDC トークン交換（id-token: write 必須・
+          # App インストール前提）になり失敗するため、既定の GITHUB_TOKEN を渡す。
+          github_token: ${{ github.token }}
           claude_args: |
             --model claude-opus-4-7
             --max-turns 30
