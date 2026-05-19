@@ -164,16 +164,18 @@ const docRoute = HttpRouter.use((router) => router.add("GET", "/doc", () => Effe
   Layer.provide(authOnlyRouterLayer),
 )
 
-const uiRoute = HttpRouter.use((router) =>
-  Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
-    const client = yield* HttpClient.HttpClient
-    const flags = yield* RuntimeFlags.Service
-    yield* router.add("*", "/*", (request) =>
-      serveUIEffect(request, { fs, client, disableEmbeddedWebUi: flags.disableEmbeddedWebUi }),
-    )
-  }),
-).pipe(Layer.provide(authOnlyRouterLayer))
+function uiRouteWithBasePath(basePath?: string) {
+  return HttpRouter.use((router) =>
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const client = yield* HttpClient.HttpClient
+      const flags = yield* RuntimeFlags.Service
+      yield* router.add("*", "/*", (request) =>
+        serveUIEffect(request, { fs, client, disableEmbeddedWebUi: flags.disableEmbeddedWebUi, basePath }),
+      )
+    }),
+  ).pipe(Layer.provide(authOnlyRouterLayer))
+}
 
 type RouteRequirements =
   | HttpRouter.HttpRouter
@@ -183,15 +185,15 @@ type RouteRequirements =
   | HttpRouter.Request<"GlobalRequires", never>
 
 export function createRoutes(
-  corsOptions?: CorsOptions,
+  options?: CorsOptions & { basePath?: string },
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
-  return Layer.mergeAll(rootApiRoutes, eventApiRoutes, ptyConnectApiRoutes, instanceRoutes, docRoute, uiRoute).pipe(
+  return Layer.mergeAll(rootApiRoutes, eventApiRoutes, ptyConnectApiRoutes, instanceRoutes, docRoute, uiRouteWithBasePath(options?.basePath)).pipe(
     Layer.provide([
       errorLayer,
       compressionLayer,
       corsVaryFix,
       fenceLayer.pipe(Layer.provide(Database.defaultLayer)),
-      cors(corsOptions),
+      cors(options),
       Database.defaultLayer,
       Account.defaultLayer,
       Agent.defaultLayer,
@@ -236,7 +238,7 @@ export function createRoutes(
       FetchHttpClient.layer,
       HttpServer.layerServices,
     ]),
-    Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
+    Layer.provide(Layer.succeed(CorsConfig)(options)),
     Layer.provide(InstanceLayer.layer),
     Layer.provide(Observability.layer),
   )
