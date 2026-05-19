@@ -6,14 +6,7 @@
 // while the footer view renders the current menu state below it.
 /** @jsxImportSource @opentui/solid */
 import { pathToFileURL } from "bun"
-import {
-  StyledText,
-  bg,
-  fg,
-  type KeyBinding,
-  type KeyEvent,
-  type TextareaRenderable,
-} from "@opentui/core"
+import { StyledText, bg, fg, type KeyBinding, type KeyEvent, type TextareaRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import path from "path"
