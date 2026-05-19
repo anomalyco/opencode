@@ -81,8 +81,8 @@ export default function NewCollabSession() {
   }
 
   return (
-    <div class="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center p-6">
-      <div class="w-full max-w-lg">
+    <div class="min-h-screen bg-zinc-950 text-zinc-100 overflow-y-auto">
+      <div class="w-full max-w-lg mx-auto px-6 py-12">
         <div class="mb-8">
           <div class="flex items-center gap-2 mb-3">
             <span class="text-xs font-medium px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">

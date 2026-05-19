@@ -61,6 +61,16 @@ const SQL = `
     used_at INTEGER,
     used_by TEXT
   );
+  CREATE TABLE IF NOT EXISTS collab_auth_session (
+    token TEXT PRIMARY KEY,
+    github_id INTEGER NOT NULL,
+    github_login TEXT NOT NULL,
+    github_avatar_url TEXT NOT NULL DEFAULT '',
+    github_access_token TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS collab_auth_session_login_idx ON collab_auth_session(github_login);
 `
 
 export function runCollabMigrations() {

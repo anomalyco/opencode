@@ -77,6 +77,18 @@ export const CollabVoteTable = sqliteTable(
   ],
 )
 
+// Persisted GitHub OAuth sessions — survives server restarts.
+// The in-memory Map used originally was wiped on every container restart.
+export const CollabAuthSessionTable = sqliteTable("collab_auth_session", {
+  token: text().primaryKey(),
+  github_id: integer().notNull(),
+  github_login: text().notNull(),
+  github_avatar_url: text().notNull().default(""),
+  github_access_token: text().notNull(),
+  created_at: integer({ mode: "timestamp_ms" }).notNull(),
+  expires_at: integer({ mode: "timestamp_ms" }).notNull(),
+})
+
 export const CollabInviteTable = sqliteTable("collab_invite", {
   token: text().primaryKey(),
   collab_session_id: text()

@@ -38,6 +38,9 @@ import { runCollabMigrations } from "./migrate"
 import { collabDb } from "./db-impl"
 import { initSessionWorkspace, cleanupSessionWorkspace } from "./workspace"
 import type { CollabEvent } from "@opencode-ai/collab"
+import { Database } from "@/storage/db"
+import { CollabAuthSessionTable } from "./schema.sql"
+import { eq, gt } from "drizzle-orm"
 
 // ── Native session execution ────────────────────────────────────────────────────
 // Sends a prompt to the underlying opencode session, creating it first if needed.
@@ -102,7 +105,7 @@ function ensureMigrated() {
   migrated = true
 }
 
-// ── Cookie-based session store (in-memory; swap for Redis in prod) ──────────────
+// ── Cookie-based session store (SQLite-backed — survives server restarts) ───────
 
 interface CookieSession {
   githubAccessToken: string
@@ -112,18 +115,46 @@ interface CookieSession {
   state?: string
 }
 
-const sessions = new Map<string, CookieSession>()
-
 function getSession(req: Request): CookieSession | null {
   const cookie = parseCookies(req.headers.get("cookie") ?? "")
   const sid = cookie["collab_sid"]
   if (!sid) return null
-  return sessions.get(sid) ?? null
+  return Database.use((db) => {
+    const row = db
+      .select()
+      .from(CollabAuthSessionTable)
+      .where(eq(CollabAuthSessionTable.token, sid))
+      .get()
+    if (!row) return null
+    // Reject expired sessions
+    if (row.expires_at < Date.now()) {
+      db.delete(CollabAuthSessionTable).where(eq(CollabAuthSessionTable.token, sid)).run()
+      return null
+    }
+    return {
+      githubAccessToken: row.github_access_token,
+      githubId: row.github_id,
+      githubLogin: row.github_login,
+      githubAvatarUrl: row.github_avatar_url,
+    }
+  })
 }
 
 function setSession(session: CookieSession): { token: string; header: string } {
   const token = randomBytes(32).toString("hex")
-  sessions.set(token, session)
+  const now = Date.now()
+  const expiresAt = now + 7 * 24 * 3600 * 1000
+  Database.use((db) => {
+    db.insert(CollabAuthSessionTable).values({
+      token,
+      github_id: session.githubId,
+      github_login: session.githubLogin,
+      github_avatar_url: session.githubAvatarUrl,
+      github_access_token: session.githubAccessToken,
+      created_at: now,
+      expires_at: expiresAt,
+    }).run()
+  })
   return {
     token,
     header: `collab_sid=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 3600}`,
