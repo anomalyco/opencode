@@ -444,8 +444,13 @@ export default function BlackSubscribe() {
         </div>
 
         {/* Workspace picker modal */}
-        <Modal open={showWorkspacePicker() ?? false} onClose={() => {}} title={i18n.t("black.workspace.selectPlan")}>
-          <div data-slot="workspace-picker">
+        <Modal
+          open={showWorkspacePicker() ?? false}
+          onClose={() => {}}
+          title={i18n.t("black.workspace.selectPlan")}
+          variant="black"
+        >
+          <div data-component="black-workspace-picker-modal" data-slot="workspace-picker">
             <ul
               ref={listRef}
               data-slot="workspace-list"

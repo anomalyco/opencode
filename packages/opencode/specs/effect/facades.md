@@ -6,7 +6,6 @@ Current status on this branch:
 
 - `src/` has 5 `makeRuntime(...)` call sites total.
 - 2 are intentionally excluded from this checklist: `src/bus/index.ts` and `src/effect/cross-spawn-spawner.ts`.
-- 1 is tracked primarily by the instance-context migration rather than facade removal: `src/project/instance.ts`.
 - That leaves 2 live runtime-backed service facades still worth tracking here: `src/npm/index.ts` and `src/cli/cmd/tui/config/tui.ts`.
 
 Recent progress:
@@ -18,7 +17,6 @@ Recent progress:
 
 - `src/cli/cmd/tui/config/tui.ts` still exports `makeRuntime(...)` plus async facade helpers for `get()` and `waitForDependencies()`.
 - `src/npm/index.ts` still exports `makeRuntime(...)` plus async facade helpers for `install()`, `add()`, `outdated()`, and `which()`.
-- `src/project/instance.ts` still uses a dedicated runtime for project boot, but that file is really part of the broader legacy instance-context transition tracked in `instance-context.md`.
 
 ## Completed Batches
 
@@ -192,7 +190,6 @@ Most of the original facade-removal backlog is already done. The practical remai
 
 1. remove the `Npm` runtime-backed facade from `src/npm/index.ts`
 2. remove the `TuiConfig` runtime-backed facade from `src/cli/cmd/tui/config/tui.ts`
-3. keep `src/project/instance.ts` in the separate instance-context migration, not this checklist
 
 ## Checklist
 

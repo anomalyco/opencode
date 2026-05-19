@@ -8,7 +8,7 @@ import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Plugin } from "../plugin"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
-import * as ModelsDev from "@opencode-ai/core/models"
+import * as ModelsDev from "@opencode-ai/core/models-dev"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -427,13 +427,14 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
-    nvidia: () =>
+    nvidia: (provider) =>
       Effect.succeed({
-        autoload: false,
+        autoload: provider.source === "config",
         options: {
           headers: {
             "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
+            "X-BILLING-INVOKE-ORIGIN": "OpenCode",
           },
         },
       }),

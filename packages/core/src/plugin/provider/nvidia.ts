@@ -10,6 +10,7 @@ export const NvidiaPlugin = PluginV2.define({
         if (evt.provider.id !== ProviderV2.ID.make("nvidia")) return
         evt.provider.options.headers["HTTP-Referer"] = "https://opencode.ai/"
         evt.provider.options.headers["X-Title"] = "opencode"
+        evt.provider.options.headers["X-BILLING-INVOKE-ORIGIN"] ??= "OpenCode"
       }),
     }
   }),
