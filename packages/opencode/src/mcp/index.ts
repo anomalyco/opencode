@@ -121,6 +121,15 @@ function isOutputSchemaValidationError(error: Error) {
   )
 }
 
+function isMethodNotFoundError(error: unknown) {
+  if (typeof error !== "object" || error === null) return false
+  const value = error as { code?: unknown; message?: unknown }
+  const code = value.code
+  if ((typeof code === "number" || typeof code === "string") && Number(code) === -32601) return true
+  const message = typeof value.message === "string" ? value.message : ""
+  return /-32601|method not found/i.test(message)
+}
+
 function listTools(key: string, client: MCPClient, timeout: number) {
   return Effect.tryPromise({
     try: () => client.listTools(undefined, { timeout }),
@@ -195,11 +204,16 @@ function fetchFromClient<T extends { name: string }>(
   client: Client,
   listFn: (c: Client) => Promise<T[]>,
   label: string,
+  options?: {
+    onError?: (clientName: string, error: unknown) => void
+    shouldLogError?: (error: unknown) => boolean
+  },
 ) {
   return Effect.tryPromise({
     try: () => listFn(client),
     catch: (e: any) => {
-      log.error(`failed to get ${label}`, { clientName, error: e.message })
+      options?.onError?.(clientName, e)
+      if (options?.shouldLogError?.(e) ?? true) log.error(`failed to get ${label}`, { clientName, error: e.message })
       return e
     },
   }).pipe(
@@ -233,6 +247,7 @@ interface State {
   status: Record<string, Status>
   clients: Record<string, MCPClient>
   defs: Record<string, MCPToolDef[]>
+  unsupportedPrompts: Set<string>
 }
 
 export interface Interface {
@@ -519,6 +534,7 @@ export const layer = Layer.effect(
           status: {},
           clients: {},
           defs: {},
+          unsupportedPrompts: new Set(),
         }
 
         yield* Effect.forEach(
@@ -578,6 +594,7 @@ export const layer = Layer.effect(
     function closeClient(s: State, name: string) {
       const client = s.clients[name]
       delete s.defs[name]
+      s.unsupportedPrompts.delete(name)
       if (!client) return Effect.void
       return Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
     }
@@ -693,18 +710,34 @@ export const layer = Layer.effect(
       s: State,
       listFn: (c: Client) => Promise<T[]>,
       label: string,
+      options?: {
+        skip?: Set<string>
+        onError?: (clientName: string, error: unknown) => void
+        shouldLogError?: (error: unknown) => boolean
+      },
     ) {
       return Effect.forEach(
-        Object.entries(s.clients).filter(([name]) => s.status[name]?.status === "connected"),
+        Object.entries(s.clients).filter(
+          ([name]) => s.status[name]?.status === "connected" && !options?.skip?.has(name),
+        ),
         ([clientName, client]) =>
-          fetchFromClient(clientName, client, listFn, label).pipe(Effect.map((items) => Object.entries(items ?? {}))),
+          fetchFromClient(clientName, client, listFn, label, options).pipe(
+            Effect.map((items) => Object.entries(items ?? {})),
+          ),
         { concurrency: "unbounded" },
       ).pipe(Effect.map((results) => Object.fromEntries<T & { client: string }>(results.flat())))
     }
 
     const prompts = Effect.fn("MCP.prompts")(function* () {
       const s = yield* InstanceState.get(state)
-      return yield* collectFromConnected(s, (c) => c.listPrompts().then((r) => r.prompts), "prompts")
+      return yield* collectFromConnected(s, (c) => c.listPrompts().then((r) => r.prompts), "prompts", {
+        skip: s.unsupportedPrompts,
+        onError: (clientName, error) => {
+          if (!isMethodNotFoundError(error)) return
+          s.unsupportedPrompts.add(clientName)
+        },
+        shouldLogError: (error) => !isMethodNotFoundError(error),
+      })
     })
 
     const resources = Effect.fn("MCP.resources")(function* () {

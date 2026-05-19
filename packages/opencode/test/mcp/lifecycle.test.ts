@@ -9,10 +9,12 @@ import { testEffect } from "../lib/effect"
 interface MockClientState {
   tools: Array<{ name: string; description?: string; inputSchema: object; outputSchema?: object }>
   listToolsCalls: number
+  listPromptsCalls: number
   requestCalls: number
   listToolsShouldFail: boolean
   listToolsError: string
   listPromptsShouldFail: boolean
+  listPromptsError: Error & { code?: number | string }
   listResourcesShouldFail: boolean
   prompts: Array<{ name: string; description?: string }>
   resources: Array<{ name: string; uri: string; description?: string }>
@@ -34,13 +36,17 @@ function getOrCreateClientState(name?: string): MockClientState {
   const key = name ?? "default"
   let state = clientStates.get(key)
   if (!state) {
+    const listPromptsError = new Error("MCP error -32601: Method not found") as Error & { code?: number }
+    listPromptsError.code = -32601
     state = {
       tools: [{ name: "test_tool", description: "A test tool", inputSchema: { type: "object", properties: {} } }],
       listToolsCalls: 0,
+      listPromptsCalls: 0,
       requestCalls: 0,
       listToolsShouldFail: false,
       listToolsError: "listTools failed",
       listPromptsShouldFail: false,
+      listPromptsError,
       listResourcesShouldFail: false,
       prompts: [],
       resources: [],
@@ -148,8 +154,9 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
     }
 
     async listPrompts() {
+      if (this._state) this._state.listPromptsCalls++
       if (this._state?.listPromptsShouldFail) {
-        throw new Error("listPrompts failed")
+        throw this._state.listPromptsError
       }
       return { prompts: this._state?.prompts ?? [] }
     }
@@ -557,6 +564,147 @@ it.instance(
     config: {
       mcp: {
         "prompt-server": {
+          type: "local",
+          command: ["echo", "test"],
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "prompts() does not repeatedly call servers that do not support prompts/list",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "prompt-unsupported-server"
+        const serverState = getOrCreateClientState("prompt-unsupported-server")
+        serverState.listPromptsShouldFail = true
+
+        yield* mcp.add("prompt-unsupported-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        yield* mcp.prompts()
+        yield* mcp.prompts()
+        yield* mcp.prompts()
+
+        expect(serverState.listPromptsCalls).toBe(1)
+      }),
+    ),
+  {
+    config: {
+      mcp: {
+        "prompt-unsupported-server": {
+          type: "local",
+          command: ["echo", "test"],
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "prompts() recognizes string method-not-found error codes",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "prompt-string-code-server"
+        const serverState = getOrCreateClientState("prompt-string-code-server")
+        serverState.listPromptsShouldFail = true
+        serverState.listPromptsError = Object.assign(new Error("unsupported method"), { code: "-32601" })
+
+        yield* mcp.add("prompt-string-code-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        yield* mcp.prompts()
+        yield* mcp.prompts()
+
+        expect(serverState.listPromptsCalls).toBe(1)
+      }),
+    ),
+  {
+    config: {
+      mcp: {
+        "prompt-string-code-server": {
+          type: "local",
+          command: ["echo", "test"],
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "prompts() keeps retrying transient prompt list errors",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "prompt-transient-server"
+        const serverState = getOrCreateClientState("prompt-transient-server")
+        serverState.listPromptsShouldFail = true
+        serverState.listPromptsError = new Error("temporary prompts failure")
+
+        yield* mcp.add("prompt-transient-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        yield* mcp.prompts()
+        yield* mcp.prompts()
+        yield* mcp.prompts()
+
+        expect(serverState.listPromptsCalls).toBe(3)
+      }),
+    ),
+  {
+    config: {
+      mcp: {
+        "prompt-transient-server": {
+          type: "local",
+          command: ["echo", "test"],
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "prompts() retries unsupported prompt list after reconnect",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "prompt-reconnect-server"
+        const serverState = getOrCreateClientState("prompt-reconnect-server")
+        serverState.listPromptsShouldFail = true
+
+        yield* mcp.add("prompt-reconnect-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        yield* mcp.prompts()
+        yield* mcp.prompts()
+        expect(serverState.listPromptsCalls).toBe(1)
+
+        serverState.listPromptsShouldFail = false
+        serverState.prompts = [{ name: "available_after_reconnect", description: "now available" }]
+
+        yield* mcp.disconnect("prompt-reconnect-server")
+        yield* mcp.connect("prompt-reconnect-server")
+
+        const prompts = yield* mcp.prompts()
+        expect(serverState.listPromptsCalls).toBe(2)
+        expect(Object.keys(prompts).some((key) => key.includes("available_after_reconnect"))).toBe(true)
+      }),
+    ),
+  {
+    config: {
+      mcp: {
+        "prompt-reconnect-server": {
           type: "local",
           command: ["echo", "test"],
         },
