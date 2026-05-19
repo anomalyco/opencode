@@ -62,6 +62,7 @@ describe("RuntimeFlags", () => {
       expect(flags.experimentalEventSystem).toBe(true)
       expect(flags.experimentalWorkspaces).toBe(true)
       expect(flags.experimentalIconDiscovery).toBe(true)
+      expect(flags.experimentalNativeLlm).toBe(true)
       expect(flags.client).toBe("desktop")
     }),
   )
@@ -77,6 +78,16 @@ describe("RuntimeFlags", () => {
       )
 
       expect(flags.experimentalLspTy).toBe(true)
+    }),
+  )
+
+  it.effect("enables native LLM via dedicated or umbrella flag", () =>
+    Effect.gen(function* () {
+      const explicit = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL_NATIVE_LLM: "true" })))
+      const umbrella = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL: "true" })))
+
+      expect(explicit.experimentalNativeLlm).toBe(true)
+      expect(umbrella.experimentalNativeLlm).toBe(true)
     }),
   )
 

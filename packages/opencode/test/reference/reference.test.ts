@@ -5,9 +5,11 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "../../src/config/config"
+import { ConfigReference } from "../../src/config/reference"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Git } from "../../src/git"
 import { Reference } from "../../src/reference/reference"
+import { RepositoryCache } from "../../src/reference/repository-cache"
 import { disposeAllInstances, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -18,8 +20,7 @@ afterEach(async () => {
 const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Reference.layer.pipe(
     Layer.provide(Config.defaultLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(Git.defaultLayer),
+    Layer.provide(RepositoryCache.defaultLayer),
     Layer.provide(RuntimeFlags.layer(flags)),
   )
 
@@ -81,31 +82,76 @@ const waitForContent = (
   })
 
 describe("reference", () => {
-  it.live("resolves local and git references", () =>
+  it.live("resolves supported local and git config forms", () =>
     Effect.gen(function* () {
       const root = path.resolve("opencode-reference-root")
       const local = Reference.resolve({
         name: "docs",
-        reference: { path: "../docs" },
+        reference: ConfigReference.normalizeEntry({ path: "../docs" }),
         directory: path.join(root, "packages", "app"),
         worktree: root,
       })
       const repo = Reference.resolve({
         name: "effect",
-        reference: { repository: "Effect-TS/effect", branch: "main" },
+        reference: ConfigReference.normalizeEntry({ repository: "Effect-TS/effect", branch: "main" }),
+        directory: path.join(root, "packages", "app"),
+        worktree: root,
+      })
+      const localString = Reference.resolve({
+        name: "notes",
+        reference: ConfigReference.normalizeEntry("./notes"),
+        directory: path.join(root, "packages", "app"),
+        worktree: root,
+      })
+      const repoString = Reference.resolve({
+        name: "repo",
+        reference: ConfigReference.normalizeEntry("owner/repo"),
         directory: path.join(root, "packages", "app"),
         worktree: root,
       })
 
       expect(local.kind).toBe("local")
       if (local.kind === "local") expect(local.path).toBe(path.resolve(root, "../docs"))
+      expect(localString.kind).toBe("local")
+      if (localString.kind === "local") expect(localString.path).toBe(path.resolve(root, "notes"))
       expect(repo.kind).toBe("git")
       if (repo.kind === "git") {
         expect(repo.repository).toBe("Effect-TS/effect")
         expect(repo.branch).toBe("main")
         expect(repo.path).toBe(path.join(Global.Path.repos, "github.com", "Effect-TS", "effect"))
       }
+      expect(repoString.kind).toBe("git")
+      if (repoString.kind === "git") {
+        expect(repoString.repository).toBe("owner/repo")
+        expect(repoString.path).toBe(path.join(Global.Path.repos, "github.com", "owner", "repo"))
+      }
     }),
+  )
+
+  it.live("keeps invalid repository references visible without materializing", () =>
+    provideTmpdirInstance(
+      (_dir) =>
+        Effect.gen(function* () {
+          const reference = yield* Reference.Service
+          const references = yield* reference.list()
+          const invalid = yield* reference.get("bad")
+
+          expect(references.map((item) => item.name)).toEqual(["bad"])
+          expect(invalid).toMatchObject({
+            name: "bad",
+            kind: "invalid",
+            repository: "not-a-repo",
+          })
+          if (invalid?.kind === "invalid") expect(invalid.message).toContain("Repository must be a git URL")
+        }),
+      {
+        config: {
+          reference: {
+            bad: "not-a-repo",
+          },
+        },
+      },
+    ),
   )
 
   it.live("marks same-cache references with different branches invalid", () =>
@@ -114,11 +160,11 @@ describe("reference", () => {
       const references = Reference.resolveAll({
         directory: root,
         worktree: root,
-        references: {
+        references: ConfigReference.normalize({
           main: { repository: "owner/repo", branch: "main" },
           dev: { repository: "github.com/owner/repo", branch: "dev" },
           alsoMain: { repository: "https://github.com/owner/repo", branch: "main" },
-        },
+        }),
       })
 
       expect(references.map((reference) => reference.kind)).toEqual(["git", "invalid", "git"])
@@ -127,6 +173,27 @@ describe("reference", () => {
         expect(references[1].message).toContain("conflicts with @main")
         expect(references[1].message).toContain("@dev requests dev")
       }
+    }),
+  )
+
+  it.live("represents invalid aliases as invalid references", () =>
+    Effect.gen(function* () {
+      const root = path.resolve("opencode-reference-root")
+      const references = Reference.resolveAll({
+        directory: root,
+        worktree: root,
+        references: ConfigReference.normalize({
+          "bad/name": "owner/repo",
+        }),
+      })
+
+      expect(references).toEqual([
+        {
+          name: "bad/name",
+          kind: "invalid",
+          message: "Reference alias must not contain /, whitespace, comma, or backtick",
+        },
+      ])
     }),
   )
 
