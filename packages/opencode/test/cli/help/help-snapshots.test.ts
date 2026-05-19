@@ -95,30 +95,28 @@ describe("opencode CLI help-text snapshots", () => {
       Effect.gen(function* () {
         const argvs: Array<readonly string[]> = [...TOP_LEVEL.map((c) => [c] as const), ...SUBCOMMANDS]
 
-        // Collect per-command results in parallel, then assert in argv order
-        // so snapshot output is deterministic and failures across multiple
-        // commands all surface in one run instead of aborting on the first.
-        const results = yield* Effect.forEach(
+        // Spawn in parallel, then assert in argv order so snapshot output is
+        // deterministic and per-command failures don't abort the rest of
+        // the sweep. `Effect.partition` is the canonical "run all, separate
+        // failures from successes" primitive — no mutable accumulator needed.
+        const [failures, results] = yield* Effect.partition(
           argvs,
           (argv) =>
             Effect.gen(function* () {
               const result = yield* opencode.spawn([...argv, "--help"], { env: SNAPSHOT_ENV })
+              if (result.exitCode !== 0) {
+                return yield* Effect.fail(`opencode ${argv.join(" ")}: exit ${result.exitCode}`)
+              }
               return { argv, result }
             }),
           { concurrency: 8 },
         )
 
-        const failures: string[] = []
         for (const { argv, result } of results) {
-          const label = `opencode ${argv.join(" ")} --help`
-          if (result.exitCode !== 0) {
-            failures.push(`${label}: exit ${result.exitCode}`)
-            continue
-          }
           // yargs writes --help to stderr, not stdout. Snapshotting stderr
           // means our test catches the help body; stdout for these commands
           // is expected to be empty.
-          expect(normalize(result.stderr)).toMatchSnapshot(label)
+          expect(normalize(result.stderr)).toMatchSnapshot(`opencode ${argv.join(" ")} --help`)
         }
         if (failures.length > 0) {
           throw new Error(`Help text failed for:\n  ${failures.join("\n  ")}`)

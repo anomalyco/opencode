@@ -33,6 +33,30 @@ const cliEntry = path.join(opencodeRoot, "src/index.ts")
 
 export const testModelID = "test/test-model"
 
+// Wrap a Bun subprocess pipe (or any ReadableStream<Uint8Array>) as a Stream.
+// Centralizes the `evaluate` + `onError` boilerplate and tags errors with the
+// stream name so a stderr/stdout failure is greppable in logs.
+function fromBunStream(name: string, get: () => ReadableStream<Uint8Array>) {
+  return Stream.fromReadableStream({
+    evaluate: get,
+    onError: (cause) => new Error(`${name} stream error: ${String(cause)}`),
+  })
+}
+
+// Long-lived processes (serve, acp) all want the same stderr drain: read every
+// chunk, push to a tail buffer, swallow stream errors (the child closing the
+// pipe is normal). `log: true` surfaces a real protocol error to logs so a
+// regression doesn't silently disappear.
+function forkStderrDrain(stream: ReadableStream<Uint8Array>, into: string[]) {
+  return Effect.forkScoped(
+    fromBunStream("stderr", () => stream).pipe(
+      Stream.decodeText(),
+      Stream.runForEach((chunk) => Effect.sync(() => into.push(chunk))),
+      Effect.ignore({ log: true }),
+    ),
+  )
+}
+
 function isolatedEnv(home: string, configJson: string): Record<string, string> {
   return {
     OPENCODE_TEST_HOME: home,
@@ -225,20 +249,10 @@ export function withCliFixture<A, E>(
           }).pipe(Effect.ignore),
       )
 
-      // Drain stderr in a scope-bound fork. Without this the OS pipe buffer
-      // eventually fills and the child blocks on its next log call. Kept as a
-      // tail buffer so timeout failures can include context.
+      // Tail buffer so timeout failures can include stderr context. The fork
+      // also keeps the OS pipe buffer from filling and wedging the child.
       const stderrChunks: string[] = []
-      yield* Effect.forkScoped(
-        Stream.fromReadableStream({
-          evaluate: () => proc.stderr,
-          onError: () => new Error("stderr stream error"),
-        }).pipe(
-          Stream.decodeText(),
-          Stream.runForEach((chunk) => Effect.sync(() => stderrChunks.push(chunk))),
-          Effect.ignore,
-        ),
-      )
+      yield* forkStderrDrain(proc.stderr, stderrChunks)
 
       // Watch stdout line-by-line for the listening sentinel. Format
       // (see src/cli/cmd/serve.ts):
@@ -246,17 +260,14 @@ export function withCliFixture<A, E>(
       const readyRe = /listening on (http:\/\/([^\s:]+):(\d+))/
       const readyDeferred = yield* Deferred.make<{ url: string; hostname: string; port: number }>()
       yield* Effect.forkScoped(
-        Stream.fromReadableStream({
-          evaluate: () => proc.stdout,
-          onError: () => new Error("stdout stream error"),
-        }).pipe(
+        fromBunStream("stdout", () => proc.stdout).pipe(
           Stream.decodeText(),
           Stream.splitLines,
           Stream.runForEach((line) => {
             const m = line.match(readyRe)
             return m ? Deferred.succeed(readyDeferred, { url: m[1], hostname: m[2], port: Number(m[3]) }) : Effect.void
           }),
-          Effect.ignore,
+          Effect.ignore({ log: true }),
         ),
       )
 
@@ -323,26 +334,14 @@ export function withCliFixture<A, E>(
       )
 
       const stderrChunks: string[] = []
-      yield* Effect.forkScoped(
-        Stream.fromReadableStream({
-          evaluate: () => proc.stderr,
-          onError: () => new Error("stderr stream error"),
-        }).pipe(
-          Stream.decodeText(),
-          Stream.runForEach((chunk) => Effect.sync(() => stderrChunks.push(chunk))),
-          Effect.ignore,
-        ),
-      )
+      yield* forkStderrDrain(proc.stderr, stderrChunks)
 
       // Each ndjson line becomes one queue entry. JSON.parse failures are
       // surfaced as the raw string so a malformed protocol message doesn't
       // silently wedge the test in `receive`.
       const responses = yield* Queue.unbounded<unknown>()
       yield* Effect.forkScoped(
-        Stream.fromReadableStream({
-          evaluate: () => proc.stdout,
-          onError: () => new Error("stdout stream error"),
-        }).pipe(
+        fromBunStream("stdout", () => proc.stdout).pipe(
           Stream.decodeText(),
           Stream.splitLines,
           Stream.runForEach((line) => {
@@ -355,23 +354,23 @@ export function withCliFixture<A, E>(
             }
             return Queue.offer(responses, parsed)
           }),
-          Effect.ignore,
+          Effect.ignore({ log: true }),
         ),
       )
 
       return {
+        // `proc.stdin.write` returns `number | Promise<number>`. The promise
+        // form is the backpressure signal — if we don't await it, rapid
+        // successive sends can interleave under pipe-buffer-full conditions
+        // and corrupt the ndjson framing.
         send: (msg: object) =>
-          Effect.sync(() => {
-            proc.stdin.write(JSON.stringify(msg) + "\n")
+          Effect.promise(async () => {
+            const ret = proc.stdin.write(JSON.stringify(msg) + "\n")
+            if (typeof ret !== "number") await ret
           }),
         receive: Queue.take(responses),
-        close: () => {
-          try {
-            proc.stdin.end()
-          } catch {
-            // already closed
-          }
-        },
+        // proc.stdin.end() is idempotent in Bun; no try/catch needed.
+        close: () => proc.stdin.end(),
         exited: proc.exited as Promise<number>,
       } satisfies AcpHandle
     })
