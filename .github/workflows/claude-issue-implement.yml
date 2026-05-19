@@ -61,10 +61,14 @@ jobs:
             ユーザーが `/claude-approve` で実装を承認しました。実装し、Pull Request を作成してください。
             すべての出力（コミットメッセージ・PR・コメント）は日本語で書いてください。
 
+            重要: このリポジトリは fork のため、`gh` コマンドには必ず `-R ${{ github.repository }}`
+            を付けること。付けないと upstream の親リポジトリに解決され、別物の Issue を読んだり
+            親リポジトリへ PR を作ろうとして失敗する。
+
             ## 手順
 
-            1. `gh issue view ${{ github.event.issue.number }} --comments` で Issue 本文と、
-               Claude が以前投稿した「実装方針」コメントを読む。これに沿って実装する。
+            1. `gh issue view ${{ github.event.issue.number }} -R ${{ github.repository }} --comments`
+               で Issue 本文と、Claude が以前投稿した「実装方針」コメントを読む。これに沿って実装する。
             2. PR を作成する前に、次のリポジトリ規約を必ず読み、従う:
                - `.opencode/skills/gh-pr-compliance/SKILL.md`
                - `.github/pull_request_template.md`
@@ -72,17 +76,18 @@ jobs:
             3. ベースブランチ `dev` から作業ブランチ `claude/issue-${{ github.event.issue.number }}` を作成する。
             4. 実装方針に沿ってコードを変更する。可能なら `bun` で型チェック・テストを行い壊れていないか確認する。
             5. Conventional Commits 形式（例 `fix:` `feat:` `chore:`）で簡潔にコミットし、ブランチを push する。
-            6. `gh pr create --base dev` で Pull Request を作成する:
+            6. `gh pr create -R ${{ github.repository }} --base dev` で Pull Request を作成する:
                - タイトルは Conventional Commits の接頭辞付きで簡潔に。
                - 本文は `.github/pull_request_template.md` の見出しをそのまま使い、各セクションを埋める。
                - `### Issue for this PR` セクションに `Closes #${{ github.event.issue.number }}` を書く。
                - 本文は簡潔・具体的に。明らかに AI 生成と分かる冗長な文章は書かない
                  （テンプレートにそうした PR は閉じられると明記されている）。
-            7. PR 作成後、`gh issue comment ${{ github.event.issue.number }}` で
-               作成した PR の URL を Issue にコメントする。
+            7. PR 作成後、`gh issue comment ${{ github.event.issue.number }} -R ${{ github.repository }}`
+               で作成した PR の URL を Issue にコメントする。
 
             ## 注意
             - 実装方針が見当たらない、または実装が現実的でないと判断した場合は、
-              無理に PR を作らず、その理由を `gh issue comment` で Issue に説明して終了する。
+              無理に PR を作らず、その理由を `gh issue comment ${{ github.event.issue.number }}
+              -R ${{ github.repository }}` で Issue に説明して終了する。
             - Issue に直接関係しない変更は含めない。
             - `dev` ブランチへ直接 push しない。必ず作業ブランチを使う。

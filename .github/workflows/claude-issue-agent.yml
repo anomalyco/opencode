@@ -56,13 +56,18 @@ jobs:
             あなたはこのリポジトリの Issue 対応 AI です。対象は Issue #${{ github.event.issue.number }} です。
             すべての出力（コメント本文）は日本語で書いてください。
 
+            重要: このリポジトリは fork のため、`gh` コマンドには必ず `-R ${{ github.repository }}`
+            を付けること。付けないと upstream の親リポジトリに解決され、別物の Issue を読んだり
+            別リポジトリへコメントしたりして失敗する。
+
             ## 手順
 
-            1. `gh issue view ${{ github.event.issue.number }} --comments` で Issue 本文と既存コメントをすべて読む。
+            1. `gh issue view ${{ github.event.issue.number }} -R ${{ github.repository }} --comments`
+               で Issue 本文と既存コメントをすべて読む。
             2. リポジトリのコード（Read / Grep / Glob）を調査し、対応に必要な情報を集める。
                関連ファイル・既存実装・設計上の制約を把握すること。
             3. 状況に応じて、次のどちらかを Issue に 1 件だけコメントする
-               （`gh issue comment ${{ github.event.issue.number }} --body "..."`）。
+               （`gh issue comment ${{ github.event.issue.number }} -R ${{ github.repository }} --body "..."`）。
 
             ### A. 議論・確認が必要な場合（要件が曖昧／選択肢が複数ある／前提が不明）
             - Issue 作成者（`gh issue view` の author のログイン名）を `@ログイン名` でメンションする。
