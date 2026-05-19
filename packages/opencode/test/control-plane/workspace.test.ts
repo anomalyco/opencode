@@ -173,8 +173,12 @@ const startWorkspaceSyncingWithFlag = (projectID: ProjectID, experimentalWorkspa
       Effect.provide(workspaceLayer(experimentalWorkspaces)),
     ),
   )
-const waitForWorkspaceSync = (workspaceID: WorkspaceID, state: Record<string, number>, signal?: AbortSignal) =>
-  runWorkspace(Workspace.Service.use((workspace) => workspace.waitForSync(workspaceID, state, signal)))
+const waitForWorkspaceSync = (
+  workspaceID: WorkspaceID,
+  state: Record<string, number>,
+  signal?: AbortSignal,
+  timeout?: number,
+) => runWorkspace(Workspace.Service.use((workspace) => workspace.waitForSync(workspaceID, state, signal, timeout)))
 
 function captureGlobalEvents() {
   const events: GlobalEvent[] = []
@@ -1639,9 +1643,9 @@ describe("workspace waitForSync", () => {
     await withInstance(async () => {
       const sessionID = SessionID.descending("ses_wait_timeout")
 
-      await expect(waitForWorkspaceSync(WorkspaceID.ascending("wrk_wait_timeout"), { [sessionID]: 1 })).rejects.toThrow(
-        `Timed out waiting for sync fence: {"${sessionID}":1}`,
-      )
+      await expect(
+        waitForWorkspaceSync(WorkspaceID.ascending("wrk_wait_timeout"), { [sessionID]: 1 }, undefined, 25),
+      ).rejects.toThrow(`Timed out waiting for sync fence: {"${sessionID}":1}`)
     })
   }, 7000)
 })
