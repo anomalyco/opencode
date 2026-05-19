@@ -36,6 +36,9 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
           await input.onBeforeExit?.()
           // Reset window title before destroying renderer
           renderer.setTerminalTitle("")
+          // Exit alternate screen buffer to prevent the terminal emulator from
+          // closing the window/tab when the process exits
+          process.stdout.write("\x1b[?1049l")
           renderer.destroy()
           win32FlushInputBuffer()
           if (reason) {
