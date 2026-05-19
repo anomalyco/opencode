@@ -18,7 +18,7 @@
 // without changing the fixture. Long-lived commands like `serve` will need a
 // different return shape — see the TODO at the bottom of OpencodeCli.
 import type { TestOptions } from "bun:test"
-import { Deferred, Duration, Effect, Layer, Scope, Stream } from "effect"
+import { Deferred, Duration, Effect, Layer, Queue, Scope, Stream } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import path from "node:path"
 import fs from "node:fs/promises"
@@ -98,6 +98,28 @@ export type ServeHandle = {
   readonly exited: Promise<number>
 }
 
+// `opencode acp` speaks newline-delimited JSON-RPC over stdin/stdout. It is
+// long-lived and exits cleanly when stdin is closed. The handle exposes the
+// duplex stream as send/receive rather than raw pipes so tests don't have to
+// reimplement framing on every call site.
+export type AcpOpts = SpawnOpts & {
+  readonly cwd?: string
+  readonly extraArgs?: string[]
+}
+
+export type AcpHandle = {
+  // Writes a single JSON-RPC message to the child's stdin as one ndjson line.
+  readonly send: (msg: object) => Effect.Effect<void>
+  // Resolves with the next parsed JSON-RPC line from the child's stdout.
+  // Lines are buffered in a queue so multiple receives in a row won't drop
+  // anything. Pair with `Effect.timeout` if a test wants a deadline.
+  readonly receive: Effect.Effect<unknown>
+  // Closes stdin. ACP exits cleanly on stdin EOF; the scope finalizer also
+  // calls this, so tests only need it when asserting exit behavior.
+  readonly close: () => void
+  readonly exited: Promise<number>
+}
+
 export type OpencodeCli = {
   // High-level: run a single prompt against the test model. Short-lived.
   readonly run: (message: string, opts?: RunOpts) => Effect.Effect<RunResult>
@@ -105,6 +127,9 @@ export type OpencodeCli = {
   // returned handle is killed when the caller's Scope closes. Fails if the
   // listening line doesn't appear within `readyTimeoutMs`.
   readonly serve: (opts?: ServeOpts) => Effect.Effect<ServeHandle, Error, Scope.Scope>
+  // Spawn `opencode acp` and return a duplex JSON-RPC handle. Long-lived:
+  // the subprocess exits on stdin close, which the scope finalizer triggers.
+  readonly acp: (opts?: AcpOpts) => Effect.Effect<AcpHandle, Error, Scope.Scope>
   // Escape hatch: any CLI invocation with full control over argv. Used to test
   // commands that don't yet have a typed builder.
   readonly spawn: (args: string[], opts?: SpawnOpts) => Effect.Effect<RunResult>
@@ -260,7 +285,98 @@ export function withCliFixture<A, E>(
       } satisfies ServeHandle
     })
 
-    const opencode: OpencodeCli = { run, serve, spawn, expectExit, parseJsonEvents }
+    const acp = Effect.fn("opencode.acp")(function* (opts?: AcpOpts) {
+      const argv = ["acp"]
+      if (opts?.cwd) argv.push("--cwd", opts.cwd)
+      if (opts?.extraArgs) argv.push(...opts.extraArgs)
+
+      // Acquire the subprocess. Release ends stdin (clean shutdown — ACP exits
+      // on stdin EOF) and falls back to SIGTERM if it doesn't exit promptly.
+      // Either way we await proc.exited so the test scope doesn't leak.
+      const proc = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...argv], {
+            cwd: opts?.cwd ?? home,
+            env: { ...process.env, ...env, ...opts?.env },
+            stdin: "pipe",
+            stdout: "pipe",
+            stderr: "pipe",
+          }),
+        ),
+        (p) =>
+          // Graceful shutdown: close stdin (ACP exits on EOF), give it a
+          // window to exit, then SIGTERM. The Effect.timeoutOrElse expresses
+          // exactly that race without raw setTimeout or Promise.race.
+          Effect.gen(function* () {
+            yield* Effect.sync(() => p.stdin.end())
+            yield* Effect.promise(() => p.exited).pipe(
+              Effect.timeoutOrElse({
+                duration: Duration.seconds(2),
+                orElse: () =>
+                  Effect.sync(() => {
+                    p.kill()
+                  }),
+              }),
+            )
+            yield* Effect.promise(() => p.exited)
+          }).pipe(Effect.ignore),
+      )
+
+      const stderrChunks: string[] = []
+      yield* Effect.forkScoped(
+        Stream.fromReadableStream({
+          evaluate: () => proc.stderr,
+          onError: () => new Error("stderr stream error"),
+        }).pipe(
+          Stream.decodeText(),
+          Stream.runForEach((chunk) => Effect.sync(() => stderrChunks.push(chunk))),
+          Effect.ignore,
+        ),
+      )
+
+      // Each ndjson line becomes one queue entry. JSON.parse failures are
+      // surfaced as the raw string so a malformed protocol message doesn't
+      // silently wedge the test in `receive`.
+      const responses = yield* Queue.unbounded<unknown>()
+      yield* Effect.forkScoped(
+        Stream.fromReadableStream({
+          evaluate: () => proc.stdout,
+          onError: () => new Error("stdout stream error"),
+        }).pipe(
+          Stream.decodeText(),
+          Stream.splitLines,
+          Stream.runForEach((line) => {
+            if (line.length === 0) return Effect.void
+            let parsed: unknown
+            try {
+              parsed = JSON.parse(line)
+            } catch {
+              parsed = { _rawLine: line }
+            }
+            return Queue.offer(responses, parsed)
+          }),
+          Effect.ignore,
+        ),
+      )
+
+      return {
+        send: (msg: object) =>
+          Effect.sync(() => {
+            proc.stdin.write(JSON.stringify(msg) + "\n")
+          }),
+        receive: Queue.take(responses),
+        close: () => {
+          try {
+            proc.stdin.end()
+          } catch {
+            // already closed
+          }
+        },
+        exited: proc.exited as Promise<number>,
+      } satisfies AcpHandle
+    })
+
+    const opencode: OpencodeCli = { run, serve, acp, spawn, expectExit, parseJsonEvents }
 
     return yield* fn({ llm, home, opencode })
     // FetchHttpClient is provided so test bodies can `yield* HttpClient.HttpClient`
