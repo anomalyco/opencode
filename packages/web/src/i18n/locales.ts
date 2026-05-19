@@ -14,6 +14,7 @@ export const docsLocale = [
   "ru",
   "th",
   "tr",
+  "uk",
   "zh-cn",
   "zh-tw",
 ] as const
@@ -46,6 +47,7 @@ export const localeAlias = {
   ru: "ru",
   th: "th",
   tr: "tr",
+  uk: "uk",
   zh: "zh-cn",
   "zh-cn": "zh-cn",
   zht: "zh-tw",
@@ -63,6 +65,7 @@ const starts = [
   ["ja", "ja"],
   ["pl", "pl"],
   ["ru", "ru"],
+  ["uk", "uk"],
   ["ar", "ar"],
   ["th", "th"],
   ["tr", "tr"],
