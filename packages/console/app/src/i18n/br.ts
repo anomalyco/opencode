@@ -697,7 +697,8 @@ export const dict = {
   "workspace.referral.apply.preview": "Visualizar",
   "workspace.referral.apply.action": "Aplicar",
   "workspace.referral.apply.confirmTitle": "Aplicar recompensa Go",
-  "workspace.referral.apply.confirmBody": "Aplique {{amount}} para reduzir os contadores atuais de uso do Go deste workspace.",
+  "workspace.referral.apply.confirmBody":
+    "Aplique {{amount}} para reduzir os contadores atuais de uso do Go deste workspace.",
   "workspace.referral.apply.confirmAction": "Aplicar",
 
   "download.title": "OpenCode | Baixar",

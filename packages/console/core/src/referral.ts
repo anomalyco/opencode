@@ -19,7 +19,10 @@ export namespace Referral {
   export const CODE_LENGTH = 10
 
   export function normalizeCode(code?: string | null) {
-    return code?.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, CODE_LENGTH)
+    return code
+      ?.toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, CODE_LENGTH)
   }
 
   function generateCode() {
@@ -41,7 +44,11 @@ export namespace Referral {
           .update(WorkspaceTable)
           .set({ referralCode: generateCode() })
           .where(
-            and(eq(WorkspaceTable.id, workspaceID), isNull(WorkspaceTable.referralCode), isNull(WorkspaceTable.timeDeleted)),
+            and(
+              eq(WorkspaceTable.id, workspaceID),
+              isNull(WorkspaceTable.referralCode),
+              isNull(WorkspaceTable.timeDeleted),
+            ),
           )
 
         const created = await tx
@@ -74,7 +81,10 @@ export namespace Referral {
           })
           .from(ReferralRewardTable)
           .innerJoin(ReferralTable, eq(ReferralTable.id, ReferralRewardTable.referralID))
-          .innerJoin(AuthTable, and(eq(AuthTable.accountID, ReferralTable.inviteeAccountID), eq(AuthTable.provider, "email")))
+          .innerJoin(
+            AuthTable,
+            and(eq(AuthTable.accountID, ReferralTable.inviteeAccountID), eq(AuthTable.provider, "email")),
+          )
           .where(
             and(
               eq(ReferralRewardTable.workspaceID, workspaceID),
@@ -86,12 +96,18 @@ export namespace Referral {
         tx
           .select({ id: ReferralTable.id, inviteeEmail: AuthTable.subject, timeCreated: ReferralTable.timeCreated })
           .from(ReferralTable)
-          .innerJoin(AuthTable, and(eq(AuthTable.accountID, ReferralTable.inviteeAccountID), eq(AuthTable.provider, "email")))
+          .innerJoin(
+            AuthTable,
+            and(eq(AuthTable.accountID, ReferralTable.inviteeAccountID), eq(AuthTable.provider, "email")),
+          )
           .where(and(eq(ReferralTable.workspaceID, workspaceID), isNull(ReferralTable.timeDeleted))),
         tx
           .select({ id: ReferralTable.id, inviteeEmail: AuthTable.subject, timeCreated: ReferralTable.timeCreated })
           .from(ReferralTable)
-          .innerJoin(AuthTable, and(eq(AuthTable.accountID, ReferralTable.inviteeAccountID), eq(AuthTable.provider, "email")))
+          .innerJoin(
+            AuthTable,
+            and(eq(AuthTable.accountID, ReferralTable.inviteeAccountID), eq(AuthTable.provider, "email")),
+          )
           .where(and(eq(ReferralTable.inviteeAccountID, accountID), isNull(ReferralTable.timeDeleted))),
         tx
           .select({ referralID: ReferralRewardTable.referralID })
@@ -158,9 +174,7 @@ export namespace Referral {
       hasActiveGo: !!rows.lite,
       rewardAmount: microCentsToCents(REWARD_AMOUNT),
       totalEarned: rewards.reduce((total, reward) => total + reward.amount, 0),
-      totalApplied: rewards
-        .filter((reward) => reward.timeApplied)
-        .reduce((total, reward) => total + reward.amount, 0),
+      totalApplied: rewards.filter((reward) => reward.timeApplied).reduce((total, reward) => total + reward.amount, 0),
       rewards: allRewards,
     }
   })
@@ -277,10 +291,7 @@ export namespace Referral {
     }
   })
 
-  export async function createFromAccount(input: {
-    accountID: string
-    referralCode?: string
-  }) {
+  export async function createFromAccount(input: { accountID: string; referralCode?: string }) {
     const referralCode = normalizeCode(input.referralCode)
     if (!referralCode) return
 
@@ -313,14 +324,11 @@ export namespace Referral {
       if (selfReferral) throw new Error("Self-referral is not allowed")
 
       const referralID = Identifier.create("referral")
-      await tx
-        .insert(ReferralTable)
-        .ignore()
-        .values({
-          workspaceID: code.workspaceID,
-          id: referralID,
-          inviteeAccountID: input.accountID,
-        })
+      await tx.insert(ReferralTable).ignore().values({
+        workspaceID: code.workspaceID,
+        id: referralID,
+        inviteeAccountID: input.accountID,
+      })
 
       const referral = await tx
         .select({ id: ReferralTable.id, workspaceID: ReferralTable.workspaceID })
@@ -332,16 +340,17 @@ export namespace Referral {
     })
   }
 
-  export async function completeFromLiteSubscription(input: {
-    workspaceID: string
-    userID: string
-  }) {
+  export async function completeFromLiteSubscription(input: { workspaceID: string; userID: string }) {
     return Database.transaction(async (tx) => {
       const invitee = await tx
         .select({ accountID: UserTable.accountID })
         .from(UserTable)
         .where(
-          and(eq(UserTable.workspaceID, input.workspaceID), eq(UserTable.id, input.userID), isNull(UserTable.timeDeleted)),
+          and(
+            eq(UserTable.workspaceID, input.workspaceID),
+            eq(UserTable.id, input.userID),
+            isNull(UserTable.timeDeleted),
+          ),
         )
         .then((rows) => rows[0])
       if (!invitee?.accountID) throw new Error("Referral invitee account missing")

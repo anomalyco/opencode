@@ -9,10 +9,7 @@ export const ReferralTable = mysqlTable(
     ...timestamps,
     inviteeAccountID: ulid("invitee_account_id").notNull(),
   },
-  (table) => [
-    ...workspaceIndexes(table),
-    uniqueIndex("referral_invitee_account_id").on(table.inviteeAccountID),
-  ],
+  (table) => [...workspaceIndexes(table), uniqueIndex("referral_invitee_account_id").on(table.inviteeAccountID)],
 )
 
 export const ReferralRewardTable = mysqlTable(

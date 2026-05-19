@@ -671,7 +671,8 @@ export const dict = {
   "workspace.referral.copyLink": "リンクをコピー",
   "workspace.referral.copied": "コピーしました",
   "workspace.referral.overview.title": "友達を Go に招待",
-  "workspace.referral.overview.subtitle": "友達がサブスクライブすると $5 分の Go クレジットを獲得。友達にも $5 が付与されます。",
+  "workspace.referral.overview.subtitle":
+    "友達がサブスクライブすると $5 分の Go クレジットを獲得。友達にも $5 が付与されます。",
   "workspace.referral.stats.invites": "招待",
   "workspace.referral.stats.earned": "獲得",
   "workspace.referral.stats.applied": "適用済み",
@@ -695,7 +696,8 @@ export const dict = {
   "workspace.referral.apply.preview": "プレビュー",
   "workspace.referral.apply.action": "適用",
   "workspace.referral.apply.confirmTitle": "Go 特典を適用",
-  "workspace.referral.apply.confirmBody": "{{amount}} を適用して、このワークスペースの現在の Go 使用カウンターを減らします。",
+  "workspace.referral.apply.confirmBody":
+    "{{amount}} を適用して、このワークスペースの現在の Go 使用カウンターを減らします。",
   "workspace.referral.apply.confirmAction": "適用",
 
   "download.title": "OpenCode | ダウンロード",

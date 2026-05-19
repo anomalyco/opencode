@@ -140,7 +140,8 @@ function LiteUsageItem(props: { label: string; usage: { usagePercent: number; re
         <div data-slot="progress-bar" style={{ width: `${props.usage.usagePercent}%` }} />
       </div>
       <span data-slot="reset-time">
-        {i18n.t("workspace.lite.subscription.resetsIn")} {formatResetTime(props.usage.resetInSec, i18n, liteResetTimeKeys)}
+        {i18n.t("workspace.lite.subscription.resetsIn")}{" "}
+        {formatResetTime(props.usage.resetInSec, i18n, liteResetTimeKeys)}
       </span>
     </div>
   )

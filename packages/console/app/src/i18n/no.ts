@@ -694,7 +694,8 @@ export const dict = {
   "workspace.referral.apply.preview": "Forhåndsvis",
   "workspace.referral.apply.action": "Bruk",
   "workspace.referral.apply.confirmTitle": "Bruk Go-belønning",
-  "workspace.referral.apply.confirmBody": "Bruk {{amount}} for å redusere dette workspacets nåværende Go-forbrukstellere.",
+  "workspace.referral.apply.confirmBody":
+    "Bruk {{amount}} for å redusere dette workspacets nåværende Go-forbrukstellere.",
   "workspace.referral.apply.confirmAction": "Bruk",
 
   "download.title": "OpenCode | Last ned",

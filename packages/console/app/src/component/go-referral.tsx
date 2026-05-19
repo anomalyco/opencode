@@ -35,10 +35,9 @@ export const queryGoReferralUsagePreview = query(async (workspaceID: string, ref
 
 export const applyGoReferralReward = action(async (workspaceID: string, referralID: string) => {
   "use server"
-  return json(
-    await withActor(() => Referral.applyReward({ referralID }), workspaceID),
-    { revalidate: [queryGoReferral.key, queryGoReferralUsagePreview.key, queryLiteSubscription.key] },
-  )
+  return json(await withActor(() => Referral.applyReward({ referralID }), workspaceID), {
+    revalidate: [queryGoReferral.key, queryGoReferralUsagePreview.key, queryLiteSubscription.key],
+  })
 }, "go.referral.reward.apply")
 
 function currentUsagePreview(usage: { resetInSec: number; usagePercent: number }) {
@@ -245,7 +244,11 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
           </table>
         </div>
       </Show>
-      <Modal open={!!selected()} onClose={() => setSelected(undefined)} title={i18n.t("workspace.referral.apply.confirmTitle")}>
+      <Modal
+        open={!!selected()}
+        onClose={() => setSelected(undefined)}
+        title={i18n.t("workspace.referral.apply.confirmTitle")}
+      >
         <div data-component="go-credit-confirm">
           <p>
             {i18n.t("workspace.referral.apply.confirmBody", {
@@ -306,7 +309,8 @@ function GoReferralUsagePreviewRow(props: { label: string; usage: GoReferralUsag
         <div data-slot="usage-preview-after" style={{ width: `${props.usage.afterPercent}%` }} />
       </div>
       <span data-slot="usage-preview-reset">
-        {i18n.t("workspace.lite.subscription.resetsIn")} {formatResetTime(props.usage.resetInSec, i18n, liteResetTimeKeys)}
+        {i18n.t("workspace.lite.subscription.resetsIn")}{" "}
+        {formatResetTime(props.usage.resetInSec, i18n, liteResetTimeKeys)}
       </span>
     </div>
   )
