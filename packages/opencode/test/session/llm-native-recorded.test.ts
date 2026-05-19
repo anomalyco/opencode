@@ -1,7 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { HttpRecorder, Redactor } from "@opencode-ai/http-recorder"
 import { describe, expect } from "bun:test"
-import { tool } from "ai"
+import { tool, type ModelMessage } from "ai"
 import { Effect, Layer, Stream } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import path from "node:path"
@@ -22,9 +22,9 @@ import type { ModelsDev } from "@opencode-ai/core/models-dev"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const OPENAI_CASSETTE = "session/native-openai-tool-call"
-const ZEN_CASSETTE = "session/native-zen-tool-call"
-const ANTHROPIC_CASSETTE = "session/native-anthropic-tool-call"
+const OPENAI_CASSETTE = "session/native-openai-tool-loop"
+const ZEN_CASSETTE = "session/native-zen-tool-loop"
+const ANTHROPIC_CASSETTE = "session/native-anthropic-tool-loop"
 const FIXTURES_DIR = path.join(import.meta.dir, "../fixtures/recordings")
 const OPENAI_API_KEY = process.env.OPENCODE_RECORD_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY
 const CONSOLE_TOKEN = process.env.OPENCODE_RECORD_CONSOLE_TOKEN
@@ -165,7 +165,7 @@ const openAIIt = testEffect(
     provider: "openai",
     protocol: "openai-responses",
     route: "openai-responses",
-    tags: ["opencode", "native", "tool-call"],
+    tags: ["opencode", "native", "tool-loop"],
   }),
 )
 const zenIt = testEffect(
@@ -173,7 +173,7 @@ const zenIt = testEffect(
     provider: "opencode",
     protocol: "openai-responses",
     route: "openai-responses",
-    tags: ["opencode", "zen", "native", "tool-call"],
+    tags: ["opencode", "zen", "native", "tool-loop"],
   }),
 )
 const anthropicIt = testEffect(
@@ -181,7 +181,7 @@ const anthropicIt = testEffect(
     provider: "anthropic",
     protocol: "anthropic-messages",
     route: "anthropic-messages",
-    tags: ["opencode", "native", "tool-call"],
+    tags: ["opencode", "native", "tool-loop"],
   }),
 )
 const recordedOpenAIInstance = canRunOpenAI ? openAIIt.instance : openAIIt.instance.skip
@@ -212,159 +212,125 @@ const collect = (input: LLM.StreamInput) =>
     return Array.from(yield* llm.stream(input).pipe(Stream.runCollect))
   })
 
+const WEATHER_RESULT = { temperature: 22, condition: "sunny" } as const
+const WEATHER_SYSTEM =
+  "Use the get_weather tool exactly once to look up Paris, then reply with exactly: Paris is sunny."
+const WEATHER_USER = "What is the weather in Paris?"
+
+const weatherTool = () =>
+  tool({
+    description: "Get the current weather for a city.",
+    inputSchema: z.object({ city: z.string() }),
+    execute: async () => WEATHER_RESULT,
+  })
+
+type LoopParams = {
+  readonly providerID: ProviderID
+  readonly modelID: string
+  readonly configBuilder?: (model: ModelsDev.Provider["models"][string]) => Partial<Config.Info>
+  readonly sessionPrefix: string
+}
+
+const driveToolLoop = (params: LoopParams) =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const model = yield* Effect.promise(() => loadFixture(params.providerID, params.modelID))
+    yield* writeConfig(test.directory, model, params.configBuilder ?? openAIConfig)
+
+    const sessionID = SessionID.make(`session-recorded-${params.sessionPrefix}-loop`)
+    const agent = {
+      name: "test",
+      mode: "primary",
+      prompt: "Answer using tools when appropriate.",
+      options: {},
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      temperature: 0,
+    } satisfies Agent.Info
+    const resolved = yield* getModel(params.providerID, ModelID.make(model.id))
+
+    const userMessage: ModelMessage = { role: "user", content: WEATHER_USER }
+    const base = {
+      user: {
+        id: MessageID.make(`msg_user-recorded-${params.sessionPrefix}-loop`),
+        sessionID,
+        role: "user" as const,
+        time: { created: 0 },
+        agent: agent.name,
+        model: { providerID: params.providerID, modelID: ModelID.make(model.id) },
+      } satisfies MessageV2.User,
+      sessionID,
+      model: resolved,
+      agent,
+      system: [WEATHER_SYSTEM],
+      tools: { get_weather: weatherTool() },
+    }
+
+    const turn1 = yield* collect({ ...base, messages: [userMessage] })
+    const toolCall = turn1.find((event): event is Extract<(typeof turn1)[number], { type: "tool-call" }> =>
+      event.type === "tool-call",
+    )
+    const toolResult = turn1.find((event): event is Extract<(typeof turn1)[number], { type: "tool-result" }> =>
+      event.type === "tool-result",
+    )
+    expect(toolCall).toBeDefined()
+    expect(toolResult).toBeDefined()
+    expect(toolCall!.name).toBe("get_weather")
+    expect(toolCall!.input).toMatchObject({ city: expect.stringMatching(/Paris/i) })
+    expect(turn1.filter((event) => event.type === "step-finish")).toHaveLength(1)
+
+    const turn2 = yield* collect({
+      ...base,
+      messages: [
+        userMessage,
+        {
+          role: "assistant",
+          content: [
+            { type: "tool-call", toolCallId: toolCall!.id, toolName: toolCall!.name, input: toolCall!.input },
+          ],
+        },
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: toolCall!.id,
+              toolName: toolCall!.name,
+              output: { type: "json", value: WEATHER_RESULT },
+            },
+          ],
+        },
+      ],
+    })
+
+    const text = turn2
+      .filter((event): event is Extract<(typeof turn2)[number], { type: "text-delta" }> => event.type === "text-delta")
+      .map((event) => event.text)
+      .join("")
+    expect(text).toMatch(/Paris is sunny/i)
+    expect(turn2.filter((event) => event.type === "finish")).toHaveLength(1)
+    expect(turn2.filter((event) => event.type === "tool-call")).toHaveLength(0)
+  })
+
 describe("session.llm native recorded", () => {
-  recordedOpenAIInstance("uses real RequestExecutor with HTTP recorder for native OpenAI tools", () =>
-    Effect.gen(function* () {
-      const test = yield* TestInstance
-      const model = yield* Effect.promise(() => loadFixture("openai", "gpt-4.1-mini"))
-      yield* writeConfig(test.directory, model)
+  recordedOpenAIInstance("drives a native OpenAI tool loop to a final text answer", () =>
+    driveToolLoop({ providerID: ProviderID.openai, modelID: "gpt-4.1-mini", sessionPrefix: "openai" }),
+  )
 
-      const sessionID = SessionID.make("session-recorded-native-tool")
-      const agent = {
-        name: "test",
-        mode: "primary",
-        prompt: "Call tools exactly as instructed.",
-        options: {},
-        permission: [{ permission: "*", pattern: "*", action: "allow" }],
-        temperature: 0,
-      } satisfies Agent.Info
-      const resolved = yield* getModel(ProviderID.openai, ModelID.make(model.id))
-      let executed: unknown
-
-      const events = yield* collect({
-        user: {
-          id: MessageID.make("msg_user-recorded-native-tool"),
-          sessionID,
-          role: "user",
-          time: { created: 0 },
-          agent: agent.name,
-          model: { providerID: ProviderID.make("openai"), modelID: ModelID.make(model.id) },
-        } satisfies MessageV2.User,
-        sessionID,
-        model: resolved,
-        agent,
-        system: ["You must call the lookup tool exactly once with query weather. Do not answer in text."],
-        messages: [{ role: "user", content: "Use lookup." }],
-        toolChoice: "required",
-        tools: {
-          lookup: tool({
-            description: "Lookup data.",
-            inputSchema: z.object({ query: z.string() }),
-            execute: async (args, options) => {
-              executed = { args, toolCallId: options.toolCallId }
-              return { output: "looked up" }
-            },
-          }),
-        },
-      })
-
-      expect(events.filter((event) => event.type === "step-finish")).toHaveLength(1)
-      expect(events.filter((event) => event.type === "finish")).toHaveLength(1)
-      expect(events.some((event) => event.type === "tool-result")).toBe(true)
-      expect(executed).toMatchObject({ args: { query: "weather" }, toolCallId: expect.any(String) })
+  recordedZenInstance("drives a native Zen tool loop to a final text answer", () =>
+    driveToolLoop({
+      providerID: ProviderID.opencode,
+      modelID: "gpt-5.2-codex",
+      configBuilder: zenConfig,
+      sessionPrefix: "zen",
     }),
   )
 
-  recordedZenInstance("uses console-managed Zen config with native OpenAI-compatible tools", () =>
-    Effect.gen(function* () {
-      const test = yield* TestInstance
-      const model = yield* Effect.promise(() => loadFixture("opencode", "gpt-5.2-codex"))
-      yield* writeConfig(test.directory, model, zenConfig)
-
-      const sessionID = SessionID.make("session-recorded-native-zen-tool")
-      const agent = {
-        name: "test",
-        mode: "primary",
-        prompt: "Call tools exactly as instructed.",
-        options: {},
-        permission: [{ permission: "*", pattern: "*", action: "allow" }],
-      } satisfies Agent.Info
-      const resolved = yield* getModel(ProviderID.opencode, ModelID.make(model.id))
-      let executed: unknown
-
-      const events = yield* collect({
-        user: {
-          id: MessageID.make("msg_user-recorded-native-zen-tool"),
-          sessionID,
-          role: "user",
-          time: { created: 0 },
-          agent: agent.name,
-          model: { providerID: ProviderID.opencode, modelID: ModelID.make(model.id) },
-        } satisfies MessageV2.User,
-        sessionID,
-        model: resolved,
-        agent,
-        system: ["You must call the lookup tool exactly once with query weather. Do not answer in text."],
-        messages: [{ role: "user", content: "Use lookup." }],
-        toolChoice: "required",
-        tools: {
-          lookup: tool({
-            description: "Lookup data.",
-            inputSchema: z.object({ query: z.string() }),
-            execute: async (args, options) => {
-              executed = { args, toolCallId: options.toolCallId }
-              return { output: "looked up" }
-            },
-          }),
-        },
-      })
-
-      expect(events.filter((event) => event.type === "step-finish")).toHaveLength(1)
-      expect(events.filter((event) => event.type === "finish")).toHaveLength(1)
-      expect(events.some((event) => event.type === "tool-result")).toBe(true)
-      expect(executed).toMatchObject({ args: { query: "weather" }, toolCallId: expect.any(String) })
-    }),
-  )
-
-  recordedAnthropicInstance("uses real RequestExecutor with HTTP recorder for native Anthropic tools", () =>
-    Effect.gen(function* () {
-      const test = yield* TestInstance
-      const model = yield* Effect.promise(() => loadFixture("anthropic", "claude-haiku-4-5-20251001"))
-      yield* writeConfig(test.directory, model, anthropicConfig)
-
-      const sessionID = SessionID.make("session-recorded-native-anthropic-tool")
-      const agent = {
-        name: "test",
-        mode: "primary",
-        prompt: "Call tools exactly as instructed.",
-        options: {},
-        permission: [{ permission: "*", pattern: "*", action: "allow" }],
-        temperature: 0,
-      } satisfies Agent.Info
-      const resolved = yield* getModel(ProviderID.anthropic, ModelID.make(model.id))
-      let executed: unknown
-
-      const events = yield* collect({
-        user: {
-          id: MessageID.make("msg_user-recorded-native-anthropic-tool"),
-          sessionID,
-          role: "user",
-          time: { created: 0 },
-          agent: agent.name,
-          model: { providerID: ProviderID.anthropic, modelID: ModelID.make(model.id) },
-        } satisfies MessageV2.User,
-        sessionID,
-        model: resolved,
-        agent,
-        system: ["You must call the lookup tool exactly once with query weather. Do not answer in text."],
-        messages: [{ role: "user", content: "Use lookup." }],
-        toolChoice: "required",
-        tools: {
-          lookup: tool({
-            description: "Lookup data.",
-            inputSchema: z.object({ query: z.string() }),
-            execute: async (args, options) => {
-              executed = { args, toolCallId: options.toolCallId }
-              return { output: "looked up" }
-            },
-          }),
-        },
-      })
-
-      expect(events.filter((event) => event.type === "step-finish")).toHaveLength(1)
-      expect(events.filter((event) => event.type === "finish")).toHaveLength(1)
-      expect(events.some((event) => event.type === "tool-result")).toBe(true)
-      expect(executed).toMatchObject({ args: { query: "weather" }, toolCallId: expect.any(String) })
+  recordedAnthropicInstance("drives a native Anthropic tool loop to a final text answer", () =>
+    driveToolLoop({
+      providerID: ProviderID.anthropic,
+      modelID: "claude-haiku-4-5-20251001",
+      configBuilder: anthropicConfig,
+      sessionPrefix: "anthropic",
     }),
   )
 })
