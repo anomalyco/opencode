@@ -87,7 +87,8 @@ function stripNonStandardMessageFields(body: Record<string, any>) {
     ...body,
     messages: body.messages.map((message) => {
       if (!message || typeof message !== "object") return message
-      return Object.fromEntries(Object.entries(message).filter(([key]) => key !== "reasoning"))
+      const { reasoning: _reasoning, ...sanitized } = message
+      return sanitized
     }),
   }
 }
