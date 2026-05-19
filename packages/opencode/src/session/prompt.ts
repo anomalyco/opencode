@@ -395,14 +395,48 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             }
           }),
         ask: (req) =>
-          permission
-            .ask({
+          Effect.gen(function* () {
+            // Config-derived ruleset: agent defaults + user config + per-session
+            // override. The Permission service applies in-session "always"
+            // approvals separately AFTER this ruleset, so escalating an entry
+            // here cannot suppress a human's "always allow" choice.
+            const ruleset = Permission.merge(input.agent.permission, input.session.permission ?? [])
+            // Fire the `permission.ask` plugin hook against the config-only
+            // evaluation result for each pattern. Plugins (notably the
+            // securecode permission-policy plugin) may raise an `allow` to
+            // `ask`; when they do, append an `ask` rule so the gate is
+            // enforced. `deny` is never relaxed: appended rules only apply
+            // when the config result was `allow`.
+            const escalation: Permission.Ruleset = []
+            for (const pattern of req.patterns) {
+              const configStatus = Permission.evaluate(req.permission, pattern, ruleset).action
+              if (configStatus !== "allow") continue
+              const hookOutput = yield* plugin.trigger(
+                "permission.ask",
+                {
+                  id: ulid(),
+                  type: req.permission,
+                  pattern,
+                  sessionID: input.session.id,
+                  messageID: input.processor.message.id,
+                  callID: options.toolCallId,
+                  title: "",
+                  metadata: req.metadata,
+                  time: { created: Date.now() },
+                },
+                { status: configStatus as "ask" | "deny" | "allow" },
+              )
+              if (hookOutput.status === "allow") continue
+              if (escalation.some((rule) => rule.pattern === pattern)) continue
+              escalation.push({ permission: req.permission, pattern, action: hookOutput.status })
+            }
+            yield* permission.ask({
               ...req,
               sessionID: input.session.id,
               tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-              ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+              ruleset: Permission.merge(ruleset, escalation),
             })
-            .pipe(Effect.orDie),
+          }).pipe(Effect.orDie),
       })
 
       for (const item of yield* registry.tools({

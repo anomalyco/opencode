@@ -21,6 +21,7 @@ import { AzureAuthPlugin } from "./azure"
 import { OverflowGuardPlugin } from "@/securecode/plugins/overflow-guard"
 import { QwenQuestionNormalizePlugin } from "@/securecode/plugins/qwen-question-normalize"
 import { QwenThinkingDefaultPlugin } from "@/securecode/plugins/qwen-thinking-default"
+import { PermissionPolicyPlugin } from "@/securecode/plugins/permission-policy"
 import { Effect, Layer, Context, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
@@ -69,6 +70,7 @@ const INTERNAL_PLUGINS: PluginInstance[] = [
   OverflowGuardPlugin,
   QwenQuestionNormalizePlugin,
   QwenThinkingDefaultPlugin,
+  PermissionPolicyPlugin,
 ]
 
 function isServerPlugin(value: unknown): value is PluginInstance {
