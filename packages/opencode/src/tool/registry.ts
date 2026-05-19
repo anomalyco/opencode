@@ -204,9 +204,17 @@ export const layer: Layer.Layer<
         if (matches.length) yield* config.waitForDependencies()
         for (const match of matches) {
           const namespace = path.basename(match, path.extname(match))
-          // `match` is an absolute filesystem path from `Glob.scanSync(..., { absolute: true })`.
-          // Import it as `file://` so Node on Windows accepts the dynamic import.
-          const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
+          const mod = yield* Effect.promise(() => import(pathToFileURL(match).href)).pipe(
+            Effect.catch((cause) =>
+              Effect.sync(() => {
+                log.warn("failed to import tool, skipping", {
+                  file: match,
+                  error: String(cause),
+                })
+                return {}
+              }),
+            ),
+          )
           for (const [id, def] of Object.entries(mod)) {
             if (!isPluginTool(def)) continue
             custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
