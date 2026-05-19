@@ -773,7 +773,7 @@ function getSyntaxRules(theme: Theme) {
     {
       scope: ["extmark.paste"],
       style: {
-        foreground: theme.background,
+        foreground: selectedForeground(theme, theme.warning),
         background: theme.warning,
         bold: true,
       },
@@ -962,6 +962,7 @@ function getSyntaxRules(theme: Theme) {
       style: {
         foreground: theme.markdownHeading,
         bold: true,
+        underline: true,
       },
     },
     {

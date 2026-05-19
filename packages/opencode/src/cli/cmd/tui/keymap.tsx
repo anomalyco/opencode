@@ -5,30 +5,103 @@ import {
   formatCommandBindings as formatCommandBindingsExtra,
   formatKeySequence as formatKeySequenceExtra,
 } from "@opentui/keymap/extras"
-import {
-  KeymapProvider,
-  reactiveMatcherFromSignal,
-  useKeymap,
-  useKeymapSelector,
-  useBindings,
-} from "@opentui/keymap/solid"
-import type { Accessor } from "solid-js"
+import { KeymapProvider, useKeymap, useKeymapSelector, useBindings } from "@opentui/keymap/solid"
+import { createMemo, type Accessor } from "solid-js"
 import type { TuiConfig } from "./config/tui"
 import { useTuiConfig } from "./context/tui-config"
 import { TuiKeybind } from "./config/keybind"
 
 export const LEADER_TOKEN = "leader"
+export const OPENCODE_BASE_MODE = "base"
+export const COMMAND_PALETTE_COMMAND = "command.palette.show"
+
+const OPENCODE_MODE_KEY = "opencode.mode"
 
 export const OpencodeKeymapProvider = KeymapProvider
 export const useOpencodeKeymap = useKeymap
 
-export { reactiveMatcherFromSignal, useBindings, useKeymapSelector }
+export { useBindings, useKeymapSelector }
 
 export type OpenTuiKeymap = ReturnType<typeof useKeymap>
+type OpencodeModeStack = ReturnType<typeof createOpencodeModeStack>
+type CommandSlashEntry = {
+  display: string
+  description?: string
+  aliases?: string[]
+  onSelect: () => void
+}
+type Command = ReturnType<OpenTuiKeymap["getCommands"]>[number]
+
+const modeStacks = new WeakMap<OpenTuiKeymap, OpencodeModeStack>()
+
+function isVisiblePaletteCommand(command: Command) {
+  return command.hidden !== true && command.name !== COMMAND_PALETTE_COMMAND
+}
+
+export function createOpencodeModeStack(keymap: OpenTuiKeymap) {
+  keymap.setData(OPENCODE_MODE_KEY, OPENCODE_BASE_MODE)
+
+  const offFields = keymap.registerLayerFields({
+    mode(value, ctx) {
+      ctx.require(OPENCODE_MODE_KEY, value)
+    },
+  })
+
+  const stack: { id: symbol; mode: string }[] = []
+  let disposed = false
+
+  const update = () => {
+    keymap.setData(OPENCODE_MODE_KEY, stack.at(-1)?.mode ?? OPENCODE_BASE_MODE)
+  }
+
+  const stackApi = {
+    current() {
+      return stack.at(-1)?.mode ?? OPENCODE_BASE_MODE
+    },
+    push(mode: string) {
+      if (disposed) return () => {}
+      const id = Symbol(mode)
+      let active = true
+      stack.push({ id, mode })
+      update()
+
+      return () => {
+        if (!active) return
+        active = false
+        const index = stack.findIndex((item) => item.id === id)
+        if (index !== -1) stack.splice(index, 1)
+        update()
+      }
+    },
+    dispose() {
+      if (disposed) return
+      disposed = true
+      stack.length = 0
+      offFields()
+      keymap.setData(OPENCODE_MODE_KEY, undefined)
+      modeStacks.delete(keymap)
+    },
+  }
+
+  modeStacks.set(keymap, stackApi)
+  return stackApi
+}
+
+export function useOpencodeModeStack() {
+  return getOpencodeModeStack(useOpencodeKeymap())
+}
+
+export function getOpencodeModeStack(keymap: OpenTuiKeymap) {
+  const value = modeStacks.get(keymap)
+  if (!value) throw new Error("Opencode mode stack is not registered for this keymap")
+  return value
+}
 
 const KEY_ALIASES = {
   enter: "return",
   esc: "escape",
+  pgdown: "pagedown",
+  pgup: "pageup",
 } as const
 
 function expandKeyAliases(input: string) {
@@ -125,6 +198,7 @@ export function registerOpencodeKeymap(
   renderer: CliRenderer,
   config: Pick<TuiConfig.Resolved, "keybinds" | "leader_timeout">,
 ) {
+  const modeStack = createOpencodeModeStack(keymap)
   const offCommaBindings = addons.registerCommaBindings(keymap)
   const offAliasExpander = registerKeyAliases(keymap)
   const offBaseLayout = addons.registerBaseLayoutFallback(keymap)
@@ -148,6 +222,7 @@ export function registerOpencodeKeymap(
     offAliasExpander()
     offBaseLayout()
     offCommaBindings()
+    modeStack.dispose()
   }
 }
 
@@ -163,4 +238,36 @@ export function useCommandShortcut(command: string): Accessor<string> {
 
 export function useLeaderActive(): Accessor<boolean> {
   return useKeymapSelector((keymap: OpenTuiKeymap) => keymap.getPendingSequence()[0]?.tokenName === LEADER_TOKEN)
+}
+
+export function useCommandSlashes(): Accessor<readonly CommandSlashEntry[]> {
+  const keymap = useOpencodeKeymap()
+  const entries = useKeymapSelector((keymap: OpenTuiKeymap) =>
+    keymap.getCommandEntries({
+      visibility: "reachable",
+      namespace: "palette",
+      filter: isVisiblePaletteCommand,
+    }),
+  )
+
+  return createMemo<CommandSlashEntry[]>(() =>
+    entries().flatMap((entry) => {
+      const slashName = entry.command.slashName
+      if (typeof slashName !== "string" || !slashName) return []
+      const slashAliases = entry.command.slashAliases
+      return {
+        display: `/${slashName}`,
+        description:
+          typeof entry.command.desc === "string"
+            ? entry.command.desc
+            : typeof entry.command.title === "string"
+              ? entry.command.title
+              : undefined,
+        aliases: Array.isArray(slashAliases)
+          ? slashAliases.filter((alias): alias is string => typeof alias === "string").map((alias) => `/${alias}`)
+          : undefined,
+        onSelect: () => keymap.dispatchCommand(entry.command.name),
+      }
+    }),
+  )
 }

@@ -28,7 +28,7 @@ import { MessageID, PartID } from "@/session/schema"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { computePromptTraits } from "./traits"
-import { assign } from "./part"
+import { assign, expandPastedTextPlaceholders } from "./part"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -59,8 +59,7 @@ import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { type WorkspaceStatus } from "../workspace-label"
-import { useCommandPalette } from "../../context/command-palette"
-import { useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
+import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
 import { useTuiConfig } from "../../context/tui-config"
 
 export type PromptProps = {
@@ -152,7 +151,6 @@ export function Prompt(props: PromptProps) {
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
   const stash = usePromptStash()
-  const command = useCommandPalette()
   const keymap = useOpencodeKeymap()
   const agentShortcut = useCommandShortcut("agent.cycle")
   const paletteShortcut = useCommandShortcut("command.palette.show")
@@ -629,7 +627,7 @@ export function Prompt(props: PromptProps) {
   }))
 
   useBindings(() => ({
-    enabled: command.matcher,
+    mode: OPENCODE_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("prompt.palette", [
       "prompt.submit",
       "prompt.editor",
@@ -1544,6 +1542,9 @@ export function Prompt(props: PromptProps) {
               }}
               ref={(r: TextareaRenderable) => {
                 input = r
+                Object.assign(r, {
+                  getClipboardText: (text: string) => expandPastedTextPlaceholders(text, store.prompt.parts),
+                })
                 setInputTarget(r)
                 if (promptPartTypeId === 0) {
                   promptPartTypeId = input.extmarks.registerType("prompt-part")

@@ -3,10 +3,11 @@ import { mkdir, unlink } from "fs/promises"
 import path from "path"
 
 import { disposeAllInstances, tmpdir, withTestInstance } from "../fixture/fixture"
+import { markPluginDependenciesReady } from "../fixture/plugin"
 import { Global } from "@opencode-ai/core/global"
 import type { InstanceContext } from "../../src/project/instance-context"
 import { Plugin } from "../../src/plugin/index"
-import { ModelsDev } from "@opencode-ai/core/models"
+import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "@/util/filesystem"
@@ -28,15 +29,21 @@ function rememberEnv(k: string) {
   if (!originalEnv.has(k)) originalEnv.set(k, process.env[k])
 }
 
+const setProcessEnv = (k: string, v: string) =>
+  Effect.sync(() => {
+    rememberEnv(k)
+    process.env[k] = v
+  })
+
 const set = (ctx: InstanceContext, k: string, v: string) => {
   rememberEnv(k)
   process.env[k] = v
-  return env.runSync((svc) => svc.set(k, v).pipe(Effect.provideService(InstanceRef, ctx)))
+  return env.runPromise((svc) => svc.set(k, v).pipe(Effect.provideService(InstanceRef, ctx)))
 }
 const remove = (ctx: InstanceContext, k: string) => {
   rememberEnv(k)
   delete process.env[k]
-  return env.runSync((svc) => svc.remove(k).pipe(Effect.provideService(InstanceRef, ctx)))
+  return env.runPromise((svc) => svc.remove(k).pipe(Effect.provideService(InstanceRef, ctx)))
 }
 
 afterEach(async () => {
@@ -80,28 +87,12 @@ async function getModel(providerID: ProviderID, modelID: ModelID, ctx: InstanceC
   return run(ctx, (provider) => provider.getModel(providerID, modelID))
 }
 
-async function getLanguage(model: Provider.Model, ctx: InstanceContext) {
-  return run(ctx, (provider) => provider.getLanguage(model))
-}
-
 async function closest(providerID: ProviderID, query: string[], ctx: InstanceContext) {
   return run(ctx, (provider) => provider.closest(providerID, query))
 }
 
 async function getSmallModel(providerID: ProviderID, ctx: InstanceContext) {
   return run(ctx, (provider) => provider.getSmallModel(providerID))
-}
-
-async function defaultModel(ctx: InstanceContext) {
-  return run(ctx, (provider) => provider.defaultModel())
-}
-
-async function markPluginDependenciesReady(dir: string) {
-  await mkdir(path.join(dir, "node_modules"), { recursive: true })
-  await Bun.write(
-    path.join(dir, "package-lock.json"),
-    JSON.stringify({ packages: { "": { dependencies: { "@opencode-ai/plugin": "0.0.0" } } } }),
-  )
 }
 
 function paid(providers: Awaited<ReturnType<typeof list>>) {
@@ -135,236 +126,159 @@ const alphaProviderConfig = {
   },
 }
 
-test("provider loaded from env variable", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
-      const providers = await list(ctx)
-      expect(providers[ProviderID.anthropic]).toBeDefined()
-      // Provider should retain its connection source even if custom loaders
-      // merge additional options.
-      expect(providers[ProviderID.anthropic].source).toBe("env")
-      expect(providers[ProviderID.anthropic].options.headers["anthropic-beta"]).toBeDefined()
-    },
-  })
-})
+it.instance("provider loaded from env variable", () =>
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    expect(providers[ProviderID.anthropic]).toBeDefined()
+    // Provider should retain its connection source even if custom loaders
+    // merge additional options.
+    expect(providers[ProviderID.anthropic].source).toBe("env")
+    expect(providers[ProviderID.anthropic].options.headers["anthropic-beta"]).toBeDefined()
+  }),
+)
 
-test("provider loaded from config with apiKey option", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            anthropic: {
-              options: {
-                apiKey: "config-api-key",
+it.instance(
+  "provider loaded from config with apiKey option",
+  Effect.gen(function* () {
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    expect(providers[ProviderID.anthropic]).toBeDefined()
+  }),
+  {
+    config: {
+      provider: {
+        anthropic: {
+          options: {
+            apiKey: "config-api-key",
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "disabled_providers excludes provider",
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    expect(providers[ProviderID.anthropic]).toBeUndefined()
+  }),
+  { config: { disabled_providers: ["anthropic"] } },
+)
+
+it.instance(
+  "enabled_providers restricts to only listed providers",
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+    yield* setProcessEnv("OPENAI_API_KEY", "test-openai-key")
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    expect(providers[ProviderID.anthropic]).toBeDefined()
+    expect(providers[ProviderID.openai]).toBeUndefined()
+  }),
+  { config: { enabled_providers: ["anthropic"] } },
+)
+
+it.instance(
+  "model whitelist filters models for provider",
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    expect(providers[ProviderID.anthropic]).toBeDefined()
+    const models = Object.keys(providers[ProviderID.anthropic].models)
+    expect(models).toContain("claude-sonnet-4-20250514")
+    expect(models.length).toBe(1)
+  }),
+  {
+    config: {
+      provider: {
+        anthropic: {
+          whitelist: ["claude-sonnet-4-20250514"],
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "model blacklist excludes specific models",
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    expect(providers[ProviderID.anthropic]).toBeDefined()
+    const models = Object.keys(providers[ProviderID.anthropic].models)
+    expect(models).not.toContain("claude-sonnet-4-20250514")
+  }),
+  {
+    config: {
+      provider: {
+        anthropic: {
+          blacklist: ["claude-sonnet-4-20250514"],
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "custom model alias via config",
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    expect(providers[ProviderID.anthropic]).toBeDefined()
+    expect(providers[ProviderID.anthropic].models["my-alias"]).toBeDefined()
+    expect(providers[ProviderID.anthropic].models["my-alias"].name).toBe("My Custom Alias")
+  }),
+  {
+    config: {
+      provider: {
+        anthropic: {
+          models: {
+            "my-alias": {
+              id: "claude-sonnet-4-20250514",
+              name: "My Custom Alias",
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "custom provider with npm package",
+  Effect.gen(function* () {
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    expect(providers[ProviderID.make("custom-provider")]).toBeDefined()
+    expect(providers[ProviderID.make("custom-provider")].name).toBe("Custom Provider")
+    expect(providers[ProviderID.make("custom-provider")].models["custom-model"]).toBeDefined()
+  }),
+  {
+    config: {
+      provider: {
+        "custom-provider": {
+          name: "Custom Provider",
+          npm: "@ai-sdk/openai-compatible",
+          api: "https://api.custom.com/v1",
+          env: ["CUSTOM_API_KEY"],
+          models: {
+            "custom-model": {
+              name: "Custom Model",
+              tool_call: true,
+              limit: {
+                context: 128000,
+                output: 4096,
               },
             },
           },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const providers = await list(ctx)
-      expect(providers[ProviderID.anthropic]).toBeDefined()
-    },
-  })
-})
-
-test("disabled_providers excludes provider", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          disabled_providers: ["anthropic"],
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
-      const providers = await list(ctx)
-      expect(providers[ProviderID.anthropic]).toBeUndefined()
-    },
-  })
-})
-
-test("enabled_providers restricts to only listed providers", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          enabled_providers: ["anthropic"],
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
-      set(ctx, "OPENAI_API_KEY", "test-openai-key")
-      const providers = await list(ctx)
-      expect(providers[ProviderID.anthropic]).toBeDefined()
-      expect(providers[ProviderID.openai]).toBeUndefined()
-    },
-  })
-})
-
-test("model whitelist filters models for provider", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            anthropic: {
-              whitelist: ["claude-sonnet-4-20250514"],
-            },
+          options: {
+            apiKey: "custom-key",
           },
-        }),
-      )
+        },
+      },
     },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
-      const providers = await list(ctx)
-      expect(providers[ProviderID.anthropic]).toBeDefined()
-      const models = Object.keys(providers[ProviderID.anthropic].models)
-      expect(models).toContain("claude-sonnet-4-20250514")
-      expect(models.length).toBe(1)
-    },
-  })
-})
-
-test("model blacklist excludes specific models", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            anthropic: {
-              blacklist: ["claude-sonnet-4-20250514"],
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
-      const providers = await list(ctx)
-      expect(providers[ProviderID.anthropic]).toBeDefined()
-      const models = Object.keys(providers[ProviderID.anthropic].models)
-      expect(models).not.toContain("claude-sonnet-4-20250514")
-    },
-  })
-})
-
-test("custom model alias via config", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            anthropic: {
-              models: {
-                "my-alias": {
-                  id: "claude-sonnet-4-20250514",
-                  name: "My Custom Alias",
-                },
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
-      const providers = await list(ctx)
-      expect(providers[ProviderID.anthropic]).toBeDefined()
-      expect(providers[ProviderID.anthropic].models["my-alias"]).toBeDefined()
-      expect(providers[ProviderID.anthropic].models["my-alias"].name).toBe("My Custom Alias")
-    },
-  })
-})
-
-test("custom provider with npm package", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            "custom-provider": {
-              name: "Custom Provider",
-              npm: "@ai-sdk/openai-compatible",
-              api: "https://api.custom.com/v1",
-              env: ["CUSTOM_API_KEY"],
-              models: {
-                "custom-model": {
-                  name: "Custom Model",
-                  tool_call: true,
-                  limit: {
-                    context: 128000,
-                    output: 4096,
-                  },
-                },
-              },
-              options: {
-                apiKey: "custom-key",
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const providers = await list(ctx)
-      expect(providers[ProviderID.make("custom-provider")]).toBeDefined()
-      expect(providers[ProviderID.make("custom-provider")].name).toBe("Custom Provider")
-      expect(providers[ProviderID.make("custom-provider")].models["custom-model"]).toBeDefined()
-    },
-  })
-})
+  },
+)
 
 it.instance(
   "filters alpha provider models by default",
@@ -386,123 +300,95 @@ experimentalModels.instance(
   { config: alphaProviderConfig },
 )
 
-test("custom DeepSeek openai-compatible model defaults interleaved reasoning field", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            "custom-provider": {
-              name: "Custom Provider",
-              npm: "@ai-sdk/openai-compatible",
-              api: "https://api.custom.com/v1",
-              models: {
-                "deepseek-r1": {
-                  name: "DeepSeek R1",
-                },
-                "deepseek-details": {
-                  name: "DeepSeek Details",
-                  interleaved: { field: "reasoning_details" },
-                },
-                "custom-model": {
-                  name: "Custom Model",
-                },
-              },
-              options: {
-                apiKey: "custom-key",
-              },
+it.instance(
+  "custom DeepSeek openai-compatible model defaults interleaved reasoning field",
+  Effect.gen(function* () {
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    const provider = providers[ProviderID.make("custom-provider")]
+    expect(provider.models["deepseek-r1"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
+    expect(provider.models["deepseek-details"].capabilities.interleaved).toEqual({ field: "reasoning_details" })
+    expect(provider.models["custom-model"].capabilities.interleaved).toBe(false)
+    expect(providers[ProviderID.make("custom-anthropic-provider")].models["deepseek-r1"].capabilities.interleaved).toBe(
+      false,
+    )
+  }),
+  {
+    config: {
+      provider: {
+        "custom-provider": {
+          name: "Custom Provider",
+          npm: "@ai-sdk/openai-compatible",
+          api: "https://api.custom.com/v1",
+          models: {
+            "deepseek-r1": {
+              name: "DeepSeek R1",
             },
-            "custom-anthropic-provider": {
-              name: "Custom Anthropic Provider",
-              npm: "@ai-sdk/anthropic",
-              api: "https://api.custom.com/v1",
-              models: {
-                "deepseek-r1": {
-                  name: "DeepSeek R1",
-                },
-              },
-              options: {
-                apiKey: "custom-key",
-              },
+            "deepseek-details": {
+              name: "DeepSeek Details",
+              interleaved: { field: "reasoning_details" },
+            },
+            "custom-model": {
+              name: "Custom Model",
             },
           },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const providers = await list(ctx)
-      const provider = providers[ProviderID.make("custom-provider")]
-      expect(provider.models["deepseek-r1"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
-      expect(provider.models["deepseek-details"].capabilities.interleaved).toEqual({ field: "reasoning_details" })
-      expect(provider.models["custom-model"].capabilities.interleaved).toBe(false)
-      expect(
-        providers[ProviderID.make("custom-anthropic-provider")].models["deepseek-r1"].capabilities.interleaved,
-      ).toBe(false)
-    },
-  })
-})
-
-test("env variable takes precedence, config merges options", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            anthropic: {
-              options: {
-                timeout: 60000,
-                chunkTimeout: 15000,
-              },
+          options: {
+            apiKey: "custom-key",
+          },
+        },
+        "custom-anthropic-provider": {
+          name: "Custom Anthropic Provider",
+          npm: "@ai-sdk/anthropic",
+          api: "https://api.custom.com/v1",
+          models: {
+            "deepseek-r1": {
+              name: "DeepSeek R1",
             },
           },
-        }),
-      )
+          options: {
+            apiKey: "custom-key",
+          },
+        },
+      },
     },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "env-api-key")
-      const providers = await list(ctx)
-      expect(providers[ProviderID.anthropic]).toBeDefined()
-      // Config options should be merged
-      expect(providers[ProviderID.anthropic].options.timeout).toBe(60000)
-      expect(providers[ProviderID.anthropic].options.chunkTimeout).toBe(15000)
-    },
-  })
-})
+  },
+)
 
-test("getModel returns model for valid provider/model", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-        }),
-      )
+it.instance(
+  "env variable takes precedence, config merges options",
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "env-api-key")
+    const providers = yield* Provider.Service.use((provider) => provider.list())
+    expect(providers[ProviderID.anthropic]).toBeDefined()
+    // Config options should be merged
+    expect(providers[ProviderID.anthropic].options.timeout).toBe(60000)
+    expect(providers[ProviderID.anthropic].options.chunkTimeout).toBe(15000)
+  }),
+  {
+    config: {
+      provider: {
+        anthropic: {
+          options: {
+            timeout: 60000,
+            chunkTimeout: 15000,
+          },
+        },
+      },
     },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
-      const model = await getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"), ctx)
-      expect(model).toBeDefined()
-      expect(String(model.providerID)).toBe("anthropic")
-      expect(String(model.id)).toBe("claude-sonnet-4-20250514")
-      const language = await getLanguage(model, ctx)
-      expect(language).toBeDefined()
-    },
-  })
-})
+  },
+)
+
+it.instance("getModel returns model for valid provider/model", () =>
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+    const provider = yield* Provider.Service
+    const model = yield* provider.getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"))
+    expect(model).toBeDefined()
+    expect(String(model.providerID)).toBe("anthropic")
+    expect(String(model.id)).toBe("claude-sonnet-4-20250514")
+    const language = yield* provider.getLanguage(model)
+    expect(language).toBeDefined()
+  }),
+)
 
 test("getModel throws ModelNotFoundError for invalid model", async () => {
   await using tmp = await tmpdir({
@@ -518,7 +404,7 @@ test("getModel throws ModelNotFoundError for invalid model", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       expect(getModel(ProviderID.anthropic, ModelID.make("nonexistent-model"), ctx)).rejects.toThrow()
     },
   })
@@ -555,50 +441,25 @@ test("parseModel handles model IDs with slashes", () => {
   expect(String(result.modelID)).toBe("anthropic/claude-3-opus")
 })
 
-test("defaultModel returns first available model when no config set", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
-      const model = await defaultModel(ctx)
-      expect(model.providerID).toBeDefined()
-      expect(model.modelID).toBeDefined()
-    },
-  })
-})
+it.instance("defaultModel returns first available model when no config set", () =>
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+    const model = yield* Provider.Service.use((provider) => provider.defaultModel())
+    expect(model.providerID).toBeDefined()
+    expect(model.modelID).toBeDefined()
+  }),
+)
 
-test("defaultModel respects config model setting", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          model: "anthropic/claude-sonnet-4-20250514",
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
-      const model = await defaultModel(ctx)
-      expect(String(model.providerID)).toBe("anthropic")
-      expect(String(model.modelID)).toBe("claude-sonnet-4-20250514")
-    },
-  })
-})
+it.instance(
+  "defaultModel respects config model setting",
+  Effect.gen(function* () {
+    yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+    const model = yield* Provider.Service.use((provider) => provider.defaultModel())
+    expect(String(model.providerID)).toBe("anthropic")
+    expect(String(model.modelID)).toBe("claude-sonnet-4-20250514")
+  }),
+  { config: { model: "anthropic/claude-sonnet-4-20250514" } },
+)
 
 it.instance(
   "provider with baseURL from config",
@@ -725,7 +586,7 @@ test("closest finds model by partial match", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const result = await closest(ProviderID.anthropic, ["sonnet-4"], ctx)
       expect(result).toBeDefined()
       expect(String(result?.providerID)).toBe("anthropic")
@@ -778,7 +639,7 @@ test("getModel uses realIdByKey for aliased models", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const providers = await list(ctx)
       expect(providers[ProviderID.anthropic].models["my-sonnet"]).toBeDefined()
 
@@ -891,7 +752,7 @@ test("model inherits properties from existing database model", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const providers = await list(ctx)
       const model = providers[ProviderID.anthropic].models["claude-sonnet-4-20250514"]
       expect(model.name).toBe("Custom Name for Sonnet")
@@ -917,7 +778,7 @@ test("disabled_providers prevents loading even with env var", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "OPENAI_API_KEY", "test-openai-key")
+      await set(ctx, "OPENAI_API_KEY", "test-openai-key")
       const providers = await list(ctx)
       expect(providers[ProviderID.openai]).toBeUndefined()
     },
@@ -939,8 +800,8 @@ test("enabled_providers with empty array allows no providers", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
-      set(ctx, "OPENAI_API_KEY", "test-openai-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "OPENAI_API_KEY", "test-openai-key")
       const providers = await list(ctx)
       expect(Object.keys(providers).length).toBe(0)
     },
@@ -967,7 +828,7 @@ test("whitelist and blacklist can be combined", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const providers = await list(ctx)
       expect(providers[ProviderID.anthropic]).toBeDefined()
       const models = Object.keys(providers[ProviderID.anthropic].models)
@@ -1074,7 +935,7 @@ test("getSmallModel returns appropriate small model", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const model = await getSmallModel(ProviderID.anthropic, ctx)
       expect(model).toBeDefined()
       expect(model?.id).toContain("haiku")
@@ -1097,7 +958,7 @@ test("getSmallModel respects config small_model override", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const model = await getSmallModel(ProviderID.anthropic, ctx)
       expect(model).toBeDefined()
       expect(String(model?.providerID)).toBe("anthropic")
@@ -1121,7 +982,7 @@ test("getSmallModel ignores invalid config small_model", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       expect(await getSmallModel(ProviderID.anthropic, ctx)).toBeUndefined()
     },
   })
@@ -1164,8 +1025,8 @@ test("multiple providers can be configured simultaneously", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-anthropic-key")
-      set(ctx, "OPENAI_API_KEY", "test-openai-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-anthropic-key")
+      await set(ctx, "OPENAI_API_KEY", "test-openai-key")
       const providers = await list(ctx)
       expect(providers[ProviderID.anthropic]).toBeDefined()
       expect(providers[ProviderID.openai]).toBeDefined()
@@ -1241,7 +1102,7 @@ test("model alias name defaults to alias key when id differs", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const providers = await list(ctx)
       expect(providers[ProviderID.anthropic].models["sonnet"].name).toBe("sonnet")
     },
@@ -1279,7 +1140,7 @@ test("provider with multiple env var options only includes apiKey when single en
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "MULTI_ENV_KEY_1", "test-key")
+      await set(ctx, "MULTI_ENV_KEY_1", "test-key")
       const providers = await list(ctx)
       expect(providers[ProviderID.make("multi-env")]).toBeDefined()
       // When multiple env options exist, key should NOT be auto-set
@@ -1319,7 +1180,7 @@ test("provider with single env var includes apiKey automatically", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "SINGLE_ENV_KEY", "my-api-key")
+      await set(ctx, "SINGLE_ENV_KEY", "my-api-key")
       const providers = await list(ctx)
       expect(providers[ProviderID.make("single-env")]).toBeDefined()
       // Single env option should auto-set key
@@ -1354,7 +1215,7 @@ test("model cost overrides existing cost values", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const providers = await list(ctx)
       const model = providers[ProviderID.anthropic].models["claude-sonnet-4-20250514"]
       expect(model.cost.input).toBe(999)
@@ -1431,9 +1292,9 @@ test("disabled_providers and enabled_providers interaction", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-anthropic")
-      set(ctx, "OPENAI_API_KEY", "test-openai")
-      set(ctx, "GOOGLE_GENERATIVE_AI_API_KEY", "test-google")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-anthropic")
+      await set(ctx, "OPENAI_API_KEY", "test-openai")
+      await set(ctx, "GOOGLE_GENERATIVE_AI_API_KEY", "test-google")
       const providers = await list(ctx)
       // anthropic: in enabled, not in disabled = allowed
       expect(providers[ProviderID.anthropic]).toBeDefined()
@@ -1588,7 +1449,7 @@ test("provider env fallback - second env var used if first missing", async () =>
     directory: tmp.path,
     fn: async (ctx) => {
       // Only set fallback, not primary
-      set(ctx, "FALLBACK_KEY", "fallback-api-key")
+      await set(ctx, "FALLBACK_KEY", "fallback-api-key")
       const providers = await list(ctx)
       // Provider should load because fallback env var is set
       expect(providers[ProviderID.make("fallback-env")]).toBeDefined()
@@ -1610,7 +1471,7 @@ test("getModel returns consistent results", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const model1 = await getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"), ctx)
       const model2 = await getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"), ctx)
       expect(model1.providerID).toEqual(model2.providerID)
@@ -1669,7 +1530,7 @@ test("ModelNotFoundError includes suggestions for typos", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       try {
         await getModel(ProviderID.anthropic, ModelID.make("claude-sonet-4"), ctx) // typo: sonet instead of sonnet
         expect(true).toBe(false) // Should not reach here
@@ -1695,7 +1556,7 @@ test("ModelNotFoundError for provider includes suggestions", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       try {
         await getModel(ProviderID.make("antropic"), ModelID.make("claude-sonnet-4"), ctx) // typo: antropic
         expect(true).toBe(false) // Should not reach here
@@ -1721,7 +1582,7 @@ test("ModelNotFoundError suggests catalog models for unloaded providers", async 
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      remove(ctx, "OPENCODE_API_KEY")
+      await remove(ctx, "OPENCODE_API_KEY")
       try {
         await getModel(ProviderID.opencode, ModelID.make("claude-haiku-fake-model"), ctx)
         throw new Error("expected model lookup to fail")
@@ -1767,7 +1628,7 @@ test("getProvider returns provider info", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const provider = await getProvider(ProviderID.anthropic, ctx)
       expect(provider).toBeDefined()
       expect(String(provider?.id)).toBe("anthropic")
@@ -1789,7 +1650,7 @@ test("closest returns undefined when no partial match found", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const result = await closest(ProviderID.anthropic, ["nonexistent-xyz-model"], ctx)
       expect(result).toBeUndefined()
     },
@@ -1810,7 +1671,7 @@ test("closest checks multiple query terms in order", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       // First term won't match, second will
       const result = await closest(ProviderID.anthropic, ["nonexistent", "haiku"], ctx)
       expect(result).toBeDefined()
@@ -1880,7 +1741,7 @@ test("provider options are deeply merged", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const providers = await list(ctx)
       // Custom options should be merged
       expect(providers[ProviderID.anthropic].options.timeout).toBe(30000)
@@ -2010,7 +1871,7 @@ test("custom model inherits npm package from models.dev provider config", async 
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "OPENAI_API_KEY", "test-api-key")
+      await set(ctx, "OPENAI_API_KEY", "test-api-key")
       const providers = await list(ctx)
       const model = providers[ProviderID.openai].models["my-custom-model"]
       expect(model).toBeDefined()
@@ -2043,7 +1904,7 @@ test("custom model inherits api.url from models.dev provider", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "OPENROUTER_API_KEY", "test-api-key")
+      await set(ctx, "OPENROUTER_API_KEY", "test-api-key")
       const providers = await list(ctx)
       expect(providers[ProviderID.openrouter]).toBeDefined()
 
@@ -2174,7 +2035,7 @@ test("model variants are generated for reasoning models", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const providers = await list(ctx)
       // Claude sonnet 4 has reasoning capability
       const model = providers[ProviderID.anthropic].models["claude-sonnet-4-20250514"]
@@ -2210,7 +2071,7 @@ test("model variants can be disabled via config", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const providers = await list(ctx)
       const model = providers[ProviderID.anthropic].models["claude-sonnet-4-20250514"]
       expect(model.variants).toBeDefined()
@@ -2251,7 +2112,7 @@ test("model variants can be customized via config", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const providers = await list(ctx)
       const model = providers[ProviderID.anthropic].models["claude-sonnet-4-20250514"]
       expect(model.variants!["high"]).toBeDefined()
@@ -2288,7 +2149,7 @@ test("disabled key is stripped from variant config", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const providers = await list(ctx)
       const model = providers[ProviderID.anthropic].models["claude-sonnet-4-20250514"]
       expect(model.variants!["max"]).toBeDefined()
@@ -2324,7 +2185,7 @@ test("all variants can be disabled via config", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const providers = await list(ctx)
       const model = providers[ProviderID.anthropic].models["claude-sonnet-4-20250514"]
       expect(model.variants).toBeDefined()
@@ -2360,7 +2221,7 @@ test("variant config merges with generated variants", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-api-key")
       const providers = await list(ctx)
       const model = providers[ProviderID.anthropic].models["claude-sonnet-4-20250514"]
       expect(model.variants!["high"]).toBeDefined()
@@ -2396,7 +2257,7 @@ test("variants filtered in second pass for database models", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "OPENAI_API_KEY", "test-api-key")
+      await set(ctx, "OPENAI_API_KEY", "test-api-key")
       const providers = await list(ctx)
       const model = providers[ProviderID.openai].models["gpt-5"]
       expect(model.variants).toBeDefined()
@@ -2498,7 +2359,7 @@ test("Google Vertex: retains baseURL for custom proxy", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "GOOGLE_APPLICATION_CREDENTIALS", "test-creds")
+      await set(ctx, "GOOGLE_APPLICATION_CREDENTIALS", "test-creds")
       const providers = await list(ctx)
       expect(providers[ProviderID.make("vertex-proxy")]).toBeDefined()
       expect(providers[ProviderID.make("vertex-proxy")].options.baseURL).toBe("https://my-proxy.com/v1")
@@ -2541,7 +2402,7 @@ test("Google Vertex: supports OpenAI compatible models", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "GOOGLE_APPLICATION_CREDENTIALS", "test-creds")
+      await set(ctx, "GOOGLE_APPLICATION_CREDENTIALS", "test-creds")
       const providers = await list(ctx)
       const model = providers[ProviderID.make("vertex-openai")].models["gpt-4"]
 
@@ -2565,9 +2426,9 @@ test("cloudflare-ai-gateway loads with env variables", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "CLOUDFLARE_ACCOUNT_ID", "test-account")
-      set(ctx, "CLOUDFLARE_GATEWAY_ID", "test-gateway")
-      set(ctx, "CLOUDFLARE_API_TOKEN", "test-token")
+      await set(ctx, "CLOUDFLARE_ACCOUNT_ID", "test-account")
+      await set(ctx, "CLOUDFLARE_GATEWAY_ID", "test-gateway")
+      await set(ctx, "CLOUDFLARE_API_TOKEN", "test-token")
       const providers = await list(ctx)
       expect(providers[ProviderID.make("cloudflare-ai-gateway")]).toBeDefined()
     },
@@ -2595,9 +2456,9 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "CLOUDFLARE_ACCOUNT_ID", "test-account")
-      set(ctx, "CLOUDFLARE_GATEWAY_ID", "test-gateway")
-      set(ctx, "CLOUDFLARE_API_TOKEN", "test-token")
+      await set(ctx, "CLOUDFLARE_ACCOUNT_ID", "test-account")
+      await set(ctx, "CLOUDFLARE_GATEWAY_ID", "test-gateway")
+      await set(ctx, "CLOUDFLARE_API_TOKEN", "test-token")
       const providers = await list(ctx)
       expect(providers[ProviderID.make("cloudflare-ai-gateway")]).toBeDefined()
       expect(providers[ProviderID.make("cloudflare-ai-gateway")].options.metadata).toEqual({
@@ -2673,8 +2534,10 @@ test("plugin config providers persist after instance dispose", async () => {
 test("plugin config enabled and disabled providers are honored", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      const root = path.join(dir, ".opencode", "plugin")
+      const configDir = path.join(dir, ".opencode")
+      const root = path.join(configDir, "plugin")
       await mkdir(root, { recursive: true })
+      await markPluginDependenciesReady(configDir)
       await Bun.write(
         path.join(root, "provider-filter.ts"),
         [
@@ -2696,8 +2559,8 @@ test("plugin config enabled and disabled providers are honored", async () => {
   await withTestInstance({
     directory: tmp.path,
     fn: async (ctx) => {
-      set(ctx, "ANTHROPIC_API_KEY", "test-anthropic-key")
-      set(ctx, "OPENAI_API_KEY", "test-openai-key")
+      await set(ctx, "ANTHROPIC_API_KEY", "test-anthropic-key")
+      await set(ctx, "OPENAI_API_KEY", "test-openai-key")
       const providers = await list(ctx)
       expect(providers[ProviderID.anthropic]).toBeDefined()
       expect(providers[ProviderID.openai]).toBeUndefined()

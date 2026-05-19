@@ -4,7 +4,7 @@ import { CliError, effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
 import { CancelledError } from "../cancelled-error"
 import * as Prompt from "../effect/prompt"
-import { ModelsDev } from "@opencode-ai/core/models"
+import { ModelsDev } from "@opencode-ai/core/models-dev"
 
 import { map, pipe, sortBy, values } from "remeda"
 import path from "path"
