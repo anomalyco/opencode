@@ -33,12 +33,12 @@ type ProviderSpec = {
   readonly cassette: string
   readonly protocol: string
   readonly tags: ReadonlyArray<string>
-  readonly canRecord: () => boolean
+  readonly canRecord: boolean
   readonly config: (model: ModelsDev.Provider["models"][string]) => Partial<Config.Info>
 }
 
 const cloneModel = (model: ModelsDev.Provider["models"][string]) =>
-  JSON.parse(JSON.stringify(model)) as NonNullable<NonNullable<Config.Info["provider"]>[string]["models"]>[string]
+  structuredClone(model) as NonNullable<NonNullable<Config.Info["provider"]>[string]["models"]>[string]
 
 const PROVIDERS = {
   openai: {
@@ -47,7 +47,7 @@ const PROVIDERS = {
     cassette: "session/native-openai-tool-loop",
     protocol: "openai-responses",
     tags: ["opencode", "native", "tool-loop"],
-    canRecord: () => Boolean(process.env.OPENCODE_RECORD_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY),
+    canRecord: Boolean(process.env.OPENCODE_RECORD_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY),
     config: (model) => ({
       enabled_providers: ["openai"],
       provider: {
@@ -71,8 +71,7 @@ const PROVIDERS = {
     cassette: "session/native-zen-tool-loop",
     protocol: "openai-responses",
     tags: ["opencode", "zen", "native", "tool-loop"],
-    canRecord: () =>
-      Boolean(process.env.OPENCODE_RECORD_CONSOLE_TOKEN && process.env.OPENCODE_RECORD_ZEN_ORG_ID),
+    canRecord: Boolean(process.env.OPENCODE_RECORD_CONSOLE_TOKEN && process.env.OPENCODE_RECORD_ZEN_ORG_ID),
     config: (model) => ({
       enabled_providers: ["opencode"],
       provider: {
@@ -98,7 +97,7 @@ const PROVIDERS = {
     cassette: "session/native-anthropic-tool-loop",
     protocol: "anthropic-messages",
     tags: ["opencode", "native", "tool-loop"],
-    canRecord: () => Boolean(process.env.OPENCODE_RECORD_ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY),
+    canRecord: Boolean(process.env.OPENCODE_RECORD_ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY),
     config: (model) => ({
       enabled_providers: ["anthropic"],
       provider: {
@@ -117,12 +116,12 @@ const PROVIDERS = {
       },
     }),
   },
-} as const satisfies Record<string, ProviderSpec>
+} satisfies Record<string, ProviderSpec>
 
 const shouldRecord = process.env.RECORD === "true"
 
 const canRun = (spec: ProviderSpec) =>
-  shouldRecord ? spec.canRecord() : HttpRecorder.hasCassetteSync(spec.cassette, { directory: FIXTURES_DIR })
+  shouldRecord ? spec.canRecord : HttpRecorder.hasCassetteSync(spec.cassette, { directory: FIXTURES_DIR })
 
 async function loadFixture(providerID: string, modelID: string) {
   const data = await Filesystem.readJson<Record<string, ModelsDev.Provider>>(
@@ -136,43 +135,43 @@ async function loadFixture(providerID: string, modelID: string) {
 }
 
 function recordedNativeLLMLayer(spec: ProviderSpec) {
-  const cassetteService = HttpRecorder.Cassette.fileSystem({ directory: FIXTURES_DIR }).pipe(
-    Layer.provide(NodeFileSystem.layer),
-  )
   // Only the HTTP client is recorded; RequestExecutor and the opencode LLM stack remain real.
-  const recorder = HttpRecorder.recordingLayer(spec.cassette, {
-    mode: shouldRecord ? "record" : "replay",
-    metadata: { provider: spec.providerID, protocol: spec.protocol, route: spec.protocol, tags: spec.tags },
-    redactor: Redactor.compose(
-      Redactor.defaults({
-        url: {
-          transform: (url) => url.replace(/\/proxy\/connections\/[^/]+\/v1/, "/proxy/connections/{connection}/v1"),
-        },
-      }),
-      {
-        response: (snapshot) => ({ ...snapshot, body: snapshot.body.replace(/wrk_[A-Z0-9]+/g, "wrk_redacted") }),
-      },
+  const recordedClient = LLMClient.layer.pipe(
+    Layer.provide(RequestExecutor.layer),
+    Layer.provide(
+      HttpRecorder.recordingLayer(spec.cassette, {
+        mode: shouldRecord ? "record" : "replay",
+        metadata: { provider: spec.providerID, protocol: spec.protocol, route: spec.protocol, tags: spec.tags },
+        redactor: Redactor.compose(
+          Redactor.defaults({
+            url: {
+              transform: (url) => url.replace(/\/proxy\/connections\/[^/]+\/v1/, "/proxy/connections/{connection}/v1"),
+            },
+          }),
+          {
+            response: (snapshot) => ({ ...snapshot, body: snapshot.body.replace(/wrk_[A-Z0-9]+/g, "wrk_redacted") }),
+          },
+        ),
+      }).pipe(Layer.provide(FetchHttpClient.layer)),
     ),
-  }).pipe(Layer.provide(FetchHttpClient.layer))
-  const executor = RequestExecutor.layer.pipe(Layer.provide(recorder))
-  const client = LLMClient.layer.pipe(Layer.provide(executor))
-
-  const providerLayer = Provider.defaultLayer.pipe(
-    Layer.provide(Auth.defaultLayer),
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(Plugin.defaultLayer),
-  )
-  const llmLayer = LLM.layer.pipe(
-    Layer.provide(Auth.defaultLayer),
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(Provider.defaultLayer),
-    Layer.provide(Plugin.defaultLayer),
-    Layer.provide(client),
-    Layer.provide(cassetteService),
-    Layer.provide(RuntimeFlags.layer({ experimentalNativeLlm: true })),
   )
 
-  return Layer.mergeAll(providerLayer, llmLayer)
+  return Layer.mergeAll(
+    Provider.defaultLayer.pipe(
+      Layer.provide(Auth.defaultLayer),
+      Layer.provide(Config.defaultLayer),
+      Layer.provide(Plugin.defaultLayer),
+    ),
+    LLM.layer.pipe(
+      Layer.provide(Auth.defaultLayer),
+      Layer.provide(Config.defaultLayer),
+      Layer.provide(Provider.defaultLayer),
+      Layer.provide(Plugin.defaultLayer),
+      Layer.provide(recordedClient),
+      Layer.provide(HttpRecorder.Cassette.fileSystem({ directory: FIXTURES_DIR }).pipe(Layer.provide(NodeFileSystem.layer))),
+      Layer.provide(RuntimeFlags.layer({ experimentalNativeLlm: true })),
+    ),
+  )
 }
 
 const writeConfig = (directory: string, spec: ProviderSpec, model: ModelsDev.Provider["models"][string]) =>
