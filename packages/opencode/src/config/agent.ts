@@ -144,7 +144,7 @@ export async function loadMode(dir: string) {
     if (!md) continue
 
     const config = {
-      name: configEntryNameFromPath(item, []),
+      name: configEntryNameFromPath(path.relative(dir, item), ["mode/", "modes/"]),
       ...md.data,
       prompt: md.content.trim(),
     }
