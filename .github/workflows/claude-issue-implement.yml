@@ -33,21 +33,14 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      # OpenCode GitHub App トークンを使う。既定の GITHUB_TOKEN で作成した PR は
-      # 他ワークフロー（test / review / pr-standards 等）を起動できないため、
-      # App トークンで PR を作成して CI を自動起動させる。
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
-
+      # PR は既定の GITHUB_TOKEN で作成する。GitHub の仕様により、この場合は
+      # 自動作成された PR で他のワークフロー（test / review / pr-standards 等）が
+      # 起動しない。CI を回したいときはメンテナが PR を close→reopen するか、
+      # コミットを追加するなどして手動で再トリガーすること。
       - name: Implement issue and open pull request
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ steps.committer.outputs.token }}
           claude_args: |
             --model claude-opus-4-7
             --max-turns 50
