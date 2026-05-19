@@ -1,0 +1,83 @@
+name: claude-issue-agent
+
+# Issue がオープンされたとき（および議論後に `/claude-plan` とコメントされたとき）に
+# Claude が Issue を分析し、不明点があれば作成者にメンションで質問、
+# 実装方針が固まれば方針を Issue にコメントする。
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: claude-issue-agent-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    # issues:opened は全 Issue を対象。
+    # issue_comment は `/claude-plan` で始まり、PR ではなく、信頼できる権限の発言者のみ。
+    if: |
+      github.event.issue.user.type != 'Bot' && (
+        github.event_name == 'issues' ||
+        (
+          startsWith(github.event.comment.body, '/claude-plan') &&
+          !github.event.issue.pull_request &&
+          contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+        )
+      )
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Analyze issue and post plan
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: |
+            --model claude-sonnet-4-6
+            --max-turns 30
+            --allowedTools "Read,Grep,Glob,Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh search:*),Bash(gh pr list:*),Bash(gh api:*)"
+          prompt: |
+            あなたはこのリポジトリの Issue 対応 AI です。対象は Issue #${{ github.event.issue.number }} です。
+            すべての出力（コメント本文）は日本語で書いてください。
+
+            ## 手順
+
+            1. `gh issue view ${{ github.event.issue.number }} --comments` で Issue 本文と既存コメントをすべて読む。
+            2. リポジトリのコード（Read / Grep / Glob）を調査し、対応に必要な情報を集める。
+               関連ファイル・既存実装・設計上の制約を把握すること。
+            3. 状況に応じて、次のどちらかを Issue に 1 件だけコメントする
+               （`gh issue comment ${{ github.event.issue.number }} --body "..."`）。
+
+            ### A. 議論・確認が必要な場合（要件が曖昧／選択肢が複数ある／前提が不明）
+            - Issue 作成者（`gh issue view` の author のログイン名）を `@ログイン名` でメンションする。
+            - 具体的で答えやすい質問を箇条書きで提示する（できれば選択肢付き）。
+            - この段階では実装方針や承認コマンドの案内は書かない。
+            - コメント冒頭に `## 🤔 確認したいこと` という見出しを付ける。
+
+            ### B. 実装方針が固められる場合
+            - コメント冒頭に `## 📋 実装方針` という見出しを付け、次を簡潔に記述する:
+              - 背景 / 目的（Issue の要約）
+              - 変更方針（どう直すか）
+              - 対象ファイル・モジュール（判明している範囲で）
+              - 想定する検証方法
+              - 既知のリスク・影響範囲
+            - コメント末尾に必ず次の案内をそのまま含める:
+
+              ---
+              この方針で進めて良ければ、この Issue に `/claude-approve` とコメントしてください。
+              Claude が実装し、Pull Request を自動作成します。
+              方針を修正したい場合は内容を補足のうえ `/claude-plan` とコメントすると再分析します。
+
+            ## 注意
+            - コメントは 1 件のみ。簡潔・具体的に書く。明らかに AI 生成と分かる冗長な定型文は避ける。
+            - リポジトリへの書き込み・コミットはしない（分析とコメントのみ）。
+            - 判断に迷う場合は B ではなく A（質問）を選ぶ。
