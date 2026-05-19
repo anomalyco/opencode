@@ -290,7 +290,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     applyingHistory: false,
   })
 
-  const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
+  const buttonsSpring = useSpring(() => (store.mode === "shell" ? 0 : 1), { visualDuration: 0.2, bounce: 0 })
   const motion = (value: number) => ({
     opacity: value,
     transform: `scale(${0.95 + value * 0.05})`,
@@ -1535,18 +1535,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   }}
                 >
                   <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.shell")}</span>
-                  <div class="size-4 shrink-0" />
-                </div>
-              </Show>
-              <Show when={store.mode === "draw"}>
-                <div
-                  class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0 absolute inset-y-0 left-0"
-                  style={{
-                    padding: "0 4px 0 8px",
-                    ...shell(),
-                  }}
-                >
-                  <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.draw")}</span>
                   <div class="size-4 shrink-0" />
                 </div>
               </Show>
