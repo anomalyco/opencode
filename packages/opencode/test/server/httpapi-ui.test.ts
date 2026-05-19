@@ -365,18 +365,18 @@ describe("HttpApi UI fallback", () => {
     }),
   )
 
-  it.live("allows web UI preflight without auth", () =>
+  it.live("allows web UI preflight without auth from the OpenCode hosted origin", () =>
     Effect.gen(function* () {
       const response = yield* app({ password: "secret", username: "opencode" }).request("/", {
         method: "OPTIONS",
         headers: {
-          origin: "http://localhost:3000",
+          origin: "https://app.opencode.ai",
           "access-control-request-method": "GET",
         },
       })
 
       expect(response.status).toBe(204)
-      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
+      expect(response.headers.get("access-control-allow-origin")).toBe("https://app.opencode.ai")
     }),
   )
 })

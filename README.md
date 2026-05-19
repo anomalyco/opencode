@@ -116,6 +116,28 @@ This is used internally and can be invoked using `@general` in messages.
 
 Learn more about [agents](https://opencode.ai/docs/agents).
 
+### Security
+
+The local OpenCode HTTP/WebSocket server (`opencode serve`, `opencode web`) exposes shell execution, PTY upgrades, MCP installation, and file-system primitives. To prevent a malicious website from driving these primitives through the user's browser, the server enforces three browser-facing defenses:
+
+- **Strict CORS allowlist** (`src/server/cors.ts`). Only `https://opencode.ai`, `https://app.opencode.ai`, `oc://renderer`, and the Tauri schemes are trusted. Wildcard trust for `http://localhost:*`, `http://127.0.0.1:*`, and `*.opencode.ai` subdomains has been removed. Additional origins can be added per-instance with `--cors <origin>` or the `server.cors` config field.
+- **WebSocket Origin validation** on the PTY connect route. Browsers always include `Origin` on WebSocket handshakes; the server rejects upgrades from any origin not in the allowlist plus the same-host exemption.
+- **Host header validation** (`src/server/host.ts`) as a DNS-rebinding defense. The server only accepts Host headers that name an interface it's actually bound to. Loopback names are always accepted; the configured `--hostname`, the mDNS domain, and the machine's network-interface addresses (when binding to `0.0.0.0`/`::`) are accepted automatically. Additional hostnames can be allow-listed with `--allowed-host <host>` or the `server.allowedHosts` config field. Unknown Host headers receive `421 Misdirected Request`.
+
+If you run a custom dev UI on another localhost port, add it explicitly:
+
+```bash
+opencode serve --cors http://localhost:5173
+```
+
+If you bind to a non-loopback hostname and access via an extra hostname not auto-discovered, add it explicitly:
+
+```bash
+opencode serve --hostname 0.0.0.0 --allowed-host my-laptop.lan
+```
+
+`OPENCODE_SERVER_PASSWORD` is still strongly recommended for any non-loopback binding.
+
 ### Documentation
 
 For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).

@@ -53,6 +53,7 @@ import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
 import { Workspace } from "@/control-plane/workspace"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@/server/cors"
+import { HostConfig, type HostOptions } from "@/server/host"
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
 import { InstanceHttpApi, RootHttpApi } from "./api"
@@ -84,6 +85,7 @@ import { compressionLayer } from "./middleware/compression"
 import { corsVaryFix } from "./middleware/cors-vary"
 import { errorLayer } from "./middleware/error"
 import { fenceLayer } from "./middleware/fence"
+import { hostGuard } from "./middleware/host-guard"
 import { schemaErrorLayer } from "./middleware/schema-error"
 
 export const context = Context.makeUnsafe<unknown>(new Map())
@@ -96,6 +98,8 @@ const runtime = HttpRouter.middleware()(
     }),
   ),
 ).layer
+
+export type SecurityOptions = CorsOptions & HostOptions
 
 const cors = (corsOptions?: CorsOptions) =>
   HttpRouter.middleware(
@@ -175,14 +179,15 @@ const uiRoute = HttpRouter.use((router) =>
   }),
 ).pipe(Layer.provide(authOnlyRouterLayer))
 
-export function createRoutes(corsOptions?: CorsOptions) {
+export function createRoutes(securityOptions?: SecurityOptions) {
   return Layer.mergeAll(rootApiRoutes, eventApiRoutes, instanceRoutes, docRoute, uiRoute).pipe(
     Layer.provide([
       errorLayer,
       compressionLayer,
       corsVaryFix,
       fenceLayer,
-      cors(corsOptions),
+      cors(securityOptions),
+      hostGuard(securityOptions),
       runtime,
       Account.defaultLayer,
       Agent.defaultLayer,
@@ -227,7 +232,8 @@ export function createRoutes(corsOptions?: CorsOptions) {
       FetchHttpClient.layer,
       HttpServer.layerServices,
     ]),
-    Layer.provideMerge(Layer.succeed(CorsConfig)(corsOptions)),
+    Layer.provideMerge(Layer.succeed(CorsConfig)(securityOptions)),
+    Layer.provideMerge(Layer.succeed(HostConfig)(securityOptions)),
     Layer.provideMerge(InstanceLayer.layer),
     Layer.provideMerge(Observability.layer),
   )
@@ -242,10 +248,20 @@ const defaultWebHandler = lazy(() =>
   }),
 )
 
-export function webHandler(corsOptions?: CorsOptions) {
-  if (!corsOptions?.cors?.length) return defaultWebHandler()
-  return HttpRouter.toWebHandler(createRoutes(corsOptions), {
-    // Server-level CORS options are dynamic; don't reuse the default route layer memoized without them.
+function hasDynamicSecurityOptions(options?: SecurityOptions) {
+  if (!options) return false
+  if (options.cors && options.cors.length > 0) return true
+  if (options.allowedHosts && options.allowedHosts.length > 0) return true
+  if (options.hostname && options.hostname !== "127.0.0.1") return true
+  if (options.mdnsDomain) return true
+  return false
+}
+
+export function webHandler(securityOptions?: SecurityOptions) {
+  if (!hasDynamicSecurityOptions(securityOptions)) return defaultWebHandler()
+  return HttpRouter.toWebHandler(createRoutes(securityOptions), {
+    // Server-level security options (CORS list, host bindings, allowedHosts)
+    // are dynamic; don't reuse the default route layer memoized without them.
     memoMap: Layer.makeMemoMapUnsafe(),
     middleware: disposeMiddleware,
   })

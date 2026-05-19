@@ -29,6 +29,13 @@ const options = {
     describe: "additional domains to allow for CORS",
     default: [] as string[],
   },
+  "allowed-host": {
+    type: "string" as const,
+    array: true,
+    describe:
+      "additional hostnames accepted in the HTTP Host header (defends against DNS rebinding); repeat to add more",
+    default: [] as string[],
+  },
 }
 
 export type NetworkOptions = InferredOptionTypes<typeof options>
@@ -58,5 +65,13 @@ export function resolveNetworkOptionsNoConfig(args: NetworkOptions, config?: Con
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
 
-  return { hostname, port, mdns, mdnsDomain, cors }
+  const configAllowedHosts = config?.server?.allowedHosts ?? []
+  const argsAllowedHosts = Array.isArray(args["allowed-host"])
+    ? args["allowed-host"]
+    : args["allowed-host"]
+      ? [args["allowed-host"]]
+      : []
+  const allowedHosts = [...configAllowedHosts, ...argsAllowedHosts]
+
+  return { hostname, port, mdns, mdnsDomain, cors, allowedHosts }
 }

@@ -43,11 +43,11 @@ const it = testEffect(
 )
 
 describe("HttpApi CORS", () => {
-  it.live("allows browser preflight requests without credentials", () =>
+  it.live("allows browser preflight requests from the OpenCode hosted UI without credentials", () =>
     Effect.gen(function* () {
       const response = yield* HttpClientRequest.options(InstancePaths.path).pipe(
         HttpClientRequest.setHeaders({
-          origin: "http://localhost:3000",
+          origin: "https://app.opencode.ai",
           "access-control-request-method": "GET",
           "access-control-request-headers": "authorization",
         }),
@@ -55,8 +55,47 @@ describe("HttpApi CORS", () => {
       )
 
       expect(response.status).toBe(204)
-      expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:3000")
+      expect(response.headers["access-control-allow-origin"]).toBe("https://app.opencode.ai")
       expect(response.headers["access-control-allow-headers"]).toBe("authorization")
+    }),
+  )
+
+  it.live("rejects untrusted origins (no Access-Control-Allow-Origin header)", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClientRequest.options(InstancePaths.path).pipe(
+        HttpClientRequest.setHeaders({
+          origin: "https://evil.example",
+          "access-control-request-method": "POST",
+        }),
+        HttpClient.execute,
+      )
+      expect(response.headers["access-control-allow-origin"]).toBeUndefined()
+    }),
+  )
+
+  it.live("rejects loopback origins by default (no longer trusted by wildcard)", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClientRequest.options(InstancePaths.path).pipe(
+        HttpClientRequest.setHeaders({
+          origin: "http://localhost:3000",
+          "access-control-request-method": "POST",
+        }),
+        HttpClient.execute,
+      )
+      expect(response.headers["access-control-allow-origin"]).toBeUndefined()
+    }),
+  )
+
+  it.live("rejects subdomain-of-opencode.ai origins (no wildcard trust)", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClientRequest.options(InstancePaths.path).pipe(
+        HttpClientRequest.setHeaders({
+          origin: "https://attacker.opencode.ai",
+          "access-control-request-method": "POST",
+        }),
+        HttpClient.execute,
+      )
+      expect(response.headers["access-control-allow-origin"]).toBeUndefined()
     }),
   )
 

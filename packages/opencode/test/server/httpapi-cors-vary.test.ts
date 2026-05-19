@@ -16,7 +16,11 @@ function app() {
 }
 
 const PREFLIGHT_HEADERS = {
-  origin: "http://localhost:3000",
+  // Use an explicitly allow-listed origin so the CORS middleware actually
+  // reflects Access-Control-Allow-Origin and the Vary-header behavior is
+  // testable. The previous broad allowlist trusted any http://localhost:*
+  // origin; that has been tightened in cors.ts.
+  origin: "https://app.opencode.ai",
   "access-control-request-method": "POST",
   "access-control-request-headers": "content-type, x-opencode-directory",
 }
@@ -35,7 +39,7 @@ describe("CORS preflight Vary header", () => {
     })
 
     expect([200, 204]).toContain(response.status)
-    expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
+    expect(response.headers.get("access-control-allow-origin")).toBe("https://app.opencode.ai")
     expect((response.headers.get("vary") ?? "").toLowerCase()).toContain("origin")
   })
 
