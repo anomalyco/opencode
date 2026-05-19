@@ -337,12 +337,16 @@ export async function POST(input: APIEvent) {
           .select({
             amount: PaymentTable.amount,
             enrichment: PaymentTable.enrichment,
+            timeRefunded: PaymentTable.timeRefunded,
           })
           .from(PaymentTable)
           .where(and(eq(PaymentTable.paymentID, paymentIntentID), eq(PaymentTable.workspaceID, workspaceID)))
           .then((rows) => rows[0]),
       )
       if (!payment) throw new Error("Payment not found")
+      if (payment.timeRefunded) return
+
+      const refundAmountInMicroCents = centsToMicroCents(body.data.object.amount_refunded as number)
 
       await Database.transaction(async (tx) => {
         await tx
@@ -357,7 +361,7 @@ export async function POST(input: APIEvent) {
           await tx
             .update(BillingTable)
             .set({
-              balance: sql`${BillingTable.balance} - ${payment.amount}`,
+              balance: sql`${BillingTable.balance} - ${refundAmountInMicroCents}`,
             })
             .where(eq(BillingTable.workspaceID, workspaceID))
         }
