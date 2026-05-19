@@ -4,8 +4,8 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { List } from "@opencode-ai/ui/list"
-import { base64Encode } from "@opencode-ai/shared/util/encode"
-import { getDirectory, getFilename } from "@opencode-ai/shared/util/path"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { useNavigate } from "@solidjs/router"
 import { createMemo, createSignal, Match, onCleanup, Show, Switch } from "solid-js"
 import { formatKeybind, useCommand, type CommandOption } from "@/context/command"
@@ -107,7 +107,8 @@ function createCommandEntries(props: {
   const allowed = createMemo(() => {
     if (props.filesOnly()) return []
     return props.command.options.filter(
-      (option) => !option.disabled && !option.id.startsWith("suggested.") && option.id !== "file.open",
+      (option) =>
+        !option.disabled && !option.hidden && !option.id.startsWith("suggested.") && option.id !== "file.open",
     )
   })
 

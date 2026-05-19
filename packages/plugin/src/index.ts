@@ -8,10 +8,9 @@ import type {
   UserMessage,
   Message,
   Part,
-  Auth,
   Config as SDKConfig,
 } from "@opencode-ai/sdk"
-import type { Provider as ProviderV2, Model as ModelV2 } from "@opencode-ai/sdk/v2"
+import type { Provider as ProviderV2, Model as ModelV2, Auth } from "@opencode-ai/sdk/v2"
 
 import type { BunShell } from "./shell.js"
 import { type ToolDefinition } from "./tool.js"
@@ -45,7 +44,7 @@ export type WorkspaceTarget =
       headers?: HeadersInit
     }
 
-export type WorkspaceAdaptor = {
+export type WorkspaceAdapter = {
   name: string
   description: string
   configure(config: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>
@@ -60,7 +59,7 @@ export type PluginInput = {
   directory: string
   worktree: string
   experimental_workspace: {
-    register(type: string, adaptor: WorkspaceAdaptor): void
+    register(type: string, adapter: WorkspaceAdapter): void
   }
   serverUrl: URL
   $: BunShell
@@ -153,6 +152,7 @@ export type AuthHook = {
               type: "success"
               key: string
               provider?: string
+              metadata?: Record<string, string>
             }
           | {
               type: "failed"
@@ -177,7 +177,7 @@ export type AuthOAuthResult = { url: string; instructions: string } & (
                 accountId?: string
                 enterpriseUrl?: string
               }
-            | { key: string }
+            | { key: string; metadata?: Record<string, string> }
           ))
         | {
             type: "failed"
@@ -198,7 +198,7 @@ export type AuthOAuthResult = { url: string; instructions: string } & (
                 accountId?: string
                 enterpriseUrl?: string
               }
-            | { key: string }
+            | { key: string; metadata?: Record<string, string> }
           ))
         | {
             type: "failed"

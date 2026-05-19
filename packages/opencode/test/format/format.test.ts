@@ -3,7 +3,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Format } from "../../src/format"
 import * as Formatter from "../../src/format/formatter"
 
@@ -186,14 +186,14 @@ describe("Format", () => {
               Formatter.gofmt.enabled = async () => {
                 active++
                 max = Math.max(max, active)
-                await Bun.sleep(20)
+                await Promise.resolve()
                 active--
                 return ["sh", "-c", "true"]
               }
               Formatter.mix.enabled = async () => {
                 active++
                 max = Math.max(max, active)
-                await Bun.sleep(20)
+                await Promise.resolve()
                 active--
                 return ["sh", "-c", "true"]
               }

@@ -1,26 +1,23 @@
-import { Effect, Layer, Context } from "effect"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
-import { InstanceState } from "@/effect"
+import { Effect, Layer, Context, Schema } from "effect"
+import { ChildProcess } from "effect/unstable/process"
+import { AppProcess } from "@opencode-ai/core/process"
+import { InstanceState } from "@/effect/instance-state"
 import path from "path"
 import { mergeDeep } from "remeda"
-import z from "zod"
-import { Config } from "../config"
-import { Log } from "../util"
+import { Config } from "@/config/config"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { errorMessage } from "@/util/error"
+import * as Log from "@opencode-ai/core/util/log"
 import * as Formatter from "./formatter"
 
 const log = Log.create({ service: "format" })
 
-export const Status = z
-  .object({
-    name: z.string(),
-    extensions: z.string().array(),
-    enabled: z.boolean(),
-  })
-  .meta({
-    ref: "FormatterStatus",
-  })
-export type Status = z.infer<typeof Status>
+export const Status = Schema.Struct({
+  name: Schema.String,
+  extensions: Schema.Array(Schema.String),
+  enabled: Schema.Boolean,
+}).annotate({ identifier: "FormatterStatus" })
+export type Status = Schema.Schema.Type<typeof Status>
 
 export interface Interface {
   readonly init: () => Effect.Effect<void>
@@ -34,7 +31,8 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const appProcess = yield* AppProcess.Service
+    const flags = yield* RuntimeFlags.Service
 
     const state = yield* InstanceState.make(
       Effect.fn("Format.state")(function* (ctx) {
@@ -44,7 +42,7 @@ export const layer = Layer.effect(
         async function getCommand(item: Formatter.Info) {
           let cmd = commands[item.name]
           if (cmd === false || cmd === undefined) {
-            cmd = await item.enabled(ctx)
+            cmd = await item.enabled({ ...ctx, experimentalOxfmt: flags.experimentalOxfmt })
             commands[item.name] = cmd
           }
           return cmd
@@ -86,30 +84,32 @@ export const layer = Layer.effect(
               log.info("running", { command: cmd })
               const replaced = cmd.map((x) => x.replace("$FILE", filepath))
               const dir = yield* InstanceState.directory
-              const code = yield* spawner
-                .spawn(
+              const result = yield* appProcess
+                .run(
                   ChildProcess.make(replaced[0]!, replaced.slice(1), {
                     cwd: dir,
                     env: item.environment,
                     extendEnv: true,
+                    stdin: "ignore",
+                    stdout: "ignore",
+                    stderr: "ignore",
                   }),
                 )
                 .pipe(
-                  Effect.flatMap((handle) => handle.exitCode),
-                  Effect.scoped,
-                  Effect.catch(() =>
+                  Effect.catch((error) =>
                     Effect.sync(() => {
                       log.error("failed to format file", {
                         error: "spawn failed",
                         command: cmd,
                         ...item.environment,
                         file: filepath,
+                        cause: errorMessage(error.cause ?? error),
                       })
-                      return ChildProcessSpawner.ExitCode(1)
+                      return undefined
                     }),
                   ),
                 )
-              if (code !== 0) {
+              if (result && result.exitCode !== 0) {
                 log.error("failed", {
                   command: cmd,
                   ...item.environment,
@@ -202,7 +202,8 @@ export const layer = Layer.effect(
 
 export const defaultLayer = layer.pipe(
   Layer.provide(Config.defaultLayer),
-  Layer.provide(CrossSpawnSpawner.defaultLayer),
+  Layer.provide(AppProcess.defaultLayer),
+  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 export * as Format from "."

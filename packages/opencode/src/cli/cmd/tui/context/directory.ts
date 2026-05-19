@@ -1,7 +1,7 @@
 import { createMemo } from "solid-js"
 import { useProject } from "./project"
 import { useSync } from "./sync"
-import { Global } from "@/global"
+import { Global } from "@opencode-ai/core/global"
 
 export function useDirectory() {
   const project = useProject()

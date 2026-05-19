@@ -1,15 +1,12 @@
-import { afterEach, describe, test, expect } from "bun:test"
+import { describe, test, expect } from "bun:test"
+import { Effect } from "effect"
 import { Permission } from "../src/permission"
-import { Config } from "../src/config"
-import { Instance } from "../src/project/instance"
-import { tmpdir } from "./fixture/fixture"
-import { AppRuntime } from "../src/effect/app-runtime"
+import { Config } from "@/config/config"
+import { testEffect } from "./lib/effect"
 
-const load = () => AppRuntime.runPromise(Config.Service.use((svc) => svc.get()))
+const it = testEffect(Config.defaultLayer)
 
-afterEach(async () => {
-  await Instance.disposeAll()
-})
+const load = Config.Service.use((svc) => svc.get())
 
 describe("Permission.evaluate for permission.task", () => {
   const createRuleset = (rules: Record<string, "allow" | "deny" | "ask">): Permission.Ruleset =>
@@ -146,8 +143,18 @@ describe("Permission.disabled for task tool", () => {
 
 // Integration tests that load permissions from real config files
 describe("permission.task with real config files", () => {
-  test("loads task permissions from opencode.json config", async () => {
-    await using tmp = await tmpdir({
+  it.instance(
+    "loads task permissions from opencode.json config",
+    () =>
+      Effect.gen(function* () {
+        const config = yield* load
+        const ruleset = Permission.fromConfig(config.permission ?? {})
+        // general and orchestrator-fast should be allowed, code-reviewer denied
+        expect(Permission.evaluate("task", "general", ruleset).action).toBe("allow")
+        expect(Permission.evaluate("task", "orchestrator-fast", ruleset).action).toBe("allow")
+        expect(Permission.evaluate("task", "code-reviewer", ruleset).action).toBe("deny")
+      }),
+    {
       git: true,
       config: {
         permission: {
@@ -157,22 +164,21 @@ describe("permission.task with real config files", () => {
           },
         },
       },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const config = await load()
-        const ruleset = Permission.fromConfig(config.permission ?? {})
-        // general and orchestrator-fast should be allowed, code-reviewer denied
-        expect(Permission.evaluate("task", "general", ruleset).action).toBe("allow")
-        expect(Permission.evaluate("task", "orchestrator-fast", ruleset).action).toBe("allow")
-        expect(Permission.evaluate("task", "code-reviewer", ruleset).action).toBe("deny")
-      },
-    })
-  })
+    },
+  )
 
-  test("loads task permissions with wildcard patterns from config", async () => {
-    await using tmp = await tmpdir({
+  it.instance(
+    "loads task permissions with wildcard patterns from config",
+    () =>
+      Effect.gen(function* () {
+        const config = yield* load
+        const ruleset = Permission.fromConfig(config.permission ?? {})
+        // general and code-reviewer should be ask, orchestrator-* denied
+        expect(Permission.evaluate("task", "general", ruleset).action).toBe("ask")
+        expect(Permission.evaluate("task", "code-reviewer", ruleset).action).toBe("ask")
+        expect(Permission.evaluate("task", "orchestrator-fast", ruleset).action).toBe("deny")
+      }),
+    {
       git: true,
       config: {
         permission: {
@@ -182,22 +188,21 @@ describe("permission.task with real config files", () => {
           },
         },
       },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const config = await load()
-        const ruleset = Permission.fromConfig(config.permission ?? {})
-        // general and code-reviewer should be ask, orchestrator-* denied
-        expect(Permission.evaluate("task", "general", ruleset).action).toBe("ask")
-        expect(Permission.evaluate("task", "code-reviewer", ruleset).action).toBe("ask")
-        expect(Permission.evaluate("task", "orchestrator-fast", ruleset).action).toBe("deny")
-      },
-    })
-  })
+    },
+  )
 
-  test("evaluate respects task permission from config", async () => {
-    await using tmp = await tmpdir({
+  it.instance(
+    "evaluate respects task permission from config",
+    () =>
+      Effect.gen(function* () {
+        const config = yield* load
+        const ruleset = Permission.fromConfig(config.permission ?? {})
+        expect(Permission.evaluate("task", "general", ruleset).action).toBe("allow")
+        expect(Permission.evaluate("task", "code-reviewer", ruleset).action).toBe("deny")
+        // Unspecified agents default to "ask"
+        expect(Permission.evaluate("task", "unknown-agent", ruleset).action).toBe("ask")
+      }),
+    {
       git: true,
       config: {
         permission: {
@@ -207,38 +212,14 @@ describe("permission.task with real config files", () => {
           },
         },
       },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const config = await load()
-        const ruleset = Permission.fromConfig(config.permission ?? {})
-        expect(Permission.evaluate("task", "general", ruleset).action).toBe("allow")
-        expect(Permission.evaluate("task", "code-reviewer", ruleset).action).toBe("deny")
-        // Unspecified agents default to "ask"
-        expect(Permission.evaluate("task", "unknown-agent", ruleset).action).toBe("ask")
-      },
-    })
-  })
+    },
+  )
 
-  test("mixed permission config with task and other tools", async () => {
-    await using tmp = await tmpdir({
-      git: true,
-      config: {
-        permission: {
-          bash: "allow",
-          edit: "ask",
-          task: {
-            "*": "deny",
-            general: "allow",
-          },
-        },
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const config = await load()
+  it.instance(
+    "mixed permission config with task and other tools",
+    () =>
+      Effect.gen(function* () {
+        const config = yield* load
         const ruleset = Permission.fromConfig(config.permission ?? {})
 
         // Verify task permissions
@@ -256,27 +237,27 @@ describe("permission.task with real config files", () => {
         // task is NOT disabled because disabled() uses findLast, and the last rule
         // matching "task" permission is {pattern: "general", action: "allow"}, not pattern: "*"
         expect(disabled.has("task")).toBe(false)
-      },
-    })
-  })
-
-  test("task tool disabled when global deny comes last in config", async () => {
-    await using tmp = await tmpdir({
+      }),
+    {
       git: true,
       config: {
         permission: {
+          bash: "allow",
+          edit: "ask",
           task: {
-            general: "allow",
-            "code-reviewer": "allow",
             "*": "deny",
+            general: "allow",
           },
         },
       },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const config = await load()
+    },
+  )
+
+  it.instance(
+    "task tool disabled when global deny comes last in config",
+    () =>
+      Effect.gen(function* () {
+        const config = yield* load
         const ruleset = Permission.fromConfig(config.permission ?? {})
 
         // Last matching rule wins - "*" deny is last, so all agents are denied
@@ -288,26 +269,26 @@ describe("permission.task with real config files", () => {
         // and sees pattern: "*" with action: "deny", so task is disabled
         const disabled = Permission.disabled(["task"], ruleset)
         expect(disabled.has("task")).toBe(true)
-      },
-    })
-  })
-
-  test("task tool NOT disabled when specific allow comes last in config", async () => {
-    await using tmp = await tmpdir({
+      }),
+    {
       git: true,
       config: {
         permission: {
           task: {
-            "*": "deny",
             general: "allow",
+            "code-reviewer": "allow",
+            "*": "deny",
           },
         },
       },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const config = await load()
+    },
+  )
+
+  it.instance(
+    "task tool NOT disabled when specific allow comes last in config",
+    () =>
+      Effect.gen(function* () {
+        const config = yield* load
         const ruleset = Permission.fromConfig(config.permission ?? {})
 
         // Evaluate uses findLast - "general" allow comes after "*" deny
@@ -320,7 +301,17 @@ describe("permission.task with real config files", () => {
         // So the task tool is NOT disabled (even though most subagents are denied)
         const disabled = Permission.disabled(["task"], ruleset)
         expect(disabled.has("task")).toBe(false)
+      }),
+    {
+      git: true,
+      config: {
+        permission: {
+          task: {
+            "*": "deny",
+            general: "allow",
+          },
+        },
       },
-    })
-  })
+    },
+  )
 })

@@ -1,17 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { Result, Schema } from "effect"
-import { toJsonSchema } from "../../src/util/effect-zod"
+import { ToolJsonSchema } from "../../src/tool/json-schema"
 
 // Each tool exports its parameters schema at module scope so this test can
 // import them without running the tool's Effect-based init. The JSON Schema
 // snapshot captures what the LLM sees; the parse assertions pin down the
-// accepts/rejects contract. `toJsonSchema` is the same helper `session/
+// accepts/rejects contract. `ToolJsonSchema.fromSchema` is the same helper `session/
 // prompt.ts` uses to emit tool schemas to the LLM, so the snapshots stay
-// byte-identical regardless of whether a tool has migrated from zod to Schema.
+// provider-compatible while tools use Effect Schema internally.
 
 import { Parameters as ApplyPatch } from "../../src/tool/apply_patch"
-import { Parameters as Bash } from "../../src/tool/bash"
-import { Parameters as CodeSearch } from "../../src/tool/codesearch"
 import { Parameters as Edit } from "../../src/tool/edit"
 import { Parameters as Glob } from "../../src/tool/glob"
 import { Parameters as Grep } from "../../src/tool/grep"
@@ -20,6 +18,7 @@ import { Parameters as Lsp } from "../../src/tool/lsp"
 import { Parameters as Plan } from "../../src/tool/plan"
 import { Parameters as Question } from "../../src/tool/question"
 import { Parameters as Read } from "../../src/tool/read"
+import { Parameters as Shell } from "../../src/tool/shell"
 import { Parameters as Skill } from "../../src/tool/skill"
 import { Parameters as Task } from "../../src/tool/task"
 import { Parameters as Todo } from "../../src/tool/todo"
@@ -33,11 +32,12 @@ const parse = <S extends Schema.Decoder<unknown>>(schema: S, input: unknown): S[
 const accepts = (schema: Schema.Decoder<unknown>, input: unknown): boolean =>
   Result.isSuccess(Schema.decodeUnknownResult(schema)(input))
 
+const toJsonSchema = ToolJsonSchema.fromSchema
+
 describe("tool parameters", () => {
   describe("JSON Schema (wire shape)", () => {
     test("apply_patch", () => expect(toJsonSchema(ApplyPatch)).toMatchSnapshot())
-    test("bash", () => expect(toJsonSchema(Bash)).toMatchSnapshot())
-    test("codesearch", () => expect(toJsonSchema(CodeSearch)).toMatchSnapshot())
+    test("bash", () => expect(toJsonSchema(Shell)).toMatchSnapshot())
     test("edit", () => expect(toJsonSchema(Edit)).toMatchSnapshot())
     test("glob", () => expect(toJsonSchema(Glob)).toMatchSnapshot())
     test("grep", () => expect(toJsonSchema(Grep)).toMatchSnapshot())
@@ -52,6 +52,36 @@ describe("tool parameters", () => {
     test("webfetch", () => expect(toJsonSchema(WebFetch)).toMatchSnapshot())
     test("websearch", () => expect(toJsonSchema(WebSearch)).toMatchSnapshot())
     test("write", () => expect(toJsonSchema(Write)).toMatchSnapshot())
+
+    test("inlines named child schemas for provider compatibility", () => {
+      const schema = toJsonSchema(Question)
+      expect(schema).not.toHaveProperty("$defs")
+      expect(schema).toMatchObject({
+        properties: {
+          questions: { items: { properties: { options: { items: { properties: { label: { type: "string" } } } } } } },
+        },
+      })
+    })
+
+    test("preserves required nullable fields", () => {
+      expect(toJsonSchema(Schema.Struct({ value: Schema.NullOr(Schema.String) }))).toMatchObject({
+        properties: { value: { anyOf: expect.arrayContaining([{ type: "null" }]) } },
+      })
+    })
+
+    test("keeps repeated allOf constraints instead of dropping duplicates", () => {
+      expect(
+        toJsonSchema(
+          Schema.Struct({ value: Schema.String.check(Schema.isPattern(/^a/)).check(Schema.isPattern(/z$/)) }),
+        ),
+      ).toMatchObject({ properties: { value: { allOf: [{ pattern: "^a" }, { pattern: "z$" }] } } })
+    })
+
+    test("bounds bare integer fields to safe integer range", () => {
+      expect(toJsonSchema(Schema.Struct({ value: Schema.Int }))).toMatchObject({
+        properties: { value: { minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER } },
+      })
+    })
   })
 
   describe("apply_patch", () => {
@@ -68,35 +98,20 @@ describe("tool parameters", () => {
     })
   })
 
-  describe("bash", () => {
+  describe("shell", () => {
     test("accepts minimum: command + description", () => {
-      expect(parse(Bash, { command: "ls", description: "list" })).toEqual({ command: "ls", description: "list" })
+      expect(parse(Shell, { command: "ls", description: "list" })).toEqual({ command: "ls", description: "list" })
     })
     test("accepts optional timeout + workdir", () => {
-      const parsed = parse(Bash, { command: "ls", description: "list", timeout: 5000, workdir: "/tmp" })
+      const parsed = parse(Shell, { command: "ls", description: "list", timeout: 5000, workdir: "/tmp" })
       expect(parsed.timeout).toBe(5000)
       expect(parsed.workdir).toBe("/tmp")
     })
-    test("rejects missing description (required by zod)", () => {
-      expect(accepts(Bash, { command: "ls" })).toBe(false)
+    test("rejects missing description", () => {
+      expect(accepts(Shell, { command: "ls" })).toBe(false)
     })
     test("rejects missing command", () => {
-      expect(accepts(Bash, { description: "list" })).toBe(false)
-    })
-  })
-
-  describe("codesearch", () => {
-    test("accepts query; tokensNum defaults to 5000", () => {
-      expect(parse(CodeSearch, { query: "hooks" })).toEqual({ query: "hooks", tokensNum: 5000 })
-    })
-    test("accepts override tokensNum", () => {
-      expect(parse(CodeSearch, { query: "hooks", tokensNum: 10000 }).tokensNum).toBe(10000)
-    })
-    test("rejects tokensNum under 1000", () => {
-      expect(accepts(CodeSearch, { query: "x", tokensNum: 500 })).toBe(false)
-    })
-    test("rejects tokensNum over 50000", () => {
-      expect(accepts(CodeSearch, { query: "x", tokensNum: 60000 })).toBe(false)
+      expect(accepts(Shell, { description: "list" })).toBe(false)
     })
   })
 
@@ -219,6 +234,10 @@ describe("tool parameters", () => {
     test("accepts description + prompt + subagent_type", () => {
       const parsed = parse(Task, { description: "d", prompt: "p", subagent_type: "general" })
       expect(parsed.subagent_type).toBe("general")
+    })
+    test("accepts optional background flag", () => {
+      const parsed = parse(Task, { description: "d", prompt: "p", subagent_type: "general", background: true })
+      expect(parsed.background).toBe(true)
     })
     test("rejects missing prompt", () => {
       expect(accepts(Task, { description: "d", subagent_type: "general" })).toBe(false)

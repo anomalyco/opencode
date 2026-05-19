@@ -1,5 +1,4 @@
 import { z } from "zod"
-import { Effect } from "effect"
 
 export type ToolContext = {
   sessionID: string
@@ -17,7 +16,7 @@ export type ToolContext = {
   worktree: string
   abort: AbortSignal
   metadata(input: { title?: string; metadata?: { [key: string]: any } }): void
-  ask(input: AskInput): Effect.Effect<void>
+  ask(input: AskInput): Promise<void>
 }
 
 type AskInput = {
@@ -27,7 +26,21 @@ type AskInput = {
   metadata: { [key: string]: any }
 }
 
-export type ToolResult = string | { output: string; metadata?: { [key: string]: any } }
+export type ToolAttachment = {
+  type: "file"
+  mime: string
+  url: string
+  filename?: string
+}
+
+export type ToolResult =
+  | string
+  | {
+      title?: string
+      output: string
+      metadata?: { [key: string]: any }
+      attachments?: ToolAttachment[]
+    }
 
 export function tool<Args extends z.ZodRawShape>(input: {
   description: string

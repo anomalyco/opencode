@@ -1,20 +1,17 @@
 export * as ConfigKeybinds from "./keybinds"
 
-import { Effect, Schema } from "effect"
-import type z from "zod"
-import { zod } from "@/util/effect-zod"
+import z from "zod"
 
 // Every keybind field has the same shape: an optional string with a default
 // binding and a human description.  `keybind()` keeps the declaration list
 // below dense and readable.
-const keybind = (value: string, description: string) =>
-  Schema.String.pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(value))).annotate({ description })
+const keybind = (value: string, description: string) => z.string().optional().default(value).describe(description)
 
 // Windows prepends ctrl+z to the undo binding because `terminal_suspend`
 // cannot consume ctrl+z on native Windows terminals (no POSIX suspend).
 const inputUndoDefault = process.platform === "win32" ? "ctrl+z,ctrl+-,super+z" : "ctrl+-,super+z"
 
-const KeybindsSchema = Schema.Struct({
+const KeybindsSchema = z.object({
   leader: keybind("ctrl+x", "Leader key for keybind combinations"),
   app_exit: keybind("ctrl+c,ctrl+d,<leader>q", "Exit the application"),
   editor_open: keybind("<leader>e", "Open external editor"),
@@ -116,13 +113,9 @@ const KeybindsSchema = Schema.Struct({
   tips_toggle: keybind("<leader>h", "Toggle tips on home screen"),
   plugin_manager: keybind("none", "Open plugin manager dialog"),
   display_thinking: keybind("none", "Toggle thinking blocks visibility"),
-}).annotate({ identifier: "KeybindsConfig" })
+})
 
-export type Keybinds = Schema.Schema.Type<typeof KeybindsSchema>
+export type Keybinds = z.infer<typeof KeybindsSchema>
 
-// Consumers access `Keybinds.shape` and `Keybinds.shape.X.parse(undefined)`,
-// which requires the runtime type to be a ZodObject, not just ZodType.  Every
-// field is `string().optional().default(...)` at runtime, so widen to that.
-export const Keybinds = zod(KeybindsSchema) as unknown as z.ZodObject<
-  Record<keyof Keybinds, z.ZodDefault<z.ZodOptional<z.ZodString>>>
->
+// Consumers access `Keybinds.shape` and `Keybinds.shape.X.parse(undefined)`.
+export const Keybinds = KeybindsSchema

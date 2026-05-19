@@ -14,7 +14,7 @@ import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@opencode-ai/ui/toast"
-import { findLast } from "@opencode-ai/shared/util/array"
+import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
@@ -75,8 +75,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     import.meta.env.VITE_OPENCODE_CHANNEL !== "beta" ||
     settings.general.showFileTree()
 
-  const idle = { type: "idle" as const }
-  const status = () => sync.data.session_status[params.id ?? ""] ?? idle
   const messages = () => {
     const id = params.id
     if (!id) return []
@@ -290,7 +288,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
 
-    if (status().type !== "idle") {
+    if (sync.data.session_working(params.id ?? "")) {
       await sdk.client.session.abort({ sessionID }).catch(() => {})
     }
 
