@@ -60,6 +60,9 @@ export function createOpencodeModeStack(keymap: OpenTuiKeymap) {
   }
 
   const stackApi = {
+    current() {
+      return stack.at(-1)?.mode ?? OPENCODE_BASE_MODE
+    },
     push(mode: string) {
       if (disposed) return () => {}
       const id = Symbol(mode)
@@ -81,6 +84,7 @@ export function createOpencodeModeStack(keymap: OpenTuiKeymap) {
       stack.length = 0
       offFields()
       keymap.setData(OPENCODE_MODE_KEY, undefined)
+      modeStacks.delete(keymap)
     },
   }
 
@@ -89,7 +93,11 @@ export function createOpencodeModeStack(keymap: OpenTuiKeymap) {
 }
 
 export function useOpencodeModeStack() {
-  const value = modeStacks.get(useOpencodeKeymap())
+  return getOpencodeModeStack(useOpencodeKeymap())
+}
+
+export function getOpencodeModeStack(keymap: OpenTuiKeymap) {
+  const value = modeStacks.get(keymap)
   if (!value) throw new Error("Opencode mode stack is not registered for this keymap")
   return value
 }

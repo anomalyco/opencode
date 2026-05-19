@@ -192,6 +192,17 @@ function createScopedAttention(
   }
 }
 
+function createScopedMode(mode: TuiPluginApi["mode"], scope: PluginScope): TuiPluginApi["mode"] {
+  return {
+    current() {
+      return mode.current()
+    },
+    push(value) {
+      return scope.track(mode.push(value))
+    },
+  }
+}
+
 type CleanupResult = { type: "ok" } | { type: "error"; error: unknown } | { type: "timeout" }
 
 function runCleanup(fn: () => unknown, ms: number): Promise<CleanupResult> {
@@ -616,6 +627,7 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
     command: createCommandShim(keymap, api.ui.dialog, api.tuiConfig.keybinds),
     keys: api.keys,
     keymap,
+    mode: createScopedMode(api.mode, scope),
     route,
     ui: api.ui,
     tuiConfig: api.tuiConfig,
