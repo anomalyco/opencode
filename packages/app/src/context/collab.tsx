@@ -144,6 +144,10 @@ export function CollabProvider(props: CollabProviderProps) {
       case "collab:session_deleted":
         setSession(null)
         break
+
+      case "collab:native_session_linked":
+        setSession((prev) => (prev ? { ...prev, sessionId: event.sessionId } : prev))
+        break
     }
   }
 

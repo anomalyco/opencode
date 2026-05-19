@@ -72,11 +72,11 @@ async function executePromptOnNativeSession(
     const created = (await createRes.json()) as { id: string }
     nativeSessionId = created.id
     Session.linkNativeSession(collabSession.id, nativeSessionId)
-    broadcastSse(collabSession.id, { type: "collab:native_session_linked" as any, sessionId: nativeSessionId })
+    broadcastSse(collabSession.id, { type: "collab:native_session_linked", sessionId: nativeSessionId })
   }
 
   const promptRes = await fetch(
-    `http://localhost:4096/session/${nativeSessionId}/message?directory=${encodeURIComponent(workspacePath)}`,
+    `http://localhost:4096/session/${nativeSessionId}/prompt_async?directory=${encodeURIComponent(workspacePath)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
