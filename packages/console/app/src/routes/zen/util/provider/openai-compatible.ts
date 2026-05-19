@@ -31,9 +31,10 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage }) => ({
     headers.set("x-session-affinity", headers.get("x-opencode-session") ?? "")
   },
   modifyBody: (body: Record<string, any>, _workspaceID?: string) => {
+    const sanitized = stripNonStandardMessageFields(body)
     return {
-      ...body,
-      ...(body.stream ? { stream_options: { include_usage: true } } : {}),
+      ...sanitized,
+      ...(sanitized.stream ? { stream_options: { include_usage: true } } : {}),
     }
   },
   createBinaryStreamDecoder: () => undefined,
@@ -79,6 +80,17 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage }) => ({
     }
   },
 })
+
+function stripNonStandardMessageFields(body: Record<string, any>) {
+  if (!Array.isArray(body.messages)) return body
+  return {
+    ...body,
+    messages: body.messages.map((message) => {
+      if (!message || typeof message !== "object") return message
+      return Object.fromEntries(Object.entries(message).filter(([key]) => key !== "reasoning"))
+    }),
+  }
+}
 
 export function fromOaCompatibleRequest(body: any): CommonRequest {
   if (!body || typeof body !== "object") return body
