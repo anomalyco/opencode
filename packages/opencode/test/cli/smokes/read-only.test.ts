@@ -12,7 +12,8 @@
 // an empty env, update the assertion + add a note explaining the new contract.
 //
 // Speed: each test pays ~1.5s for bun startup. 7 tests serialize within this
-// file. Tracked as task #16 — investigate bun pre-warm if the suite grows.
+// file. See script/prebuild-test-cli.ts for an opt-in pre-built binary that
+// cuts per-spawn cost when this suite gets bigger.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { cliIt } from "../../lib/cli-process"
@@ -32,17 +33,18 @@ describe("opencode read-only commands (smoke)", () => {
   )
 
   // `providers list` enumerates credentials + env-resolved providers.
-  // (Not config-injected ones — those don't appear here by design.) We just
-  // assert it produced the two section headers, which proves the resolver
-  // walked both sources without crashing.
+  // (Not config-injected ones — those don't appear here by design.) The
+  // Credentials header always renders; the Environment header only renders
+  // when at least one provider env var is set, which the isolation harness
+  // deliberately doesn't guarantee. Assert the always-present marker so the
+  // test passes on a clean CI runner without env-var leakage.
   cliIt.live(
-    "providers list: exits 0 and prints credential/environment sections",
+    "providers list: exits 0 and prints the credentials section",
     ({ opencode }) =>
       Effect.gen(function* () {
         const r = yield* opencode.spawn(["providers", "list"])
         opencode.expectExit(r, 0, "providers list")
         expect(r.stdout).toContain("Credentials")
-        expect(r.stdout).toContain("Environment")
       }),
     60_000,
   )
