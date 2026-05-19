@@ -1204,67 +1204,37 @@ test("keeps plugin origins aligned with merged plugin list", async () => {
 
 // Legacy tools migration tests
 
-test("migrates legacy tools config to permissions - allow", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test: {
-              tools: {
-                bash: true,
-                read: true,
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test"]?.permission).toEqual({
-        bash: "allow",
-        read: "allow",
-      })
-    },
-  })
-})
+it.instance("migrates legacy tools config to permissions - allow", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      agent: { test: { tools: { bash: true, read: true } } },
+    })
 
-test("migrates legacy tools config to permissions - deny", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test: {
-              tools: {
-                bash: false,
-                webfetch: false,
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test"]?.permission).toEqual({
-        bash: "deny",
-        webfetch: "deny",
-      })
-    },
-  })
-})
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test"]?.permission).toEqual({
+      bash: "allow",
+      read: "allow",
+    })
+  }),
+)
+
+it.instance("migrates legacy tools config to permissions - deny", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      agent: { test: { tools: { bash: false, webfetch: false } } },
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test"]?.permission).toEqual({
+      bash: "deny",
+      webfetch: "deny",
+    })
+  }),
+)
 
 it.instance("migrates legacy write tool to edit permission", () =>
   Effect.gen(function* () {
