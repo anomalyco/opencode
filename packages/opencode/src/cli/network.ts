@@ -29,6 +29,20 @@ const options = {
     describe: "additional domains to allow for CORS",
     default: [] as string[],
   },
+  "base-path": {
+    type: "string" as const,
+    describe: "base URL path prefix for reverse proxy (e.g., /opencode)",
+    default: "",
+  },
+}
+
+function normalizeBasePath(input: string | undefined): string {
+  if (!input) return ""
+  let p = input.trim()
+  if (!p || p === "/") return ""
+  if (!p.startsWith("/")) p = "/" + p
+  p = p.replace(/\/+$/, "")
+  return p
 }
 
 export type NetworkOptions = InferredOptionTypes<typeof options>
@@ -57,6 +71,10 @@ export function resolveNetworkOptionsNoConfig(args: NetworkOptions, config?: Con
   const configCors = config?.server?.cors ?? []
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
+  const basePathExplicitlySet = process.argv.includes("--base-path")
+  const basePath = normalizeBasePath(
+    basePathExplicitlySet ? args["base-path"] : (config?.server?.basePath ?? args["base-path"]),
+  )
 
-  return { hostname, port, mdns, mdnsDomain, cors }
+  return { hostname, port, mdns, mdnsDomain, cors, basePath }
 }
