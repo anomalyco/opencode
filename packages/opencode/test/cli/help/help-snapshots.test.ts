@@ -29,13 +29,18 @@ const REAL_TMP = fs.realpathSync(TMP)
 function normalize(text: string): string {
   return (
     text
+      // Windows emits CRLF on stderr; collapse first so the rest of the
+      // pipeline doesn't need separate Windows-vs-POSIX branches.
+      .replaceAll("\r\n", "\n")
       .replaceAll(REAL_TMP, "<TMPDIR>")
       .replaceAll(TMP, "<TMPDIR>")
-      .replace(/<TMPDIR>\/oc-cli-[a-z0-9]+/g, "<HOME>")
+      // The harness writes the random home dir at `<TMPDIR>/oc-cli-XXX` on
+      // POSIX, `<TMPDIR>\oc-cli-XXX` on Windows. Strip either form.
+      .replace(/<TMPDIR>[/\\]oc-cli-[a-z0-9]+/g, "<HOME>")
       // yargs wraps the `[string] [default: "..."]` clause based on the
       // pre-normalized default's character length, so different random home
-      // path widths produce different leading-whitespace counts on the
-      // wrapped continuation. Collapse the wrap-dependent whitespace.
+      // path widths produce different leading-whitespace counts (or even
+      // line-wraps onto a fresh line on Windows). `\s+` matches both forms.
       .replace(/\s+\[string\] \[default: "<HOME>"\]/g, ' [string] [default: "<HOME>"]')
   )
 }
