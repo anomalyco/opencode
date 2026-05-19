@@ -517,7 +517,7 @@ export const dict = {
   "workspace.members.subtitle": "Çalışma alanı üyelerini ve izinlerini yönetin.",
   "workspace.members.invite": "Üyeyi Davet Et",
   "workspace.members.inviting": "Davet ediliyor...",
-  "workspace.members.beta.beforeLink": "Çalışma alanları ekipler için ücretsizdir.",
+  "workspace.members.beta.beforeLink": "Beta süresince çalışma alanları ekipler için ücretsizdir.",
   "workspace.members.form.invitee": "Davetli",
   "workspace.members.form.emailPlaceholder": "E-posta girin",
   "workspace.members.form.role": "Rol",

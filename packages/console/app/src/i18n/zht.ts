@@ -493,7 +493,7 @@ export const dict = {
   "workspace.members.subtitle": "管理工作區成員及其權限。",
   "workspace.members.invite": "邀請成員",
   "workspace.members.inviting": "邀請中...",
-  "workspace.members.beta.beforeLink": "工作區對團隊免費。",
+  "workspace.members.beta.beforeLink": "Beta 測試期間，工作區對團隊免費。",
   "workspace.members.form.invitee": "受邀者",
   "workspace.members.form.emailPlaceholder": "輸入電子郵件",
   "workspace.members.form.role": "角色",

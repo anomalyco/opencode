@@ -508,7 +508,7 @@ export const dict = {
   "workspace.members.subtitle": "إدارة أعضاء مساحة العمل وأذوناتهم.",
   "workspace.members.invite": "دعوة عضو",
   "workspace.members.inviting": "جارٍ الدعوة...",
-  "workspace.members.beta.beforeLink": "مساحات العمل مجانية للفرق.",
+  "workspace.members.beta.beforeLink": "مساحات العمل مجانية للفرق أثناء الفترة التجريبية.",
   "workspace.members.form.invitee": "المدعو",
   "workspace.members.form.emailPlaceholder": "أدخل البريد الإلكتروني",
   "workspace.members.form.role": "الدور",
