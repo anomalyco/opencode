@@ -13,7 +13,7 @@ function isPrivateBaseURL(baseURL: string): boolean {
     const host = new URL(baseURL).hostname
     if (host === "localhost") return true
     const parts = host.split(".").map(Number)
-    if (parts.length === 4 && parts.every((n) => !isNaN(n))) {
+    if (parts.length === 4 && parts.every((n) => !Number.isNaN(n))) {
       const [a, b] = parts
       if (a === 127) return true
       if (a === 10) return true
@@ -31,6 +31,10 @@ function providerIDFromName(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
+}
+
+function normalizeControlBaseURL(baseURL: string) {
+  return baseURL.replace(/\/+$/, "").replace(/\/v1$/, "")
 }
 
 export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (handlers) =>
@@ -162,6 +166,27 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       return providerID
     })
 
-    return handlers.handle("scan", scan).handle("connect", connect).handle("disconnect", disconnect)
+    const setModelCtxSize = Effect.fn("LocalHttpApi.setModelCtxSize")(function* (ctx) {
+      const { providerID, modelID } = ctx.pathParams
+      const { ctx_size } = ctx.payload
+      const config = yield* configSvc.get()
+      const baseURL = (config.provider?.[providerID] as { options?: { baseURL?: string } } | undefined)?.options?.baseURL
+      if (!baseURL) return false
+      const url = `${normalizeControlBaseURL(baseURL)}/api/config/models/${encodeURIComponent(modelID)}`
+      const res = yield* Effect.promise(() =>
+        fetch(url, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ctx_size }),
+        }),
+      )
+      return res.ok
+    })
+
+    return handlers
+      .handle("scan", scan)
+      .handle("connect", connect)
+      .handle("disconnect", disconnect)
+      .handle("setModelCtxSize", setModelCtxSize)
   }),
 )

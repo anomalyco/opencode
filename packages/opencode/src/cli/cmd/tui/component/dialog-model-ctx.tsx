@@ -1,0 +1,77 @@
+import { createMemo, createSignal } from "solid-js"
+import { useDialog } from "@tui/ui/dialog"
+import { useSync } from "@tui/context/sync"
+import { useSDK } from "@tui/context/sdk"
+import { useToast } from "@tui/ui/toast"
+import { DialogSelect } from "@tui/ui/dialog-select"
+
+const PRESETS = [8192, 16384, 32768, 65536, 131072, 262144]
+
+function fmtCtxK(n: number): string {
+  if (n >= 1024 && n % 1024 === 0) return `${n / 1024}k`
+  if (n >= 1000) return `${Math.round(n / 1024)}k`
+  return `${n}`
+}
+
+export function DialogModelCtx(props: { providerID: string; modelID: string }) {
+  const dialog = useDialog()
+  const sync = useSync()
+  const sdk = useSDK()
+  const toast = useToast()
+  const [busy, setBusy] = createSignal(false)
+
+  const current = createMemo(() => {
+    const provider = sync.data.provider.find((p) => p.id === props.providerID)
+    return provider?.models[props.modelID]?.limit.context ?? 0
+  })
+
+  const modelName = createMemo(() => {
+    const provider = sync.data.provider.find((p) => p.id === props.providerID)
+    return provider?.models[props.modelID]?.name ?? props.modelID
+  })
+
+  const options = createMemo(() => {
+    const cur = current()
+    const sizes = cur > 0 && !PRESETS.includes(cur) ? [...PRESETS, cur].sort((a, b) => a - b) : PRESETS
+    return sizes.map((n) => ({
+      value: n,
+      title: fmtCtxK(n),
+      description: n === cur ? "current" : undefined,
+      onSelect() {},
+    }))
+  })
+
+  async function apply(ctx_size: number) {
+    if (busy()) return
+    setBusy(true)
+    try {
+      const res = await sdk.client.local.setModelCtxSize(
+        { providerID: props.providerID, modelID: props.modelID, localCtxSizePayload: { ctx_size } },
+        { throwOnError: true },
+      )
+      if (res.data === false) {
+        toast.show({ variant: "error", message: "Provider not found or has no base URL" })
+        return
+      }
+      await sync.refreshProviders()
+      toast.show({ variant: "info", message: `Context set to ${fmtCtxK(ctx_size)}` })
+      dialog.clear()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      toast.show({ variant: "error", message: `Failed to set context size: ${msg}` })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <DialogSelect<number>
+      title={`Context size — ${modelName()}`}
+      options={options()}
+      flat={true}
+      skipFilter={true}
+      current={current()}
+      onSelect={(opt) => void apply(opt.value)}
+    />
+  )
+}

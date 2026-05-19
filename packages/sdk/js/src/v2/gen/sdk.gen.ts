@@ -61,8 +61,10 @@ import type {
   InstanceDisposeResponses,
   LocalConnectPayload,
   LocalConnectResponses,
+  LocalCtxSizePayload,
   LocalDisconnectResponses,
   LocalScanResponses,
+  LocalSetModelCtxSizeResponses,
   LspStatusResponses,
   McpAddErrors,
   McpAddResponses,
@@ -1933,6 +1935,47 @@ export class Local extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<LocalConnectResponses, unknown, ThrowOnError>({
       url: "/local/connect",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Set model context window size
+   *
+   * Patch the ctx_size for a model on a llama-swap backend.
+   */
+  public setModelCtxSize<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      modelID: string
+      directory?: string
+      workspace?: string
+      localCtxSizePayload?: LocalCtxSizePayload
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "path", key: "modelID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "localCtxSizePayload", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<LocalSetModelCtxSizeResponses, unknown, ThrowOnError>({
+      url: "/local/model/{providerID}/{modelID}/ctx-size",
       ...options,
       ...params,
       headers: {

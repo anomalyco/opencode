@@ -23,6 +23,10 @@ export const LocalConnectPayload = Schema.Struct({
   baseURL: Schema.String,
 }).annotate({ identifier: "LocalConnectPayload" })
 
+export const LocalCtxSizePayload = Schema.Struct({
+  ctx_size: Schema.Int.check(Schema.isGreaterThan(0)),
+}).annotate({ identifier: "LocalCtxSizePayload" })
+
 export const LocalApi = HttpApi.make("local").add(
   HttpApiGroup.make("local")
     .add(
@@ -57,6 +61,18 @@ export const LocalApi = HttpApi.make("local").add(
           identifier: "local.disconnect",
           summary: "Remove local provider from config",
           description: "Delete a local llama-swap provider entry from the global config.",
+        }),
+      ),
+      HttpApiEndpoint.patch("setModelCtxSize", `${root}/model/:providerID/:modelID/ctx-size`, {
+        params: { providerID: Schema.String, modelID: Schema.String },
+        query: WorkspaceRoutingQuery,
+        payload: LocalCtxSizePayload,
+        success: described(Schema.Boolean, "Context size updated"),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "local.model.setCtxSize",
+          summary: "Set model context window size",
+          description: "Patch the ctx_size for a model on a llama-swap backend.",
         }),
       ),
     )

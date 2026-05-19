@@ -4753,6 +4753,32 @@ export type LocalDisconnectResponses = {
 
 export type LocalDisconnectResponse = LocalDisconnectResponses[keyof LocalDisconnectResponses]
 
+export type LocalCtxSizePayload = {
+  ctx_size: number
+}
+
+export type LocalSetModelCtxSizeData = {
+  body?: LocalCtxSizePayload
+  path: {
+    providerID: string
+    modelID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/local/model/{providerID}/{modelID}/ctx-size"
+}
+
+export type LocalSetModelCtxSizeResponses = {
+  /**
+   * Context size updated
+   */
+  200: boolean
+}
+
+export type LocalSetModelCtxSizeResponse = LocalSetModelCtxSizeResponses[keyof LocalSetModelCtxSizeResponses]
+
 export type McpStatusData = {
   body?: never
   path?: never

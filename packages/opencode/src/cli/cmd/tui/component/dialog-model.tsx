@@ -6,6 +6,7 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { DialogVariant } from "./dialog-variant"
+import { DialogModelCtx } from "./dialog-model-ctx"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 
@@ -166,6 +167,17 @@ export function DialogModel(props: { providerID?: string }) {
           disabled: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
+          },
+        },
+        {
+          command: "model.dialog.ctx",
+          title: "Set context size",
+          disabled: !connected(),
+          onTrigger: (option) => {
+            const { providerID, modelID } = option.value as { providerID: string; modelID: string }
+            const provider = sync.data.provider.find((p) => p.id === providerID)
+            if (!provider?.options?.baseURL) return
+            dialog.replace(() => <DialogModelCtx providerID={providerID} modelID={modelID} />)
           },
         },
       ]}
