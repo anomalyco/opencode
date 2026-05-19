@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { and, asc, desc, eq, isNull, sql, Database } from "./drizzle"
+import { and, asc, eq, isNull, sql, Database } from "./drizzle"
 import { Actor } from "./actor"
 import { Identifier } from "./identifier"
 import { LiteTable } from "./schema/billing.sql"
@@ -68,7 +68,7 @@ export namespace Referral {
     const accountID = Actor.account()
     const code = await ensureCode(workspaceID)
     const rows = await Database.use(async (tx) => {
-      const [rewards, invites, inviteeReferral, inviteeRewards, lite] = await Promise.all([
+      const [rewards, invites, inviteeReferral, inviteeRewards] = await Promise.all([
         tx
           .select({
             referralID: ReferralRewardTable.referralID,
@@ -91,8 +91,7 @@ export namespace Referral {
               isNull(ReferralRewardTable.timeDeleted),
               isNull(ReferralTable.timeDeleted),
             ),
-          )
-          .orderBy(desc(ReferralRewardTable.timeCreated)),
+          ),
         tx
           .select({ id: ReferralTable.id, inviteeEmail: AuthTable.subject, timeCreated: ReferralTable.timeCreated })
           .from(ReferralTable)
@@ -130,14 +129,9 @@ export namespace Referral {
               isNull(ReferralTable.timeDeleted),
             ),
           ),
-        tx
-          .select({ id: LiteTable.id })
-          .from(LiteTable)
-          .where(and(eq(LiteTable.workspaceID, workspaceID), isNull(LiteTable.timeDeleted)))
-          .then((result) => result[0]),
       ])
 
-      return { inviteeReferral, inviteeRewards, invites, lite, rewards }
+      return { inviteeReferral, inviteeRewards, invites, rewards }
     })
 
     const rewardReferralIDs = new Set(rows.rewards.map((reward) => reward.referralID))
@@ -185,12 +179,8 @@ export namespace Referral {
     )
     return {
       referralCode: code.code,
-      inviteCount: allRewards.filter((reward) => reward.source === "inviter").length,
       hasReferral: allRewards.length > 0,
-      hasActiveGo: !!rows.lite,
       rewardAmount: microCentsToCents(REWARD_AMOUNT),
-      totalEarned: rewards.reduce((total, reward) => total + reward.amount, 0),
-      totalApplied: rewards.filter((reward) => reward.timeApplied).reduce((total, reward) => total + reward.amount, 0),
       rewards: allRewards,
     }
   })

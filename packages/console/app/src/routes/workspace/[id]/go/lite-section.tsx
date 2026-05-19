@@ -68,6 +68,8 @@ export const queryLiteSubscription = query(async (workspaceID: string) => {
   }, workspaceID)
 }, "lite.subscription.get")
 
+type LiteSubscription = Awaited<ReturnType<typeof queryLiteSubscription>>
+
 const createLiteCheckoutUrl = action(
   async (workspaceID: string, successUrl: string, cancelUrl: string, method?: "alipay" | "upi") => {
     "use server"
@@ -147,13 +149,12 @@ function LiteUsageItem(props: { label: string; usage: { usagePercent: number; re
   )
 }
 
-export function LiteSection() {
+export function LiteSection(props: { lite: LiteSubscription | undefined }) {
   const params = useParams()
   const i18n = useI18n()
   const language = useLanguage()
   const billingInfo = createAsync(() => queryBillingInfo(params.id!))
   const isBlack = createMemo(() => billingInfo()?.subscriptionID || billingInfo()?.timeSubscriptionBooked)
-  const lite = createAsync(() => queryLiteSubscription(params.id!))
   const sessionAction = useAction(createSessionUrl)
   const sessionSubmission = useSubmission(createSessionUrl)
   const checkoutAction = useAction(createLiteCheckoutUrl)
@@ -193,7 +194,7 @@ export function LiteSection() {
           <p data-slot="other-message">{i18n.t("workspace.lite.black.message")}</p>
         </section>
       </Show>
-      <Show when={!isBlack() && lite() && lite()!.mine && lite()!}>
+      <Show when={!isBlack() && props.lite && props.lite.mine && props.lite}>
         {(sub) => (
           <section class={styles.root}>
             <div data-slot="section-title">
@@ -235,12 +236,12 @@ export function LiteSection() {
           </section>
         )}
       </Show>
-      <Show when={!isBlack() && lite() && !lite()!.mine}>
+      <Show when={!isBlack() && props.lite && !props.lite.mine}>
         <section class={styles.root}>
           <p data-slot="other-message">{i18n.t("workspace.lite.other.message")}</p>
         </section>
       </Show>
-      <Show when={!isBlack() && lite() === null}>
+      <Show when={!isBlack() && props.lite === null}>
         <section class={styles.root}>
           <p data-slot="promo-description">
             <For

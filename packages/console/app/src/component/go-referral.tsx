@@ -1,4 +1,4 @@
-import { action, createAsync, json, query, useAction, useSubmission } from "@solidjs/router"
+import { action, json, query, useAction, useSubmission } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import { Referral } from "@opencode-ai/console-core/referral.js"
@@ -13,6 +13,7 @@ import "./go-referral.css"
 
 type GoReferralSummary = Awaited<ReturnType<typeof Referral.summary>>
 type GoReferralReward = GoReferralSummary["rewards"][number]
+type GoLiteSubscription = Awaited<ReturnType<typeof queryLiteSubscription>>
 type GoReferralUsagePreview = NonNullable<Awaited<ReturnType<typeof Referral.usagePreview>>>
 type GoReferralUsagePreviewItem = GoReferralUsagePreview["rollingUsage"]
 
@@ -111,18 +112,21 @@ function CopyInviteLink(props: { summary: GoReferralSummary }) {
   )
 }
 
-export function GoReferralSection(props: { workspaceID: string; summary: GoReferralSummary }) {
+export function GoReferralSection(props: {
+  workspaceID: string
+  summary: GoReferralSummary
+  lite: GoLiteSubscription | undefined
+}) {
   const i18n = useI18n()
   const language = useLanguage()
   const apply = useAction(applyGoReferralReward)
   const submission = useSubmission(applyGoReferralReward)
   const [selected, setSelected] = createSignal<GoReferralReward>()
   const [preview, setPreview] = createSignal<GoReferralUsagePreview | null>()
-  const lite = createAsync(() => queryLiteSubscription(props.workspaceID))
   const displayPreview = createMemo(() => {
     const loaded = preview()
     if (loaded) return loaded
-    const current = lite()
+    const current = props.lite
     if (!current) return emptyUsagePreview
     return {
       rollingUsage: currentUsagePreview(current.rollingUsage),
@@ -157,28 +161,14 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
 
   return (
     <>
-      <Show when={props.summary.hasActiveGo || props.summary.hasReferral}>
+      <Show when={props.lite || props.summary.hasReferral}>
         <section data-component="go-referral-section">
-          <Show when={props.summary.hasActiveGo}>
+          <Show when={props.lite}>
             <div data-slot="section-title">
               <h2>{i18n.t("workspace.referral.overview.title")}</h2>
               <p>{i18n.t("workspace.referral.overview.subtitle")}</p>
             </div>
             <div data-component="go-referral-overview">
-              <div data-slot="referral-stats">
-                <div>
-                  <span>{i18n.t("workspace.referral.stats.invites")}</span>
-                  <strong>{props.summary.inviteCount}</strong>
-                </div>
-                <div>
-                  <span>{i18n.t("workspace.referral.stats.earned")}</span>
-                  <strong>{formatCurrency(props.summary.totalEarned)}</strong>
-                </div>
-                <div>
-                  <span>{i18n.t("workspace.referral.stats.applied")}</span>
-                  <strong>{formatCurrency(props.summary.totalApplied)}</strong>
-                </div>
-              </div>
               <CopyInviteLink summary={props.summary} />
               <div data-slot="instructions">
                 <ol>
@@ -220,10 +210,10 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
                           <td data-slot="referral-action">
                             <button
                               type="button"
-                              disabled={reward.status !== "available" || !props.summary.hasActiveGo || submission.pending}
+                              disabled={reward.status !== "available" || !props.lite || submission.pending}
                               onClick={() => setSelected(reward)}
                             >
-                              {i18n.t(rewardActionKey(reward, props.summary.hasActiveGo))}
+                              {i18n.t(rewardActionKey(reward, !!props.lite))}
                             </button>
                           </td>
                         </tr>

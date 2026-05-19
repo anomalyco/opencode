@@ -673,9 +673,6 @@ export const dict = {
   "workspace.referral.overview.title": "友達を Go に招待",
   "workspace.referral.overview.subtitle":
     "友達がサブスクライブすると $5 分の Go クレジットを獲得。友達にも $5 が付与されます。",
-  "workspace.referral.stats.invites": "招待",
-  "workspace.referral.stats.earned": "獲得",
-  "workspace.referral.stats.applied": "適用済み",
   "workspace.referral.instructions.share": "リファラルリンクをシェア",
   "workspace.referral.instructions.subscribe": "友達が参加して Go にサブスクライブ",
   "workspace.referral.instructions.claim": "二人とも $5 の利用クレジットを獲得し、Go の利用上限に充当できます",

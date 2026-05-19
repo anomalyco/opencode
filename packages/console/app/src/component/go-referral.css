@@ -187,40 +187,6 @@
     margin-top: var(--space-4);
   }
 
-  [data-slot="referral-stats"] {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--space-6);
-
-    @media (max-width: 30rem) {
-      grid-template-columns: 1fr;
-      gap: var(--space-4);
-    }
-
-    > div {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--border-radius-sm);
-    }
-
-    span {
-      color: var(--color-text-muted);
-      font-size: var(--font-size-sm);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: -0.025rem;
-    }
-
-    strong {
-      color: var(--color-text);
-      font-size: var(--font-size-md);
-      font-weight: 600;
-    }
-  }
-
   [data-slot="referrals-table"] {
     overflow-x: auto;
   }
