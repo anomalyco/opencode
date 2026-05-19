@@ -1,7 +1,6 @@
 import type {
   Config,
   OpencodeClient,
-  Path,
   PermissionRequest,
   Project,
   ProviderAuthResponse,
@@ -9,6 +8,7 @@ import type {
   QuestionRequest,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
+import type { Path } from "@/lib/host-types"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
 import { retry } from "@opencode-ai/util/retry"

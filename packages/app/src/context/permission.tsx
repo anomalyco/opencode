@@ -178,7 +178,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       )
 
       globalSDK.client.permission
-        .list({ directory })
+        .list({ project: directory })
         .then((x) => {
           if (!isAutoAcceptingDirectory(directory)) return
           for (const perm of x.data ?? []) {
@@ -210,7 +210,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       )
 
       globalSDK.client.permission
-        .list({ directory })
+        .list({ project: directory })
         .then((x) => {
           if (enableVersion.get(key) !== version) return
           if (!isAutoAccepting(sessionID, directory)) return

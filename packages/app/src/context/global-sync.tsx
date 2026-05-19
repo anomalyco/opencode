@@ -1,12 +1,12 @@
 import type {
   Config,
   OpencodeClient,
-  Path,
   Project,
   ProviderAuthResponse,
   ProviderListResponse,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
+import type { Path } from "@/lib/host-types"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
 import {

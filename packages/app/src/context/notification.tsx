@@ -209,7 +209,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
       if (match.found) return syncStore.session[match.index]
       return globalSDK.client.session
-        .get({ directory, sessionID })
+        .get({ project: directory, sessionID })
         .then((x) => x.data)
         .catch(() => undefined)
     }

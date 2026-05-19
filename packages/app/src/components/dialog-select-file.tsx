@@ -191,7 +191,7 @@ function createSessionEntries(props: {
       dirs.map((directory) => {
         const description = props.label(directory)
         return props.globalSDK.client.session
-          .list({ directory, roots: true })
+          .list({ project: directory, roots: true })
           .then((x) =>
             (x.data ?? [])
               .filter((s) => !!s?.id)

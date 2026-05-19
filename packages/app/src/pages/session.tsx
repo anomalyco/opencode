@@ -283,7 +283,6 @@ export default function Page() {
   })
 
   const [ui, setUi] = createStore({
-    git: false,
     pendingMessage: undefined as string | undefined,
     restoring: undefined as string | undefined,
     reviewSnap: false,
@@ -548,46 +547,6 @@ export default function Page() {
     if (sync.data.config.snapshot === false) return "session.review.noSnapshot"
     return "session.review.empty"
   })
-
-  function upsert(next: Project) {
-    const list = globalSync.data.project
-    sync.set("project", next.id)
-    const idx = list.findIndex((item) => item.id === next.id)
-    if (idx >= 0) {
-      globalSync.set(
-        "project",
-        list.map((item, i) => (i === idx ? { ...item, ...next } : item)),
-      )
-      return
-    }
-    const at = list.findIndex((item) => item.id > next.id)
-    if (at >= 0) {
-      globalSync.set("project", [...list.slice(0, at), next, ...list.slice(at)])
-      return
-    }
-    globalSync.set("project", [...list, next])
-  }
-
-  function initGit() {
-    if (ui.git) return
-    setUi("git", true)
-    void sdk.client.project
-      .initGit()
-      .then((x) => {
-        if (!x.data) return
-        upsert(x.data)
-      })
-      .catch((err) => {
-        showToast({
-          variant: "error",
-          title: language.t("common.requestFailed"),
-          description: formatServerError(err, language.t),
-        })
-      })
-      .finally(() => {
-        setUi("git", false)
-      })
-  }
 
   let inputRef!: HTMLDivElement
   let promptDock: HTMLDivElement | undefined
@@ -854,21 +813,6 @@ export default function Page() {
       return <div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>
     }
 
-    if (reviewEmptyKey() === "session.review.noVcs") {
-      return (
-        <div class={input.emptyClass}>
-          <div class="flex flex-col gap-3">
-            <div class="text-14-medium text-text-strong">Create a Git repository</div>
-            <div class="text-14-regular text-text-base max-w-md" style={{ "line-height": "var(--line-height-normal)" }}>
-              Track, review, and undo changes in this project
-            </div>
-          </div>
-          <Button size="large" disabled={ui.git} onClick={initGit}>
-            {ui.git ? "Creating Git repository..." : "Create Git repository"}
-          </Button>
-        </div>
-      )
-    }
 
     return (
       <div class={input.emptyClass}>

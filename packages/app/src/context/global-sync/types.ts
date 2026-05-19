@@ -3,11 +3,9 @@ import type {
   Command,
   Config,
   FileDiff,
-  LspStatus,
   McpStatus,
   Message,
   Part,
-  Path,
   PermissionRequest,
   Project,
   ProviderListResponse,
@@ -15,8 +13,8 @@ import type {
   Session,
   SessionStatus,
   Todo,
-  VcsInfo,
 } from "@opencode-ai/sdk/v2/client"
+import type { LspStatus, Path, VcsInfo } from "@/lib/host-types"
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 
@@ -118,7 +116,7 @@ export type DisposeCheck = {
 export type RootLoadArgs = {
   directory: string
   limit: number
-  list: (query: { directory: string; roots: true; limit?: number }) => Promise<{ data?: Session[] }>
+  list: (query: { project: string; roots: true; limit?: number }) => Promise<{ data?: Session[] }>
 }
 
 export type RootLoadResult = {

@@ -21,7 +21,7 @@ export class ACPSessionManager {
     const session = await this.sdk.session
       .create(
         {
-          directory: cwd,
+          project: cwd,
         },
         { throwOnError: true },
       )
@@ -53,7 +53,7 @@ export class ACPSessionManager {
       .get(
         {
           sessionID: sessionId,
-          directory: cwd,
+          project: cwd,
         },
         { throwOnError: true },
       )

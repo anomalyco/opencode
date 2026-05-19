@@ -54,7 +54,7 @@ function useSessionShare(args: {
     if (!sessionID || state.share) return
     setState("share", true)
     args.globalSDK.client.session
-      .share({ sessionID, directory: args.projectID() })
+      .share({ sessionID, project: args.projectID() })
       .catch((error) => {
         console.error("Failed to share session", error)
       })
@@ -68,7 +68,7 @@ function useSessionShare(args: {
     if (!sessionID || state.unshare) return
     setState("unshare", true)
     args.globalSDK.client.session
-      .unshare({ sessionID, directory: args.projectID() })
+      .unshare({ sessionID, project: args.projectID() })
       .catch((error) => {
         console.error("Failed to unshare session", error)
       })
