@@ -1,22 +1,19 @@
 import { createStore } from "solid-js/store"
 import { createMemo, createSignal, For, Show } from "solid-js"
+import { useRenderer } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
-import { useDialog } from "../../ui/dialog"
 import { useTuiConfig } from "../../context/tui-config"
-import { useBindings } from "../../keymap"
+import { OPENCODE_BASE_MODE, useBindings } from "../../keymap"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
   const { theme } = useTheme()
+  const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
-  const {
-    keymap: { sections },
-  } = tuiConfig
-  const keymapConfig = tuiConfig.keymap
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
@@ -122,13 +119,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     pick(opt.label)
   }
 
-  const dialog = useDialog()
-
   useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
     enabled: store.editing && !confirm(),
     commands: [
       {
-        name: "question.edit.clear",
+        name: "prompt.clear",
         title: "Clear answer edit",
         category: "Question",
         run() {
@@ -150,7 +146,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
           setStore("editing", false)
         },
       },
-      ...keymapConfig.pick("question", ["question.edit.clear"]),
+      ...tuiConfig.keybinds.get("prompt.clear"),
       {
         key: "return",
         desc: "Submit answer edit",
@@ -205,10 +201,11 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     const max = Math.min(total, 9)
 
     return {
-      enabled: dialog.stack.length === 0 && !store.editing,
+      mode: OPENCODE_BASE_MODE,
+      enabled: !store.editing,
       commands: [
         {
-          name: "question.reject",
+          name: "app.exit",
           title: "Reject question",
           category: "Question",
           run() {
@@ -243,7 +240,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
           ? [
               { key: "return", desc: "Submit answer", group: "Question", cmd: () => submit() },
               { key: "escape", desc: "Reject question", group: "Question", cmd: () => reject() },
-              ...sections.question,
+              ...tuiConfig.keybinds.get("app.exit"),
             ]
           : [
               ...Array.from({ length: max }, (_, index) => ({
@@ -271,7 +268,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               { key: "j", desc: "Next answer", group: "Question", cmd: () => moveTo((store.selected + 1) % total) },
               { key: "return", desc: "Select answer", group: "Question", cmd: () => selectOption() },
               { key: "escape", desc: "Reject question", group: "Question", cmd: () => reject() },
-              ...sections.question,
+              ...tuiConfig.keybinds.get("app.exit"),
             ]),
       ],
     }
@@ -306,7 +303,10 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                     }
                     onMouseOver={() => setTabHover(index())}
                     onMouseOut={() => setTabHover(null)}
-                    onMouseUp={() => selectTab(index())}
+                    onMouseUp={() => {
+                      if (renderer.getSelection()?.getSelectedText()) return
+                      selectTab(index())
+                    }}
                   >
                     <text
                       fg={
@@ -331,7 +331,10 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               }
               onMouseOver={() => setTabHover("confirm")}
               onMouseOut={() => setTabHover(null)}
-              onMouseUp={() => selectTab(questions().length)}
+              onMouseUp={() => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                selectTab(questions().length)
+              }}
             >
               <text fg={confirm() ? selectedForeground(theme, theme.accent) : theme.textMuted}>Confirm</text>
             </box>
@@ -355,7 +358,10 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                     <box
                       onMouseOver={() => moveTo(i())}
                       onMouseDown={() => moveTo(i())}
-                      onMouseUp={() => selectOption()}
+                      onMouseUp={() => {
+                        if (renderer.getSelection()?.getSelectedText()) return
+                        selectOption()
+                      }}
                     >
                       <box flexDirection="row">
                         <box backgroundColor={active() ? theme.backgroundElement : undefined} paddingRight={1}>
@@ -384,7 +390,10 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                 <box
                   onMouseOver={() => moveTo(options().length)}
                   onMouseDown={() => moveTo(options().length)}
-                  onMouseUp={() => selectOption()}
+                  onMouseUp={() => {
+                    if (renderer.getSelection()?.getSelectedText()) return
+                    selectOption()
+                  }}
                 >
                   <box flexDirection="row">
                     <box backgroundColor={other() ? theme.backgroundElement : undefined} paddingRight={1}>

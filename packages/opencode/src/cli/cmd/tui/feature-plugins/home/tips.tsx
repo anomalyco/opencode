@@ -20,13 +20,13 @@ function View(props: { api: TuiPluginApi; hidden: boolean; show: boolean; connec
         },
       },
     ],
-    bindings: props.api.tuiConfig.keymap.sections.home_tips,
+    bindings: props.api.tuiConfig.keybinds.get("tips.toggle"),
   }))
 
   return (
-    <box height={4} minHeight={0} width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
+    <box width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
       <Show when={props.show}>
-        <Tips connected={props.connected} />
+        <Tips api={props.api} connected={props.connected} />
       </Show>
     </box>
   )

@@ -51,6 +51,8 @@ type RunRuntimeInput = {
   files: RunInput["files"]
   initialInput?: string
   thinking: boolean
+  replay?: boolean
+  replayLimit?: number
   demo?: RunInput["demo"]
 }
 
@@ -67,6 +69,8 @@ type RunLocalInput = {
   files: RunInput["files"]
   initialInput?: string
   thinking: boolean
+  replay?: boolean
+  replayLimit?: number
   demo?: RunInput["demo"]
 }
 
@@ -487,8 +491,11 @@ async function runInteractiveRuntime(input: RunRuntimeInput): Promise<void> {
 
           const handle = await mod.createSessionTransport({
             sdk: ctx.sdk,
+            directory: ctx.directory,
             sessionID: state.sessionID,
             thinking: input.thinking,
+            replay: input.replay,
+            replayLimit: input.replayLimit,
             limits: () => state.limits,
             footer,
             trace: log,
@@ -721,6 +728,8 @@ export async function runInteractiveLocalMode(input: RunLocalInput): Promise<voi
         files: input.files,
         initialInput: input.initialInput,
         thinking: input.thinking,
+        replay: input.replay,
+        replayLimit: input.replayLimit,
         demo: input.demo,
         resolveSession: () => {
           if (session) {
@@ -773,6 +782,8 @@ export async function runInteractiveMode(input: RunInput & { createSession?: Cre
         files: input.files,
         initialInput: input.initialInput,
         thinking: input.thinking,
+        replay: input.replay,
+        replayLimit: input.replayLimit,
         demo: input.demo,
         boot: async () => ({
           sdk: input.sdk,

@@ -168,16 +168,20 @@ export const layer = Layer.effect(
           fn: (evt: { properties: any }) => Effect.Effect<void, unknown>,
         ) =>
           bus.subscribe(def as never).pipe(
-            Stream.runForEach((evt) =>
-              fn(evt).pipe(
-                Effect.catchCause((cause) =>
-                  Effect.sync(() => {
-                    log.error("share subscriber failed", { type: def.type, cause })
-                  }),
+            Effect.flatMap((stream) =>
+              stream.pipe(
+                Stream.runForEach((evt) =>
+                  fn(evt).pipe(
+                    Effect.catchCause((cause) =>
+                      Effect.sync(() => {
+                        log.error("share subscriber failed", { type: def.type, cause })
+                      }),
+                    ),
+                  ),
                 ),
+                Effect.forkScoped,
               ),
             ),
-            Effect.forkScoped,
           )
 
         yield* watch(Session.Event.Updated, (evt) =>
@@ -272,7 +276,7 @@ export const layer = Layer.effect(
       log.info("full sync", { sessionID })
       const info = yield* session.get(sessionID)
       const diffs = yield* session.diff(sessionID)
-      const messages = yield* Effect.sync(() => Array.from(MessageV2.stream(sessionID)))
+      const messages = yield* session.messages({ sessionID })
       const models = yield* Effect.forEach(
         Array.from(
           new Map(

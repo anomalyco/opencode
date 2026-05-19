@@ -1,5 +1,5 @@
 import "./index.css"
-import { createAsync, query } from "@solidjs/router"
+import { createAsync, query, useLocation } from "@solidjs/router"
 import { Title, Meta } from "@solidjs/meta"
 import { For, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 //import { HttpHeader } from "@solidjs/start"
@@ -224,8 +224,15 @@ function LimitsGraph(props: { href: string }) {
 }
 
 export default function Home() {
+  const location = useLocation()
   const workspaceID = createAsync(() => checkLoggedIn())
-  const subscribeUrl = createMemo(() => (workspaceID() ? `/workspace/${workspaceID()}/go` : "/auth"))
+  const referralCode = createMemo(() => new URLSearchParams(location.search).get("ref") ?? undefined)
+  const subscribeUrl = createMemo(() => {
+    const code = referralCode()
+    const referral = code ? `?ref=${encodeURIComponent(code)}` : ""
+    if (workspaceID()) return `/workspace/${workspaceID()}/go${referral}`
+    return `/auth${referral}`
+  })
   const i18n = useI18n()
   const language = useLanguage()
   return (
