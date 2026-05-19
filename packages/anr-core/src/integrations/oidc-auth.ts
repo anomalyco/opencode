@@ -28,21 +28,42 @@ function computeCodeChallenge(verifier: string): string {
 }
 
 async function openBrowser(url: string): Promise<void> {
-  try {
-    const { platform } = await import("os")
-    const os = platform()
+  const { platform } = await import("os")
+  const os = platform()
 
-    if (os === "darwin") {
+  if (os === "darwin") {
+    try {
       await execAsync(`open "${url}"`)
-    } else if (os === "win32") {
-      // Use cmd's built-in 'start' — instant, no PowerShell/.NET startup overhead
-      await execAsync(`start "" "${url}"`)
-    } else {
-      await execAsync(`xdg-open "${url}"`)
+    } catch (err) {
+      console.error(`Could not open browser: ${err}`)
+      console.log(`\nPlease open this URL manually:\n${url}`)
     }
-  } catch (err) {
-    console.error(`Could not open browser: ${err}`)
+    return
   }
+
+  if (os === "win32") {
+    try {
+      await execAsync(`start "" "${url}"`)
+    } catch (err) {
+      console.error(`Could not open browser: ${err}`)
+      console.log(`\nPlease open this URL manually:\n${url}`)
+    }
+    return
+  }
+
+  // Linux: try common openers in order
+  const cmds = ["xdg-open", "sensible-browser", "x-www-browser", "gnome-open", "kde-open"]
+  for (const cmd of cmds) {
+    try {
+      await execAsync(`${cmd} "${url}"`)
+      return
+    } catch {
+      // try next
+    }
+  }
+
+  console.error("Could not open browser automatically.")
+  console.log(`\nPlease open this URL manually:\n${url}`)
 }
 
 export async function authenticateWithOIDC(config: ANRConfig): Promise<OIDCTokens> {
