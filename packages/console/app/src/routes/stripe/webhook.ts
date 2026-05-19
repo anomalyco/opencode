@@ -64,7 +64,7 @@ export async function POST(input: APIEvent) {
           tx
             .select({ id: PaymentTable.id })
             .from(PaymentTable)
-            .where(eq(PaymentTable.paymentID, paymentID))
+            .where(eq(PaymentTable.invoiceID, invoiceID))
             .then((rows) => rows[0]),
         )
         if (existingPayment) return
@@ -274,13 +274,13 @@ export async function POST(input: APIEvent) {
           const invoice = await Billing.stripe().invoices.retrieve(invoiceID, {
             expand: ["payments"],
           })
-          const paymentID = invoice.payments?.data[0].payment.payment_intent as string
+          const paymentID = invoice.payments?.data[0]?.payment.payment_intent as string | undefined
 
           const existingPayment = await Database.use((tx) =>
             tx
               .select({ id: PaymentTable.id })
               .from(PaymentTable)
-              .where(eq(PaymentTable.paymentID, paymentID))
+              .where(eq(PaymentTable.invoiceID, invoiceID))
               .then((rows) => rows[0]),
           )
           if (existingPayment) return
