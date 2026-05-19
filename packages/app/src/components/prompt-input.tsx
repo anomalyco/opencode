@@ -21,6 +21,7 @@ import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
 import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
 import { Icon } from "@opencode-ai/ui/icon"
+import { showToast } from "@opencode-ai/ui/toast"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -54,6 +55,8 @@ import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
+import { PromptDrawingShell } from "./prompt-input/drawing-shell"
+import { createPromptDrawing } from "./prompt-input/drawing"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 
 interface PromptInputProps {
@@ -101,6 +104,8 @@ const promptTriggersOff = import.meta.env.VITE_DISABLE_PROMPT_TRIGGERS === "true
 const permissionsOff = import.meta.env.VITE_DISABLE_PROMPT_PERMISSIONS === "true"
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
+
+type PromptMode = "normal" | "shell" | "draw"
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
@@ -273,7 +278,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     savedPrompt: PromptHistoryEntry | null
     placeholder: number
     draggingType: "image" | "@mention" | null
-    mode: "normal" | "shell"
+    mode: PromptMode
     applyingHistory: boolean
   }>({
     popover: null,
@@ -293,12 +298,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     "pointer-events": value > 0.5 ? ("auto" as const) : ("none" as const),
   })
   const buttons = createMemo(() => motion(buttonsSpring()))
+  const submitStyle = createMemo(() => (store.mode === "draw" ? motion(1) : buttons()))
   const shell = createMemo(() => motion(1 - buttonsSpring()))
   const control = createMemo(() => ({ height: "28px", ...buttons() }))
 
   const commentCount = createMemo(() => {
-    if (store.mode === "shell") return 0
+    if (store.mode !== "normal") return 0
     return prompt.context.items().filter((item) => !!item.comment?.trim()).length
+  })
+
+  const drawing = createPromptDrawing({
+    t: (key) => language.t(key as Parameters<typeof language.t>[0]),
   })
 
   const contextItems = createMemo(() => {
@@ -434,10 +444,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const pick = () => fileInputRef?.click()
 
-  const setMode = (mode: "normal" | "shell") => {
+  const setMode = (mode: PromptMode) => {
+    if (store.mode === "draw" && mode !== "draw") drawing.dispose()
     setStore("mode", mode)
     setStore("popover", null)
-    requestAnimationFrame(() => editorRef?.focus())
+    if (mode === "normal") requestAnimationFrame(() => editorRef?.focus())
   }
 
   const shellModeKey = "mod+shift+x"
@@ -467,6 +478,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       keybind: normalModeKey,
       disabled: store.mode === "normal",
       onSelect: () => setMode("normal"),
+    },
+    {
+      id: "prompt.mode.draw",
+      title: language.t("command.prompt.mode.draw"),
+      category: language.t("command.category.session"),
+      disabled: store.mode === "draw",
+      onSelect: () => setMode("draw"),
     },
   ])
 
@@ -988,7 +1006,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return true
   }
 
-  const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
+  const addToHistory = (prompt: Prompt, mode: PromptMode) => {
     const currentHistory = mode === "shell" ? shellHistory : history
     const setCurrentHistory = mode === "shell" ? setShellHistory : setHistory
     const next = prependHistoryEntry(currentHistory.entries, prompt, mode === "shell" ? [] : historyComments())
@@ -1052,6 +1070,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const { addAttachments, removeAttachment, handlePaste } = createPromptAttachments({
+    enabled: () => store.mode !== "draw",
     editor: () => editorRef,
     isDialogActive: () => !!dialog.active,
     setDraggingType: (type) => setStore("draggingType", type),
@@ -1105,6 +1124,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onSubmit: props.onSubmit,
   })
 
+  const handleFormSubmit = async (event: Event) => {
+    if (store.mode === "draw") {
+      event.preventDefault()
+      const part = await drawing.commit()
+      if (!part) {
+        showToast({
+          title: language.t("prompt.toast.drawEmpty.title"),
+          description: language.t("prompt.toast.drawEmpty.description"),
+        })
+        return
+      }
+      drawing.dispose()
+      await handleSubmit(event, [part])
+      return
+    }
+
+    handleSubmit(event)
+  }
+
   const handleKeyDown = (event: KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "u") {
       event.preventDefault()
@@ -1151,6 +1189,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
       if (store.mode === "shell") {
         setStore("mode", "normal")
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+
+      if (store.mode === "draw") {
+        setMode("normal")
         event.preventDefault()
         event.stopPropagation()
         return
@@ -1268,7 +1313,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   return (
-    <div class="relative size-full _max-h-[320px] flex flex-col gap-0">
+    <div class="relative size-full _max-h-[512px] flex flex-col gap-0">
       <PromptPopover
         popover={store.popover}
         setSlashPopoverRef={(el) => (slashPopoverRef = el)}
@@ -1285,7 +1330,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
       <DockShellForm
-        onSubmit={handleSubmit}
+        onSubmit={handleFormSubmit}
         classList={{
           "group/prompt-input": true,
           "focus-within:shadow-xs-border": true,
@@ -1293,10 +1338,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           [props.class ?? ""]: !!props.class,
         }}
       >
-        <PromptDragOverlay
-          type={store.draggingType}
-          label={language.t(store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label")}
-        />
+        <Show when={store.mode !== "draw"}>
+          <PromptDragOverlay
+            type={store.draggingType}
+            label={language.t(store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label")}
+          />
+        </Show>
         <PromptContextItems
           items={contextItems()}
           active={(item) => {
@@ -1325,7 +1372,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             if (!(target instanceof HTMLElement)) return
             if (
               target.closest(
-                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-permissions"]',
+                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-draw"], [data-action="prompt-draw-exit"], [data-action="prompt-permissions"]',
               )
             ) {
               return
@@ -1333,13 +1380,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             editorRef?.focus()
           }}
         >
-          <div
-            class="relative max-h-[240px] overflow-y-auto no-scrollbar"
-            ref={(el) => (scrollRef = el)}
-            style={{ "scroll-padding-bottom": space }}
-          >
-            <div
-              data-component="prompt-input"
+          <Show
+            when={store.mode === "draw"}
+            fallback={
+              <div
+                class="relative max-h-[240px] overflow-y-auto no-scrollbar"
+                ref={(el) => (scrollRef = el)}
+                style={{ "scroll-padding-bottom": space }}
+              >
+                <div
+                  data-component="prompt-input"
               ref={(el) => {
                 editorRef = el
                 props.ref?.(el)
@@ -1375,18 +1425,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 {placeholder()}
               </div>
             </Show>
-          </div>
+              </div>
+            }
+          >
+            <PromptDrawingShell drawing={drawing} working={working} tip={tip} onExit={() => setMode("normal")} />
+          </Show>
 
-          <div
-            aria-hidden="true"
-            class="pointer-events-none absolute inset-x-0 bottom-0"
-            style={{
-              height: space,
-              background:
-                "linear-gradient(to top, var(--surface-raised-stronger-non-alpha) calc(100% - 20px), transparent)",
-            }}
-          />
+          <Show when={store.mode !== "draw"}>
+            <div
+              aria-hidden="true"
+              class="pointer-events-none absolute inset-x-0 bottom-0"
+              style={{
+                height: space,
+                background:
+                  "linear-gradient(to top, var(--surface-raised-stronger-non-alpha) calc(100% - 20px), transparent)",
+              }}
+            />
+          </Show>
 
+          <Show when={store.mode !== "draw"}>
           <div class="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1">
             <input
               ref={fileInputRef}
@@ -1406,63 +1463,93 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <IconButton
                   data-action="prompt-submit"
                   type="submit"
-                  disabled={store.mode !== "normal" || (!prompt.dirty() && !working() && commentCount() === 0)}
-                  tabIndex={store.mode === "normal" ? undefined : -1}
+                  disabled={
+                    store.mode === "shell" ||
+                    (store.mode === "normal" && !prompt.dirty() && !working() && commentCount() === 0)
+                  }
+                  tabIndex={store.mode === "shell" ? -1 : undefined}
                   icon={working() ? "stop" : "arrow-up"}
                   variant="primary"
                   class="size-7.5"
-                  style={buttons()}
+                  style={submitStyle()}
                   aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
                 />
               </Tooltip>
             </div>
           </div>
 
-          <div class="pointer-events-none absolute bottom-2 left-2">
-            <div
-              aria-hidden={store.mode !== "normal"}
-              class="pointer-events-auto"
-              style={{
-                "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-              }}
-            >
-              <TooltipKeybind
-                placement="top"
-                title={language.t("prompt.action.attachFile")}
-                keybind={command.keybind("file.attach")}
+          <div class="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1">
+            <Show when={store.mode === "normal"}>
+              <div
+                class="pointer-events-auto flex items-center gap-1"
+                style={{
+                  "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
+                }}
               >
-                <Button
-                  data-action="prompt-attach"
-                  type="button"
-                  variant="ghost"
-                  class="size-7.5 p-0"
-                  style={buttons()}
-                  onClick={pick}
-                  disabled={store.mode !== "normal"}
-                  tabIndex={store.mode === "normal" ? undefined : -1}
-                  aria-label={language.t("prompt.action.attachFile")}
+                <TooltipKeybind
+                  placement="top"
+                  title={language.t("prompt.action.attachFile")}
+                  keybind={command.keybind("file.attach")}
                 >
-                  <Icon name="plus" class="size-4.5" />
-                </Button>
-              </TooltipKeybind>
-            </div>
+                  <Button
+                    data-action="prompt-attach"
+                    type="button"
+                    variant="ghost"
+                    class="size-7.5 p-0"
+                    style={buttons()}
+                    onClick={pick}
+                    aria-label={language.t("prompt.action.attachFile")}
+                  >
+                    <Icon name="plus" class="size-4.5" />
+                  </Button>
+                </TooltipKeybind>
+                <Tooltip placement="top" value={language.t("prompt.action.draw")}>
+                  <Button
+                    data-action="prompt-draw"
+                    type="button"
+                    variant="ghost"
+                    class="size-7.5 p-0"
+                    style={buttons()}
+                    onClick={() => setMode("draw")}
+                    aria-label={language.t("prompt.action.draw")}
+                  >
+                    <Icon name="photo" class="size-4.5" />
+                  </Button>
+                </Tooltip>
+              </div>
+            </Show>
           </div>
+          </Show>
         </div>
       </DockShellForm>
-      <Show when={store.mode === "normal" || store.mode === "shell"}>
+      <Show when={store.mode === "normal" || store.mode === "shell" || store.mode === "draw"}>
         <DockTray attach="top">
           <div class="px-1.75 pt-5.5 pb-2 flex items-center gap-2 min-w-0">
             <div class="flex items-center gap-1.5 min-w-0 flex-1 relative">
-              <div
-                class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0 absolute inset-y-0 left-0"
-                style={{
-                  padding: "0 4px 0 8px",
-                  ...shell(),
-                }}
-              >
-                <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.shell")}</span>
-                <div class="size-4 shrink-0" />
-              </div>
+              <Show when={store.mode === "shell"}>
+                <div
+                  class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0 absolute inset-y-0 left-0"
+                  style={{
+                    padding: "0 4px 0 8px",
+                    ...shell(),
+                  }}
+                >
+                  <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.shell")}</span>
+                  <div class="size-4 shrink-0" />
+                </div>
+              </Show>
+              <Show when={store.mode === "draw"}>
+                <div
+                  class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0 absolute inset-y-0 left-0"
+                  style={{
+                    padding: "0 4px 0 8px",
+                    ...shell(),
+                  }}
+                >
+                  <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.draw")}</span>
+                  <div class="size-4 shrink-0" />
+                </div>
+              </Show>
               <div class="flex items-center gap-1.5 min-w-0 flex-1">
                 <div data-component="prompt-agent-control">
                   <TooltipKeybind
