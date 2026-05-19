@@ -42,6 +42,7 @@
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 # Autoopencode-cli
+## This is fork from opencode, this fork is autonomous open source ai agent
 
 ---
 
@@ -66,7 +67,6 @@ nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
 
-### This is fork from opencode, this fork is autonomous open source ai agent
 
 ### Desktop App (BETA)
 
