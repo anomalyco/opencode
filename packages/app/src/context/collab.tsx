@@ -18,6 +18,8 @@ interface CollabContextValue {
   participants: () => Participant[]
   queue: () => PromptSuggestion[]
   isConnected: () => boolean
+  /** Local workspace directory on the server — available after first prompt is approved */
+  nativeSessionDirectory: () => string | null
 
   // Actions
   submitPrompt: (content: string) => Promise<void>
@@ -47,11 +49,20 @@ export function CollabProvider(props: CollabProviderProps) {
   const [session, setSession] = createSignal<CollabSession | null>(null)
   const [queue, setQueue] = createSignal<PromptSuggestion[]>([])
   const [isConnected, setIsConnected] = createSignal(false)
+  const [nativeSessionDirectory, setNativeSessionDirectory] = createSignal<string | null>(null)
 
   async function fetchSession() {
     try {
       const res = await fetch(`/collab/session/${props.collabSessionId}`)
-      if (res.ok) setSession(await res.json())
+      if (res.ok) {
+        const data = await res.json()
+        const { workspacePath, ...sessionData } = data as CollabSession & { workspacePath?: string }
+        setSession(sessionData)
+        // Recover workspace directory for the iframe URL on page reload
+        if (workspacePath && sessionData.sessionId) {
+          setNativeSessionDirectory(workspacePath)
+        }
+      }
     } catch {}
   }
 
@@ -147,6 +158,7 @@ export function CollabProvider(props: CollabProviderProps) {
 
       case "collab:native_session_linked":
         setSession((prev) => (prev ? { ...prev, sessionId: event.sessionId } : prev))
+        setNativeSessionDirectory(event.directory)
         break
     }
   }
@@ -163,6 +175,7 @@ export function CollabProvider(props: CollabProviderProps) {
     participants: () => session()?.participants ?? [],
     queue,
     isConnected,
+    nativeSessionDirectory,
 
     async submitPrompt(content) {
       await api("/prompt", "POST", { content })

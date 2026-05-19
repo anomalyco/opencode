@@ -3,30 +3,26 @@
  *
  * Layout:
  *  ┌────────────────┬───────────────────────────────────────┐
- *  │  Collab panel  │  Conversation (native session)         │
+ *  │  Collab panel  │  Conversation (native session iframe)  │
  *  │    (1/4)       │            (3/4)                       │
  *  └────────────────┴───────────────────────────────────────┘
  *
  * The left panel handles participant management, role-based prompt
- * input, and the queue. The right panel mirrors the opencode session
- * message thread by polling the native session API.
+ * input, and the queue. The right panel embeds the full opencode
+ * session UI via an iframe once the native session is created.
  */
 
 import {
   createSignal,
-  createEffect,
-  createResource,
   onMount,
-  onCleanup,
   For,
   Show,
-  Switch,
-  Match,
 } from "solid-js"
 import { useParams, useNavigate } from "@solidjs/router"
 import { CollabProvider, useCollab } from "@/context/collab"
 import { InviteDialog } from "@/components/collab/InviteDialog"
-import type { CollabSession, CollabRole, Participant, PromptSuggestion } from "@opencode-ai/collab"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import type { CollabRole, Participant, PromptSuggestion } from "@opencode-ai/collab"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -34,20 +30,6 @@ interface Me {
   githubId: number
   githubLogin: string
   githubAvatarUrl: string
-}
-
-interface NativeMessage {
-  id: string
-  role: "user" | "assistant"
-  parts: Array<{
-    type: string
-    text?: string
-    name?: string     // for tool-use parts
-    input?: unknown
-    content?: unknown // tool result
-    state?: string    // tool state: "running" | "completed" | "error"
-  }>
-  createdAt?: number
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -223,123 +205,6 @@ function QueueItem(props: {
   )
 }
 
-// ── Message part renderer ─────────────────────────────────────────────────────
-
-function MessagePartView(props: { part: NativeMessage["parts"][number] }) {
-  return (
-    <Switch>
-      <Match when={props.part.type === "text"}>
-        <p class="text-sm text-zinc-200 whitespace-pre-wrap leading-relaxed">{props.part.text}</p>
-      </Match>
-      <Match when={props.part.type === "tool-use" || props.part.type === "tool_use"}>
-        <div class="flex items-center gap-2 py-1 px-2 rounded bg-zinc-800/60 border border-zinc-700/50 text-xs">
-          <span class="text-zinc-500">
-            {props.part.state === "running" ? (
-              <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-              </svg>
-            ) : props.part.state === "error" ? "✕" : "✓"}
-          </span>
-          <code class="text-zinc-300 font-mono">{props.part.name}</code>
-        </div>
-      </Match>
-    </Switch>
-  )
-}
-
-// ── Single message bubble ─────────────────────────────────────────────────────
-
-function MessageBubble(props: { message: NativeMessage }) {
-  const isUser = () => props.message.role === "user"
-  const textParts = () => props.message.parts?.filter(p => p.type === "text") ?? []
-  const toolParts = () => props.message.parts?.filter(p => p.type === "tool-use" || p.type === "tool_use") ?? []
-
-  return (
-    <div class={`flex gap-3 ${isUser() ? "flex-row-reverse" : "flex-row"}`}>
-      <div class={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs mt-0.5 ${
-        isUser() ? "bg-blue-600" : "bg-zinc-700"
-      }`}>
-        {isUser() ? "U" : "AI"}
-      </div>
-      <div class={`flex-1 min-w-0 max-w-[85%] space-y-1`}>
-        <For each={props.message.parts ?? []}>
-          {(part) => <MessagePartView part={part} />}
-        </For>
-      </div>
-    </div>
-  )
-}
-
-// ── Native session message thread ──────────────────────────────────────────────
-
-function MessageThread(props: { nativeSessionId: string | null }) {
-  const [messages, setMessages] = createSignal<NativeMessage[]>([])
-  const [loading, setLoading] = createSignal(false)
-  let bottomRef: HTMLDivElement | undefined
-
-  async function fetchMessages(sessionId: string) {
-    try {
-      const res = await fetch(`/session/${sessionId}/message`)
-      if (!res.ok) return
-      const data = await res.json()
-      // The API returns { items: Message[] } or Message[]
-      const items: NativeMessage[] = Array.isArray(data) ? data : (data.items ?? data.messages ?? [])
-      setMessages(items)
-    } catch {}
-  }
-
-  createEffect(() => {
-    const sid = props.nativeSessionId
-    if (!sid) return
-
-    setLoading(true)
-    fetchMessages(sid).then(() => setLoading(false))
-
-    // Poll for new messages every 2s while session is active
-    const interval = setInterval(() => fetchMessages(sid), 2000)
-    onCleanup(() => clearInterval(interval))
-  })
-
-  createEffect(() => {
-    if (messages().length > 0) {
-      bottomRef?.scrollIntoView({ behavior: "smooth" })
-    }
-  })
-
-  return (
-    <div class="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-      <Show when={!props.nativeSessionId}>
-        <div class="flex flex-col items-center justify-center h-full text-center py-20">
-          <div class="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center mb-4">
-            <svg class="w-6 h-6 text-zinc-600" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
-            </svg>
-          </div>
-          <p class="text-sm font-medium text-zinc-400 mb-1">No conversation yet</p>
-          <p class="text-xs text-zinc-600">Send a prompt to start the session</p>
-        </div>
-      </Show>
-
-      <Show when={props.nativeSessionId && loading() && messages().length === 0}>
-        <div class="flex items-center gap-2 text-zinc-600 text-sm py-4">
-          <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-          </svg>
-          Loading messages…
-        </div>
-      </Show>
-
-      <For each={messages()}>
-        {(msg) => <MessageBubble message={msg} />}
-      </For>
-
-      <div ref={bottomRef} />
-    </div>
-  )
-}
-
 // ── Inner component (inside CollabProvider) ────────────────────────────────────
 
 function CollabSessionInner(props: { me: Me }) {
@@ -493,34 +358,53 @@ function CollabSessionInner(props: { me: Me }) {
         </Show>
       </div>
 
-      {/* ── RIGHT: Conversation (3/4) ─────────────────────────────────────── */}
-      <div class="flex-1 flex flex-col min-w-0">
+      {/* ── RIGHT: Conversation (3/4) — opencode session iframe ─────────── */}
+      <div class="flex-1 flex flex-col min-w-0 relative">
 
-        {/* Top bar */}
-        <div class="px-4 py-2.5 border-b border-zinc-800 flex items-center gap-3 flex-shrink-0 bg-zinc-900/30">
-          <div class="flex-1 min-w-0">
-            <span class="text-sm text-zinc-400">
-              {collab.session()?.sessionId
-                ? `Session ${collab.session()!.sessionId!.slice(0, 8)}…`
-                : "Waiting for first prompt…"}
-            </span>
-          </div>
+        {/* Connection status badge (top-right corner) */}
+        <div class="absolute top-2 right-3 z-10 flex items-center gap-1.5">
           <Show when={!collab.isConnected()}>
-            <div class="flex items-center gap-1.5 text-xs text-amber-500">
+            <div class="flex items-center gap-1.5 text-xs text-amber-500 bg-zinc-900/80 px-2 py-1 rounded-full border border-zinc-700/50">
               <div class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
               Reconnecting…
             </div>
           </Show>
-          <Show when={collab.isConnected()}>
-            <div class="flex items-center gap-1.5 text-xs text-emerald-500">
-              <div class="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              Live
-            </div>
-          </Show>
         </div>
 
-        {/* Messages */}
-        <MessageThread nativeSessionId={collab.session()?.sessionId ?? null} />
+        <Show
+          when={collab.session()?.sessionId && collab.nativeSessionDirectory()}
+          fallback={
+            <div class="flex-1 flex flex-col items-center justify-center text-center bg-zinc-950">
+              <div class="w-16 h-16 rounded-full bg-zinc-800/60 flex items-center justify-center mb-5">
+                <svg class="w-8 h-8 text-zinc-600" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+                </svg>
+              </div>
+              <p class="text-sm font-medium text-zinc-400 mb-2">Conversation starts here</p>
+              <p class="text-xs text-zinc-600 max-w-xs">
+                {myRole() === "viewer"
+                  ? "Waiting for a prompt to be approved"
+                  : myRole() === "driver"
+                    ? "Add a prompt to the queue and click Approve to start"
+                    : "Suggest a prompt — a Driver must approve it to start"}
+              </p>
+            </div>
+          }
+        >
+          {(_) => {
+            const dir = collab.nativeSessionDirectory()!
+            const sid = collab.session()!.sessionId!
+            const sessionUrl = `/${base64Encode(dir)}/session/${sid}`
+            return (
+              <iframe
+                src={sessionUrl}
+                class="flex-1 w-full border-0 bg-zinc-950"
+                title="Collab session"
+                style="flex: 1; width: 100%; height: 100%; display: block;"
+              />
+            )
+          }}
+        </Show>
       </div>
 
       {/* Invite dialog */}

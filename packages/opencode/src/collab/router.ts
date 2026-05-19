@@ -72,7 +72,7 @@ async function executePromptOnNativeSession(
     const created = (await createRes.json()) as { id: string }
     nativeSessionId = created.id
     Session.linkNativeSession(collabSession.id, nativeSessionId)
-    broadcastSse(collabSession.id, { type: "collab:native_session_linked", sessionId: nativeSessionId })
+    broadcastSse(collabSession.id, { type: "collab:native_session_linked", sessionId: nativeSessionId, directory: workspacePath })
   }
 
   const promptRes = await fetch(
@@ -463,7 +463,8 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
 
   // GET /collab/session/:id
   if (req.method === "GET" && parts.length === 3) {
-    return json(collabSession)
+    // Include workspacePath so the client can build the iframe URL on page reload
+    return json({ ...collabSession, workspacePath: sessionWorkspacePath(sessionId) })
   }
 
   // DELETE /collab/session/:id — Drivers only

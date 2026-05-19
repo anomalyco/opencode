@@ -68,4 +68,4 @@ export type CollabEvent =
   | { type: "collab:typing_stop"; githubLogin: string }
   | { type: "collab:keystroke"; githubLogin: string; draft: string }
   | { type: "collab:session_deleted"; collabSessionId: string }
-  | { type: "collab:native_session_linked"; sessionId: string }
+  | { type: "collab:native_session_linked"; sessionId: string; directory: string }
