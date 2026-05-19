@@ -2,28 +2,28 @@ export function titlecase(str: string) {
   return str.replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function time(input: number): string {
+export function time(input: number, locale?: string): string {
   const date = new Date(input)
-  return date.toLocaleTimeString(undefined, { timeStyle: "short" })
+  return date.toLocaleTimeString(locale, { timeStyle: "short" })
 }
 
-export function datetime(input: number): string {
+export function datetime(input: number, locale?: string): string {
   const date = new Date(input)
-  const localTime = time(input)
-  const localDate = date.toLocaleDateString()
+  const localTime = time(input, locale)
+  const localDate = date.toLocaleDateString(locale)
   return `${localTime} · ${localDate}`
 }
 
-export function todayTimeOrDateTime(input: number): string {
+export function todayTimeOrDateTime(input: number, locale?: string): string {
   const date = new Date(input)
   const now = new Date()
   const isToday =
     date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
 
   if (isToday) {
-    return time(input)
+    return time(input, locale)
   } else {
-    return datetime(input)
+    return datetime(input, locale)
   }
 }
 
