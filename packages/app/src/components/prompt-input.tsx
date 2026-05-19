@@ -97,7 +97,7 @@ const EXAMPLES = [
   "prompt.example.25",
 ] as const
 
-const triggersOff = import.meta.env.VITE_DISABLE_PROMPT_TRIGGERS === "true"
+const promptTriggersOff = import.meta.env.VITE_DISABLE_PROMPT_TRIGGERS === "true"
 const permissionsOff = import.meta.env.VITE_DISABLE_PROMPT_PERMISSIONS === "true"
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
@@ -880,7 +880,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const shellMode = store.mode === "shell"
 
     if (!shellMode) {
-      if (triggersOff) {
+      if (promptTriggersOff) {
         closePopover()
       } else {
         const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
@@ -1131,7 +1131,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     }
 
-    if (!triggersOff && event.key === "!" && store.mode === "normal") {
+    if (!promptTriggersOff && event.key === "!" && store.mode === "normal") {
       const cursorPosition = getCursorPosition(editorRef)
       if (cursorPosition === 0) {
         setStore("mode", "shell")

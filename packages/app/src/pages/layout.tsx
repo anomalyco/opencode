@@ -332,31 +332,9 @@ export default function Layout(props: ParentProps) {
     layout.mobileSidebar.hide()
   }
 
-  function cycleTheme(direction = 1) {
-    const ids = availableThemeEntries().map(([id]) => id)
-    if (ids.length === 0) return
-    const currentIndex = ids.indexOf(theme.themeId())
-    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + direction + ids.length) % ids.length
-    const nextThemeId = ids[nextIndex]
-    theme.setTheme(nextThemeId)
-    showToast({
-      title: language.t("toast.theme.title"),
-      description: theme.name(nextThemeId),
-    })
-  }
+  function cycleTheme(_direction?: number) {}
 
-  function cycleColorScheme(direction = 1) {
-    const current = theme.colorScheme()
-    const currentIndex = colorSchemeOrder.indexOf(current)
-    const nextIndex =
-      currentIndex === -1 ? 0 : (currentIndex + direction + colorSchemeOrder.length) % colorSchemeOrder.length
-    const next = colorSchemeOrder[nextIndex]
-    theme.setColorScheme(next)
-    showToast({
-      title: language.t("toast.scheme.title"),
-      description: colorSchemeLabel(next),
-    })
-  }
+  function cycleColorScheme(_direction?: number) {}
 
   function setLocale(next: Locale) {
     if (next === language.locale()) return

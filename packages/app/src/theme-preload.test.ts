@@ -1,3 +1,4 @@
+import { COLOR_SCHEME, THEME_ID } from "@opencode-ai/ui/theme/pin"
 import { beforeEach, describe, expect, test } from "bun:test"
 
 const src = await Bun.file(new URL("../public/oc-theme-preload.js", import.meta.url)).text()
@@ -19,19 +20,27 @@ beforeEach(() => {
 })
 
 describe("theme preload", () => {
-  test("migrates legacy oc-1 to oc-2 before mount", () => {
+  test("pins codle and system when no theme is stored", () => {
+    run()
+
+    expect(document.documentElement.dataset.theme).toBe(THEME_ID)
+    expect(document.documentElement.dataset.colorScheme).toBe("light")
+    expect(localStorage.getItem("opencode-theme-id")).toBe(THEME_ID)
+    expect(localStorage.getItem("opencode-color-scheme")).toBe(COLOR_SCHEME)
+    expect(document.getElementById("oc-theme-preload")).toBeNull()
+  })
+
+  test("migrates legacy oc-1 to codle before mount", () => {
     localStorage.setItem("opencode-theme-id", "oc-1")
     localStorage.setItem("opencode-theme-css-light", "--background-base:#fff;")
     localStorage.setItem("opencode-theme-css-dark", "--background-base:#000;")
 
     run()
 
-    expect(document.documentElement.dataset.theme).toBe("oc-2")
-    expect(document.documentElement.dataset.colorScheme).toBe("light")
-    expect(localStorage.getItem("opencode-theme-id")).toBe("oc-2")
-    expect(localStorage.getItem("opencode-theme-css-light")).toBeNull()
-    expect(localStorage.getItem("opencode-theme-css-dark")).toBeNull()
-    expect(document.getElementById("oc-theme-preload")).toBeNull()
+    expect(document.documentElement.dataset.theme).toBe(THEME_ID)
+    expect(localStorage.getItem("opencode-theme-id")).toBe(THEME_ID)
+    expect(localStorage.getItem("opencode-color-scheme")).toBe(COLOR_SCHEME)
+    expect(document.getElementById("oc-theme-preload")?.textContent).toContain("--background-base:#fff;")
   })
 
   test("migrates legacy lovable to codle before mount", () => {
@@ -39,25 +48,21 @@ describe("theme preload", () => {
 
     run()
 
-    expect(document.documentElement.dataset.theme).toBe("codle")
-    expect(localStorage.getItem("opencode-theme-id")).toBe("codle")
+    expect(document.documentElement.dataset.theme).toBe(THEME_ID)
+    expect(localStorage.getItem("opencode-theme-id")).toBe(THEME_ID)
+    expect(localStorage.getItem("opencode-color-scheme")).toBe(COLOR_SCHEME)
   })
 
-  test("defaults to codle when no theme is stored", () => {
-    run()
-
-    expect(document.documentElement.dataset.theme).toBe("codle")
-    expect(document.documentElement.dataset.colorScheme).toBe("light")
-    expect(document.getElementById("oc-theme-preload")).toBeNull()
-  })
-
-  test("keeps cached css for non-default themes", () => {
+  test("pins stored themes to codle", () => {
     localStorage.setItem("opencode-theme-id", "nightowl")
+    localStorage.setItem("opencode-color-scheme", "dark")
     localStorage.setItem("opencode-theme-css-light", "--background-base:#fff;")
 
     run()
 
-    expect(document.documentElement.dataset.theme).toBe("nightowl")
+    expect(document.documentElement.dataset.theme).toBe(THEME_ID)
+    expect(localStorage.getItem("opencode-theme-id")).toBe(THEME_ID)
+    expect(localStorage.getItem("opencode-color-scheme")).toBe(COLOR_SCHEME)
     expect(document.getElementById("oc-theme-preload")?.textContent).toContain("--background-base:#fff;")
   })
 })
