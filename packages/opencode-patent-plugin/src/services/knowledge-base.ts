@@ -1,8 +1,9 @@
 /**
  * 知识库查询服务
  *
- * 封装 Obsidian 知识库的读取和搜索能力。
- * 底层实现来自 utils/obsidian-kb.ts 和 utils/obsidian-index.ts。
+ * Facade 模块：统一暴露知识库相关 API。
+ * 底层实现来自 utils/obsidian-kb.ts 和 utils/obsidian-index.ts，
+ * 消费方从此处导入即可，无需关心内部模块划分。
  */
 
 export {

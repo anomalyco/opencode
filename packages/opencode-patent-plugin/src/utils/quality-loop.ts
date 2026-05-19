@@ -74,31 +74,29 @@ const THRESHOLD = 7.5
 const MAX_ITERATIONS = 3
 
 /**
+ * 安全解析 JSON：尝试直接解析、从代码块提取、从花括号提取
+ */
+function safeParseJSON(text: string): any {
+  // Try direct parse first
+  try { return JSON.parse(text) } catch {}
+  // Try extracting JSON from markdown code blocks
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (codeBlockMatch) try { return JSON.parse(codeBlockMatch[1]) } catch {}
+  // Try finding first { to last }
+  const braceMatch = text.match(/\{[\s\S]*\}/)
+  if (braceMatch) try { return JSON.parse(braceMatch[0]) } catch {}
+  throw new Error("Failed to parse JSON response")
+}
+
+/**
  * 解析 LLM 返回的 JSON 评分
  */
 function parseQualityResponse(text: string): {
   dimensions: DimensionScore[]
   suggestions: string[]
 } {
-  // 尝试从 LLM 输出中提取 JSON
-  let jsonStr = text
-
-  // 提取 ```json ... ``` 块
-  const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/)
-  if (jsonMatch) {
-    jsonStr = jsonMatch[1]
-  }
-
-  // 尝试提取 { ... } 块
-  if (!jsonStr.startsWith("{")) {
-    const braceMatch = text.match(/\{[\s\S]*\}/)
-    if (braceMatch) {
-      jsonStr = braceMatch[0]
-    }
-  }
-
   try {
-    const parsed = JSON.parse(jsonStr)
+    const parsed = safeParseJSON(text)
 
     const dimensions: DimensionScore[] = Object.entries(QUALITY_DIMENSIONS).map(([key, def]) => {
       const dimData = parsed.dimensions?.[key] ?? parsed[key]

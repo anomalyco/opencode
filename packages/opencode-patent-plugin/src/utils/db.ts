@@ -7,6 +7,7 @@
  */
 
 import { Pool } from "pg"
+import { SimpleCache } from "./cache.js"
 
 export interface DBConfig {
   host: string
@@ -19,7 +20,7 @@ export interface DBConfig {
 const DEFAULT_CONFIG: DBConfig = {
   host: process.env.PATENT_DB_HOST || "localhost",
   port: Number(process.env.PATENT_DB_PORT) || 5432,
-  user: process.env.PATENT_DB_USER || "xujian",
+  user: process.env.PATENT_DB_USER || "postgres",
   password: process.env.PATENT_DB_PASSWORD || "",
   database: "patent_db",
 }
@@ -28,6 +29,12 @@ const DEFAULT_CONFIG: DBConfig = {
  * 连接池缓存（按数据库名分组）
  */
 const poolCache = new Map<string, Pool>()
+
+/** 专利搜索结果缓存（TTL 60 秒，最多 50 条） */
+const patentSearchCache = new SimpleCache<PatentRecord[]>({ ttlMs: 60_000, maxSize: 50 })
+
+/** 法规搜索结果缓存（TTL 60 秒，最多 50 条） */
+const legalSearchCache = new SimpleCache<LegalRule[]>({ ttlMs: 60_000, maxSize: 50 })
 
 /**
  * 获取或创建连接池
@@ -112,6 +119,11 @@ export async function searchPatents(
     dateTo?: string
   } = {},
 ): Promise<PatentRecord[]> {
+  // 查询缓存
+  const cacheKey = `${keyword}:${JSON.stringify(options)}`
+  const cached = patentSearchCache.get(cacheKey)
+  if (cached !== undefined) return cached
+
   const {
     limit = 10,
     fields = ["title", "abstract", "claims"],
@@ -162,7 +174,9 @@ export async function searchPatents(
   `
   params.push(limit)
 
-  return queryPatentDB<PatentRecord>(sql, params)
+  const results = await queryPatentDB<PatentRecord>(sql, params)
+  patentSearchCache.set(cacheKey, results)
+  return results
 }
 
 /**
@@ -192,6 +206,11 @@ export async function searchLegalRules(
     articleType?: string
   } = {},
 ): Promise<LegalRule[]> {
+  // 查询缓存
+  const cacheKey = `${keyword}:${JSON.stringify(options)}`
+  const cached = legalSearchCache.get(cacheKey)
+  if (cached !== undefined) return cached
+
   const { limit = 10, articleType } = options
 
   const conditions: string[] = ["content ILIKE $1 OR title ILIKE $1"]
@@ -220,7 +239,9 @@ export async function searchLegalRules(
   `
   params.push(limit)
 
-  return queryLegalModel<LegalRule>(sql, params)
+  const results = await queryLegalModel<LegalRule>(sql, params)
+  legalSearchCache.set(cacheKey, results)
+  return results
 }
 
 /**
@@ -312,6 +333,18 @@ export async function getLegalRule(articleNumber: string): Promise<LegalRule | n
     [articleNumber],
   )
   return results[0] || null
+}
+
+/**
+ * 关闭所有连接池（应用退出时调用）
+ */
+export function closeAllPools(): Promise<void> {
+  const promises: Promise<void>[] = []
+  for (const [key, pool] of poolCache) {
+    promises.push(pool.end())
+    poolCache.delete(key)
+  }
+  return Promise.all(promises).then(() => {})
 }
 
 /**

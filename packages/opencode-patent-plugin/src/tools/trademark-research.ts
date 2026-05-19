@@ -37,9 +37,9 @@ export async function registerTrademarkResearchTools(pluginContext: PatentPlugin
         const { action, topic, scope = "全部", depth = "概述" } = args
 
         switch (action) {
-          case "understand": return await tmResearchUnderstand(topic, pluginContext)
-          case "search": return await tmResearchSearch(topic, scope, pluginContext)
-          case "analyze": return await tmResearchAnalyze(topic, depth, pluginContext)
+          case "understand": return await trademarkResearchUnderstand(topic, pluginContext)
+          case "search": return await trademarkResearchSearch(topic, scope, pluginContext)
+          case "analyze": return await trademarkResearchAnalyze(topic, depth, pluginContext)
           default: return `未知的研究动作: ${action}`
         }
       },
@@ -47,7 +47,7 @@ export async function registerTrademarkResearchTools(pluginContext: PatentPlugin
   }
 }
 
-async function tmResearchUnderstand(topic: string, pluginContext: PatentPluginContext) {
+async function trademarkResearchUnderstand(topic: string, pluginContext: PatentPluginContext) {
   // 查询知识库获取法规概要
   let kbData = ""
   try {
@@ -85,7 +85,7 @@ ${kbData ? `**知识库参考资料**：\n${kbData}\n\n` : ""}
   return `## 商标法律研究：${topic}\n\n${response.content}`
 }
 
-async function tmResearchSearch(topic: string, scope: string, pluginContext: PatentPluginContext) {
+async function trademarkResearchSearch(topic: string, scope: string, pluginContext: PatentPluginContext) {
   let output = `## 商标法规检索：${topic}\n\n`
   let hasData = false
 
@@ -126,7 +126,7 @@ async function tmResearchSearch(topic: string, scope: string, pluginContext: Pat
   return output
 }
 
-async function tmResearchAnalyze(topic: string, depth: string, pluginContext: PatentPluginContext) {
+async function trademarkResearchAnalyze(topic: string, depth: string, pluginContext: PatentPluginContext) {
   let kbData = ""
   try {
     const [lawResult, practiceResult] = await Promise.all([

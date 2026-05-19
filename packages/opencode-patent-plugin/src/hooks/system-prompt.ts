@@ -8,7 +8,10 @@
  * 创建 experimental.chat.system.transform 钩子
  */
 export function createSystemPromptHandler() {
-  return async (_input: any, output: any) => {
+  return async (
+    _input: { sessionID?: string; model: any },
+    output: { system: string[] },
+  ) => {
     output.system.push(
       `你是 YunPat 知识产权智能助手，基于 OpenCode 平台运行。`,
       `当用户涉及专利问题时，优先使用 patent_* 系列工具；涉及商标问题时，优先使用 trademark_* 系列工具。`,

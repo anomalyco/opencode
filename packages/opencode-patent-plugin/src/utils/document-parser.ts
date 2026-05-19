@@ -9,6 +9,9 @@
 import * as fs from "fs"
 import * as path from "path"
 
+/** 最大允许的文件大小（50MB） */
+const MAX_FILE_SIZE = 50 * 1024 * 1024
+
 // --- 类型定义 ---
 
 export interface ParseResult {
@@ -76,6 +79,10 @@ export async function parseDocx(filePath: string): Promise<ParseResult> {
   const start = Date.now()
   const stats = fs.statSync(filePath)
 
+  if (stats.size > MAX_FILE_SIZE) {
+    throw new Error(`文件过大 (${(stats.size / 1024 / 1024).toFixed(1)}MB)，超过限制 (50MB)`)
+  }
+
   const mammothLib = await loadMammoth()
   const TurndownLib = await loadTurndown()
 
@@ -101,6 +108,10 @@ export async function parseDocx(filePath: string): Promise<ParseResult> {
 export async function parsePdf(filePath: string): Promise<ParseResult> {
   const start = Date.now()
   const stats = fs.statSync(filePath)
+
+  if (stats.size > MAX_FILE_SIZE) {
+    throw new Error(`文件过大 (${(stats.size / 1024 / 1024).toFixed(1)}MB)，超过限制 (50MB)`)
+  }
 
   const parseLib = await loadPdfParse()
   const buffer = fs.readFileSync(filePath)
@@ -198,6 +209,11 @@ export async function detectAndParse(
   if (TEXT_EXTS.has(ext)) {
     const start = Date.now()
     const stats = fs.statSync(filePath)
+
+    if (stats.size > MAX_FILE_SIZE) {
+      throw new Error(`文件过大 (${(stats.size / 1024 / 1024).toFixed(1)}MB)，超过限制 (50MB)`)
+    }
+
     const text = fs.readFileSync(filePath, "utf-8")
     return {
       text,

@@ -197,7 +197,7 @@ export class ObsidianSearchIndex {
       return { filesIndexed: 0, chunksIndexed: 0 }
     }
 
-    console.log("[ObsidianIndex] Building full-text index...")
+    console.debug("[ObsidianIndex] Building full-text index...")
     const start = Date.now()
 
     const files = await this.scanFiles()
@@ -242,7 +242,7 @@ export class ObsidianSearchIndex {
       throw error
     }
 
-    console.log(`[ObsidianIndex] Indexed ${filesIndexed} files, ${chunksIndexed} chunks in ${Date.now() - start}ms`)
+    console.debug(`[ObsidianIndex] Indexed ${filesIndexed} files, ${chunksIndexed} chunks in ${Date.now() - start}ms`)
     return { filesIndexed, chunksIndexed }
   }
 
@@ -300,7 +300,7 @@ export class ObsidianSearchIndex {
       filesRemoved++
     }
 
-    console.log(`[ObsidianIndex] Incremental update: +${filesAdded} ~${filesUpdated} -${filesRemoved}`)
+    console.debug(`[ObsidianIndex] Incremental update: +${filesAdded} ~${filesUpdated} -${filesRemoved}`)
     return { filesUpdated, filesAdded, filesRemoved }
   }
 
@@ -361,7 +361,7 @@ export class ObsidianSearchIndex {
       rank: number
     }>
 
-    console.log(`[ObsidianIndex] Search "${query}" returned ${results.length} results in ${Date.now() - start}ms`)
+    console.debug(`[ObsidianIndex] Search "${query}" returned ${results.length} results in ${Date.now() - start}ms`)
 
     return results.map(r => ({
       filePath: r.file_path,
@@ -411,7 +411,7 @@ export async function quickSearch(query: string, limit: number = 10): Promise<In
   const stats = index.getStats()
 
   if (stats.files === 0) {
-    console.log("[ObsidianIndex] Index empty, building...")
+    console.debug("[ObsidianIndex] Index empty, building...")
     await index.buildIndex()
   }
 

@@ -17,6 +17,8 @@ const YUNPAT_BASE_PATH = process.env.YUNPAT_PATH ?? ""
  * YunPat 模块缓存
  */
 const moduleCache = new Map<string, any>()
+/** 模块缓存上限 */
+const MAX_MODULE_CACHE = 50
 /**
  * 模块加载 Promise 缓存（防止并发重复加载）
  */
@@ -99,6 +101,11 @@ export async function loadYunPatModule<T = any>(moduleName: string): Promise<T |
     try {
       const mod = await import(modulePath)
       moduleCache.set(moduleName, mod)
+      // 驱逐最旧的缓存条目
+      if (moduleCache.size > MAX_MODULE_CACHE) {
+        const firstKey = moduleCache.keys().next().value
+        if (firstKey) moduleCache.delete(firstKey)
+      }
       console.log(`[YunPat] Loaded module: ${moduleName}`)
       return mod
     } catch (error: any) {

@@ -9,8 +9,8 @@
 
 import { withRetry } from "../utils/retry.js"
 
-/** LLM 请求超时（ms） */
-const LLM_TIMEOUT = 30_000
+/** LLM 请求超时（ms），可通过 LLM_TIMEOUT_MS 环境变量覆盖 */
+const LLM_TIMEOUT = Number(process.env.LLM_TIMEOUT_MS) || 30_000
 
 /** 可重试的 HTTP 状态码 */
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504])

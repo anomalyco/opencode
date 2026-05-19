@@ -187,6 +187,11 @@ export class CaseStore {
     projectPath?: string
     metadata?: Record<string, unknown>
   }): PatentCase {
+    const VALID_PATENT_TYPES = ["发明", "实用新型", "外观设计"]
+    if (data.patentType && !VALID_PATENT_TYPES.includes(data.patentType)) {
+      throw new Error(`无效的专利类型: ${data.patentType}，有效值: ${VALID_PATENT_TYPES.join(", ")}`)
+    }
+
     const id = randomUUID()
     const now = Math.floor(Date.now() / 1000)
     this.db.prepare(`
@@ -463,4 +468,14 @@ export function getCaseStore(): CaseStore {
     globalStore = new CaseStore()
   }
   return globalStore
+}
+
+/**
+ * 关闭全局 CaseStore 单例（应用退出时调用）
+ */
+export function closeStore(): void {
+  if (globalStore) {
+    globalStore.close()
+    globalStore = null
+  }
 }

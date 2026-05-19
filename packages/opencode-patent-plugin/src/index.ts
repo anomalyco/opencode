@@ -27,6 +27,7 @@ import { registerCaseTools } from "./tools/case-manager.js"
 import { createPermissionHandler } from "./hooks/permission.js"
 import { createSystemPromptHandler } from "./hooks/system-prompt.js"
 import { createAuditLogHandler } from "./hooks/audit-log.js"
+import { existsSync } from "fs"
 import { checkDBHealth } from "./utils/db.js"
 import { getWorkflowStore } from "./utils/workflow-store.js"
 import { seedTemplates } from "./utils/workflow-seeds.js"
@@ -58,8 +59,7 @@ const PatentPlugin: Plugin = async (input, options) => {
       const yunpatPath = process.env.YUNPAT_PATH
       if (yunpatPath) {
         try {
-          const fs = require("fs")
-          if (fs.existsSync(yunpatPath)) {
+          if (existsSync(yunpatPath)) {
             console.log(`[YunPat] ✅ YUNPAT_PATH=${yunpatPath}`)
           } else {
             console.warn(`[YunPat] ⚠️ YUNPAT_PATH 路径不存在: ${yunpatPath}`)
@@ -74,8 +74,7 @@ const PatentPlugin: Plugin = async (input, options) => {
       const kbPath = process.env.OBSIDIAN_KB_PATH
       if (kbPath) {
         try {
-          const fs = require("fs")
-          if (fs.existsSync(kbPath)) {
+          if (existsSync(kbPath)) {
             console.log(`[YunPat] ✅ OBSIDIAN_KB_PATH=${kbPath}`)
           } else {
             console.warn(`[YunPat] ⚠️ OBSIDIAN_KB_PATH 路径不存在: ${kbPath}`)

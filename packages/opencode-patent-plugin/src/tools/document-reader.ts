@@ -12,6 +12,8 @@ import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
 import { detectAndParse } from "../utils/document-parser.js"
 
+const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
+
 export async function registerDocumentReaderTools(_pluginContext: PatentPluginContext) {
   return {
     document_read: tool({
@@ -61,13 +63,20 @@ export async function registerDocumentReaderTools(_pluginContext: PatentPluginCo
           ? filePath
           : path.resolve(ctx.worktree || ctx.directory, filePath)
 
+        // 路径遍历保护：确保解析后的路径不超出工作目录范围
+        const normalizedPath = path.normalize(resolvedPath)
+        const basePath = path.normalize(ctx.worktree || ctx.directory)
+        if (!normalizedPath.startsWith(basePath)) {
+          return `❌ 文件路径超出工作目录范围`
+        }
+
         // 验证文件存在
         if (!fs.existsSync(resolvedPath)) {
           return `❌ 文件不存在: ${resolvedPath}\n\n请检查文件路径是否正确。`
         }
 
         const stats = fs.statSync(resolvedPath)
-        if (stats.size > 50 * 1024 * 1024) {
+        if (stats.size > MAX_FILE_SIZE) {
           return `❌ 文件过大（${(stats.size / 1024 / 1024).toFixed(1)}MB），当前限制 50MB。`
         }
 

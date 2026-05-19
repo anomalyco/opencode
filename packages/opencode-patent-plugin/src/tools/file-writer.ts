@@ -49,6 +49,13 @@ export async function registerFileWriterTools(_pluginContext: PatentPluginContex
           ? filePath
           : path.resolve(ctx.worktree || ctx.directory, filePath)
 
+        // 路径遍历保护：确保解析后的路径不超出工作目录范围
+        const normalizedPath = path.normalize(resolvedPath)
+        const basePath = path.normalize(ctx.worktree || ctx.directory)
+        if (!normalizedPath.startsWith(basePath)) {
+          return `❌ 文件路径超出工作目录范围`
+        }
+
         // 检查文件是否已存在
         if (fs.existsSync(resolvedPath) && !overwrite) {
           const ext = path.extname(resolvedPath)

@@ -9,10 +9,10 @@ import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
 import { searchLegalRules, searchPatentJudgments, searchPatents } from "../utils/db.js"
-import { queryInvalidationFromKB, queryJudgmentFromKB } from "../utils/obsidian-kb.js"
+import { queryInvalidationFromKB } from "../utils/obsidian-kb.js"
 import { extractPatentKeywords } from "../utils/patent-keywords.js"
 import { invalidationAttackTemplate, invalidationDefendTemplate } from "../templates/invalidation.js"
-import { createFlow, advance, getState, getCurrentStep, formatStepResult, reset as resetFlow } from "../services/workflow-orchestrator.js"
+import { executeWorkflowStep } from "../services/workflow-orchestrator.js"
 
 /**
  * 注册无效宣告工具集
@@ -286,8 +286,10 @@ async function invalidationEvidence(targetPatent: string, pluginContext: PatentP
       keywords = [...(parsed.keywords_cn || []), ...(parsed.keywords_en || [])]
       ipcClass = parsed.ipc_class || ""
     }
-  } catch {
+  } catch (error: unknown) {
+    console.warn("[Invalidation] JSON keyword parse failed:", error instanceof Error ? error.message : String(error))
     keywords = targetPatent.slice(0, 100).split(/[,，、\s]+/).filter(w => w.length >= 2).slice(0, 5)
+    if (keywords.length === 0) keywords = ["技术", "发明"]
   }
 
   // 在专利数据库中检索
@@ -359,29 +361,14 @@ async function invalidationWorkflow(
   pluginContext: PatentPluginContext,
   sessionId: string,
 ): Promise<string> {
-  let state = getState(sessionId)
-  if (!state || state.status === "completed" || state.workflowType !== "invalidation") {
-    if (state) resetFlow(sessionId)
-    state = createFlow("invalidation", sessionId)
-  }
-
-  if (state.status === "paused") {
-    return `[WORKFLOW_STEP_COMPLETE]\n工作流已暂停。请确认上一步结果后回复「继续」以推进。\n\n当前步骤：${state.currentStep + 1}/${state.totalSteps}`
-  }
-
-  const step = getCurrentStep(state)
-  if (!step) return "工作流已完成"
-
-  let output: string
-  switch (step.action) {
-    case "parse": output = await invalidationParse(targetPatent, pluginContext); break
-    case "analyze": output = await invalidationAnalyze(targetPatent, role, evidence, pluginContext); break
-    case "attack": output = await invalidationAttack(targetPatent, evidence, extraContext, pluginContext); break
-    case "defend": output = await invalidationDefend(targetPatent, evidence, extraContext, pluginContext); break
-    case "evidence": output = await invalidationEvidence(targetPatent, pluginContext); break
-    default: output = `未知步骤: ${step.action}`
-  }
-
-  state = advance(sessionId, step.action, output)
-  return formatStepResult(state, step, output)
+  return executeWorkflowStep("invalidation", sessionId, async (step) => {
+    switch (step.action) {
+      case "parse": return await invalidationParse(targetPatent, pluginContext)
+      case "analyze": return await invalidationAnalyze(targetPatent, role, evidence, pluginContext)
+      case "attack": return await invalidationAttack(targetPatent, evidence, extraContext, pluginContext)
+      case "defend": return await invalidationDefend(targetPatent, evidence, extraContext, pluginContext)
+      case "evidence": return await invalidationEvidence(targetPatent, pluginContext)
+      default: return `未知步骤: ${step.action}`
+    }
+  })
 }

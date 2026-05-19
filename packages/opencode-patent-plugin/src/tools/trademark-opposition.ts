@@ -8,7 +8,7 @@
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
-import { queryTrademarkLaw, queryTrademarkExamGuide } from "../utils/obsidian-kb.js"
+import { getTrademarkKBData } from "../utils/trademark-kb.js"
 import { trademarkOppositionTemplate, trademarkDefenseTemplate, TRADEMARK_OPPOSITION_GROUNDS } from "../templates/trademark.js"
 
 export async function registerTrademarkOppositionTools(pluginContext: PatentPluginContext) {
@@ -43,11 +43,11 @@ export async function registerTrademarkOppositionTools(pluginContext: PatentPlug
         const { action, target_trademark, role = "异议人", grounds = "", evidence = "", context = "" } = args
 
         switch (action) {
-          case "parse": return await tmOppositionParse(target_trademark, context, pluginContext)
-          case "analyze": return await tmOppositionAnalyze(target_trademark, grounds, context, pluginContext)
-          case "oppose": return await tmOppositionOppose(target_trademark, grounds, evidence, context, pluginContext)
-          case "defend": return await tmOppositionDefend(target_trademark, grounds, evidence, context, pluginContext)
-          case "evidence": return await tmOppositionEvidence(target_trademark, evidence, role, context, pluginContext)
+          case "parse": return await trademarkOppositionParse(target_trademark, context, pluginContext)
+          case "analyze": return await trademarkOppositionAnalyze(target_trademark, grounds, context, pluginContext)
+          case "oppose": return await trademarkOppositionOppose(target_trademark, grounds, evidence, context, pluginContext)
+          case "defend": return await trademarkOppositionDefend(target_trademark, grounds, evidence, context, pluginContext)
+          case "evidence": return await trademarkOppositionEvidence(target_trademark, evidence, role, context, pluginContext)
           default: return `未知的异议动作: ${action}`
         }
       },
@@ -55,20 +55,7 @@ export async function registerTrademarkOppositionTools(pluginContext: PatentPlug
   }
 }
 
-async function getKBData(keyword: string): Promise<string> {
-  let data = ""
-  try {
-    const [lawResult, examResult] = await Promise.all([
-      queryTrademarkLaw(keyword).catch(() => ""),
-      queryTrademarkExamGuide(keyword).catch(() => ""),
-    ])
-    if (lawResult && !lawResult.includes("未在商标知识库中找到")) data += lawResult
-    if (examResult && !examResult.includes("未在商标审查指南中找到")) data += "\n\n" + examResult
-  } catch { /* ignore */ }
-  return data
-}
-
-async function tmOppositionParse(target: string, context: string, pluginContext: PatentPluginContext) {
+async function trademarkOppositionParse(target: string, context: string, pluginContext: PatentPluginContext) {
   const response = await pluginContext.llm.chat({
     messages: [
       { role: "system", content: "你是商标异议程序专家。解析异议或答辩通知，提取关键信息。" },
@@ -90,8 +77,8 @@ ${context ? `**通知/文件内容**：\n${context}\n\n` : ""}
   return `## 商标异议文件解析\n\n${response.content}\n\n---\n\n*解析完成。请确认后继续分析异议理由。*`
 }
 
-async function tmOppositionAnalyze(target: string, grounds: string, context: string, pluginContext: PatentPluginContext) {
-  const kbData = await getKBData("异议")
+async function trademarkOppositionAnalyze(target: string, grounds: string, context: string, pluginContext: PatentPluginContext) {
+  const kbData = await getTrademarkKBData("异议")
 
   const groundsList = TRADEMARK_OPPOSITION_GROUNDS.map(g => `- ${g.article} ${g.label}：${g.desc}`).join("\n")
 
@@ -121,14 +108,14 @@ ${groundsList}
   return `## 商标异议理由分析\n\n${response.content}\n\n---\n\n*分析完成。确认后可继续撰写异议申请书或答辩意见。*`
 }
 
-async function tmOppositionOppose(
+async function trademarkOppositionOppose(
   target: string,
   grounds: string,
   evidence: string,
   context: string,
   pluginContext: PatentPluginContext,
 ) {
-  const kbData = await getKBData("异议")
+  const kbData = await getTrademarkKBData("异议")
   const templateRef = trademarkOppositionTemplate()
 
   const response = await pluginContext.llm.chat({
@@ -154,14 +141,14 @@ ${templateRef}
   return `## 商标异议申请书\n\n${response.content}\n\n---\n\n⚠️ 以上为草案，需经专业审校后提交。建议使用 \`trademark_analyze\` 进行近似/显著性分析补充论据。`
 }
 
-async function tmOppositionDefend(
+async function trademarkOppositionDefend(
   target: string,
   grounds: string,
   evidence: string,
   context: string,
   pluginContext: PatentPluginContext,
 ) {
-  const kbData = await getKBData("异议答辩")
+  const kbData = await getTrademarkKBData("异议答辩")
   const templateRef = trademarkDefenseTemplate()
 
   const response = await pluginContext.llm.chat({
@@ -187,7 +174,7 @@ ${templateRef}
   return `## 商标异议答辩意见\n\n${response.content}\n\n---\n\n⚠️ 以上为草案，需经专业审校后提交。`
 }
 
-async function tmOppositionEvidence(
+async function trademarkOppositionEvidence(
   target: string,
   evidence: string,
   role: string,

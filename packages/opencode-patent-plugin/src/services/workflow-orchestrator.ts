@@ -36,6 +36,32 @@ const WORKFLOW_REGISTRY: Record<WorkflowType, OrchestratorStep[]> = {
 /** 内存中的活跃工作流状态（sessionId → state） */
 const activeFlows = new Map<string, OrchestratorState>()
 
+/** 工作流存活时间上限（2 小时） */
+const FLOW_TTL = 2 * 60 * 60 * 1000
+/** 最大同时保存的工作流数量 */
+const MAX_FLOWS = 1000
+
+/**
+ * 清理过期和超量工作流，防止内存泄漏
+ */
+function cleanupFlows(): void {
+  const now = Date.now()
+  for (const [key, state] of activeFlows) {
+    if (now - state.startedAt > FLOW_TTL || state.status === "completed") {
+      activeFlows.delete(key)
+    }
+  }
+  // 如果仍然超出上限，驱逐最旧的条目
+  if (activeFlows.size > MAX_FLOWS) {
+    const entries = [...activeFlows.entries()]
+      .sort((a, b) => a[1].startedAt - b[1].startedAt)
+    const toDelete = entries.slice(0, entries.length - MAX_FLOWS)
+    for (const [key] of toDelete) {
+      activeFlows.delete(key)
+    }
+  }
+}
+
 /**
  * 创建工作流
  */
@@ -44,6 +70,7 @@ export function createFlow(
   sessionId: string,
   caseId?: string,
 ): OrchestratorState {
+  cleanupFlows()
   const steps = WORKFLOW_REGISTRY[type]
   if (!steps) throw new Error(`Unknown workflow type: ${type}`)
 
@@ -140,6 +167,60 @@ export function getFlowSteps(type: WorkflowType): OrchestratorStep[] {
  */
 export function reset(sessionId: string): void {
   activeFlows.delete(sessionId)
+}
+
+/**
+ * 将工作流标记为失败
+ *
+ * 当步骤执行抛出异常时调用，将状态设为 failed 并记录错误信息。
+ */
+export function failFlow(sessionId: string, error: unknown): void {
+  const state = activeFlows.get(sessionId)
+  if (!state) return
+
+  state.status = "failed"
+  const errorMsg = error instanceof Error ? error.message : String(error)
+  state.stepOutputs["_error"] = errorMsg
+  activeFlows.set(sessionId, state)
+}
+
+/**
+ * 通用工作流步骤执行辅助函数
+ *
+ * 封装 createFlow/getState/advance/formatStepResult 的编排模式，
+ * 减少 5 个 tool 文件中的重复代码。
+ */
+export function executeWorkflowStep(
+  type: WorkflowType,
+  sessionId: string,
+  stepExecutor: (step: OrchestratorStep, state: OrchestratorState) => Promise<string>,
+): Promise<string> {
+  let state = getState(sessionId)
+  if (!state || state.status === "completed" || state.workflowType !== type) {
+    if (state) reset(sessionId)
+    state = createFlow(type, sessionId)
+  }
+
+  if (state.status === "paused") {
+    const step = getCurrentStep(state)!
+    return Promise.resolve(
+      `[WORKFLOW_STEP_COMPLETE]\n步骤 ${state.currentStep}/${state.totalSteps}「${step.description}」需要确认。\n\n请确认后回复「继续」。`,
+    )
+  }
+
+  const step = getCurrentStep(state)
+  if (!step) return Promise.resolve("工作流已完成。")
+
+  return stepExecutor(step, state)
+    .then(output => {
+      const newState = advance(sessionId, step.action, output)
+      return formatStepResult(newState, step, output)
+    })
+    .catch(error => {
+      failFlow(sessionId, error)
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      return `[WORKFLOW_STEP_FAILED]\n步骤 ${state.currentStep + 1}/${state.totalSteps}「${step.description}」执行失败。\n\n错误信息：${errorMsg}\n\n请修复问题后重新开始工作流。`
+    })
 }
 
 /**

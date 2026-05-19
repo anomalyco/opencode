@@ -12,7 +12,7 @@ import { createSharedAgentContext } from "../utils/agent-factory.js"
 import { searchPatents, type PatentRecord } from "../utils/db.js"
 import { specificationTemplate, SPEC_LENGTH_GUIDE } from "../templates/specification.js"
 import { getClaimsTemplate } from "../templates/claims.js"
-import { createFlow, advance, getState, getCurrentStep, formatStepResult, reset as resetFlow, type WorkflowType } from "../services/workflow-orchestrator.js"
+import { executeWorkflowStep } from "../services/workflow-orchestrator.js"
 
 /**
  * 注册专利撰写工具集
@@ -154,9 +154,10 @@ async function draftSearch(disclosure: string, pluginContext: PatentPluginContex
       keywords = [...(parsed.keywords_cn || []), ...(parsed.keywords_en || [])]
       ipcHint = parsed.ipc_hint || ""
     }
-  } catch {
-    // JSON 解析失败，用原始文本作为关键词
+  } catch (error: unknown) {
+    console.warn("[Draft] JSON keyword parse failed:", error instanceof Error ? error.message : String(error))
     keywords = disclosure.slice(0, 100).split(/[,，、\s]+/).filter(w => w.length >= 2).slice(0, 5)
+    if (keywords.length === 0) keywords = ["技术", "发明"]
   }
 
   if (keywords.length === 0) {
@@ -207,8 +208,8 @@ async function draftSpecification(disclosure: string, patentType: string, invent
   // 生成模板参考结构
   const templateRef = specificationTemplate({
     inventionTitle: "[发明名称]",
-    patentType: patentType as any,
-    inventionType: inventionType as any,
+    patentType: patentType as "发明" | "实用新型",
+    inventionType: inventionType as "装置" | "方法" | "系统" | "组合物",
   })
 
   const response = await pluginContext.llm.chat({
@@ -239,8 +240,8 @@ async function draftClaims(disclosure: string, patentType: string, inventionType
   // 生成权利要求模板参考
   const templateRef = getClaimsTemplate({
     inventionTitle: "[发明名称]",
-    patentType: patentType as any,
-    inventionType: inventionType as any,
+    patentType: patentType as "发明" | "实用新型",
+    inventionType: inventionType as "装置" | "方法" | "系统" | "组合物",
   })
 
   const response = await pluginContext.llm.chat({
@@ -339,32 +340,14 @@ async function draftWorkflow(
   pluginContext: PatentPluginContext,
   sessionId: string,
 ): Promise<string> {
-  // 获取或创建流程
-  let state = getState(sessionId)
-  if (!state || state.status === "completed" || state.workflowType !== "draft") {
-    if (state) resetFlow(sessionId)
-    state = createFlow("draft", sessionId)
-  }
-
-  if (state.status === "paused") {
-    return `[WORKFLOW_STEP_COMPLETE]\n工作流已暂停。请确认上一步结果后回复「继续」以推进。\n\n当前步骤：${state.currentStep + 1}/${state.totalSteps}`
-  }
-
-  const step = getCurrentStep(state)
-  if (!step) return "工作流已完成"
-
-  // 执行当前步骤
-  let output: string
-  switch (step.action) {
-    case "understand": output = await draftUnderstand(disclosure, patentType, inventionType, pluginContext); break
-    case "search": output = await draftSearch(disclosure, pluginContext); break
-    case "specification": output = await draftSpecification(disclosure, patentType, inventionType, pluginContext); break
-    case "claims": output = await draftClaims(disclosure, patentType, inventionType, pluginContext); break
-    case "integrate": output = await draftIntegrate(disclosure, pluginContext); break
-    default: output = `未知步骤: ${step.action}`
-  }
-
-  // 推进状态
-  state = advance(sessionId, step.action, output)
-  return formatStepResult(state, step, output)
+  return executeWorkflowStep("draft", sessionId, async (step) => {
+    switch (step.action) {
+      case "understand": return await draftUnderstand(disclosure, patentType, inventionType, pluginContext)
+      case "search": return await draftSearch(disclosure, pluginContext)
+      case "specification": return await draftSpecification(disclosure, patentType, inventionType, pluginContext)
+      case "claims": return await draftClaims(disclosure, patentType, inventionType, pluginContext)
+      case "integrate": return await draftIntegrate(disclosure, pluginContext)
+      default: return `未知步骤: ${step.action}`
+    }
+  })
 }

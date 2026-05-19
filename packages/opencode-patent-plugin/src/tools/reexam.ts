@@ -14,7 +14,7 @@ import { searchLegalRules, searchPatentJudgments } from "../utils/db.js"
 import { queryInvalidationFromKB, queryGuidelinesFromKB } from "../utils/obsidian-kb.js"
 import { extractPatentKeywords } from "../utils/patent-keywords.js"
 import { reexamTemplate } from "../templates/reexam.js"
-import { createFlow, advance, getState, getCurrentStep, formatStepResult, reset as resetFlow } from "../services/workflow-orchestrator.js"
+import { executeWorkflowStep } from "../services/workflow-orchestrator.js"
 
 /**
  * 注册复审请求工具集
@@ -263,28 +263,13 @@ async function reexamWorkflow(
   pluginContext: PatentPluginContext,
   sessionId: string,
 ): Promise<string> {
-  let state = getState(sessionId)
-  if (!state || state.status === "completed" || state.workflowType !== "reexam") {
-    if (state) resetFlow(sessionId)
-    state = createFlow("reexam", sessionId)
-  }
-
-  if (state.status === "paused") {
-    return `[WORKFLOW_STEP_COMPLETE]\n工作流已暂停。请确认上一步结果后回复「继续」以推进。\n\n当前步骤：${state.currentStep + 1}/${state.totalSteps}`
-  }
-
-  const step = getCurrentStep(state)
-  if (!step) return "工作流已完成"
-
-  let output: string
-  switch (step.action) {
-    case "parse": output = await reexamParse(rejectionDecision, pluginContext); break
-    case "analyze": output = await reexamAnalyze(rejectionDecision, claims, extraContext, pluginContext); break
-    case "draft": output = await reexamDraft(rejectionDecision, claims, extraContext, pluginContext); break
-    case "revise_claims": output = await reexamReviseClaims(rejectionDecision, claims, pluginContext); break
-    default: output = `未知步骤: ${step.action}`
-  }
-
-  state = advance(sessionId, step.action, output)
-  return formatStepResult(state, step, output)
+  return executeWorkflowStep("reexam", sessionId, async (step) => {
+    switch (step.action) {
+      case "parse": return await reexamParse(rejectionDecision, pluginContext)
+      case "analyze": return await reexamAnalyze(rejectionDecision, claims, extraContext, pluginContext)
+      case "draft": return await reexamDraft(rejectionDecision, claims, extraContext, pluginContext)
+      case "revise_claims": return await reexamReviseClaims(rejectionDecision, claims, pluginContext)
+      default: return `未知步骤: ${step.action}`
+    }
+  })
 }

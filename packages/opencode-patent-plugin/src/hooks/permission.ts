@@ -7,13 +7,20 @@
  * - 文件写入/撰写/修改操作 → 需要审批
  */
 
+import type { Permission } from "@opencode-ai/sdk"
+
 /**
  * 创建 permission.ask 钩子
  */
 export function createPermissionHandler() {
-  return async (permission: any, output: any) => {
-    const perm = permission.type
-    const patterns = Array.isArray(permission.pattern) ? permission.pattern : [permission.pattern].filter(Boolean)
+  return async (
+    permission: Permission,
+    output: { status: "ask" | "deny" | "allow" },
+  ) => {
+    const perm = (permission as any).type ?? (permission as any).tool ?? String(permission)
+    const patterns = Array.isArray((permission as any).pattern)
+      ? (permission as any).pattern
+      : [(permission as any).pattern].filter(Boolean)
 
     // 公开数据库检索：自动放行
     if (perm === "patent_search" || perm === "patent_research") {
@@ -34,7 +41,8 @@ export function createPermissionHandler() {
     }
 
     // 撰写/修改操作：需要审批
-    if (perm.startsWith("patent_draft") || perm.startsWith("oa_response") || perm.startsWith("reexam") || perm.startsWith("invalidation")) {
+    const permStr = String(perm)
+    if (permStr.startsWith("patent_draft") || permStr.startsWith("oa_response") || permStr.startsWith("reexam") || permStr.startsWith("invalidation")) {
       output.status = "ask"
       return
     }

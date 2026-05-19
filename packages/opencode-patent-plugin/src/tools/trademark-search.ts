@@ -34,13 +34,13 @@ export async function registerTrademarkSearchTools(pluginContext: PatentPluginCo
         })
 
         const { query, search_type = "文字", max_results = 10 } = args
-        return await tmSearch(query, search_type, max_results, pluginContext)
+        return await trademarkSearch(query, search_type, max_results, pluginContext)
       },
     }),
   }
 }
 
-async function tmSearch(
+async function trademarkSearch(
   query: string,
   searchType: string,
   maxResults: number,

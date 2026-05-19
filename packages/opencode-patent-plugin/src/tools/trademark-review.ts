@@ -8,7 +8,7 @@
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
-import { queryTrademarkLaw, queryTrademarkExamGuide } from "../utils/obsidian-kb.js"
+import { getTrademarkKBData } from "../utils/trademark-kb.js"
 import { trademarkReviewRequestTemplate, trademarkInvalidationTemplate } from "../templates/trademark.js"
 
 export async function registerTrademarkReviewTools(pluginContext: PatentPluginContext) {
@@ -42,11 +42,11 @@ export async function registerTrademarkReviewTools(pluginContext: PatentPluginCo
         const { action, review_document, review_type = "驳回复审", evidence = "", context = "" } = args
 
         switch (action) {
-          case "parse": return await tmReviewParse(review_document, review_type, pluginContext)
-          case "analyze": return await tmReviewAnalyze(review_document, review_type, context, pluginContext)
-          case "respond": return await tmReviewRespond(review_document, review_type, evidence, context, pluginContext)
-          case "revise": return await tmReviewRevise(review_document, review_type, evidence, context, pluginContext)
-          case "validate": return await tmReviewValidate(review_document, review_type, pluginContext)
+          case "parse": return await trademarkReviewParse(review_document, review_type, pluginContext)
+          case "analyze": return await trademarkReviewAnalyze(review_document, review_type, context, pluginContext)
+          case "respond": return await trademarkReviewRespond(review_document, review_type, evidence, context, pluginContext)
+          case "revise": return await trademarkReviewRevise(review_document, review_type, evidence, context, pluginContext)
+          case "validate": return await trademarkReviewValidate(review_document, review_type, pluginContext)
           default: return `未知的复审动作: ${action}`
         }
       },
@@ -54,20 +54,7 @@ export async function registerTrademarkReviewTools(pluginContext: PatentPluginCo
   }
 }
 
-async function getKBData(keyword: string): Promise<string> {
-  let data = ""
-  try {
-    const [lawResult, examResult] = await Promise.all([
-      queryTrademarkLaw(keyword).catch(() => ""),
-      queryTrademarkExamGuide(keyword).catch(() => ""),
-    ])
-    if (lawResult && !lawResult.includes("未在商标知识库中找到")) data += lawResult
-    if (examResult && !examResult.includes("未在商标审查指南中找到")) data += "\n\n" + examResult
-  } catch { /* ignore */ }
-  return data
-}
-
-async function tmReviewParse(document: string, reviewType: string, pluginContext: PatentPluginContext) {
+async function trademarkReviewParse(document: string, reviewType: string, pluginContext: PatentPluginContext) {
   const response = await pluginContext.llm.chat({
     messages: [
       { role: "system", content: `你是商标${reviewType}专家。解析国家知识产权局决定书，提取关键信息。` },
@@ -92,8 +79,8 @@ ${document}
   return `## ${reviewType}决定书解析\n\n${response.content}\n\n---\n\n*解析完成。请确认后继续分析应对策略。*`
 }
 
-async function tmReviewAnalyze(document: string, reviewType: string, context: string, pluginContext: PatentPluginContext) {
-  const kbData = await getKBData(reviewType.includes("无效") ? "无效宣告" : "复审")
+async function trademarkReviewAnalyze(document: string, reviewType: string, context: string, pluginContext: PatentPluginContext) {
+  const kbData = await getTrademarkKBData(reviewType.includes("无效") ? "无效宣告" : "复审")
 
   const response = await pluginContext.llm.chat({
     messages: [
@@ -119,14 +106,14 @@ ${kbData ? `\n**参考资料**：\n${kbData}\n` : ""}
   return `## ${reviewType}应对策略分析\n\n${response.content}\n\n---\n\n*策略分析完成。确认后可继续撰写复审请求书。*`
 }
 
-async function tmReviewRespond(
+async function trademarkReviewRespond(
   document: string,
   reviewType: string,
   evidence: string,
   context: string,
   pluginContext: PatentPluginContext,
 ) {
-  const kbData = await getKBData(reviewType.includes("无效") ? "无效宣告" : "复审")
+  const kbData = await getTrademarkKBData(reviewType.includes("无效") ? "无效宣告" : "复审")
   const templateRef = reviewType === "无效宣告"
     ? trademarkInvalidationTemplate()
     : trademarkReviewRequestTemplate()
@@ -156,7 +143,7 @@ ${templateRef}
   return `## ${reviewType}请求书\n\n${response.content}\n\n---\n\n⚠️ 以上为草案，需经专业审校后提交。`
 }
 
-async function tmReviewRevise(
+async function trademarkReviewRevise(
   document: string,
   reviewType: string,
   evidence: string,
@@ -186,8 +173,8 @@ ${context ? `\n**修改要求/反馈**：\n${context}\n` : ""}
   return `## ${reviewType}文书修订\n\n${response.content}\n\n---\n\n⚠️ 修订稿仍需专业审校后提交。`
 }
 
-async function tmReviewValidate(document: string, reviewType: string, pluginContext: PatentPluginContext) {
-  const kbData = await getKBData(reviewType.includes("无效") ? "无效宣告" : "复审")
+async function trademarkReviewValidate(document: string, reviewType: string, pluginContext: PatentPluginContext) {
+  const kbData = await getTrademarkKBData(reviewType.includes("无效") ? "无效宣告" : "复审")
 
   const response = await pluginContext.llm.chat({
     messages: [

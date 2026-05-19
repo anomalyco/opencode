@@ -7,7 +7,8 @@
 import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
-import { queryTrademarkLaw, queryTrademarkExamGuide } from "../utils/obsidian-kb.js"
+import { getTrademarkKBData } from "../utils/trademark-kb.js"
+import { toolMissingParam } from "../utils/tool-response.js"
 
 export async function registerTrademarkAnalyzeTools(pluginContext: PatentPluginContext) {
   return {
@@ -40,12 +41,12 @@ export async function registerTrademarkAnalyzeTools(pluginContext: PatentPluginC
         const { action, target, reference = "", context = "" } = args
 
         switch (action) {
-          case "显著性": return await tmAnalyzeDistinctiveness(target, context, pluginContext)
-          case "近似": return await tmAnalyzeSimilarity(target, reference, context, pluginContext)
-          case "混淆可能性": return await tmAnalyzeConfusion(target, reference, context, pluginContext)
-          case "侵权": return await tmAnalyzeInfringement(target, context, pluginContext)
-          case "驰名": return await tmAnalyzeWellKnown(target, context, pluginContext)
-          case "商品类似": return await tmAnalyzeSimilarGoods(target, context, pluginContext)
+          case "显著性": return await trademarkAnalyzeDistinctiveness(target, context, pluginContext)
+          case "近似": return await trademarkAnalyzeSimilarity(target, reference, context, pluginContext)
+          case "混淆可能性": return await trademarkAnalyzeConfusion(target, reference, context, pluginContext)
+          case "侵权": return await trademarkAnalyzeInfringement(target, context, pluginContext)
+          case "驰名": return await trademarkAnalyzeWellKnown(target, context, pluginContext)
+          case "商品类似": return await trademarkAnalyzeSimilarGoods(target, context, pluginContext)
           default: return `未知的分析类型: ${action}`
         }
       },
@@ -53,21 +54,8 @@ export async function registerTrademarkAnalyzeTools(pluginContext: PatentPluginC
   }
 }
 
-async function getKBReference(keyword: string): Promise<string> {
-  let data = ""
-  try {
-    const [lawResult, examResult] = await Promise.all([
-      queryTrademarkLaw(keyword).catch(() => ""),
-      queryTrademarkExamGuide(keyword).catch(() => ""),
-    ])
-    if (lawResult && !lawResult.includes("未在商标知识库中找到")) data += lawResult
-    if (examResult && !examResult.includes("未在商标审查指南中找到")) data += "\n\n" + examResult
-  } catch { /* ignore */ }
-  return data
-}
-
-async function tmAnalyzeDistinctiveness(target: string, context: string, pluginContext: PatentPluginContext) {
-  const kbData = await getKBReference("显著性")
+async function trademarkAnalyzeDistinctiveness(target: string, context: string, pluginContext: PatentPluginContext) {
+  const kbData = await getTrademarkKBData("显著性")
 
   const response = await pluginContext.llm.chat({
     messages: [
@@ -91,10 +79,10 @@ ${kbData ? `**参考资料**：\n${kbData}\n\n` : ""}
   return `## 商标显著性分析\n\n${response.content}`
 }
 
-async function tmAnalyzeSimilarity(target: string, reference: string, context: string, pluginContext: PatentPluginContext) {
-  if (!reference) return "❌ 近似分析需要提供对比商标（reference 参数）。"
+async function trademarkAnalyzeSimilarity(target: string, reference: string, context: string, pluginContext: PatentPluginContext) {
+  if (!reference) return toolMissingParam("reference", "近似分析需要提供对比商标")
 
-  const kbData = await getKBReference("近似判断")
+  const kbData = await getTrademarkKBData("近似判断")
 
   const response = await pluginContext.llm.chat({
     messages: [
@@ -137,10 +125,10 @@ ${kbData ? `**参考资料**：\n${kbData}\n\n` : ""}
   return `## 商标近似比对\n\n${response.content}`
 }
 
-async function tmAnalyzeConfusion(target: string, reference: string, context: string, pluginContext: PatentPluginContext) {
-  if (!reference) return "❌ 混淆可能性分析需要提供对比商标（reference 参数）。"
+async function trademarkAnalyzeConfusion(target: string, reference: string, context: string, pluginContext: PatentPluginContext) {
+  if (!reference) return toolMissingParam("reference", "混淆可能性分析需要提供对比商标")
 
-  const kbData = await getKBReference("混淆可能性")
+  const kbData = await getTrademarkKBData("混淆可能性")
 
   const response = await pluginContext.llm.chat({
     messages: [
@@ -168,8 +156,8 @@ ${kbData ? `**参考资料**：\n${kbData}\n\n` : ""}
   return `## 混淆可能性分析\n\n${response.content}`
 }
 
-async function tmAnalyzeInfringement(target: string, context: string, pluginContext: PatentPluginContext) {
-  const kbData = await getKBReference("商标侵权")
+async function trademarkAnalyzeInfringement(target: string, context: string, pluginContext: PatentPluginContext) {
+  const kbData = await getTrademarkKBData("商标侵权")
 
   const response = await pluginContext.llm.chat({
     messages: [
@@ -195,8 +183,8 @@ ${kbData ? `**参考资料**：\n${kbData}\n\n` : ""}
   return `## 商标侵权分析\n\n${response.content}`
 }
 
-async function tmAnalyzeWellKnown(target: string, context: string, pluginContext: PatentPluginContext) {
-  const kbData = await getKBReference("驰名商标")
+async function trademarkAnalyzeWellKnown(target: string, context: string, pluginContext: PatentPluginContext) {
+  const kbData = await getTrademarkKBData("驰名商标")
 
   const response = await pluginContext.llm.chat({
     messages: [
@@ -222,7 +210,7 @@ ${kbData ? `**参考资料**：\n${kbData}\n\n` : ""}
   return `## 驰名商标认定分析\n\n${response.content}`
 }
 
-async function tmAnalyzeSimilarGoods(target: string, context: string, pluginContext: PatentPluginContext) {
+async function trademarkAnalyzeSimilarGoods(target: string, context: string, pluginContext: PatentPluginContext) {
   const response = await pluginContext.llm.chat({
     messages: [
       { role: "system", content: "你是商标商品/服务分类专家。熟悉《类似商品和服务区分表》（尼斯分类）。" },

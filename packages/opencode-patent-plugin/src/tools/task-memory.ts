@@ -9,6 +9,7 @@ import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { safeAsk } from "../types.js"
 import { getCaseStore, type TaskType } from "../utils/case-store.js"
+import { toolMissingParam } from "../utils/tool-response.js"
 
 export async function registerMemoryTools(_pluginContext: PatentPluginContext) {
   return {
@@ -56,7 +57,7 @@ export async function registerMemoryTools(_pluginContext: PatentPluginContext) {
 
         switch (args.action) {
           case "search": {
-            if (!args.task_type) return "❌ 搜索需要提供 task_type 参数"
+            if (!args.task_type) return toolMissingParam("task_type", "搜索需要提供任务类型")
             const tasks = store.findSimilarTasks(
               args.task_type as TaskType,
               args.keyword,
@@ -76,7 +77,7 @@ export async function registerMemoryTools(_pluginContext: PatentPluginContext) {
               const tasks = store.getSessionTasks(args.session_id)
               return formatHistory(tasks)
             }
-            return "❌ 需要提供 case_id 或 session_id"
+            return toolMissingParam("case_id 或 session_id", "查看历史需要提供案件 ID 或会话 ID")
           }
           case "suggest": {
             // 获取各类型最近的完成任务，提供概览

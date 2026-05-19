@@ -14,14 +14,23 @@
 
 import { existsSync } from "fs"
 import { readFile, readdir, stat } from "fs/promises"
-import { resolve, join, relative, extname } from "path"
+import { resolve, join, relative, extname, sep } from "path"
 import { quickSearch } from "./obsidian-index.js"
 import { SimpleCache } from "./cache.js"
 
 /**
- * Obsidian 知识库路径。必须通过环境变量 OBSIDIAN_KB_PATH 指定。
+ * Obsidian 知识库路径。可通过 OBSIDIAN_KB_PATH 环境变量指定。
  */
 const KNOWLEDGE_BASE_PATH = process.env.OBSIDIAN_KB_PATH ?? ""
+
+/** 知识库子目录常量，可通过环境变量覆盖 */
+const KB_LAW_FOLDERS = (process.env.KB_LAW_FOLDERS ?? "Wiki/法律法规,Raw/法律法规司法解释,Raw/法律法规司法解释_md,Wiki/审查指南").split(",")
+const KB_GUIDELINES_FOLDERS = (process.env.KB_GUIDELINES_FOLDERS ?? "Wiki/审查指南,Raw/审查指南,Raw/审查指南_md").split(",")
+const KB_INVALIDATION_FOLDERS = (process.env.KB_INVALIDATION_FOLDERS ?? "Wiki/复审无效,Raw/无效复审决定").split(",")
+const KB_JUDGMENT_FOLDERS = (process.env.KB_JUDGMENT_FOLDERS ?? "Wiki/专利判决,Raw/专利判决,Raw/指导性专利判决文书,Raw/指导性专利判决文书_md").split(",")
+const KB_TRADEMARK_LAW_FOLDERS = (process.env.KB_TRADEMARK_LAW_FOLDERS ?? "Wiki/法律法规/商标").split(",")
+const KB_TRADEMARK_EXAM_FOLDERS = (process.env.KB_TRADEMARK_EXAM_FOLDERS ?? "Wiki/法律法规/商标/实务,商标审查审理指南_全本").split(",")
+const KB_TRADEMARK_PRACTICE_FOLDERS = (process.env.KB_TRADEMARK_PRACTICE_FOLDERS ?? "Wiki/法律法规/商标/实务").split(",")
 
 /** KB 查询结果缓存（TTL 5 分钟，最多 200 条） */
 const kbCache = new SimpleCache<string>({ ttlMs: 5 * 60 * 1000, maxSize: 200 })
@@ -111,7 +120,8 @@ export async function readMarkdownFile(filePath: string): Promise<string> {
   const fullPath = resolve(resolvedBase, filePath)
 
   // 防止路径遍历：确保最终路径在知识库目录内
-  if (!fullPath.startsWith(resolvedBase + "/") && fullPath !== resolvedBase) {
+  const rel = relative(resolvedBase, fullPath)
+  if (rel.startsWith("..") || (sep === "/" ? rel.startsWith("/") : /^[A-Za-z]:/.test(rel))) {
     throw new Error(`Access denied: path escapes knowledge base (${filePath})`)
   }
 
@@ -237,7 +247,7 @@ export async function getKnowledgeBaseStats(): Promise<{
   folders: string[]
 }> {
   const files = await scanMarkdownFiles()
-  const folders = [...new Set(files.map(f => f.folder.split("/")[0]))]
+  const folders = [...new Set(files.map(f => f.folder.split(sep)[0]))]
   const totalSize = files.reduce((sum, f) => sum + f.size, 0)
   return {
     totalFiles: files.length,
@@ -266,7 +276,7 @@ async function queryLawFromKBInternal(
   lawName: string,
   articleNumber?: string,
 ): Promise<string> {
-  const folders = ["Wiki/法律法规", "Raw/法律法规司法解释", "Raw/法律法规司法解释_md", "Wiki/审查指南"]
+  const folders = KB_LAW_FOLDERS
 
   const results = await searchKnowledgeBase(lawName, { limit: 20, folders })
 
@@ -317,7 +327,7 @@ export async function queryGuidelinesFromKB(
 async function queryGuidelinesFromKBInternal(
   topic: string,
 ): Promise<string> {
-  const folders = ["Wiki/审查指南", "Raw/审查指南", "Raw/审查指南_md"]
+  const folders = KB_GUIDELINES_FOLDERS
   const results = await searchKnowledgeBase(topic, { limit: 10, folders })
 
   if (results.length === 0) {
@@ -354,7 +364,7 @@ export async function queryInvalidationFromKB(
 async function queryInvalidationFromKBInternal(
   keyword: string,
 ): Promise<string> {
-  const folders = ["Wiki/复审无效", "Raw/无效复审决定"]
+  const folders = KB_INVALIDATION_FOLDERS
   const results = await searchKnowledgeBase(keyword, { limit: 10, folders })
 
   if (results.length === 0) {
@@ -390,7 +400,7 @@ export async function queryJudgmentFromKB(
 async function queryJudgmentFromKBInternal(
   keyword: string,
 ): Promise<string> {
-  const folders = ["Wiki/专利判决", "Raw/专利判决", "Raw/指导性专利判决文书", "Raw/指导性专利判决文书_md"]
+  const folders = KB_JUDGMENT_FOLDERS
   const results = await searchKnowledgeBase(keyword, { limit: 10, folders })
 
   if (results.length === 0) {
@@ -424,7 +434,7 @@ export async function queryTrademarkLaw(
 }
 
 async function queryTrademarkLawInternal(keyword: string): Promise<string> {
-  const folders = ["Wiki/法律法规/商标"]
+  const folders = KB_TRADEMARK_LAW_FOLDERS
   const results = await searchKnowledgeBase(keyword, { limit: 10, folders })
 
   if (results.length === 0) {
@@ -458,7 +468,7 @@ export async function queryTrademarkExamGuide(
 }
 
 async function queryTrademarkExamGuideInternal(keyword: string): Promise<string> {
-  const folders = ["Wiki/法律法规/商标/实务", "商标审查审理指南_全本"]
+  const folders = KB_TRADEMARK_EXAM_FOLDERS
   const results = await searchKnowledgeBase(keyword, { limit: 10, folders })
 
   if (results.length === 0) {
@@ -486,7 +496,7 @@ export async function queryTrademarkPractice(
   const cached = kbCache.get(cacheKey)
   if (cached !== undefined) return cached
 
-  const folders = ["Wiki/法律法规/商标/实务"]
+  const folders = KB_TRADEMARK_PRACTICE_FOLDERS
   const results = await searchKnowledgeBase(keyword, { limit: 10, folders })
 
   if (results.length === 0) {

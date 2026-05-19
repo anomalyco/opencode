@@ -40,11 +40,11 @@ export async function registerTrademarkDraftTools(pluginContext: PatentPluginCon
         const { action, disclosure, trademark_type = "文字" } = args
 
         switch (action) {
-          case "understand": return await tmDraftUnderstand(disclosure, trademark_type, pluginContext)
-          case "search": return await tmDraftSearch(disclosure, pluginContext)
-          case "specification": return await tmDraftSpecification(disclosure, trademark_type, pluginContext)
-          case "goods": return await tmDraftGoods(disclosure, pluginContext)
-          case "integrate": return await tmDraftIntegrate(disclosure, trademark_type, pluginContext)
+          case "understand": return await trademarkDraftUnderstand(disclosure, trademark_type, pluginContext)
+          case "search": return await trademarkDraftSearch(disclosure, pluginContext)
+          case "specification": return await trademarkDraftSpecification(disclosure, trademark_type, pluginContext)
+          case "goods": return await trademarkDraftGoods(disclosure, pluginContext)
+          case "integrate": return await trademarkDraftIntegrate(disclosure, trademark_type, pluginContext)
           default: return `未知的撰写动作: ${action}`
         }
       },
@@ -52,7 +52,7 @@ export async function registerTrademarkDraftTools(pluginContext: PatentPluginCon
   }
 }
 
-async function tmDraftUnderstand(disclosure: string, tmType: string, pluginContext: PatentPluginContext) {
+async function trademarkDraftUnderstand(disclosure: string, tmType: string, pluginContext: PatentPluginContext) {
   const response = await pluginContext.llm.chat({
     messages: [
       { role: "system", content: "你是商标申请专家。从申请人提供的信息中提取结构化商标信息。" },
@@ -78,7 +78,7 @@ ${disclosure}
   return `## 步骤 1/5：商标理解 ✅\n\n${response.content}\n\n---\n\n*请确认以上理解是否准确。确认后将继续步骤 2：近似商标检索。*`
 }
 
-async function tmDraftSearch(disclosure: string, pluginContext: PatentPluginContext) {
+async function trademarkDraftSearch(disclosure: string, pluginContext: PatentPluginContext) {
   // LLM 提取检索关键词
   const kwResponse = await pluginContext.llm.chat({
     messages: [
@@ -100,16 +100,16 @@ async function tmDraftSearch(disclosure: string, pluginContext: PatentPluginCont
   let output = `## 步骤 2/5：近似商标检索 ✅\n\n`
   output += `**检索关键词**：${keywords.join("、")}\n\n`
 
-  // 查询审查实例
+  // 查询审查实例（并行查询，避免 N+1）
   let hasData = false
-  for (const kw of keywords.slice(0, 3)) {
-    try {
-      const examResult = await queryTrademarkExamGuide(kw)
-      if (examResult && !examResult.includes("未在商标审查指南中找到")) {
-        output += examResult + "\n"
-        hasData = true
-      }
-    } catch { /* ignore */ }
+  const results = await Promise.allSettled(
+    keywords.slice(0, 3).map(kw => queryTrademarkExamGuide(kw))
+  )
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value && !result.value.includes("未在商标审查指南中找到")) {
+      output += result.value + "\n"
+      hasData = true
+    }
   }
 
   if (!hasData) {
@@ -120,7 +120,7 @@ async function tmDraftSearch(disclosure: string, pluginContext: PatentPluginCont
   return output
 }
 
-async function tmDraftSpecification(disclosure: string, tmType: string, pluginContext: PatentPluginContext) {
+async function trademarkDraftSpecification(disclosure: string, tmType: string, pluginContext: PatentPluginContext) {
   const templateRef = trademarkDescriptionTemplate(tmType)
 
   const response = await pluginContext.llm.chat({
@@ -143,7 +143,7 @@ ${templateRef}
   return `## 步骤 3/5：商标说明撰写 ✅\n\n${response.content}\n\n---\n\n*请审阅商标说明。确认后将继续步骤 4：商品分类选择。*`
 }
 
-async function tmDraftGoods(disclosure: string, pluginContext: PatentPluginContext) {
+async function trademarkDraftGoods(disclosure: string, pluginContext: PatentPluginContext) {
   const response = await pluginContext.llm.chat({
     messages: [
       { role: "system", content: "你是商标分类专家。熟悉尼斯分类和类似商品和服务区分表。" },
@@ -168,7 +168,7 @@ ${disclosure}
   return `## 步骤 4/5：商品分类选择 ✅\n\n${response.content}\n\n---\n\n*请确认商品/服务分类。确认后将继续步骤 5：整合申请文件。*`
 }
 
-async function tmDraftIntegrate(disclosure: string, tmType: string, pluginContext: PatentPluginContext) {
+async function trademarkDraftIntegrate(disclosure: string, tmType: string, pluginContext: PatentPluginContext) {
   const templateRef = trademarkApplicationTemplate()
 
   const response = await pluginContext.llm.chat({

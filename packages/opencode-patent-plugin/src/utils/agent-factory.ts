@@ -18,30 +18,36 @@ export interface AgentInfrastructure {
 }
 
 let infraCache: AgentInfrastructure | null = null
+let infraPromise: Promise<AgentInfrastructure | null> | null = null
 
 /**
  * 获取共享的 Agent 基础设施
  */
 export async function getAgentInfrastructure(): Promise<AgentInfrastructure | null> {
   if (infraCache) return infraCache
+  if (infraPromise) return infraPromise
 
-  const core = await loadYunPatModule("core")
-  if (!core) {
-    console.warn("[YunPat] Core module not available, infrastructure limited")
-    return null
-  }
-
-  try {
-    infraCache = {
-      eventBus: new (core.InMemoryEventBus || core.EventBus)(),
-      memory: new (core.InMemoryMemoryStore || core.MemoryStore)(),
-      tools: new (core.ToolRegistry)(),
+  infraPromise = (async () => {
+    const core = await loadYunPatModule("core")
+    if (!core) {
+      console.warn("[YunPat] Core module not available, infrastructure limited")
+      return null
     }
-    return infraCache
-  } catch (error) {
-    console.warn("[YunPat] Failed to initialize infrastructure:", error)
-    return null
-  }
+
+    try {
+      infraCache = {
+        eventBus: new (core.InMemoryEventBus || core.EventBus)(),
+        memory: new (core.InMemoryMemoryStore || core.MemoryStore)(),
+        tools: new (core.ToolRegistry)(),
+      }
+      return infraCache
+    } catch (error) {
+      console.warn("[YunPat] Failed to initialize infrastructure:", error)
+      return null
+    }
+  })()
+
+  return infraPromise
 }
 
 /**

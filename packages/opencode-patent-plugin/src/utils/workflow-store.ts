@@ -199,3 +199,13 @@ export function getWorkflowStore(): WorkflowStore {
   }
   return globalStore
 }
+
+/**
+ * 关闭全局 WorkflowStore 单例（应用退出时调用）
+ */
+export function closeStore(): void {
+  if (globalStore) {
+    globalStore.close()
+    globalStore = null
+  }
+}
