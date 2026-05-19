@@ -1,0 +1,13 @@
+import type { Diagnostic, DocumentSymbol, Location, LocationLink, PrepareRenameDefaultBehavior, PrepareRenameResult, Range, SymbolInfo, TextEdit, WorkspaceEdit } from "./types";
+import type { ApplyResult } from "./workspace-edit";
+export declare function formatLocation(loc: Location | LocationLink): string;
+export declare function formatSymbolKind(kind: number): string;
+export declare function formatSeverity(severity: number | undefined): string;
+export declare function formatDocumentSymbol(symbol: DocumentSymbol, indent?: number): string;
+export declare function formatSymbolInfo(symbol: SymbolInfo): string;
+export declare function formatDiagnostic(diag: Diagnostic): string;
+export declare function filterDiagnosticsBySeverity(diagnostics: Diagnostic[], severityFilter?: "error" | "warning" | "information" | "hint" | "all"): Diagnostic[];
+export declare function formatPrepareRenameResult(result: PrepareRenameResult | PrepareRenameDefaultBehavior | Range | null): string;
+export declare function formatTextEdit(edit: TextEdit): string;
+export declare function formatWorkspaceEdit(edit: WorkspaceEdit | null): string;
+export declare function formatApplyResult(result: ApplyResult): string;

@@ -1,0 +1,11 @@
+import type { CapacityConfig } from "./types";
+export declare const MAIN_PANE_RATIO = 0.5;
+export declare const MAX_COLS = 2;
+export declare const MAX_ROWS = 3;
+export declare const MAX_GRID_SIZE = 4;
+export declare const DIVIDER_SIZE = 1;
+export declare const MIN_SPLIT_WIDTH: number;
+export declare const MIN_SPLIT_HEIGHT: number;
+export declare function getMainPaneSizePercent(config?: CapacityConfig): number;
+export declare function computeMainPaneWidth(windowWidth: number, config?: CapacityConfig): number;
+export declare function computeAgentAreaWidth(windowWidth: number, config?: CapacityConfig): number;
