@@ -85,6 +85,7 @@ import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
 import { nextThinkingMode, reasoningTitle, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
+import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
 import { SessionRetry } from "@/session/retry"
@@ -1744,19 +1745,19 @@ function GenericTool(props: ToolProps<any>) {
     if ("title" in props.part.state && props.part.state.title) return props.part.state.title
     return `${props.tool} ${input(props.input)}`
   })
-  const lines = createMemo(() => output().split("\n"))
   const maxLines = 3
-  const overflow = createMemo(() => lines().length > maxLines)
+  const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
+  const collapsed = createMemo(() => collapseToolOutput(output(), maxLines, maxChars()))
   const limited = createMemo(() => {
-    if (isExpanded() || !overflow()) return output()
-    return [...lines().slice(0, maxLines), "…"].join("\n")
+    if (isExpanded() || !collapsed().overflow) return output()
+    return collapsed().output
   })
   const visible = createMemo(() => {
     if (!hasTerminalOutput() && !imagePath()) return limited()
     if (!terminalOutputSupported()) return "Inline image output requires an iTerm2-compatible terminal"
     return stripAnsi(limited()).trim() || "Displayed inline image"
   })
-  const canToggleExpanded = createMemo(() => overflow() || shouldRenderImageArea())
+  const canToggleExpanded = createMemo(() => collapsed().overflow || shouldRenderImageArea())
   const shouldShowInlineImage = createMemo(() => shouldRenderImageArea() && isExpanded())
   let pendingInlineImageWrite: Promise<void> | undefined
   let pendingInlineImageRefresh: Promise<void> | undefined
@@ -2133,14 +2134,16 @@ function BlockTool(props: {
 function Shell(props: ToolProps<typeof ShellTool>) {
   const { theme } = useTheme()
   const pathFormatter = usePathFormatter()
+  const ctx = use()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
   const [expanded, setExpanded] = createSignal(false)
-  const lines = createMemo(() => output().split("\n"))
-  const overflow = createMemo(() => lines().length > 10)
+  const maxLines = 10
+  const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
+  const collapsed = createMemo(() => collapseToolOutput(output(), maxLines, maxChars()))
   const limited = createMemo(() => {
-    if (expanded() || !overflow()) return output()
-    return [...lines().slice(0, 10), "…"].join("\n")
+    if (expanded() || !collapsed().overflow) return output()
+    return collapsed().output
   })
 
   const workdirDisplay = createMemo(() => {
@@ -2164,14 +2167,14 @@ function Shell(props: ToolProps<typeof ShellTool>) {
           title={title()}
           part={props.part}
           spinner={isRunning()}
-          onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+          onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
             <text fg={theme.text}>$ {props.input.command}</text>
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
             </Show>
-            <Show when={overflow()}>
+            <Show when={collapsed().overflow}>
               <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
             </Show>
           </box>
