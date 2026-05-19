@@ -137,8 +137,7 @@ If you are working on a project that's related to OpenCode and is using "opencod
 added /skills auto-debug
 - a standalone skill that codifies the debugging mindset, failure workflow, failure classification, anti-patterns, and evidence/reporting expectations referenced from `AGENTS.md`
 
-### Thank you
-Thank you for [anomalyco](https://github.com/anomalyco) and Skills from [Andrej Karpathy](https://github.com/multica-ai/andrej-karpathy-skills)
+
 
 #### How is this different from Claude Code?
 
@@ -155,3 +154,6 @@ It's very similar to Claude Code in terms of capability. Here are the key differ
 ### Notes
 This is not built by the OpenCode team and is not affiliated with us in any way.
 
+---
+### Thank you
+Thank you for [anomalyco](https://github.com/anomalyco) and Skills from [Andrej Karpathy](https://github.com/multica-ai/andrej-karpathy-skills)
