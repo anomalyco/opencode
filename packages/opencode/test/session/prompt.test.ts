@@ -345,6 +345,15 @@ const deferredAsPromise = <A>(deferred: Deferred.Deferred<A>): PromiseLike<A> =>
   },
 })
 
+function nonSystemMessages(input: Record<string, unknown> | undefined) {
+  const messages = input?.messages
+  if (!Array.isArray(messages)) return []
+  return messages.filter((message) => {
+    if (!message || typeof message !== "object") return true
+    return !("role" in message) || message.role !== "system"
+  })
+}
+
 function defer<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
   const promise = new Promise<T>((done) => {
@@ -1114,13 +1123,14 @@ it.instance(
 )
 
 it.instance(
-  "prompt submitted during an active run is included in the next LLM input",
+  "queued prompt waits for the active answer before starting the next LLM call",
   () =>
     Effect.gen(function* () {
       const { llm } = yield* useServerConfig(providerCfg)
       const gate = yield* Deferred.make<void>()
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
+      const status = yield* SessionStatus.Service
       const chat = yield* sessions.create({ title: "Pinned" })
 
       yield* llm.hold("first", deferredAsPromise(gate))
@@ -1136,6 +1146,7 @@ it.instance(
         .pipe(Effect.forkChild)
 
       yield* llm.wait(1)
+      expect(yield* llm.calls).toBe(1)
 
       const id = MessageID.ascending()
       const b = yield* prompt
@@ -1159,12 +1170,44 @@ it.instance(
         "timed out waiting for second prompt to save",
       )
 
+      const queuedExit = yield* Fiber.await(b)
+      expect(Exit.isSuccess(queuedExit)).toBe(true)
+      if (Exit.isSuccess(queuedExit)) expect(queuedExit.value.info.role).toBe("user")
+      expect(yield* llm.calls).toBe(1)
+      expect(yield* status.get(chat.id)).toEqual({ type: "busy", queued: [id] })
+
+      const beforeRelease = yield* llm.inputs
+      const beforeReleaseMessages = nonSystemMessages(beforeRelease.at(0))
+      expect(beforeRelease).toHaveLength(1)
+      expect(JSON.stringify(beforeReleaseMessages)).toContain("first")
+      expect(JSON.stringify(beforeReleaseMessages)).not.toContain("second")
+
       yield* Deferred.succeed(gate, void 0)
 
-      const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+      const ea = yield* Fiber.await(a)
       expect(Exit.isSuccess(ea)).toBe(true)
-      expect(Exit.isSuccess(eb)).toBe(true)
+      if (Exit.isSuccess(ea)) {
+        expect(ea.value.info.role).toBe("assistant")
+        expect(ea.value.parts.some((part) => part.type === "text" && part.text === "first")).toBe(true)
+      }
+      yield* llm.wait(2)
       expect(yield* llm.calls).toBe(2)
+
+      yield* pollWithTimeout(
+        sessions.messages({ sessionID: chat.id }).pipe(
+          Effect.map((messages) =>
+            messages.some(
+              (message) =>
+                message.info.role === "assistant" &&
+                message.info.parentID === id &&
+                message.parts.some((part) => part.type === "text" && part.text === "second"),
+            )
+              ? true
+              : undefined,
+          ),
+        ),
+        "timed out waiting for queued assistant response",
+      )
 
       const msgs = yield* sessions.messages({ sessionID: chat.id })
       const assistants = msgs.filter((msg) => msg.info.role === "assistant")
@@ -1175,8 +1218,9 @@ it.instance(
       expect(last.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
 
       const inputs = yield* llm.inputs
+      const lastInputMessages = nonSystemMessages(inputs.at(-1))
       expect(inputs).toHaveLength(2)
-      expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("second")
+      expect(JSON.stringify(lastInputMessages)).toContain("second")
     }),
   3_000,
 )
