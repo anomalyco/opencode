@@ -671,6 +671,7 @@ export const dict = {
   "workspace.referral.instructions.subscribe": "친구가 가입하고 Go를 구독",
   "workspace.referral.instructions.claim": "두 분 모두 $5 사용 크레딧을 받아 Go 사용 한도에 적용할 수 있습니다",
   "workspace.referral.rewards.title": "추천 보상",
+  "workspace.referral.rewards.description": "사용 가능한 추천 크레딧을 Go 사용량에 적용합니다.",
   "workspace.referral.rewards.subtitle": "{{applied}} / {{total}}개 보상 사용됨.",
   "workspace.referral.rewards.empty": "아직 추천 보상이 없습니다.",
   "workspace.referral.table.reward": "보상",

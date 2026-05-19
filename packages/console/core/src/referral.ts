@@ -68,7 +68,7 @@ export namespace Referral {
     const accountID = Actor.account()
     const code = await ensureCode(workspaceID)
     const rows = await Database.use(async (tx) => {
-      const [rewards, rewardInviters, invites, inviteeReferrals, inviteeRewards, lite] = await Promise.all([
+      const [rewards, invites, inviteeReferral, inviteeRewards, lite] = await Promise.all([
         tx
           .select({
             referralID: ReferralRewardTable.referralID,
@@ -94,33 +94,6 @@ export namespace Referral {
           )
           .orderBy(desc(ReferralRewardTable.timeCreated)),
         tx
-          .select({
-            referralID: ReferralRewardTable.referralID,
-            inviterEmail: AuthTable.subject,
-          })
-          .from(ReferralRewardTable)
-          .innerJoin(ReferralTable, eq(ReferralTable.id, ReferralRewardTable.referralID))
-          .leftJoin(
-            UserTable,
-            and(
-              eq(UserTable.workspaceID, ReferralTable.workspaceID),
-              eq(UserTable.role, "admin"),
-              isNull(UserTable.timeDeleted),
-            ),
-          )
-          .leftJoin(
-            AuthTable,
-            and(eq(AuthTable.accountID, UserTable.accountID), eq(AuthTable.provider, "email")),
-          )
-          .where(
-            and(
-              eq(ReferralRewardTable.workspaceID, workspaceID),
-              isNull(ReferralRewardTable.timeDeleted),
-              isNull(ReferralTable.timeDeleted),
-            ),
-          )
-          .orderBy(asc(UserTable.timeCreated)),
-        tx
           .select({ id: ReferralTable.id, inviteeEmail: AuthTable.subject, timeCreated: ReferralTable.timeCreated })
           .from(ReferralTable)
           .innerJoin(
@@ -144,7 +117,8 @@ export namespace Referral {
             and(eq(AuthTable.accountID, UserTable.accountID), eq(AuthTable.provider, "email")),
           )
           .where(and(eq(ReferralTable.inviteeAccountID, accountID), isNull(ReferralTable.timeDeleted)))
-          .orderBy(asc(UserTable.timeCreated)),
+          .orderBy(asc(UserTable.timeCreated))
+          .then((rows) => rows.find((row) => row.inviterEmail) ?? rows[0]),
         tx
           .select({ referralID: ReferralRewardTable.referralID })
           .from(ReferralRewardTable)
@@ -163,25 +137,18 @@ export namespace Referral {
           .then((result) => result[0]),
       ])
 
-      return { inviteeReferrals, inviteeRewards, invites, lite, rewardInviters, rewards }
+      return { inviteeReferral, inviteeRewards, invites, lite, rewards }
     })
 
     const rewardReferralIDs = new Set(rows.rewards.map((reward) => reward.referralID))
     const inviteeRewardReferralIDs = new Set(rows.inviteeRewards.map((reward) => reward.referralID))
-    const rewardInviterEmails = rows.rewardInviters.reduce((emails, row) => {
-      if (row.inviterEmail && !emails.has(row.referralID)) emails.set(row.referralID, row.inviterEmail)
-      return emails
-    }, new Map<string, string>())
-    const inviteeReferrals = rows.inviteeReferrals.filter(
-      (referral, index, referrals) => referrals.findIndex((x) => x.id === referral.id) === index,
-    )
     const rewards = rows.rewards.map((reward) => {
       const source = reward.workspaceID === reward.referralWorkspaceID ? ("inviter" as const) : ("invitee" as const)
       return {
         id: reward.referralID,
         source,
         status: reward.timeApplied ? ("applied" as const) : ("available" as const),
-        email: source === "invitee" ? (rewardInviterEmails.get(reward.referralID) ?? null) : reward.inviteeEmail,
+        email: source === "invitee" ? (rows.inviteeReferral?.inviterEmail ?? null) : reward.inviteeEmail,
         amount: microCentsToCents(reward.amount),
         timeCreated: reward.timeCreated,
         timeApplied: reward.timeApplied,
@@ -199,17 +166,19 @@ export namespace Referral {
           timeCreated: referral.timeCreated,
           timeApplied: null,
         })),
-      ...inviteeReferrals
-        .filter((referral) => !inviteeRewardReferralIDs.has(referral.id))
-        .map((referral) => ({
-          id: `${referral.id}:invitee`,
-          source: "invitee" as const,
-          status: "pending" as const,
-          email: referral.inviterEmail,
-          amount: microCentsToCents(REWARD_AMOUNT),
-          timeCreated: referral.timeCreated,
-          timeApplied: null,
-        })),
+      ...(rows.inviteeReferral && !inviteeRewardReferralIDs.has(rows.inviteeReferral.id)
+        ? [
+            {
+              id: `${rows.inviteeReferral.id}:invitee`,
+              source: "invitee" as const,
+              status: "pending" as const,
+              email: rows.inviteeReferral.inviterEmail,
+              amount: microCentsToCents(REWARD_AMOUNT),
+              timeCreated: rows.inviteeReferral.timeCreated,
+              timeApplied: null,
+            },
+          ]
+        : []),
     ]
     const allRewards = [...pending, ...rewards].sort(
       (a, b) => new Date(b.timeCreated).getTime() - new Date(a.timeCreated).getTime(),
@@ -217,6 +186,7 @@ export namespace Referral {
     return {
       referralCode: code.code,
       inviteCount: allRewards.filter((reward) => reward.source === "inviter").length,
+      hasReferral: allRewards.length > 0,
       hasActiveGo: !!rows.lite,
       rewardAmount: microCentsToCents(REWARD_AMOUNT),
       totalEarned: rewards.reduce((total, reward) => total + reward.amount, 0),

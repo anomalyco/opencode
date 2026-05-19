@@ -674,6 +674,7 @@ export const dict = {
   "workspace.referral.instructions.subscribe": "เพื่อนของคุณเข้าร่วมและสมัครสมาชิก Go",
   "workspace.referral.instructions.claim": "คุณทั้งคู่จะได้รับเครดิตการใช้งาน $5 เพื่อใช้กับขีดจำกัดการใช้งาน Go",
   "workspace.referral.rewards.title": "รางวัลการแนะนำ",
+  "workspace.referral.rewards.description": "ใช้เครดิตการแนะนำที่มีอยู่กับการใช้งาน Go ของคุณ",
   "workspace.referral.rewards.subtitle": "ใช้แล้ว {{applied}} / {{total}} รางวัล",
   "workspace.referral.rewards.empty": "ยังไม่มีรางวัลการแนะนำ",
   "workspace.referral.table.reward": "รางวัล",

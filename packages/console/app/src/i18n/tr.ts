@@ -681,6 +681,7 @@ export const dict = {
   "workspace.referral.instructions.subscribe": "Arkadaşın katılır ve Go'ya abone olur",
   "workspace.referral.instructions.claim": "İkiniz de Go kullanım limitlerinize uygulamak için $5 kullanım kredisi alırsınız",
   "workspace.referral.rewards.title": "Davet ödülleri",
+  "workspace.referral.rewards.description": "Mevcut davet kredilerini Go kullanımınıza uygulayın.",
   "workspace.referral.rewards.subtitle": "{{applied}} / {{total}} ödül kullanıldı.",
   "workspace.referral.rewards.empty": "Henüz davet ödülü yok.",
   "workspace.referral.table.reward": "Ödül",

@@ -680,6 +680,7 @@ export const dict = {
   "workspace.referral.instructions.subscribe": "友達が参加して Go にサブスクライブ",
   "workspace.referral.instructions.claim": "二人とも $5 の利用クレジットを獲得し、Go の利用上限に充当できます",
   "workspace.referral.rewards.title": "リファラル特典",
+  "workspace.referral.rewards.description": "利用可能なリファラルクレジットを Go の利用に適用します。",
   "workspace.referral.rewards.subtitle": "{{applied}} / {{total}} 件の特典を適用済み。",
   "workspace.referral.rewards.empty": "リファラル特典はまだありません。",
   "workspace.referral.table.reward": "特典",

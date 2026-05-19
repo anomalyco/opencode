@@ -31,7 +31,7 @@ export default function () {
         <LiteSection />
         <Show when={referral()} fallback={<section>{i18n.t("workspace.lite.loading")}</section>}>
           {(summary) => (
-            <Show when={summary().hasActiveGo || summary().rewards.length > 0}>
+            <Show when={summary().hasActiveGo || summary().hasReferral}>
               <GoReferralSection workspaceID={params.id!} summary={summary()} />
             </Show>
           )}

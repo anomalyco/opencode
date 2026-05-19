@@ -671,6 +671,7 @@ export const dict = {
   "workspace.referral.instructions.subscribe": "ينضم صديقك ويشترك في Go",
   "workspace.referral.instructions.claim": "تحصلان كلاكما على رصيد استخدام بقيمة $5 لتطبيقه على حدود استخدام Go",
   "workspace.referral.rewards.title": "مكافآت الإحالة",
+  "workspace.referral.rewards.description": "طبّق أرصدة الإحالة المتاحة على استخدامك لـ Go.",
   "workspace.referral.rewards.subtitle": "تم تطبيق {{applied}} / {{total}} من المكافآت.",
   "workspace.referral.rewards.empty": "لا توجد مكافآت إحالة بعد.",
   "workspace.referral.table.reward": "المكافأة",

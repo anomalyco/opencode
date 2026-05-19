@@ -654,6 +654,7 @@ export const dict = {
   "workspace.referral.instructions.subscribe": "好友加入并订阅 Go。",
   "workspace.referral.instructions.claim": "你们都将获得 $5 使用额度，可用于您的 Go 使用限额。",
   "workspace.referral.rewards.title": "邀请奖励",
+  "workspace.referral.rewards.description": "将可用的邀请积分应用到您的 Go 用量。",
   "workspace.referral.rewards.subtitle": "已使用 {{applied}} / {{total}} 个奖励。",
   "workspace.referral.rewards.empty": "暂无邀请奖励。",
   "workspace.referral.table.reward": "奖励",

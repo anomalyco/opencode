@@ -296,6 +296,7 @@ declare module "sst" {
     "AuthStorage": cloudflare.KVNamespace
     "Bucket": cloudflare.R2Bucket
     "EnterpriseStorage": cloudflare.R2Bucket
+    "GatewayKv": cloudflare.KVNamespace
     "LogProcessor": cloudflare.Service
     "Stat": cloudflare.Service
     "ZenData": cloudflare.R2Bucket
