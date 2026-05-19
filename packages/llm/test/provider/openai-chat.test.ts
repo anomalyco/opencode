@@ -179,6 +179,38 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("prepares assistant tool-call message with reasoning_content from native providerOptions", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          id: "req_reasoning_tool_call",
+          model,
+          messages: [
+            Message.user("What is the weather?"),
+            new Message({
+              role: "assistant",
+              content: [ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })],
+              native: { providerOptions: { openaiCompatible: { reasoning_content: "thinking about weather" } } },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages[1]).toEqual({
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_1",
+            type: "function",
+            function: { name: "lookup", arguments: encodeJson({ query: "weather" }) },
+          },
+        ],
+        reasoning_content: "thinking about weather",
+      })
+    }),
+  )
+
   it.effect("rejects unsupported user media content", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.prepare(
