@@ -40,11 +40,16 @@ const configLayer = TestConfig.layer({
   directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
 })
 
-const registryLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
+type RegistryLayerOptions = {
+  flags?: Partial<RuntimeFlags.Info>
+  plugin?: Layer.Layer<Plugin.Service>
+}
+
+const registryLayer = (opts: RegistryLayerOptions = {}) =>
   ToolRegistry.layer
     .pipe(
       Layer.provide(configLayer),
-      Layer.provide(Plugin.defaultLayer),
+      Layer.provide(opts.plugin ?? Plugin.defaultLayer),
       Layer.provide(Question.defaultLayer),
       Layer.provide(Todo.defaultLayer),
       Layer.provide(Skill.defaultLayer),
@@ -64,12 +69,38 @@ const registryLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       Layer.provide(Ripgrep.defaultLayer),
       Layer.provide(Truncate.defaultLayer),
     )
-    .pipe(Layer.provide(RuntimeFlags.layer(flags)))
+    .pipe(Layer.provide(RuntimeFlags.layer(opts.flags ?? {})))
+
+// Fake Plugin.Service that returns a single plugin whose `tool` map contains
+// one definition with `args: undefined`. Used to exercise the plugin entry
+// point of `fromPlugin` for the #27451 / #27630 regression.
+const brokenPluginLayer = Layer.succeed(
+  Plugin.Service,
+  Plugin.Service.of({
+    init: () => Effect.void,
+    trigger: ((_name: unknown, _input: unknown, output: unknown) => Effect.succeed(output)) as Plugin.Interface["trigger"],
+    list: () =>
+      Effect.succeed([
+        {
+          tool: {
+            broken_plugin_tool: {
+              description: "plugin tool with missing args",
+              args: undefined as unknown as Record<string, never>,
+              execute: async () => "ok",
+            },
+          },
+        },
+      ]),
+  }),
+)
 
 const it = testEffect(Layer.mergeAll(registryLayer(), node, Agent.defaultLayer))
-const scout = testEffect(Layer.mergeAll(registryLayer({ experimentalScout: true }), node, Agent.defaultLayer))
+const scout = testEffect(Layer.mergeAll(registryLayer({ flags: { experimentalScout: true } }), node, Agent.defaultLayer))
 const background = testEffect(
-  Layer.mergeAll(registryLayer({ experimentalBackgroundSubagents: true }), node, Agent.defaultLayer),
+  Layer.mergeAll(registryLayer({ flags: { experimentalBackgroundSubagents: true } }), node, Agent.defaultLayer),
+)
+const withBrokenPlugin = testEffect(
+  Layer.mergeAll(registryLayer({ plugin: brokenPluginLayer }), node, Agent.defaultLayer),
 )
 
 afterEach(async () => {
@@ -219,6 +250,21 @@ describe("tool.registry", () => {
       const loaded = (yield* registry.all()).find((t) => t.id === "noargs")
       if (!loaded) throw new Error("noargs tool was not loaded")
       expect(loaded.jsonSchema).toMatchObject({ type: "object", properties: {} })
+    }),
+  )
+
+  // Same regression, plugin entry point. The original reports (#27451, #27630)
+  // came in through `plugin.list()` — `oh-my-opencode` was registering a tool
+  // with `args: undefined` and crashing every message submit. The file-scan
+  // and plugin-list loops both funnel through `fromPlugin`, but covering both
+  // entry points means a future refactor that splits them won't silently lose
+  // protection.
+  withBrokenPlugin.instance("tolerates a plugin tool registered with null/undefined args", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+      expect(ids).toContain("read")
+      expect(ids).toContain("broken_plugin_tool")
     }),
   )
 
