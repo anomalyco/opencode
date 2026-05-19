@@ -170,7 +170,7 @@ export namespace Referral {
     )
     return {
       referralCode: code.code,
-      inviteCount: allRewards.length,
+      inviteCount: allRewards.filter((reward) => reward.source === "inviter").length,
       hasActiveGo: !!rows.lite,
       rewardAmount: microCentsToCents(REWARD_AMOUNT),
       totalEarned: rewards.reduce((total, reward) => total + reward.amount, 0),

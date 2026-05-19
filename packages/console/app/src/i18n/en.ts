@@ -664,7 +664,7 @@ export const dict = {
 
   "workspace.referral.copyLink": "Copy Link",
   "workspace.referral.copied": "Copied",
-  "workspace.referral.overview.title": "Invite friends to Go",
+  "workspace.referral.overview.title": "Invite friends",
   "workspace.referral.overview.subtitle": "Earn $5 in Go credit when a friend subscribes. They’ll get $5 too.",
   "workspace.referral.stats.invites": "Invites",
   "workspace.referral.stats.earned": "Earned",
