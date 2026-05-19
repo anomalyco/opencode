@@ -120,9 +120,20 @@ export function broadcastSse(collabSessionId: string, event: CollabEvent) {
 
 // ── Main handler ────────────────────────────────────────────────────────────────
 
-export function handleCollabRequest(req: Request): Response | Promise<Response> {
+export function handleCollabRequest(req: Request): Promise<Response> {
+  return Promise.resolve()
+    .then(() => handleCollabRequestInner(req))
+    .catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err)
+      const stack = err instanceof Error ? err.stack : undefined
+      console.error("[collab] unhandled error:", stack ?? message)
+      return json({ error: "Internal server error", detail: message }, 500)
+    })
+}
+
+function handleCollabRequestInner(req: Request): Promise<Response> | Response {
   ensureMigrated()
-  const url = new URL(req.url)
+  const url = new URL(req.url, "http://localhost")
   const path = url.pathname
 
   // OAuth start

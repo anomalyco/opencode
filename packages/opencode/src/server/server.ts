@@ -3,8 +3,8 @@ import "./init-projectors"
 import { handleCollabRequest } from "@/collab/router"
 import { NodeHttpServer } from "@effect/platform-node"
 import * as Log from "@opencode-ai/core/util/log"
-import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
-import { HttpRouter, HttpServer } from "effect/unstable/http"
+import { ConfigProvider, Context, Effect, Exit, Layer, Scope, Stream } from "effect"
+import { HttpMiddleware, HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
 import { createServer } from "node:http"
 import { MDNS } from "./mdns"
@@ -14,6 +14,37 @@ import { WebSocketTracker } from "./routes/instance/httpapi/websocket-tracker"
 import { PublicApi } from "./routes/instance/httpapi/public"
 import type { CorsOptions } from "./cors"
 import { lazy } from "@/util/lazy"
+
+// ── Collab middleware ──────────────────────────────────────────────────────────
+// Intercepts /collab/* requests before the Effect HTTP router's catch-all UI
+// route can serve index.html for them. Bridges the standard Web Request/Response
+// API used by the collab router into Effect's HttpServerRequest/HttpServerResponse.
+
+const collabMiddleware: HttpMiddleware.HttpMiddleware = (app) =>
+  Effect.gen(function* () {
+    const req = yield* HttpServerRequest.HttpServerRequest
+    const pathname = new URL(req.url, "http://localhost").pathname
+    if (!pathname.startsWith("/collab/")) return yield* app
+
+    // toWeb converts Effect's HttpServerRequest → standard Web API Request (body included)
+    const webRequest = yield* HttpServerRequest.toWeb(req)
+    const webResponse = yield* Effect.promise(() => handleCollabRequest(webRequest))
+
+    const resHeaders = new Headers(webResponse.headers)
+
+    // SSE: stream without buffering
+    if (webResponse.headers.get("content-type")?.startsWith("text/event-stream") && webResponse.body) {
+      const rs = webResponse.body
+      const effectStream = Stream.fromAsyncIterable(
+        rs as AsyncIterable<Uint8Array>,
+        () => new Error("SSE stream error"),
+      )
+      return HttpServerResponse.stream(effectStream, { status: webResponse.status, headers: resHeaders })
+    }
+
+    const buf = yield* Effect.promise(() => webResponse.arrayBuffer())
+    return HttpServerResponse.raw(new Uint8Array(buf), { status: webResponse.status, headers: resHeaders })
+  })
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -109,7 +140,8 @@ const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unkno
 
 function listenerLayer(opts: ListenOptions, port: number) {
   return HttpRouter.serve(HttpApiApp.createRoutes(opts), {
-    middleware: disposeMiddleware,
+    // collabMiddleware intercepts /collab/* before the catch-all uiRoute serves index.html
+    middleware: (app) => disposeMiddleware(collabMiddleware(app)),
     disableLogger: true,
     disableListenLog: true,
   }).pipe(
