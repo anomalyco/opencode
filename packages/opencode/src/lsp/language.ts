@@ -32,6 +32,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".fsi": "fsharp",
   ".fsx": "fsharp",
   ".fsscript": "fsharp",
+  ".gd": "gdscript",
   ".gitcommit": "git-commit",
   ".gitrebase": "git-rebase",
   ".go": "go",
