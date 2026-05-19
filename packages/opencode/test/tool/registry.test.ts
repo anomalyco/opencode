@@ -186,6 +186,42 @@ describe("tool.registry", () => {
     }),
   )
 
+  // Regression for #27451 / #27630: a custom tool that omits `args` must not
+  // crash registry initialization with
+  // `Object.entries requires that input parameter not be null or undefined`.
+  // Pre-1.14.49 the code path was `z.object(def.args)`, and `z.object(undefined)`
+  // silently produced an empty schema — so the tool registered as no-args.
+  // Preserve that tolerance.
+  it.instance("tolerates a custom tool exporting null/undefined args (no-args fallback)", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tool = path.join(test.directory, ".opencode", "tool")
+      yield* Effect.promise(() => fs.mkdir(tool, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tool, "noargs.ts"),
+          [
+            "export default {",
+            "  description: 'tool with no args',",
+            "  args: undefined,",
+            "  execute: async () => 'ok',",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+      // Built-in tools must still load — a single malformed custom tool must
+      // not poison the whole registry.
+      expect(ids).toContain("read")
+      const loaded = (yield* registry.all()).find((t) => t.id === "noargs")
+      if (!loaded) throw new Error("noargs tool was not loaded")
+      expect(loaded.jsonSchema).toMatchObject({ type: "object", properties: {} })
+    }),
+  )
+
   it.instance("loads tools from .opencode/tools (plural)", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
