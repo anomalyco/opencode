@@ -805,12 +805,12 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   }))
 
   useBindings(() => ({
-    opencodeMode: OPENCODE_BASE_MODE,
+    mode: OPENCODE_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("app", appBindingCommands),
   }))
 
   useBindings(() => ({
-    opencodeMode: OPENCODE_BASE_MODE,
+    mode: OPENCODE_BASE_MODE,
     enabled: () => {
       const current = promptRef.current
       if (!current?.focused) return true

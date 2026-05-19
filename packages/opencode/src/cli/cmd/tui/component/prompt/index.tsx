@@ -633,7 +633,7 @@ export function Prompt(props: PromptProps) {
   }))
 
   useBindings(() => ({
-    opencodeMode: OPENCODE_BASE_MODE,
+    mode: OPENCODE_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("prompt.palette", [
       "prompt.submit",
       "prompt.editor",

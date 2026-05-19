@@ -47,7 +47,7 @@ export function createOpencodeModeStack(keymap: OpenTuiKeymap) {
   keymap.setData(OPENCODE_MODE_KEY, OPENCODE_BASE_MODE)
 
   const offFields = keymap.registerLayerFields({
-    opencodeMode(value, ctx) {
+    mode(value, ctx) {
       ctx.require(OPENCODE_MODE_KEY, value)
     },
   })

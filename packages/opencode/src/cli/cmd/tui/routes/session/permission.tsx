@@ -448,7 +448,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
   useBindings(() => ({
-    opencodeMode: OPENCODE_BASE_MODE,
+    mode: OPENCODE_BASE_MODE,
     commands: [
       {
         name: "app.exit",
@@ -543,7 +543,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   const fullscreenHint = useCommandShortcut("permission.prompt.fullscreen")
 
   useBindings(() => ({
-    opencodeMode: OPENCODE_BASE_MODE,
+    mode: OPENCODE_BASE_MODE,
     commands: [
       {
         name: "app.exit",

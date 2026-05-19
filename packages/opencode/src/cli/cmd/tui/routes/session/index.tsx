@@ -1055,7 +1055,7 @@ export function Session() {
   }))
 
   useBindings(() => ({
-    opencodeMode: OPENCODE_BASE_MODE,
+    mode: OPENCODE_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("session", sessionBindingCommands),
   }))
 

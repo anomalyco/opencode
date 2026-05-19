@@ -258,7 +258,7 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 
 #### Mode-aware layers
 
-OpenCode registers an `opencodeMode` layer field on the host keymap. Plugins can use it to keep bindings active only in the relevant UI state.
+OpenCode registers a `mode` layer field on the host keymap. Plugins can use it to keep bindings active only in the relevant UI state.
 
 Built-in modes:
 
@@ -271,7 +271,7 @@ Example: register a command and shortcut that are active only in normal app mode
 
 ```tsx
 api.keymap.registerLayer({
-  opencodeMode: "base",
+  mode: "base",
   commands: [
     {
       name: "demo.open",
@@ -287,7 +287,7 @@ api.keymap.registerLayer({
 })
 ```
 
-Layers without `opencodeMode` are not mode-gated and can remain active while dialogs or autocomplete are open. Use that only for intentionally global commands or low-level keymap extensions.
+Layers without `mode` are not mode-gated and can remain active while dialogs or autocomplete are open. Use that only for intentionally global commands or low-level keymap extensions.
 
 Plugins that own a full-screen route or modal-like UI can temporarily push a plugin-specific mode with `api.mode.push(...)`. Use a plugin-scoped mode name. The returned disposer pops that specific stack entry and is idempotent, so popping an older mode while a newer mode is on top leaves the newer mode active.
 
@@ -311,7 +311,7 @@ api.route.register([
 ])
 
 api.keymap.registerLayer({
-  opencodeMode: "acme.demo",
+  mode: "acme.demo",
   bindings: [{ key: "escape", cmd: () => api.route.navigate("home"), desc: "Close demo" }],
 })
 ```
