@@ -511,6 +511,11 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         options: {
           project,
           location,
+          // Continental multi-regions (eu, us) require Regional Endpoint Platform
+          // domains — the default {region}-aiplatform.googleapis.com does not resolve.
+          ...((location === "eu" || location === "us") && project
+            ? { baseURL: `https://aiplatform.${location}.rep.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models` }
+            : {}),
         },
         async getModel(sdk: any, modelID) {
           const id = String(modelID).trim()
