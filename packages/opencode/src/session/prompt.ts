@@ -1208,8 +1208,8 @@ export const layer = Layer.effect(
       return { info, parts }
     }, Effect.scoped)
 
-    const prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts, Image.Error> = Effect.fn(
-      "SessionPrompt.prompt",
+    const persistPrompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts, Image.Error> = Effect.fn(
+      "SessionPrompt.persistPrompt",
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       yield* revert.cleanup(session)
@@ -1225,8 +1225,7 @@ export const layer = Layer.effect(
         yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
       }
 
-      if (input.noReply === true) return message
-      return yield* loop({ sessionID: input.sessionID })
+      return message
     })
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
@@ -1236,6 +1235,26 @@ export const layer = Layer.effect(
       if (msgs.length > 0) return msgs[0]
       throw new Error("Impossible")
     })
+
+    interface QueuedTurnState {
+      active?: MessageID
+      draining: boolean
+      messageIDs: MessageID[]
+    }
+
+    const queuedTurns = new Map<SessionID, QueuedTurnState>()
+
+    function queuedState(sessionID: SessionID) {
+      const existing = queuedTurns.get(sessionID)
+      if (existing) return existing
+      const next: QueuedTurnState = { draining: false, messageIDs: [] }
+      queuedTurns.set(sessionID, next)
+      return next
+    }
+
+    function queuedMessageIDs(sessionID: SessionID) {
+      return new Set(queuedTurns.get(sessionID)?.messageIDs ?? [])
+    }
 
     const runLoop: (sessionID: SessionID) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.run")(
       function* (sessionID: SessionID) {
@@ -1250,6 +1269,8 @@ export const layer = Layer.effect(
           yield* slog.info("loop", { step })
 
           let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
+          const queued = queuedMessageIDs(sessionID)
+          if (queued.size > 0) msgs = msgs.filter((msg) => !queued.has(msg.info.id))
 
           const { user: lastUser, assistant: lastAssistant, finished: lastFinished, tasks } = MessageV2.latest(msgs)
 
@@ -1264,12 +1285,16 @@ export const layer = Layer.effect(
           // provider's stream (e.g. DWS Agent Platform) and don't need a re-loop.
           const hasToolCalls =
             lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
+          const activeQueuedMessageID = queuedTurns.get(sessionID)?.active
+          const activeQueuedAwaitingAnswer =
+            lastUser.id === activeQueuedMessageID && lastAssistant?.parentID !== activeQueuedMessageID
 
           if (
             lastAssistant?.finish &&
             !["tool-calls"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
-            lastUser.id < lastAssistant.id
+            lastUser.id < lastAssistant.id &&
+            !activeQueuedAwaitingAnswer
           ) {
             yield* slog.info("exiting loop")
             break
@@ -1486,6 +1511,69 @@ export const layer = Layer.effect(
       input: LoopInput,
     ) {
       return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
+    })
+
+    const drainQueuedTurns = Effect.fn("SessionPrompt.drainQueuedTurns")(function* (sessionID: SessionID) {
+      const queue = queuedState(sessionID)
+      if (queue.draining) return
+      queue.draining = true
+      try {
+        while (queue.messageIDs.length > 0) {
+          let messageID: MessageID | undefined
+          yield* Effect.gen(function* () {
+            yield* loop({ sessionID })
+            messageID = queue.messageIDs.shift()
+            yield* status.setQueued(sessionID, queue.messageIDs)
+            if (messageID) {
+              queue.active = messageID
+              yield* runLoop(sessionID).pipe(
+                Effect.ensuring(
+                  Effect.sync(() => {
+                    if (queue.active === messageID) delete queue.active
+                  }),
+                ),
+              )
+            }
+          }).pipe(
+            Effect.catchCause((cause) =>
+              Effect.gen(function* () {
+                if (messageID) queue.messageIDs.unshift(messageID)
+                yield* status.setQueued(sessionID, queue.messageIDs)
+                return yield* Effect.failCause(cause)
+              }),
+            ),
+          )
+        }
+      } finally {
+        queue.draining = false
+        if (queue.messageIDs.length === 0) {
+          queuedTurns.delete(sessionID)
+          yield* status.setQueued(sessionID, [])
+        }
+      }
+    })
+
+    const prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts, Image.Error> = Effect.fn(
+      "SessionPrompt.prompt",
+    )(function* (input: PromptInput) {
+      if (input.noReply === true) return yield* persistPrompt(input)
+      const existingQueue = queuedTurns.get(input.sessionID)
+      const busy =
+        existingQueue?.draining === true ||
+        (yield* state.assertNotBusy(input.sessionID).pipe(
+          Effect.as(false),
+          Effect.catchCause(() => Effect.succeed(true)),
+        ))
+      if (!busy) {
+        yield* persistPrompt(input)
+        return yield* loop({ sessionID: input.sessionID })
+      }
+      const message = yield* persistPrompt(input)
+      const queue = queuedState(input.sessionID)
+      queue.messageIDs.push(message.info.id)
+      yield* status.setQueued(input.sessionID, queue.messageIDs)
+      yield* drainQueuedTurns(input.sessionID).pipe(Effect.forkIn(scope))
+      return message
     })
 
     const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts, Session.BusyError> = Effect.fn(
