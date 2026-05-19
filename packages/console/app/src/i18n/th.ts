@@ -510,7 +510,7 @@ export const dict = {
   "workspace.members.subtitle": "จัดการสมาชิก Workspace และสิทธิ์ของพวกเขา",
   "workspace.members.invite": "เชิญสมาชิก",
   "workspace.members.inviting": "กำลังเชิญ...",
-  "workspace.members.beta.beforeLink": "Workspace ให้บริการฟรีสำหรับทีมในช่วงเบต้า",
+  "workspace.members.beta.beforeLink": "Workspace ให้บริการฟรีสำหรับทีม",
   "workspace.members.form.invitee": "ผู้ได้รับเชิญ",
   "workspace.members.form.emailPlaceholder": "ใส่อีเมล",
   "workspace.members.form.role": "บทบาท",

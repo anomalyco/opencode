@@ -521,7 +521,7 @@ export const dict = {
   "workspace.members.subtitle": "Управляйте участниками рабочего пространства и их правами.",
   "workspace.members.invite": "Пригласить участника",
   "workspace.members.inviting": "Отправка приглашения...",
-  "workspace.members.beta.beforeLink": "Рабочие пространства бесплатны для команд во время беты.",
+  "workspace.members.beta.beforeLink": "Рабочие пространства бесплатны для команд.",
   "workspace.members.form.invitee": "Приглашаемый",
   "workspace.members.form.emailPlaceholder": "Введите email",
   "workspace.members.form.role": "Роль",

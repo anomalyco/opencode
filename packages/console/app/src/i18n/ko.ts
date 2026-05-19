@@ -508,7 +508,7 @@ export const dict = {
   "workspace.members.subtitle": "워크스페이스 멤버 및 권한을 관리합니다.",
   "workspace.members.invite": "멤버 초대",
   "workspace.members.inviting": "초대 중...",
-  "workspace.members.beta.beforeLink": "베타 기간 동안 팀 워크스페이스는 무료입니다.",
+  "workspace.members.beta.beforeLink": "팀 워크스페이스는 무료입니다.",
   "workspace.members.form.invitee": "초대받는 사람",
   "workspace.members.form.emailPlaceholder": "이메일 입력",
   "workspace.members.form.role": "역할",

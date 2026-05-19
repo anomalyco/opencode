@@ -515,7 +515,7 @@ export const dict = {
   "workspace.members.subtitle": "Zarządzaj członkami obszaru roboczego i ich uprawnieniami.",
   "workspace.members.invite": "Zaproś członka",
   "workspace.members.inviting": "Zapraszanie...",
-  "workspace.members.beta.beforeLink": "Obszary robocze są darmowe dla zespołów w fazie beta.",
+  "workspace.members.beta.beforeLink": "Obszary robocze są darmowe dla zespołów.",
   "workspace.members.form.invitee": "Zaproszona osoba",
   "workspace.members.form.emailPlaceholder": "Wpisz e-mail",
   "workspace.members.form.role": "Rola",

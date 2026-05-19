@@ -513,7 +513,7 @@ export const dict = {
   "workspace.members.subtitle": "Administrer workspace-medlemmer og deres tilladelser.",
   "workspace.members.invite": "Inviter medlem",
   "workspace.members.inviting": "Inviterer...",
-  "workspace.members.beta.beforeLink": "Workspaces er gratis for teams under betaversionen.",
+  "workspace.members.beta.beforeLink": "Workspaces er gratis for teams.",
   "workspace.members.form.invitee": "Inviteret",
   "workspace.members.form.emailPlaceholder": "Indtast e-mail",
   "workspace.members.form.role": "Rolle",
