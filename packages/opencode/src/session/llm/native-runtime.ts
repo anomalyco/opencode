@@ -42,12 +42,7 @@ export function status(input: Pick<StreamInput, "model" | "provider" | "auth">):
   if (input.model.api.npm !== "@ai-sdk/openai") return { type: "unsupported", reason: "provider package is not OpenAI" }
   if (input.auth?.type === "oauth") return { type: "unsupported", reason: "OAuth auth is not supported" }
 
-  const apiKey =
-    input.auth?.type === "api"
-      ? input.auth.key
-      : typeof input.provider.options.apiKey === "string"
-        ? input.provider.options.apiKey
-        : undefined
+  const apiKey = typeof input.provider.options.apiKey === "string" ? input.provider.options.apiKey : input.provider.key
   if (!apiKey) return { type: "unsupported", reason: "OpenAI API key is not configured" }
 
   return {

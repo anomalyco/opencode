@@ -1,5 +1,5 @@
 import { test, expect, describe, mock, afterEach, beforeEach } from "bun:test"
-import { Effect, Layer, Option } from "effect"
+import { Effect, Exit, Layer, Option } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
@@ -13,7 +13,7 @@ import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Env } from "../../src/env"
-import { provideTestInstance, provideTmpdirInstance, withTestInstance } from "../fixture/fixture"
+import { provideTestInstance, provideTmpdirInstance, TestInstance, withTestInstance } from "../fixture/fixture"
 import { tmpdir } from "../fixture/fixture"
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -68,13 +68,6 @@ const load = (ctx: InstanceContext) =>
   Effect.runPromise(
     Config.Service.use((svc) => provideCurrentInstance(svc.get(), ctx)).pipe(Effect.scoped, Effect.provide(layer)),
   )
-const save = (config: Config.Info, ctx: InstanceContext) =>
-  Effect.runPromise(
-    Config.Service.use((svc) => provideCurrentInstance(svc.update(config), ctx)).pipe(
-      Effect.scoped,
-      Effect.provide(layer),
-    ),
-  )
 const saveGlobal = (config: Config.Info) =>
   Effect.runPromise(
     Config.Service.use((svc) => svc.updateGlobal(config)).pipe(
@@ -94,14 +87,6 @@ const listDirs = (ctx: InstanceContext) =>
       Effect.provide(layer),
     ),
   )
-const ready = (ctx: InstanceContext) =>
-  Effect.runPromise(
-    Config.Service.use((svc) => provideCurrentInstance(svc.waitForDependencies(), ctx)).pipe(
-      Effect.scoped,
-      Effect.provide(layer),
-    ),
-  )
-
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
 
@@ -119,8 +104,32 @@ async function writeManagedSettings(settings: object, filename = "opencode.json"
   await Filesystem.write(path.join(managedConfigDir, filename), JSON.stringify(settings))
 }
 
+const writeManagedSettingsEffect = (settings: object, filename?: string) =>
+  Effect.promise(() => writeManagedSettings(settings, filename))
+
 async function writeConfig(dir: string, config: object, name = "opencode.json") {
   await Filesystem.write(path.join(dir, name), JSON.stringify(config))
+}
+
+const writeConfigEffect = (dir: string, config: object, name = "opencode.json") =>
+  Effect.promise(() => writeConfig(dir, config, name))
+const mkdirEffect = (dir: string) => Effect.promise(() => fs.mkdir(dir, { recursive: true }))
+const writeTextEffect = (file: string, content: string) => Effect.promise(() => Filesystem.write(file, content))
+
+function withProcessEnv<A, E, R>(key: string, value: string, effect: Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const original = process.env[key]
+      process.env[key] = value
+      return original
+    }),
+    () => effect,
+    (original) =>
+      Effect.sync(() => {
+        if (original !== undefined) process.env[key] = original
+        else delete process.env[key]
+      }),
+  )
 }
 
 async function check(map: (dir: string) => string) {
@@ -151,16 +160,12 @@ async function check(map: (dir: string) => string) {
   }
 }
 
-test("loads config with defaults when no files exist", async () => {
-  await using tmp = await tmpdir()
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.username).toBeDefined()
-    },
-  })
-})
+it.instance("loads config with defaults when no files exist", () =>
+  Effect.gen(function* () {
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.username).toBeDefined()
+  }),
+)
 
 test("creates global jsonc config with schema when no global configs exist", async () => {
   await using tmp = await tmpdir()
@@ -210,67 +215,42 @@ test("does not create global config when OPENCODE_CONFIG_DIR is set", async () =
   }
 })
 
-test("loads JSON config file", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        model: "test/model",
-        username: "testuser",
-      })
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.model).toBe("test/model")
-      expect(config.username).toBe("testuser")
-    },
-  })
-})
+it.instance(
+  "loads JSON config file",
+  Effect.gen(function* () {
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.model).toBe("test/model")
+    expect(config.username).toBe("testuser")
+  }),
+  { config: { model: "test/model", username: "testuser" } },
+)
 
-test("loads shell config field", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        shell: "bash",
-      })
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.shell).toBe("bash")
-    },
-  })
-})
+it.instance(
+  "loads shell config field",
+  Effect.gen(function* () {
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.shell).toBe("bash")
+  }),
+  { config: { shell: "bash" } },
+)
 
-test("updates config and preserves empty shell sentinel", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(
-        dir,
-        {
-          $schema: "https://opencode.ai/config.json",
-          shell: "bash",
-        },
-        "config.json",
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      await save({ shell: "" }, ctx)
+it.instance("updates config and preserves empty shell sentinel", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(
+      test.directory,
+      { $schema: "https://opencode.ai/config.json", shell: "bash" },
+      "config.json",
+    )
 
-      const writtenConfig = await Filesystem.readJson<{ shell?: string }>(path.join(tmp.path, "config.json"))
-      expect(writtenConfig.shell).toBe("")
-    },
-  })
-})
+    yield* Config.Service.use((svc) => svc.update(ConfigParse.schema(Config.Info, { shell: "" }, "test:config")))
+
+    const writtenConfig = yield* Effect.promise(() =>
+      Filesystem.readJson<{ shell?: string }>(path.join(test.directory, "config.json")),
+    )
+    expect(writtenConfig.shell).toBe("")
+  }),
+)
 
 test("updates global config and omits empty shell key in json", async () => {
   await using tmp = await tmpdir({
@@ -330,41 +310,23 @@ test("updates global config and omits empty shell key in jsonc", async () => {
   }
 })
 
-test("loads formatter boolean config", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        formatter: true,
-      })
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.formatter).toBe(true)
-    },
-  })
-})
+it.instance(
+  "loads formatter boolean config",
+  Effect.gen(function* () {
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.formatter).toBe(true)
+  }),
+  { config: { formatter: true } },
+)
 
-test("loads lsp boolean config", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        lsp: true,
-      })
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.lsp).toBe(true)
-    },
-  })
-})
+it.instance(
+  "loads lsp boolean config",
+  Effect.gen(function* () {
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.lsp).toBe(true)
+  }),
+  { config: { lsp: true } },
+)
 
 test("loads project config from Git Bash and MSYS2 paths on Windows", async () => {
   // Git Bash and MSYS2 both use /<drive>/... paths on Windows.
@@ -383,146 +345,135 @@ test("loads project config from Cygwin paths on Windows", async () => {
   })
 })
 
-test("ignores legacy tui keys in opencode config", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        model: "test/model",
-        theme: "legacy",
-        tui: { scroll_speed: 4 },
-      })
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.model).toBe("test/model")
-      expect((config as Record<string, unknown>).theme).toBeUndefined()
-      expect((config as Record<string, unknown>).tui).toBeUndefined()
-    },
-  })
-})
+it.instance("ignores legacy tui keys in opencode config", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      model: "test/model",
+      theme: "legacy",
+      tui: { scroll_speed: 4 },
+    })
 
-test("loads JSONC config file", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.jsonc"),
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.model).toBe("test/model")
+    expect((config as Record<string, unknown>).theme).toBeUndefined()
+    expect((config as Record<string, unknown>).tui).toBeUndefined()
+  }),
+)
+
+it.instance("loads JSONC config file", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* Effect.promise(() =>
+      Filesystem.write(
+        path.join(test.directory, "opencode.jsonc"),
         `{
         // This is a comment
         "$schema": "https://opencode.ai/config.json",
         "model": "test/model",
         "username": "testuser"
       }`,
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.model).toBe("test/model")
-      expect(config.username).toBe("testuser")
-    },
-  })
-})
+      ),
+    )
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.model).toBe("test/model")
+    expect(config.username).toBe("testuser")
+  }),
+)
 
-test("jsonc overrides json in the same directory", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(
-        dir,
-        {
-          $schema: "https://opencode.ai/config.json",
-          model: "base",
-          username: "base",
-        },
-        "opencode.jsonc",
-      )
-      await writeConfig(dir, {
+it.instance("jsonc overrides json in the same directory", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(
+      test.directory,
+      {
         $schema: "https://opencode.ai/config.json",
-        model: "override",
+        model: "base",
+        username: "base",
+      },
+      "opencode.jsonc",
+    )
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      model: "override",
+    })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.model).toBe("base")
+    expect(config.username).toBe("base")
+  }),
+)
+
+it.instance("handles environment variable substitution", () =>
+  withProcessEnv(
+    "TEST_VAR",
+    "test-user",
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* writeConfigEffect(test.directory, {
+        $schema: "https://opencode.ai/config.json",
+        username: "{env:TEST_VAR}",
       })
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.model).toBe("base")
-      expect(config.username).toBe("base")
-    },
-  })
-})
+      const config = yield* Config.Service.use((svc) => svc.get())
+      expect(config.username).toBe("test-user")
+    }),
+  ),
+)
 
-test("handles environment variable substitution", async () => {
-  const originalEnv = process.env["TEST_VAR"]
-  process.env["TEST_VAR"] = "test-user"
-
-  try {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await writeConfig(dir, {
-          $schema: "https://opencode.ai/config.json",
-          username: "{env:TEST_VAR}",
-        })
-      },
-    })
-    await withTestInstance({
-      directory: tmp.path,
-      fn: async (ctx) => {
-        const config = await load(ctx)
-        expect(config.username).toBe("test-user")
-      },
-    })
-  } finally {
-    if (originalEnv !== undefined) {
-      process.env["TEST_VAR"] = originalEnv
-    } else {
-      delete process.env["TEST_VAR"]
-    }
-  }
-})
-
-test("preserves env variables when adding $schema to config", async () => {
-  const originalEnv = process.env["PRESERVE_VAR"]
-  process.env["PRESERVE_VAR"] = "secret_value"
-
-  try {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        // Config without $schema - should trigger auto-add
-        await Filesystem.write(
-          path.join(dir, "opencode.json"),
+it.instance("preserves env variables when adding $schema to config", () =>
+  withProcessEnv(
+    "PRESERVE_VAR",
+    "secret_value",
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      // Config without $schema - should trigger auto-add
+      yield* Effect.promise(() =>
+        Filesystem.write(
+          path.join(test.directory, "opencode.json"),
           JSON.stringify({
             username: "{env:PRESERVE_VAR}",
           }),
-        )
-      },
-    })
-    await withTestInstance({
-      directory: tmp.path,
-      fn: async (ctx) => {
-        const config = await load(ctx)
-        expect(config.username).toBe("secret_value")
+        ),
+      )
+      const config = yield* Config.Service.use((svc) => svc.get())
+      expect(config.username).toBe("secret_value")
 
-        // Read the file to verify the env variable was preserved
-        const content = await Filesystem.readText(path.join(tmp.path, "opencode.json"))
-        expect(content).toContain("{env:PRESERVE_VAR}")
-        expect(content).not.toContain("secret_value")
-        expect(content).toContain("$schema")
-      },
+      // Read the file to verify the env variable was preserved
+      const content = yield* Effect.promise(() => Filesystem.readText(path.join(test.directory, "opencode.json")))
+      expect(content).toContain("{env:PRESERVE_VAR}")
+      expect(content).not.toContain("secret_value")
+      expect(content).toContain("$schema")
+    }),
+  ),
+)
+
+it.instance("handles file inclusion substitution", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* Effect.promise(() => Filesystem.write(path.join(test.directory, "included.txt"), "test-user"))
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      username: "{file:included.txt}",
     })
-  } finally {
-    if (originalEnv !== undefined) {
-      process.env["PRESERVE_VAR"] = originalEnv
-    } else {
-      delete process.env["PRESERVE_VAR"]
-    }
-  }
-})
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.username).toBe("test-user")
+  }),
+)
+
+it.instance("handles file inclusion with replacement tokens", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* Effect.promise(() =>
+      Filesystem.write(path.join(test.directory, "included.md"), "const out = await Bun.$`echo hi`"),
+    )
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      username: "{file:included.md}",
+    })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.username).toBe("const out = await Bun.$`echo hi`")
+  }),
+)
 
 test("resolves env templates in account config with account token", async () => {
   const originalControlToken = process.env["OPENCODE_CONSOLE_TOKEN"]
@@ -589,443 +540,304 @@ test("resolves env templates in account config with account token", async () => 
   }
 })
 
-test("handles file inclusion substitution", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(path.join(dir, "included.txt"), "test-user")
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        username: "{file:included.txt}",
-      })
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.username).toBe("test-user")
-    },
-  })
-})
+it.instance("validates config schema and throws on invalid fields", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      invalid_field: "should cause error",
+    })
+    const exit = yield* Config.Service.use((svc) => svc.get()).pipe(Effect.exit)
+    expect(Exit.isFailure(exit)).toBe(true)
+  }),
+)
 
-test("handles file inclusion with replacement tokens", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(path.join(dir, "included.md"), "const out = await Bun.$`echo hi`")
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        username: "{file:included.md}",
-      })
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.username).toBe("const out = await Bun.$`echo hi`")
-    },
-  })
-})
+it.instance("throws error for invalid JSON", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* Effect.promise(() => Filesystem.write(path.join(test.directory, "opencode.json"), "{ invalid json }"))
+    const exit = yield* Config.Service.use((svc) => svc.get()).pipe(Effect.exit)
+    expect(Exit.isFailure(exit)).toBe(true)
+  }),
+)
 
-test("validates config schema and throws on invalid fields", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        invalid_field: "should cause error",
-      })
-    },
-  })
-  await provideTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      // Strict schema should throw an error for invalid fields
-      await expect(load(ctx)).rejects.toThrow()
-    },
-  })
-})
-
-test("throws error for invalid JSON", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(path.join(dir, "opencode.json"), "{ invalid json }")
-    },
-  })
-  await provideTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      await expect(load(ctx)).rejects.toThrow()
-    },
-  })
-})
-
-test("handles agent configuration", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        agent: {
-          test_agent: {
-            model: "test/model",
-            temperature: 0.7,
-            description: "test agent",
-          },
-        },
-      })
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test_agent"]).toEqual(
-        expect.objectContaining({
+it.instance("handles agent configuration", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      agent: {
+        test_agent: {
           model: "test/model",
           temperature: 0.7,
           description: "test agent",
-        }),
-      )
-    },
-  })
-})
-
-test("treats agent variant as model-scoped setting (not provider option)", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        agent: {
-          test_agent: {
-            model: "openai/gpt-5.2",
-            variant: "xhigh",
-            max_tokens: 123,
-          },
         },
-      })
-    },
-  })
-
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      const agent = config.agent?.["test_agent"]
-
-      expect(agent?.variant).toBe("xhigh")
-      expect(agent?.options).toMatchObject({
-        max_tokens: 123,
-      })
-      expect(agent?.options).not.toHaveProperty("variant")
-    },
-  })
-})
-
-test("handles command configuration", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        command: {
-          test_command: {
-            template: "test template",
-            description: "test command",
-            agent: "test_agent",
-          },
-        },
-      })
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.command?.["test_command"]).toEqual({
-        template: "test template",
-        description: "test command",
-        agent: "test_agent",
-      })
-    },
-  })
-})
-
-test("migrates autoshare to share field", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          autoshare: true,
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.share).toBe("auto")
-      expect(config.autoshare).toBe(true)
-    },
-  })
-})
-
-test("migrates mode field to agent field", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          mode: {
-            test_mode: {
-              model: "test/model",
-              temperature: 0.5,
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test_mode"]).toEqual({
+      },
+    })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test_agent"]).toEqual(
+      expect.objectContaining({
         model: "test/model",
-        temperature: 0.5,
-        mode: "primary",
-        options: {},
-        permission: {},
-      })
-    },
-  })
-})
+        temperature: 0.7,
+        description: "test agent",
+      }),
+    )
+  }),
+)
 
-test("loads config from .opencode directory", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
-      const agentDir = path.join(opencodeDir, "agent")
-      await fs.mkdir(agentDir, { recursive: true })
+it.instance("treats agent variant as model-scoped setting (not provider option)", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      agent: {
+        test_agent: {
+          model: "openai/gpt-5.2",
+          variant: "xhigh",
+          max_tokens: 123,
+        },
+      },
+    })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    const agent = config.agent?.["test_agent"]
 
-      await Filesystem.write(
-        path.join(agentDir, "test.md"),
-        `---
+    expect(agent?.variant).toBe("xhigh")
+    expect(agent?.options).toMatchObject({
+      max_tokens: 123,
+    })
+    expect(agent?.options).not.toHaveProperty("variant")
+  }),
+)
+
+it.instance("handles command configuration", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      command: {
+        test_command: {
+          template: "test template",
+          description: "test command",
+          agent: "test_agent",
+        },
+      },
+    })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.command?.["test_command"]).toEqual({
+      template: "test template",
+      description: "test command",
+      agent: "test_agent",
+    })
+  }),
+)
+
+it.instance("migrates autoshare to share field", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      autoshare: true,
+    })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.share).toBe("auto")
+    expect(config.autoshare).toBe(true)
+  }),
+)
+
+it.instance("migrates mode field to agent field", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      mode: {
+        test_mode: {
+          model: "test/model",
+          temperature: 0.5,
+        },
+      },
+    })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test_mode"]).toEqual({
+      model: "test/model",
+      temperature: 0.5,
+      mode: "primary",
+      options: {},
+      permission: {},
+    })
+  }),
+)
+
+it.instance("loads config from .opencode directory", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* mkdirEffect(path.join(test.directory, ".opencode", "agent"))
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "agent", "test.md"),
+      `---
 model: test/model
 ---
 Test agent prompt`,
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test"]).toEqual(
-        expect.objectContaining({
-          name: "test",
-          model: "test/model",
-          prompt: "Test agent prompt",
-        }),
-      )
-    },
-  })
-})
+    )
 
-test("agent markdown permission config preserves user key order", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const agentDir = path.join(dir, ".opencode", "agent")
-      await fs.mkdir(agentDir, { recursive: true })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test"]).toEqual(
+      expect.objectContaining({
+        name: "test",
+        model: "test/model",
+        prompt: "Test agent prompt",
+      }),
+    )
+  }),
+)
 
-      await Filesystem.write(
-        path.join(agentDir, "ordered.md"),
-        `---
+it.instance("agent markdown permission config preserves user key order", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* mkdirEffect(path.join(test.directory, ".opencode", "agent"))
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "agent", "ordered.md"),
+      `---
 permission:
   bash: allow
   "*": deny
   edit: ask
 ---
 Ordered permissions`,
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(Object.keys(config.agent?.ordered?.permission ?? {})).toEqual(["bash", "*", "edit"])
-    },
-  })
-})
+    )
 
-test("loads agents from .opencode/agents (plural)", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(Object.keys(config.agent?.ordered?.permission ?? {})).toEqual(["bash", "*", "edit"])
+  }),
+)
 
-      const agentsDir = path.join(opencodeDir, "agents")
-      await fs.mkdir(path.join(agentsDir, "nested"), { recursive: true })
-
-      await Filesystem.write(
-        path.join(agentsDir, "helper.md"),
-        `---
+it.instance("loads agents from .opencode/agents (plural)", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* mkdirEffect(path.join(test.directory, ".opencode", "agents", "nested"))
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "agents", "helper.md"),
+      `---
 model: test/model
 mode: subagent
 ---
 Helper agent prompt`,
-      )
+    )
 
-      await Filesystem.write(
-        path.join(agentsDir, "nested", "child.md"),
-        `---
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "agents", "nested", "child.md"),
+      `---
 model: test/model
 mode: subagent
 ---
 Nested agent prompt`,
-      )
-    },
-  })
+    )
 
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
+    const config = yield* Config.Service.use((svc) => svc.get())
 
-      expect(config.agent?.["helper"]).toMatchObject({
-        name: "helper",
-        model: "test/model",
-        mode: "subagent",
-        prompt: "Helper agent prompt",
-      })
+    expect(config.agent?.["helper"]).toMatchObject({
+      name: "helper",
+      model: "test/model",
+      mode: "subagent",
+      prompt: "Helper agent prompt",
+    })
 
-      expect(config.agent?.["nested/child"]).toMatchObject({
-        name: "nested/child",
-        model: "test/model",
-        mode: "subagent",
-        prompt: "Nested agent prompt",
-      })
-    },
-  })
-})
+    expect(config.agent?.["nested/child"]).toMatchObject({
+      name: "nested/child",
+      model: "test/model",
+      mode: "subagent",
+      prompt: "Nested agent prompt",
+    })
+  }),
+)
 
-test("loads commands from .opencode/command (singular)", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
-
-      const commandDir = path.join(opencodeDir, "command")
-      await fs.mkdir(path.join(commandDir, "nested"), { recursive: true })
-
-      await Filesystem.write(
-        path.join(commandDir, "hello.md"),
-        `---
+it.instance("loads commands from .opencode/command (singular)", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* mkdirEffect(path.join(test.directory, ".opencode", "command", "nested"))
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "command", "hello.md"),
+      `---
 description: Test command
 ---
 Hello from singular command`,
-      )
+    )
 
-      await Filesystem.write(
-        path.join(commandDir, "nested", "child.md"),
-        `---
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "command", "nested", "child.md"),
+      `---
 description: Nested command
 ---
 Nested command template`,
-      )
-    },
-  })
+    )
 
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
+    const config = yield* Config.Service.use((svc) => svc.get())
 
-      expect(config.command?.["hello"]).toEqual({
-        description: "Test command",
-        template: "Hello from singular command",
-      })
+    expect(config.command?.["hello"]).toEqual({
+      description: "Test command",
+      template: "Hello from singular command",
+    })
 
-      expect(config.command?.["nested/child"]).toEqual({
-        description: "Nested command",
-        template: "Nested command template",
-      })
-    },
-  })
-})
+    expect(config.command?.["nested/child"]).toEqual({
+      description: "Nested command",
+      template: "Nested command template",
+    })
+  }),
+)
 
-test("loads commands from .opencode/commands (plural)", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
-
-      const commandsDir = path.join(opencodeDir, "commands")
-      await fs.mkdir(path.join(commandsDir, "nested"), { recursive: true })
-
-      await Filesystem.write(
-        path.join(commandsDir, "hello.md"),
-        `---
+it.instance("loads commands from .opencode/commands (plural)", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* mkdirEffect(path.join(test.directory, ".opencode", "commands", "nested"))
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "commands", "hello.md"),
+      `---
 description: Test command
 ---
 Hello from plural commands`,
-      )
+    )
 
-      await Filesystem.write(
-        path.join(commandsDir, "nested", "child.md"),
-        `---
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "commands", "nested", "child.md"),
+      `---
 description: Nested command
 ---
 Nested command template`,
-      )
-    },
-  })
+    )
 
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
+    const config = yield* Config.Service.use((svc) => svc.get())
 
-      expect(config.command?.["hello"]).toEqual({
-        description: "Test command",
-        template: "Hello from plural commands",
-      })
+    expect(config.command?.["hello"]).toEqual({
+      description: "Test command",
+      template: "Hello from plural commands",
+    })
 
-      expect(config.command?.["nested/child"]).toEqual({
-        description: "Nested command",
-        template: "Nested command template",
-      })
-    },
-  })
-})
+    expect(config.command?.["nested/child"]).toEqual({
+      description: "Nested command",
+      template: "Nested command template",
+    })
+  }),
+)
 
-test("updates config and writes to file", async () => {
-  await using tmp = await tmpdir()
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const newConfig = { model: "updated/model" }
-      await save(newConfig as any, ctx)
+it.instance("updates config and writes to file", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* Config.Service.use((svc) =>
+      svc.update(ConfigParse.schema(Config.Info, { model: "updated/model" }, "test:config")),
+    )
 
-      const writtenConfig = await Filesystem.readJson<{ model: string }>(path.join(tmp.path, "config.json"))
-      expect(writtenConfig.model).toBe("updated/model")
-    },
-  })
-})
+    const writtenConfig = yield* Effect.promise(() =>
+      Filesystem.readJson<{ model: string }>(path.join(test.directory, "config.json")),
+    )
+    expect(writtenConfig.model).toBe("updated/model")
+  }),
+)
 
-test("gets config directories", async () => {
-  await using tmp = await tmpdir()
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const dirs = await listDirs(ctx)
-      expect(dirs.length).toBeGreaterThanOrEqual(1)
-    },
-  })
-})
+it.instance("gets config directories", () =>
+  Effect.gen(function* () {
+    const dirs = yield* Config.Service.use((svc) => svc.directories())
+    expect(dirs.length).toBeGreaterThanOrEqual(1)
+  }),
+)
 
 test("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR", async () => {
   if (process.platform === "win32") return
@@ -1113,49 +925,35 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
 // core Npm.Service (via EffectFlock). Those behaviors are tested in the core
 // package's npm tests, not here.
 
-test("resolves scoped npm plugins in config", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const pluginDir = path.join(dir, "node_modules", "@scope", "plugin")
-      await fs.mkdir(pluginDir, { recursive: true })
+it.instance("resolves scoped npm plugins in config", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const pluginDir = path.join(test.directory, "node_modules", "@scope", "plugin")
+    yield* mkdirEffect(pluginDir)
+    yield* writeTextEffect(
+      path.join(test.directory, "package.json"),
+      JSON.stringify({ name: "config-fixture", version: "1.0.0", type: "module" }, null, 2),
+    )
+    yield* writeTextEffect(
+      path.join(pluginDir, "package.json"),
+      JSON.stringify(
+        {
+          name: "@scope/plugin",
+          version: "1.0.0",
+          type: "module",
+          main: "./index.js",
+        },
+        null,
+        2,
+      ),
+    )
+    yield* writeTextEffect(path.join(pluginDir, "index.js"), "export default {}\n")
+    yield* writeConfigEffect(test.directory, { plugin: ["@scope/plugin"] })
 
-      await Filesystem.write(
-        path.join(dir, "package.json"),
-        JSON.stringify({ name: "config-fixture", version: "1.0.0", type: "module" }, null, 2),
-      )
-
-      await Filesystem.write(
-        path.join(pluginDir, "package.json"),
-        JSON.stringify(
-          {
-            name: "@scope/plugin",
-            version: "1.0.0",
-            type: "module",
-            main: "./index.js",
-          },
-          null,
-          2,
-        ),
-      )
-
-      await Filesystem.write(path.join(pluginDir, "index.js"), "export default {}\n")
-
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({ $schema: "https://opencode.ai/config.json", plugin: ["@scope/plugin"] }, null, 2),
-      )
-    },
-  })
-
-  await provideTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      const pluginEntries = config.plugin ?? []
-      expect(pluginEntries).toContain("@scope/plugin")
-    },
-  })
-})
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.plugin ?? []).toContain("@scope/plugin")
+  }),
+)
 
 test("merges plugin arrays from global and local configs", async () => {
   await using tmp = await tmpdir({
@@ -1203,37 +1001,28 @@ test("merges plugin arrays from global and local configs", async () => {
   })
 })
 
-test("does not error when only custom agent is a subagent", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
-      const agentDir = path.join(opencodeDir, "agent")
-      await fs.mkdir(agentDir, { recursive: true })
-
-      await Filesystem.write(
-        path.join(agentDir, "helper.md"),
-        `---
+it.instance("does not error when only custom agent is a subagent", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* mkdirEffect(path.join(test.directory, ".opencode", "agent"))
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "agent", "helper.md"),
+      `---
 model: test/model
 mode: subagent
 ---
 Helper subagent prompt`,
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["helper"]).toMatchObject({
-        name: "helper",
-        model: "test/model",
-        mode: "subagent",
-        prompt: "Helper subagent prompt",
-      })
-    },
-  })
-})
+    )
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["helper"]).toMatchObject({
+      name: "helper",
+      model: "test/model",
+      mode: "subagent",
+      prompt: "Helper subagent prompt",
+    })
+  }),
+)
 
 test("merges instructions arrays from global and local configs", async () => {
   await using tmp = await tmpdir({
@@ -1477,283 +1266,160 @@ test("migrates legacy tools config to permissions - deny", async () => {
   })
 })
 
-test("migrates legacy write tool to edit permission", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test: {
-              tools: {
-                write: true,
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test"]?.permission).toEqual({
-        edit: "allow",
-      })
-    },
-  })
-})
+it.instance("migrates legacy write tool to edit permission", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      agent: { test: { tools: { write: true } } },
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test"]?.permission).toEqual({ edit: "allow" })
+  }),
+)
 
 // Managed settings tests
 // Note: preload.ts sets OPENCODE_TEST_MANAGED_CONFIG which Global.Path.managedConfig uses
 
-test("managed settings override user settings", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        model: "user/model",
-        share: "auto",
-        username: "testuser",
-      })
-    },
-  })
+it.instance(
+  "managed settings override user settings",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      model: "managed/model",
+      share: "disabled",
+    })
 
-  await writeManagedSettings({
-    $schema: "https://opencode.ai/config.json",
-    model: "managed/model",
-    share: "disabled",
-  })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.model).toBe("managed/model")
+    expect(config.share).toBe("disabled")
+    expect(config.username).toBe("testuser")
+  }),
+  { config: { model: "user/model", share: "auto", username: "testuser" } },
+)
 
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.model).toBe("managed/model")
-      expect(config.share).toBe("disabled")
-      expect(config.username).toBe("testuser")
-    },
-  })
-})
+it.instance(
+  "managed settings override project settings",
+  Effect.gen(function* () {
+    yield* writeManagedSettingsEffect({
+      $schema: "https://opencode.ai/config.json",
+      autoupdate: false,
+      disabled_providers: ["openai"],
+    })
 
-test("managed settings override project settings", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        autoupdate: true,
-        disabled_providers: [],
-      })
-    },
-  })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.autoupdate).toBe(false)
+    expect(config.disabled_providers).toEqual(["openai"])
+  }),
+  { config: { autoupdate: true, disabled_providers: [] } },
+)
 
-  await writeManagedSettings({
-    $schema: "https://opencode.ai/config.json",
-    autoupdate: false,
-    disabled_providers: ["openai"],
-  })
+it.instance(
+  "missing managed settings file is not an error",
+  Effect.gen(function* () {
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.model).toBe("user/model")
+  }),
+  { config: { model: "user/model" } },
+)
 
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.autoupdate).toBe(false)
-      expect(config.disabled_providers).toEqual(["openai"])
-    },
-  })
-})
+it.instance("migrates legacy edit tool to edit permission", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      agent: { test: { tools: { edit: false } } },
+    })
 
-test("missing managed settings file is not an error", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(dir, {
-        $schema: "https://opencode.ai/config.json",
-        model: "user/model",
-      })
-    },
-  })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test"]?.permission).toEqual({ edit: "deny" })
+  }),
+)
 
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.model).toBe("user/model")
-    },
-  })
-})
+it.instance("migrates legacy patch tool to edit permission", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      agent: { test: { tools: { patch: true } } },
+    })
 
-test("migrates legacy edit tool to edit permission", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test: {
-              tools: {
-                edit: false,
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test"]?.permission).toEqual({
-        edit: "deny",
-      })
-    },
-  })
-})
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test"]?.permission).toEqual({ edit: "allow" })
+  }),
+)
 
-test("migrates legacy patch tool to edit permission", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test: {
-              tools: {
-                patch: true,
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test"]?.permission).toEqual({
-        edit: "allow",
-      })
-    },
-  })
-})
+it.instance("migrates mixed legacy tools config", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      agent: { test: { tools: { bash: true, write: true, read: false, webfetch: true } } },
+    })
 
-test("migrates mixed legacy tools config", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test: {
-              tools: {
-                bash: true,
-                write: true,
-                read: false,
-                webfetch: true,
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test"]?.permission).toEqual({
-        bash: "allow",
-        edit: "allow",
-        read: "deny",
-        webfetch: "allow",
-      })
-    },
-  })
-})
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test"]?.permission).toEqual({
+      bash: "allow",
+      edit: "allow",
+      read: "deny",
+      webfetch: "allow",
+    })
+  }),
+)
 
-test("merges legacy tools with existing permission config", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test: {
-              permission: {
-                glob: "allow",
-              },
-              tools: {
-                bash: true,
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test"]?.permission).toEqual({
-        glob: "allow",
-        bash: "allow",
-      })
-    },
-  })
-})
+it.instance("merges legacy tools with existing permission config", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      agent: { test: { permission: { glob: "allow" }, tools: { bash: true } } },
+    })
 
-test("permission config preserves user key order", async () => {
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test"]?.permission).toEqual({
+      glob: "allow",
+      bash: "allow",
+    })
+  }),
+)
+
+it.instance("permission config preserves user key order", () =>
   // Permission precedence follows the order users write in config, so parsing
   // must not canonicalise known keys ahead of wildcard or custom keys.
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          permission: {
-            "*": "deny",
-            edit: "ask",
-            write: "ask",
-            external_directory: "ask",
-            read: "allow",
-            todowrite: "allow",
-            "thoughts_*": "allow",
-            "reasoning_model_*": "allow",
-            "tools_*": "allow",
-            "pr_comments_*": "allow",
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(Object.keys(config.permission!)).toEqual([
-        "*",
-        "edit",
-        "write",
-        "external_directory",
-        "read",
-        "todowrite",
-        "thoughts_*",
-        "reasoning_model_*",
-        "tools_*",
-        "pr_comments_*",
-      ])
-    },
-  })
-})
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      permission: {
+        "*": "deny",
+        edit: "ask",
+        write: "ask",
+        external_directory: "ask",
+        read: "allow",
+        todowrite: "allow",
+        "thoughts_*": "allow",
+        "reasoning_model_*": "allow",
+        "tools_*": "allow",
+        "pr_comments_*": "allow",
+      },
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(Object.keys(config.permission!)).toEqual([
+      "*",
+      "edit",
+      "write",
+      "external_directory",
+      "read",
+      "todowrite",
+      "thoughts_*",
+      "reasoning_model_*",
+      "tools_*",
+      "pr_comments_*",
+    ])
+  }),
+)
 
 test("config parser preserves permission order while rejecting unknown top-level keys", () => {
   const config = ConfigParse.schema(

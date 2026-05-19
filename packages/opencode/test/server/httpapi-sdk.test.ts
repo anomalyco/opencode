@@ -23,6 +23,7 @@ import path from "path"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
+import { testProviderConfig } from "../lib/test-provider"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const it = testEffect(
@@ -97,39 +98,6 @@ function serverFetch(serverPath: ServerPath, input?: { password?: string; userna
 
 function authorization(username: string, password: string) {
   return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
-}
-
-function providerConfig(url: string) {
-  return {
-    formatter: false,
-    lsp: false,
-    provider: {
-      test: {
-        name: "Test",
-        id: "test",
-        env: [],
-        npm: "@ai-sdk/openai-compatible",
-        models: {
-          "test-model": {
-            id: "test-model",
-            name: "Test Model",
-            attachment: false,
-            reasoning: false,
-            temperature: false,
-            tool_call: true,
-            release_date: "2025-01-01",
-            limit: { context: 100000, output: 10000 },
-            cost: { input: 0, output: 0 },
-            options: {},
-          },
-        },
-        options: {
-          apiKey: "test-key",
-          baseURL: url,
-        },
-      },
-    },
-  }
 }
 
 function call<T>(request: () => Promise<T>) {
@@ -283,7 +251,7 @@ function withStandardProject<A, E>(
 function withFakeLlm<A, E>(serverPath: ServerPath, run: (input: LlmProjectFixture) => Effect.Effect<A, E, TestScope>) {
   return Effect.gen(function* () {
     const llm = yield* TestLLMServer
-    return yield* withProject(serverPath, { config: providerConfig(llm.url) }, (input) => run({ ...input, llm }))
+    return yield* withProject(serverPath, { config: testProviderConfig(llm.url) }, (input) => run({ ...input, llm }))
   }).pipe(Effect.provide(TestLLMServer.layer))
 }
 
@@ -297,7 +265,7 @@ function withFakeLlmProject<A, E>(
     return yield* withProject(
       serverPath,
       {
-        config: providerConfig(llm.url),
+        config: testProviderConfig(llm.url),
         setup: options.setup,
       },
       (input) => run({ ...input, llm }),
