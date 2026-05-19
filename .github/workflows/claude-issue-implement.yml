@@ -48,6 +48,10 @@ jobs:
           # Claude GitHub App との OIDC トークン交換（id-token: write 必須・
           # App インストール前提）になり失敗するため、既定の GITHUB_TOKEN を渡す。
           github_token: ${{ github.token }}
+          # Claude の各ターン（ツール呼び出し・出力）を Actions ログに表示する。
+          # 既定では伏せられ実装失敗時の調査ができないため有効化する。本リポジトリは
+          # private で、認証トークンは登録済み Secret として常にマスクされる。
+          show_full_output: true
           claude_args: |
             --model claude-opus-4-7
             --max-turns 50
