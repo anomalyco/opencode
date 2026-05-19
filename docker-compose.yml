@@ -40,7 +40,7 @@ services:
       - ${HOME}/.claude/.credentials.json:/root/.claude/.credentials.json:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:4096/ || exit 1"]
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:4096/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))\""]
       interval: 15s
       timeout: 5s
       retries: 5
