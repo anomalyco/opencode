@@ -6,10 +6,14 @@ export const WorkspaceTable = mysqlTable(
   {
     id: ulid("id").notNull().primaryKey(),
     slug: varchar("slug", { length: 255 }),
+    referralCode: varchar("referral_code", { length: 10 }),
     name: varchar("name", { length: 255 }).notNull(),
     ...timestamps,
   },
-  (table) => [uniqueIndex("slug").on(table.slug)],
+  (table) => [
+    uniqueIndex("slug").on(table.slug),
+    uniqueIndex("referral_code").on(table.referralCode),
+  ],
 )
 
 export function workspaceIndexes(table: any) {

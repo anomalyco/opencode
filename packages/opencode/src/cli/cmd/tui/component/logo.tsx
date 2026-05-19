@@ -2,7 +2,6 @@ import { BoxRenderable, MouseButton, MouseEvent, RGBA, TextAttributes } from "@o
 import { useRenderer } from "@opentui/solid"
 import { For, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js"
 import { useTheme, tint } from "@tui/context/theme"
-import * as Sound from "@tui/util/sound"
 import { go, logo } from "@/cli/logo"
 
 export type LogoShape = {
@@ -563,7 +562,6 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
   const [now, setNow] = createSignal(0)
   let box: BoxRenderable | undefined
   let timer: ReturnType<typeof setInterval> | undefined
-  let hum = false
 
   const stop = () => {
     if (!timer) return
@@ -575,10 +573,6 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
     const t = performance.now()
     setNow(t)
     const item = hold()
-    if (item && !hum && t - item.at >= HOLD) {
-      hum = true
-      Sound.start()
-    }
     if (item && t - item.at >= CHARGE) {
       burst(item.x, item.y)
     }
@@ -605,8 +599,6 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
 
   onCleanup(() => {
     stop()
-    hum = false
-    Sound.dispose()
   })
 
   onMount(() => {
@@ -626,14 +618,12 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
     setNow(t)
     if (!last) setRelease(undefined)
     setHold({ x, y, at: t, glyph: select(x, y, ctx) })
-    hum = false
     start()
   }
 
   const burst = (x: number, y: number) => {
     const item = hold()
     if (!item) return
-    hum = false
     const t = performance.now()
     const age = t - item.at
     const rise = ramp(age, HOLD, CHARGE)
@@ -655,7 +645,6 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
     ])
     setNow(t)
     start()
-    Sound.pulse(lerp(0.8, 1, level))
   }
 
   const frame = createMemo(() => {

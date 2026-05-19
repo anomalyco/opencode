@@ -186,14 +186,14 @@ describe("Format", () => {
               Formatter.gofmt.enabled = async () => {
                 active++
                 max = Math.max(max, active)
-                await Bun.sleep(20)
+                await Promise.resolve()
                 active--
                 return ["sh", "-c", "true"]
               }
               Formatter.mix.enabled = async () => {
                 active++
                 max = Math.max(max, active)
-                await Bun.sleep(20)
+                await Promise.resolve()
                 active--
                 return ["sh", "-c", "true"]
               }

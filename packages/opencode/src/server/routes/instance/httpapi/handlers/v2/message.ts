@@ -1,4 +1,4 @@
-import { SessionMessage } from "@/v2/session-message"
+import { SessionMessage } from "@opencode-ai/core/session-message"
 import { SessionV2 } from "@/v2/session"
 import { Effect, Schema } from "effect"
 import * as DateTime from "effect/DateTime"
@@ -34,6 +34,7 @@ export const messageHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.message
     return handlers.handle(
       "messages",
       Effect.fn(function* (ctx) {
+        if (ctx.query.cursor && ctx.query.order !== undefined) return yield* new HttpApiError.BadRequest({})
         const decoded = yield* Effect.try({
           try: () => (ctx.query.cursor ? cursor.decode(ctx.query.cursor) : undefined),
           catch: () => new HttpApiError.BadRequest({}),

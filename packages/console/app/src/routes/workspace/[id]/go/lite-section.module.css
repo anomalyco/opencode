@@ -212,6 +212,9 @@
     gap: 4px;
   }
 
+}
+
+.paymentMethodModal {
   [data-slot="modal-actions"] {
     display: flex;
     gap: var(--space-3);

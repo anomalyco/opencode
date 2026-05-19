@@ -3,17 +3,19 @@ import { SessionID } from "@/session/schema"
 import { WorkspaceID } from "@/control-plane/schema"
 import { and, asc, desc, eq, gt, gte, isNull, like, lt, or, type SQL } from "@/storage/db"
 import * as Database from "@/storage/db"
-import { Context, DateTime, Effect, Layer, Schema } from "effect"
-import { SessionMessage } from "./session-message"
-import type { Prompt } from "./session-prompt"
-import { EventV2 } from "./event"
+import { Context, DateTime, Effect, Layer, Option, Schema } from "effect"
+import { SessionMessage } from "@opencode-ai/core/session-message"
+import type { Prompt } from "@opencode-ai/core/session-prompt"
 import { ProjectID } from "@/project/schema"
-import { ModelID, ProviderID } from "@/provider/schema"
-import { SessionEvent } from "./session-event"
-import { V2Schema } from "./schema"
-import { optionalOmitUndefined } from "@/util/schema"
+import { SessionEvent } from "@opencode-ai/core/session-event"
+import { V2Schema } from "@opencode-ai/core/v2-schema"
+import { optionalOmitUndefined } from "@opencode-ai/core/schema"
+import { EventV2 } from "@opencode-ai/core/event"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 
-export const Delivery = Schema.Union([Schema.Literal("immediate"), Schema.Literal("deferred")]).annotate({
+export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({
   identifier: "Session.Delivery",
 })
 export type Delivery = Schema.Schema.Type<typeof Delivery>
@@ -27,11 +29,17 @@ export class Info extends Schema.Class<Info>("Session.Info")({
   workspaceID: optionalOmitUndefined(WorkspaceID),
   path: optionalOmitUndefined(Schema.String),
   agent: optionalOmitUndefined(Schema.String),
-  model: Schema.Struct({
-    id: ModelID,
-    providerID: ProviderID,
-    variant: optionalOmitUndefined(Schema.String),
-  }).pipe(optionalOmitUndefined),
+  model: ModelV2.Ref.pipe(optionalOmitUndefined),
+  cost: Schema.Finite,
+  tokens: Schema.Struct({
+    input: Schema.Finite,
+    output: Schema.Finite,
+    reasoning: Schema.Finite,
+    cache: Schema.Struct({
+      read: Schema.Finite,
+      write: Schema.Finite,
+    }),
+  }),
   time: Schema.Struct({
     created: V2Schema.DateTimeUtcFromMillis,
     updated: V2Schema.DateTimeUtcFromMillis,
@@ -53,7 +61,18 @@ export class Info extends Schema.Class<Info>("Session.Info")({
   */
 }) {}
 
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Session.NotFoundError", {
+  sessionID: SessionID,
+}) {}
+
 export interface Interface {
+  readonly create: (input?: {
+    agent?: string
+    model?: ModelV2.Ref
+    parentID?: SessionID
+    workspaceID?: WorkspaceID
+  }) => Effect.Effect<Info>
+  readonly get: (sessionID: SessionID) => Effect.Effect<Info, NotFoundError>
   readonly list: (input: {
     limit?: number
     order?: "asc" | "desc"
@@ -88,13 +107,15 @@ export interface Interface {
   }) => Effect.Effect<SessionMessage.User, never>
   readonly shell: (input: { id?: EventV2.ID; sessionID: SessionID; command: string }) => Effect.Effect<void, never>
   readonly skill: (input: { id?: EventV2.ID; sessionID: SessionID; skill: string }) => Effect.Effect<void, never>
+  readonly subagent: (input: {
+    id?: EventV2.ID
+    parentID: SessionID
+    prompt: Prompt
+    agent: string
+    model?: ModelV2.Ref
+  }) => Effect.Effect<void, NotFoundError>
   readonly switchAgent: (input: { sessionID: SessionID; agent: string }) => Effect.Effect<void, never>
-  readonly switchModel: (input: {
-    sessionID: SessionID
-    id: ModelID
-    providerID: ProviderID
-    variant?: string
-  }) => Effect.Effect<void, never>
+  readonly switchModel: (input: { sessionID: SessionID; model: ModelV2.Ref }) => Effect.Effect<void, never>
   readonly compact: (sessionID: SessionID) => Effect.Effect<void, never>
   readonly wait: (sessionID: SessionID) => Effect.Effect<void, never>
 }
@@ -104,6 +125,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const events = yield* EventV2Bridge.Service
     const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
 
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -120,11 +142,21 @@ export const layer = Layer.effect(
         agent: row.agent ?? undefined,
         model: row.model
           ? {
-              id: ModelID.make(row.model.id),
-              providerID: ProviderID.make(row.model.providerID),
-              variant: row.model.variant,
+              id: ModelV2.ID.make(row.model.id),
+              providerID: ProviderV2.ID.make(row.model.providerID),
+              variant: ModelV2.VariantID.make(row.model.variant ?? "default"),
             }
           : undefined,
+        cost: row.cost,
+        tokens: {
+          input: row.tokens_input,
+          output: row.tokens_output,
+          reasoning: row.tokens_reasoning,
+          cache: {
+            read: row.tokens_cache_read,
+            write: row.tokens_cache_write,
+          },
+        },
         time: {
           created: DateTime.makeUnsafe(row.time_created),
           updated: DateTime.makeUnsafe(row.time_updated),
@@ -133,10 +165,20 @@ export const layer = Layer.effect(
       })
     }
 
-    const result: Interface = {
+    const result = Service.of({
+      create: Effect.fn("V2Session.create")(function* (_input) {
+        return {} as any
+      }),
+      get: Effect.fn("V2Session.get")(function* (sessionID) {
+        const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get())
+        if (!row) return yield* new NotFoundError({ sessionID })
+        return fromRow(row)
+      }),
       list: Effect.fn("V2Session.list")(function* (input) {
         const direction = input.cursor?.direction ?? "next"
         let order = input.order ?? "desc"
+        // This is a load bearing sort, desktop relies on this
+        const sortColumn = SessionTable.time_updated
         // Query the adjacent rows in reverse, then flip them back into the requested order below.
         if (direction === "previous" && order === "asc") order = "desc"
         if (direction === "previous" && order === "desc") order = "asc"
@@ -146,18 +188,18 @@ export const layer = Layer.effect(
           conditions.push(or(eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`))!)
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if (input.roots) conditions.push(isNull(SessionTable.parent_id))
-        if (input.start) conditions.push(gte(SessionTable.time_created, input.start))
+        if (input.start) conditions.push(gte(sortColumn, input.start))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
         if (input.cursor) {
           conditions.push(
             order === "asc"
               ? or(
-                  gt(SessionTable.time_created, input.cursor.time),
-                  and(eq(SessionTable.time_created, input.cursor.time), gt(SessionTable.id, input.cursor.id)),
+                  gt(sortColumn, input.cursor.time),
+                  and(eq(sortColumn, input.cursor.time), gt(SessionTable.id, input.cursor.id)),
                 )!
               : or(
-                  lt(SessionTable.time_created, input.cursor.time),
-                  and(eq(SessionTable.time_created, input.cursor.time), lt(SessionTable.id, input.cursor.id)),
+                  lt(sortColumn, input.cursor.time),
+                  and(eq(sortColumn, input.cursor.time), lt(SessionTable.id, input.cursor.id)),
                 )!,
           )
         }
@@ -166,7 +208,7 @@ export const layer = Layer.effect(
           .from(SessionTable)
           .where(conditions.length > 0 ? and(...conditions) : undefined)
           .orderBy(
-            order === "asc" ? asc(SessionTable.time_created) : desc(SessionTable.time_created),
+            order === "asc" ? asc(sortColumn) : desc(sortColumn),
             order === "asc" ? asc(SessionTable.id) : desc(SessionTable.id),
           )
 
@@ -252,29 +294,48 @@ export const layer = Layer.effect(
       shell: Effect.fn("V2Session.shell")(function* (_input) {}),
       skill: Effect.fn("V2Session.skill")(function* (_input) {}),
       switchAgent: Effect.fn("V2Session.switchAgent")(function* (input) {
-        EventV2.run(SessionEvent.AgentSwitched.Sync, {
+        yield* events.publish(SessionEvent.AgentSwitched, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(Date.now()),
           agent: input.agent,
         })
       }),
       switchModel: Effect.fn("V2Session.switchModel")(function* (input) {
-        EventV2.run(SessionEvent.ModelSwitched.Sync, {
+        yield* events.publish(SessionEvent.ModelSwitched, {
           sessionID: input.sessionID,
           timestamp: DateTime.makeUnsafe(Date.now()),
-          id: input.id,
-          providerID: input.providerID,
-          variant: input.variant,
+          model: input.model,
         })
+      }),
+      subagent: Effect.fn("V2Session.subagent")(function* (input) {
+        const parent = yield* result.get(input.parentID)
+        const child = yield* result.create({
+          agent: input.agent,
+          model: input.model,
+          parentID: input.parentID,
+          workspaceID: parent.workspaceID,
+        })
+        yield* result.prompt({
+          prompt: input.prompt,
+          sessionID: child.id,
+        })
+        yield* Effect.gen(function* () {
+          yield* result.wait(child.id)
+          const messages = yield* result.messages({ sessionID: child.id, order: "desc" })
+          const assistant = messages.find((msg) => msg.type === "assistant")
+          if (!assistant) return
+          const text = assistant.content.findLast((part) => part.type === "text")
+          if (!text) return
+        }).pipe(Effect.forkChild())
       }),
       compact: Effect.fn("V2Session.compact")(function* (_sessionID) {}),
       wait: Effect.fn("V2Session.wait")(function* (_sessionID) {}),
-    }
+    })
 
-    return Service.of(result)
+    return result
   }),
 )
 
-export const defaultLayer = layer
+export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer))
 
 export * as SessionV2 from "./session"

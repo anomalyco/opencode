@@ -4,9 +4,9 @@ import { effectCmd } from "../effect-cmd"
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
 import { ACP } from "@/acp/agent"
 import { Server } from "@/server/server"
+import { ServerAuth } from "@/server/auth"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
-import { Flag } from "@opencode-ai/core/flag/flag"
 
 const log = Log.create({ service: "acp-command" })
 
@@ -22,18 +22,12 @@ export const AcpCommand = effectCmd({
   },
   handler: Effect.fn("Cli.acp")(function* (args) {
     process.env.OPENCODE_CLIENT = "acp"
-    const opts = yield* Effect.promise(() => resolveNetworkOptions(args))
+    const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => Server.listen(opts))
 
     const sdk = createOpencodeClient({
       baseUrl: `http://${server.hostname}:${server.port}`,
-      headers: Flag.OPENCODE_SERVER_PASSWORD
-        ? {
-            Authorization: `Basic ${Buffer.from(
-              `${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`,
-            ).toString("base64")}`,
-          }
-        : undefined,
+      headers: ServerAuth.headers(),
     })
 
     const input = new WritableStream<Uint8Array>({
