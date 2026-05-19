@@ -1,0 +1,38 @@
+import type { OhMyOpenCodeConfig, HookName } from "../../config";
+import type { ModelCacheState } from "../../plugin-state";
+import type { PluginContext } from "../types";
+import { createContextWindowMonitorHook, createSessionRecoveryHook, createSessionNotification, createThinkModeHook, createModelFallbackHook, createAnthropicContextWindowLimitRecoveryHook, createAutoUpdateCheckerHook, createAgentUsageReminderHook, createNonInteractiveEnvHook, createInteractiveBashSessionHook, createRalphLoopHook, createEditErrorRecoveryHook, createDelegateTaskRetryHook, createTaskResumeInfoHook, createStartWorkHook, createPrometheusMdOnlyHook, createSisyphusJuniorNotepadHook, createNoSisyphusGptHook, createNoHephaestusNonGptHook, createQuestionLabelTruncatorHook, createPreemptiveCompactionHook, createRuntimeFallbackHook, createLegacyPluginToastHook } from "../../hooks";
+import { createAnthropicEffortHook } from "../../hooks/anthropic-effort";
+export type SessionHooks = {
+    contextWindowMonitor: ReturnType<typeof createContextWindowMonitorHook> | null;
+    preemptiveCompaction: ReturnType<typeof createPreemptiveCompactionHook> | null;
+    sessionRecovery: ReturnType<typeof createSessionRecoveryHook> | null;
+    sessionNotification: ReturnType<typeof createSessionNotification> | null;
+    thinkMode: ReturnType<typeof createThinkModeHook> | null;
+    modelFallback: ReturnType<typeof createModelFallbackHook> | null;
+    anthropicContextWindowLimitRecovery: ReturnType<typeof createAnthropicContextWindowLimitRecoveryHook> | null;
+    autoUpdateChecker: ReturnType<typeof createAutoUpdateCheckerHook> | null;
+    agentUsageReminder: ReturnType<typeof createAgentUsageReminderHook> | null;
+    nonInteractiveEnv: ReturnType<typeof createNonInteractiveEnvHook> | null;
+    interactiveBashSession: ReturnType<typeof createInteractiveBashSessionHook> | null;
+    ralphLoop: ReturnType<typeof createRalphLoopHook> | null;
+    editErrorRecovery: ReturnType<typeof createEditErrorRecoveryHook> | null;
+    delegateTaskRetry: ReturnType<typeof createDelegateTaskRetryHook> | null;
+    startWork: ReturnType<typeof createStartWorkHook> | null;
+    prometheusMdOnly: ReturnType<typeof createPrometheusMdOnlyHook> | null;
+    sisyphusJuniorNotepad: ReturnType<typeof createSisyphusJuniorNotepadHook> | null;
+    noSisyphusGpt: ReturnType<typeof createNoSisyphusGptHook> | null;
+    noHephaestusNonGpt: ReturnType<typeof createNoHephaestusNonGptHook> | null;
+    questionLabelTruncator: ReturnType<typeof createQuestionLabelTruncatorHook> | null;
+    taskResumeInfo: ReturnType<typeof createTaskResumeInfoHook> | null;
+    anthropicEffort: ReturnType<typeof createAnthropicEffortHook> | null;
+    runtimeFallback: ReturnType<typeof createRuntimeFallbackHook> | null;
+    legacyPluginToast: ReturnType<typeof createLegacyPluginToastHook> | null;
+};
+export declare function createSessionHooks(args: {
+    ctx: PluginContext;
+    pluginConfig: OhMyOpenCodeConfig;
+    modelCacheState: ModelCacheState;
+    isHookEnabled: (hookName: HookName) => boolean;
+    safeHookEnabled: boolean;
+}): SessionHooks;

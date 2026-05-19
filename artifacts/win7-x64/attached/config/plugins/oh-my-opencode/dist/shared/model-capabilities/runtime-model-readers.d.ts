@@ -1,0 +1,11 @@
+import type { ModelMetadata } from "../connected-providers-cache";
+import type { ModelCapabilities } from "./types";
+export declare function readRuntimeModel(runtimeModel: ModelMetadata | Record<string, unknown> | undefined): Record<string, unknown> | undefined;
+export declare function readRuntimeModelVariants(runtimeModel: Record<string, unknown> | undefined): string[] | undefined;
+export declare function readRuntimeModelModalities(runtimeModel: Record<string, unknown> | undefined): ModelCapabilities["modalities"] | undefined;
+export declare function readRuntimeModelReasoningSupport(runtimeModel: Record<string, unknown> | undefined): boolean | undefined;
+export declare function readRuntimeModelThinkingSupport(runtimeModel: Record<string, unknown> | undefined): boolean | undefined;
+export declare function readRuntimeModelTemperatureSupport(runtimeModel: Record<string, unknown> | undefined): boolean | undefined;
+export declare function readRuntimeModelTopPSupport(runtimeModel: Record<string, unknown> | undefined): boolean | undefined;
+export declare function readRuntimeModelToolCallSupport(runtimeModel: Record<string, unknown> | undefined): boolean | undefined;
+export declare function readRuntimeModelLimitOutput(runtimeModel: Record<string, unknown> | undefined): number | undefined;
