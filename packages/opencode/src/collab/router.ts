@@ -36,8 +36,16 @@ import * as Queue from "@opencode-ai/collab"
 import * as Room from "./room"
 import { runCollabMigrations } from "./migrate"
 import { collabDb } from "./db-impl"
-import { initSessionWorkspace, cleanupSessionWorkspace } from "./workspace"
+import { initSessionWorkspace, cleanupSessionWorkspace, sessionWorkspacePath } from "./workspace"
 import type { CollabEvent } from "@opencode-ai/collab"
+
+function ensureQueueRegistered(collabSessionId: string) {
+  try {
+    Queue.getQueue(collabSessionId)
+  } catch {
+    Queue.registerSession(collabSessionId, collabDb, async () => {})
+  }
+}
 import { Database } from "@/storage/db"
 import { CollabAuthSessionTable } from "./schema.sql"
 import { eq, gt } from "drizzle-orm"
@@ -46,41 +54,38 @@ import { eq, gt } from "drizzle-orm"
 // Sends a prompt to the underlying opencode session, creating it first if needed.
 
 async function executePromptOnNativeSession(
-  collabSession: ReturnType<typeof Session.getCollabSession> & {},
+  collabSession: NonNullable<ReturnType<typeof Session.getCollabSession>>,
   content: string,
   workspacePath: string,
 ): Promise<void> {
-  let sessionId = collabSession.sessionId
+  let nativeSessionId = collabSession.sessionId
 
-  // Create the native session on first prompt if not yet linked
-  if (!sessionId) {
-    const createRes = await fetch("http://localhost:4096/api/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-      // Pass workspace path via query param
-    })
+  if (!nativeSessionId) {
+    const createRes = await fetch(
+      `http://localhost:4096/session?directory=${encodeURIComponent(workspacePath)}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+    )
     if (!createRes.ok) {
       console.error("[collab] failed to create native session:", await createRes.text())
       return
     }
     const created = (await createRes.json()) as { id: string }
-    sessionId = created.id
-    Session.linkNativeSession(collabSession.id, sessionId)
-    broadcastSse(collabSession.id, {
-      type: "collab:native_session_linked" as any,
-      sessionId,
-    })
+    nativeSessionId = created.id
+    Session.linkNativeSession(collabSession.id, nativeSessionId)
+    broadcastSse(collabSession.id, { type: "collab:native_session_linked" as any, sessionId: nativeSessionId })
   }
 
-  // Send the prompt to the native session (async — don't block the HTTP response)
-  fetch(`http://localhost:4096/api/session/${sessionId}/prompt_async`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ parts: [{ type: "text", text: content }] }),
-  }).catch((err) => {
-    console.error("[collab] failed to send prompt to native session:", err)
-  })
+  const promptRes = await fetch(
+    `http://localhost:4096/session/${nativeSessionId}/message?directory=${encodeURIComponent(workspacePath)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ parts: [{ type: "text", text: content }] }),
+    },
+  )
+  if (!promptRes.ok) {
+    console.error("[collab] failed to send prompt:", await promptRes.text())
+  }
 }
 
 // ── Config ──────────────────────────────────────────────────────────────────────
@@ -492,21 +497,14 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     return json({ ...invite, url: Invite.inviteUrl(c.baseUrl, invite.token) }, 201)
   }
 
-  // POST /collab/session/:id/prompt — Driver submits directly
+  // POST /collab/session/:id/prompt — add to queue as pending (Drivers + Contributors)
   if (req.method === "POST" && parts[3] === "prompt") {
-    if (caller.role !== "driver") return json({ error: "Forbidden — Drivers only" }, 403)
+    if (caller.role === "viewer") return json({ error: "Forbidden — Viewers cannot submit prompts" }, 403)
     const body = (await req.json()) as { content: string }
-    const suggestion =
-      collabSession.queueMode === "fifo"
-        ? Queue.enqueue(sessionId, body.content, sess.githubId, sess.githubLogin)
-        : Queue.submitToPool(sessionId, body.content, sess.githubId, sess.githubLogin)
-    const queue = Queue.getQueue(sessionId)
-    broadcastSse(sessionId, { type: "collab:queue_update", queue })
-
-    // Execute the prompt on the underlying opencode session (non-blocking)
-    const workspacePath = process.env["COLLAB_WORKSPACE_ROOT"] ?? "/var/opencode/workspaces"
-    executePromptOnNativeSession(collabSession, body.content, workspacePath).catch(console.error)
-
+    ensureQueueRegistered(sessionId)
+    const suggestion = Queue.submitToPool(sessionId, body.content, sess.githubId, sess.githubLogin)
+    broadcastSse(sessionId, { type: "collab:prompt_suggestion", suggestion })
+    broadcastSse(sessionId, { type: "collab:queue_update", queue: collabDb.getPendingPool(sessionId) })
     return json(suggestion, 201)
   }
 
@@ -519,17 +517,17 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     return json(suggestion, 201)
   }
 
-  // POST /collab/session/:id/approve/:sid — Driver approves suggestion
+  // POST /collab/session/:id/approve/:sid — Driver approves suggestion → executes
   if (req.method === "POST" && parts[3] === "approve" && parts[4]) {
     if (caller.role !== "driver") return json({ error: "Forbidden — Drivers only" }, 403)
+    ensureQueueRegistered(sessionId)
     const approved = Queue.approveSuggestion(sessionId, parts[4])
     if (!approved) return json({ error: "Suggestion not found" }, 404)
     broadcastSse(sessionId, { type: "collab:suggestion_approved", suggestionId: parts[4], approvedBy: sess.githubLogin })
-    const queue = Queue.getQueue(sessionId)
-    broadcastSse(sessionId, { type: "collab:queue_update", queue })
+    broadcastSse(sessionId, { type: "collab:queue_update", queue: collabDb.getPendingPool(sessionId) })
 
-    // Execute the approved suggestion on the native session
-    const workspacePath = process.env["COLLAB_WORKSPACE_ROOT"] ?? "/var/opencode/workspaces"
+    // Execute on native session
+    const workspacePath = sessionWorkspacePath(sessionId)
     executePromptOnNativeSession(collabSession, approved.content, workspacePath).catch(console.error)
 
     return json(approved)
@@ -585,6 +583,12 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     return handleSse(req, sessionId, sess)
   }
 
+  // GET /collab/session/:id/queue — current pending suggestions (for page reload recovery)
+  if (req.method === "GET" && parts[3] === "queue") {
+    ensureQueueRegistered(sessionId)
+    return json(collabDb.getPendingPool(sessionId))
+  }
+
   return json({ error: "Not found" }, 404)
 }
 
@@ -621,7 +625,8 @@ function handleSse(
       // Send current session state immediately
       const current = Session.getCollabSession(collabSessionId)
       if (current) {
-        send({ type: "collab:queue_update", queue: Queue.getQueue(collabSessionId) })
+        ensureQueueRegistered(collabSessionId)
+        send({ type: "collab:queue_update", queue: collabDb.getPendingPool(collabSessionId) })
       }
       unregister = registerSse(collabSessionId, send)
     },

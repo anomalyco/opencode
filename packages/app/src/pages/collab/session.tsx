@@ -89,9 +89,9 @@ function PromptInput(props: {
   role: CollabRole
   onSent: () => void
 }) {
-  const collab = useCollab()
   const [text, setText] = createSignal("")
   const [busy, setBusy] = createSignal(false)
+  const [sendError, setSendError] = createSignal<string | null>(null)
 
   const isDriver = () => props.role === "driver"
   const isContributor = () => props.role === "contributor"
@@ -101,14 +101,22 @@ function PromptInput(props: {
     const content = text().trim()
     if (!content || busy()) return
     setBusy(true)
+    setSendError(null)
     try {
-      if (isDriver()) {
-        await collab.submitPrompt(content)
-      } else if (isContributor()) {
-        await collab.suggestPrompt(content)
+      const res = await fetch(`/collab/session/${props.collabSessionId}/prompt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+        setSendError((err as any).error ?? "Failed to send")
+        return
       }
       setText("")
       props.onSent()
+    } catch (err) {
+      setSendError(String(err))
     } finally {
       setBusy(false)
     }
@@ -134,6 +142,9 @@ function PromptInput(props: {
           rows={3}
           class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500 resize-none"
         />
+        <Show when={sendError()}>
+          <p class="text-xs text-red-400">{sendError()}</p>
+        </Show>
         <button
           type="submit"
           disabled={busy() || !text().trim()}
@@ -143,7 +154,7 @@ function PromptInput(props: {
               : "bg-zinc-700 hover:bg-zinc-600 text-zinc-100"
           }`}
         >
-          {busy() ? "Sending…" : isDriver() ? "Send" : "Suggest"}
+          {busy() ? "Sending…" : isDriver() ? "Add to Queue" : "Suggest"}
         </button>
       </form>
     </Show>
@@ -269,7 +280,7 @@ function MessageThread(props: { nativeSessionId: string | null }) {
 
   async function fetchMessages(sessionId: string) {
     try {
-      const res = await fetch(`/api/session/${sessionId}/message`)
+      const res = await fetch(`/session/${sessionId}/message`)
       if (!res.ok) return
       const data = await res.json()
       // The API returns { items: Message[] } or Message[]

@@ -7,6 +7,7 @@ import {
   createEffect,
   createSignal,
   onCleanup,
+  onMount,
   useContext,
   type ParentProps,
 } from "solid-js"
@@ -75,6 +76,14 @@ export function CollabProvider(props: CollabProviderProps) {
     }
 
     onCleanup(() => es.close())
+  })
+
+  onMount(async () => {
+    const res = await fetch(`/collab/session/${props.collabSessionId}/queue`)
+    if (res.ok) {
+      const data = await res.json()
+      setQueue(data)
+    }
   })
 
   function handleEvent(event: CollabEvent) {
