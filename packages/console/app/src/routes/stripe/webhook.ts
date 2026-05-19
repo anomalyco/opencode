@@ -109,31 +109,20 @@ export async function POST(input: APIEvent) {
       const type = body.data.object.metadata?.type
       if (type === "lite") {
         const workspaceID = body.data.object.metadata?.workspaceID
-        const userID = body.data.object.metadata?.userID
-        const userEmail = body.data.object.metadata?.userEmail
-        const coupon = body.data.object.metadata?.coupon
         const customerID = body.data.object.customer as string
-        const invoiceID = body.data.object.latest_invoice as string
         const subscriptionID = body.data.object.id as string
-        const paymentMethodID = body.data.object.default_payment_method as string
 
         if (!workspaceID) throw new Error("Workspace ID not found")
-        if (!userID) throw new Error("User ID not found")
         if (!customerID) throw new Error("Customer ID not found")
-        if (!invoiceID) throw new Error("Invoice ID not found")
         if (!subscriptionID) throw new Error("Subscription ID not found")
-        if (!paymentMethodID) throw new Error("Payment method ID not found")
 
-        // get payment method for the payment intent
-        const paymentMethod = await Billing.stripe().paymentMethods.retrieve(paymentMethodID)
         await Actor.provide("system", { workspaceID }, async () => {
-          // look up current billing
           const billing = await Billing.get()
           if (!billing) throw new Error(`Workspace with ID ${workspaceID} not found`)
           if (billing.customerID && billing.customerID !== customerID) throw new Error("Customer ID mismatch")
 
           // set customer metadata
-          if (!billing?.customerID) {
+          if (!billing.customerID) {
             await Billing.stripe().customers.update(customerID, {
               metadata: {
                 workspaceID,
@@ -141,46 +130,12 @@ export async function POST(input: APIEvent) {
             })
           }
 
-          await Database.transaction(async (tx) => {
-            await tx
+          await Database.use((tx) =>
+            tx
               .update(BillingTable)
-              .set({
-                customerID,
-                liteSubscriptionID: subscriptionID,
-                lite: {},
-                paymentMethodID: paymentMethod.id,
-                paymentMethodLast4: paymentMethod.card?.last4 ?? null,
-                paymentMethodType: paymentMethod.type,
-              })
-              .where(eq(BillingTable.workspaceID, workspaceID))
-
-            await tx.insert(LiteTable).values({
-              workspaceID,
-              id: Identifier.create("lite"),
-              userID: userID,
-            })
-
-            if (userEmail) {
-              if (coupon === LiteData.firstMonth50Coupon) {
-                await Billing.redeemCoupon(userEmail, "GO1MONTH50")
-              } else if (coupon === LiteData.firstMonth100Coupon) {
-                await Billing.redeemCoupon(userEmail, "GOFREEMONTH")
-              } else if (coupon === LiteData.threeMonths100Coupon) {
-                await Billing.redeemCoupon(userEmail, "GO3MONTHS100")
-              } else if (coupon === LiteData.sixMonths100Coupon) {
-                await Billing.redeemCoupon(userEmail, "GO6MONTHS100")
-              } else if (coupon === LiteData.twelveMonths100Coupon) {
-                await Billing.redeemCoupon(userEmail, "GO12MONTHS100")
-              }
-            }
-          })
-
-          await Referral.completeFromLiteSubscription({
-            workspaceID,
-            userID,
-          }).catch((error) => {
-            console.error("Referral sync failed", error)
-          })
+              .set({ customerID, liteSubscriptionID: subscriptionID })
+              .where(eq(BillingTable.workspaceID, workspaceID)),
+          )
         })
       }
     }
@@ -207,10 +162,7 @@ export async function POST(input: APIEvent) {
       }
     }
     if (body.type === "invoice.payment_succeeded") {
-      if (
-        body.data.object.billing_reason === "subscription_create" ||
-        body.data.object.billing_reason === "subscription_cycle"
-      ) {
+      if (body.data.object.billing_reason === "subscription_create") {
         const invoiceID = body.data.object.id as string
         const amountInCents = body.data.object.amount_paid
         const customerID = body.data.object.customer as string
@@ -221,14 +173,113 @@ export async function POST(input: APIEvent) {
         if (!invoiceID) throw new Error("Invoice ID not found")
         if (!subscriptionID) throw new Error("Subscription ID not found")
 
-        // get coupon id from subscription
         const invoice = await Billing.stripe().invoices.retrieve(invoiceID, {
           expand: ["discounts", "payments"],
         })
         const paymentID = invoice.payments?.data[0]?.payment.payment_intent as string
-        const couponID = (invoice.discounts[0] as Stripe.Discount).coupon?.id as string
+        const couponID = (invoice.discounts[0] as Stripe.Discount)?.coupon?.id as string
         if (!paymentID) {
-          // payment id can be undefined when using coupon
+          if (!couponID) throw new Error("Payment ID not found")
+        }
+
+        const subscription = await Billing.stripe().subscriptions.retrieve(subscriptionID)
+        const workspaceID = subscription.metadata?.workspaceID
+        const userID = subscription.metadata?.userID
+        const userEmail = subscription.metadata?.userEmail
+        const coupon = subscription.metadata?.coupon
+
+        if (!workspaceID) throw new Error("Workspace ID not found in subscription metadata")
+
+        await Actor.provide("system", { workspaceID }, async () => {
+          const billing = await Billing.get()
+          if (!billing) throw new Error(`Workspace with ID ${workspaceID} not found`)
+
+          await Database.use((tx) =>
+            tx.insert(PaymentTable).values({
+              workspaceID,
+              id: Identifier.create("payment"),
+              amount: centsToMicroCents(amountInCents),
+              paymentID,
+              invoiceID,
+              customerID,
+              enrichment: {
+                type: productID === LiteData.productID() ? "lite" : "subscription",
+                currency: body.data.object.currency === "inr" ? "inr" : undefined,
+                couponID,
+              },
+            }),
+          )
+
+          if (productID === LiteData.productID() && !billing.lite) {
+            const paymentMethod = paymentID
+              ? await Billing.stripe()
+                  .paymentIntents.retrieve(paymentID, { expand: ["payment_method"] })
+                  .then((pi) => (typeof pi.payment_method !== "string" ? pi.payment_method : null))
+              : null
+
+            await Database.transaction(async (tx) => {
+              await tx
+                .update(BillingTable)
+                .set({
+                  customerID,
+                  liteSubscriptionID: subscriptionID,
+                  lite: {},
+                  ...(paymentMethod
+                    ? {
+                        paymentMethodID: paymentMethod.id,
+                        paymentMethodLast4: paymentMethod.card?.last4 ?? null,
+                        paymentMethodType: paymentMethod.type,
+                      }
+                    : {}),
+                })
+                .where(eq(BillingTable.workspaceID, workspaceID))
+
+              await tx.insert(LiteTable).values({
+                workspaceID,
+                id: Identifier.create("lite"),
+                userID,
+              })
+            })
+
+            if (userEmail) {
+              if (coupon === LiteData.firstMonth50Coupon) {
+                await Billing.redeemCoupon(userEmail, "GO1MONTH50")
+              } else if (coupon === LiteData.firstMonth100Coupon) {
+                await Billing.redeemCoupon(userEmail, "GOFREEMONTH")
+              } else if (coupon === LiteData.threeMonths100Coupon) {
+                await Billing.redeemCoupon(userEmail, "GO3MONTHS100")
+              } else if (coupon === LiteData.sixMonths100Coupon) {
+                await Billing.redeemCoupon(userEmail, "GO6MONTHS100")
+              } else if (coupon === LiteData.twelveMonths100Coupon) {
+                await Billing.redeemCoupon(userEmail, "GO12MONTHS100")
+              }
+            }
+
+            await Referral.completeFromLiteSubscription({
+              workspaceID,
+              userID: userID!,
+            }).catch((error) => {
+              console.error("Referral sync failed", error)
+            })
+          }
+        })
+      } else if (body.data.object.billing_reason === "subscription_cycle") {
+        const invoiceID = body.data.object.id as string
+        const amountInCents = body.data.object.amount_paid
+        const customerID = body.data.object.customer as string
+        const subscriptionID = body.data.object.parent?.subscription_details?.subscription as string
+        const productID = body.data.object.lines?.data[0].pricing?.price_details?.product as string
+
+        if (!customerID) throw new Error("Customer ID not found")
+        if (!invoiceID) throw new Error("Invoice ID not found")
+        if (!subscriptionID) throw new Error("Subscription ID not found")
+
+        const invoice = await Billing.stripe().invoices.retrieve(invoiceID, {
+          expand: ["discounts", "payments"],
+        })
+        const paymentID = invoice.payments?.data[0]?.payment.payment_intent as string
+        const couponID = (invoice.discounts[0] as Stripe.Discount)?.coupon?.id as string
+        if (!paymentID) {
           if (!couponID) throw new Error("Payment ID not found")
         }
 
