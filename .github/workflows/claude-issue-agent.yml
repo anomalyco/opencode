@@ -42,7 +42,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_args: |
-            --model claude-sonnet-4-6
+            --model claude-opus-4-7
             --max-turns 30
             --allowedTools "Read,Grep,Glob,Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh search:*),Bash(gh pr list:*),Bash(gh api:*)"
           prompt: |
