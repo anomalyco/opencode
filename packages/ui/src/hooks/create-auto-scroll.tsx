@@ -186,6 +186,19 @@ export function createAutoScroll(options: AutoScrollOptions) {
     },
   )
 
+  createResizeObserver(
+    () => store.scrollRef,
+    () => {
+      const el = store.scrollRef
+      if (!el) return
+      if (!canScroll(el)) return
+      if (store.userScrolled) return
+      // When the viewport resizes (e.g. composer grows and shrinks the
+      // scroller), re-anchor to bottom so chat history doesn't get covered.
+      scrollToBottom(false)
+    },
+  )
+
   createEffect(
     on(options.working, (working: boolean) => {
       settling = false

@@ -1191,6 +1191,7 @@ export default function Page() {
   let scrollStateFrame: number | undefined
   let scrollStateTarget: HTMLDivElement | undefined
   let fillFrame: number | undefined
+  let dockScrollFrame: number | undefined
 
   const jumpThreshold = (el: HTMLDivElement) => Math.max(400, el.clientHeight)
 
@@ -1594,7 +1595,20 @@ export default function Page() {
 
       dockHeight = next
 
-      if (stick) autoScroll.forceScrollToBottom()
+      if (stick) {
+        autoScroll.forceScrollToBottom()
+
+        // When the dock grows, the scroller's clientHeight may not have
+        // updated yet in this frame. Defer a re-scroll to keep the timeline
+        // at the bottom after the layout settles.
+        if (delta > 0) {
+          if (dockScrollFrame !== undefined) cancelAnimationFrame(dockScrollFrame)
+          dockScrollFrame = requestAnimationFrame(() => {
+            dockScrollFrame = undefined
+            if (!autoScroll.userScrolled()) autoScroll.forceScrollToBottom()
+          })
+        }
+      }
 
       if (el) scheduleScrollState(el)
       fill()
@@ -1644,6 +1658,7 @@ export default function Page() {
     if (diffTimer !== undefined) window.clearTimeout(diffTimer)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
+    if (dockScrollFrame !== undefined) cancelAnimationFrame(dockScrollFrame)
   })
 
   useUsageExceededDialogs()
