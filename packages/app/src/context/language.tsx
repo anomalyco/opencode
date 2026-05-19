@@ -18,6 +18,7 @@ export type Locale =
   | "ja"
   | "pl"
   | "ru"
+  | "uk"
   | "ar"
   | "no"
   | "br"
@@ -45,6 +46,7 @@ const LOCALES: readonly Locale[] = [
   "ja",
   "pl",
   "ru",
+  "uk",
   "bs",
   "ar",
   "no",
@@ -65,6 +67,7 @@ const INTL: Record<Locale, string> = {
   ja: "ja",
   pl: "pl",
   ru: "ru",
+  uk: "uk",
   ar: "ar",
   no: "nb-NO",
   br: "pt-BR",
@@ -85,6 +88,7 @@ const LABEL_KEY: Record<Locale, keyof Dictionary> = {
   ja: "language.ja",
   pl: "language.pl",
   ru: "language.ru",
+  uk: "language.uk",
   ar: "language.ar",
   no: "language.no",
   br: "language.br",
@@ -110,6 +114,7 @@ const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
   ja: () => merge(import("@/i18n/ja"), import("@opencode-ai/ui/i18n/ja")),
   pl: () => merge(import("@/i18n/pl"), import("@opencode-ai/ui/i18n/pl")),
   ru: () => merge(import("@/i18n/ru"), import("@opencode-ai/ui/i18n/ru")),
+  uk: () => merge(import("@/i18n/uk"), import("@opencode-ai/ui/i18n/uk")),
   ar: () => merge(import("@/i18n/ar"), import("@opencode-ai/ui/i18n/ar")),
   no: () => merge(import("@/i18n/no"), import("@opencode-ai/ui/i18n/no")),
   br: () => merge(import("@/i18n/br"), import("@opencode-ai/ui/i18n/br")),
@@ -145,6 +150,7 @@ const localeMatchers: Array<{ locale: Locale; match: (language: string) => boole
   { locale: "ja", match: (language) => language.startsWith("ja") },
   { locale: "pl", match: (language) => language.startsWith("pl") },
   { locale: "ru", match: (language) => language.startsWith("ru") },
+  { locale: "uk", match: (language) => language.startsWith("uk") },
   { locale: "ar", match: (language) => language.startsWith("ar") },
   {
     locale: "no",

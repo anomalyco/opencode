@@ -1,6 +1,7 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { describe, expect } from "bun:test"
+import { ConfigError } from "../../src/config/error"
 import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
 import { errorLayer } from "../../src/server/routes/instance/httpapi/middleware/error"
@@ -47,6 +48,27 @@ describe("HttpApi error middleware", () => {
         data: { message: "Unexpected server error. Check server logs for details." },
       })
       expect(JSON.stringify(body)).not.toContain("secret named marker")
+    }),
+  )
+
+  it.live("preserves config defects as client-visible bad requests", () =>
+    Effect.gen(function* () {
+      const configError = new ConfigError.InvalidError({
+        path: "/tmp/opencode.json",
+        issues: [{ message: "Expected object", path: ["provider", "anthropic", "options"] }],
+      })
+
+      yield* HttpRouter.add("GET", "/config-error", Effect.die(configError)).pipe(
+        Layer.provide(errorLayer),
+        HttpRouter.serve,
+        Layer.build,
+      )
+
+      const response = yield* HttpClientRequest.get("/config-error").pipe(HttpClient.execute)
+      const body = yield* response.json
+
+      expect(response.status).toBe(400)
+      expect(JSON.stringify(body)).toBe(JSON.stringify(configError.toObject()))
     }),
   )
 
