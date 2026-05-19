@@ -304,25 +304,21 @@ export function withCliFixture<A, E>(
           }),
         ),
         (p) =>
-          Effect.promise(async () => {
-            try {
-              p.stdin.end()
-            } catch {
-              // already closed — fine
-            }
-            // If the child doesn't exit on EOF within a small window, kill it.
-            // 2s is generous for a graceful shutdown; longer than that means
-            // the child is hung and the test runner shouldn't wait.
-            await Promise.race([
-              p.exited,
-              new Promise<void>((resolve) =>
-                setTimeout(() => {
-                  p.kill()
-                  resolve()
-                }, 2000),
-              ),
-            ])
-            await p.exited
+          // Graceful shutdown: close stdin (ACP exits on EOF), give it a
+          // window to exit, then SIGTERM. The Effect.timeoutOrElse expresses
+          // exactly that race without raw setTimeout or Promise.race.
+          Effect.gen(function* () {
+            yield* Effect.sync(() => p.stdin.end())
+            yield* Effect.promise(() => p.exited).pipe(
+              Effect.timeoutOrElse({
+                duration: Duration.seconds(2),
+                orElse: () =>
+                  Effect.sync(() => {
+                    p.kill()
+                  }),
+              }),
+            )
+            yield* Effect.promise(() => p.exited)
           }).pipe(Effect.ignore),
       )
 
