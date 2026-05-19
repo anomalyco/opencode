@@ -18,7 +18,7 @@ import {
   For,
   Show,
 } from "solid-js"
-import { useParams, useNavigate } from "@solidjs/router"
+import { useParams } from "@solidjs/router"
 import { CollabProvider, useCollab } from "@/context/collab"
 import { InviteDialog } from "@/components/collab/InviteDialog"
 import { base64Encode } from "@opencode-ai/core/util/encode"
@@ -209,7 +209,6 @@ function QueueItem(props: {
 
 function CollabSessionInner(props: { me: Me }) {
   const collab = useCollab()
-  const navigate = useNavigate()
   const [showInvite, setShowInvite] = createSignal(false)
   const [queueOpen, setQueueOpen] = createSignal(true)
 
@@ -419,7 +418,6 @@ function CollabSessionInner(props: { me: Me }) {
 
 export default function CollabSessionPage() {
   const params = useParams<{ id: string }>()
-  const navigate = useNavigate()
   const [me, setMe] = createSignal<Me | null>(null)
 
   onMount(async () => {
