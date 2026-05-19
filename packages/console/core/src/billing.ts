@@ -457,6 +457,21 @@ export namespace Billing {
     async (input) => {
       const { paymentID } = input
 
+      const payment = await Database.use((tx) =>
+        tx
+          .select()
+          .from(PaymentTable)
+          .where(
+            and(
+              eq(PaymentTable.workspaceID, Actor.workspace()),
+              eq(PaymentTable.paymentID, paymentID),
+              isNull(PaymentTable.timeDeleted),
+            ),
+          )
+          .then((rows) => rows[0]),
+      )
+      if (!payment) throw new Error("Payment not found")
+
       const intent = await Billing.stripe().paymentIntents.retrieve(paymentID)
       if (!intent.latest_charge) throw new Error("No charge found")
 
