@@ -195,6 +195,7 @@ export function registerOpencodeKeymap(
   renderer: CliRenderer,
   config: Pick<TuiConfig.Resolved, "keybinds" | "leader_timeout">,
 ) {
+  const modeStack = createOpencodeModeStack(keymap)
   const offCommaBindings = addons.registerCommaBindings(keymap)
   const offAliasExpander = registerKeyAliases(keymap)
   const offBaseLayout = addons.registerBaseLayoutFallback(keymap)
@@ -218,6 +219,7 @@ export function registerOpencodeKeymap(
     offAliasExpander()
     offBaseLayout()
     offCommaBindings()
+    modeStack.dispose()
   }
 }
 

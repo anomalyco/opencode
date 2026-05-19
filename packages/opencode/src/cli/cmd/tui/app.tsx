@@ -71,7 +71,6 @@ import {
   COMMAND_PALETTE_COMMAND,
   OPENCODE_BASE_MODE,
   OpencodeKeymapProvider,
-  createOpencodeModeStack,
   registerOpencodeKeymap,
   useBindings,
   useOpencodeKeymap,
@@ -186,7 +185,6 @@ export function tui(input: {
     }
     const onBeforeExit = async () => {
       offKeymap()
-      modeStack.dispose()
       await TuiPluginRuntime.dispose()
       TuiAudio.dispose()
     }
@@ -197,7 +195,6 @@ export function tui(input: {
     const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
 
     const keymap = createDefaultOpenTuiKeymap(renderer)
-    const modeStack = createOpencodeModeStack(keymap)
     const offKeymap = registerOpencodeKeymap(keymap, renderer, input.config)
 
     await render(() => {
