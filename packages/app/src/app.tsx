@@ -325,6 +325,7 @@ export function AppInterface(props: {
                   <Dynamic
                     component={props.router ?? Router}
                     root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
+                    base={(window.__OPENCODE_BASE_PATH__ || import.meta.env.BASE_URL).replace(/\/$/, "") || undefined}
                   >
                     <Route path="/" component={HomeRoute} />
                     <Route path="/:dir" component={DirectoryLayout}>
