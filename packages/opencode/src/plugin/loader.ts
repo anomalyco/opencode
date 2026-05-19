@@ -61,12 +61,15 @@ export namespace PluginLoader {
     retry: boolean
   }
 
-  function isRetryableLoadError(error: unknown) {
-    if (!error || typeof error !== "object") return false
-    const name = "name" in error && typeof error.name === "string" ? error.name : ""
-    if (name === "ResolveMessage") return true
+  function errorMessage(error: unknown) {
+    if (!error || typeof error !== "object") return ""
     const message = "message" in error && typeof error.message === "string" ? error.message : ""
-    return /Cannot find (?:package|module)|Could not resolve/.test(message)
+    return message
+  }
+
+  function isRetryableResolveError(stage: "install" | "entry" | "compatibility", error: unknown) {
+    if (stage !== "install") return false
+    return errorMessage(error).includes("missing package.json or index file")
   }
 
   // Normalize a config item into the loader's internal representation.
@@ -171,20 +174,20 @@ export namespace PluginLoader {
         return { retry: false }
       }
       report?.error?.(candidate, retry, resolved.stage, resolved.error)
-      return { retry: filePlugin }
+      return { retry: filePlugin && isRetryableResolveError(resolved.stage, resolved.error) }
     }
 
     const loaded = await load(resolved.value)
     if (!loaded.ok) {
       report?.error?.(candidate, retry, "load", loaded.error, resolved.value)
-      return { retry: isRetryableLoadError(loaded.error) }
+      return { retry: false }
     }
 
     // The default behavior is to return the successfully loaded plugin as-is, but callers can
     // provide a finisher to adapt the result into a more specific runtime shape.
     if (!finish) return { value: loaded.value as R, retry: false }
     const value = await finish(loaded.value, candidate.origin, retry)
-    return { value, retry: filePlugin && value === undefined }
+    return { value, retry: false }
   }
 
   type Input<R> = {
@@ -198,9 +201,9 @@ export namespace PluginLoader {
 
   // Resolve and load all configured plugins in parallel.
   //
-  // If `wait` is provided, file-based plugins that initially failed are retried once after the
-  // caller finishes preparing dependencies. This supports local plugins that depend on an install
-  // step happening elsewhere before their entrypoint becomes loadable.
+  // If `wait` is provided, file-based plugins with retryable pre-import setup failures are retried
+  // once after the caller finishes preparing dependencies. Once dynamic import runs, failures are
+  // treated as permanent for this process because Bun caches failed module resolution.
   export async function loadExternal<R = Loaded>(input: Input<R>): Promise<R[]> {
     const candidates = input.items.map((origin) => ({ origin, plan: plan(origin.spec) }))
     const list: Array<Promise<AttemptResult<R>>> = []
@@ -215,8 +218,8 @@ export namespace PluginLoader {
         if (previous?.value !== undefined) continue
         if (previous?.retry !== true) continue
 
-        // Only local file plugins with module-resolution failures are retried. Syntax/build errors
-        // cannot be fixed by dependency installation and should not block TUI startup.
+        // Only pre-import file plugin setup failures are retried. Bun caches failed dynamic imports,
+        // so dependency waiting cannot fix load/build/runtime/shape failures in this process.
         const candidate = candidates[i]
         if (!candidate || pluginSource(candidate.plan.spec) !== "file") continue
         deps ??= input.wait()
