@@ -44,8 +44,6 @@ const initialize = Effect.fn("SnapshotTest.initialize")(function* (dir: string) 
   const bContent = `B${unique}`
   yield* write(`${dir}/a.txt`, aContent)
   yield* write(`${dir}/b.txt`, bContent)
-  yield* exec(dir, ["git", "add", "."])
-  yield* exec(dir, ["git", "commit", "-m", "init"])
   return { aContent, bContent }
 })
 
