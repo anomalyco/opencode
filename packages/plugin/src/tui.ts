@@ -78,6 +78,11 @@ export type TuiKeys = {
 
 export type TuiKeymap = Keymap<Renderable, KeyEvent>
 
+export type TuiModeApi = {
+  current: () => string
+  push: (mode: string) => () => void
+}
+
 /**
  * Legacy `api.command` shape kept so v1 plugins can initialize. Remove in v2.
  *
@@ -589,6 +594,7 @@ export type TuiPluginApi = {
   command?: TuiCommandApi
   keys: TuiKeys
   keymap: TuiKeymap
+  mode: TuiModeApi
   route: {
     register: (routes: TuiRouteDefinition[]) => () => void
     navigate: (name: string, params?: Record<string, unknown>) => void
