@@ -68,13 +68,6 @@ const load = (ctx: InstanceContext) =>
   Effect.runPromise(
     Config.Service.use((svc) => provideCurrentInstance(svc.get(), ctx)).pipe(Effect.scoped, Effect.provide(layer)),
   )
-const save = (config: Config.Info, ctx: InstanceContext) =>
-  Effect.runPromise(
-    Config.Service.use((svc) => provideCurrentInstance(svc.update(config), ctx)).pipe(
-      Effect.scoped,
-      Effect.provide(layer),
-    ),
-  )
 const saveGlobal = (config: Config.Info) =>
   Effect.runPromise(
     Config.Service.use((svc) => svc.updateGlobal(config)).pipe(
@@ -117,6 +110,8 @@ async function writeConfig(dir: string, config: object, name = "opencode.json") 
 
 const writeConfigEffect = (dir: string, config: object, name = "opencode.json") =>
   Effect.promise(() => writeConfig(dir, config, name))
+const mkdirEffect = (dir: string) => Effect.promise(() => fs.mkdir(dir, { recursive: true }))
+const writeTextEffect = (file: string, content: string) => Effect.promise(() => Filesystem.write(file, content))
 
 function withProcessEnv<A, E, R>(key: string, value: string, effect: Effect.Effect<A, E, R>) {
   return Effect.acquireUseRelease(
@@ -240,29 +235,23 @@ it.instance(
   { config: { shell: "bash" } },
 )
 
-test("updates config and preserves empty shell sentinel", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await writeConfig(
-        dir,
-        {
-          $schema: "https://opencode.ai/config.json",
-          shell: "bash",
-        },
-        "config.json",
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      await save({ shell: "" }, ctx)
+it.instance("updates config and preserves empty shell sentinel", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(
+      test.directory,
+      { $schema: "https://opencode.ai/config.json", shell: "bash" },
+      "config.json",
+    )
 
-      const writtenConfig = await Filesystem.readJson<{ shell?: string }>(path.join(tmp.path, "config.json"))
-      expect(writtenConfig.shell).toBe("")
-    },
-  })
-})
+    yield* Config.Service.use((svc) => svc.update(ConfigParse.schema(Config.Info, { shell: "" }, "test:config")))
+
+    const writtenConfig = yield* Effect.promise(() =>
+      Filesystem.readJson<{ shell?: string }>(path.join(test.directory, "config.json")),
+    )
+    expect(writtenConfig.shell).toBe("")
+  }),
+)
 
 test("updates global config and omits empty shell key in json", async () => {
   await using tmp = await tmpdir({
@@ -684,230 +673,177 @@ it.instance("migrates mode field to agent field", () =>
   }),
 )
 
-test("loads config from .opencode directory", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
-      const agentDir = path.join(opencodeDir, "agent")
-      await fs.mkdir(agentDir, { recursive: true })
-
-      await Filesystem.write(
-        path.join(agentDir, "test.md"),
-        `---
+it.instance("loads config from .opencode directory", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* mkdirEffect(path.join(test.directory, ".opencode", "agent"))
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "agent", "test.md"),
+      `---
 model: test/model
 ---
 Test agent prompt`,
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test"]).toEqual(
-        expect.objectContaining({
-          name: "test",
-          model: "test/model",
-          prompt: "Test agent prompt",
-        }),
-      )
-    },
-  })
-})
+    )
 
-test("agent markdown permission config preserves user key order", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const agentDir = path.join(dir, ".opencode", "agent")
-      await fs.mkdir(agentDir, { recursive: true })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test"]).toEqual(
+      expect.objectContaining({
+        name: "test",
+        model: "test/model",
+        prompt: "Test agent prompt",
+      }),
+    )
+  }),
+)
 
-      await Filesystem.write(
-        path.join(agentDir, "ordered.md"),
-        `---
+it.instance("agent markdown permission config preserves user key order", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* mkdirEffect(path.join(test.directory, ".opencode", "agent"))
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "agent", "ordered.md"),
+      `---
 permission:
   bash: allow
   "*": deny
   edit: ask
 ---
 Ordered permissions`,
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(Object.keys(config.agent?.ordered?.permission ?? {})).toEqual(["bash", "*", "edit"])
-    },
-  })
-})
+    )
 
-test("loads agents from .opencode/agents (plural)", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(Object.keys(config.agent?.ordered?.permission ?? {})).toEqual(["bash", "*", "edit"])
+  }),
+)
 
-      const agentsDir = path.join(opencodeDir, "agents")
-      await fs.mkdir(path.join(agentsDir, "nested"), { recursive: true })
-
-      await Filesystem.write(
-        path.join(agentsDir, "helper.md"),
-        `---
+it.instance("loads agents from .opencode/agents (plural)", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* mkdirEffect(path.join(test.directory, ".opencode", "agents", "nested"))
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "agents", "helper.md"),
+      `---
 model: test/model
 mode: subagent
 ---
 Helper agent prompt`,
-      )
+    )
 
-      await Filesystem.write(
-        path.join(agentsDir, "nested", "child.md"),
-        `---
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "agents", "nested", "child.md"),
+      `---
 model: test/model
 mode: subagent
 ---
 Nested agent prompt`,
-      )
-    },
-  })
+    )
 
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
+    const config = yield* Config.Service.use((svc) => svc.get())
 
-      expect(config.agent?.["helper"]).toMatchObject({
-        name: "helper",
-        model: "test/model",
-        mode: "subagent",
-        prompt: "Helper agent prompt",
-      })
+    expect(config.agent?.["helper"]).toMatchObject({
+      name: "helper",
+      model: "test/model",
+      mode: "subagent",
+      prompt: "Helper agent prompt",
+    })
 
-      expect(config.agent?.["nested/child"]).toMatchObject({
-        name: "nested/child",
-        model: "test/model",
-        mode: "subagent",
-        prompt: "Nested agent prompt",
-      })
-    },
-  })
-})
+    expect(config.agent?.["nested/child"]).toMatchObject({
+      name: "nested/child",
+      model: "test/model",
+      mode: "subagent",
+      prompt: "Nested agent prompt",
+    })
+  }),
+)
 
-test("loads commands from .opencode/command (singular)", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
-
-      const commandDir = path.join(opencodeDir, "command")
-      await fs.mkdir(path.join(commandDir, "nested"), { recursive: true })
-
-      await Filesystem.write(
-        path.join(commandDir, "hello.md"),
-        `---
+it.instance("loads commands from .opencode/command (singular)", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* mkdirEffect(path.join(test.directory, ".opencode", "command", "nested"))
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "command", "hello.md"),
+      `---
 description: Test command
 ---
 Hello from singular command`,
-      )
+    )
 
-      await Filesystem.write(
-        path.join(commandDir, "nested", "child.md"),
-        `---
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "command", "nested", "child.md"),
+      `---
 description: Nested command
 ---
 Nested command template`,
-      )
-    },
-  })
+    )
 
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
+    const config = yield* Config.Service.use((svc) => svc.get())
 
-      expect(config.command?.["hello"]).toEqual({
-        description: "Test command",
-        template: "Hello from singular command",
-      })
+    expect(config.command?.["hello"]).toEqual({
+      description: "Test command",
+      template: "Hello from singular command",
+    })
 
-      expect(config.command?.["nested/child"]).toEqual({
-        description: "Nested command",
-        template: "Nested command template",
-      })
-    },
-  })
-})
+    expect(config.command?.["nested/child"]).toEqual({
+      description: "Nested command",
+      template: "Nested command template",
+    })
+  }),
+)
 
-test("loads commands from .opencode/commands (plural)", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
-
-      const commandsDir = path.join(opencodeDir, "commands")
-      await fs.mkdir(path.join(commandsDir, "nested"), { recursive: true })
-
-      await Filesystem.write(
-        path.join(commandsDir, "hello.md"),
-        `---
+it.instance("loads commands from .opencode/commands (plural)", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* mkdirEffect(path.join(test.directory, ".opencode", "commands", "nested"))
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "commands", "hello.md"),
+      `---
 description: Test command
 ---
 Hello from plural commands`,
-      )
+    )
 
-      await Filesystem.write(
-        path.join(commandsDir, "nested", "child.md"),
-        `---
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "commands", "nested", "child.md"),
+      `---
 description: Nested command
 ---
 Nested command template`,
-      )
-    },
-  })
+    )
 
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
+    const config = yield* Config.Service.use((svc) => svc.get())
 
-      expect(config.command?.["hello"]).toEqual({
-        description: "Test command",
-        template: "Hello from plural commands",
-      })
+    expect(config.command?.["hello"]).toEqual({
+      description: "Test command",
+      template: "Hello from plural commands",
+    })
 
-      expect(config.command?.["nested/child"]).toEqual({
-        description: "Nested command",
-        template: "Nested command template",
-      })
-    },
-  })
-})
+    expect(config.command?.["nested/child"]).toEqual({
+      description: "Nested command",
+      template: "Nested command template",
+    })
+  }),
+)
 
-test("updates config and writes to file", async () => {
-  await using tmp = await tmpdir()
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const newConfig = { model: "updated/model" }
-      await save(newConfig as any, ctx)
+it.instance("updates config and writes to file", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* Config.Service.use((svc) =>
+      svc.update(ConfigParse.schema(Config.Info, { model: "updated/model" }, "test:config")),
+    )
 
-      const writtenConfig = await Filesystem.readJson<{ model: string }>(path.join(tmp.path, "config.json"))
-      expect(writtenConfig.model).toBe("updated/model")
-    },
-  })
-})
+    const writtenConfig = yield* Effect.promise(() =>
+      Filesystem.readJson<{ model: string }>(path.join(test.directory, "config.json")),
+    )
+    expect(writtenConfig.model).toBe("updated/model")
+  }),
+)
 
-test("gets config directories", async () => {
-  await using tmp = await tmpdir()
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const dirs = await listDirs(ctx)
-      expect(dirs.length).toBeGreaterThanOrEqual(1)
-    },
-  })
-})
+it.instance("gets config directories", () =>
+  Effect.gen(function* () {
+    const dirs = yield* Config.Service.use((svc) => svc.directories())
+    expect(dirs.length).toBeGreaterThanOrEqual(1)
+  }),
+)
 
 test("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR", async () => {
   if (process.platform === "win32") return

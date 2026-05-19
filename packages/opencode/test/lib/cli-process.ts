@@ -18,8 +18,8 @@
 // without changing the fixture. Long-lived commands like `serve` will need a
 // different return shape — see the TODO at the bottom of OpencodeCli.
 import type { TestOptions } from "bun:test"
-import * as Scope from "effect/Scope"
-import { Effect } from "effect"
+import { Deferred, Duration, Effect, Layer, Scope, Stream } from "effect"
+import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import path from "node:path"
 import fs from "node:fs/promises"
 import os from "node:os"
@@ -71,9 +71,40 @@ export type RunOpts = SpawnOpts & {
   readonly extraArgs?: string[]
 }
 
+// `opencode serve` is a long-lived process — it never exits on its own.
+// `serve(opts)` therefore returns a handle inside the caller's Scope: the
+// subprocess is killed when the scope closes (test end), and the URL the
+// server actually bound to (port 0 means OS-assigned) is parsed off stdout.
+export type ServeOpts = SpawnOpts & {
+  readonly port?: number
+  readonly hostname?: string
+  readonly extraArgs?: string[]
+  // How long to wait for the "listening on http://..." line before failing.
+  // Default 15s — startup is dominated by bun's transpile + plugin init, not
+  // the actual listen() call.
+  readonly readyTimeoutMs?: number
+}
+
+export type ServeHandle = {
+  // Full URL the server is bound to, e.g. "http://127.0.0.1:54321". Use this
+  // as the base for HTTP requests in tests — never assume the port.
+  readonly url: string
+  readonly hostname: string
+  readonly port: number
+  // Sends SIGTERM. The scope finalizer also calls this, so tests rarely need
+  // to invoke it directly — useful for tests that assert exit behavior.
+  readonly kill: () => void
+  // Resolves with the exit code once the process exits. Bun returns a number.
+  readonly exited: Promise<number>
+}
+
 export type OpencodeCli = {
   // High-level: run a single prompt against the test model. Short-lived.
   readonly run: (message: string, opts?: RunOpts) => Effect.Effect<RunResult>
+  // Spawn `opencode serve` and wait until it's listening. Long-lived: the
+  // returned handle is killed when the caller's Scope closes. Fails if the
+  // listening line doesn't appear within `readyTimeoutMs`.
+  readonly serve: (opts?: ServeOpts) => Effect.Effect<ServeHandle, Error, Scope.Scope>
   // Escape hatch: any CLI invocation with full control over argv. Used to test
   // commands that don't yet have a typed builder.
   readonly spawn: (args: string[], opts?: SpawnOpts) => Effect.Effect<RunResult>
@@ -85,9 +116,6 @@ export type OpencodeCli = {
   // event (see src/cli/cmd/run.ts `emit`). Throws on a malformed line so
   // tests fail loudly rather than silently skipping data.
   readonly parseJsonEvents: (stdout: string) => Array<Record<string, unknown>>
-  // TODO: long-lived builders for `serve` / `acp` / etc. need a different
-  // return shape — they yield a handle with .url / .kill and live inside the
-  // surrounding Scope. Add when the first long-lived command is tested.
 }
 
 export type CliFixture = {
@@ -101,7 +129,7 @@ export type CliFixture = {
 // the caller doesn't need to wire it up — the fixture's lifetime is tied to
 // the surrounding Scope.
 export function withCliFixture<A, E>(
-  fn: (input: CliFixture) => Effect.Effect<A, E>,
+  fn: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope | HttpClient.HttpClient>,
 ): Effect.Effect<A, E | unknown, Scope.Scope> {
   return Effect.gen(function* () {
     const llm = yield* TestLLMServer
@@ -145,10 +173,99 @@ export function withCliFixture<A, E>(
       return spawn(argv, opts)
     }
 
-    const opencode: OpencodeCli = { run, spawn, expectExit, parseJsonEvents }
+    const serve = Effect.fn("opencode.serve")(function* (opts?: ServeOpts) {
+      const argv = ["serve"]
+      // Default port 0 — let the OS pick a free port, parse the actual one
+      // off stdout. Hard-coded ports flake under parallel tests.
+      argv.push("--port", String(opts?.port ?? 0))
+      if (opts?.hostname) argv.push("--hostname", opts.hostname)
+      if (opts?.extraArgs) argv.push(...opts.extraArgs)
+
+      // Acquire the subprocess; release sends SIGTERM and awaits exit on
+      // scope close. Wrapped in Effect.ignore so a flaky kill doesn't surface
+      // as a finalizer error during test teardown.
+      const proc = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...argv], {
+            cwd: home,
+            env: { ...process.env, ...env, ...opts?.env },
+            stdout: "pipe",
+            stderr: "pipe",
+          }),
+        ),
+        (p) =>
+          Effect.promise(() => {
+            p.kill()
+            return p.exited
+          }).pipe(Effect.ignore),
+      )
+
+      // Drain stderr in a scope-bound fork. Without this the OS pipe buffer
+      // eventually fills and the child blocks on its next log call. Kept as a
+      // tail buffer so timeout failures can include context.
+      const stderrChunks: string[] = []
+      yield* Effect.forkScoped(
+        Stream.fromReadableStream({
+          evaluate: () => proc.stderr,
+          onError: () => new Error("stderr stream error"),
+        }).pipe(
+          Stream.decodeText(),
+          Stream.runForEach((chunk) => Effect.sync(() => stderrChunks.push(chunk))),
+          Effect.ignore,
+        ),
+      )
+
+      // Watch stdout line-by-line for the listening sentinel. Format
+      // (see src/cli/cmd/serve.ts):
+      //   "opencode server listening on http://<host>:<port>"
+      const readyRe = /listening on (http:\/\/([^\s:]+):(\d+))/
+      const readyDeferred = yield* Deferred.make<{ url: string; hostname: string; port: number }>()
+      yield* Effect.forkScoped(
+        Stream.fromReadableStream({
+          evaluate: () => proc.stdout,
+          onError: () => new Error("stdout stream error"),
+        }).pipe(
+          Stream.decodeText(),
+          Stream.splitLines,
+          Stream.runForEach((line) => {
+            const m = line.match(readyRe)
+            return m ? Deferred.succeed(readyDeferred, { url: m[1], hostname: m[2], port: Number(m[3]) }) : Effect.void
+          }),
+          Effect.ignore,
+        ),
+      )
+
+      const readyTimeoutMs = opts?.readyTimeoutMs ?? 15_000
+      const match = yield* Deferred.await(readyDeferred).pipe(
+        Effect.timeoutOrElse({
+          duration: Duration.millis(readyTimeoutMs),
+          orElse: () =>
+            Effect.fail(
+              new Error(
+                `opencode serve did not become ready within ${readyTimeoutMs}ms\n` +
+                  `stderr (last 2000):\n${stderrChunks.join("").slice(-2000)}`,
+              ),
+            ),
+        }),
+      )
+
+      return {
+        url: match.url,
+        hostname: match.hostname,
+        port: match.port,
+        kill: () => {
+          proc.kill()
+        },
+        exited: proc.exited as Promise<number>,
+      } satisfies ServeHandle
+    })
+
+    const opencode: OpencodeCli = { run, serve, spawn, expectExit, parseJsonEvents }
 
     return yield* fn({ llm, home, opencode })
-  }).pipe(Effect.provide(TestLLMServer.layer))
+    // FetchHttpClient is provided so test bodies can `yield* HttpClient.HttpClient`
+    // and hit endpoints on `opencode.serve()` without rolling their own fetch.
+  }).pipe(Effect.provide(Layer.mergeAll(TestLLMServer.layer, FetchHttpClient.layer)))
 }
 
 function parseJsonEvents(stdout: string): Array<Record<string, unknown>> {
@@ -180,7 +297,13 @@ function expectExit(result: RunResult, expected: number, label = "opencode") {
 // Only `.live` is exposed because subprocess tests must run against the real
 // clock — a TestClock-paused environment can't drive a child process. If you
 // need `.only` or `.skip`, fall back to `it.live` + `withCliFixture` directly.
+// Body's R is `Scope.Scope | never` so tests can yield* scope-requiring
+// resources (e.g. `opencode.serve`) without an extra `Effect.scoped` wrapper —
+// `withCliFixture`'s outer scope is the natural lifetime.
 export const cliIt = {
-  live: <A, E>(name: string, body: (input: CliFixture) => Effect.Effect<A, E>, opts?: number | TestOptions) =>
-    it.live(name, () => withCliFixture(body), opts),
+  live: <A, E>(
+    name: string,
+    body: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope | HttpClient.HttpClient>,
+    opts?: number | TestOptions,
+  ) => it.live(name, () => withCliFixture(body), opts),
 }
