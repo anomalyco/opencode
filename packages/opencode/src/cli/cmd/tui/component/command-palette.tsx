@@ -12,8 +12,8 @@ import { useTuiConfig } from "../context/tui-config"
 
 type PaletteCommandEntry = ReturnType<OpenTuiKeymap["getCommandEntries"]>[number]
 
-function isVisiblePaletteCommand(entry: PaletteCommandEntry) {
-  return entry.command.hidden !== true && entry.command.name !== COMMAND_PALETTE_COMMAND
+function isVisiblePaletteCommand(command: PaletteCommandEntry["command"]) {
+  return command.hidden !== true && command.name !== COMMAND_PALETTE_COMMAND
 }
 
 function isSuggestedPaletteCommand(entry: PaletteCommandEntry) {
@@ -34,8 +34,8 @@ export function CommandPaletteDialog() {
       .getCommandEntries({
         ...query,
         visibility: "reachable",
+        filter: isVisiblePaletteCommand,
       })
-      .filter(isVisiblePaletteCommand)
     const registeredBindings = keymap.getCommandBindings({
       visibility: "registered",
       commands: reachable.map((entry) => entry.command.name),

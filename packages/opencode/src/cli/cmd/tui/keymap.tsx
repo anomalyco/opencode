@@ -35,12 +35,12 @@ type CommandSlashEntry = {
   aliases?: string[]
   onSelect: () => void
 }
-type CommandEntry = ReturnType<OpenTuiKeymap["getCommandEntries"]>[number]
+type Command = ReturnType<OpenTuiKeymap["getCommands"]>[number]
 
 const modeStacks = new WeakMap<OpenTuiKeymap, OpencodeModeStack>()
 
-function isVisiblePaletteCommand(entry: CommandEntry) {
-  return entry.command.hidden !== true && entry.command.name !== COMMAND_PALETTE_COMMAND
+function isVisiblePaletteCommand(command: Command) {
+  return command.hidden !== true && command.name !== COMMAND_PALETTE_COMMAND
 }
 
 export function createOpencodeModeStack(keymap: OpenTuiKeymap) {
@@ -244,8 +244,8 @@ export function useCommandSlashes(): Accessor<readonly CommandSlashEntry[]> {
       .getCommandEntries({
         visibility: "reachable",
         namespace: "palette",
+        filter: isVisiblePaletteCommand,
       })
-      .filter(isVisiblePaletteCommand),
   )
 
   return createMemo<CommandSlashEntry[]>(() =>
