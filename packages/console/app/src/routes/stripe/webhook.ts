@@ -60,6 +60,15 @@ export async function POST(input: APIEvent) {
         const customer = await Billing.get()
         if (customer?.customerID && customer.customerID !== customerID) throw new Error("Customer ID mismatch")
 
+        const existingPayment = await Database.use((tx) =>
+          tx
+            .select({ id: PaymentTable.id })
+            .from(PaymentTable)
+            .where(eq(PaymentTable.paymentID, paymentID))
+            .then((rows) => rows[0]),
+        )
+        if (existingPayment) return
+
         // set customer metadata
         if (!customer?.customerID) {
           await Billing.stripe().customers.update(customerID, {
@@ -265,6 +274,17 @@ export async function POST(input: APIEvent) {
           const invoice = await Billing.stripe().invoices.retrieve(invoiceID, {
             expand: ["payments"],
           })
+          const paymentID = invoice.payments?.data[0].payment.payment_intent as string
+
+          const existingPayment = await Database.use((tx) =>
+            tx
+              .select({ id: PaymentTable.id })
+              .from(PaymentTable)
+              .where(eq(PaymentTable.paymentID, paymentID))
+              .then((rows) => rows[0]),
+          )
+          if (existingPayment) return
+
           await Database.transaction(async (tx) => {
             await tx
               .update(BillingTable)
@@ -279,7 +299,7 @@ export async function POST(input: APIEvent) {
               id: Identifier.create("payment"),
               amount: centsToMicroCents(amountInCents),
               invoiceID,
-              paymentID: invoice.payments?.data[0].payment.payment_intent as string,
+              paymentID,
               customerID,
             })
           })

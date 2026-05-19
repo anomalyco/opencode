@@ -107,7 +107,7 @@ export const PaymentTable = mysqlTable(
         }
     >(),
   },
-  (table) => [...workspaceIndexes(table)],
+  (table) => [...workspaceIndexes(table), uniqueIndex("payment_payment_id").on(table.paymentID)],
 )
 
 export const UsageTable = mysqlTable(
