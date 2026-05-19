@@ -1,5 +1,7 @@
 # opencode database guide
 
+- IMPORTANT: All Issues, Pull Requests, and commit messages must be written in Japanese unless the user explicitly requests otherwise. SecureCode developers are all native Japanese speakers.
+
 ## Database
 
 - **Schema**: Drizzle schema lives in `src/**/*.sql.ts`.

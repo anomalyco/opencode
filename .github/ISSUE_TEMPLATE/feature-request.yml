@@ -1,5 +1,5 @@
-name: 🚀 Feature Request
-description: Suggest an idea, feature, or enhancement
+name: 🚀 機能リクエスト
+description: アイデア、機能、強化を提案する
 labels: [discussion]
 title: "[FEATURE]:"
 
@@ -7,14 +7,14 @@ body:
   - type: checkboxes
     id: verified
     attributes:
-      label: Feature hasn't been suggested before.
+      label: この機能は以前に提案されていません。
       options:
-        - label: I have verified this feature I'm about to request hasn't been suggested before.
+        - label: この機能を提案する前に、既に提案されていないことを確認しました。
           required: true
 
   - type: textarea
     attributes:
-      label: Describe the enhancement you want to request
-      description: What do you want to change or add? What are the benefits of implementing this? Try to be detailed so we can understand your request better :)
+      label: 要望する機能・強化を説明してください
+      description: 何を変更・追加したいですか？その利点は何ですか？詳細に記載してもらえるほど、リクエストを適切に理解できます。
     validations:
       required: true
