@@ -13,6 +13,10 @@ export const Server = Schema.Struct({
   cors: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
     description: "Additional domains to allow for CORS",
   }),
+  allowedHosts: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description:
+      "Additional hostnames accepted in the HTTP Host header (DNS-rebinding defense). Loopback names are always accepted; when listening on 0.0.0.0/::, the machine's network-interface addresses are also accepted automatically.",
+  }),
 }).annotate({ identifier: "ServerConfig" })
 export type Server = Schema.Schema.Type<typeof Server>
 
