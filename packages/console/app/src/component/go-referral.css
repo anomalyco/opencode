@@ -102,8 +102,6 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-4);
-    border: 2px solid var(--color-accent);
     border-radius: var(--border-radius-sm);
 
     @media (max-width: 40rem) {

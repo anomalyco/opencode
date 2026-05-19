@@ -95,7 +95,7 @@ function CopyInviteLink(props: { summary: GoReferralSummary }) {
     <div data-slot="invite-link-box">
       <div>
         <code title={inviteUrl()}>{inviteUrl()}</code>
-        <button type="button" data-color="primary" onClick={copy}>
+        <button type="button" onClick={copy}>
           <Show
             when={copied()}
             fallback={
