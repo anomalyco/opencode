@@ -25,6 +25,7 @@ import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
 import { RepoCloneTool } from "./repo_clone"
 import { RepoOverviewTool } from "./repo_overview"
+import { RepositoryCache } from "@/reference/repository-cache"
 import * as Log from "@opencode-ai/core/util/log"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
@@ -39,6 +40,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "../file/ripgrep"
 import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
+import { EffectBridge } from "@/effect/bridge"
 import { Question } from "../question"
 import { Todo } from "../session/todo"
 import { LSP } from "@/lsp/lsp"
@@ -93,6 +95,7 @@ export const layer: Layer.Layer<
   | BackgroundJob.Service
   | Provider.Service
   | Git.Service
+  | RepositoryCache.Service
   | Reference.Service
   | LSP.Service
   | Instruction.Service
@@ -156,9 +159,12 @@ export const layer: Layer.Layer<
             description: def.description,
             execute: (args, toolCtx) =>
               Effect.gen(function* () {
+                // Bridge the host's Effect-based `ask` into a Promise-returning
+                // function for the plugin to make sure context persists
+                const bridge = yield* EffectBridge.make()
                 const pluginCtx: PluginToolContext = {
                   ...toolCtx,
-                  ask: (req) => toolCtx.ask(req),
+                  ask: (req) => bridge.promise(toolCtx.ask(req)),
                   directory: ctx.directory,
                   worktree: ctx.worktree,
                 }
@@ -378,7 +384,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Session.defaultLayer),
       Layer.provide(Layer.mergeAll(SessionStatus.defaultLayer, BackgroundJob.defaultLayer)),
       Layer.provide(Provider.defaultLayer),
-      Layer.provide(Git.defaultLayer),
+      Layer.provide(Layer.mergeAll(Git.defaultLayer, RepositoryCache.defaultLayer)),
       Layer.provide(Reference.defaultLayer),
       Layer.provide(LSP.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
@@ -417,12 +423,38 @@ function legacyJsonSchema(entries: [string, unknown][]): JSONSchema7 {
 }
 
 function zodJsonSchema(schema: z.ZodType): JSONSchema7 {
-  const result = normalizeZodJsonSchema(z.toJSONSchema(schema, { io: "input" }))
+  const result = normalizeZodJsonSchema(z.toJSONSchema(schema, { io: "input", metadata: zodMetadataRegistry(schema) }))
   if (!isJsonSchemaObject(result)) throw new Error("plugin tool Zod schema produced a non-object JSON Schema")
   const { $defs, ...rest } = result
   return (
     $defs && isJsonSchemaObject($defs) ? { ...rest, definitions: $defs as JSONSchema7["definitions"] } : rest
   ) as JSONSchema7
+}
+
+function zodMetadataRegistry(schema: z.ZodType) {
+  const registry = z.registry<Record<string, unknown>>()
+  const seen = new WeakSet<object>()
+  const collect = (value: unknown) => {
+    if (typeof value !== "object" || value === null) return
+    if (seen.has(value)) return
+    seen.add(value)
+
+    if (isZodType(value)) {
+      const metadata = typeof value.meta === "function" ? value.meta() : undefined
+      const description = typeof value.description === "string" ? value.description : undefined
+      const merged = {
+        ...(metadata && typeof metadata === "object" ? metadata : {}),
+        ...(description ? { description } : {}),
+      }
+      if (Object.keys(merged).length) registry.add(value, merged)
+      collect(value._zod.def)
+      return
+    }
+
+    for (const item of Object.values(value)) collect(item)
+  }
+  collect(schema)
+  return registry
 }
 
 function normalizeZodJsonSchema(value: unknown): unknown {

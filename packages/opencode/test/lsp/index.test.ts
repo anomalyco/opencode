@@ -1,18 +1,26 @@
 import { describe, expect, spyOn } from "bun:test"
 import path from "path"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Layer } from "effect"
+import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LSP } from "@/lsp/lsp"
 import * as LSPServer from "@/lsp/server"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(LSP.defaultLayer, CrossSpawnSpawner.defaultLayer))
 const experimentalTyIt = testEffect(
   Layer.mergeAll(
     LSP.layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(RuntimeFlags.layer({ experimentalLspTy: true }))),
+    CrossSpawnSpawner.defaultLayer,
+  ),
+)
+const fakeServerPath = path.join(__dirname, "../fixture/lsp/fake-lsp-server.js")
+const disabledDownloadIt = testEffect(
+  Layer.mergeAll(
+    LSP.layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(RuntimeFlags.layer({ disableLspDownload: true }))),
     CrossSpawnSpawner.defaultLayer,
   ),
 )
@@ -83,6 +91,35 @@ describe("lsp.spawn", () => {
           }),
         ),
       { config: { lsp: true } },
+    ),
+  )
+
+  it.live("publishes lsp.updated after custom LSP initialization", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const lsp = yield* LSP.Service
+          const updated = yield* Deferred.make<void>()
+          const unsubscribe = Bus.subscribe(LSP.Event.Updated, () =>
+            Effect.runSync(Deferred.succeed(updated, undefined)),
+          )
+          yield* Effect.addFinalizer(() => Effect.sync(unsubscribe))
+
+          const file = path.join(dir, "sample.repro")
+          yield* Effect.promise(() => Bun.write(file, "sample\n"))
+          yield* lsp.touchFile(file)
+          yield* awaitWithTimeout(Deferred.await(updated), "lsp.updated event was not published")
+        }),
+      {
+        config: {
+          lsp: {
+            fake: {
+              command: [process.execPath, fakeServerPath],
+              extensions: [".repro"],
+            },
+          },
+        },
+      },
     ),
   )
 
@@ -159,6 +196,30 @@ describe("lsp.spawn", () => {
               expect(pyright).toHaveBeenCalledTimes(0)
             } finally {
               ty.mockRestore()
+              pyright.mockRestore()
+            }
+          }),
+        ),
+      { config: { lsp: true } },
+    ),
+  )
+
+  disabledDownloadIt.live("passes disableLspDownload to builtin LSP spawn", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        LSP.Service.use((lsp) =>
+          Effect.gen(function* () {
+            const pyright = spyOn(LSPServer.Pyright, "spawn").mockResolvedValue(undefined)
+
+            try {
+              yield* lsp.hover({
+                file: path.join(dir, "src", "inside.py"),
+                line: 0,
+                character: 0,
+              })
+              expect(pyright).toHaveBeenCalledTimes(1)
+              expect(pyright.mock.calls[0]?.[2]).toMatchObject({ disableLspDownload: true })
+            } finally {
               pyright.mockRestore()
             }
           }),

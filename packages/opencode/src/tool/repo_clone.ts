@@ -1,9 +1,7 @@
 import { Effect, Schema } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Git } from "@/git"
 import DESCRIPTION from "./repo_clone.txt"
 import * as Tool from "./tool"
-import { parseRemoteRepositoryReference, repositoryCachePath, validateRepositoryBranch } from "@/util/repository"
+import { repositoryCachePath } from "@/util/repository"
 import { RepositoryCache } from "@/reference/repository-cache"
 
 export const Parameters = Schema.Struct({
@@ -28,19 +26,18 @@ type Metadata = {
   branch?: string
 }
 
-export const RepoCloneTool = Tool.define<typeof Parameters, Metadata, AppFileSystem.Service | Git.Service>(
+export const RepoCloneTool = Tool.define<typeof Parameters, Metadata, RepositoryCache.Service>(
   "repo_clone",
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
-    const git = yield* Git.Service
+    const cache = yield* RepositoryCache.Service
 
     return {
       description: DESCRIPTION,
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context<Metadata>) =>
         Effect.gen(function* () {
-          const reference = parseRemoteRepositoryReference(params.repository)
-          if (params.branch) validateRepositoryBranch(params.branch)
+          const reference = yield* RepositoryCache.parseRemoteReference(params.repository)
+          if (params.branch) yield* RepositoryCache.validateBranch(params.branch)
 
           const repository = reference.label
           const remote = reference.remote
@@ -59,10 +56,7 @@ export const RepoCloneTool = Tool.define<typeof Parameters, Metadata, AppFileSys
             },
           })
 
-          const result = yield* RepositoryCache.ensure(
-            { reference, refresh: params.refresh, branch: params.branch },
-            { fs, git },
-          )
+          const result = yield* cache.ensure({ reference, refresh: params.refresh, branch: params.branch })
           return {
             title: repository,
             metadata: result,
@@ -74,7 +68,10 @@ export const RepoCloneTool = Tool.define<typeof Parameters, Metadata, AppFileSys
               ...(result.head ? [`HEAD: ${result.head}`] : []),
             ].join("\n"),
           }
-        }).pipe(Effect.orDie),
+        }).pipe(
+          Effect.catchIf(RepositoryCache.isError, (error) => Effect.fail(new Error(error.message))),
+          Effect.orDie,
+        ),
     } satisfies Tool.DefWithoutID<typeof Parameters, Metadata>
   }),
 )
