@@ -99,17 +99,13 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
   applyLegacySchemaOverrides(spec)
   normalizeComponentDescriptions(spec)
   addLegacyErrorSchemas(spec)
-  delete spec.components?.schemas?.Unauthorized
-  delete spec.components?.schemas?.EffectHttpApiErrorBadRequest
-  delete spec.components?.schemas?.EffectHttpApiErrorNotFound
-  delete spec.components?.schemas?.effect_HttpApiError_BadRequest
-  delete spec.components?.schemas?.effect_HttpApiError_NotFound
   delete spec.components?.securitySchemes
 
   for (const [path, item] of Object.entries(spec.paths ?? {})) {
     for (const method of ["get", "post", "put", "delete", "patch"] as const) {
       const operation = item[method]
       if (!operation) continue
+      const isV2Api = isV2ApiPath(path)
       if (operation.requestBody) {
         // The legacy OpenAPI surface never marked request bodies as required.
         // Keep that SDK surface stable while the HttpApi spec is tightened.
@@ -146,11 +142,14 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
           if (content.schema) content.schema = stripOptionalNull(structuredClone(content.schema))
         }
       }
-      // Auth is still runtime middleware outside the public OpenAPI metadata, so
-      // the SDK should not expose auth schemes or generated 401 error unions.
-      delete operation.security
-      delete operation.responses?.["401"]
-      normalizeLegacyErrorResponses(operation)
+      if (!isV2Api) {
+        // Auth is still runtime middleware outside the legacy public OpenAPI
+        // metadata, so the legacy SDK should not expose auth schemes or
+        // generated 401 error unions.
+        delete operation.security
+        delete operation.responses?.["401"]
+        normalizeLegacyErrorResponses(operation)
+      }
       normalizeLegacyOperation(operation, path, method)
       if ((path === "/event" || path === "/global/event") && method === "get") {
         // HttpApi has no first-class SSE response schema, and these handlers are
@@ -171,7 +170,12 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
       for (const param of operation.parameters ?? []) normalizeParameter(param, route)
     }
   }
+  deleteUnusedLegacyErrorComponents(spec)
   return input
+}
+
+function isV2ApiPath(path: string) {
+  return path === "/api" || path.startsWith("/api/")
 }
 
 function addLegacyErrorSchemas(spec: OpenApiSpec) {
@@ -343,6 +347,26 @@ function normalizeLegacyErrorResponses(operation: OpenApiOperation) {
   if (operation.responses?.["404"] && isBuiltInErrorResponse(operation.responses["404"], "NotFound")) {
     operation.responses["404"] = legacyErrorResponse("Not found", "NotFoundError")
   }
+}
+
+function deleteUnusedLegacyErrorComponents(spec: OpenApiSpec) {
+  for (const name of [
+    "Unauthorized",
+    "EffectHttpApiErrorBadRequest",
+    "EffectHttpApiErrorNotFound",
+    "effect_HttpApiError_BadRequest",
+    "effect_HttpApiError_NotFound",
+  ]) {
+    if (referencesComponent(spec.paths, name)) continue
+    delete spec.components?.schemas?.[name]
+  }
+}
+
+function referencesComponent(input: unknown, name: string): boolean {
+  if (Array.isArray(input)) return input.some((item) => referencesComponent(item, name))
+  if (!input || typeof input !== "object") return false
+  if ((input as OpenApiSchema).$ref === `#/components/schemas/${name}`) return true
+  return Object.values(input).some((value) => referencesComponent(value, name))
 }
 
 function normalizeLegacyOperation(operation: OpenApiOperation, path: string, method: string) {
