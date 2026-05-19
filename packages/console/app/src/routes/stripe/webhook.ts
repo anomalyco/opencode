@@ -189,6 +189,7 @@ export async function POST(input: APIEvent) {
         const coupon = subscription.metadata?.coupon
 
         if (!workspaceID) throw new Error("Workspace ID not found in subscription metadata")
+        if (productID === LiteData.productID() && !userID) throw new Error("User ID not found in subscription metadata")
 
         await Actor.provide("system", { workspaceID }, async () => {
           const billing = await Billing.get()
@@ -237,22 +238,22 @@ export async function POST(input: APIEvent) {
               await tx.insert(LiteTable).values({
                 workspaceID,
                 id: Identifier.create("lite"),
-                userID,
+                userID: userID!,
               })
             })
+          }
 
-            if (userEmail) {
-              if (coupon === LiteData.firstMonth50Coupon) {
-                await Billing.redeemCoupon(userEmail, "GO1MONTH50")
-              } else if (coupon === LiteData.firstMonth100Coupon) {
-                await Billing.redeemCoupon(userEmail, "GOFREEMONTH")
-              } else if (coupon === LiteData.threeMonths100Coupon) {
-                await Billing.redeemCoupon(userEmail, "GO3MONTHS100")
-              } else if (coupon === LiteData.sixMonths100Coupon) {
-                await Billing.redeemCoupon(userEmail, "GO6MONTHS100")
-              } else if (coupon === LiteData.twelveMonths100Coupon) {
-                await Billing.redeemCoupon(userEmail, "GO12MONTHS100")
-              }
+          if (productID === LiteData.productID() && userEmail) {
+            if (coupon === LiteData.firstMonth50Coupon) {
+              await Billing.redeemCoupon(userEmail, "GO1MONTH50")
+            } else if (coupon === LiteData.firstMonth100Coupon) {
+              await Billing.redeemCoupon(userEmail, "GOFREEMONTH")
+            } else if (coupon === LiteData.threeMonths100Coupon) {
+              await Billing.redeemCoupon(userEmail, "GO3MONTHS100")
+            } else if (coupon === LiteData.sixMonths100Coupon) {
+              await Billing.redeemCoupon(userEmail, "GO6MONTHS100")
+            } else if (coupon === LiteData.twelveMonths100Coupon) {
+              await Billing.redeemCoupon(userEmail, "GO12MONTHS100")
             }
 
             await Referral.completeFromLiteSubscription({
