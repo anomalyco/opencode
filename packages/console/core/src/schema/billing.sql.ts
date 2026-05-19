@@ -95,6 +95,7 @@ export const PaymentTable = mysqlTable(
     invoiceID: varchar("invoice_id", { length: 255 }),
     paymentID: varchar("payment_id", { length: 255 }),
     amount: bigint("amount", { mode: "number" }).notNull(),
+    amountRefunded: bigint("amount_refunded", { mode: "number" }),
     timeRefunded: utc("time_refunded"),
     enrichment: json("enrichment").$type<
       | {

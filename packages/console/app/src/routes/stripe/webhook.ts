@@ -336,32 +336,33 @@ export async function POST(input: APIEvent) {
         tx
           .select({
             amount: PaymentTable.amount,
+            amountRefunded: PaymentTable.amountRefunded,
             enrichment: PaymentTable.enrichment,
-            timeRefunded: PaymentTable.timeRefunded,
           })
           .from(PaymentTable)
           .where(and(eq(PaymentTable.paymentID, paymentIntentID), eq(PaymentTable.workspaceID, workspaceID)))
           .then((rows) => rows[0]),
       )
       if (!payment) throw new Error("Payment not found")
-      if (payment.timeRefunded) return
 
-      const refundAmountInMicroCents = centsToMicroCents(body.data.object.amount_refunded as number)
+      const cumulativeRefundedMicroCents = centsToMicroCents(body.data.object.amount_refunded as number)
+      const deltaRefundMicroCents = cumulativeRefundedMicroCents - (payment.amountRefunded ?? 0)
+      if (deltaRefundMicroCents <= 0) return
 
       await Database.transaction(async (tx) => {
         await tx
           .update(PaymentTable)
           .set({
-            timeRefunded: new Date(body.created * 1000),
+            amountRefunded: cumulativeRefundedMicroCents,
+            ...(cumulativeRefundedMicroCents >= payment.amount ? { timeRefunded: new Date(body.created * 1000) } : {}),
           })
           .where(and(eq(PaymentTable.paymentID, paymentIntentID), eq(PaymentTable.workspaceID, workspaceID)))
 
-        // deduct balance only for top up
         if (!payment.enrichment?.type) {
           await tx
             .update(BillingTable)
             .set({
-              balance: sql`${BillingTable.balance} - ${refundAmountInMicroCents}`,
+              balance: sql`${BillingTable.balance} - ${deltaRefundMicroCents}`,
             })
             .where(eq(BillingTable.workspaceID, workspaceID))
         }
