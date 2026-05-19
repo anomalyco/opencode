@@ -265,6 +265,7 @@ Built-in modes:
 - `base`: normal app, route, and prompt interaction.
 - `modal`: host dialog stack is open, including dialogs rendered through `api.ui.dialog` and `api.ui.Dialog*` components.
 - `autocomplete`: host prompt autocomplete is open.
+- `api.mode.current()` returns the active top mode, or `base` when no pushed mode is active.
 
 Example: register a command and shortcut that are active only in normal app mode:
 
