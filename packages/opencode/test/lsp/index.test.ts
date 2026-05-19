@@ -1,13 +1,14 @@
 import { describe, expect, spyOn } from "bun:test"
 import path from "path"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Layer } from "effect"
+import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LSP } from "@/lsp/lsp"
 import * as LSPServer from "@/lsp/server"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(LSP.defaultLayer, CrossSpawnSpawner.defaultLayer))
 const experimentalTyIt = testEffect(
@@ -16,6 +17,7 @@ const experimentalTyIt = testEffect(
     CrossSpawnSpawner.defaultLayer,
   ),
 )
+const fakeServerPath = path.join(__dirname, "../fixture/lsp/fake-lsp-server.js")
 const disabledDownloadIt = testEffect(
   Layer.mergeAll(
     LSP.layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(RuntimeFlags.layer({ disableLspDownload: true }))),
@@ -89,6 +91,35 @@ describe("lsp.spawn", () => {
           }),
         ),
       { config: { lsp: true } },
+    ),
+  )
+
+  it.live("publishes lsp.updated after custom LSP initialization", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const lsp = yield* LSP.Service
+          const updated = yield* Deferred.make<void>()
+          const unsubscribe = Bus.subscribe(LSP.Event.Updated, () =>
+            Effect.runSync(Deferred.succeed(updated, undefined)),
+          )
+          yield* Effect.addFinalizer(() => Effect.sync(unsubscribe))
+
+          const file = path.join(dir, "sample.repro")
+          yield* Effect.promise(() => Bun.write(file, "sample\n"))
+          yield* lsp.touchFile(file)
+          yield* awaitWithTimeout(Deferred.await(updated), "lsp.updated event was not published")
+        }),
+      {
+        config: {
+          lsp: {
+            fake: {
+              command: [process.execPath, fakeServerPath],
+              extensions: [".repro"],
+            },
+          },
+        },
+      },
     ),
   )
 

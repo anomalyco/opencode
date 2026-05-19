@@ -11,7 +11,7 @@ export function createRateLimiter(modelId: string, rateLimit: number | undefined
 
   const limits = Subscription.getFreeLimits()
   const headersExist = Object.entries(limits.checkHeaders).every(
-    ([name, value]) => request.headers.get(name)?.includes(value) ?? false,
+    ([name, value]) => request.headers.get(name)?.toLowerCase().includes(value) ?? false,
   )
   const dailyLimit = !headersExist ? limits.dailyRequestsFallback : (rateLimit ?? limits.dailyRequests)
   const isDefaultModel = headersExist && !rateLimit
