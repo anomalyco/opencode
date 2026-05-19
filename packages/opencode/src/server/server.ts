@@ -24,7 +24,14 @@ const collabMiddleware: HttpMiddleware.HttpMiddleware = (app) =>
   Effect.gen(function* () {
     const req = yield* HttpServerRequest.HttpServerRequest
     const pathname = new URL(req.url, "http://localhost").pathname
-    if (!pathname.startsWith("/collab/")) return yield* app
+    // Only intercept collab API/auth/invite paths — let UI routes fall through to index.html
+    const isCollabApi =
+      pathname === "/collab/auth/github" ||
+      pathname.startsWith("/collab/auth/") ||
+      pathname.startsWith("/collab/invite/") ||
+      pathname === "/collab/session" ||
+      pathname.startsWith("/collab/session/")
+    if (!isCollabApi) return yield* app
 
     // toWeb converts Effect's HttpServerRequest → standard Web API Request (body included)
     const webRequest = yield* HttpServerRequest.toWeb(req)
