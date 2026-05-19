@@ -39,6 +39,47 @@ import { collabDb } from "./db-impl"
 import { initSessionWorkspace, cleanupSessionWorkspace } from "./workspace"
 import type { CollabEvent } from "@opencode-ai/collab"
 
+// ── Native session execution ────────────────────────────────────────────────────
+// Sends a prompt to the underlying opencode session, creating it first if needed.
+
+async function executePromptOnNativeSession(
+  collabSession: ReturnType<typeof Session.getCollabSession> & {},
+  content: string,
+  workspacePath: string,
+): Promise<void> {
+  let sessionId = collabSession.sessionId
+
+  // Create the native session on first prompt if not yet linked
+  if (!sessionId) {
+    const createRes = await fetch("http://localhost:4096/api/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+      // Pass workspace path via query param
+    })
+    if (!createRes.ok) {
+      console.error("[collab] failed to create native session:", await createRes.text())
+      return
+    }
+    const created = (await createRes.json()) as { id: string }
+    sessionId = created.id
+    Session.linkNativeSession(collabSession.id, sessionId)
+    broadcastSse(collabSession.id, {
+      type: "collab:native_session_linked" as any,
+      sessionId,
+    })
+  }
+
+  // Send the prompt to the native session (async — don't block the HTTP response)
+  fetch(`http://localhost:4096/api/session/${sessionId}/prompt_async`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ parts: [{ type: "text", text: content }] }),
+  }).catch((err) => {
+    console.error("[collab] failed to send prompt to native session:", err)
+  })
+}
+
 // ── Config ──────────────────────────────────────────────────────────────────────
 
 function cfg() {
@@ -171,6 +212,21 @@ function handleCollabRequestInner(req: Request): Promise<Response> | Response {
   if (req.method === "GET" && path.startsWith("/collab/invite/")) {
     const token = path.slice("/collab/invite/".length)
     return handleInviteRedeem(req, token)
+  }
+
+  // GET /collab/repos — list org repos (auth required, no session needed)
+  if (req.method === "GET" && path === "/collab/repos") {
+    const sess = getSession(req)
+    if (!sess) return json({ error: "Unauthorised — please authenticate via /collab/auth/github" }, 401)
+    const c = cfg()
+    return listOrgRepos({ orgName: c.orgName, serverToken: c.serverToken }).then((repos) => json(repos))
+  }
+
+  // GET /collab/me — current authenticated user info
+  if (req.method === "GET" && path === "/collab/me") {
+    const sess = getSession(req)
+    if (!sess) return json({ error: "Unauthorised" }, 401)
+    return json({ githubId: sess.githubId, githubLogin: sess.githubLogin, githubAvatarUrl: sess.githubAvatarUrl })
   }
 
   // REST API — require auth for all /collab/session/* routes
@@ -415,6 +471,11 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
         : Queue.submitToPool(sessionId, body.content, sess.githubId, sess.githubLogin)
     const queue = Queue.getQueue(sessionId)
     broadcastSse(sessionId, { type: "collab:queue_update", queue })
+
+    // Execute the prompt on the underlying opencode session (non-blocking)
+    const workspacePath = process.env["COLLAB_WORKSPACE_ROOT"] ?? "/var/opencode/workspaces"
+    executePromptOnNativeSession(collabSession, body.content, workspacePath).catch(console.error)
+
     return json(suggestion, 201)
   }
 
@@ -435,6 +496,11 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     broadcastSse(sessionId, { type: "collab:suggestion_approved", suggestionId: parts[4], approvedBy: sess.githubLogin })
     const queue = Queue.getQueue(sessionId)
     broadcastSse(sessionId, { type: "collab:queue_update", queue })
+
+    // Execute the approved suggestion on the native session
+    const workspacePath = process.env["COLLAB_WORKSPACE_ROOT"] ?? "/var/opencode/workspaces"
+    executePromptOnNativeSession(collabSession, approved.content, workspacePath).catch(console.error)
+
     return json(approved)
   }
 

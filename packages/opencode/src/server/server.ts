@@ -29,6 +29,8 @@ const collabMiddleware: HttpMiddleware.HttpMiddleware = (app) =>
       pathname === "/collab/auth/github" ||
       pathname.startsWith("/collab/auth/") ||
       pathname.startsWith("/collab/invite/") ||
+      pathname === "/collab/repos" ||
+      pathname === "/collab/me" ||
       pathname === "/collab/session" ||
       pathname.startsWith("/collab/session/")
     if (!isCollabApi) return yield* app
