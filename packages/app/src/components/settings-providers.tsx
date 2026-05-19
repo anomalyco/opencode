@@ -185,29 +185,31 @@ export const SettingsProviders: Component = () => {
                         </span>
                       }
                     >
-                      <Button size="large" variant="ghost" onClick={() => void disconnect(item.id, item.name)}>
-                        {language.t("common.disconnect")}
-                      </Button>
-                      <Button
-                        size="large"
-                        variant="secondary"
-                        icon="edit"
-                        onClick={() => {
-                          if (isConfigCustom(item.id)) {
-                            dialog.show(() => (
-                              <DialogCustomProvider
-                                back="close"
-                                initialConfig={customProviderFormState(item.id)}
-                                originalProviderID={item.id}
-                              />
-                            ))
-                          } else {
-                            dialog.show(() => <DialogConnectProvider provider={item.id} />)
-                          }
-                        }}
-                      >
-                        {language.t("common.edit")}
-                      </Button>
+                      <div class="flex items-center gap-2">
+                        <Button size="large" variant="ghost" onClick={() => void disconnect(item.id, item.name)}>
+                          {language.t("common.disconnect")}
+                        </Button>
+                        <Button
+                          size="large"
+                          variant="secondary"
+                          icon="edit"
+                          onClick={() => {
+                            if (isConfigCustom(item.id)) {
+                              dialog.show(() => (
+                                <DialogCustomProvider
+                                  back="close"
+                                  initialConfig={customProviderFormState(item.id)}
+                                  originalProviderID={item.id}
+                                />
+                              ))
+                            } else {
+                              dialog.show(() => <DialogConnectProvider provider={item.id} />)
+                            }
+                          }}
+                        >
+                          {language.t("common.edit")}
+                        </Button>
+                      </div>
                     </Show>
                   </div>
                 )}
