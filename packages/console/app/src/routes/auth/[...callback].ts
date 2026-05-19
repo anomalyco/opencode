@@ -5,7 +5,7 @@ import { AuthClient } from "~/context/auth"
 import { useAuthSession } from "~/context/auth"
 import { i18n } from "~/i18n"
 import { localeFromRequest, route } from "~/lib/language"
-import { clearInviteCookie, inviteFromCookieHeader } from "~/lib/referral-invite"
+import { clearReferralCookie, referralCodeFromCookieHeader } from "~/lib/referral-invite"
 
 export async function GET(input: APIEvent) {
   const url = new URL(input.request.url)
@@ -19,7 +19,7 @@ export async function GET(input: APIEvent) {
     if (result.err) throw new Error(result.err.message)
     const decoded = AuthClient.decode(result.tokens.access, {} as any)
     if (decoded.err) throw new Error(decoded.err.message)
-    const inviteCode = inviteFromCookieHeader(input.request.headers.get("cookie"))
+    const referralCode = referralCodeFromCookieHeader(input.request.headers.get("cookie"))
     const session = await useAuthSession()
     const id = decoded.subject.properties.accountID
     await session.update((value) => {
@@ -35,14 +35,14 @@ export async function GET(input: APIEvent) {
         current: id,
       }
     })
-    if (decoded.subject.properties.newAccount && inviteCode) {
-      await Referral.createFromAccount({ accountID: id, inviteCode }).catch((error) => {
+    if (decoded.subject.properties.newAccount && referralCode) {
+      await Referral.createFromAccount({ accountID: id, referralCode }).catch((error) => {
         console.error("Referral create failed", error)
       })
     }
     const next = url.pathname === "/auth/callback" ? "/auth" : url.pathname.replace("/auth/callback", "")
     const response = redirect(route(locale, next))
-    if (inviteCode) response.headers.append("set-cookie", clearInviteCookie())
+    if (referralCode) response.headers.append("set-cookie", clearReferralCookie())
     return response
   } catch (e: any) {
     return new Response(

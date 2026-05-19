@@ -81,7 +81,7 @@ function CopyInviteLink(props: { summary: GoReferralSummary }) {
       ? window.location.origin
       : undefined
   const inviteUrl = createMemo(() => {
-    const path = `/go?ref=${props.summary.inviteCode}`
+    const path = `/go?ref=${props.summary.referralCode}`
     if (!origin) return path
     return new URL(path, origin).toString()
   })

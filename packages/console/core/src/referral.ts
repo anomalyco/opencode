@@ -153,7 +153,7 @@ export namespace Referral {
       (a, b) => new Date(b.timeCreated).getTime() - new Date(a.timeCreated).getTime(),
     )
     return {
-      inviteCode: code.code,
+      referralCode: code.code,
       inviteCount: allRewards.length,
       hasActiveGo: !!rows.lite,
       rewardAmount: microCentsToCents(REWARD_AMOUNT),
@@ -279,16 +279,16 @@ export namespace Referral {
 
   export async function createFromAccount(input: {
     accountID: string
-    inviteCode?: string
+    referralCode?: string
   }) {
-    const inviteCode = normalizeCode(input.inviteCode)
-    if (!inviteCode) return { status: "missing-code" as const }
+    const referralCode = normalizeCode(input.referralCode)
+    if (!referralCode) return { status: "missing-code" as const }
 
     return Database.transaction(async (tx) => {
       const code = await tx
         .select({ workspaceID: WorkspaceTable.id })
         .from(WorkspaceTable)
-        .where(and(eq(WorkspaceTable.referralCode, inviteCode), isNull(WorkspaceTable.timeDeleted)))
+        .where(and(eq(WorkspaceTable.referralCode, referralCode), isNull(WorkspaceTable.timeDeleted)))
         .then((rows) => rows[0])
       if (!code) return { status: "invalid-code" as const }
 
