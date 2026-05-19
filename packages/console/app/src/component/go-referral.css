@@ -183,61 +183,8 @@
     }
   }
 
-  [data-slot="rewards-title"] {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding-top: var(--space-2);
-
-    h2 {
-      margin: 0;
-      color: var(--color-text);
-      font-size: var(--font-size-md);
-      font-weight: 600;
-      line-height: 1.2;
-      letter-spacing: -0.03125rem;
-    }
-
-    p {
-      margin: 0;
-      color: var(--color-text-muted);
-      font-size: var(--font-size-sm);
-      line-height: 1.5;
-    }
-  }
-
-  [data-slot="referral-stats"] {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--space-6);
-
-    @media (max-width: 30rem) {
-      grid-template-columns: 1fr;
-      gap: var(--space-4);
-    }
-
-    > div {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-      padding: var(--space-4);
-      border: 1px solid var(--color-border);
-      border-radius: var(--border-radius-sm);
-    }
-
-    span {
-      color: var(--color-text-muted);
-      font-size: var(--font-size-sm);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: -0.025rem;
-    }
-
-    strong {
-      color: var(--color-text);
-      font-size: var(--font-size-md);
-      font-weight: 600;
-    }
+  [data-component="go-referral-overview"] + [data-slot="section-title"] {
+    margin-top: var(--space-4);
   }
 
   [data-slot="referrals-table"] {
@@ -296,17 +243,7 @@
       &[data-slot="referral-source"] {
         color: var(--color-text-secondary);
         font-family: var(--font-sans);
-
-        span {
-          display: block;
-        }
-
-        [data-slot="referral-email"] {
-          margin-top: var(--space-1);
-          color: var(--color-text-muted);
-          line-height: 1.4;
-          white-space: normal;
-        }
+        white-space: nowrap;
       }
 
       &[data-slot="referral-action"] {

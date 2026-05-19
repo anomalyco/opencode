@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { and, desc, eq, isNull, sql, Database } from "./drizzle"
+import { and, asc, eq, isNull, sql, Database } from "./drizzle"
 import { Actor } from "./actor"
 import { Identifier } from "./identifier"
 import { LiteTable } from "./schema/billing.sql"
@@ -68,7 +68,7 @@ export namespace Referral {
     const accountID = Actor.account()
     const code = await ensureCode(workspaceID)
     const rows = await Database.use(async (tx) => {
-      const [rewards, invites, inviteeReferrals, inviteeRewards, lite] = await Promise.all([
+      const [rewards, invites, inviteeReferral, inviteeRewards] = await Promise.all([
         tx
           .select({
             referralID: ReferralRewardTable.referralID,
@@ -91,8 +91,7 @@ export namespace Referral {
               isNull(ReferralRewardTable.timeDeleted),
               isNull(ReferralTable.timeDeleted),
             ),
-          )
-          .orderBy(desc(ReferralRewardTable.timeCreated)),
+          ),
         tx
           .select({ id: ReferralTable.id, inviteeEmail: AuthTable.subject, timeCreated: ReferralTable.timeCreated })
           .from(ReferralTable)
@@ -102,13 +101,20 @@ export namespace Referral {
           )
           .where(and(eq(ReferralTable.workspaceID, workspaceID), isNull(ReferralTable.timeDeleted))),
         tx
-          .select({ id: ReferralTable.id, inviteeEmail: AuthTable.subject, timeCreated: ReferralTable.timeCreated })
+          .select({ id: ReferralTable.id, inviterEmail: AuthTable.subject, timeCreated: ReferralTable.timeCreated })
           .from(ReferralTable)
-          .innerJoin(
-            AuthTable,
-            and(eq(AuthTable.accountID, ReferralTable.inviteeAccountID), eq(AuthTable.provider, "email")),
+          .leftJoin(
+            UserTable,
+            and(
+              eq(UserTable.workspaceID, ReferralTable.workspaceID),
+              eq(UserTable.role, "admin"),
+              isNull(UserTable.timeDeleted),
+            ),
           )
-          .where(and(eq(ReferralTable.inviteeAccountID, accountID), isNull(ReferralTable.timeDeleted))),
+          .leftJoin(AuthTable, and(eq(AuthTable.accountID, UserTable.accountID), eq(AuthTable.provider, "email")))
+          .where(and(eq(ReferralTable.inviteeAccountID, accountID), isNull(ReferralTable.timeDeleted)))
+          .orderBy(asc(UserTable.timeCreated))
+          .then((rows) => rows.find((row) => row.inviterEmail) ?? rows[0]),
         tx
           .select({ referralID: ReferralRewardTable.referralID })
           .from(ReferralRewardTable)
@@ -120,27 +126,25 @@ export namespace Referral {
               isNull(ReferralTable.timeDeleted),
             ),
           ),
-        tx
-          .select({ id: LiteTable.id })
-          .from(LiteTable)
-          .where(and(eq(LiteTable.workspaceID, workspaceID), isNull(LiteTable.timeDeleted)))
-          .then((result) => result[0]),
       ])
 
-      return { inviteeReferrals, inviteeRewards, invites, lite, rewards }
+      return { inviteeReferral, inviteeRewards, invites, rewards }
     })
 
     const rewardReferralIDs = new Set(rows.rewards.map((reward) => reward.referralID))
     const inviteeRewardReferralIDs = new Set(rows.inviteeRewards.map((reward) => reward.referralID))
-    const rewards = rows.rewards.map((reward) => ({
-      id: reward.referralID,
-      source: reward.workspaceID === reward.referralWorkspaceID ? ("inviter" as const) : ("invitee" as const),
-      status: reward.timeApplied ? ("applied" as const) : ("available" as const),
-      email: reward.inviteeEmail,
-      amount: microCentsToCents(reward.amount),
-      timeCreated: reward.timeCreated,
-      timeApplied: reward.timeApplied,
-    }))
+    const rewards = rows.rewards.map((reward) => {
+      const source = reward.workspaceID === reward.referralWorkspaceID ? ("inviter" as const) : ("invitee" as const)
+      return {
+        id: reward.referralID,
+        source,
+        status: reward.timeApplied ? ("applied" as const) : ("available" as const),
+        email: source === "invitee" ? (rows.inviteeReferral?.inviterEmail ?? null) : reward.inviteeEmail,
+        amount: microCentsToCents(reward.amount),
+        timeCreated: reward.timeCreated,
+        timeApplied: reward.timeApplied,
+      }
+    })
     const pending = [
       ...rows.invites
         .filter((referral) => !rewardReferralIDs.has(referral.id))
@@ -153,28 +157,27 @@ export namespace Referral {
           timeCreated: referral.timeCreated,
           timeApplied: null,
         })),
-      ...rows.inviteeReferrals
-        .filter((referral) => !inviteeRewardReferralIDs.has(referral.id))
-        .map((referral) => ({
-          id: `${referral.id}:invitee`,
-          source: "invitee" as const,
-          status: "pending" as const,
-          email: referral.inviteeEmail,
-          amount: microCentsToCents(REWARD_AMOUNT),
-          timeCreated: referral.timeCreated,
-          timeApplied: null,
-        })),
+      ...(rows.inviteeReferral && !inviteeRewardReferralIDs.has(rows.inviteeReferral.id)
+        ? [
+            {
+              id: `${rows.inviteeReferral.id}:invitee`,
+              source: "invitee" as const,
+              status: "pending" as const,
+              email: rows.inviteeReferral.inviterEmail,
+              amount: microCentsToCents(REWARD_AMOUNT),
+              timeCreated: rows.inviteeReferral.timeCreated,
+              timeApplied: null,
+            },
+          ]
+        : []),
     ]
     const allRewards = [...pending, ...rewards].sort(
       (a, b) => new Date(b.timeCreated).getTime() - new Date(a.timeCreated).getTime(),
     )
     return {
       referralCode: code.code,
-      inviteCount: allRewards.length,
-      hasActiveGo: !!rows.lite,
+      hasReferral: allRewards.length > 0,
       rewardAmount: microCentsToCents(REWARD_AMOUNT),
-      totalEarned: rewards.reduce((total, reward) => total + reward.amount, 0),
-      totalApplied: rewards.filter((reward) => reward.timeApplied).reduce((total, reward) => total + reward.amount, 0),
       rewards: allRewards,
     }
   })
