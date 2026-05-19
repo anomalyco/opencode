@@ -724,7 +724,7 @@ it.live("session.processor effect tests complete AI SDK tool calls when native f
         expect(call.state.time.start).toBeDefined()
         expect(call.state.time.end).toBeDefined()
       }),
-    { git: true, config: (url) => providerCfg(url) },
+    { config: (url) => providerCfg(url) },
   ),
 )
 
