@@ -942,10 +942,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       // downstream providerOptions() wrapper nests it under { bedrock: ... }.
       if (id.includes("glm") && model.api.npm === "@ai-sdk/amazon-bedrock") {
         return {
-          default: { additionalModelRequestFields: { reasoning_config: "medium" } },
-          low:     { additionalModelRequestFields: { reasoning_config: "low"    } },
-          medium:  { additionalModelRequestFields: { reasoning_config: "medium" } },
-          high:    { additionalModelRequestFields: { reasoning_config: "high"   } },
+          low:    { additionalModelRequestFields: { reasoning_config: "low"    } },
+          medium: { additionalModelRequestFields: { reasoning_config: "medium" } },
+          high:   { additionalModelRequestFields: { reasoning_config: "high"   } },
         }
       }
 
@@ -1133,27 +1132,6 @@ export function options(input: {
     result["promptCacheKey"] = input.sessionID
   }
 
-  // Bedrock-hosted Z.ai GLM: reasoning is enabled via Converse's
-  // additionalModelRequestFields using `reasoning_config` (Bedrock-native
-  // shape). Confirmed from Bedrock invocation logs — when set, responses
-  // include <thinking> / reasoning_content blocks in the text.
-  // The actual value (low/medium/high) is supplied by the variant system —
-  // see variants() above. This block is a safety fallback for when no
-  // variant is selected (older sessions, direct API callers).
-  if (
-    input.model.api.npm === "@ai-sdk/amazon-bedrock" &&
-    (input.model.api.id.toLowerCase().includes("glm") ||
-      input.model.api.id.toLowerCase().includes("zai_glm"))
-  ) {
-    // options() returns a FLAT object; the downstream providerOptions()
-    // wrapper puts the whole thing under { bedrock: ... }
-    // additionalModelRequestFields is how we send it.
-    const amrf = (result["additionalModelRequestFields"] as Record<string, unknown> | undefined) ?? {}
-    if (!("reasoning_config" in amrf)) {
-      result["additionalModelRequestFields"] = { ...amrf, reasoning_config: "medium" }
-    }
-  }
-
   if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
     if (input.model.capabilities.reasoning) {
       result["thinkingConfig"] = {
@@ -1255,20 +1233,6 @@ export function smallOptions(model: Provider.Model) {
   if (model.providerID === "venice") {
     if (Object.keys(small).length > 0) return small
     return { veniceParameters: { disableThinking: true } }
-  }
-
-  // Bedrock-hosted Z.ai GLM small-model calls (title, summary) bypass the
-  // variant system entirely, so without this the call goes to Bedrock with
-  // no reasoning_config at all. Use "low" — cheap and still emits a light trace.
-  if (
-    model.api.npm === "@ai-sdk/amazon-bedrock" &&
-    (model.api.id.toLowerCase().includes("glm") ||
-      model.api.id.toLowerCase().includes("zai_glm"))
-  ) {
-    // FLAT object; providerOptions() wrapper handles the { bedrock: ... } shell.
-    return {
-      additionalModelRequestFields: { reasoning_config: "low" },
-    }
   }
 
   return small
