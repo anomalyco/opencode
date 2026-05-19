@@ -5,6 +5,12 @@ export type ClientOptions = {
 }
 
 export type Event =
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow1
+  | EventTuiSessionSelect
+  | EventServerConnected
+  | EventGlobalDisposed
   | EventServerInstanceDisposed
   | EventFileEdited
   | EventFileWatcherUpdated
@@ -21,10 +27,6 @@ export type Event =
   | EventTodoUpdated
   | EventSessionStatus
   | EventSessionIdle
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow1
-  | EventTuiSessionSelect
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
@@ -75,8 +77,6 @@ export type Event =
   | EventSessionNextCompactionStarted
   | EventSessionNextCompactionDelta
   | EventSessionNextCompactionEnded
-  | EventServerConnected
-  | EventGlobalDisposed
   | EventCatalogModelUpdated
 
 export type OAuth = {
@@ -103,6 +103,65 @@ export type WellKnownAuth = {
 }
 
 export type Auth = OAuth | ApiAuth | WellKnownAuth
+
+export type EffectHttpApiErrorBadRequest = {
+  _tag: "BadRequest"
+}
+
+export type EventTuiPromptAppend = {
+  id: string
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  id: string
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  id: string
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    duration?: number
+  }
+}
+
+export type EventTuiSessionSelect = {
+  id: string
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+}
 
 export type PermissionRequest = {
   id: string
@@ -280,61 +339,6 @@ export type SessionStatus =
   | {
       type: "busy"
     }
-
-export type EventTuiPromptAppend = {
-  id: string
-  type: "tui.prompt.append"
-  properties: {
-    text: string
-  }
-}
-
-export type EventTuiCommandExecute = {
-  id: string
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.line.up"
-      | "session.line.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  id: string
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    duration?: number
-  }
-}
-
-export type EventTuiSessionSelect = {
-  id: string
-  type: "tui.session.select"
-  properties: {
-    /**
-     * Session ID to navigate to
-     */
-    sessionID: string
-  }
-}
 
 export type Project = {
   id: string
@@ -790,6 +794,12 @@ export type GlobalEvent = {
   project?: string
   workspace?: string
   payload:
+    | EventTuiPromptAppend
+    | EventTuiCommandExecute
+    | EventTuiToastShow
+    | EventTuiSessionSelect
+    | EventServerConnected
+    | EventGlobalDisposed
     | EventServerInstanceDisposed
     | EventFileEdited
     | EventFileWatcherUpdated
@@ -806,10 +816,6 @@ export type GlobalEvent = {
     | EventTodoUpdated
     | EventSessionStatus
     | EventSessionIdle
-    | EventTuiPromptAppend
-    | EventTuiCommandExecute
-    | EventTuiToastShow
-    | EventTuiSessionSelect
     | EventMcpToolsChanged
     | EventMcpBrowserOpenFailed
     | EventCommandExecuted
@@ -860,8 +866,6 @@ export type GlobalEvent = {
     | EventSessionNextCompactionStarted
     | EventSessionNextCompactionDelta
     | EventSessionNextCompactionEnded
-    | EventServerConnected
-    | EventGlobalDisposed
     | EventCatalogModelUpdated
     | SyncEventMessageUpdated
     | SyncEventMessageRemoved
@@ -2403,6 +2407,22 @@ export type SyncEventSessionNextCompactionEnded = {
   }
 }
 
+export type EventServerConnected = {
+  id: string
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventGlobalDisposed = {
+  id: string
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
 export type EventServerInstanceDisposed = {
   id: string
   type: "server.instance.disposed"
@@ -3126,22 +3146,6 @@ export type EventSessionNextCompactionEnded = {
     sessionID: string
     text: string
     include?: string
-  }
-}
-
-export type EventServerConnected = {
-  id: string
-  type: "server.connected"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type EventGlobalDisposed = {
-  id: string
-  type: "global.disposed"
-  properties: {
-    [key: string]: unknown
   }
 }
 
@@ -6639,9 +6643,13 @@ export type V2SessionListData = {
 
 export type V2SessionListErrors = {
   /**
-   * Bad request
+   * BadRequest
    */
-  400: BadRequestError
+  400: EffectHttpApiErrorBadRequest
+  /**
+   * Unauthorized
+   */
+  401: unknown
 }
 
 export type V2SessionListError = V2SessionListErrors[keyof V2SessionListErrors]
@@ -6670,6 +6678,13 @@ export type V2SessionPromptData = {
   url: "/api/session/{sessionID}/prompt"
 }
 
+export type V2SessionPromptErrors = {
+  /**
+   * Unauthorized
+   */
+  401: unknown
+}
+
 export type V2SessionPromptResponses = {
   /**
    * Session.Message
@@ -6689,6 +6704,13 @@ export type V2SessionCompactData = {
     workspace?: string
   }
   url: "/api/session/{sessionID}/compact"
+}
+
+export type V2SessionCompactErrors = {
+  /**
+   * Unauthorized
+   */
+  401: unknown
 }
 
 export type V2SessionCompactResponses = {
@@ -6712,6 +6734,13 @@ export type V2SessionWaitData = {
   url: "/api/session/{sessionID}/wait"
 }
 
+export type V2SessionWaitErrors = {
+  /**
+   * Unauthorized
+   */
+  401: unknown
+}
+
 export type V2SessionWaitResponses = {
   /**
    * <No Content>
@@ -6731,6 +6760,13 @@ export type V2SessionContextData = {
     workspace?: string
   }
   url: "/api/session/{sessionID}/context"
+}
+
+export type V2SessionContextErrors = {
+  /**
+   * Unauthorized
+   */
+  401: unknown
 }
 
 export type V2SessionContextResponses = {
@@ -6762,9 +6798,13 @@ export type V2SessionMessagesData = {
 
 export type V2SessionMessagesErrors = {
   /**
-   * Bad request
+   * BadRequest
    */
-  400: BadRequestError
+  400: EffectHttpApiErrorBadRequest
+  /**
+   * Unauthorized
+   */
+  401: unknown
 }
 
 export type V2SessionMessagesError = V2SessionMessagesErrors[keyof V2SessionMessagesErrors]
@@ -6790,6 +6830,13 @@ export type V2ModelListData = {
   url: "/api/model"
 }
 
+export type V2ModelListErrors = {
+  /**
+   * Unauthorized
+   */
+  401: unknown
+}
+
 export type V2ModelListResponses = {
   /**
    * Success
@@ -6809,6 +6856,13 @@ export type V2ProviderListData = {
     }
   }
   url: "/api/provider"
+}
+
+export type V2ProviderListErrors = {
+  /**
+   * Unauthorized
+   */
+  401: unknown
 }
 
 export type V2ProviderListResponses = {
@@ -6835,6 +6889,10 @@ export type V2ProviderGetData = {
 }
 
 export type V2ProviderGetErrors = {
+  /**
+   * Unauthorized
+   */
+  401: unknown
   /**
    * NotFoundError
    */

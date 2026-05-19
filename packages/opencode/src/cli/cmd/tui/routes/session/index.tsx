@@ -84,12 +84,12 @@ import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
 import { nextThinkingMode, reasoningTitle, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
+import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
 import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
-import { useCommandPalette } from "../../context/command-palette"
-import { useBindings, useCommandShortcut } from "../../keymap"
+import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { PathFormatterProvider, usePathFormatter } from "../../context/path-format"
 
 addDefaultParsers(parsers.parsers)
@@ -310,7 +310,7 @@ export function Session() {
     seeded = true
     r.set(route.prompt)
   }
-  const command = useCommandPalette()
+  const keymap = useOpencodeKeymap()
   const dialog = useDialog()
   const renderer = useRenderer()
 
@@ -1055,7 +1055,7 @@ export function Session() {
   }))
 
   useBindings(() => ({
-    enabled: command.matcher,
+    mode: OPENCODE_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("session", sessionBindingCommands),
   }))
 
@@ -1132,7 +1132,6 @@ export function Session() {
                     <Switch>
                       <Match when={message.id === revert()?.messageID}>
                         {(function () {
-                          const command = useCommandPalette()
                           const redoShortcut = useCommandShortcut("session.redo")
                           const [hover, setHover] = createSignal(false)
                           const dialog = useDialog()
@@ -1144,7 +1143,7 @@ export function Session() {
                               "Are you sure you want to restore the reverted messages?",
                             )
                             if (confirmed) {
-                              command.run("session.redo")
+                              keymap.dispatchCommand("session.redo")
                             }
                           }
 
@@ -1696,12 +1695,12 @@ function GenericTool(props: ToolProps<any>) {
   const ctx = use()
   const output = createMemo(() => props.output?.trim() ?? "")
   const [expanded, setExpanded] = createSignal(false)
-  const lines = createMemo(() => output().split("\n"))
   const maxLines = 3
-  const overflow = createMemo(() => lines().length > maxLines)
+  const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
+  const collapsed = createMemo(() => collapseToolOutput(output(), maxLines, maxChars()))
   const limited = createMemo(() => {
-    if (expanded() || !overflow()) return output()
-    return [...lines().slice(0, maxLines), "…"].join("\n")
+    if (expanded() || !collapsed().overflow) return output()
+    return collapsed().output
   })
 
   return (
@@ -1716,11 +1715,11 @@ function GenericTool(props: ToolProps<any>) {
       <BlockTool
         title={`# ${props.tool} ${input(props.input)}`}
         part={props.part}
-        onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+        onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
       >
         <box gap={1}>
           <text fg={theme.text}>{limited()}</text>
-          <Show when={overflow()}>
+          <Show when={collapsed().overflow}>
             <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
           </Show>
         </box>
@@ -1871,14 +1870,16 @@ function BlockTool(props: {
 function Shell(props: ToolProps<typeof ShellTool>) {
   const { theme } = useTheme()
   const pathFormatter = usePathFormatter()
+  const ctx = use()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
   const [expanded, setExpanded] = createSignal(false)
-  const lines = createMemo(() => output().split("\n"))
-  const overflow = createMemo(() => lines().length > 10)
+  const maxLines = 10
+  const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
+  const collapsed = createMemo(() => collapseToolOutput(output(), maxLines, maxChars()))
   const limited = createMemo(() => {
-    if (expanded() || !overflow()) return output()
-    return [...lines().slice(0, 10), "…"].join("\n")
+    if (expanded() || !collapsed().overflow) return output()
+    return collapsed().output
   })
 
   const workdirDisplay = createMemo(() => {
@@ -1902,14 +1903,14 @@ function Shell(props: ToolProps<typeof ShellTool>) {
           title={title()}
           part={props.part}
           spinner={isRunning()}
-          onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+          onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
             <text fg={theme.text}>$ {props.input.command}</text>
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
             </Show>
-            <Show when={overflow()}>
+            <Show when={collapsed().overflow}>
               <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
             </Show>
           </box>
