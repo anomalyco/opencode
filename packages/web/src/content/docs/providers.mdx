@@ -2046,6 +2046,64 @@ Some useful routing options:
 
 ---
 
+### Weights & Biases
+
+[Weights & Biases Serverless Inference](https://docs.wandb.ai/inference/api-reference) provides OpenAI-compatible endpoints for hosted foundation models. OpenCode loads it from Models.dev as the `wandb` provider, so model IDs use the format `wandb/<model-id>`.
+
+1. Head over to [W&B user settings](https://wandb.ai/settings) and create an API key. Your W&B account needs access to Serverless Inference.
+
+2. Run the `/connect` command and search for **Weights & Biases**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your W&B API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _Kimi K2.5_ or _Qwen3 Coder 480B_.
+
+   ```txt
+   /models
+   ```
+
+Alternatively, set your W&B API key as an environment variable.
+
+```bash frame="none"
+export WANDB_API_KEY=your-wandb-api-key
+```
+
+#### Team and Project Attribution
+
+If you belong to multiple W&B teams, or want usage attributed to a specific project, add the `OpenAI-Project` header in your provider config.
+
+```json title="opencode.json" {6-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "wandb": {
+      "options": {
+        "headers": {
+          "OpenAI-Project": "your-team/your-project"
+        }
+      }
+    }
+  }
+}
+```
+
+:::tip
+If W&B adds or removes models and your local list looks stale, run `opencode models wandb --refresh`. You can also check W&B's live model list with their `/v1/models` endpoint.
+:::
+
+---
+
 ### xAI
 
 1. Head over to the [xAI console](https://console.x.ai/), create an account, and generate an API key.
