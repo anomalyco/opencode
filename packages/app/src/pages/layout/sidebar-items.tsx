@@ -34,9 +34,6 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
   const notification = useNotification()
   const permission = usePermission()
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
-  const unseenCount = createMemo(() =>
-    dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
-  )
   const hasError = createMemo(() => dirs().some((directory) => notification.project.unseenHasError(directory)))
   const hasPermissions = createMemo(() =>
     dirs().some((directory) => {
@@ -44,7 +41,7 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
       return hasProjectPermissions(store.permission, (item) => !permission.autoResponds(item, directory))
     }),
   )
-  const notify = createMemo(() => props.notify && (hasPermissions() || unseenCount() > 0))
+  const notify = createMemo(() => props.notify && (hasPermissions() || hasError()))
   const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
   return (
     <div class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}>
@@ -65,7 +62,6 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
             "absolute top-px right-px size-1.5 rounded-full z-10": true,
             "bg-surface-warning-strong": hasPermissions(),
             "bg-icon-critical-base": !hasPermissions() && hasError(),
-            "bg-text-interactive-base": !hasPermissions() && !hasError(),
           }}
         />
       </Show>
@@ -108,7 +104,6 @@ const SessionRow = (props: {
   isWorking: Accessor<boolean>
   hasPermissions: Accessor<boolean>
   hasError: Accessor<boolean>
-  unseenCount: Accessor<number>
   setHoverSession: (id: string | undefined) => void
   clearHoverProjectSoon: () => void
   sidebarOpened: Accessor<boolean>
@@ -144,9 +139,6 @@ const SessionRow = (props: {
           </Match>
           <Match when={props.hasError()}>
             <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-          </Match>
-          <Match when={props.unseenCount() > 0}>
-            <div class="size-1.5 rounded-full bg-text-interactive-base" />
           </Match>
         </Switch>
       </div>
@@ -229,7 +221,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const notification = useNotification()
   const permission = usePermission()
   const globalSync = useGlobalSync()
-  const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
   const [sessionStore] = globalSync.child(props.session.directory)
   const hasPermissions = createMemo(() => {
@@ -322,7 +313,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       isWorking={isWorking}
       hasPermissions={hasPermissions}
       hasError={hasError}
-      unseenCount={unseenCount}
       setHoverSession={props.setHoverSession}
       clearHoverProjectSoon={props.clearHoverProjectSoon}
       sidebarOpened={layout.sidebar.opened}
