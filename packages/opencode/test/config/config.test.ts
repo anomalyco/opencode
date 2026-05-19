@@ -2079,6 +2079,34 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
   })
 })
 
+// Regression for #28206: malformed OPENCODE_PERMISSION JSON used to crash
+// the app on startup with an unhandled SyntaxError. Loading the config with
+// an invalid JSON value in this env var should not throw.
+describe("OPENCODE_PERMISSION env var", () => {
+  test("does not crash when OPENCODE_PERMISSION contains invalid JSON", async () => {
+    const original = process.env["OPENCODE_PERMISSION"]
+    process.env["OPENCODE_PERMISSION"] = "{invalid"
+    try {
+      await using tmp = await tmpdir()
+      await withTestInstance({
+        directory: tmp.path,
+        fn: async (ctx) => {
+          const config = await load(ctx)
+          // We don't assert on permission shape; the regression is that
+          // load() throws before returning anything.
+          expect(config).toBeDefined()
+        },
+      })
+    } finally {
+      if (original !== undefined) {
+        process.env["OPENCODE_PERMISSION"] = original
+      } else {
+        delete process.env["OPENCODE_PERMISSION"]
+      }
+    }
+  })
+})
+
 describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
   test("substitutes {env:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
     const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
