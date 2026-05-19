@@ -31,9 +31,6 @@
     "sisyphus": {
       "model": "enterprise-llm/your-model-name"
     },
-    "sisyphus": {
-      "model": "opencode/gpt-5-nano"
-    },
     "sisyphus-junior": {
       "model": "enterprise-llm/your-model-name"
     }
