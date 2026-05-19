@@ -277,17 +277,7 @@
       &[data-slot="referral-source"] {
         color: var(--color-text-secondary);
         font-family: var(--font-sans);
-
-        span {
-          display: block;
-        }
-
-        [data-slot="referral-email"] {
-          margin-top: var(--space-1);
-          color: var(--color-text-muted);
-          line-height: 1.4;
-          white-space: normal;
-        }
+        white-space: nowrap;
       }
 
       &[data-slot="referral-action"] {

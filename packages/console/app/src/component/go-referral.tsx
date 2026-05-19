@@ -57,17 +57,15 @@ function formatDate(value: string | Date, locale: string) {
   return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value))
 }
 
-function rewardTitleKey(reward: GoReferralReward) {
-  if (reward.status === "pending" && reward.source === "invitee")
-    return "workspace.referral.reward.source.pendingInvitee" as const
-  if (reward.status === "pending") return "workspace.referral.reward.source.pendingInviter" as const
-  if (reward.status === "applied") return "workspace.referral.reward.source.applied" as const
-  return "workspace.referral.reward.source.available" as const
+function rewardDescriptionKey(source: GoReferralReward["source"]) {
+  if (source === "invitee") return "workspace.referral.reward.description.invitee" as const
+  return "workspace.referral.reward.description.inviter" as const
 }
 
-function rewardPendingStatusKey(source: GoReferralReward["source"]) {
-  if (source === "invitee") return "workspace.referral.reward.status.pendingInvitee" as const
-  return "workspace.referral.reward.status.pendingInviter" as const
+function rewardActionKey(reward: GoReferralReward, hasActiveGo: boolean) {
+  if (reward.status === "applied") return "workspace.referral.reward.action.applied" as const
+  if (reward.status === "pending" || !hasActiveGo) return "workspace.referral.reward.action.subscribeUnlock" as const
+  return "workspace.referral.reward.action.view" as const
 }
 
 function CopyInviteLink(props: { summary: GoReferralSummary }) {
@@ -164,11 +162,7 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
           <Show when={props.summary.hasActiveGo}>
             <div data-slot="section-title">
               <h2>{i18n.t("workspace.referral.overview.title")}</h2>
-              <p>
-                {i18n.t("workspace.referral.overview.subtitle", {
-                  reward: formatCurrency(props.summary.rewardAmount),
-                })}
-              </p>
+              <p>{i18n.t("workspace.referral.overview.subtitle")}</p>
             </div>
             <div data-component="go-referral-overview">
               <div data-slot="referral-stats">
@@ -213,17 +207,12 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
                 <tbody>
                   <For each={props.summary.rewards}>
                     {(reward) => {
-                      const applied = reward.status === "applied"
-                      const pending = reward.status === "pending"
                       const earnedAt = () => formatDate(reward.timeCreated, language.tag(language.locale()))
                       return (
                         <tr data-status={reward.status} data-source={reward.source}>
                           <td data-slot="referral-amount">{formatCurrency(reward.amount)}</td>
                           <td data-slot="referral-source">
-                            <span>{i18n.t(rewardTitleKey(reward))}</span>
-                            <Show when={reward.email}>
-                              <span data-slot="referral-email">{reward.email}</span>
-                            </Show>
+                            {i18n.t(rewardDescriptionKey(reward.source), { email: reward.email ?? "" })}
                           </td>
                           <td data-slot="referral-date" title={earnedAt()}>
                             {earnedAt()}
@@ -234,13 +223,7 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
                               disabled={reward.status !== "available" || !props.summary.hasActiveGo || submission.pending}
                               onClick={() => setSelected(reward)}
                             >
-                              <Show when={!applied} fallback={i18n.t("workspace.referral.reward.status.applied")}>
-                                {pending
-                                  ? i18n.t(rewardPendingStatusKey(reward.source))
-                                  : props.summary.hasActiveGo
-                                    ? i18n.t("workspace.referral.apply.preview")
-                                    : i18n.t("workspace.referral.apply.noGo")}
-                              </Show>
+                              {i18n.t(rewardActionKey(reward, props.summary.hasActiveGo))}
                             </button>
                           </td>
                         </tr>
