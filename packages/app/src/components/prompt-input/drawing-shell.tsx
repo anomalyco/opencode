@@ -28,7 +28,7 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
       </div>
       <div
         data-component="prompt-draw-actions"
-        class="flex shrink-0 items-center justify-between gap-2 border-t border-border-base bg-surface-raised-stronger-non-alpha px-2 py-1.5"
+        class="flex shrink-0 items-center justify-between gap-2 border-t border-border-weaker-base bg-surface-raised-stronger-non-alpha px-2 py-1.5"
       >
         <div class="flex items-center gap-0.5">
           <Tooltip placement="top" value={language.t("prompt.action.drawToText")}>
