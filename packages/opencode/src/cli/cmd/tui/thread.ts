@@ -21,6 +21,9 @@ import {
   sanitizedProcessEnv,
 } from "@opencode-ai/core/util/opencode-process"
 import { validateSession } from "./validate-session"
+import { Session } from "@/session/session"
+import { SessionID } from "@/session/schema"
+import { Effect, Schema } from "effect"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -76,6 +79,37 @@ export function resolveThreadDirectory(project?: string, envPWD = process.env.PW
   return Filesystem.resolve(cwd)
 }
 
+export async function resolveThreadTargetDirectory(input: {
+  project?: string
+  sessionID?: string
+  envPWD?: string
+  cwd?: string
+  loadSession: (sessionID: string) => Promise<{ directory?: string } | undefined>
+  exists: (directory: string) => Promise<boolean>
+}) {
+  const launch = resolveThreadDirectory(input.project, input.envPWD, input.cwd)
+  if (input.project || !input.sessionID) return launch
+
+  const session = await input.loadSession(input.sessionID)
+  if (!session?.directory) return launch
+  if (!(await input.exists(session.directory))) throw new Error(`Session directory not found: ${session.directory}`)
+  return Filesystem.resolve(session.directory)
+}
+
+async function loadStoredSession(sessionID: string) {
+  try {
+    const decoded = Schema.decodeUnknownSync(SessionID)(sessionID)
+    return await Effect.runPromise(
+      Session.Service.use((session) => session.get(decoded)).pipe(
+        Effect.provide(Session.defaultLayer),
+        Effect.catch(() => Effect.succeed<Session.Info | undefined>(undefined)),
+      ),
+    )
+  } catch {
+    return undefined
+  }
+}
+
 export const TuiThreadCommand = cmd({
   command: "$0 [project]",
   describe: "start opencode tui",
@@ -127,9 +161,16 @@ export const TuiThreadCommand = cmd({
         return
       }
 
-      // Resolve relative --project paths from PWD, then use the real cwd after
-      // chdir so the thread and worker share the same directory key.
-      const next = resolveThreadDirectory(args.project)
+      // Resolve relative --project paths from PWD. When resuming a session
+      // without an explicit project path, boot the TUI worker in the stored
+      // session directory so UI state, SDK routing, and tool execution share
+      // the same project instance.
+      const next = await resolveThreadTargetDirectory({
+        project: args.project,
+        sessionID: args.session,
+        loadSession: loadStoredSession,
+        exists: Filesystem.exists,
+      })
       const file = await target()
       try {
         process.chdir(next)

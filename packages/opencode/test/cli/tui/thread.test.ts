@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { tmpdir } from "../../fixture/fixture"
-import { resolveThreadDirectory } from "../../../src/cli/cmd/tui/thread"
+import { resolveThreadDirectory, resolveThreadTargetDirectory } from "../../../src/cli/cmd/tui/thread"
 
 describe("tui thread", () => {
   async function check(project?: string) {
@@ -24,5 +24,42 @@ describe("tui thread", () => {
 
   test("uses the real cwd after resolving a relative project from PWD", async () => {
     await check(".")
+  })
+
+  test("resumed sessions without a project use the stored session directory", async () => {
+    expect(
+      await resolveThreadTargetDirectory({
+        sessionID: "ses_123",
+        envPWD: "/tmp/launch-link",
+        cwd: "/tmp/launch",
+        loadSession: async () => ({ directory: "/tmp/session" }),
+        exists: async () => true,
+      }),
+    ).toBe("/tmp/session")
+  })
+
+  test("explicit project takes precedence over stored session directory", async () => {
+    expect(
+      await resolveThreadTargetDirectory({
+        project: "project",
+        sessionID: "ses_123",
+        envPWD: "/tmp/launch",
+        cwd: "/tmp/other",
+        loadSession: async () => ({ directory: "/tmp/session" }),
+        exists: async () => true,
+      }),
+    ).toBe("/tmp/launch/project")
+  })
+
+  test("resumed sessions fail fast when stored session directory is missing", async () => {
+    await expect(
+      resolveThreadTargetDirectory({
+        sessionID: "ses_123",
+        envPWD: "/tmp/launch",
+        cwd: "/tmp/launch",
+        loadSession: async () => ({ directory: "/tmp/missing" }),
+        exists: async () => false,
+      }),
+    ).rejects.toThrow("Session directory not found: /tmp/missing")
   })
 })
