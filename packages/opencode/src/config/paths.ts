@@ -22,6 +22,14 @@ export namespace ConfigPaths {
   export async function directories(directory: string, worktree: string) {
     return [
       Global.Path.config,
+      // User-level config comes before project dirs so project config takes priority.
+      ...(await Array.fromAsync(
+        Filesystem.up({
+          targets: [".opencode"],
+          start: Global.Path.home,
+          stop: Global.Path.home,
+        }),
+      )),
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
@@ -31,13 +39,6 @@ export namespace ConfigPaths {
             }),
           )
         : []),
-      ...(await Array.fromAsync(
-        Filesystem.up({
-          targets: [".opencode"],
-          start: Global.Path.home,
-          stop: Global.Path.home,
-        }),
-      )),
       ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
     ]
   }

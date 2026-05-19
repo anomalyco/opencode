@@ -154,15 +154,17 @@ export async function loadANRConfig(envPath?: string, quiet = false): Promise<AN
     // 2. User-level:    ~/.opencode/
     // 3. Global-level:  /etc/opencode/ (Mac/Linux) or C:\ProgramData\opencode\ (Windows)
     const cwd = process.cwd()
-    const rootPath = import.meta.url.replace("file://", "").split("/src/")[0] || cwd
-    const root = resolve(rootPath, "../..")
+    // Only use import.meta.url-derived root when running from source (path contains /src/).
+    const parts = import.meta.url.replace("file://", "").split("/src/")
+    const rootPath = parts.length > 1 ? parts[0] : undefined
+    const root = rootPath ? resolve(rootPath, "../.."): undefined
     const userDir = resolve(process.env.HOME || process.env.USERPROFILE || "~", ".opencode")
     const global = process.platform === "win32"
       ? resolve(process.env.PROGRAMDATA || "C:\\ProgramData", "opencode")
       : "/etc/opencode"
     const searchPaths = [
       resolve(cwd, ".opencode"),
-      ...(root !== cwd ? [resolve(root, ".opencode")] : []),
+      ...(root && root !== cwd ? [resolve(root, ".opencode")] : []),
       userDir,
       global,
     ]

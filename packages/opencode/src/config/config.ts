@@ -318,12 +318,15 @@ export namespace Config {
       return false
     }
 
-    const nodeModules = path.join(dir, "node_modules")
-    if (!existsSync(nodeModules)) return true
-
+    // Only manage deps in dirs that already have a package.json.
+    // Creating one from scratch in arbitrary dirs (e.g. ~/.opencode, ~/.config/opencode)
+    // causes unexpected bun install runs inside the binary install directory.
     const pkg = path.join(dir, "package.json")
     const pkgExists = await Filesystem.exists(pkg)
-    if (!pkgExists) return true
+    if (!pkgExists) return false
+
+    const nodeModules = path.join(dir, "node_modules")
+    if (!existsSync(nodeModules)) return true
 
     const parsed = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => null)
     const dependencies = parsed?.dependencies ?? {}

@@ -465,8 +465,10 @@ function detectANR(): boolean {
   const global = process.platform === "win32"
     ? path.resolve(process.env.PROGRAMDATA || "C:\\ProgramData", "opencode")
     : "/etc/opencode"
-  // In dev mode, cwd may be packages/opencode — also check repo root
-  const pkg = Bun.fileURLToPath(import.meta.url).split(path.sep + "src" + path.sep)[0]
+  // In dev mode, cwd may be packages/opencode — also check repo root.
+  // Only use import.meta.url-derived root when running from source (path contains /src/).
+  const parts = Bun.fileURLToPath(import.meta.url).split(path.sep + "src" + path.sep)
+  const pkg = parts.length > 1 ? parts[0] : undefined
   const root = pkg ? path.resolve(pkg, "../..") : undefined
   const dirs = [
     path.join(process.cwd(), ".opencode"),
@@ -502,8 +504,10 @@ async function selectEnvFile(): Promise<string | undefined> {
   // 2. User-level:    ~/.opencode/ — personal config / exe users
   // 3. Global-level:  /etc/opencode/ or C:\ProgramData\opencode\ — enterprise
   const home = process.env.HOME || process.env.USERPROFILE || "~"
-  const pkg = Bun.fileURLToPath(import.meta.url).split(path.sep + "src" + path.sep)[0]
-  const root = pkg ? path.resolve(pkg, "../..") : undefined
+  // Only use import.meta.url-derived root when running from source (path contains /src/).
+  const srcParts = Bun.fileURLToPath(import.meta.url).split(path.sep + "src" + path.sep)
+  const srcPkg = srcParts.length > 1 ? srcParts[0] : undefined
+  const root = srcPkg ? path.resolve(srcPkg, "../.."): undefined
   const global = process.platform === "win32"
     ? path.resolve(process.env.PROGRAMDATA || "C:\\ProgramData", "opencode")
     : "/etc/opencode"
