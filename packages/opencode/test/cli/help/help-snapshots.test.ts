@@ -27,10 +27,17 @@ import { cliIt } from "../../lib/cli-process"
 const TMP = os.tmpdir()
 const REAL_TMP = fs.realpathSync(TMP)
 function normalize(text: string): string {
-  return text
-    .replaceAll(REAL_TMP, "<TMPDIR>")
-    .replaceAll(TMP, "<TMPDIR>")
-    .replace(/<TMPDIR>\/oc-cli-[a-z0-9]+/g, "<HOME>")
+  return (
+    text
+      .replaceAll(REAL_TMP, "<TMPDIR>")
+      .replaceAll(TMP, "<TMPDIR>")
+      .replace(/<TMPDIR>\/oc-cli-[a-z0-9]+/g, "<HOME>")
+      // yargs wraps the `[string] [default: "..."]` clause based on the
+      // pre-normalized default's character length, so different random home
+      // path widths produce different leading-whitespace counts on the
+      // wrapped continuation. Collapse the wrap-dependent whitespace.
+      .replace(/\s+\[string\] \[default: "<HOME>"\]/g, ' [string] [default: "<HOME>"]')
+  )
 }
 
 // Top-level commands. Order matches what `opencode --help` prints today;
