@@ -156,7 +156,11 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
           event.preventDefault()
         }}
         onCloseAutoFocus={(event: Event) => {
-          if (state.dismiss === "outside") event.preventDefault()
+          // Only Escape-dismiss should return focus to the trigger for keyboard a11y.
+          // Hover/outside/programmatic close must NOT steal focus back, otherwise
+          // Kobalte calls trigger.focus() and the browser paints a :focus-visible ring
+          // around the trigger (e.g. extra-agent IconButton blue outline after hover-out).
+          if (state.dismiss !== "escape") event.preventDefault()
           setState("dismiss", null)
         }}
       >
