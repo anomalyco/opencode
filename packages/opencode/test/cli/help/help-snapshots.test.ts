@@ -13,36 +13,26 @@
 // version (changes per release), so we'd snapshot a moving target.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import fs from "node:fs"
-import os from "node:os"
 import { cliIt } from "../../lib/cli-process"
+import { normalizeForSnapshot, PATH_SEP } from "../../lib/snapshot"
 
-// Strips dynamic content that varies per run so snapshots are stable.
-// Currently only the tmpdir prefix bleeds in (via `--cwd` defaults that
-// resolve to `process.cwd()`). Add new patterns here as they surface.
+// Composes `normalizeForSnapshot` (CRLF + tmpdir) with two help-specific
+// rules:
 //
-// On macOS `os.tmpdir()` returns `/var/folders/...` but `process.cwd()`
-// inside the child returns the realpath `/private/var/folders/...` — so
-// we strip both forms.
-const TMP = os.tmpdir()
-const REAL_TMP = fs.realpathSync(TMP)
+//   1. The harness's `oc-cli-XXX` subdir under TMPDIR collapses to `<HOME>`.
+//      `PATH_SEP` matches `/` and `\\` so the rule works on POSIX + Windows.
+//
+//   2. yargs wraps the `[string] [default: "..."]` clause based on the
+//      pre-normalized default's character length, so different random home
+//      path widths produce different leading-whitespace counts (or even
+//      line-wraps onto a fresh line on Windows). `\s+` matches both forms.
 function normalize(text: string): string {
-  return (
-    text
-      // Windows emits CRLF on stderr; collapse first so the rest of the
-      // pipeline doesn't need separate Windows-vs-POSIX branches.
-      .replaceAll("\r\n", "\n")
-      .replaceAll(REAL_TMP, "<TMPDIR>")
-      .replaceAll(TMP, "<TMPDIR>")
-      // The harness writes the random home dir at `<TMPDIR>/oc-cli-XXX` on
-      // POSIX, `<TMPDIR>\oc-cli-XXX` on Windows. Strip either form.
-      .replace(/<TMPDIR>[/\\]oc-cli-[a-z0-9]+/g, "<HOME>")
-      // yargs wraps the `[string] [default: "..."]` clause based on the
-      // pre-normalized default's character length, so different random home
-      // path widths produce different leading-whitespace counts (or even
-      // line-wraps onto a fresh line on Windows). `\s+` matches both forms.
-      .replace(/\s+\[string\] \[default: "<HOME>"\]/g, ' [string] [default: "<HOME>"]')
-  )
+  return normalizeForSnapshot(text, {
+    pathReplacements: [
+      [new RegExp(`<TMPDIR>${PATH_SEP}oc-cli-[a-z0-9]+`, "g"), "<HOME>"],
+      [/\s+\[string\] \[default: "<HOME>"\]/g, ' [string] [default: "<HOME>"]'],
+    ],
+  })
 }
 
 // Top-level commands. Order matches what `opencode --help` prints today;
