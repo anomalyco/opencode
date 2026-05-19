@@ -7,14 +7,17 @@
 /** @jsxImportSource @opentui/solid */
 import { pathToFileURL } from "bun"
 import { StyledText, bg, fg, type KeyBinding, type KeyEvent, type TextareaRenderable } from "@opentui/core"
-import { useKeyboard } from "@opentui/solid"
+import { useKeyboard, useRenderer } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
 import * as Locale from "@/util/locale"
 import {
   createPromptHistory,
+  displayCharAt,
+  displaySlice,
   isExitCommand,
+  mentionTriggerIndex,
   isNewCommand,
   movePromptHistory,
   promptCycle,
@@ -194,13 +197,45 @@ export function RunPromptBody(props: {
   onContentChange: () => void
   bind: (area?: TextareaRenderable) => void
 }) {
+  const renderer = useRenderer()
   let area: TextareaRenderable | undefined
+  let pasteTick: ReturnType<typeof setTimeout> | undefined
+
+  const refreshPasteLayout = () => {
+    if (pasteTick) {
+      clearTimeout(pasteTick)
+    }
+
+    pasteTick = setTimeout(() => {
+      pasteTick = undefined
+      if (!area || area.isDestroyed) {
+        return
+      }
+
+      // Paste can leave the textarea layout stale until the next edit.
+      area.getLayoutNode().markDirty()
+      renderer.requestRender()
+      void renderer
+        .idle()
+        .then(() => {
+          if (!area || area.isDestroyed) {
+            return
+          }
+
+          props.onContentChange()
+        })
+        .catch(() => {})
+    }, 0)
+  }
 
   onMount(() => {
     props.bind(area)
   })
 
   onCleanup(() => {
+    if (pasteTick) {
+      clearTimeout(pasteTick)
+    }
     props.bind(undefined)
   })
 
@@ -223,6 +258,9 @@ export function RunPromptBody(props: {
           keyBindings={props.bindings()}
           onSubmit={props.onSubmit}
           onKeyDown={props.onKeyDown}
+          onPaste={() => {
+            refreshPasteLayout()
+          }}
           onContentChange={props.onContentChange}
           ref={(next) => {
             area = next
@@ -537,7 +575,7 @@ export function createPromptState(input: PromptInput): PromptState {
     })
   }
 
-  const restore = (value: RunPrompt, cursor = value.text.length) => {
+  const restore = (value: RunPrompt, cursor = Bun.stringWidth(value.text)) => {
     draft = clonePrompt(value)
     if (!area || area.isDestroyed) {
       return
@@ -546,7 +584,7 @@ export function createPromptState(input: PromptInput): PromptState {
     hide()
     area.setText(value.text)
     restoreParts(value.parts)
-    area.cursorOffset = Math.min(cursor, area.plainText.length)
+    area.cursorOffset = Math.min(cursor, Bun.stringWidth(area.plainText))
     scheduleRows()
     area.focus()
   }
@@ -577,7 +615,7 @@ export function createPromptState(input: PromptInput): PromptState {
     area.setText(text)
     clearParts()
     draft = { text: area.plainText, parts: [] }
-    area.cursorOffset = Math.min(text.length, area.plainText.length)
+    area.cursorOffset = Math.min(Bun.stringWidth(text), Bun.stringWidth(area.plainText))
     scheduleRows()
     area.focus()
   }
@@ -610,12 +648,13 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     if (visible() && mode() === "mention") {
-      if (cursor <= at() || /\s/.test(text.slice(at(), cursor))) {
+      const query = displaySlice(text, at(), cursor)
+      if (cursor <= at() || /\s/.test(query)) {
         hide()
         return
       }
 
-      setQuery(text.slice(at() + 1, cursor))
+      setQuery(displaySlice(text, at() + 1, cursor))
       return
     }
 
@@ -623,19 +662,12 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    const head = text.slice(0, cursor)
-    const idx = head.lastIndexOf("@")
-    if (idx === -1) {
-      return
-    }
-
-    const before = idx === 0 ? undefined : head[idx - 1]
-    const tail = head.slice(idx)
-    if ((before === undefined || /\s/.test(before)) && !/\s/.test(tail)) {
+    const idx = mentionTriggerIndex(text, cursor)
+    if (idx !== undefined) {
       setAt(idx)
       menu.reset()
       setMode("mention")
-      setQuery(head.slice(idx + 1))
+      setQuery(displaySlice(text, idx + 1, cursor))
     }
   }
 
@@ -782,7 +814,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const cursor = area.cursorOffset
-    const tail = area.plainText.at(cursor)
+    const tail = displayCharAt(area.plainText, cursor)
     const append = "@" + next.value + (tail === " " ? "" : " ")
     area.cursorOffset = at()
     const start = area.logicalCursor
@@ -941,7 +973,8 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const dir = up ? -1 : 1
-    if ((dir === -1 && area.cursorOffset === 0) || (dir === 1 && area.cursorOffset === area.plainText.length)) {
+    const endOffset = Bun.stringWidth(area.plainText)
+    if ((dir === -1 && area.cursorOffset === 0) || (dir === 1 && area.cursorOffset === endOffset)) {
       move(dir, event)
       return
     }
@@ -955,7 +988,7 @@ export function createPromptState(input: PromptInput): PromptState {
         ? area.height - 1
         : Math.max(0, (area.virtualLineCount ?? 1) - 1)
     if (dir === 1 && area.visualCursor.visualRow === end) {
-      area.cursorOffset = area.plainText.length
+      area.cursorOffset = endOffset
     }
   }
 

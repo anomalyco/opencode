@@ -231,13 +231,22 @@ export const McpSearchTool = Tool.define(
         const raw = params as McpSearchParams & Record<string, unknown>
         const server = raw.server ?? (raw as any).mcp_name ?? (raw as any).server_name
         const tool = raw.tool ?? (raw as any).tool_name ?? (raw as any).name
-        const args: Record<string, unknown> | undefined = raw.args ?? (typeof (raw as any).arguments === "string" ? JSON.parse((raw as any).arguments) : (raw as any).arguments)
         return Effect.gen(function* () {
           if (raw.operation === "list") return yield* doList(mcp) as any
           if (raw.operation === "search") return yield* doSearch(mcp, raw.query) as any
           if (!server || !tool)
             throw new Error(`Both 'server' and 'tool' parameters are required. Received: server=${JSON.stringify(server)}, tool=${JSON.stringify(tool)}. Use parameter names "server" and "tool", not "mcp_name" or "tool_name".`)
           if (raw.operation === "describe") return yield* doDescribe(mcp, server, tool) as any
+          const argsRaw = (raw as any).arguments
+          const args: Record<string, unknown> | undefined =
+            raw.args ??
+            (typeof argsRaw === "string"
+              ? yield* Effect.try({
+                  try: () => JSON.parse(argsRaw) as Record<string, unknown>,
+                  catch: (e) =>
+                    new Error(`Invalid JSON in 'arguments' field: ${e instanceof Error ? e.message : String(e)}`),
+                })
+              : argsRaw)
           return yield* doCall(mcp, plugin, server, tool, args ?? {}, ctx) as any
         }) as any
       },

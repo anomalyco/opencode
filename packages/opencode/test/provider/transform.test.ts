@@ -310,6 +310,75 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
   })
 })
 
+describe("ProviderTransform.options - gpt-5 reasoningEffort", () => {
+  const sessionID = "test-session-123"
+
+  const createModel = (apiId: string) =>
+    ({
+      id: `azure/${apiId}`,
+      providerID: "azure",
+      api: {
+        id: apiId,
+        url: "https://azure.com",
+        npm: "@ai-sdk/azure",
+      },
+      name: apiId,
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: {
+          text: true,
+          audio: false,
+          image: true,
+          video: false,
+          pdf: false,
+        },
+        output: {
+          text: true,
+          audio: false,
+          image: false,
+          video: false,
+          pdf: false,
+        },
+        interleaved: false,
+      },
+      cost: {
+        input: 0.03,
+        output: 0.06,
+        cache: { read: 0.001, write: 0.002 },
+      },
+      limit: {
+        context: 128000,
+        output: 4096,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("gpt-5-chat should NOT set reasoningEffort", () => {
+    const result = ProviderTransform.options({
+      model: createModel("gpt-5-chat"),
+      sessionID,
+      providerOptions: {},
+    })
+
+    expect(result.reasoningEffort).toBeUndefined()
+  })
+
+  test("gpt-5.5 should NOT set reasoningEffort", () => {
+    const result = ProviderTransform.options({
+      model: createModel("gpt-5.5"),
+      sessionID,
+      providerOptions: {},
+    })
+
+    expect(result.reasoningEffort).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.options - gateway", () => {
   const sessionID = "test-session-123"
 
@@ -3292,89 +3361,74 @@ describe("ProviderTransform.variants", () => {
     })
   })
 
-  describe("@ai-sdk/google", () => {
-    test("gemini-2.5 returns high and max with thinkingConfig and thinkingBudget", () => {
-      const model = createMockModel({
-        id: "google/gemini-2.5-pro",
-        providerID: "google",
-        api: {
-          id: "gemini-2.5-pro",
-          url: "https://generativelanguage.googleapis.com",
-          npm: "@ai-sdk/google",
+  for (const provider of [
+    { name: "@ai-sdk/google", providerID: "google", url: "https://generativelanguage.googleapis.com" },
+    { name: "@ai-sdk/google-vertex", providerID: "google-vertex", url: "https://vertexai.googleapis.com" },
+  ]) {
+    describe(provider.name, () => {
+      for (const testCase of [
+        {
+          apiId: "gemini-2.5-pro",
+          efforts: ["high", "max"],
+          expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16_000 } },
+          expectedMax: { thinkingConfig: { includeThoughts: true, thinkingBudget: 32_768 } },
         },
-      })
-      const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["high", "max"])
-      expect(result.high).toEqual({
-        thinkingConfig: {
-          includeThoughts: true,
-          thinkingBudget: 16000,
+        {
+          apiId: "gemini-2.5-flash",
+          efforts: ["high", "max"],
+          expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16_000 } },
+          expectedMax: { thinkingConfig: { includeThoughts: true, thinkingBudget: 24_576 } },
         },
-      })
-      expect(result.max).toEqual({
-        thinkingConfig: {
-          includeThoughts: true,
-          thinkingBudget: 24576,
+        {
+          apiId: "gemini-3-pro-preview",
+          efforts: ["low", "medium", "high"],
+          expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
         },
-      })
+        {
+          apiId: "gemini-3.1-pro-preview",
+          efforts: ["low", "medium", "high"],
+          expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+        },
+        {
+          apiId: "gemini-3-flash-preview",
+          efforts: ["minimal", "low", "medium", "high"],
+          expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+        },
+        {
+          apiId: "gemini-3.1-flash-lite",
+          efforts: ["minimal", "low", "medium", "high"],
+          expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+        },
+        {
+          apiId: "gemini-3.1-flash-image-preview",
+          efforts: ["minimal", "high"],
+          expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+        },
+        {
+          apiId: "gemini-3-pro-image-preview",
+          efforts: ["high"],
+          expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+        },
+      ]) {
+        test(`${testCase.apiId} returns supported thinking controls`, () => {
+          const result = ProviderTransform.variants(
+            createMockModel({
+              id: `${provider.providerID}/${testCase.apiId}`,
+              providerID: provider.providerID,
+              api: {
+                id: testCase.apiId,
+                url: provider.url,
+                npm: provider.name,
+              },
+            }),
+          )
+          expect(Object.keys(result)).toEqual(testCase.efforts)
+          expect(result.high).toEqual(testCase.expectedHigh)
+          if (testCase.expectedMax) expect(result.max).toEqual(testCase.expectedMax)
+        })
+      }
     })
-
-    test("other gemini models return low and high with thinkingLevel", () => {
-      const model = createMockModel({
-        id: "google/gemini-2.0-pro",
-        providerID: "google",
-        api: {
-          id: "gemini-2.0-pro",
-          url: "https://generativelanguage.googleapis.com",
-          npm: "@ai-sdk/google",
-        },
-      })
-      const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["low", "high"])
-      expect(result.low).toEqual({
-        thinkingConfig: {
-          includeThoughts: true,
-          thinkingLevel: "low",
-        },
-      })
-      expect(result.high).toEqual({
-        thinkingConfig: {
-          includeThoughts: true,
-          thinkingLevel: "high",
-        },
-      })
-    })
-  })
-
-  describe("@ai-sdk/google-vertex", () => {
-    test("gemini-2.5 returns high and max with thinkingConfig and thinkingBudget", () => {
-      const model = createMockModel({
-        id: "google-vertex/gemini-2.5-pro",
-        providerID: "google-vertex",
-        api: {
-          id: "gemini-2.5-pro",
-          url: "https://vertexai.googleapis.com",
-          npm: "@ai-sdk/google-vertex",
-        },
-      })
-      const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["high", "max"])
-    })
-
-    test("other vertex models return low and high with thinkingLevel", () => {
-      const model = createMockModel({
-        id: "google-vertex/gemini-2.0-pro",
-        providerID: "google-vertex",
-        api: {
-          id: "gemini-2.0-pro",
-          url: "https://vertexai.googleapis.com",
-          npm: "@ai-sdk/google-vertex",
-        },
-      })
-      const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["low", "high"])
-    })
-  })
+  }
 
   describe("@ai-sdk/cohere", () => {
     test("returns empty object", () => {
@@ -3617,8 +3671,8 @@ describe("ProviderTransform.variants", () => {
 })
 
 describe("ProviderTransform.smallOptions - gpt-5 chat/search", () => {
-  const createModel = (apiId: string) =>
-    ({
+  const createModel = (apiId: string) => {
+    const model = {
       id: `openai/${apiId}`,
       providerID: "openai",
       api: {
@@ -3626,18 +3680,98 @@ describe("ProviderTransform.smallOptions - gpt-5 chat/search", () => {
         url: "https://api.openai.com",
         npm: "@ai-sdk/openai",
       },
-    }) as any
+      capabilities: { reasoning: true },
+      limit: { output: 64_000 },
+      release_date: "2026-01-01",
+    } as any
+    model.variants = ProviderTransform.variants(model)
+    return model
+  }
 
   for (const testCase of [
     { id: "gpt-5-chat-latest", options: { store: false } },
-    { id: "gpt-5.1-chat-latest", options: { store: false, reasoningEffort: "medium" } },
-    { id: "gpt-5.2-chat-latest", options: { store: false, reasoningEffort: "medium" } },
-    { id: "gpt-5-search-api", options: { store: false } },
+    {
+      id: "gpt-5.1-chat-latest",
+      options: {
+        store: false,
+        reasoningEffort: "medium",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      },
+    },
+    {
+      id: "gpt-5.2-chat-latest",
+      options: {
+        store: false,
+        reasoningEffort: "medium",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      },
+    },
+    {
+      id: "gpt-5-search-api",
+      options: {
+        store: false,
+        reasoningEffort: "none",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      },
+    },
   ]) {
     test(`${testCase.id} returns only supported small options`, () => {
       expect(ProviderTransform.smallOptions(createModel(testCase.id))).toEqual(testCase.options)
     })
   }
+})
+
+describe("ProviderTransform.smallOptions - google thinking controls", () => {
+  const createGoogleModel = (apiId: string) => {
+    const model = {
+      id: `google/${apiId}`,
+      providerID: "google",
+      api: {
+        id: apiId,
+        url: "https://generativelanguage.googleapis.com",
+        npm: "@ai-sdk/google",
+      },
+      capabilities: { reasoning: true },
+      limit: { output: 64_000 },
+    } as any
+    model.variants = ProviderTransform.variants(model)
+    return model
+  }
+
+  for (const testCase of [
+    { id: "gemini-3-pro-preview", options: { thinkingConfig: { includeThoughts: true, thinkingLevel: "low" } } },
+    { id: "gemini-3-flash-preview", options: { thinkingConfig: { includeThoughts: true, thinkingLevel: "minimal" } } },
+    {
+      id: "gemini-3.1-flash-image-preview",
+      options: { thinkingConfig: { includeThoughts: true, thinkingLevel: "minimal" } },
+    },
+    { id: "gemini-3-pro-image-preview", options: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } } },
+    { id: "gemini-2.5-pro", options: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } } },
+    { id: "gemini-2.5-flash", options: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } } },
+  ]) {
+    test(`${testCase.id} returns supported small thinking options`, () => {
+      expect(ProviderTransform.smallOptions(createGoogleModel(testCase.id))).toEqual(testCase.options)
+    })
+  }
+
+  test("uses the first configured variant when available", () => {
+    expect(
+      ProviderTransform.smallOptions({
+        ...createGoogleModel("gemini-2.5-pro"),
+        variants: {
+          high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
+          max: { thinkingConfig: { includeThoughts: true, thinkingBudget: 32768 } },
+        },
+      }),
+    ).toEqual({ thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } })
+  })
+
+  test("does not synthesize thinking options when variants are empty", () => {
+    expect(ProviderTransform.smallOptions({ ...createGoogleModel("gemini-2.5-pro"), variants: {} })).toEqual({})
+  })
 })
 
 describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {

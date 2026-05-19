@@ -32,22 +32,39 @@ console.log("binaries", binaries)
 const version = Object.values(binaries)[0]
 
 await $`mkdir -p ./dist/${pkg.name}`
-await $`cp -r ./bin ./dist/${pkg.name}/bin`
+await $`mkdir -p ./dist/${pkg.name}/bin`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE").text())
+await Bun.file(`./dist/${pkg.name}/bin/${pkg.name}.exe`).write(
+  [
+    `echo "Error: ${pkg.name}-ai's postinstall script was not run." >&2`,
+    'echo "" >&2',
+    'echo "This occurs when using --ignore-scripts during installation, or when using a" >&2',
+    'echo "package manager like pnpm that does not run postinstall scripts by default." >&2',
+    'echo "" >&2',
+    'echo "To fix this, run the postinstall script manually:" >&2',
+    `echo "  cd node_modules/${pkg.name}-ai && node postinstall.mjs" >&2`,
+    'echo "" >&2',
+    `echo "Or reinstall ${pkg.name}-ai without the --ignore-scripts flag." >&2`,
+    "exit 1",
+    "",
+  ].join("\n"),
+)
 
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
       name: pkg.name + "-ai",
       bin: {
-        [pkg.name]: `./bin/${pkg.name}`,
+        [pkg.name]: `./bin/${pkg.name}.exe`,
       },
       scripts: {
-        postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
+        postinstall: "node ./postinstall.mjs",
       },
       version: version,
       license: pkg.license,
+      os: ["darwin", "linux", "win32"],
+      cpu: ["arm64", "x64"],
       optionalDependencies: binaries,
     },
     null,
