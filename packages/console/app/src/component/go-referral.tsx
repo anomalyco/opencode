@@ -216,7 +216,9 @@ export function GoReferralSection(props: { workspaceID: string; summary: GoRefer
                       <td data-slot="referral-amount">{formatCurrency(reward.amount)}</td>
                       <td data-slot="referral-source">
                         <span>{i18n.t(rewardTitleKey(reward))}</span>
-                        <span data-slot="referral-email">{reward.email}</span>
+                        <Show when={reward.email}>
+                          <span data-slot="referral-email">{reward.email}</span>
+                        </Show>
                       </td>
                       <td data-slot="referral-date" title={earnedAt()}>
                         {earnedAt()}
