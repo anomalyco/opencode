@@ -40,7 +40,10 @@ jobs:
       - name: Implement issue and open pull request
         uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Claude Max サブスクの OAuth トークンで認証する（API の従量課金・
+          # レート Tier ではなく Max プランの利用枠を使う）。
+          # トークンは `claude setup-token` で発行する。
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # github_token を明示すると Action は OIDC を使わない。指定しない場合
           # Claude GitHub App との OIDC トークン交換（id-token: write 必須・
           # App インストール前提）になり失敗するため、既定の GITHUB_TOKEN を渡す。
