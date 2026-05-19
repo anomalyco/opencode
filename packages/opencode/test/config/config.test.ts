@@ -925,49 +925,35 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
 // core Npm.Service (via EffectFlock). Those behaviors are tested in the core
 // package's npm tests, not here.
 
-test("resolves scoped npm plugins in config", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const pluginDir = path.join(dir, "node_modules", "@scope", "plugin")
-      await fs.mkdir(pluginDir, { recursive: true })
+it.instance("resolves scoped npm plugins in config", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const pluginDir = path.join(test.directory, "node_modules", "@scope", "plugin")
+    yield* mkdirEffect(pluginDir)
+    yield* writeTextEffect(
+      path.join(test.directory, "package.json"),
+      JSON.stringify({ name: "config-fixture", version: "1.0.0", type: "module" }, null, 2),
+    )
+    yield* writeTextEffect(
+      path.join(pluginDir, "package.json"),
+      JSON.stringify(
+        {
+          name: "@scope/plugin",
+          version: "1.0.0",
+          type: "module",
+          main: "./index.js",
+        },
+        null,
+        2,
+      ),
+    )
+    yield* writeTextEffect(path.join(pluginDir, "index.js"), "export default {}\n")
+    yield* writeConfigEffect(test.directory, { plugin: ["@scope/plugin"] })
 
-      await Filesystem.write(
-        path.join(dir, "package.json"),
-        JSON.stringify({ name: "config-fixture", version: "1.0.0", type: "module" }, null, 2),
-      )
-
-      await Filesystem.write(
-        path.join(pluginDir, "package.json"),
-        JSON.stringify(
-          {
-            name: "@scope/plugin",
-            version: "1.0.0",
-            type: "module",
-            main: "./index.js",
-          },
-          null,
-          2,
-        ),
-      )
-
-      await Filesystem.write(path.join(pluginDir, "index.js"), "export default {}\n")
-
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({ $schema: "https://opencode.ai/config.json", plugin: ["@scope/plugin"] }, null, 2),
-      )
-    },
-  })
-
-  await provideTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      const pluginEntries = config.plugin ?? []
-      expect(pluginEntries).toContain("@scope/plugin")
-    },
-  })
-})
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.plugin ?? []).toContain("@scope/plugin")
+  }),
+)
 
 test("merges plugin arrays from global and local configs", async () => {
   await using tmp = await tmpdir({
@@ -1015,37 +1001,28 @@ test("merges plugin arrays from global and local configs", async () => {
   })
 })
 
-test("does not error when only custom agent is a subagent", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
-      const agentDir = path.join(opencodeDir, "agent")
-      await fs.mkdir(agentDir, { recursive: true })
-
-      await Filesystem.write(
-        path.join(agentDir, "helper.md"),
-        `---
+it.instance("does not error when only custom agent is a subagent", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* mkdirEffect(path.join(test.directory, ".opencode", "agent"))
+    yield* writeTextEffect(
+      path.join(test.directory, ".opencode", "agent", "helper.md"),
+      `---
 model: test/model
 mode: subagent
 ---
 Helper subagent prompt`,
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["helper"]).toMatchObject({
-        name: "helper",
-        model: "test/model",
-        mode: "subagent",
-        prompt: "Helper subagent prompt",
-      })
-    },
-  })
-})
+    )
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["helper"]).toMatchObject({
+      name: "helper",
+      model: "test/model",
+      mode: "subagent",
+      prompt: "Helper subagent prompt",
+    })
+  }),
+)
 
 test("merges instructions arrays from global and local configs", async () => {
   await using tmp = await tmpdir({
