@@ -129,9 +129,14 @@ export const layer = Layer.effect(
     )
 
     const source = Flag.OPENCODE_MODELS_URL || "https://models.dev"
+    const anrEndpoint = Flag.OPENCODE_API_ENDPOINT
     const filepath = path.join(
       Global.Path.cache,
-      source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
+      anrEndpoint
+        ? `models-${Hash.fast(anrEndpoint)}.json`
+        : source === "https://models.dev"
+          ? "models.json"
+          : `models-${Hash.fast(source)}.json`,
     )
     const ttl = Duration.minutes(5)
     const lockKey = `models-dev:${filepath}`
@@ -152,6 +157,54 @@ export const layer = Layer.effect(
       )
     })
 
+    // ANR: parse DynamoDB attribute values into plain JS values
+    const fromDynamoDBValue = (value: Record<string, unknown>): unknown => {
+      if ("S" in value) return value.S
+      if ("N" in value) return Number(value.N)
+      if ("BOOL" in value) return value.BOOL
+      if ("M" in value) {
+        const map = value.M as Record<string, Record<string, unknown>>
+        return Object.fromEntries(Object.entries(map).map(([k, v]) => [k, fromDynamoDBValue(v)]))
+      }
+      if ("L" in value) {
+        const list = value.L as Record<string, unknown>[]
+        return list.map((item) => fromDynamoDBValue(item))
+      }
+      return undefined
+    }
+
+    // ANR: fetch models from our API endpoint with auth token
+    const fetchAnrEndpoint = Effect.fn("ModelsDev.fetchAnrEndpoint")(function* () {
+      const endpoint = Flag.OPENCODE_API_ENDPOINT
+      if (!endpoint) return undefined as Record<string, Provider> | undefined
+      const idToken = process.env.OPENCODE_ANR_ID_TOKEN
+      const request = HttpClientRequest.get(`${endpoint}/model`).pipe(
+        HttpClientRequest.setHeader("User-Agent", USER_AGENT),
+        idToken ? HttpClientRequest.setHeader("Authorization", `Bearer ${idToken}`) : (x) => x,
+      )
+      const response = yield* http.execute(request).pipe(
+        Effect.flatMap((res) => res.json),
+        Effect.timeout("10 seconds"),
+        Effect.catch(() => Effect.succeed(undefined)),
+      )
+      if (!response) return undefined as Record<string, Provider> | undefined
+      const policy = response as Record<string, unknown>
+      // Check if response has models in DynamoDB format (with .M) or direct format
+      const modelsAttr = policy.models as { M?: Record<string, Record<string, unknown>> } | undefined
+      if (modelsAttr?.M) {
+        return Object.fromEntries(
+          Object.entries(modelsAttr.M).map(([providerID, providerDDB]) => [
+            providerID,
+            fromDynamoDBValue(providerDDB) as Provider,
+          ]),
+        ) as Record<string, Provider>
+      }
+      if (policy.models && typeof policy.models === "object") {
+        return policy.models as Record<string, Provider>
+      }
+      return undefined as Record<string, Provider> | undefined
+    })
+
     const loadFromDisk = fs.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).pipe(
       Effect.catch(() => Effect.succeed(undefined)),
       Effect.map((v) => v as Record<string, Provider> | undefined),
@@ -162,6 +215,15 @@ export const layer = Layer.effect(
     )
 
     const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
+      // ANR: when API endpoint is configured, fetch from there instead
+      if (Flag.OPENCODE_API_ENDPOINT) {
+        const models = yield* fetchAnrEndpoint()
+        if (models) {
+          yield* fs.writeWithDirs(filepath, JSON.stringify(models))
+          return JSON.stringify(models)
+        }
+        return "{}"
+      }
       const text = yield* fetchApi()
       yield* fs.writeWithDirs(filepath, text)
       return text

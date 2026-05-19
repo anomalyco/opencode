@@ -520,6 +520,53 @@ export const layer = Layer.effect(
               })
             }
             yield* completeToolCall(value.id, output)
+
+            // ANR: track code edit metrics for telemetry
+            if (globalThis.process.env.OPENCODE_FLAVOR === "anr" && toolCall) {
+              try {
+                const EXT_MAP: Record<string, string> = {
+                  ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript",
+                  py: "python", rs: "rust", go: "go", java: "java", rb: "ruby",
+                  cpp: "cpp", c: "c", cs: "csharp", swift: "swift", kt: "kotlin",
+                  sh: "shell", bash: "shell", zsh: "shell", md: "markdown",
+                  json: "json", yaml: "yaml", yml: "yaml", toml: "toml",
+                  html: "html", css: "css", scss: "scss", sql: "sql",
+                }
+                const inp = toolCall.part.state.status === "running" ? toolCall.part.state.input : {} as Record<string, any>
+                const tool = toolCall.part.tool
+                const ext = ((inp.filePath || "") as string).split(".").pop()?.toLowerCase() || ""
+                const lang = EXT_MAP[ext] || ext || "unknown"
+
+                if (tool === "edit" && inp.oldString !== undefined && inp.newString !== undefined) {
+                  const removed = (inp.oldString as string).split("\n").length
+                  const added = (inp.newString as string).split("\n").length
+                  trackLinesOfCode(added, "added", lang)
+                  trackLinesOfCode(removed, "removed", lang)
+                  trackCodeEditTool("edit", lang, true)
+                  trackCodeEditDecision("accepted", lang)
+                } else if (tool === "write" && inp.content !== undefined) {
+                  const lines = (inp.content as string).split("\n").length
+                  trackLinesOfCode(lines, "added", lang)
+                  trackCodeEditTool("write", lang, true)
+                  trackCodeEditDecision("accepted", lang)
+                } else if (tool === "multiedit" && Array.isArray(inp.edits)) {
+                  let added = 0, removed = 0
+                  for (const e of inp.edits) {
+                    if (e.oldString !== undefined) removed += (e.oldString as string).split("\n").length
+                    if (e.newString !== undefined) added += (e.newString as string).split("\n").length
+                  }
+                  trackLinesOfCode(added, "added", lang)
+                  trackLinesOfCode(removed, "removed", lang)
+                  trackCodeEditTool("multiedit", lang, true)
+                  trackCodeEditDecision("accepted", lang)
+                } else if (tool === "bash" && typeof inp.command === "string" && /\bgit\s+commit\b/.test(inp.command)) {
+                  trackCommit()
+                }
+              } catch {
+                // silently fail — don't block tool results
+              }
+            }
+
             return
           }
 
@@ -598,6 +645,41 @@ export const layer = Layer.effect(
             ctx.assistantMessage.finish = value.reason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
+
+            // ANR: track token usage for telemetry and audit
+            if (globalThis.process.env.OPENCODE_FLAVOR === "anr") {
+              try {
+                const context = getTelemetryContext()
+                const cost = (usage.tokens.input * input.model.cost.input + usage.tokens.output * input.model.cost.output) / 1_000_000
+                trackModelCall(
+                  input.model.id || input.model.name,
+                  usage.tokens.input,
+                  usage.tokens.output,
+                  usage.tokens.reasoning,
+                  usage.tokens.cache.read,
+                  usage.tokens.cache.write,
+                  context || undefined,
+                  cost,
+                )
+                flushOTEL()
+                if (context) {
+                  logTokenUsage(
+                    {
+                      auditTableName: globalThis.process.env.AUDIT_TABLE_NAME || "AuditEvents",
+                      awsRegion: globalThis.process.env.AWS_REGION || "us-east-2",
+                    } as any,
+                    context.userId,
+                    input.model.name || input.model.id,
+                    usage.tokens.input,
+                    usage.tokens.output,
+                    context,
+                  )
+                }
+              } catch {
+                // Silently fail - don't block model calls if telemetry fails
+              }
+            }
+
             yield* session.updatePart({
               id: PartID.ascending(),
               reason: value.reason,
@@ -803,6 +885,29 @@ export const layer = Layer.effect(
         slog.info("process")
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+        const processStart = Date.now()
+
+        // ANR: per-prompt quota check
+        if (globalThis.process.env.OPENCODE_FLAVOR === "anr" && globalThis.process.env.OPENCODE_API_ENDPOINT) {
+          yield* Effect.tryPromise(async () => {
+            const email = globalThis.process.env.OPENCODE_ANR_USER_EMAIL || ""
+            const result = await checkQuota(
+              { userEmail: email },
+              globalThis.process.env.OPENCODE_API_ENDPOINT!,
+              (globalThis.process.env.QUOTA_FAIL_MODE as "closed" | "open") || "closed",
+              globalThis.process.env.OPENCODE_ANR_ID_TOKEN,
+            )
+            if (result) {
+              globalThis.process.env.OPENCODE_ANR_QUOTA_ALLOWED = String(result.usage.allowed)
+              globalThis.process.env.OPENCODE_ANR_QUOTA_WARNING_LEVEL = result.usage.warningLevel
+              globalThis.process.env.OPENCODE_ANR_QUOTA_DAILY_PERCENT = String(result.usage.dailyUsagePercent)
+              globalThis.process.env.OPENCODE_ANR_QUOTA_MONTHLY_PERCENT = String(result.usage.monthlyUsagePercent)
+            }
+            if (result && !result.usage.allowed) {
+              throw new QuotaExceededError(result.usage, result.policy)
+            }
+          }).pipe(Effect.ignore)
+        }
 
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
@@ -828,6 +933,15 @@ export const layer = Layer.effect(
             Effect.catchCauseIf(
               (cause) => !Cause.hasInterruptsOnly(cause),
               (cause) => Effect.fail(Cause.squash(cause)),
+            ),
+            // ANR: detect expired tokens and attempt credential refresh before retry
+            Effect.tapError((e) =>
+              globalThis.process.env.OPENCODE_FLAVOR === "anr" && isExpiredTokenError(e)
+                ? Effect.tryPromise(async () => {
+                    slog.info("detected expired token, attempting credential refresh")
+                    await refreshANRCredentials()
+                  }).pipe(Effect.ignore)
+                : Effect.void,
             ),
             Effect.retry(
               SessionRetry.policy({
@@ -866,6 +980,17 @@ export const layer = Layer.effect(
 
           if (ctx.needsCompaction) return "compact"
           if (ctx.blocked || ctx.assistantMessage.error) return "stop"
+
+          // ANR: track active processing time for telemetry
+          if (globalThis.process.env.OPENCODE_FLAVOR === "anr") {
+            try {
+              const elapsed = Math.round((Date.now() - processStart) / 1000)
+              if (elapsed > 0) trackActiveTime(elapsed)
+            } catch {
+              // silently fail
+            }
+          }
+
           return "continue"
         })
       })
