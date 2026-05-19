@@ -2,6 +2,7 @@ export * as PluginBoot from "./boot"
 
 import { Context, Deferred, Effect, Layer } from "effect"
 import { AccountV2 } from "../account"
+import { AgentV2 } from "../agent"
 import { Catalog } from "../catalog"
 import { Npm } from "../npm"
 import { PluginV2 } from "../plugin"
@@ -12,7 +13,11 @@ import { ProviderPlugins } from "./provider"
 
 type Plugin = {
   id: PluginV2.ID
-  effect: Effect.Effect<PluginV2.HookFunctions | void, never, Catalog.Service | AccountV2.Service | Npm.Service>
+  effect: Effect.Effect<
+    PluginV2.HookFunctions | void,
+    never,
+    AgentV2.Service | Catalog.Service | AccountV2.Service | Npm.Service
+  >
 }
 
 export interface Interface {
@@ -21,10 +26,15 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/PluginBoot") {}
 
-export const layer: Layer.Layer<Service, never, Catalog.Service | PluginV2.Service | AccountV2.Service | Npm.Service> =
+export const layer: Layer.Layer<
+  Service,
+  never,
+  AgentV2.Service | Catalog.Service | PluginV2.Service | AccountV2.Service | Npm.Service
+> =
   Layer.effect(
     Service,
     Effect.gen(function* () {
+      const agent = yield* AgentV2.Service
       const catalog = yield* Catalog.Service
       const plugin = yield* PluginV2.Service
       const accounts = yield* AccountV2.Service
@@ -36,6 +46,7 @@ export const layer: Layer.Layer<Service, never, Catalog.Service | PluginV2.Servi
           id: input.id,
           effect: input.effect.pipe(
             Effect.provideService(Catalog.Service, catalog),
+            Effect.provideService(AgentV2.Service, agent),
             Effect.provideService(AccountV2.Service, accounts),
             Effect.provideService(Npm.Service, npm),
           ),
@@ -64,6 +75,7 @@ export const layer: Layer.Layer<Service, never, Catalog.Service | PluginV2.Servi
   )
 
 export const defaultLayer = layer.pipe(
+  Layer.provide(AgentV2.defaultLayer),
   Layer.provide(Catalog.defaultLayer),
   Layer.provide(PluginV2.defaultLayer),
   Layer.provide(Layer.orDie(AccountV2.defaultLayer)),

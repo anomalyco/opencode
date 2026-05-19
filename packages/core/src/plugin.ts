@@ -6,6 +6,7 @@ import { type ProviderV2 } from "./provider"
 import { Context, Effect, Layer, Schema } from "effect"
 import type { ModelV2 } from "./model"
 import type { AccountV2 } from "./account"
+import type { AgentV2 } from "./agent"
 
 export const ID = Schema.String.pipe(Schema.brand("Plugin.ID"))
 export type ID = typeof ID.Type
@@ -77,6 +78,27 @@ type HookSpec = {
     }
     output: {
       sdk?: any
+    }
+  }
+  "agent.update": {
+    input: {}
+    output: {
+      agent: AgentV2.Info
+      cancel: boolean
+    }
+  }
+  "agent.remove": {
+    input: {
+      agent: AgentV2.Info
+    }
+    output: {
+      cancel: boolean
+    }
+  }
+  "agent.default": {
+    input: {}
+    output: {
+      agent?: AgentV2.ID
     }
   }
 }
