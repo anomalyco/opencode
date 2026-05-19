@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.14.39",
+  "version": "1.15.5",
   "description": "",
   "type": "module",
   "exports": {
@@ -73,7 +73,6 @@
     "solid-js": "catalog:",
     "solid-list": "catalog:",
     "tailwindcss": "catalog:",
-    "virtua": "catalog:",
-    "zod": "catalog:"
+    "virtua": "catalog:"
   }
 }

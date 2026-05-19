@@ -1,6 +1,6 @@
 import { WorkspaceID } from "@/control-plane/schema"
 import { SessionV2 } from "@/v2/session"
-import { Effect, Schema } from "effect"
+import { DateTime, Effect, Schema } from "effect"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
 
@@ -22,6 +22,31 @@ type SessionCursor = typeof SessionCursor.Type
 
 const decodeCursor = Schema.decodeUnknownSync(SessionCursor)
 
+function hasCursorFilter(query: {
+  readonly order?: unknown
+  readonly path?: unknown
+  readonly roots?: unknown
+  readonly start?: unknown
+  readonly search?: unknown
+}) {
+  return (
+    query.order !== undefined ||
+    query.path !== undefined ||
+    query.roots !== undefined ||
+    query.start !== undefined ||
+    query.search !== undefined
+  )
+}
+
+function hasCursorRoutingMismatch(
+  query: { readonly directory?: string; readonly workspace?: string },
+  decoded: SessionCursor | undefined,
+) {
+  if (!decoded) return false
+  if (query.directory !== undefined && query.directory !== decoded.directory) return true
+  return query.workspace !== undefined && query.workspace !== decoded.workspaceID
+}
+
 const sessionCursor = {
   encode(
     session: SessionV2.Info,
@@ -30,7 +55,13 @@ const sessionCursor = {
     filters: Pick<SessionCursor, "directory" | "path" | "workspaceID" | "roots" | "start" | "search">,
   ) {
     return Buffer.from(
-      JSON.stringify({ id: session.id, time: session.time.created, order, direction, ...filters }),
+      JSON.stringify({
+        ...filters,
+        id: session.id,
+        time: DateTime.toEpochMillis(session.time.updated),
+        order,
+        direction,
+      }),
     ).toString("base64url")
   },
   decode(input: string) {
@@ -46,10 +77,12 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
       .handle(
         "sessions",
         Effect.fn(function* (ctx) {
+          if (ctx.query.cursor && hasCursorFilter(ctx.query)) return yield* new HttpApiError.BadRequest({})
           const decoded = yield* Effect.try({
             try: () => (ctx.query.cursor ? sessionCursor.decode(ctx.query.cursor) : undefined),
             catch: () => new HttpApiError.BadRequest({}),
           })
+          if (hasCursorRoutingMismatch(ctx.query, decoded)) return yield* new HttpApiError.BadRequest({})
           const order = decoded?.order ?? ctx.query.order ?? "desc"
           const filters = decoded ?? {
             directory: ctx.query.directory,
