@@ -24,8 +24,8 @@ import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "../fixtures/recordings")
-const ZEN_API_URL =
-  process.env.OPENCODE_RECORD_ZEN_API_URL ?? "https://console.opencode.ai/proxy/connections/fixture/v1"
+
+const zenURL = (connection: string) => `https://console.opencode.ai/proxy/connections/${connection}/v1`
 
 type ProviderSpec = {
   readonly providerID: ProviderID
@@ -80,7 +80,9 @@ const PROVIDERS = {
           name: "OpenCode Zen",
           env: ["OPENCODE_CONSOLE_TOKEN"],
           npm: "@ai-sdk/openai-compatible",
-          api: ZEN_API_URL,
+          // The connection slug is account-specific; the cassette redactor
+          // normalizes it to {connection} for replay. Set during recording.
+          api: zenURL(process.env.OPENCODE_RECORD_ZEN_CONNECTION ?? "fixture"),
           models: { [model.id]: cloneModel(model) },
           options: {
             apiKey: process.env.OPENCODE_RECORD_CONSOLE_TOKEN ?? "fixture-console-token",
