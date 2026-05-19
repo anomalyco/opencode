@@ -18,7 +18,6 @@ import { centsToMicroCents } from "./util/price"
 import { User } from "./user"
 import { BlackData } from "./black"
 import { LiteData } from "./lite"
-import { getMonthlyBounds, getWeekBounds } from "./util/date"
 
 export namespace Billing {
   export const ITEM_CREDIT_NAME = "opencode credits"
@@ -159,37 +158,18 @@ export namespace Billing {
   export const subtractLiteUsage = async (workspaceID: string, amountInMicroCents: number) => {
     await Database.transaction(async (tx) => {
       const lite = await tx
-        .select({ timeCreated: LiteTable.timeCreated })
+        .select({ id: LiteTable.id })
         .from(LiteTable)
         .where(and(eq(LiteTable.workspaceID, workspaceID), isNull(LiteTable.timeDeleted)))
         .then((rows) => rows[0])
       if (!lite) throw new Error("Subscribe to Go before applying referral rewards")
 
-      const now = new Date()
-      const week = getWeekBounds(now)
-      const month = getMonthlyBounds(now, lite.timeCreated)
-      const rollingWindowSeconds = LiteData.getLimits().rollingWindow * 3600
       await tx
         .update(LiteTable)
         .set({
-          monthlyUsage: sql`
-            CASE
-              WHEN ${LiteTable.timeMonthlyUpdated} >= ${month.start} THEN GREATEST(0, COALESCE(${LiteTable.monthlyUsage}, 0) - ${amountInMicroCents})
-              ELSE ${LiteTable.monthlyUsage}
-            END
-          `,
-          weeklyUsage: sql`
-            CASE
-              WHEN ${LiteTable.timeWeeklyUpdated} >= ${week.start} THEN GREATEST(0, COALESCE(${LiteTable.weeklyUsage}, 0) - ${amountInMicroCents})
-              ELSE ${LiteTable.weeklyUsage}
-            END
-          `,
-          rollingUsage: sql`
-            CASE
-              WHEN UNIX_TIMESTAMP(${LiteTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN GREATEST(0, COALESCE(${LiteTable.rollingUsage}, 0) - ${amountInMicroCents})
-              ELSE ${LiteTable.rollingUsage}
-            END
-          `,
+          monthlyUsage: sql`GREATEST(0, COALESCE(${LiteTable.monthlyUsage}, 0) - ${amountInMicroCents})`,
+          weeklyUsage: sql`GREATEST(0, COALESCE(${LiteTable.weeklyUsage}, 0) - ${amountInMicroCents})`,
+          rollingUsage: sql`GREATEST(0, COALESCE(${LiteTable.rollingUsage}, 0) - ${amountInMicroCents})`,
         })
         .where(and(eq(LiteTable.workspaceID, workspaceID), isNull(LiteTable.timeDeleted)))
     })
