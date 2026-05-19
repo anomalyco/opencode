@@ -174,7 +174,7 @@ It's very similar to Claude Code in terms of capability. Here are the key differ
 ---
 
 ### Notes
-This is not built by the OpenCode team and is not affiliated with us in any way.
+This is not built by the OpenCode team and is not affiliated with OpenCode in any way.
 
 ---
 ### Thank you
