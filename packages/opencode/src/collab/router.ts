@@ -540,9 +540,12 @@ async function handleInviteRedeem(req: Request, token: string): Promise<Response
     participant,
   })
 
+  // History-based router — the previous hash-prefixed URL ("/#/collab/<id>")
+  // made the browser land at "/" (opencode home) because the hash was
+  // discarded on the server-side 302 and the SPA never saw the collab path.
   return new Response(null, {
     status: 302,
-    headers: { Location: `/#/collab/${invite.collabSessionId}` },
+    headers: { Location: `/collab/${invite.collabSessionId}` },
   })
 }
 
