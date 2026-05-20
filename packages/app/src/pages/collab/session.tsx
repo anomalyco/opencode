@@ -312,9 +312,16 @@ function CollabSessionInner(props: { me: Me }) {
         <div class="px-4 py-3 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 mb-0.5">
-              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 uppercase tracking-wider">
+              {/* "Collab" pill links back to the home / new-session page so
+                  any participant can quickly hop to the list of all their
+                  sessions or create a new one. */}
+              <a
+                href="/collab/new"
+                title="Back to your collab sessions"
+                class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 uppercase tracking-wider hover:bg-blue-500/30 hover:text-blue-300 transition-colors"
+              >
                 Collab
-              </span>
+              </a>
             </div>
             <h1 class="text-sm font-semibold text-zinc-100 truncate">
               {collab.session()?.name ?? "Loading…"}
