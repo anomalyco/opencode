@@ -92,6 +92,10 @@ export function TeamNoteComposer(props: {
   const [error, setError] = createSignal<string | null>(null)
   const [popoverOpen, setPopoverOpen] = createSignal(false)
   const [highlightIdx, setHighlightIdx] = createSignal(0)
+  // Collapsed by default keeps the sidebar compact — when notes are
+  // important the user expands; the unread count on the header chip is
+  // still visible while collapsed so they don't miss new chatter.
+  const [expanded, setExpanded] = createSignal(true)
   let textareaRef: HTMLTextAreaElement | undefined
   // Tick re-evaluates the visible relative timestamps every 30s
   const [tick, setTick] = createSignal(0)
@@ -195,73 +199,96 @@ export function TeamNoteComposer(props: {
   }
 
   return (
-    <div class="px-3 py-2 border-b border-zinc-800/60 flex-shrink-0 space-y-2">
-      <div class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">
-        Team chat
-      </div>
-
-      {/* Scrolling notes feed.  Max-height keeps the composer in view; the
-          feed scrolls internally if there are many notes. */}
-      <NotesFeed notes={collab.notes()} tick={tick()} />
-
-      <Show
-        when={!props.readonly}
-        fallback={<div class="text-[11px] text-zinc-600 italic">Viewers cannot post notes.</div>}
+    <div class="border-b border-zinc-800/60 flex-shrink-0">
+      {/* Collapsible header — clicking the whole bar toggles open/closed.
+          Mirrors the Queue header pattern below for visual consistency. */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        class="w-full px-3 py-2 flex items-center justify-between text-[10px] text-zinc-600 uppercase tracking-wider font-medium hover:text-zinc-400 transition-colors"
       >
-        <div class="relative">
-          <textarea
-            ref={(el) => (textareaRef = el)}
-            value={text()}
-            onInput={handleInput}
-            onKeyDown={handleKeyDown}
-            onSelect={handleInput /* keep activeMention() in sync with caret */}
-            placeholder="Message the team — @mention to ping ⌘↵ to send"
-            rows={2}
-            disabled={sending()}
-            class="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500 resize-none disabled:opacity-50"
-          />
+        <span>Team chat</span>
+        <div class="flex items-center gap-1.5">
+          <Show when={collab.notes().length > 0}>
+            <span class="px-1.5 py-0.5 rounded-full bg-zinc-800 text-zinc-400 text-[10px] normal-case tracking-normal">
+              {collab.notes().length}
+            </span>
+          </Show>
+          <svg
+            class={`w-3.5 h-3.5 transition-transform ${expanded() ? "rotate-180" : ""}`}
+            fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
 
-          {/* Autocomplete popover */}
-          <Show when={popoverOpen() && suggestions().length > 0}>
-            <div
-              class="absolute left-0 right-0 -top-2 -translate-y-full z-20 rounded border border-zinc-700 bg-zinc-900 shadow-lg overflow-hidden"
-              style={{ "max-height": "200px", "overflow-y": "auto" }}
-            >
-              <For each={suggestions()}>
-                {(p, i) => (
-                  <button
-                    type="button"
-                    onMouseDown={(e) => {
-                      // mousedown not click — click would fire after blur
-                      e.preventDefault()
-                      insertSuggestion(p)
-                    }}
-                    onMouseEnter={() => setHighlightIdx(i())}
-                    classList={{
-                      "w-full flex items-center gap-2 px-2 py-1.5 text-left text-xs transition-colors": true,
-                      "bg-blue-500/20 text-blue-200": i() === highlightIdx(),
-                      "hover:bg-zinc-800 text-zinc-300": i() !== highlightIdx(),
-                    }}
-                  >
-                    <img
-                      src={p.githubAvatarUrl || `https://github.com/${p.githubLogin}.png?size=24`}
-                      alt=""
-                      class="w-4 h-4 rounded-full"
-                    />
-                    <span class="font-mono">@{p.githubLogin}</span>
-                    <Show when={p.isOnline}>
-                      <span class="ml-auto w-1.5 h-1.5 rounded-full" style={{ "background-color": "#34d399" }} />
-                    </Show>
-                  </button>
-                )}
-              </For>
+      <Show when={expanded()}>
+        <div class="px-3 pb-2 space-y-2">
+          {/* Scrolling notes feed.  Max-height keeps the composer in view; the
+              feed scrolls internally if there are many notes. */}
+          <NotesFeed notes={collab.notes()} tick={tick()} />
+
+          <Show
+            when={!props.readonly}
+            fallback={<div class="text-[11px] text-zinc-600 italic">Viewers cannot post notes.</div>}
+          >
+            <div class="relative">
+              <textarea
+                ref={(el) => (textareaRef = el)}
+                value={text()}
+                onInput={handleInput}
+                onKeyDown={handleKeyDown}
+                onSelect={handleInput /* keep activeMention() in sync with caret */}
+                placeholder="Message the team — @mention to ping ⌘↵ to send"
+                rows={2}
+                disabled={sending()}
+                class="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500 resize-none disabled:opacity-50"
+              />
+
+              {/* Autocomplete popover */}
+              <Show when={popoverOpen() && suggestions().length > 0}>
+                <div
+                  class="absolute left-0 right-0 -top-2 -translate-y-full z-20 rounded border border-zinc-700 bg-zinc-900 shadow-lg overflow-hidden"
+                  style={{ "max-height": "200px", "overflow-y": "auto" }}
+                >
+                  <For each={suggestions()}>
+                    {(p, i) => (
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          // mousedown not click — click would fire after blur
+                          e.preventDefault()
+                          insertSuggestion(p)
+                        }}
+                        onMouseEnter={() => setHighlightIdx(i())}
+                        classList={{
+                          "w-full flex items-center gap-2 px-2 py-1.5 text-left text-xs transition-colors": true,
+                          "bg-blue-500/20 text-blue-200": i() === highlightIdx(),
+                          "hover:bg-zinc-800 text-zinc-300": i() !== highlightIdx(),
+                        }}
+                      >
+                        <img
+                          src={p.githubAvatarUrl || `https://github.com/${p.githubLogin}.png?size=24`}
+                          alt=""
+                          class="w-4 h-4 rounded-full"
+                        />
+                        <span class="font-mono">@{p.githubLogin}</span>
+                        <Show when={p.isOnline}>
+                          <span class="ml-auto w-1.5 h-1.5 rounded-full" style={{ "background-color": "#34d399" }} />
+                        </Show>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </Show>
             </div>
+
+            <Show when={error()}>
+              <div class="text-[10px] text-red-400">{error()}</div>
+            </Show>
           </Show>
         </div>
-
-        <Show when={error()}>
-          <div class="text-[10px] text-red-400">{error()}</div>
-        </Show>
       </Show>
     </div>
   )

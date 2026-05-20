@@ -663,18 +663,18 @@ function CollabSessionInner(props: { me: Me }) {
               setQueueOpen(v => !v)
               collab.clearMentions()
             }}
-            class="flex-shrink-0 w-full px-4 py-2 flex items-center justify-between text-[10px] text-zinc-600 uppercase tracking-wider font-medium hover:text-zinc-400 transition-colors"
+            class="flex-shrink-0 w-full px-3 py-2 flex items-center justify-between text-[10px] text-zinc-600 uppercase tracking-wider font-medium hover:text-zinc-400 transition-colors"
           >
             <span>Queue</span>
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-1.5">
               <Show when={pendingQueue().length > 0}>
-                <span class="px-1.5 py-0.5 rounded-full bg-blue-600/30 text-blue-400 text-[10px]">
+                <span class="px-1.5 py-0.5 rounded-full bg-blue-600/30 text-blue-400 text-[10px] normal-case tracking-normal">
                   {pendingQueue().length}
                 </span>
               </Show>
               <svg
-                class={`w-3 h-3 transition-transform ${queueOpen() ? "rotate-180" : ""}`}
-                fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+                class={`w-3.5 h-3.5 transition-transform ${queueOpen() ? "rotate-180" : ""}`}
+                fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"
               >
                 <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
               </svg>
