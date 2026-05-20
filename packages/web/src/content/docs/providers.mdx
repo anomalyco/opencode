@@ -1963,6 +1963,60 @@ To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-ap
 
 ---
 
+### Tuning Engines
+
+Tuning Engines exposes an OpenAI-compatible inference endpoint that can be used
+with opencode as a custom provider. Use this when your organization routes model
+access through Tuning Engines for centralized credentials, policy, audit, and
+usage tracking.
+
+1. Run the `/connect` command and scroll down to **Other**.
+
+   ```txt
+   /connect
+   ```
+
+2. Enter `tuning-engines` as the provider ID.
+
+3. Enter your Tuning Engines inference key.
+
+   ```txt
+   ┌ API key
+   │ sk-te-...
+   └ enter
+   ```
+
+4. Add the provider to your `opencode.json` file. Replace `your-model-id` with
+   a model alias enabled for your Tuning Engines key.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "tuning-engines": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "Tuning Engines",
+         "options": {
+           "baseURL": "https://api.tuningengines.com/v1"
+         },
+         "models": {
+           "your-model-id": {
+             "name": "Your Tuning Engines model"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+5. Run `/models` and select the model under the `tuning-engines` provider.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### Venice AI
 
 1. Head over to the [Venice AI console](https://venice.ai), create an account, and generate an API key.
