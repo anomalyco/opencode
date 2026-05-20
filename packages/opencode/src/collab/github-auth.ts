@@ -39,6 +39,13 @@ export async function exchangeCodeForToken(params: {
   code: string
   redirectUri: string
 }): Promise<string> {
+  if (!params.clientId || !params.clientSecret) {
+    throw new Error(
+      `Missing OAuth credentials in server env (clientId=${
+        params.clientId ? "set" : "empty"
+      }, clientSecret=${params.clientSecret ? "set" : "empty"})`,
+    )
+  }
   const res = await fetch(GITHUB_TOKEN_URL, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
@@ -49,8 +56,22 @@ export async function exchangeCodeForToken(params: {
       redirect_uri: params.redirectUri,
     }),
   })
-  const data = (await res.json()) as { access_token?: string; error?: string }
-  if (!data.access_token) throw new Error(data.error ?? "GitHub OAuth: no access_token returned")
+  const text = await res.text()
+  let data: { access_token?: string; error?: string; error_description?: string; error_uri?: string }
+  try {
+    data = JSON.parse(text)
+  } catch {
+    throw new Error(
+      `GitHub OAuth token exchange returned non-JSON response (status ${res.status}): ${text.slice(0, 200)}`,
+    )
+  }
+  if (!data.access_token) {
+    throw new Error(
+      `GitHub OAuth token exchange refused: ${data.error ?? "unknown"} — ${
+        data.error_description ?? "(no description)"
+      }${data.error_uri ? ` (see ${data.error_uri})` : ""}`,
+    )
+  }
   return data.access_token
 }
 
@@ -58,7 +79,10 @@ export async function getGitHubUser(accessToken: string): Promise<GitHubUser> {
   const res = await fetch(`${GITHUB_API}/user`, {
     headers: { Authorization: `Bearer ${accessToken}`, "User-Agent": "opencode-collab" },
   })
-  if (!res.ok) throw new Error(`GitHub user fetch failed: ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(`GitHub /user failed (status ${res.status}): ${body.slice(0, 200)}`)
+  }
   return res.json() as Promise<GitHubUser>
 }
 

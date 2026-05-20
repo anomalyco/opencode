@@ -524,11 +524,63 @@ async function handleOAuthCallback(req: Request, url: URL): Promise<Response> {
   const c = cfg()
   const code = url.searchParams.get("code")
   const state = url.searchParams.get("state")
+  const oauthError = url.searchParams.get("error")
+  const oauthErrorDescription = url.searchParams.get("error_description")
+  const oauthErrorUri = url.searchParams.get("error_uri")
 
-  if (!code) return json({ error: "Missing OAuth code" }, 400)
+  console.error("[collab.auth] callback received", {
+    hasCode: Boolean(code),
+    hasState: Boolean(state),
+    oauthError,
+    oauthErrorDescription,
+    referer: req.headers.get("referer"),
+  })
+
+  // GitHub redirects back here with ?error=... when the user denied access,
+  // the OAuth app is restricted by an org policy, the app is suspended, etc.
+  // Without surfacing this the user just sees a generic "Missing OAuth code"
+  // 400 and we have no idea what went wrong server-side.
+  if (oauthError) {
+    console.error("[collab.auth] GitHub returned an OAuth error", {
+      oauthError,
+      oauthErrorDescription,
+      oauthErrorUri,
+    })
+    return html(
+      `
+        <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 560px; margin: 4rem auto; padding: 1.5rem; line-height: 1.5;">
+          <h1 style="margin: 0 0 0.5rem 0;">GitHub OAuth error</h1>
+          <p>GitHub rejected the sign-in with:</p>
+          <pre style="background:#111;color:#eee;padding:0.75rem;border-radius:6px;overflow-x:auto;">${oauthError}${
+            oauthErrorDescription ? `\n\n${oauthErrorDescription.replace(/</g, "&lt;")}` : ""
+          }</pre>
+          <p>Common causes:</p>
+          <ul>
+            <li><strong>access_denied</strong> — you clicked Cancel on the GitHub authorisation screen.</li>
+            <li><strong>application_suspended</strong> — the OAuth App has been suspended by GitHub.</li>
+            <li><strong>redirect_uri_mismatch</strong> — the configured <code>OPENCODE_BASE_URL</code> doesn't match the OAuth App's registered callback (server admin: fix in OAuth App settings).</li>
+            <li>Organisation has restricted OAuth app access and this app isn't on the allowlist — the server admin needs to <a href="https://github.com/orgs/${c.orgName}/policies/applications">request approval</a> or you need to ask an org owner to approve this app for you.</li>
+          </ul>
+          ${oauthErrorUri ? `<p>GitHub docs: <a href="${oauthErrorUri}">${oauthErrorUri}</a></p>` : ""}
+        </div>
+      `,
+      400,
+    )
+  }
+
+  if (!code) {
+    console.error("[collab.auth] callback missing both code and error params", {
+      url: req.url,
+    })
+    return json({ error: "Missing OAuth code" }, 400)
+  }
 
   const cookieState = parseCookies(req.headers.get("cookie") ?? "")["collab_oauth_state"]
   if (!cookieState || cookieState !== state) {
+    console.error("[collab.auth] OAuth state mismatch", {
+      hasCookieState: Boolean(cookieState),
+      stateMatches: cookieState === state,
+    })
     return json({ error: "Invalid OAuth state" }, 400)
   }
 
@@ -542,15 +594,29 @@ async function handleOAuthCallback(req: Request, url: URL): Promise<Response> {
   const nextFromCookie = cookies["collab_next"] ? decodeURIComponent(cookies["collab_next"]) : null
   const nextParam = decoded?.next ?? nextFromCookie
 
+  let accessToken: string
   try {
-    const accessToken = await exchangeCodeForToken({
+    accessToken = await exchangeCodeForToken({
       clientId: c.clientId,
       clientSecret: c.clientSecret,
       code,
       redirectUri: `${c.baseUrl}/collab/auth/github/callback`,
     })
+    console.error("[collab.auth] code exchange ok — have user access token")
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error("[collab.auth] code exchange failed", { error: message })
+    return html(
+      `<h1>OAuth code exchange failed</h1>
+       <p>GitHub didn't return an access token.  Check that GITHUB_OAUTH_CLIENT_ID / GITHUB_OAUTH_CLIENT_SECRET in the server env actually match the OAuth App's credentials.</p>
+       <pre style="background:#111;color:#eee;padding:0.75rem;border-radius:6px;">${message.replace(/</g, "&lt;")}</pre>`,
+      500,
+    )
+  }
 
+  try {
     const ghUser = await getGitHubUser(accessToken)
+    console.error("[collab.auth] fetched github user", { login: ghUser.login, id: ghUser.id })
 
     // Check org membership.  Pass the user's OAuth token so we can ask GitHub
     // "is THIS person a member of <org>" directly (works for private members);
@@ -605,9 +671,18 @@ async function handleOAuthCallback(req: Request, url: URL): Promise<Response> {
     respHeaders.append("Set-Cookie", `collab_oauth_state=; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=0`)
     respHeaders.append("Set-Cookie", `collab_pending_invite=; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=0`)
     respHeaders.append("Set-Cookie", `collab_next=; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=0`)
+    console.error("[collab.auth] login successful, redirecting", { login: ghUser.login, location })
     return new Response(null, { status: 302, headers: respHeaders })
   } catch (err) {
-    return json({ error: String(err) }, 500)
+    const message = err instanceof Error ? err.message : String(err)
+    const stack = err instanceof Error ? err.stack : undefined
+    console.error("[collab.auth] callback inner error", { error: message, stack })
+    return html(
+      `<h1>Login failed</h1>
+       <p>The server hit an unexpected error while completing your sign-in.  Ask the admin to check docker logs.</p>
+       <pre style="background:#111;color:#eee;padding:0.75rem;border-radius:6px;">${message.replace(/</g, "&lt;")}</pre>`,
+      500,
+    )
   }
 }
 
