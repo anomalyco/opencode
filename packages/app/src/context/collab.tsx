@@ -22,6 +22,8 @@ interface CollabContextValue {
   nativeSessionDirectory: () => string | null
   /** GitHub logins of participants currently typing in their prompt editor. */
   typingUsers: () => Set<string>
+  /** TCP ports the workspace container is currently listening on (likely dev servers). */
+  previewPorts: () => number[]
 
   // Actions
   submitPrompt: (content: string) => Promise<void>
@@ -62,6 +64,7 @@ export function CollabProvider(props: CollabProviderProps) {
   const [isConnected, setIsConnected] = createSignal(false)
   const [nativeSessionDirectory, setNativeSessionDirectory] = createSignal<string | null>(null)
   const [typingUsers, setTypingUsers] = createSignal<Set<string>>(new Set())
+  const [previewPorts, setPreviewPorts] = createSignal<number[]>([])
 
   function markTyping(githubLogin: string, typing: boolean) {
     setTypingUsers((prev) => {
@@ -165,6 +168,54 @@ export function CollabProvider(props: CollabProviderProps) {
       if (timer) return
       pollOnce()
       timer = setInterval(pollOnce, 4000)
+    }
+    function stop() {
+      if (!timer) return
+      clearInterval(timer)
+      timer = null
+    }
+    start()
+    const onVisibility = () => {
+      if (typeof document === "undefined") return
+      if (document.hidden) stop()
+      else start()
+    }
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibility)
+    }
+    onCleanup(() => {
+      stop()
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibility)
+      }
+    })
+  })
+
+  // Poll the list of TCP ports the container is listening on every 5 s.
+  // When the LLM (or a user via the iframe terminal) runs `npm run dev`
+  // and Vite binds to :5173, this is what surfaces the chip in the UI.
+  // Same visibility-aware pause as the branch poller.
+  onMount(() => {
+    let timer: ReturnType<typeof setInterval> | null = null
+    async function pollOnce() {
+      if (typeof document !== "undefined" && document.hidden) return
+      try {
+        const r = await fetch(`/collab/session/${props.collabSessionId}/preview-ports`)
+        if (!r.ok) return
+        const data = (await r.json()) as { ports?: number[] }
+        const next = data.ports ?? []
+        setPreviewPorts((prev) => {
+          if (prev.length === next.length && prev.every((p, i) => p === next[i])) return prev
+          return next
+        })
+      } catch {
+        // ignore network blips
+      }
+    }
+    function start() {
+      if (timer) return
+      pollOnce()
+      timer = setInterval(pollOnce, 5000)
     }
     function stop() {
       if (!timer) return
@@ -301,6 +352,7 @@ export function CollabProvider(props: CollabProviderProps) {
     isConnected,
     nativeSessionDirectory,
     typingUsers,
+    previewPorts,
 
     async submitPrompt(content) {
       await api("/prompt", "POST", { content })

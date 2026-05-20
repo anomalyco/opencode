@@ -1,6 +1,7 @@
 import "./init-projectors"
 
 import { handleCollabRequest } from "@/collab/router"
+import { parsePreviewPath, handlePreviewHttp, attachPreviewUpgrade } from "@/collab/preview-router"
 import { NodeHttpServer } from "@effect/platform-node"
 import * as Log from "@opencode-ai/core/util/log"
 import { ConfigProvider, Context, Effect, Exit, Layer, Scope, Stream } from "effect"
@@ -24,6 +25,35 @@ const collabMiddleware: HttpMiddleware.HttpMiddleware = (app) =>
   Effect.gen(function* () {
     const req = yield* HttpServerRequest.HttpServerRequest
     const pathname = new URL(req.url, "http://localhost").pathname
+
+    // /preview/<port>/<rest> — HTTP reverse proxy to a dev server running
+    // inside this container.  WebSocket upgrades for the same path are
+    // handled separately by attachPreviewUpgrade on the http.Server.
+    const previewParsed = parsePreviewPath(pathname)
+    if (previewParsed) {
+      const webRequest = yield* HttpServerRequest.toWeb(req)
+      const webResponse = yield* Effect.promise(() =>
+        handlePreviewHttp(webRequest, previewParsed.port, previewParsed.rest),
+      )
+      const previewHeaders = new Headers(webResponse.headers)
+      // The upstream body is a stream — let Effect pipe it through without
+      // buffering, so video / large downloads / SSE all work.
+      if (webResponse.body) {
+        const previewStream = Stream.fromAsyncIterable(
+          webResponse.body as AsyncIterable<Uint8Array>,
+          () => new Error("Preview stream error"),
+        )
+        return HttpServerResponse.stream(previewStream, {
+          status: webResponse.status,
+          headers: previewHeaders,
+        })
+      }
+      return HttpServerResponse.raw(new Uint8Array(), {
+        status: webResponse.status,
+        headers: previewHeaders,
+      })
+    }
+
     // Only intercept collab API/auth/invite paths — let UI routes fall through to index.html
     const isCollabApi =
       pathname === "/collab/auth/github" ||
@@ -249,6 +279,12 @@ function serverLayer(opts: { port: number; hostname: string }) {
     if (serverRef.forceStop) server.closeAllConnections()
     return result
   }) as typeof server.close
+
+  // /preview/<port>/* WebSocket upgrades — must hook into the raw Node
+  // server's `upgrade` event, ahead of any other ws handlers, because by
+  // the time Effect's HTTP layer sees a request the upgrade chance is
+  // gone.  Non-/preview upgrades fall through to opencode's own ws routes.
+  attachPreviewUpgrade(server)
 
   return Layer.mergeAll(
     NodeHttpServer.layer(() => server, { port: opts.port, host: opts.hostname, gracefulShutdownTimeout: "1 second" }),

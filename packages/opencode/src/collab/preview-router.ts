@@ -1,0 +1,184 @@
+/**
+ * /preview/<port>/<rest> — HTTP + WebSocket reverse proxy.
+ *
+ * Lets a collab participant's browser see a dev server running INSIDE the
+ * opencode container.  When the LLM (or a user via the iframe's terminal)
+ * does `npm run dev` and Vite binds to 127.0.0.1:5173, others can open
+ *   https://collab.unleashlive.com/preview/5173/
+ * and the request gets proxied through.
+ *
+ * Two pieces:
+ *  - {@link handlePreviewHttp} for plain HTTP requests (web-standard
+ *    Request/Response) — used from the collab middleware in server.ts
+ *    after it identifies the path as /preview/.
+ *  - {@link attachPreviewUpgrade} for WebSocket upgrades — wired into the
+ *    Node http.Server's `upgrade` event (Vite / Next HMR live here).
+ *
+ * Security note: the proxy targets ONLY 127.0.0.1 inside the container's
+ * network namespace, so it can't reach anything else on the network.  We
+ * accept any port the URL specifies — the assumption is anyone with
+ * collab access has effectively shell-level trust on the workspace
+ * already (they can ask the LLM to run arbitrary commands).
+ */
+
+import { connect as netConnect } from "node:net"
+import type { IncomingMessage } from "node:http"
+import type { Socket } from "node:net"
+
+const PREVIEW_PREFIX = "/preview/"
+
+/**
+ * Parse `/preview/<port>/<rest>` out of an incoming URL.
+ * Returns null if the URL doesn't match.
+ */
+export function parsePreviewPath(pathname: string): { port: number; rest: string } | null {
+  if (!pathname.startsWith(PREVIEW_PREFIX)) return null
+  const after = pathname.slice(PREVIEW_PREFIX.length)
+  const slash = after.indexOf("/")
+  const portStr = slash === -1 ? after : after.slice(0, slash)
+  const rest = slash === -1 ? "" : after.slice(slash) // keeps leading "/"
+  const port = Number(portStr)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return null
+  return { port, rest: rest || "/" }
+}
+
+/**
+ * Forward a plain HTTP request through to 127.0.0.1:<port>.  Returns a
+ * Response the collab middleware can hand back to the browser.  Headers
+ * that don't survive a hop are stripped; everything else passes through.
+ */
+export async function handlePreviewHttp(req: Request, port: number, rest: string): Promise<Response> {
+  const url = new URL(req.url)
+  const target = `http://127.0.0.1:${port}${rest}${url.search}`
+
+  // Strip hop-by-hop headers + the Host header (would otherwise lie about
+  // the upstream's host name and break some apps' redirect logic).
+  const headers = new Headers()
+  for (const [name, value] of req.headers.entries()) {
+    const lower = name.toLowerCase()
+    if (
+      lower === "host" ||
+      lower === "connection" ||
+      lower === "keep-alive" ||
+      lower === "transfer-encoding" ||
+      lower === "upgrade" ||
+      lower === "proxy-authorization" ||
+      lower === "proxy-authenticate" ||
+      lower === "te" ||
+      lower === "trailers"
+    ) {
+      continue
+    }
+    headers.set(name, value)
+  }
+  // Tell the upstream what its public URL prefix is — apps that use this
+  // (e.g. Vite with `--base`) can self-rewrite their links.
+  headers.set("X-Forwarded-Prefix", `/preview/${port}`)
+  headers.set("X-Forwarded-Host", url.host)
+  headers.set("X-Forwarded-Proto", url.protocol.replace(":", ""))
+
+  try {
+    const upstream = await fetch(target, {
+      method: req.method,
+      headers,
+      body:
+        req.method === "GET" || req.method === "HEAD"
+          ? undefined
+          : (req.body as BodyInit | null) ?? undefined,
+      // Stream the response back without buffering.
+      // @ts-expect-error — Bun supports this option even though node fetch typing omits it.
+      redirect: "manual",
+    })
+
+    // Pass through the upstream's body (which may itself be a stream) and
+    // headers as-is, minus anything hop-by-hop the upstream might have set.
+    const respHeaders = new Headers(upstream.headers)
+    respHeaders.delete("connection")
+    respHeaders.delete("keep-alive")
+    respHeaders.delete("transfer-encoding")
+    return new Response(upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: respHeaders,
+    })
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    return new Response(
+      `<!doctype html><meta charset="utf-8"><title>Preview unavailable</title>` +
+        `<div style="font-family:system-ui;margin:3rem auto;max-width:520px;line-height:1.5">` +
+        `<h1 style="margin:0 0 .5rem 0">Preview unavailable</h1>` +
+        `<p>Couldn't reach <code>127.0.0.1:${port}</code> from inside the workspace container.</p>` +
+        `<p>Is a dev server actually listening there?  In the iframe terminal:</p>` +
+        `<pre style="background:#111;color:#eee;padding:.75rem;border-radius:6px">ss -lntp | grep ${port}</pre>` +
+        `<p>Error: <code>${detail.replace(/</g, "&lt;")}</code></p>` +
+        `</div>`,
+      { status: 502, headers: { "Content-Type": "text/html; charset=utf-8" } },
+    )
+  }
+}
+
+/**
+ * Wire the Node http.Server's `upgrade` event so WebSocket connections to
+ * /preview/<port>/<rest> are TCP-proxied to 127.0.0.1:<port>.  This is what
+ * makes Vite / Next HMR work — they all run over a single WS connection.
+ *
+ * We deliberately do NO frame-level interpretation; we just rewrite the
+ * HTTP/1.1 request line + headers and then pipe sockets in both directions
+ * until either side closes.
+ */
+export function attachPreviewUpgrade(server: {
+  on: (event: "upgrade", listener: (req: IncomingMessage, socket: Socket, head: Buffer) => void) => void
+}) {
+  server.on("upgrade", (req, clientSocket, head) => {
+    const url = req.url ?? "/"
+    const pathname = url.split("?", 1)[0]!
+    const parsed = parsePreviewPath(pathname)
+    if (!parsed) {
+      // Not ours — leave the socket alone so other upgrade listeners (e.g.
+      // opencode's own WebSocket routes) can claim it.
+      return
+    }
+
+    const upstreamSocket = netConnect({ host: "127.0.0.1", port: parsed.port })
+
+    const cleanup = (err?: Error) => {
+      if (err) {
+        try {
+          clientSocket.write(
+            "HTTP/1.1 502 Bad Gateway\r\n" +
+              "Connection: close\r\n" +
+              "Content-Type: text/plain\r\n\r\n" +
+              `Preview proxy upstream error: ${err.message}\r\n`,
+          )
+        } catch {}
+      }
+      try { clientSocket.destroy() } catch {}
+      try { upstreamSocket.destroy() } catch {}
+    }
+
+    upstreamSocket.on("error", cleanup)
+    clientSocket.on("error", cleanup)
+
+    upstreamSocket.once("connect", () => {
+      // Build the rewritten request line + headers.  Rewrite the URL by
+      // stripping the /preview/<port> prefix; everything else (Sec-WebSocket-*
+      // headers, Upgrade, Connection, Origin, etc.) passes through.
+      const newUrl = (parsed.rest || "/") + (url.includes("?") ? url.slice(url.indexOf("?")) : "")
+      const lines: string[] = [`${req.method ?? "GET"} ${newUrl} HTTP/1.1`]
+      const raw = req.rawHeaders
+      for (let i = 0; i < raw.length; i += 2) {
+        const name = raw[i]!
+        const value = raw[i + 1]!
+        if (name.toLowerCase() === "host") {
+          lines.push(`Host: 127.0.0.1:${parsed.port}`)
+        } else {
+          lines.push(`${name}: ${value}`)
+        }
+      }
+      upstreamSocket.write(lines.join("\r\n") + "\r\n\r\n")
+      if (head && head.length) upstreamSocket.write(head)
+      // Bidirectional pipe; once either side closes the other follows.
+      clientSocket.pipe(upstreamSocket).pipe(clientSocket)
+    })
+  })
+}

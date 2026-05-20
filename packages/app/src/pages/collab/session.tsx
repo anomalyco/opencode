@@ -574,8 +574,28 @@ function CollabSessionInner(props: { me: Me }) {
       {/* ── RIGHT: Conversation (3/4) — opencode session iframe ─────────── */}
       <div class="flex-1 flex flex-col min-w-0 relative">
 
-        {/* Connection status badge (top-right corner) */}
+        {/* Top-right chrome — preview-port chips + connection status */}
         <div class="absolute top-2 right-3 z-10 flex items-center gap-1.5">
+          {/* Live preview chips — one per TCP port the workspace container
+              is listening on.  Clicking opens /preview/<port>/ in a new tab
+              (HTTP + WebSocket proxied through to 127.0.0.1:<port>). */}
+          <For each={collab.previewPorts()}>
+            {(port) => (
+              <a
+                href={`/preview/${port}/`}
+                target="_blank"
+                rel="noreferrer"
+                title={`Open live preview for port ${port} (proxied via /preview/${port}/)`}
+                class="flex items-center gap-1.5 text-[11px] text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-1 rounded-full border border-emerald-500/30 transition-colors"
+              >
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                preview :{port}
+                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </a>
+            )}
+          </For>
           <Show when={!collab.isConnected()}>
             <div class="flex items-center gap-1.5 text-xs text-amber-500 bg-zinc-900/80 px-2 py-1 rounded-full border border-zinc-700/50">
               <div class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />

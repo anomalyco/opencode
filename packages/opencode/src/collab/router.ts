@@ -43,6 +43,45 @@ import {
   nativeSessionDirectory,
   readRepoBranches,
 } from "./workspace"
+import { readFile } from "node:fs/promises"
+
+/**
+ * Read TCP ports the container is currently LISTENING on, by parsing
+ * /proc/net/tcp + /proc/net/tcp6.  Filters out:
+ *   - non-LISTEN states (only state 0A = LISTEN)
+ *   - opencode's own port (4096)
+ *   - ports under 1024 (system services)
+ *   - well-known DB ports we definitely don't want to expose (5432, 6379, etc.)
+ *
+ * Used by the left-panel "Live preview" chip strip — each port becomes a
+ * link to /preview/<port>/.
+ */
+async function readListeningPorts(): Promise<number[]> {
+  const exclude = new Set([4096, 5432, 6379, 9229, 3306, 27017])
+  const found = new Set<number>()
+  for (const file of ["/proc/net/tcp", "/proc/net/tcp6"]) {
+    try {
+      const text = await readFile(file, "utf8")
+      const lines = text.split("\n").slice(1) // skip header
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/)
+        if (parts.length < 4) continue
+        const local = parts[1]
+        const state = parts[3]
+        if (state !== "0A") continue // LISTEN only
+        const portHex = local!.split(":").pop()!
+        const port = parseInt(portHex, 16)
+        if (!Number.isInteger(port)) continue
+        if (port < 1024 || port > 65535) continue
+        if (exclude.has(port)) continue
+        found.add(port)
+      }
+    } catch {
+      // /proc/net/tcp6 might not exist on IPv6-disabled hosts; ignore.
+    }
+  }
+  return [...found].sort((a, b) => a - b)
+}
 import type { CollabEvent } from "@opencode-ai/collab"
 
 /**
@@ -897,6 +936,18 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
   if (req.method === "GET" && parts[3] === "branches") {
     const repoBranches = await readRepoBranches(sessionId, collabSession.repos)
     return new Response(JSON.stringify({ repoBranches }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    })
+  }
+
+  // GET /collab/session/:id/preview-ports — list of TCP ports the container
+  // is currently listening on (likely dev servers).  Used by the left panel
+  // to show a chip per port → click opens https://<host>/preview/<port>/.
+  // Reads /proc/net/tcp (and tcp6) and filters to LISTEN state.
+  if (req.method === "GET" && parts[3] === "preview-ports") {
+    const ports = await readListeningPorts()
+    return new Response(JSON.stringify({ ports }), {
       status: 200,
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     })
