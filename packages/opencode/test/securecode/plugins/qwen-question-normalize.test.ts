@@ -141,5 +141,38 @@ describe("QwenQuestionNormalizePlugin tool.execute.before hook", () => {
     process.env[DISABLE_ENV] = "1"
     const hooks = await QwenQuestionNormalizePlugin(stubPluginInput)
     expect(hooks["tool.execute.before"]).toBeUndefined()
+    expect(hooks["tool.definition"]).toBeUndefined()
+  })
+})
+
+describe("QwenQuestionNormalizePlugin tool.definition hook", () => {
+  test("appends the Qwen JSON hint to the question tool description", async () => {
+    const hooks = await QwenQuestionNormalizePlugin(stubPluginInput)
+    const def = hooks["tool.definition"]!
+    const output = { description: "Use this tool to ask the user questions.", parameters: {} }
+    await def({ toolID: "question" } as any, output as any)
+    expect(output.description).toContain("Use this tool to ask the user questions.")
+    expect(output.description).toContain("Do not wrap the `questions` array in quotes")
+    expect(output.description).toContain(
+      '`{"questions":[{"header":"Stack","question":"Which language?","options":[{"label":"TypeScript","description":"Use TypeScript"}]}]}`',
+    )
+  })
+
+  test("does not touch other tools", async () => {
+    const hooks = await QwenQuestionNormalizePlugin(stubPluginInput)
+    const def = hooks["tool.definition"]!
+    const output = { description: "Read a file.", parameters: {} }
+    await def({ toolID: "read" } as any, output as any)
+    expect(output.description).toBe("Read a file.")
+  })
+
+  test("is idempotent — appends the hint only once across repeated invocations", async () => {
+    const hooks = await QwenQuestionNormalizePlugin(stubPluginInput)
+    const def = hooks["tool.definition"]!
+    const output = { description: "Use this tool to ask the user questions.", parameters: {} }
+    await def({ toolID: "question" } as any, output as any)
+    const first = output.description
+    await def({ toolID: "question" } as any, output as any)
+    expect(output.description).toBe(first)
   })
 })

@@ -13,7 +13,12 @@
 // schema decode に渡す。後続の Effect Schema は upstream と同じ strict な
 // `Schema.Array(Question.Prompt)` で OK。
 //
-// 関連: issue #119 (Pilot 5)、precedent: PR #102 / #116 と同じ
+// あわせて `tool.definition` hook で LLM に送る `question` tool の description
+// に「`questions` を quote するな」という Qwen 向け hint を append する。
+// 以前は `packages/opencode/src/tool/question.txt` に直接書かれていたが、
+// upstream sync の conflict 面を減らすため plugin 側に集約した (issue #131)。
+//
+// 関連: issue #119 (Pilot 5) / #131、precedent: PR #102 / #116 と同じ
 // `packages/opencode/src/securecode/plugins/` レイアウト。
 
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
@@ -22,6 +27,13 @@ import * as Log from "@opencode-ai/core/util/log"
 const log = Log.create({ service: "securecode.qwen-question-normalize" })
 
 const DISABLE_ENV = "SECURECODE_QWEN_QUESTION_NORMALIZE_DISABLE"
+
+const QUESTION_TOOL_ID = "question"
+
+const QWEN_QUESTION_DESCRIPTION_HINT = [
+  "- Pass raw JSON values to the tool. Do not wrap the `questions` array in quotes.",
+  '- Example: `{"questions":[{"header":"Stack","question":"Which language?","options":[{"label":"TypeScript","description":"Use TypeScript"}]}]}`',
+].join("\n")
 
 function trim(input: unknown) {
   return typeof input === "string" ? input.trim() : ""
@@ -105,7 +117,7 @@ export async function QwenQuestionNormalizePlugin(_input: PluginInput): Promise<
 
   return {
     "tool.execute.before": async (input, output) => {
-      if (input.tool !== "question") return
+      if (input.tool !== QUESTION_TOOL_ID) return
       const args = output.args as { questions?: unknown } | undefined
       if (!args || !("questions" in args)) return
 
@@ -120,6 +132,11 @@ export async function QwenQuestionNormalizePlugin(_input: PluginInput): Promise<
         beforeLength: typeof before === "string" ? before.length : Array.isArray(before) ? before.length : "n/a",
         afterLength: Array.isArray(after) ? after.length : "n/a",
       })
+    },
+    "tool.definition": async (input, output) => {
+      if (input.toolID !== QUESTION_TOOL_ID) return
+      if (output.description.includes(QWEN_QUESTION_DESCRIPTION_HINT)) return
+      output.description = `${output.description.trimEnd()}\n${QWEN_QUESTION_DESCRIPTION_HINT}\n`
     },
   }
 }
