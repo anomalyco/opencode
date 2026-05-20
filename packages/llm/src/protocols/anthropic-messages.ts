@@ -681,9 +681,4 @@ export const route = Route.make({
   headers: () => ({ "anthropic-version": "2023-06-01" }),
 })
 
-// =============================================================================
-// Model Helper
-// =============================================================================
-export const model = route.model
-
 export * as AnthropicMessages from "./anthropic-messages"

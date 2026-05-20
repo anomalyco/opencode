@@ -156,7 +156,7 @@ packages/llm/src/
   tool-runtime.ts           implementation helpers for LLMClient tool execution
 ```
 
-The dependency arrow points down: `providers/*.ts` files import protocol route/model helpers and auth-option utilities; protocol modules import `endpoint`, `auth`, `framing`, and transport pieces. Protocols do not import provider facades. Lower-level modules know nothing about provider catalog metadata.
+The dependency arrow points down: `providers/*.ts` files import protocol routes and auth-option utilities; protocol modules import `endpoint`, `auth`, `framing`, and transport pieces. Protocols do not import provider facades. Lower-level modules know nothing about provider catalog metadata.
 
 ### Shared protocol helpers
 
@@ -251,7 +251,7 @@ Use this order for every protocol module:
 5. Request body construction (`fromRequest`)
 6. Stream parsing (`step` and per-event handlers)
 7. Protocol and route
-8. Model helper
+8. Protocol route export
 
 ### Rules
 

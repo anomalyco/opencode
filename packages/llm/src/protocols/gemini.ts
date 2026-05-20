@@ -414,9 +414,4 @@ export const route = Route.make({
   framing: Framing.sse,
 })
 
-// =============================================================================
-// Model Helper
-// =============================================================================
-export const model = route.model
-
 export * as Gemini from "./gemini"

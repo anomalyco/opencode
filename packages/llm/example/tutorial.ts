@@ -29,7 +29,7 @@ const model = OpenAI.configure({
 // 2. Build a provider-neutral request. This is useful when reusing one request
 // across generate and stream examples.
 //
-// Options can live on both the model and the request:
+// Options can live on both the configured route/provider facade and the request:
 //
 //   - `generation`: common controls such as max tokens, temperature, topP/topK,
 //     penalties, seed, and stop sequences.
@@ -39,7 +39,7 @@ const model = OpenAI.configure({
 //   - `http`: last-resort serializable overlays for final request body, headers,
 //     and query params. Prefer typed `providerOptions` when a field is stable.
 //
-// Model options are defaults. Request options override them for this call.
+// Route/provider options are defaults. Request options override them for this call.
 const request = LLM.request({
   model,
   system: "You are concise and practical.",

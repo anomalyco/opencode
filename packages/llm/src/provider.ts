@@ -6,7 +6,8 @@ export type ModelOptions = RouteDefaultsInput
 /**
  * Advanced structural provider definition helper. Built-in providers should
  * prefer explicit `configure(options).model(id)` facades so deployment config is
- * chosen before model selection.
+ * chosen before model selection. The optional `apis` map remains for external
+ * structural providers that expose multiple route selectors behind one provider.
  */
 export type ModelFactory<Options extends ModelOptions = ModelOptions> = (
   id: string | ModelID,

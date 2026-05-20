@@ -334,10 +334,12 @@ Final request call site stays boring:
 ```ts
 const response =
   yield *
-  LLM.generate({
-    model: DeepSeek.model("deepseek-chat"),
-    prompt: "Hello.",
-  })
+  LLM.generate(
+    LLM.request({
+      model: DeepSeek.model("deepseek-chat"),
+      prompt: "Hello.",
+    }),
+  )
 ```
 
 HTTP versus WebSocket is represented as named route selectors, not as model or
@@ -551,26 +553,11 @@ App boundary = explicit durable-config -> typed-provider call
 - [x] Split Cloudflare products into separate facades such as
       `CloudflareAIGateway` and `CloudflareWorkersAI`; do not expose a shared root
       config surface unless one product actually exists.
-- [ ] Migrate remaining built-in provider facades one at a time so configuration
+- [x] Migrate remaining built-in provider facades one at a time so configuration
       happens before model selection and selectors accept only ids:
-  - [x] xAI: replace `model(id, options)`, `responses(id, options)`,
-        `chat(id, options)`, and `apis` with `XAI.configure(options).model(id)`,
-        `.responses(id)`, and `.chat(id)`.
-  - [x] GitHub Copilot: move base URL/auth/options into
-        `GitHubCopilot.configure(options)` and make `model`, `responses`, and
-        `chat` id-only selectors.
-  - [x] OpenRouter: replace `OpenRouter.model(id, options)` with
-        `OpenRouter.configure(options).model(id)`.
-  - [x] OpenAI-compatible generic/families: replace family-level
-        `model(id, options)` helpers with configured facades such as
-        `OpenAICompatible.deepseek.configure(options).model(id)` and a generic
-        `OpenAICompatible.configure({ provider, baseURL, auth }).model(id)`.
-  - [x] Anthropic: replace `Anthropic.model(id, options)` with
-        `Anthropic.configure(options).model(id)`.
-  - [x] Google/Gemini: replace `Google.model(id, options)` with
-        `Google.configure(options).model(id)`.
-  - [x] Amazon Bedrock: replace `AmazonBedrock.model(id, options)` with
-        `AmazonBedrock.configure({ region, credentials, baseURL }).model(id)`.
+      xAI, GitHub Copilot, OpenRouter, OpenAI-compatible families, Anthropic,
+      Google/Gemini, and Amazon Bedrock now use configured facades such as
+      `Provider.configure(options).model(id)` with named selectors where needed.
 - [ ] Decide whether a tiny `Provider.define(...)` helper is warranted after two
       or three provider conversions; start with plain objects if duplication is not
       yet painful.

@@ -211,7 +211,7 @@ describe("session.llm-native.request", () => {
     ])
   })
 
-  test("selects native routes for supported provider packages", () => {
+  test("selects native request routes for provider packages", () => {
     const openai = LLMNative.model({
       model: { ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/openai" } },
       apiKey: "test-key",
@@ -227,6 +227,34 @@ describe("session.llm-native.request", () => {
     })
     expect(anthropic.route.id).toBe("anthropic-messages")
     expect(anthropic.route.endpoint.baseURL).toBe("https://api.anthropic.com/v1")
+
+    const google = LLMNative.model({
+      model: { ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/google" } },
+      apiKey: "test-key",
+      messages: [],
+    })
+    expect(google.route.id).toBe("gemini")
+    expect(google.route.endpoint.baseURL).toBe("https://generativelanguage.googleapis.com/v1beta")
+
+    const compatible = LLMNative.model({
+      model: {
+        ...baseModel,
+        providerID: ProviderID.make("opencode"),
+        api: { ...baseModel.api, url: "https://ai.example.test/v1", npm: "@ai-sdk/openai-compatible" },
+      },
+      apiKey: "test-key",
+      messages: [],
+    })
+    expect(compatible.route.id).toBe("openai-compatible-chat")
+    expect(compatible.route.endpoint.baseURL).toBe("https://ai.example.test/v1")
+
+    const openrouter = LLMNative.model({
+      model: { ...baseModel, api: { ...baseModel.api, url: "", npm: "@openrouter/ai-sdk-provider" } },
+      apiKey: "test-key",
+      messages: [],
+    })
+    expect(openrouter.route.id).toBe("openrouter")
+    expect(openrouter.route.endpoint.baseURL).toBe("https://openrouter.ai/api/v1")
   })
 
   test("fails fast for unsupported provider packages", () => {

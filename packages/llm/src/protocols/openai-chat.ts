@@ -403,9 +403,4 @@ export const route = Route.make({
   transport: httpTransport,
 })
 
-// =============================================================================
-// Model Helper
-// =============================================================================
-export const model = route.model
-
 export * as OpenAIChat from "./openai-chat"

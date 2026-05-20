@@ -1,4 +1,5 @@
 import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
+import * as Option from "effect/Option"
 import { Auth, type Auth as AuthDef } from "./auth"
 import { Endpoint, type EndpointPatch } from "./endpoint"
 import { RequestExecutor } from "./executor"
@@ -6,7 +7,6 @@ import type { Framing } from "./framing"
 import { HttpTransport } from "./transport"
 import type { Transport, TransportRuntime } from "./transport"
 import { WebSocketExecutor } from "./transport"
-import type { Service as WebSocketExecutorService } from "./transport/websocket"
 import type { Protocol } from "./protocol"
 import { applyCachePolicy } from "../cache-policy"
 import * as ProviderShared from "../protocols/shared"
@@ -114,9 +114,9 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
     generation: mergeGenerationOptions(generationOptions(base?.generation), generationOptions(patch.generation)),
     providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
     http: mergeHttpOptions(
-      headers === undefined ? undefined : new HttpOptions({ headers }),
       base?.http,
       httpOptions(patch.http),
+      headers === undefined ? undefined : new HttpOptions({ headers }),
     ),
   }
 }
@@ -185,7 +185,7 @@ export interface MakeInput<Body, Frame, Event, State> {
   readonly protocol: Protocol<Body, Frame, Event, State>
   /** Where the request is sent. */
   readonly endpoint: Endpoint<Body>
-  /** Per-request transport auth. Model-level `Auth` overrides this. */
+  /** Per-request transport auth. Provider facades override this via `route.with(...)`. */
   readonly auth?: AuthDef
   /** Stream framing — bytes -> frames before `protocol.stream.event` decoding. */
   readonly framing: Framing<Frame>
@@ -204,7 +204,7 @@ export interface MakeTransportInput<Body, Prepared, Frame, Event, State> {
   readonly protocol: Protocol<Body, Frame, Event, State>
   /** Where the request is sent. */
   readonly endpoint: Endpoint<Body>
-  /** Per-request transport auth. Model-level `Auth` overrides this. */
+  /** Per-request transport auth. Provider facades override this via `route.with(...)`. */
   readonly auth?: AuthDef
   /** Static / per-request headers added before `auth` runs. */
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
@@ -429,13 +429,13 @@ export const streamRequest = (request: LLMRequest) =>
     }),
   )
 
-export const layer: Layer.Layer<Service, never, RequestExecutor.Service | WebSocketExecutorService> = Layer.effect(
+export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const stream = streamWith(
       streamRequestWith({
         http: yield* RequestExecutor.Service,
-        webSocket: yield* WebSocketExecutor.Service,
+        webSocket: Option.getOrUndefined(yield* Effect.serviceOption(WebSocketExecutor.Service)),
       }),
     )
     return Service.of({ prepare: prepareWith as Interface["prepare"], stream, generate: generateWith(stream) })

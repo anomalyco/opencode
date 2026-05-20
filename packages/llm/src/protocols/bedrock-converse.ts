@@ -1,6 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Route, type RouteDefaultsInput, type RouteModelInput } from "../route/client"
-import { Auth } from "../route/auth"
+import { Route } from "../route/client"
 import { Endpoint } from "../route/endpoint"
 import { Protocol } from "../route/protocol"
 import {
@@ -15,7 +14,7 @@ import {
 } from "../schema"
 import { BedrockEventStream } from "./bedrock-event-stream"
 import { JsonObject, optionalArray, ProviderShared } from "./shared"
-import { BedrockAuth, type Credentials as BedrockCredentials } from "./utils/bedrock-auth"
+import { BedrockAuth } from "./utils/bedrock-auth"
 import { BedrockCache } from "./utils/bedrock-cache"
 import { BedrockMedia } from "./utils/bedrock-media"
 import { Lifecycle } from "./utils/lifecycle"
@@ -24,24 +23,6 @@ import { ToolStream } from "./utils/tool-stream"
 const ADAPTER = "bedrock-converse"
 
 export type { Credentials as BedrockCredentials } from "./utils/bedrock-auth"
-
-// =============================================================================
-// Public Model Input
-// =============================================================================
-export type BedrockConverseModelInput = RouteModelInput & {
-  /**
-   * Bearer API key (Bedrock's newer API key auth). Sets the `Authorization`
-   * header and bypasses SigV4 signing. Mutually exclusive with `credentials`.
-   */
-  readonly apiKey?: string
-  /** Override the computed `https://bedrock-runtime.<region>.amazonaws.com` URL. */
-  readonly baseURL?: string
-  /**
-   * AWS credentials for SigV4 signing. The route signs each request at
-   * `toHttp` time using `aws4fetch`. Mutually exclusive with `apiKey`.
-   */
-  readonly credentials?: BedrockCredentials
-} & RouteDefaultsInput
 
 // =============================================================================
 // Request Body Schema
@@ -631,17 +612,5 @@ export const route = Route.make({
 })
 
 export const sigV4Auth = BedrockAuth.sigV4
-
-export const model = (input: BedrockConverseModelInput) => {
-  const { id, apiKey, credentials, baseURL, ...rest } = input
-  const region = credentials?.region ?? "us-east-1"
-  return route
-    .with({
-      ...rest,
-      endpoint: { baseURL: baseURL ?? `https://bedrock-runtime.${region}.amazonaws.com` },
-      auth: apiKey === undefined ? BedrockAuth.sigV4(credentials) : Auth.bearer(apiKey),
-    })
-    .model({ id })
-}
 
 export * as BedrockConverse from "./bedrock-converse"

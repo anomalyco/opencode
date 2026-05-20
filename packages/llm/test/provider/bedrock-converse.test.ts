@@ -4,6 +4,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { CacheHint, LLM, Message, ToolCallPart, ToolChoice } from "../../src"
 import { LLMClient } from "../../src/route"
+import { AmazonBedrock } from "../../src/providers"
 import * as BedrockConverse from "../../src/protocols/bedrock-converse"
 import { it } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
@@ -52,11 +53,10 @@ const eventStreamBody = (...payloads: ReadonlyArray<readonly [string, object]>) 
 const fixedBytes = (bytes: Uint8Array) =>
   fixedResponse(bytes.slice().buffer, { headers: { "content-type": "application/vnd.amazon.eventstream" } })
 
-const model = BedrockConverse.model({
-  id: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+const model = AmazonBedrock.configure({
   baseURL: "https://bedrock-runtime.test",
   apiKey: "test-bearer",
-})
+}).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
 
 const baseRequest = LLM.request({
   id: "req_1",
@@ -298,10 +298,9 @@ describe("Bedrock Converse route", () => {
 
   it.effect("rejects requests with no auth path", () =>
     Effect.gen(function* () {
-      const unsignedModel = BedrockConverse.model({
-        id: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+      const unsignedModel = AmazonBedrock.configure({
         baseURL: "https://bedrock-runtime.test",
-      })
+      }).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
       const error = yield* LLMClient.generate(LLM.updateRequest(baseRequest, { model: unsignedModel })).pipe(
         Effect.provide(fixedBytes(eventStreamBody(["messageStop", { stopReason: "end_turn" }]))),
         Effect.flip,
@@ -313,15 +312,14 @@ describe("Bedrock Converse route", () => {
 
   it.effect("signs requests with SigV4 when AWS credentials are provided (deterministic plumbing check)", () =>
     Effect.gen(function* () {
-      const signed = BedrockConverse.model({
-        id: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+      const signed = AmazonBedrock.configure({
         baseURL: "https://bedrock-runtime.test",
         credentials: {
           region: "us-east-1",
           accessKeyId: "AKIAIOSFODNN7EXAMPLE",
           secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
         },
-      })
+      }).model("anthropic.claude-3-5-sonnet-20240620-v1:0")
       const prepared = yield* LLMClient.prepare(LLM.updateRequest(baseRequest, { model: signed }))
 
       expect(prepared.route).toBe("bedrock-converse")
@@ -575,18 +573,17 @@ describe("Bedrock Converse route", () => {
 const RECORDING_REGION = process.env.BEDROCK_RECORDING_REGION ?? "us-east-1"
 
 const recordedModel = () =>
-  BedrockConverse.model({
+  AmazonBedrock.configure({
     // Most newer Anthropic models on Bedrock require a cross-region inference
     // profile (`us.` prefix). Nova does not require an Anthropic use-case form
     // and is on-demand-throughput accessible by default for most accounts.
-    id: process.env.BEDROCK_MODEL_ID ?? "us.amazon.nova-micro-v1:0",
     credentials: {
       region: RECORDING_REGION,
       accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "fixture",
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "fixture",
       sessionToken: process.env.AWS_SESSION_TOKEN,
     },
-  })
+  }).model(process.env.BEDROCK_MODEL_ID ?? "us.amazon.nova-micro-v1:0")
 
 const recorded = recordedTests({
   prefix: "bedrock-converse",

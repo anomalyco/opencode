@@ -596,11 +596,4 @@ export const webSocketRoute = Route.make({
   transport: webSocketTransport,
 })
 
-// =============================================================================
-// Model Helper
-// =============================================================================
-export const model = route.model
-
-export const webSocketModel = webSocketRoute.model
-
 export * as OpenAIResponses from "./openai-responses"

@@ -34,5 +34,10 @@ describe("Route.with", () => {
       "x-override": "patch",
       "x-patch": "patch",
     })
+    expect(route.defaults.http?.headers).toEqual({
+      "x-base": "base",
+      "x-override": "patch",
+      "x-patch": "patch",
+    })
   })
 })
