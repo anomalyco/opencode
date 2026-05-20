@@ -1204,67 +1204,37 @@ test("keeps plugin origins aligned with merged plugin list", async () => {
 
 // Legacy tools migration tests
 
-test("migrates legacy tools config to permissions - allow", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test: {
-              tools: {
-                bash: true,
-                read: true,
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test"]?.permission).toEqual({
-        bash: "allow",
-        read: "allow",
-      })
-    },
-  })
-})
+it.instance("migrates legacy tools config to permissions - allow", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      agent: { test: { tools: { bash: true, read: true } } },
+    })
 
-test("migrates legacy tools config to permissions - deny", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test: {
-              tools: {
-                bash: false,
-                webfetch: false,
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test"]?.permission).toEqual({
-        bash: "deny",
-        webfetch: "deny",
-      })
-    },
-  })
-})
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test"]?.permission).toEqual({
+      bash: "allow",
+      read: "allow",
+    })
+  }),
+)
+
+it.instance("migrates legacy tools config to permissions - deny", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      agent: { test: { tools: { bash: false, webfetch: false } } },
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test"]?.permission).toEqual({
+      bash: "deny",
+      webfetch: "deny",
+    })
+  }),
+)
 
 it.instance("migrates legacy write tool to edit permission", () =>
   Effect.gen(function* () {
@@ -2104,6 +2074,34 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
         delete process.env["OPENCODE_CONFIG_DIR"]
       } else {
         process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
+      }
+    }
+  })
+})
+
+// Regression for #28206: malformed OPENCODE_PERMISSION JSON used to crash
+// the app on startup with an unhandled SyntaxError. Loading the config with
+// an invalid JSON value in this env var should not throw.
+describe("OPENCODE_PERMISSION env var", () => {
+  test("does not crash when OPENCODE_PERMISSION contains invalid JSON", async () => {
+    const original = process.env["OPENCODE_PERMISSION"]
+    process.env["OPENCODE_PERMISSION"] = "{invalid"
+    try {
+      await using tmp = await tmpdir()
+      await withTestInstance({
+        directory: tmp.path,
+        fn: async (ctx) => {
+          const config = await load(ctx)
+          // We don't assert on permission shape; the regression is that
+          // load() throws before returning anything.
+          expect(config).toBeDefined()
+        },
+      })
+    } finally {
+      if (original !== undefined) {
+        process.env["OPENCODE_PERMISSION"] = original
+      } else {
+        delete process.env["OPENCODE_PERMISSION"]
       }
     }
   })

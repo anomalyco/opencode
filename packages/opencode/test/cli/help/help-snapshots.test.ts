@@ -29,7 +29,10 @@ import { normalizeForSnapshot, PATH_SEP } from "../../lib/snapshot"
 function normalize(text: string): string {
   return normalizeForSnapshot(text, {
     pathReplacements: [
-      [new RegExp(`<TMPDIR>${PATH_SEP}oc-cli-[a-z0-9]+`, "g"), "<HOME>"],
+      // Mixed-case [A-Za-z0-9] because node's mkdtemp suffix is mixed-case
+      // (the harness now uses FileSystem.makeTempDirectoryScoped under the
+      // hood). A `[a-z0-9]+` regex would leave uppercase chars trailing.
+      [new RegExp(`<TMPDIR>${PATH_SEP}oc-cli-[A-Za-z0-9]+`, "g"), "<HOME>"],
       [/\s+\[string\] \[default: "<HOME>"\]/g, ' [string] [default: "<HOME>"]'],
     ],
   })
