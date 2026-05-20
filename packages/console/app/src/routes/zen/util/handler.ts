@@ -170,6 +170,10 @@ export async function handler(
                     if (v === "$ip") return [[k, ip]]
                     if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
                     if (v === "$session") return sessionId ? [[k, sessionId]] : []
+                    if (v === "$user") {
+                      const user = sessionId ?? authInfo?.workspaceID ?? ip
+                      return user ? [[k, user]] : []
+                    }
                     if (v.startsWith("$header.")) {
                       const headerValue = input.request.headers.get(v.slice(8))
                       return headerValue ? [[k, headerValue]] : []
