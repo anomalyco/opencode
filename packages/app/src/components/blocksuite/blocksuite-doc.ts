@@ -29,6 +29,26 @@ function docPlain(doc: Doc) {
   return lines.join("\n").trim()
 }
 
+function ensureEditable(doc: Doc) {
+  if (doc.getBlockByFlavour("affine:paragraph").length > 0) return
+  doc.withoutTransact(() => {
+    const notes = doc.getBlockByFlavour("affine:note")
+    if (notes[0]) {
+      doc.addBlock("affine:paragraph", {}, notes[0].id)
+      return
+    }
+    const pages = doc.getBlockByFlavour("affine:page")
+    if (!pages[0]) return
+    const noteId = doc.addBlock("affine:note", {}, pages[0].id)
+    doc.addBlock("affine:paragraph", {}, noteId)
+  })
+}
+
+function baseline(doc: Doc) {
+  ensureEditable(doc)
+  doc.resetHistory()
+}
+
 export type DocMountInput = {
   theme: () => "light" | "dark"
 }
@@ -42,6 +62,7 @@ export async function createPage(input: DocMountInput) {
 
   const { doc, init } = createEmptyDoc()
   init()
+  baseline(doc)
 
   const editor = new PageEditor()
   editor.doc = doc
@@ -52,7 +73,9 @@ export async function createPage(input: DocMountInput) {
   }
 
   const focus = () => {
-    const rich = editor.querySelector("rich-text")
+    ensureEditable(doc)
+    const host = editor.host
+    const rich = host?.querySelector("rich-text") ?? editor.querySelector("rich-text")
     const inline =
       rich && "inlineEditor" in rich
         ? (rich as { inlineEditor?: { focusEnd: () => void } }).inlineEditor
@@ -61,14 +84,53 @@ export async function createPage(input: DocMountInput) {
   }
 
   const attach = async (el: HTMLElement) => {
-    if (editor.parentElement !== el) el.replaceChildren(editor)
+    const attached = editor.parentElement === el
+    if (!attached) el.replaceChildren(editor)
     await editor.updateComplete
     applyTheme()
-    focus()
+    if (!attached) focus()
   }
 
   const detach = () => {
     editor.remove()
+  }
+
+  let hadText = false
+
+  const settle = () => {
+    ensureEditable(doc)
+    const empty = !docPlain(doc)
+    if (empty) {
+      doc.resetHistory()
+      hadText = false
+      return
+    }
+    hadText = true
+  }
+
+  const onHistory = () => {
+    const empty = !docPlain(doc)
+    if (hadText && empty) doc.resetHistory()
+    hadText = !empty
+    ensureEditable(doc)
+  }
+
+  const guard = () => {
+    ensureEditable(doc)
+  }
+
+  const undo = () => {
+    if (!doc.canUndo) return
+    doc.undo()
+    settle()
+    requestAnimationFrame(focus)
+  }
+
+  const redo = () => {
+    if (!doc.canRedo) return
+    doc.redo()
+    onHistory()
+    requestAnimationFrame(focus)
   }
 
   return {
@@ -76,17 +138,12 @@ export async function createPage(input: DocMountInput) {
     editor,
     attach,
     detach,
-    focus,
+    guard,
+    onHistory,
     plain: () => docPlain(doc),
     empty: () => !docPlain(doc),
-    undo: () => {
-      doc.undo()
-      requestAnimationFrame(focus)
-    },
-    redo: () => {
-      doc.redo()
-      requestAnimationFrame(focus)
-    },
+    undo,
+    redo,
     canUndo: () => doc.canUndo,
     canRedo: () => doc.canRedo,
     setTheme: (theme: "light" | "dark") => {

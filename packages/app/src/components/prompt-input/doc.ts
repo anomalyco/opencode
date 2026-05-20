@@ -8,32 +8,42 @@ export function createPromptDoc() {
   let handle: DocHandle | undefined
   let theme: (() => "light" | "dark") | undefined
   let historySub: { dispose: () => void } | undefined
-  let root: HTMLElement | undefined
+  let mounted: HTMLElement | undefined
 
   const [ready, setReady] = createSignal(false)
   const [history, setHistory] = createStore({ undo: false, redo: false })
 
   const sync = () => {
     if (!handle) return
-    setHistory({ undo: handle.canUndo(), redo: handle.canRedo() })
+    const undo = handle.canUndo()
+    const redo = handle.canRedo()
+    if (history.undo === undo && history.redo === redo) return
+    setHistory({ undo, redo })
   }
 
   const mount = async (input: { el: HTMLElement; theme: () => "light" | "dark" }) => {
-    root = input.el
+    if (mounted === input.el && handle) {
+      await handle.attach(input.el)
+      return
+    }
+    mounted = input.el
     theme = input.theme
     if (!handle) handle = await createPage({ theme: input.theme })
     await handle.attach(input.el)
     setReady(true)
     sync()
     historySub?.dispose()
-    historySub = handle.doc.slots.historyUpdated.on(() => sync())
+    historySub = handle.doc.slots.historyUpdated.on(() => {
+      handle?.onHistory()
+      sync()
+    })
   }
 
   const detach = () => {
     historySub?.dispose()
     historySub = undefined
     handle?.detach()
-    root = undefined
+    mounted = undefined
     setReady(false)
   }
 
@@ -44,6 +54,8 @@ export function createPromptDoc() {
     theme = undefined
     setHistory({ undo: false, redo: false })
   }
+
+  const guard = () => handle?.guard()
 
   const undo = () => {
     handle?.undo()
@@ -65,6 +77,7 @@ export function createPromptDoc() {
     mount,
     detach,
     reset,
+    guard,
     commitText,
     empty,
     undo,
