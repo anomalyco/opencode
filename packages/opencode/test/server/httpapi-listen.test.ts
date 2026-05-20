@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect } from "bun:test"
+import { Effect } from "effect"
 import net from "node:net"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import * as Log from "@opencode-ai/core/util/log"
@@ -6,7 +7,8 @@ import { Server } from "../../src/server/server"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { withTimeout } from "../../src/util/timeout"
 import { resetDatabase } from "../fixture/db"
-import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { it } from "../lib/effect"
 
 void Log.init({ print: false })
 
@@ -17,7 +19,8 @@ const original = {
   envUsername: process.env.OPENCODE_SERVER_USERNAME,
 }
 const auth = { username: "opencode", password: "listen-secret" }
-const testPty = process.platform === "win32" ? test.skip : test
+const testPtyInstance = process.platform === "win32" ? it.instance.skip : it.instance
+const testPtyEffect = process.platform === "win32" ? it.effect.skip : it.effect
 
 afterEach(async () => {
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
@@ -30,27 +33,43 @@ afterEach(async () => {
   await resetDatabase()
 })
 
-async function startListener() {
-  Flag.OPENCODE_SERVER_PASSWORD = auth.password
-  Flag.OPENCODE_SERVER_USERNAME = auth.username
-  process.env.OPENCODE_SERVER_PASSWORD = auth.password
-  process.env.OPENCODE_SERVER_USERNAME = auth.username
-  return Server.listen({ hostname: "127.0.0.1", port: 0 })
-}
+type Listener = Awaited<ReturnType<typeof Server.listen>>
 
-async function startNoAuthListener() {
-  Flag.OPENCODE_SERVER_PASSWORD = undefined
-  Flag.OPENCODE_SERVER_USERNAME = auth.username
-  delete process.env.OPENCODE_SERVER_PASSWORD
-  process.env.OPENCODE_SERVER_USERNAME = auth.username
-  return Server.listen({ hostname: "127.0.0.1", port: 0 })
-}
+const startListener = () =>
+  Effect.acquireRelease(
+    Effect.promise(() => {
+      Flag.OPENCODE_SERVER_PASSWORD = auth.password
+      Flag.OPENCODE_SERVER_USERNAME = auth.username
+      process.env.OPENCODE_SERVER_PASSWORD = auth.password
+      process.env.OPENCODE_SERVER_USERNAME = auth.username
+      return Server.listen({ hostname: "127.0.0.1", port: 0 })
+    }),
+    (listener: Listener) =>
+      Effect.promise(() =>
+        withTimeout(listener.stop(true), 10_000, "timed out cleaning up listener").catch(() => undefined),
+      ),
+  )
+
+const startNoAuthListener = () =>
+  Effect.acquireRelease(
+    Effect.promise(() => {
+      Flag.OPENCODE_SERVER_PASSWORD = undefined
+      Flag.OPENCODE_SERVER_USERNAME = auth.username
+      delete process.env.OPENCODE_SERVER_PASSWORD
+      process.env.OPENCODE_SERVER_USERNAME = auth.username
+      return Server.listen({ hostname: "127.0.0.1", port: 0 })
+    }),
+    (listener: Listener) =>
+      Effect.promise(() =>
+        withTimeout(listener.stop(true), 10_000, "timed out cleaning up no-auth listener").catch(() => undefined),
+      ),
+  )
 
 function authorization() {
   return `Basic ${btoa(`${auth.username}:${auth.password}`)}`
 }
 
-function socketURL(listener: Awaited<ReturnType<typeof startListener>>, id: string, dir: string, ticket?: string) {
+function socketURL(listener: Listener, id: string, dir: string, ticket?: string) {
   const url = new URL(PtyPaths.connect.replace(":ptyID", id), listener.url)
   url.protocol = "ws:"
   url.searchParams.set("directory", dir)
@@ -60,7 +79,7 @@ function socketURL(listener: Awaited<ReturnType<typeof startListener>>, id: stri
 }
 
 async function requestTicket(
-  listener: Awaited<ReturnType<typeof startListener>>,
+  listener: Listener,
   id: string,
   dir: string,
   options?: { ticketHeader?: boolean; origin?: string },
@@ -78,13 +97,13 @@ async function requestTicket(
   return response
 }
 
-async function connectTicket(listener: Awaited<ReturnType<typeof startListener>>, id: string, dir: string) {
+async function connectTicket(listener: Listener, id: string, dir: string) {
   const response = await requestTicket(listener, id, dir)
   expect(response.status).toBe(200)
   return (await response.json()) as { ticket: string; expires_in: number }
 }
 
-async function createCat(listener: Awaited<ReturnType<typeof startListener>>, dir: string) {
+async function createCat(listener: Listener, dir: string) {
   const response = await fetch(new URL(PtyPaths.create, listener.url), {
     method: "POST",
     headers: {
@@ -134,10 +153,6 @@ async function expectSocketRejected(url: URL, init?: { headers?: Record<string, 
   )
 }
 
-function stop(listener: Awaited<ReturnType<typeof startListener>>, label: string) {
-  return withTimeout(listener.stop(true), 10_000, label)
-}
-
 function waitForMessage(ws: WebSocket, predicate: (message: string) => boolean) {
   const decoder = new TextDecoder()
   let onMessage: ((event: MessageEvent) => void) | undefined
@@ -157,7 +172,7 @@ function waitForMessage(ws: WebSocket, predicate: (message: string) => boolean) 
   })
 }
 
-async function openPtySocket(listener: Awaited<ReturnType<typeof startListener>>, dir: string) {
+async function openPtySocket(listener: Listener, dir: string) {
   const info = await createCat(listener, dir)
   const ticket = await connectTicket(listener, info.id, dir)
   const ws = await openSocket(socketURL(listener, info.id, dir, ticket.ticket))
@@ -168,233 +183,252 @@ async function openPtySocket(listener: Awaited<ReturnType<typeof startListener>>
 }
 
 describe("HttpApi Server.listen", () => {
-  testPty("serves HTTP routes and upgrades PTY websocket through Server.listen", async () => {
-    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
-    const listener = await startListener()
-    let stopped = false
-    try {
-      const response = await fetch(new URL(PtyPaths.shells, listener.url), {
-        headers: { authorization: authorization(), "x-opencode-directory": tmp.path },
+  testPtyInstance(
+    "serves HTTP routes and upgrades PTY websocket through Server.listen",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const listener = yield* startListener()
+
+        yield* Effect.promise(async () => {
+          const response = await fetch(new URL(PtyPaths.shells, listener.url), {
+            headers: { authorization: authorization(), "x-opencode-directory": tmp.directory },
+          })
+          expect(response.status).toBe(200)
+          expect(await response.json()).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                path: expect.any(String),
+                name: expect.any(String),
+                acceptable: expect.any(Boolean),
+              }),
+            ]),
+          )
+
+          const info = await createCat(listener, tmp.directory)
+          const ticket = await connectTicket(listener, info.id, tmp.directory)
+          expect(ticket.expires_in).toBeGreaterThan(0)
+          const ws = await openSocket(socketURL(listener, info.id, tmp.directory, ticket.ticket))
+          const closed = new Promise<void>((resolve) => ws.addEventListener("close", () => resolve(), { once: true }))
+
+          const message = waitForMessage(ws, (m) => m.includes("ping-listen"))
+          ws.send("ping-listen\n")
+          expect(await message).toContain("ping-listen")
+
+          await withTimeout(listener.stop(true), 10_000, "timed out waiting for listener.stop(true)")
+          await withTimeout(closed, 5_000, "timed out waiting for websocket close")
+          expect(ws.readyState).toBe(WebSocket.CLOSED)
+        })
+
+        const restarted = yield* startListener()
+        yield* Effect.promise(async () => {
+          const nextInfo = await createCat(restarted, tmp.directory)
+          const nextTicket = await connectTicket(restarted, nextInfo.id, tmp.directory)
+          const nextWs = await openSocket(socketURL(restarted, nextInfo.id, tmp.directory, nextTicket.ticket))
+          const nextMessage = waitForMessage(nextWs, (m) => m.includes("ping-restarted"))
+          nextWs.send("ping-restarted\n")
+          expect(await nextMessage).toContain("ping-restarted")
+          nextWs.close(1000)
+        })
+      }),
+    { config: { formatter: false, lsp: false } },
+  )
+
+  testPtyInstance(
+    "stop(true) is safe when called concurrently and repeatedly",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const listener = yield* startListener()
+
+        yield* Effect.promise(async () => {
+          const socket = await openPtySocket(listener, tmp.directory)
+          await withTimeout(
+            Promise.all([listener.stop(true), listener.stop(true)]).then(() => undefined),
+            10_000,
+            "timed out waiting for concurrent listener.stop(true)",
+          )
+          await withTimeout(socket.closed, 5_000, "timed out waiting for websocket close after concurrent stop")
+          await withTimeout(listener.stop(true), 5_000, "timed out waiting for repeated listener.stop(true)")
+        })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  testPtyInstance(
+    "stop(true) can force a graceful stop already in progress",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const listener = yield* startListener()
+
+        yield* Effect.promise(async () => {
+          const socket = await openPtySocket(listener, tmp.directory)
+          const graceful = listener.stop()
+          const forced = listener.stop(true)
+          await withTimeout(
+            Promise.all([graceful, forced]).then(() => undefined),
+            10_000,
+            "timed out waiting for forced listener stop",
+          )
+          await withTimeout(socket.closed, 5_000, "timed out waiting for websocket close after forced stop")
+        })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  testPtyInstance(
+    "graceful stop waits for an overlapping forced stop",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const listener = yield* startListener()
+
+        yield* Effect.promise(async () => {
+          const socket = await openPtySocket(listener, tmp.directory)
+          const forced = listener.stop(true)
+          await withTimeout(listener.stop(), 10_000, "timed out waiting for graceful stop after forced stop")
+          await withTimeout(forced, 5_000, "timed out waiting for overlapping forced stop")
+          await withTimeout(socket.closed, 5_000, "timed out waiting for websocket close before graceful stop resolved")
+        })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.effect("stop() gracefully closes an idle listener and is repeat-safe", () =>
+    Effect.gen(function* () {
+      const listener = yield* startListener()
+      yield* Effect.promise(async () => {
+        await withTimeout(listener.stop(), 10_000, "timed out waiting for graceful listener.stop()")
+        await withTimeout(listener.stop(), 5_000, "timed out waiting for repeated graceful listener.stop()")
+        await expect(
+          fetch(new URL(PtyPaths.shells, listener.url), { headers: { authorization: authorization() } }),
+        ).rejects.toThrow()
       })
-      expect(response.status).toBe(200)
-      expect(await response.json()).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            path: expect.any(String),
-            name: expect.any(String),
-            acceptable: expect.any(Boolean),
-          }),
-        ]),
-      )
+    }),
+  )
 
-      const info = await createCat(listener, tmp.path)
-      const ticket = await connectTicket(listener, info.id, tmp.path)
-      expect(ticket.expires_in).toBeGreaterThan(0)
-      const ws = await openSocket(socketURL(listener, info.id, tmp.path, ticket.ticket))
-      const closed = new Promise<void>((resolve) => ws.addEventListener("close", () => resolve(), { once: true }))
-
-      const message = waitForMessage(ws, (message) => message.includes("ping-listen"))
-      ws.send("ping-listen\n")
-      expect(await message).toContain("ping-listen")
-
-      await stop(listener, "timed out waiting for listener.stop(true)")
-      stopped = true
-      await withTimeout(closed, 5_000, "timed out waiting for websocket close")
-      expect(ws.readyState).toBe(WebSocket.CLOSED)
-
-      const restarted = await startListener()
+  it.effect("default in-process handler does not emit Effect HTTP response logs", () =>
+    Effect.promise(async () => {
+      let output = ""
+      // oxlint-disable-next-line typescript-eslint/unbound-method -- restored in finally after temporarily capturing stderr.
+      const original = process.stderr.write
+      process.stderr.write = ((chunk) => {
+        output += String(chunk)
+        return true
+      }) as typeof process.stderr.write
       try {
-        const nextInfo = await createCat(restarted, tmp.path)
-        const nextTicket = await connectTicket(restarted, nextInfo.id, tmp.path)
-        const nextWs = await openSocket(socketURL(restarted, nextInfo.id, tmp.path, nextTicket.ticket))
-        const nextMessage = waitForMessage(nextWs, (message) => message.includes("ping-restarted"))
-        nextWs.send("ping-restarted\n")
-        expect(await nextMessage).toContain("ping-restarted")
-        nextWs.close(1000)
+        const response = await Server.Default().app.request("/status")
+        expect(response.status).toBe(200)
       } finally {
-        await stop(restarted, "timed out waiting for restarted listener.stop(true)")
+        process.stderr.write = original
       }
-    } finally {
-      if (!stopped) await stop(listener, "timed out cleaning up listener").catch(() => undefined)
-    }
-  })
 
-  testPty("stop(true) is safe when called concurrently and repeatedly", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    const listener = await startListener()
-    let stopped = false
-    try {
-      const socket = await openPtySocket(listener, tmp.path)
+      expect(output).not.toContain("Sent HTTP response")
+    }),
+  )
 
-      await withTimeout(
-        Promise.all([listener.stop(true), listener.stop(true)]).then(() => undefined),
-        10_000,
-        "timed out waiting for concurrent listener.stop(true)",
-      )
-      await withTimeout(socket.closed, 5_000, "timed out waiting for websocket close after concurrent stop")
-      await withTimeout(listener.stop(true), 5_000, "timed out waiting for repeated listener.stop(true)")
-      stopped = true
-    } finally {
-      if (!stopped) await stop(listener, "timed out cleaning up concurrent stop listener").catch(() => undefined)
-    }
-  })
-
-  testPty("stop(true) can force a graceful stop already in progress", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    const listener = await startListener()
-    let stopped = false
-    try {
-      const socket = await openPtySocket(listener, tmp.path)
-
-      const graceful = listener.stop()
-      const forced = listener.stop(true)
-      await withTimeout(
-        Promise.all([graceful, forced]).then(() => undefined),
-        10_000,
-        "timed out waiting for forced listener stop",
-      )
-      await withTimeout(socket.closed, 5_000, "timed out waiting for websocket close after forced stop")
-      stopped = true
-    } finally {
-      if (!stopped) await stop(listener, "timed out cleaning up forced stop listener").catch(() => undefined)
-    }
-  })
-
-  testPty("graceful stop waits for an overlapping forced stop", async () => {
-    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
-    const listener = await startListener()
-    let stopped = false
-    try {
-      const socket = await openPtySocket(listener, tmp.path)
-      const forced = listener.stop(true)
-      await withTimeout(listener.stop(), 10_000, "timed out waiting for graceful stop after forced stop")
-      stopped = true
-      await withTimeout(forced, 5_000, "timed out waiting for overlapping forced stop")
-      await withTimeout(socket.closed, 5_000, "timed out waiting for websocket close before graceful stop resolved")
-    } finally {
-      if (!stopped) await stop(listener, "timed out cleaning up overlapping stop listener").catch(() => undefined)
-    }
-  })
-
-  test("stop() gracefully closes an idle listener and is repeat-safe", async () => {
-    const listener = await startListener()
-    await withTimeout(listener.stop(), 10_000, "timed out waiting for graceful listener.stop()")
-    await withTimeout(listener.stop(), 5_000, "timed out waiting for repeated graceful listener.stop()")
-    await expect(
-      fetch(new URL(PtyPaths.shells, listener.url), { headers: { authorization: authorization() } }),
-    ).rejects.toThrow()
-  })
-
-  test("default in-process handler does not emit Effect HTTP response logs", async () => {
-    let output = ""
-    // oxlint-disable-next-line typescript-eslint/unbound-method -- restored in finally after temporarily capturing stderr.
-    const original = process.stderr.write
-    process.stderr.write = ((chunk) => {
-      output += String(chunk)
-      return true
-    }) as typeof process.stderr.write
-    try {
-      const response = await Server.Default().app.request("/status")
-      expect(response.status).toBe(200)
-    } finally {
-      process.stderr.write = original
-    }
-
-    expect(output).not.toContain("Sent HTTP response")
-  })
-
-  test("port 0 prefers 4096 when free", async () => {
-    if (!(await isPortFree(4096))) return
-    const listener = await startListener()
-    try {
+  it.effect("port 0 prefers 4096 when free", () =>
+    Effect.gen(function* () {
+      const free = yield* Effect.promise(() => isPortFree(4096))
+      if (!free) return
+      const listener = yield* startListener()
       expect(listener.port).toBe(4096)
-    } finally {
-      await stop(listener, "timed out cleaning up port-0 prefers-4096 listener")
-    }
-  })
+    }),
+  )
 
-  test("port 0 falls back when 4096 is taken", async () => {
-    const blocker = await occupyPort(4096)
-    if (!blocker) return
-    try {
-      const listener = await startListener()
-      try {
-        expect(listener.port).not.toBe(4096)
-        expect(listener.port).toBeGreaterThan(0)
-      } finally {
-        await stop(listener, "timed out cleaning up port-0 fallback listener")
-      }
-    } finally {
-      await new Promise<void>((resolve) => blocker.close(() => resolve()))
-    }
-  })
-
-  testPty("rejects unsafe PTY ticket mint and connect requests", async () => {
-    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
-    const listener = await startListener()
-    try {
-      const info = await createCat(listener, tmp.path)
-
-      expect((await requestTicket(listener, info.id, tmp.path, { ticketHeader: false })).status).toBe(403)
-      expect((await requestTicket(listener, info.id, tmp.path, { origin: "https://evil.example" })).status).toBe(403)
-
-      // Regression for #25698: minting without a directory uses the server cwd
-      // and cannot find a PTY registered in a project directory.
-      const ambiguous = await fetch(new URL(PtyPaths.connectToken.replace(":ptyID", info.id), listener.url), {
-        method: "POST",
-        headers: { authorization: authorization(), "x-opencode-ticket": "1" },
-      })
-      expect(ambiguous.status).toBe(404)
-
-      const directoryScoped = await fetch(
-        new URL(
-          `${PtyPaths.connectToken.replace(":ptyID", info.id)}?directory=${encodeURIComponent(tmp.path)}`,
-          listener.url,
-        ),
-        {
-          method: "POST",
-          headers: { authorization: authorization(), "x-opencode-ticket": "1" },
-        },
+  it.effect("port 0 falls back when 4096 is taken", () =>
+    Effect.gen(function* () {
+      const blocker = yield* Effect.acquireRelease(
+        Effect.promise(() => occupyPort(4096)),
+        (server: net.Server | undefined) =>
+          server
+            ? Effect.promise(() => new Promise<void>((resolve) => server.close(() => resolve())))
+            : Effect.void,
       )
-      expect(directoryScoped.status).toBe(200)
-      const mint = (await directoryScoped.json()) as { ticket: string }
-      const scopedWs = await openSocket(socketURL(listener, info.id, tmp.path, mint.ticket))
-      scopedWs.close(1000)
+      if (!blocker) return
+      const listener = yield* startListener()
+      expect(listener.port).not.toBe(4096)
+      expect(listener.port).toBeGreaterThan(0)
+    }),
+  )
 
-      await expectSocketRejected(socketURL(listener, info.id, tmp.path, "not-a-ticket"))
+  testPtyInstance(
+    "rejects unsafe PTY ticket mint and connect requests",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const listener = yield* startListener()
 
-      const reusable = await connectTicket(listener, info.id, tmp.path)
-      const ws = await openSocket(socketURL(listener, info.id, tmp.path, reusable.ticket))
-      await expectSocketRejected(socketURL(listener, info.id, tmp.path, reusable.ticket))
-      ws.close(1000)
+        yield* Effect.promise(async () => {
+          const info = await createCat(listener, tmp.directory)
 
-      const other = await createCat(listener, tmp.path)
-      const scoped = await connectTicket(listener, info.id, tmp.path)
-      await expectSocketRejected(socketURL(listener, other.id, tmp.path, scoped.ticket))
+          expect((await requestTicket(listener, info.id, tmp.directory, { ticketHeader: false })).status).toBe(403)
+          expect((await requestTicket(listener, info.id, tmp.directory, { origin: "https://evil.example" })).status).toBe(
+            403,
+          )
 
-      const crossOrigin = await connectTicket(listener, info.id, tmp.path)
-      await expectSocketRejected(socketURL(listener, info.id, tmp.path, crossOrigin.ticket), {
-        headers: { origin: "https://evil.example" },
-      })
-    } finally {
-      await stop(listener, "timed out cleaning up rejected ticket listener").catch(() => undefined)
-    }
-  })
+          // Regression for #25698: minting without a directory uses the server cwd
+          // and cannot find a PTY registered in a project directory.
+          const ambiguous = await fetch(new URL(PtyPaths.connectToken.replace(":ptyID", info.id), listener.url), {
+            method: "POST",
+            headers: { authorization: authorization(), "x-opencode-ticket": "1" },
+          })
+          expect(ambiguous.status).toBe(404)
 
-  testPty("keeps PTY websocket tickets optional when server auth is disabled", async () => {
-    await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
-    const listener = await startNoAuthListener()
-    try {
-      const info = await createCat(listener, tmp.path)
-      const ws = await openSocket(socketURL(listener, info.id, tmp.path))
-      const message = waitForMessage(ws, (message) => message.includes("ping-no-auth"))
-      ws.send("ping-no-auth\n")
-      expect(await message).toContain("ping-no-auth")
-      ws.close(1000)
-    } finally {
-      await stop(listener, "timed out cleaning up no-auth listener").catch(() => undefined)
-    }
-  })
+          const directoryScoped = await fetch(
+            new URL(
+              `${PtyPaths.connectToken.replace(":ptyID", info.id)}?directory=${encodeURIComponent(tmp.directory)}`,
+              listener.url,
+            ),
+            {
+              method: "POST",
+              headers: { authorization: authorization(), "x-opencode-ticket": "1" },
+            },
+          )
+          expect(directoryScoped.status).toBe(200)
+          const mint = (await directoryScoped.json()) as { ticket: string }
+          const scopedWs = await openSocket(socketURL(listener, info.id, tmp.directory, mint.ticket))
+          scopedWs.close(1000)
+
+          await expectSocketRejected(socketURL(listener, info.id, tmp.directory, "not-a-ticket"))
+
+          const reusable = await connectTicket(listener, info.id, tmp.directory)
+          const ws = await openSocket(socketURL(listener, info.id, tmp.directory, reusable.ticket))
+          await expectSocketRejected(socketURL(listener, info.id, tmp.directory, reusable.ticket))
+          ws.close(1000)
+
+          const other = await createCat(listener, tmp.directory)
+          const scoped = await connectTicket(listener, info.id, tmp.directory)
+          await expectSocketRejected(socketURL(listener, other.id, tmp.directory, scoped.ticket))
+
+          const crossOrigin = await connectTicket(listener, info.id, tmp.directory)
+          await expectSocketRejected(socketURL(listener, info.id, tmp.directory, crossOrigin.ticket), {
+            headers: { origin: "https://evil.example" },
+          })
+        })
+      }),
+    { config: { formatter: false, lsp: false } },
+  )
+
+  testPtyInstance(
+    "keeps PTY websocket tickets optional when server auth is disabled",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const listener = yield* startNoAuthListener()
+
+        yield* Effect.promise(async () => {
+          const info = await createCat(listener, tmp.directory)
+          const ws = await openSocket(socketURL(listener, info.id, tmp.directory))
+          const message = waitForMessage(ws, (m) => m.includes("ping-no-auth"))
+          ws.send("ping-no-auth\n")
+          expect(await message).toContain("ping-no-auth")
+          ws.close(1000)
+        })
+      }),
+    { config: { formatter: false, lsp: false } },
+  )
 })
 
 function isPortFree(port: number) {
