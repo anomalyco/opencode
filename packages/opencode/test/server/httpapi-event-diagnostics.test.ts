@@ -56,11 +56,11 @@ afterEach(async () => {
 })
 
 const inApp = <A, E>(eff: Effect.Effect<A, E, AppServices>) =>
-  Effect.flatMap(InstanceRef, (ctx) =>
-    ctx
-      ? Effect.promise(() => AppRuntime.runPromise(eff.pipe(Effect.provideService(InstanceRef, ctx))))
-      : Effect.die("InstanceRef not provided in test scope"),
-  )
+  Effect.gen(function* () {
+    const ctx = yield* InstanceRef
+    if (!ctx) return yield* Effect.die("InstanceRef not provided in test scope")
+    return yield* Effect.promise(() => AppRuntime.runPromise(eff.pipe(Effect.provideService(InstanceRef, ctx))))
+  })
 
 const publishConnected = inApp(Bus.Service.use((svc) => svc.publish(ServerEvent.Connected, {})))
 
@@ -112,7 +112,7 @@ const readNextEvent = (reader: ReadableStreamDefaultReader<Uint8Array>) =>
       if (result.done || !result.value) return Effect.fail(new Error("event stream closed"))
       const frames = decodeFrame(result.value)
       if (frames.length === 0) return Effect.fail(new Error("empty SSE frame"))
-      return Effect.succeed(frames[0]!)
+      return Effect.succeed(frames[0])
     }),
   )
 
@@ -186,8 +186,7 @@ describe("/event SSE delivery diagnostics", () => {
 
         const collected = yield* collectUntilEvent(reader, isPartUpdated)
         const updated = collected.find(isPartUpdated)
-        expect(updated).toBeDefined()
-        expect((updated as SseEvent).properties.part.id).toBe(partID)
+        expect(updated?.properties.part.id).toBe(partID)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
@@ -217,7 +216,7 @@ describe("/event SSE delivery diagnostics", () => {
           }),
         )
         expect(event.type).toBe(MessageV2.Event.PartUpdated.type)
-        expect((event.properties as { part: { id: string } }).part.id).toBe(partID)
+        expect(event.properties).toMatchObject({ part: { id: partID } })
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

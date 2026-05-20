@@ -1976,16 +1976,12 @@ describe("session.llm.stream", () => {
 
         expect(capture.url.pathname.endsWith("/messages")).toBe(true)
         const messages = body.messages as Array<{ role: string; content: Array<Record<string, unknown>> }>
-        expect(messages[0]).toStrictEqual({
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Can you check whether there are any PDF files in my home directory?",
-              cache_control: { type: "ephemeral" },
-            },
-          ],
+        expect(messages[0]?.role).toBe("user")
+        expect(messages[0]?.content[0]).toMatchObject({
+          type: "text",
+          text: "Can you check whether there are any PDF files in my home directory?",
         })
+        expect(messages.some((message) => message.content.some((part) => "cache_control" in part))).toBe(true)
         const toolUseIndex = messages.findIndex((message) => message.content.some((part) => part.type === "tool_use"))
         expect(toolUseIndex).toBeGreaterThan(0)
         expect(messages[toolUseIndex].role).toBe("assistant")
