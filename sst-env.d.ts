@@ -50,6 +50,10 @@ declare module "sst" {
       "type": "sst.cloudflare.SolidStart"
       "url": string
     }
+    "DISCORD_INCIDENT_WEBHOOK_URL": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "DISCORD_SUPPORT_BOT_TOKEN": {
       "type": "sst.sst.Secret"
       "value": string
@@ -102,12 +106,12 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "GatewayKv": {
-      "namespaceId": string
-      "type": "sst.cloudflare.Kv"
-    }
     "HONEYCOMB_API_KEY": {
       "type": "sst.sst.Secret"
+      "value": string
+    }
+    "HoneycombWebhookSecret": {
+      "type": "random.index/randomPassword.RandomPassword"
       "value": string
     }
     "LogProcessor": {
@@ -144,6 +148,10 @@ declare module "sst" {
     "STRIPE_WEBHOOK_SECRET": {
       "type": "sst.sst.Linkable"
       "value": string
+    }
+    "Stat": {
+      "type": "sst.cloudflare.Worker"
+      "url": string
     }
     "Teams": {
       "type": "sst.cloudflare.SolidStart"

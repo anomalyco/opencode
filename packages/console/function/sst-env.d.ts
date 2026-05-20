@@ -35,6 +35,10 @@ declare module "sst" {
       "type": "sst.cloudflare.SolidStart"
       "url": string
     }
+    "DISCORD_INCIDENT_WEBHOOK_URL": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "DISCORD_SUPPORT_BOT_TOKEN": {
       "type": "sst.sst.Secret"
       "value": string
@@ -85,6 +89,10 @@ declare module "sst" {
     }
     "HONEYCOMB_API_KEY": {
       "type": "sst.sst.Secret"
+      "value": string
+    }
+    "HoneycombWebhookSecret": {
+      "type": "random.index/randomPassword.RandomPassword"
       "value": string
     }
     "R2AccessKey": {
@@ -288,8 +296,8 @@ declare module "sst" {
     "AuthStorage": cloudflare.KVNamespace
     "Bucket": cloudflare.R2Bucket
     "EnterpriseStorage": cloudflare.R2Bucket
-    "GatewayKv": cloudflare.KVNamespace
     "LogProcessor": cloudflare.Service
+    "Stat": cloudflare.Service
     "ZenData": cloudflare.R2Bucket
     "ZenDataNew": cloudflare.R2Bucket
   }

@@ -1,27 +1,29 @@
-import { describe, expect, beforeEach, afterEach, afterAll } from "bun:test"
+import { describe, expect, beforeEach, afterAll } from "bun:test"
 import { provideTmpdirInstance } from "../fixture/fixture"
-import { Effect, Layer, Schema } from "effect"
+import { Deferred, Effect, Layer, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Bus } from "../../src/bus"
+import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { SyncEvent } from "../../src/sync"
-import { Database } from "@/storage/db"
-import { EventTable } from "../../src/sync/event.sql"
+import { Database, eq } from "@/storage/db"
+import { EventSequenceTable, EventTable } from "../../src/sync/event.sql"
 import { MessageID } from "../../src/session/schema"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { initProjectors } from "../../src/server/projectors"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
-const original = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
-const it = testEffect(Layer.mergeAll(SyncEvent.defaultLayer, CrossSpawnSpawner.defaultLayer))
+const it = testEffect(
+  Layer.mergeAll(
+    SyncEvent.layer.pipe(
+      Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: true })),
+      Layer.provideMerge(Bus.layer),
+    ),
+    CrossSpawnSpawner.defaultLayer,
+  ),
+)
 
 beforeEach(() => {
   Database.close()
-
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
-})
-
-afterEach(() => {
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = original
 })
 
 describe("SyncEvent", () => {
@@ -116,7 +118,8 @@ describe("SyncEvent", () => {
           const received = new Promise<void>((done) => {
             resolve = done
           })
-          const dispose = Bus.subscribeAll((event) => {
+          const bus = yield* Bus.Service
+          const dispose = yield* bus.subscribeAllCallback((event) => {
             events.push(event)
             resolve()
           })
@@ -133,6 +136,43 @@ describe("SyncEvent", () => {
             })
           } finally {
             dispose()
+          }
+        }),
+      ),
+    )
+
+    // Regression for the EffectBridge migration. GlobalBus.emit used to fire
+    // synchronously inside the Database.effect post-commit callback. After the
+    // migration it fires inside the forked publish Effect, AFTER bus.publish
+    // completes. Consumers don't care about microsecond-level ordering, but
+    // we still need to prove the emit actually fires.
+    it.live(
+      "emits sync events to GlobalBus after publishing to ProjectBus",
+      provideTmpdirInstance(() =>
+        Effect.gen(function* () {
+          const { Created } = setup()
+          // Filter for OUR specific event in the handler so we ignore any
+          // stray sync events from other tests' lingering forks.
+          const received = yield* Deferred.make<GlobalEvent>()
+          const handler = (evt: GlobalEvent) => {
+            if (evt.payload?.type === "sync" && evt.payload?.syncEvent?.type === "item.created.1") {
+              Deferred.doneUnsafe(received, Effect.succeed(evt))
+            }
+          }
+          GlobalBus.on("event", handler)
+          try {
+            yield* SyncEvent.use.run(Created, { id: "evt_global_1", name: "global" })
+            const event = yield* awaitWithTimeout(
+              Deferred.await(received),
+              "timed out waiting for sync event on GlobalBus",
+              "2 seconds",
+            )
+            expect(event.payload).toMatchObject({
+              type: "sync",
+              syncEvent: { type: "item.created.1", data: { id: "evt_global_1", name: "global" } },
+            })
+          } finally {
+            GlobalBus.off("event", handler)
           }
         }),
       ),
@@ -249,6 +289,100 @@ describe("SyncEvent", () => {
 
           const rows = Database.use((db) => db.select().from(EventTable).all())
           expect(rows.map((row) => row.seq)).toEqual([0, 1, 2, 3])
+        }),
+      ),
+    )
+
+    it.live(
+      "claims unowned event sequence on replay with ownerID",
+      provideTmpdirInstance(() =>
+        Effect.gen(function* () {
+          const { Created } = setup()
+          const id = MessageID.ascending()
+
+          yield* SyncEvent.use.replay(
+            {
+              id: "evt_1",
+              type: SyncEvent.versionedType(Created.type, Created.version),
+              seq: 0,
+              aggregateID: id,
+              data: { id, name: "owned" },
+            },
+            { publish: false, ownerID: "owner-1" },
+          )
+
+          const row = Database.use((db) =>
+            db
+              .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
+              .from(EventSequenceTable)
+              .get(),
+          )
+          expect(row).toEqual({ seq: 0, ownerID: "owner-1" })
+        }),
+      ),
+    )
+
+    it.live(
+      "ignores replay from a different owner after sequence is claimed",
+      provideTmpdirInstance(() =>
+        Effect.gen(function* () {
+          const { Created } = setup()
+          const id = MessageID.ascending()
+
+          yield* SyncEvent.use.replay(
+            {
+              id: "evt_1",
+              type: SyncEvent.versionedType(Created.type, Created.version),
+              seq: 0,
+              aggregateID: id,
+              data: { id, name: "first" },
+            },
+            { publish: false, ownerID: "owner-1" },
+          )
+          yield* SyncEvent.use.replay(
+            {
+              id: "evt_2",
+              type: SyncEvent.versionedType(Created.type, Created.version),
+              seq: 1,
+              aggregateID: id,
+              data: { id, name: "ignored" },
+            },
+            { publish: false, ownerID: "owner-2" },
+          )
+
+          const events = Database.use((db) => db.select().from(EventTable).all())
+          const sequence = Database.use((db) =>
+            db
+              .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
+              .from(EventSequenceTable)
+              .get(),
+          )
+          expect(events).toHaveLength(1)
+          expect(events[0].id).toBe("evt_1")
+          expect(sequence).toEqual({ seq: 0, ownerID: "owner-1" })
+        }),
+      ),
+    )
+
+    it.live(
+      "claim updates the event sequence owner",
+      provideTmpdirInstance(() =>
+        Effect.gen(function* () {
+          const { Created } = setup()
+          const id = MessageID.ascending()
+
+          yield* SyncEvent.use.run(Created, { id, name: "claimed" }, { publish: false })
+          yield* SyncEvent.use.claim(id, "owner-1")
+          yield* SyncEvent.use.claim(id, "owner-2")
+
+          const row = Database.use((db) =>
+            db
+              .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
+              .from(EventSequenceTable)
+              .where(eq(EventSequenceTable.aggregate_id, id))
+              .get(),
+          )
+          expect(row).toEqual({ seq: 0, ownerID: "owner-2" })
         }),
       ),
     )

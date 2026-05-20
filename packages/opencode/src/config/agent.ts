@@ -1,11 +1,9 @@
 export * as ConfigAgent from "./agent"
 
+import path from "path"
 import { Exit, Schema, SchemaGetter } from "effect"
-import { Bus } from "@/bus"
-import { zod } from "@/util/effect-zod"
-import { PositiveInt, withStatics } from "@/util/schema"
+import { PositiveInt } from "@opencode-ai/core/schema"
 import * as Log from "@opencode-ai/core/util/log"
-import { NamedError } from "@opencode-ai/core/util/error"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { configEntryNameFromPath } from "./entry-name"
 import * as ConfigMarkdown from "./markdown"
@@ -102,9 +100,7 @@ export const Info = AgentSchema.pipe(
     decode: SchemaGetter.transform(normalize),
     encode: SchemaGetter.passthrough({ strict: false }),
   }),
-)
-  .annotate({ identifier: "AgentConfig" })
-  .pipe(withStatics((s) => ({ zod: zod(s) })))
+).annotate({ identifier: "AgentConfig" })
 export type Info = Schema.Schema.Type<typeof Info>
 
 export async function load(dir: string) {
@@ -115,26 +111,20 @@ export async function load(dir: string) {
     dot: true,
     symlink: true,
   })) {
-    const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-      const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-        ? err.data.message
-        : `Failed to parse agent ${item}`
-      const { Session } = await import("@/session/session")
-      void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+    const md = await ConfigMarkdown.parse(item).catch((err) => {
       log.error("failed to load agent", { agent: item, err })
       return undefined
     })
     if (!md) continue
 
-    const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
-    const name = configEntryNameFromPath(item, patterns)
+    const name = configEntryNameFromPath(path.relative(dir, item), ["agent/", "agents/"])
 
     const config = {
       name,
       ...md.data,
       prompt: md.content.trim(),
     }
-    result[config.name] = ConfigParse.effectSchema(Info, config, item)
+    result[config.name] = ConfigParse.schema(Info, config, item)
   }
   return result
 }
@@ -147,19 +137,14 @@ export async function loadMode(dir: string) {
     dot: true,
     symlink: true,
   })) {
-    const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-      const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-        ? err.data.message
-        : `Failed to parse mode ${item}`
-      const { Session } = await import("@/session/session")
-      void Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+    const md = await ConfigMarkdown.parse(item).catch((err) => {
       log.error("failed to load mode", { mode: item, err })
       return undefined
     })
     if (!md) continue
 
     const config = {
-      name: configEntryNameFromPath(item, []),
+      name: configEntryNameFromPath(path.relative(dir, item), ["mode/", "modes/"]),
       ...md.data,
       prompt: md.content.trim(),
     }

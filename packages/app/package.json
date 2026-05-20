@@ -1,10 +1,11 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.14.33",
+  "version": "1.15.5",
   "description": "",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./desktop-menu": "./src/desktop-menu.ts",
     "./vite": "./vite.js",
     "./index.css": "./src/index.css"
   },
@@ -73,7 +74,6 @@
     "solid-js": "catalog:",
     "solid-list": "catalog:",
     "tailwindcss": "catalog:",
-    "virtua": "catalog:",
-    "zod": "catalog:"
+    "virtua": "catalog:"
   }
 }
