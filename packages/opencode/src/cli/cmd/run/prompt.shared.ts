@@ -65,11 +65,12 @@ export function promptCopy(prompt: RunPrompt): RunPrompt {
   return {
     text: prompt.text,
     parts: structuredClone(prompt.parts),
+    ...(prompt.mode ? { mode: prompt.mode } : {}),
   }
 }
 
 export function promptSame(a: RunPrompt, b: RunPrompt): boolean {
-  return a.text === b.text && JSON.stringify(a.parts) === JSON.stringify(b.parts)
+  return a.mode === b.mode && a.text === b.text && JSON.stringify(a.parts) === JSON.stringify(b.parts)
 }
 
 function promptKey(binding: ReturnType<typeof parseBindings>[number]): PromptInfo | undefined {

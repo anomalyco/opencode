@@ -326,6 +326,190 @@ describe("run session data", () => {
     ])
   })
 
+  test("renders direct shell mode from first-class shell events", () => {
+    let data = createSessionData()
+    const started = reduce(data, {
+      type: "session.next.shell.started",
+      properties: {
+        sessionID: "session-1",
+        timestamp: 1,
+        callID: "call-1",
+        command: "pwd",
+      },
+    })
+
+    expect(started.commits).toEqual([
+      expect.objectContaining({
+        kind: "tool",
+        phase: "start",
+        partID: "shell:call-1",
+        tool: "bash",
+        shell: {
+          callID: "call-1",
+          command: "pwd",
+        },
+      }),
+    ])
+
+    data = started.data
+    const ended = reduce(data, {
+      type: "session.next.shell.ended",
+      properties: {
+        sessionID: "session-1",
+        timestamp: 2,
+        callID: "call-1",
+        output: "/tmp/demo\n",
+      },
+    })
+
+    expect(ended.commits).toEqual([
+      expect.objectContaining({
+        kind: "tool",
+        phase: "progress",
+        partID: "shell:call-1",
+        tool: "bash",
+        text: "/tmp/demo\n",
+        toolState: "completed",
+        shell: {
+          callID: "call-1",
+          command: "pwd",
+        },
+      }),
+    ])
+  })
+
+  test("suppresses legacy bash part updates once shell events claim the call", () => {
+    let data = reduce(createSessionData(), {
+      type: "session.next.shell.started",
+      properties: {
+        sessionID: "session-1",
+        timestamp: 1,
+        callID: "call-1",
+        command: "pwd",
+      },
+    }).data
+
+    expect(
+      reduce(
+        data,
+        tool({
+          id: "tool-1",
+          messageID: "msg-1",
+          callID: "call-1",
+          tool: "bash",
+          state: {
+            status: "running",
+            input: {
+              command: "pwd",
+            },
+            time: { start: 1 },
+          },
+        }),
+      ).commits,
+    ).toEqual([])
+
+    data = reduce(data, {
+      type: "session.next.shell.ended",
+      properties: {
+        sessionID: "session-1",
+        timestamp: 2,
+        callID: "call-1",
+        output: "/tmp/demo\n",
+      },
+    }).data
+
+    expect(
+      reduce(
+        data,
+        tool({
+          id: "tool-1",
+          messageID: "msg-1",
+          callID: "call-1",
+          tool: "bash",
+          state: {
+            status: "completed",
+            input: {
+              command: "pwd",
+            },
+            output: "/tmp/demo\n",
+            title: "",
+            metadata: {
+              output: "/tmp/demo\n",
+              description: "",
+            },
+            time: { start: 1, end: 2 },
+          },
+        }),
+      ).commits,
+    ).toEqual([])
+  })
+
+  test("suppresses shell events when the legacy bash part claimed the call first", () => {
+    let data = reduce(
+      createSessionData(),
+      tool({
+        id: "tool-1",
+        messageID: "msg-1",
+        callID: "call-1",
+        tool: "bash",
+        state: {
+          status: "running",
+          input: {
+            command: "pwd",
+          },
+          time: { start: 1 },
+        },
+      }),
+    ).data
+
+    expect(
+      reduce(data, {
+        type: "session.next.shell.started",
+        properties: {
+          sessionID: "session-1",
+          timestamp: 1,
+          callID: "call-1",
+          command: "pwd",
+        },
+      }).commits,
+    ).toEqual([])
+
+    data = reduce(
+      data,
+      tool({
+        id: "tool-1",
+        messageID: "msg-1",
+        callID: "call-1",
+        tool: "bash",
+        state: {
+          status: "completed",
+          input: {
+            command: "pwd",
+          },
+          output: "/tmp/demo\n",
+          title: "",
+          metadata: {
+            output: "/tmp/demo\n",
+            description: "",
+          },
+          time: { start: 1, end: 2 },
+        },
+      }),
+    ).data
+
+    expect(
+      reduce(data, {
+        type: "session.next.shell.ended",
+        properties: {
+          sessionID: "session-1",
+          timestamp: 2,
+          callID: "call-1",
+          output: "/tmp/demo\n",
+        },
+      }).commits,
+    ).toEqual([])
+  })
+
   test("synthesizes a glob start before an error when the running update is missed", () => {
     expect(
       reduce(

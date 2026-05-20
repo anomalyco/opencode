@@ -22,7 +22,8 @@
     "./icons/file-type": "./src/components/file-icons/types.ts",
     "./icons/app": "./src/components/app-icons/types.ts",
     "./fonts/*": "./src/assets/fonts/*",
-    "./audio/*": "./src/assets/audio/*"
+    "./audio/*": "./src/assets/audio/*",
+    "./v2/*": "./src/v2/*"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",

@@ -36,6 +36,7 @@ import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from 
 import { createRefreshQueue } from "./global-sync/queue"
 import { directoryKey } from "./global-sync/utils"
 import { PathKey } from "@/utils/path-key"
+import { createDirSyncContext } from "./directory-sync"
 
 type GlobalStore = {
   ready: boolean
@@ -422,8 +423,17 @@ function createGlobalSync() {
 
   const updateConfigMutation = useMutation(() => ({
     mutationFn: (config: Config) => globalSDK.client.global.config.update({ config }),
-    onSuccess: () => bootstrap.refetch(),
+    onSuccess: () => {
+      bootstrap.refetch()
+      // Invalidate all provider queries so newly configured custom providers
+      // appear immediately in the available provider list across all directories.
+      queryClient.invalidateQueries({ queryKey: [null, "providers"] })
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[1] === "providers" })
+    },
   }))
+
+  const dirSyncContexts = new Map<string, ReturnType<typeof createDirSyncContext>>()
+  const dirSyncContextRefCounts = new Map<string, number>()
 
   return {
     data: globalStore,
@@ -442,6 +452,26 @@ function createGlobalSync() {
     project: projectApi,
     todo: {
       set: setSessionTodo,
+    },
+    createDirSyncContext: (directory: string) => {
+      onCleanup(() => {
+        dirSyncContextRefCounts.set(directory, (dirSyncContextRefCounts.get(directory) ?? 0) - 1)
+        if (dirSyncContextRefCounts.get(directory) === 0) {
+          dirSyncContexts.delete(directory)
+          dirSyncContextRefCounts.delete(directory)
+        }
+      })
+
+      const cached = dirSyncContexts.get(directory)
+      if (cached) {
+        dirSyncContextRefCounts.set(directory, (dirSyncContextRefCounts.get(directory) ?? 0) + 1)
+        return cached
+      }
+      const ctx = createDirSyncContext(globalSDK.createClient({ directory, throwOnError: true }), directory)
+      dirSyncContexts.set(directory, ctx)
+      dirSyncContextRefCounts.set(directory, 1)
+
+      return ctx
     },
   }
 }
