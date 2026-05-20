@@ -262,17 +262,24 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const auth = yield* dep.auth("amazon-bedrock")
       const env = yield* dep.env()
 
-      // Region precedence: 1) config file, 2) env var, 3) default
+      const isANR = process.env.OPENCODE_FLAVOR === "anr"
+
+      // Region precedence:
+      // ANR mode: env var wins (credentials are partition-bound)
+      // Normal:  1) config file, 2) env var, 3) default
       const configRegion = providerConfig?.options?.region
-      const envRegion = env["AWS_REGION"]
-      const defaultRegion = configRegion ?? envRegion ?? "us-east-1"
+      // In ANR mode, credentials are set on process.env after the Env snapshot is taken,
+      // so Env.get() returns stale values. Read directly from process.env.
+      const envRegion = isANR ? process.env.AWS_REGION : env["AWS_REGION"]
+      const defaultRegion = isANR ? (envRegion ?? configRegion ?? "us-east-1") : (configRegion ?? envRegion ?? "us-east-1")
 
       // Profile: config file takes precedence over env var
       const configProfile = providerConfig?.options?.profile
-      const envProfile = env["AWS_PROFILE"]
+      const envProfile = isANR ? undefined : env["AWS_PROFILE"]
       const profile = configProfile ?? envProfile
 
-      const awsAccessKeyId = env["AWS_ACCESS_KEY_ID"]
+      const awsAccessKeyId = isANR ? process.env.AWS_ACCESS_KEY_ID : env["AWS_ACCESS_KEY_ID"]
+      const awsSessionToken = isANR ? process.env.AWS_SESSION_TOKEN : env["AWS_SESSION_TOKEN"]
 
       // TODO: Using process.env directly because Env.set only updates a process.env shallow copy,
       // until the scope of the Env API is clarified (test only or runtime?)
@@ -295,7 +302,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
         return { autoload: false }
 
-      const { fromNodeProviderChain } = yield* Effect.promise(() => import("@aws-sdk/credential-providers"))
+      const { fromNodeProviderChain, fromEnv } = yield* Effect.promise(() => import("@aws-sdk/credential-providers"))
 
       const providerOptions: Record<string, any> = {
         region: defaultRegion,
@@ -304,51 +311,77 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       // Only use credential chain if no bearer token exists
       // Bearer token takes precedence over credential chain (profiles, access keys, IAM roles, web identity tokens)
       if (!awsBearerToken) {
-        // Build credential provider options (only pass profile if specified)
-        const credentialProviderOptions = profile ? { profile } : {}
-
-        providerOptions.credentialProvider = fromNodeProviderChain(credentialProviderOptions)
+        // In ANR mode with explicit credentials, use fromEnv() directly to avoid
+        // conflicts with ~/.aws/config profiles (SSO) that the SDK would prefer
+        // over environment credentials, causing "Multiple credential sources" + expiry errors
+        if (isANR && awsAccessKeyId && awsSessionToken) {
+          providerOptions.credentialProvider = fromEnv()
+        } else {
+          const credentialProviderOptions = profile ? { profile } : {}
+          providerOptions.credentialProvider = fromNodeProviderChain(credentialProviderOptions)
+        }
       }
 
       // Add custom endpoint if specified (endpoint takes precedence over baseURL)
       const endpoint = providerConfig?.options?.endpoint ?? providerConfig?.options?.baseURL
-      if (endpoint) {
+      if (endpoint && !isANR) {
         providerOptions.baseURL = endpoint
+      }
+
+      // Set explicit Bedrock runtime endpoint to prevent SDK from using incorrect URLs
+      if (!providerOptions.baseURL) {
+        providerOptions.baseURL = `https://bedrock-runtime.${defaultRegion}.amazonaws.com`
       }
 
       return {
         autoload: true,
         options: providerOptions,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          // Skip region prefixing if model already has a cross-region inference profile prefix
-          // Models from models.dev may already include prefixes like us., eu., global., etc.
-          const crossRegionPrefixes = ["global.", "us.", "eu.", "jp.", "apac.", "au."]
-          if (crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))) {
+          // Region resolution precedence (highest to lowest):
+          // ANR mode: defaultRegion always wins (credentials are partition-bound)
+          // Normal: 1. options.region from opencode.json provider config
+          //         2. defaultRegion from AWS_REGION environment variable
+          const region = isANR ? defaultRegion : (options?.region ?? defaultRegion)
+          const isGovCloud = region.startsWith("us-gov")
+
+          // ANR mode: DynamoDB model IDs are the source of truth for each environment.
+          // GovCloud stores e.g. us-gov.anthropic.claude-..., commercial stores us.anthropic.claude-...
+          // Models without prefixes (amazon.nova-lite-v1:0) are used directly without modification.
+          if (isANR) {
             return sdk.languageModel(modelID)
           }
 
-          // Region resolution precedence (highest to lowest):
-          // 1. options.region from opencode.json provider config
-          // 2. defaultRegion from AWS_REGION environment variable
-          // 3. Default "us-east-1" (baked into defaultRegion)
-          const region = options?.region ?? defaultRegion
+          // In GovCloud, strip any commercial cross-region prefix (us., global., etc.)
+          // and let the GovCloud prefixing logic below handle it correctly
+          if (isGovCloud) {
+            const commercialPrefixes = ["global.", "us.", "eu.", "jp.", "apac.", "au."]
+            for (const prefix of commercialPrefixes) {
+              if (modelID.startsWith(prefix)) {
+                modelID = modelID.slice(prefix.length)
+                break
+              }
+            }
+          }
+
+          // Skip region prefixing if model already has a cross-region inference profile prefix
+          // Models from models.dev may already include prefixes like us., eu., global., etc.
+          const crossRegionPrefixes = ["global.", "us-gov.", "us.", "eu.", "jp.", "apac.", "au."]
+          if (crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))) {
+            return sdk.languageModel(modelID)
+          }
 
           let regionPrefix = region.split("-")[0]
 
           switch (regionPrefix) {
             case "us": {
-              const modelRequiresPrefix = [
-                "nova-micro",
-                "nova-lite",
-                "nova-pro",
-                "nova-premier",
-                "nova-2",
-                "claude",
-                "deepseek",
-              ].some((m) => modelID.includes(m))
               const isGovCloud = region.startsWith("us-gov")
-              if (modelRequiresPrefix && !isGovCloud) {
-                modelID = `${regionPrefix}.${modelID}`
+              // GovCloud only has inference profiles for claude; other models use direct IDs
+              const prefixed = isGovCloud
+                ? ["claude"]
+                : ["nova-micro", "nova-lite", "nova-pro", "nova-premier", "nova-2", "claude", "deepseek.r", "llama"]
+              const modelRequiresPrefix = prefixed.some((m) => modelID.includes(m))
+              if (modelRequiresPrefix) {
+                modelID = isGovCloud ? `us-gov.${modelID}` : `${regionPrefix}.${modelID}`
               }
               break
             }
@@ -1745,7 +1778,7 @@ export const layer = Layer.effect(
       }
       for (const item of priority) {
         if (providerID === ProviderID.amazonBedrock) {
-          const crossRegionPrefixes = ["global.", "us.", "eu."]
+          const crossRegionPrefixes = ["global.", "us-gov.", "us.", "eu."]
           const candidates = Object.keys(provider.models).filter((m) => m.includes(item))
 
           const globalMatch = candidates.find((m) => m.startsWith("global."))
@@ -1753,6 +1786,10 @@ export const layer = Layer.effect(
 
           const region = provider.options?.region
           if (region) {
+            if (region.startsWith("us-gov")) {
+              const govMatch = candidates.find((m) => m.startsWith("us-gov."))
+              if (govMatch) return provider.models[govMatch]
+            }
             const regionPrefix = region.split("-")[0]
             if (regionPrefix === "us" || regionPrefix === "eu") {
               const regionalMatch = candidates.find((m) => m.startsWith(`${regionPrefix}.`))
