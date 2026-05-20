@@ -1405,7 +1405,7 @@ export const layer = Layer.effect(
 
         const loaders = custom(dep)
         const resolveLoader = (entryID: string, data: Info): CustomLoader | undefined => {
-          // Canonical loaders match by exact ID. Same path as before.
+          // Canonical loaders match by exact ID.
           if (loaders[entryID]) return loaders[entryID]
           // Otherwise read the entry's npm from its first model and accept a
           // canonical loader whose models.dev npm uniquely matches. Where the
