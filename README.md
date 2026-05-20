@@ -180,4 +180,4 @@ This is not built by the OpenCode team and is not affiliated with OpenCode in an
 
 ---
 ### Thank you
-Thank you for [anomalyco](https://github.com/anomalyco) and Skills from [Andrej Karpathy](https://github.com/multica-ai/andrej-karpathy-skills)
+Thank you for [anomalyco](https://github.com/anomalyco) and MD file from [Andrej Karpathy](https://github.com/multica-ai/andrej-karpathy-skills)
