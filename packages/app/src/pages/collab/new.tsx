@@ -141,9 +141,15 @@ export default function NewCollabSession() {
         {/* Sidebar header */}
         <div class="px-4 py-4 border-b border-zinc-800 flex-shrink-0">
           <div class="flex items-center gap-2 mb-0.5">
-            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 uppercase tracking-wider">
+            {/* Consistent with the session-page header: the Collab pill links
+                home so users always have a quick way to get back. */}
+            <a
+              href="/collab/new"
+              title="Back to your collab sessions"
+              class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 uppercase tracking-wider hover:bg-blue-500/30 hover:text-blue-300 transition-colors"
+            >
               Collab
-            </span>
+            </a>
           </div>
           <h2 class="text-sm font-semibold text-zinc-100">Rejoin Session</h2>
           <p class="text-xs text-zinc-500 mt-0.5">Your previous coding sessions</p>
