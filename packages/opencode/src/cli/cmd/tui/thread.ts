@@ -21,6 +21,7 @@ import {
   sanitizedProcessEnv,
 } from "@opencode-ai/core/util/opencode-process"
 import { validateSession } from "./validate-session"
+import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "../run/runtime.stdin"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -116,10 +117,28 @@ export const TuiThreadCommand = cmd({
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
     // (Important when running under `bun run` wrappers on Windows.)
     const unguard = win32InstallCtrlCGuard()
+    let interactiveStdin: ReturnType<typeof resolveInteractiveStdin> | undefined
     try {
       // Must be the very first thing — disables CTRL_C_EVENT before any Worker
       // spawn or async work so the OS cannot kill the process group.
       win32DisableProcessedInput()
+
+      try {
+        interactiveStdin = resolveInteractiveStdin()
+      } catch (error) {
+        if (error instanceof Error && error.message === INTERACTIVE_INPUT_ERROR) {
+          UI.error(error.message)
+          process.exitCode = 1
+          return
+        }
+
+        throw error
+      }
+
+      if (!interactiveStdin) {
+        process.exitCode = 1
+        return
+      }
 
       if (args.fork && !args.continue && !args.session) {
         UI.error("--fork requires --continue or --session")
@@ -236,6 +255,7 @@ export const TuiThreadCommand = cmd({
             const server = await client.call("snapshot", undefined)
             return [tui, server]
           },
+          stdin: interactiveStdin.stdin,
           config,
           directory: cwd,
           fetch: transport.fetch,
@@ -253,6 +273,7 @@ export const TuiThreadCommand = cmd({
         await stop()
       }
     } finally {
+      interactiveStdin?.cleanup?.()
       unguard?.()
     }
     process.exit(0)

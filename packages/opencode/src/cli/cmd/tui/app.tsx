@@ -172,6 +172,7 @@ export function tui(input: {
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
   events?: EventSource
+  stdin?: NodeJS.ReadStream
 }) {
   // promise to prevent immediate exit
   // oxlint-disable-next-line no-async-promise-executor -- intentional: async executor used for sequential setup before resolve
@@ -189,7 +190,10 @@ export function tui(input: {
       TuiAudio.dispose()
     }
 
-    const renderer = await createCliRenderer(rendererConfig(input.config))
+    const renderer = await createCliRenderer({
+      ...rendererConfig(input.config),
+      ...(input.stdin ? { stdin: input.stdin } : {}),
+    })
     // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
     void renderer.getPalette({ size: 16 }).catch(() => undefined)
     const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
