@@ -1,7 +1,7 @@
 <h1><p align="center">AUTOOPENCODE</p></h1>
 <p align="center">This is fork from opencode, this fork is autonomous open source ai agent</p>
 
-
+---
 <p align="center">
   <a href="https://opencode.ai">
     <picture>
