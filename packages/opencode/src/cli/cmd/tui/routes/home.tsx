@@ -1,7 +1,6 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import { createEffect, createSignal, onMount } from "solid-js"
 import { Logo } from "../component/logo"
-import { useProject } from "../context/project"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
 import { useArgs } from "../context/args"
@@ -19,7 +18,6 @@ const placeholder = {
 
 export function Home() {
   const sync = useSync()
-  const project = useProject()
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const [ref, setRef] = createSignal<PromptRef | undefined>()
@@ -73,13 +71,11 @@ export function Home() {
           <TuiPluginRuntime.Slot
             name="home_prompt"
             mode="replace"
-            workspace_id={project.workspace.current()}
             ref={bind}
           >
             <Prompt
               ref={bind}
-              workspaceID={project.workspace.current()}
-              right={<TuiPluginRuntime.Slot name="home_prompt_right" workspace_id={project.workspace.current()} />}
+              right={<TuiPluginRuntime.Slot name="home_prompt_right" />}
               placeholders={placeholder}
             />
           </TuiPluginRuntime.Slot>
