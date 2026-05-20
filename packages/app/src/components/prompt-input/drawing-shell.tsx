@@ -31,12 +31,13 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
   return (
     <div
       data-component={props.variant === "doc" ? "prompt-doc-shell" : "prompt-draw-shell"}
-      class="flex w-full max-h-[448px] flex-col overflow-hidden"
+      class="flex min-h-0 w-full flex-1 flex-col overflow-hidden"
     >
       <div
         classList={{
-          "h-[400px] min-h-0 w-full shrink-0": props.variant === "doc",
-          "h-[352px] min-h-0 shrink-0": props.variant === "draw",
+          "min-h-0 w-full": true,
+          "flex-1": props.variant === "doc",
+          "h-[352px] shrink-0": props.variant === "draw",
         }}
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -46,7 +47,7 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
       </div>
       <div
         data-component="prompt-draw-actions"
-        class="flex shrink-0 items-center justify-between gap-2 border-t border-border-weaker-base bg-surface-raised-stronger-non-alpha px-2 py-1.5"
+        class="relative z-20 flex shrink-0 items-center justify-between gap-2 border-t border-border-weaker-base bg-surface-raised-stronger-non-alpha px-2 py-1.5"
       >
         <div class="flex items-center gap-0.5">
           <Tooltip placement="top" value={exitLabel()}>
@@ -90,7 +91,13 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
           <PromptDrawingColors drawing={props.drawing} />
         </Show>
         <Show when={props.variant === "doc"}>
-          <div class="flex-1" />
+          <div
+            data-component="prompt-doc-id"
+            class="min-w-0 flex-1 truncate px-2 text-center font-mono text-11-regular text-text-weaker-base"
+            title={props.doc.docID() ?? ""}
+          >
+            {props.doc.docID() ?? "—"}
+          </div>
         </Show>
         <Tooltip placement="top" inactive={!props.working()} value={props.tip()}>
           <IconButton

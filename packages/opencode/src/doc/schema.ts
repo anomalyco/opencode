@@ -1,0 +1,29 @@
+import { Schema } from "effect"
+import z from "zod"
+import { Identifier } from "@/id/id"
+import { withStatics } from "@/util/schema"
+import { SessionID } from "@/session/schema"
+
+export const DocID = Schema.String.pipe(
+  Schema.brand("DocID"),
+  withStatics((s) => ({
+    make: (id: string) => s.makeUnsafe(id),
+    ascending: (id?: string) => s.makeUnsafe(Identifier.ascending("doc", id)),
+    zod: Identifier.schema("doc").pipe(z.custom<Schema.Schema.Type<typeof s>>()),
+  })),
+)
+export type DocID = Schema.Schema.Type<typeof DocID>
+
+export const ActorID = Schema.String.pipe(
+  Schema.brand("ActorID"),
+  withStatics((s) => ({
+    make: (id: string) => s.makeUnsafe(id),
+    ascending: (id?: string) => s.makeUnsafe(Identifier.ascending("actor", id)),
+    zod: Identifier.schema("actor").pipe(z.custom<Schema.Schema.Type<typeof s>>()),
+  })),
+)
+export type ActorID = Schema.Schema.Type<typeof ActorID>
+
+export const SessionIDParam = z.object({
+  sessionID: SessionID.zod,
+})

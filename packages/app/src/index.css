@@ -282,10 +282,6 @@
     border: 0;
   }
 
-  [data-component="prompt-drawing"] .excalidraw .App-toolbar-container {
-    align-items: center;
-  }
-
   /* Desktop: hand is in the shapes row — pin it to the toolbar end. */
   [data-component="prompt-drawing"] .excalidraw .App-toolbar .Stack.Stack_horizontal label:has([data-testid="toolbar-hand"]) {
     order: 99;

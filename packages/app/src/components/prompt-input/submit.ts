@@ -405,7 +405,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     const clearInput = () => {
       prompt.reset()
-      input.setMode("normal")
+      input.setMode(mode === "doc" ? "doc" : "normal")
       input.setPopover(null)
     }
 

@@ -16,6 +16,8 @@ import {
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
@@ -113,6 +115,8 @@ const canvasMode = (mode: PromptMode) => mode === "draw" || mode === "doc"
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
+  const globalSDK = useGlobalSDK()
+  const server = useServer()
   const sync = useSync()
   const local = useLocal()
   const files = useFile()
@@ -314,13 +318,54 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const drawing = createPromptDrawing({
     t: (key) => language.t(key as Parameters<typeof language.t>[0]),
   })
-  const doc = createPromptDoc()
+  const doc = createPromptDoc({
+    sessionID: () => params.id,
+    url: () => sdk.url,
+    directory: () => sdk.directory,
+    fetch: (input, init) => {
+      const http = server.current?.http
+      if (!http) return globalThis.fetch(input, init)
+      const headers = new Headers(init?.headers)
+      if (http.password) {
+        headers.set("Authorization", `Basic ${btoa(`${http.username ?? "opencode"}:${http.password}`)}`)
+      }
+      return globalThis.fetch(input, { ...init, headers })
+    },
+  })
 
   createEffect((prev) => {
     const id = params.id
     if (prev === id) return id
     doc.reset()
     return id
+  })
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    void doc.refresh(id)
+  })
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    void globalSDK.event.start()
+    const unsub = globalSDK.event.on(sdk.directory, (event) => {
+      const item = event as { type: string; properties: { sessionID: string; docID: string; clientID?: string } }
+      if (item.type !== "doc.prompt.rotated") return
+      const props = item.properties
+      if (props.sessionID !== id) return
+      if (props.clientID === doc.clientID) return
+      void doc.pivot(props.sessionID, props.docID, { init: false }).then(() => {
+        if (store.mode === "doc") return
+        showToast({
+          title: language.t("prompt.toast.docRotated.title"),
+          description: language.t("prompt.toast.docRotated.description", { docID: props.docID }),
+        })
+        setStore("mode", "doc")
+      })
+    })
+    onCleanup(unsub)
   })
 
   const contextItems = createMemo(() => {
@@ -1177,9 +1222,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         })
         return
       }
+      const sessionID = params.id
       const next = promptFromDoc(text, prompt.current())
-      doc.reset()
       await handleSubmit(event, next)
+      if (!sessionID) return
+      try {
+        await doc.advance()
+      } catch {
+        showToast({
+          title: language.t("prompt.toast.docAdvanceFailed.title"),
+          description: language.t("prompt.toast.docAdvanceFailed.description"),
+        })
+      }
       return
     }
 
@@ -1366,8 +1420,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     <div
       classList={{
         "relative flex w-full flex-col gap-0": true,
-        "h-[448px] max-h-[512px]": store.mode === "doc",
-        "size-full max-h-[512px] min-h-0": store.mode !== "doc",
+        "h-[512px] max-h-[min(512px,70vh)]": store.mode === "doc",
+        "h-[448px] max-h-[512px]": store.mode === "draw",
+        "size-full max-h-[512px] min-h-0": store.mode !== "doc" && store.mode !== "draw",
       }}
     >
       <PromptPopover
@@ -1445,9 +1500,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             when={store.mode === "draw"}
             keyed
             fallback={
-              <Show
-                when={store.mode === "doc"}
-                keyed
+              <Show when={store.mode === "doc"}
                 fallback={
               <div
                 class="relative max-h-[240px] overflow-y-auto no-scrollbar"

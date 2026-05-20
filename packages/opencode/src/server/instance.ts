@@ -27,6 +27,8 @@ import { ExperimentalRoutes } from "./routes/experimental"
 import { ProjectSummaryRoutes } from "./routes/project-summary"
 import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
+import { DocRoutes } from "../doc/routes"
+import { SessionDocRoutes } from "../doc/session-routes"
 import { errorHandler } from "./middleware"
 import { DEFAULT_CSP, csp } from "./csp"
 
@@ -46,7 +48,8 @@ export const InstanceRoutes = (app?: Hono) =>
     .route("/env", EnvRoutes())
     .route("/experimental", ExperimentalRoutes())
     .route("/project-summary", ProjectSummaryRoutes())
-    .route("/session", SessionRoutes())
+    .route("/session", SessionRoutes().route("/", SessionDocRoutes()))
+    .route("/doc", DocRoutes())
     .route("/permission", PermissionRoutes())
     .route("/question", QuestionRoutes())
     .route("/provider", ProviderRoutes())

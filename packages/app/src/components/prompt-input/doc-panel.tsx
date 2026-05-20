@@ -1,4 +1,4 @@
-import { Component, createEffect, onCleanup, onMount } from "solid-js"
+import { Component, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import type { createPromptDoc } from "./doc"
 
 type PanelProps = {
@@ -12,14 +12,14 @@ function theme() {
 }
 
 export const PromptDocPanel: Component<PanelProps> = (props) => {
-  let root: HTMLDivElement | undefined
+  const [root, setRoot] = createSignal<HTMLDivElement>()
 
   onMount(() => {
-    if (!root) return
-    void props.doc.mount({ el: root, theme })
+    const el = root()
+    if (!el) return
+    void props.doc.mount({ el, theme })
+    onCleanup(() => props.doc.detach())
   })
-
-  onCleanup(() => props.doc.detach())
 
   createEffect(() => {
     theme()
@@ -30,7 +30,7 @@ export const PromptDocPanel: Component<PanelProps> = (props) => {
     <div
       data-component="prompt-doc"
       class="h-full w-full overflow-hidden bg-transparent"
-      ref={root}
+      ref={setRoot}
       onPointerDown={(e) => {
         e.stopPropagation()
         props.doc.guard()

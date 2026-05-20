@@ -150,7 +150,9 @@
     "web-tree-sitter": "0.25.10",
     "which": "6.0.1",
     "xdg-basedir": "5.1.0",
+    "y-protocols": "1.0.7",
     "yargs": "18.0.0",
+    "yjs": "13.6.30",
     "zod": "catalog:",
     "zod-to-json-schema": "3.24.5"
   },
