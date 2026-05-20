@@ -589,7 +589,7 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       ownerGithubLogin: sess.githubLogin,
       ownerAvatarUrl: sess.githubAvatarUrl,
       repos: body.repos ?? [],
-      visibilityMode: (body.visibilityMode as any) ?? "submitted",
+      visibilityMode: (body.visibilityMode as any) ?? "typing",
       queueMode: (body.queueMode as any) ?? "fifo",
     })
     // Register queue executor — handles dispatch + "submitted" status tracking
@@ -739,11 +739,14 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
   // Body: { typing: boolean }
   // Broadcasts `collab:typing_start` / `collab:typing_stop` so other clients
   // can render a "[name] is typing…" hint next to the participant.
-  // Respects visibilityMode — silently no-ops when the session is set to
-  // "submitted" (since the whole point of that mode is to NOT leak typing).
+  //
+  // We deliberately broadcast regardless of visibilityMode now — the dots
+  // are non-revealing (no content leaks) and the previous mode-gated check
+  // silently dropped events for sessions created when the default was
+  // "submitted" (or the now-removed "live"), which made the typing
+  // indicator look broken even though everything else was wired up.
   if (req.method === "POST" && parts[3] === "typing") {
     if (caller.role === "viewer") return json({ ok: true })
-    if (collabSession.visibilityMode !== "typing") return json({ ok: true })
     const body = (await req.json().catch(() => ({}))) as { typing?: boolean }
     broadcastSse(sessionId, {
       type: body.typing ? "collab:typing_start" : "collab:typing_stop",

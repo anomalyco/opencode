@@ -27,7 +27,7 @@ export function createCollabSession(input: CreateCollabSessionInput): CollabSess
       owner_github_id: input.ownerGithubId,
       owner_github_login: input.ownerGithubLogin,
       name: input.name,
-      visibility_mode: input.visibilityMode ?? "submitted",
+      visibility_mode: input.visibilityMode ?? "typing",
       queue_mode: input.queueMode ?? "fifo",
       session_id: null,
       created_at: now,

@@ -366,13 +366,22 @@ function CollabSessionInner(props: { me: Me }) {
                         actively typing in their prompt editor. */}
                     <Show when={typing()}>
                       <span
-                        class="flex items-center gap-0.5"
+                        class="flex items-center gap-1"
                         title={`${p.githubLogin} is typing…`}
                         aria-label={`${p.githubLogin} is typing`}
                       >
-                        <span class="w-1 h-1 rounded-full bg-blue-400 animate-pulse [animation-delay:0ms]" />
-                        <span class="w-1 h-1 rounded-full bg-blue-400 animate-pulse [animation-delay:150ms]" />
-                        <span class="w-1 h-1 rounded-full bg-blue-400 animate-pulse [animation-delay:300ms]" />
+                        <span
+                          class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"
+                          style="animation-delay:0ms"
+                        />
+                        <span
+                          class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"
+                          style="animation-delay:200ms"
+                        />
+                        <span
+                          class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"
+                          style="animation-delay:400ms"
+                        />
                       </span>
                     </Show>
                     <span class={`text-[10px] ${roleColor(p.role)}`}>{roleLabel(p.role)}</span>
