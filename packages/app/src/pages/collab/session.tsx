@@ -15,6 +15,7 @@
 import {
   createSignal,
   onMount,
+  onCleanup,
   For,
   Show,
 } from "solid-js"
@@ -69,6 +70,7 @@ function Avatar(props: { participant: Participant; size?: "sm" | "md" }) {
 function PromptInput(props: {
   collabSessionId: string
   role: CollabRole
+  queueMode: "fifo" | "vote"
   onSent: () => void
 }) {
   const [text, setText] = createSignal("")
@@ -77,6 +79,8 @@ function PromptInput(props: {
 
   const isDriver = () => props.role === "driver"
   const isContributor = () => props.role === "contributor"
+  /** Driver in FIFO mode → prompt goes straight to the LLM (no approval). */
+  const isDirectSend = () => isDriver() && props.queueMode === "fifo"
 
   async function submit(e: Event) {
     e.preventDefault()
@@ -120,7 +124,13 @@ function PromptInput(props: {
               submit(e)
             }
           }}
-          placeholder={isDriver() ? "Send a prompt… (⌘↵)" : "Suggest a prompt… (⌘↵)"}
+          placeholder={
+            isDirectSend()
+              ? "Send a prompt… (⌘↵)"
+              : isDriver()
+                ? "Add a prompt to the pool… (⌘↵)"
+                : "Suggest a prompt… (⌘↵)"
+          }
           rows={3}
           class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500 resize-none"
         />
@@ -136,7 +146,13 @@ function PromptInput(props: {
               : "bg-zinc-700 hover:bg-zinc-600 text-zinc-100"
           }`}
         >
-          {busy() ? "Sending…" : isDriver() ? "Add to Queue" : "Suggest"}
+          {busy()
+            ? "Sending…"
+            : isDirectSend()
+              ? "Send"
+              : isDriver()
+                ? "Add to Pool"
+                : "Suggest"}
         </button>
       </form>
     </Show>
@@ -148,11 +164,26 @@ function PromptInput(props: {
 function QueueItem(props: {
   suggestion: PromptSuggestion
   myRole: CollabRole
-  onApprove?: (id: string) => void
+  onApprove?: (id: string) => Promise<void>
   onReject?: (id: string) => void
   onVote?: (id: string) => void
 }) {
   const s = props.suggestion
+  const [approving, setApproving] = createSignal(false)
+  const [approveError, setApproveError] = createSignal<string | null>(null)
+
+  async function handleApprove() {
+    setApproving(true)
+    setApproveError(null)
+    try {
+      await props.onApprove?.(s.id)
+    } catch (err) {
+      setApproveError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setApproving(false)
+    }
+  }
+
   return (
     <div class="px-3 py-2 border-b border-zinc-800/60 last:border-0">
       <div class="flex items-start gap-2">
@@ -178,19 +209,25 @@ function QueueItem(props: {
         </div>
       </div>
       <Show when={s.status === "pending" && props.myRole === "driver"}>
-        <div class="flex gap-1.5 mt-2">
-          <button
-            onClick={() => props.onApprove?.(s.id)}
-            class="flex-1 py-1 rounded text-xs bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors"
-          >
-            Approve
-          </button>
-          <button
-            onClick={() => props.onReject?.(s.id)}
-            class="flex-1 py-1 rounded text-xs bg-red-600/20 text-red-400 hover:bg-red-600/30 transition-colors"
-          >
-            Reject
-          </button>
+        <div class="flex flex-col gap-1 mt-2">
+          <div class="flex gap-1.5">
+            <button
+              onClick={handleApprove}
+              disabled={approving()}
+              class="flex-1 py-1 rounded text-xs bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 disabled:opacity-50 transition-colors"
+            >
+              {approving() ? "Approving…" : "Approve"}
+            </button>
+            <button
+              onClick={() => props.onReject?.(s.id)}
+              class="flex-1 py-1 rounded text-xs bg-red-600/20 text-red-400 hover:bg-red-600/30 transition-colors"
+            >
+              Reject
+            </button>
+          </div>
+          <Show when={approveError()}>
+            <p class="text-[10px] text-red-400">{approveError()}</p>
+          </Show>
         </div>
       </Show>
       <Show when={s.status === "pending" && props.myRole !== "driver" && props.myRole !== "viewer"}>
@@ -211,6 +248,7 @@ function CollabSessionInner(props: { me: Me }) {
   const collab = useCollab()
   const [showInvite, setShowInvite] = createSignal(false)
   const [queueOpen, setQueueOpen] = createSignal(true)
+  const [submitError, setSubmitError] = createSignal<string | null>(null)
 
   const myParticipant = () =>
     collab.session()?.participants.find((p) => p.githubId === props.me.githubId)
@@ -222,6 +260,47 @@ function CollabSessionInner(props: { me: Me }) {
   function handleSent() {
     // Nothing to do — SSE will update queue
   }
+
+  /**
+   * Listen for prompt submissions from inside the opencode iframe.  The
+   * iframe's PromptInput posts `opencode:collab-prompt-submit` when in
+   * embed mode, instead of dispatching to opencode directly.  We forward
+   * the content through the collab API so it gets queue / approval /
+   * direct-dispatch routing based on (queueMode, role).
+   */
+  onMount(() => {
+    function onIframeMessage(event: MessageEvent) {
+      // Same-origin only — the iframe runs at the same origin as this page.
+      if (event.origin !== window.location.origin) return
+      const data = event.data
+      if (!data || typeof data !== "object") return
+
+      // Prompt submission: route through the collab queue.
+      if (data.type === "opencode:collab-prompt-submit") {
+        const content = typeof data.content === "string" ? data.content.trim() : ""
+        if (!content) return
+        if (myRole() === "viewer") {
+          setSubmitError("Viewers cannot send prompts.")
+          return
+        }
+        setSubmitError(null)
+        collab.submitPrompt(content).catch((err) => {
+          setSubmitError(err instanceof Error ? err.message : String(err))
+        })
+        return
+      }
+
+      // Typing indicator: forward to the server so other participants
+      // see a pulsing dot next to this user (when visibilityMode === "typing").
+      if (data.type === "opencode:collab-typing") {
+        if (myRole() === "viewer") return
+        void collab.setTyping(Boolean(data.typing))
+        return
+      }
+    }
+    window.addEventListener("message", onIframeMessage)
+    onCleanup(() => window.removeEventListener("message", onIframeMessage))
+  })
 
   return (
     <div class="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
@@ -277,24 +356,66 @@ function CollabSessionInner(props: { me: Me }) {
           </div>
           <div class="space-y-1.5">
             <For each={collab.participants()}>
-              {(p) => (
-                <div class="flex items-center gap-2">
-                  <Avatar participant={p} size="sm" />
-                  <span class="text-xs text-zinc-300 flex-1 truncate">{p.githubLogin}</span>
-                  <span class={`text-[10px] ${roleColor(p.role)}`}>{roleLabel(p.role)}</span>
-                </div>
-              )}
+              {(p) => {
+                const typing = () => collab.typingUsers().has(p.githubLogin)
+                return (
+                  <div class="flex items-center gap-2">
+                    <Avatar participant={p} size="sm" />
+                    <span class="text-xs text-zinc-300 flex-1 truncate">{p.githubLogin}</span>
+                    {/* Pulsing three-dot indicator while the participant is
+                        actively typing in their prompt editor. */}
+                    <Show when={typing()}>
+                      <span
+                        class="flex items-center gap-0.5"
+                        title={`${p.githubLogin} is typing…`}
+                        aria-label={`${p.githubLogin} is typing`}
+                      >
+                        <span class="w-1 h-1 rounded-full bg-blue-400 animate-pulse [animation-delay:0ms]" />
+                        <span class="w-1 h-1 rounded-full bg-blue-400 animate-pulse [animation-delay:150ms]" />
+                        <span class="w-1 h-1 rounded-full bg-blue-400 animate-pulse [animation-delay:300ms]" />
+                      </span>
+                    </Show>
+                    <span class={`text-[10px] ${roleColor(p.role)}`}>{roleLabel(p.role)}</span>
+                  </div>
+                )
+              }}
             </For>
           </div>
         </div>
 
-        {/* Prompt input */}
+        {/* Prompt input — the actual textarea lives in the opencode iframe on
+            the right (so users get all the opencode shortcuts: ⌘P, /, @,
+            attachments, drag/drop, history, etc).  Submissions there are
+            intercepted and routed through the collab queue via postMessage. */}
         <div class="px-3 py-3 border-b border-zinc-800/60 flex-shrink-0">
-          <PromptInput
-            collabSessionId={collab.session()?.id ?? ""}
-            role={myRole()}
-            onSent={handleSent}
-          />
+          <Show
+            when={myRole() !== "viewer"}
+            fallback={
+              <div class="text-[11px] text-zinc-600 text-center py-1.5">
+                Viewer — read only
+              </div>
+            }
+          >
+            <div class="text-[11px] text-zinc-500 leading-relaxed">
+              <span class="text-zinc-300">Type prompts in the editor on the right →</span>
+              <br />
+              <span class="text-zinc-600">
+                {myRole() === "driver" && collab.session()?.queueMode === "fifo"
+                  ? "Sent prompts go straight to the LLM."
+                  : myRole() === "driver"
+                    ? "Your prompts join the vote pool — resolve it to execute."
+                    : "Your prompts go to the queue for Driver approval."}
+              </span>
+              <div class="text-[10px] text-zinc-700 mt-1.5">
+                Press <kbd class="px-1 py-0.5 rounded bg-zinc-800 border border-zinc-700 font-mono">⌘P</kbd> in the editor for the command palette.
+              </div>
+            </div>
+          </Show>
+          <Show when={submitError()}>
+            <div class="mt-2 text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded px-2 py-1">
+              {submitError()}
+            </div>
+          </Show>
         </div>
 
         {/* Queue */}
@@ -330,8 +451,8 @@ function CollabSessionInner(props: { me: Me }) {
                     suggestion={s}
                     myRole={myRole()}
                     onApprove={(id) => collab.approvesuggestion(id)}
-                    onReject={(id) => collab.rejectSuggestion(id)}
-                    onVote={(id) => collab.castVote(id)}
+                    onReject={(id) => { collab.rejectSuggestion(id).catch(console.error) }}
+                    onVote={(id) => { collab.castVote(id).catch(console.error) }}
                   />
                 )}
               </For>
@@ -393,7 +514,14 @@ function CollabSessionInner(props: { me: Me }) {
           {(_) => {
             const dir = collab.nativeSessionDirectory()!
             const sid = collab.session()!.sessionId!
-            const sessionUrl = `/${base64Encode(dir)}/session/${sid}`
+            const cid = collab.session()!.id
+            // ?embed=collab tells the inner opencode app to hide its prompt
+            // input (we have our own on the left) and to swap the project
+            // sidebar for a collab-sessions list.  cs=<id> lets it highlight
+            // the active session.
+            const sessionUrl =
+              `/${base64Encode(dir)}/session/${sid}` +
+              `?embed=collab&cs=${encodeURIComponent(cid)}`
             return (
               <iframe
                 src={sessionUrl}

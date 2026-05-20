@@ -87,6 +87,8 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { CollabEmbedSidebar } from "@/components/collab/CollabEmbedSidebar"
+import { isCollabEmbed } from "@/utils/collab-embed"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -2341,32 +2343,39 @@ export default function Layout(props: ParentProps) {
 
   const projects = () => layout.projects.list()
   const projectOverlay = () => <ProjectDragOverlay projects={projects} activeProject={() => store.activeProject} />
-  const sidebarContent = (mobile?: boolean) => (
-    <SidebarContent
-      mobile={mobile}
-      opened={() => layout.sidebar.opened()}
-      aimMove={aim.move}
-      projects={projects}
-      renderProject={(project) => (
-        <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile={mobile} />
-      )}
-      handleDragStart={handleDragStart}
-      handleDragEnd={handleDragEnd}
-      handleDragOver={handleDragOver}
-      openProjectLabel={language.t("command.project.open")}
-      openProjectKeybind={() => command.keybind("project.open")}
-      onOpenProject={chooseProject}
-      renderProjectOverlay={projectOverlay}
-      settingsLabel={() => language.t("sidebar.settings")}
-      settingsKeybind={() => command.keybind("settings.open")}
-      onOpenSettings={openSettings}
-      helpLabel={() => language.t("sidebar.help")}
-      onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-      renderPanel={() =>
-        mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
-      }
-    />
-  )
+  const sidebarContent = (mobile?: boolean) => {
+    // When the opencode UI is rendered inside the collab iframe
+    // (pages/collab/session.tsx → ?embed=collab), swap the project rail/panel
+    // for a list of collab sessions.  This is what the user sees when they
+    // click the hamburger inside the iframe.
+    if (isCollabEmbed()) return <CollabEmbedSidebar />
+    return (
+      <SidebarContent
+        mobile={mobile}
+        opened={() => layout.sidebar.opened()}
+        aimMove={aim.move}
+        projects={projects}
+        renderProject={(project) => (
+          <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile={mobile} />
+        )}
+        handleDragStart={handleDragStart}
+        handleDragEnd={handleDragEnd}
+        handleDragOver={handleDragOver}
+        openProjectLabel={language.t("command.project.open")}
+        openProjectKeybind={() => command.keybind("project.open")}
+        onOpenProject={chooseProject}
+        renderProjectOverlay={projectOverlay}
+        settingsLabel={() => language.t("sidebar.settings")}
+        settingsKeybind={() => command.keybind("settings.open")}
+        onOpenSettings={openSettings}
+        helpLabel={() => language.t("sidebar.help")}
+        onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+        renderPanel={() =>
+          mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
+        }
+      />
+    )
+  }
 
   return (
     <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">

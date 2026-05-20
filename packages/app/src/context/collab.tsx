@@ -20,6 +20,8 @@ interface CollabContextValue {
   isConnected: () => boolean
   /** Local workspace directory on the server — available after first prompt is approved */
   nativeSessionDirectory: () => string | null
+  /** GitHub logins of participants currently typing in their prompt editor. */
+  typingUsers: () => Set<string>
 
   // Actions
   submitPrompt: (content: string) => Promise<void>
@@ -31,6 +33,8 @@ interface CollabContextValue {
   changeRole: (githubId: number, role: string) => Promise<void>
   createInvite: (role: string) => Promise<{ url: string; token: string }>
   deleteSession: () => Promise<void>
+  /** Broadcast that the local user has started/stopped typing.  Debounced by caller. */
+  setTyping: (typing: boolean) => Promise<void>
 }
 
 const CollabContext = createContext<CollabContextValue>()
@@ -50,6 +54,16 @@ export function CollabProvider(props: CollabProviderProps) {
   const [queue, setQueue] = createSignal<PromptSuggestion[]>([])
   const [isConnected, setIsConnected] = createSignal(false)
   const [nativeSessionDirectory, setNativeSessionDirectory] = createSignal<string | null>(null)
+  const [typingUsers, setTypingUsers] = createSignal<Set<string>>(new Set())
+
+  function markTyping(githubLogin: string, typing: boolean) {
+    setTypingUsers((prev) => {
+      const next = new Set(prev)
+      if (typing) next.add(githubLogin)
+      else next.delete(githubLogin)
+      return next
+    })
+  }
 
   async function fetchSession() {
     try {
@@ -115,6 +129,8 @@ export function CollabProvider(props: CollabProviderProps) {
         break
 
       case "collab:participant_left":
+        // Offline implies "no longer typing".
+        markTyping(event.githubLogin, false)
         setSession((prev) => {
           if (!prev) return prev
           return {
@@ -160,15 +176,30 @@ export function CollabProvider(props: CollabProviderProps) {
         setSession((prev) => (prev ? { ...prev, sessionId: event.sessionId } : prev))
         setNativeSessionDirectory(event.directory)
         break
+
+      case "collab:typing_start":
+        markTyping(event.githubLogin, true)
+        break
+
+      case "collab:typing_stop":
+        markTyping(event.githubLogin, false)
+        break
     }
   }
 
-  const api = (path: string, method: string, body?: unknown) =>
-    fetch(`/collab/session/${props.collabSessionId}${path}`, {
+  async function api(path: string, method: string, body?: unknown): Promise<Response> {
+    const res = await fetch(`/collab/session/${props.collabSessionId}${path}`, {
       method,
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
     })
+    if (!res.ok) {
+      const text = await res.text().catch(() => `HTTP ${res.status}`)
+      console.error(`[collab] API ${method} ${path} failed:`, res.status, text)
+      throw new Error(text)
+    }
+    return res
+  }
 
   const value: CollabContextValue = {
     session,
@@ -176,6 +207,7 @@ export function CollabProvider(props: CollabProviderProps) {
     queue,
     isConnected,
     nativeSessionDirectory,
+    typingUsers,
 
     async submitPrompt(content) {
       await api("/prompt", "POST", { content })
@@ -204,6 +236,19 @@ export function CollabProvider(props: CollabProviderProps) {
     },
     async deleteSession() {
       await api("", "DELETE")
+    },
+    async setTyping(typing) {
+      // Fire-and-forget: typing is a UX nicety, not worth retrying.
+      // No-op silently on 200/4xx/5xx.
+      try {
+        await fetch(`/collab/session/${props.collabSessionId}/typing`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ typing }),
+        })
+      } catch {
+        // ignore
+      }
     },
   }
 

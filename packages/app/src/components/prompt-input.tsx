@@ -27,6 +27,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
+import { isCollabEmbed } from "@/utils/collab-embed"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
@@ -870,8 +871,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         prompt.set(DEFAULT_PROMPT, 0)
       }
       queueScroll()
+      // Editor went empty → no longer typing.
+      stopEmbeddedTyping()
       return
     }
+
+    // Notify the parent collab page that the local user is composing — used
+    // to show a pulsing "[name] is typing…" dot next to the participant.
+    notifyEmbeddedTyping()
 
     const shellMode = store.mode === "shell"
 
@@ -1062,7 +1069,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return permission.isAutoAccepting(id, sdk.directory)
   })
 
-  const { abort, handleSubmit } = createPromptSubmit({
+  const { abort, handleSubmit: nativeHandleSubmit } = createPromptSubmit({
     info,
     imageAttachments,
     commentCount,
@@ -1085,6 +1092,94 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
   })
+
+  /**
+   * Collab embed: debounced "user is typing" notifier.  We hook into the
+   * editor's onInput stream (see notifyEmbeddedTyping calls).  Sends a
+   * `typing:true` to the parent on the first keystroke, then a `typing:false`
+   * 2 s after the last one.  The parent forwards to the server which
+   * broadcasts to other participants as SSE events.
+   */
+  let typingActive = false
+  let typingStopTimer: ReturnType<typeof setTimeout> | undefined
+  function notifyEmbeddedTyping() {
+    if (!isCollabEmbed()) return
+    if (!typingActive) {
+      typingActive = true
+      try {
+        window.parent.postMessage(
+          { type: "opencode:collab-typing", typing: true },
+          window.location.origin,
+        )
+      } catch { /* ignore */ }
+    }
+    if (typingStopTimer) clearTimeout(typingStopTimer)
+    typingStopTimer = setTimeout(() => {
+      typingActive = false
+      try {
+        window.parent.postMessage(
+          { type: "opencode:collab-typing", typing: false },
+          window.location.origin,
+        )
+      } catch { /* ignore */ }
+    }, 2000)
+  }
+  function stopEmbeddedTyping() {
+    if (!isCollabEmbed()) return
+    if (typingStopTimer) clearTimeout(typingStopTimer)
+    if (typingActive) {
+      typingActive = false
+      try {
+        window.parent.postMessage(
+          { type: "opencode:collab-typing", typing: false },
+          window.location.origin,
+        )
+      } catch { /* ignore */ }
+    }
+  }
+
+  /**
+   * Collab embed: redirect the prompt to the parent collab page via
+   * postMessage so that the submission goes through the collab queue /
+   * approval / vote flow.  Bypasses the native opencode submit pipeline
+   * (which would dispatch straight to the LLM and skip approval).
+   *
+   * We intentionally hook at the same level as nativeHandleSubmit so both
+   * routes — the form's onSubmit and Cmd+Enter via handleKeyDown — funnel
+   * through here.  When the LLM is already running, we delegate to the
+   * native handler so the abort/stop button still works.
+   */
+  const handleSubmit = (event: Event) => {
+    if (!isCollabEmbed()) return nativeHandleSubmit(event)
+    // LLM is running → this click is "stop", not "send".  Let native abort.
+    if (working()) return nativeHandleSubmit(event)
+
+    event.preventDefault?.()
+
+    // Extract plain text from the contenteditable.  Pills / mentions are
+    // rendered as inline elements with their own text, so innerText preserves
+    // them as plain text (which is what the collab API expects).
+    const editor = editorRef
+    if (!editor) return
+    const text = (editor.innerText ?? editor.textContent ?? "").trim()
+    if (!text) return
+
+    try {
+      window.parent.postMessage(
+        { type: "opencode:collab-prompt-submit", content: text },
+        window.location.origin,
+      )
+    } catch {
+      // postMessage shouldn't ever throw on same-origin; ignore if it does.
+    }
+
+    // Clear the editor + history bookkeeping so the user can type the next.
+    editor.innerHTML = ""
+    addToHistory(text)
+    resetHistoryNavigation(true)
+    // Send a final "stopped typing" so the indicator clears immediately.
+    stopEmbeddedTyping()
+  }
 
   const handleKeyDown = (event: KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "u") {
@@ -1265,6 +1360,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     () => prompt.ready().promise,
     (p) => p,
   )
+
+  // Collab embed mode is detected per-submit inside `handleSubmit` above —
+  // the editor stays fully visible so users get every opencode shortcut
+  // (slash, @, ctrl+p, attachments, history, etc).  Only the SUBMIT path
+  // differs: it postMessages the prompt up to the parent collab page so the
+  // suggestion goes through the queue / approval flow instead of dispatching
+  // straight to the opencode session.
 
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-0">

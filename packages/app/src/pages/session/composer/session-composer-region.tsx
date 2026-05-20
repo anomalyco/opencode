@@ -254,6 +254,10 @@ export function SessionComposerRegion(props: {
               <Show
                 when={child()}
                 fallback={
+                  // Even when embedded, we still render PromptInput so the
+                  // footer controls (model picker, agent/mode selectors) stay
+                  // available — PromptInput itself hides only the editor +
+                  // submit/attach buttons in embed mode.  See prompt-input.tsx.
                   <Show when={!props.state.blocked()}>
                     <PromptInput
                       ref={props.inputRef}

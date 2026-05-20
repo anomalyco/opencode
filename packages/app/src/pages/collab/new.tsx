@@ -23,7 +23,7 @@ export default function NewCollabSession() {
   const navigate = useNavigate()
   const [name, setName] = createSignal("")
   const [selectedRepos, setSelectedRepos] = createSignal<string[]>([])
-  const [visibilityMode, setVisibilityMode] = createSignal("submitted")
+  const [visibilityMode, setVisibilityMode] = createSignal("typing")
   const [queueMode, setQueueMode] = createSignal("fifo")
   const [submitting, setSubmitting] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
@@ -48,12 +48,47 @@ export default function NewCollabSession() {
   })
 
   // Load existing sessions for the "Rejoin Session" sidebar
-  const [sessions] = createResource(authed, async (ready) => {
+  const [sessions, { refetch: refetchSessions }] = createResource(authed, async (ready) => {
     if (!ready) return []
     const res = await fetch("/collab/session")
     if (!res.ok) return []
     return (await res.json()) as CollabSession[]
   })
+
+  // Identify the current user so we can hide the delete control from
+  // non-Drivers (the DELETE endpoint enforces this server-side too).
+  const [me] = createResource(authed, async (ready) => {
+    if (!ready) return null
+    const res = await fetch("/collab/me")
+    if (!res.ok) return null
+    return (await res.json()) as { githubId: number; githubLogin: string }
+  })
+
+  /** Returns true if the current user has the driver role in `session`. */
+  function canDelete(session: CollabSession): boolean {
+    const user = me()
+    if (!user) return false
+    return session.participants?.some(
+      (p) => p.githubId === user.githubId && p.role === "driver",
+    ) ?? false
+  }
+
+  /** Soft-delete a collab session.  Server also wipes the workspace clone. */
+  async function deleteSession(e: MouseEvent, sessionId: string, sessionName: string) {
+    // Stop the row's onClick (which navigates into the session) from firing.
+    e.stopPropagation()
+    e.preventDefault()
+    if (!confirm(`Delete "${sessionName}"?\n\nThis removes the cloned workspace and cannot be undone.`)) {
+      return
+    }
+    const res = await fetch(`/collab/session/${sessionId}`, { method: "DELETE" })
+    if (!res.ok) {
+      const body = await res.text().catch(() => "")
+      alert(`Failed to delete session (HTTP ${res.status})${body ? ": " + body : ""}`)
+      return
+    }
+    refetchSessions()
+  }
 
   async function handleSubmit(e: Event) {
     e.preventDefault()
@@ -143,17 +178,42 @@ export default function NewCollabSession() {
           <Show when={authed() && !sessions.loading && (sessions()?.length ?? 0) > 0}>
             <For each={sessions()}>
               {(session) => (
-                <button
+                // Outer is a div (not a button) because we nest a real <button>
+                // for the delete X — nested buttons are invalid HTML.
+                <div
                   onClick={() => navigate(`/collab/${session.id}`)}
-                  class="w-full text-left px-4 py-3 hover:bg-zinc-800/60 transition-colors group border-b border-zinc-800/40 last:border-0"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      navigate(`/collab/${session.id}`)
+                    }
+                  }}
+                  class="relative w-full text-left px-4 py-3 hover:bg-zinc-800/60 transition-colors group border-b border-zinc-800/40 last:border-0 cursor-pointer"
                 >
-                  {/* Session name */}
-                  <div class="flex items-start justify-between gap-2 mb-1.5">
+                  {/* Delete X — only visible to Drivers, fades in on row hover */}
+                  <Show when={canDelete(session)}>
+                    <button
+                      type="button"
+                      onClick={(e) => deleteSession(e, session.id, session.name)}
+                      title="Delete session"
+                      aria-label={`Delete ${session.name}`}
+                      class="absolute top-2 right-2 p-1 rounded text-zinc-600 hover:text-red-400 hover:bg-zinc-800/80 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </Show>
+
+                  {/* Session name + open arrow.  pr-6 reserves space for the X. */}
+                  <div class="flex items-start justify-between gap-2 mb-1.5 pr-6">
                     <span class="text-sm font-medium text-zinc-200 group-hover:text-white transition-colors leading-snug">
                       {session.name}
                     </span>
                     <svg
-                      class="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-400 flex-shrink-0 mt-0.5 transition-colors"
+                      class="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-400 flex-shrink-0 mt-0.5 transition-colors group-hover:opacity-0"
                       fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
                     >
                       <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
@@ -206,7 +266,7 @@ export default function NewCollabSession() {
                       {session.queueMode === "vote" ? "Vote" : "FIFO"}
                     </span>
                   </div>
-                </button>
+                </div>
               )}
             </For>
           </Show>
@@ -292,9 +352,8 @@ export default function NewCollabSession() {
                 </label>
                 <div class="space-y-2">
                   <For each={[
+                    { value: "typing", label: "Typing indicator", desc: 'Shows a pulsing dot next to participants who are composing' },
                     { value: "submitted", label: "Submitted only", desc: "Others see prompts once you send them" },
-                    { value: "typing", label: "Typing indicator", desc: 'Shows "Alex is typing…" while composing' },
-                    { value: "live", label: "Live preview", desc: "Others see your draft in real time" },
                   ]}>
                     {(opt) => (
                       <label class="flex items-start gap-3 p-3 rounded-lg bg-zinc-900 border border-zinc-800 cursor-pointer hover:border-zinc-600">
