@@ -1,5 +1,6 @@
 import { UserMessage } from "@opencode-ai/sdk/v2"
-import { ComponentProps, For, Match, Show, createSignal, onCleanup, splitProps, Switch } from "solid-js"
+import { HoverCard } from "@kobalte/core/hover-card"
+import { ComponentProps, For, Match, Show, createSignal, splitProps, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { useI18n } from "../context/i18n"
 
@@ -14,33 +15,9 @@ export function MessageNav(
 ) {
   const i18n = useI18n()
   const [local, others] = splitProps(props, ["messages", "current", "size", "onMessageSelect", "getLabel", "class"])
-  let closeTimer: number | undefined
-
-  const clearCloseTimer = () => {
-    if (!closeTimer) return
-    clearTimeout(closeTimer)
-    closeTimer = undefined
-  }
-
   const [hovercardOpen, setHovercardOpen] = createSignal(false)
 
-  onCleanup(clearCloseTimer)
-
-  const showHovercard = () => {
-    clearCloseTimer()
-    setHovercardOpen(true)
-  }
-
-  const hideHovercard = () => {
-    clearCloseTimer()
-    closeTimer = window.setTimeout(() => {
-      setHovercardOpen(false)
-      closeTimer = undefined
-    }, 120) as unknown as number
-  }
-
   const selectMessage = (message: UserMessage) => {
-    clearCloseTimer()
     setHovercardOpen(false)
     local.onMessageSelect(message)
   }
@@ -99,25 +76,25 @@ export function MessageNav(
   return (
     <Switch>
       <Match when={local.size === "compact"}>
-        <div
-          data-component="message-nav-hovercard"
-          class={local.class}
-          onPointerEnter={showHovercard}
-          onPointerLeave={hideHovercard}
-          onFocusIn={showHovercard}
-          onFocusOut={(event) => {
-            const next = event.relatedTarget
-            if (next instanceof Node && event.currentTarget.contains(next)) return
-            hideHovercard()
-          }}
+        <HoverCard
+          open={hovercardOpen()}
+          onOpenChange={setHovercardOpen}
+          openDelay={0}
+          closeDelay={120}
+          placement="right-start"
+          gutter={8}
+          overflowPadding={24}
+          fitViewport
         >
-          {content()}
-          <Show when={hovercardOpen()}>
-            <div class="message-nav-tooltip" data-slot="message-nav-tooltip-content">
+          <HoverCard.Trigger as="div" data-component="message-nav-hovercard" class={local.class}>
+            {content()}
+          </HoverCard.Trigger>
+          <HoverCard.Portal>
+            <HoverCard.Content data-slot="message-nav-tooltip-content">
               <MessageNav {...props} size="normal" class="" onMessageSelect={selectMessage} />
-            </div>
-          </Show>
-        </div>
+            </HoverCard.Content>
+          </HoverCard.Portal>
+        </HoverCard>
       </Match>
       <Match when={local.size === "normal"}>{content(local.class)}</Match>
     </Switch>

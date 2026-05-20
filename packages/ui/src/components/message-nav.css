@@ -1,8 +1,3 @@
-[data-component="message-nav-hovercard"] {
-  position: relative;
-  z-index: 1000;
-}
-
 [data-component="message-nav"] {
   flex-shrink: 0;
   display: flex;
@@ -12,7 +7,7 @@
   list-style: none;
 
   &[data-size="normal"] {
-    width: 240px;
+    width: 200px;
     gap: 4px;
   }
 
@@ -68,11 +63,11 @@
   align-items: center;
   align-self: stretch;
   width: 100%;
-  column-gap: 12px;
+  column-gap: 10px;
   cursor: default;
   border: none;
   background: none;
-  padding: 4px 12px;
+  padding: 4px 10px;
   border-radius: var(--radius-sm);
 }
 
@@ -107,14 +102,8 @@
   color: var(--text-base);
 }
 
-.message-nav-tooltip {
-  position: absolute;
-  top: 0;
-  left: calc(100% + 8px);
-  z-index: 1000;
-}
-
 [data-slot="message-nav-tooltip-content"] {
+  z-index: 1000;
   display: flex;
   padding: 4px 4px 6px 4px;
   justify-content: center;
