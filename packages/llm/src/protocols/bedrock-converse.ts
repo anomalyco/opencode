@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect"
-import { Route, type RouteModelInput } from "../route/client"
+import { Route, type RouteDefaultsInput, type RouteModelInput } from "../route/client"
+import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
 import { Protocol } from "../route/protocol"
 import {
@@ -33,13 +34,14 @@ export type BedrockConverseModelInput = RouteModelInput & {
    * header and bypasses SigV4 signing. Mutually exclusive with `credentials`.
    */
   readonly apiKey?: string
+  /** Override the computed `https://bedrock-runtime.<region>.amazonaws.com` URL. */
+  readonly baseURL?: string
   /**
    * AWS credentials for SigV4 signing. The route signs each request at
    * `toHttp` time using `aws4fetch`. Mutually exclusive with `apiKey`.
    */
   readonly credentials?: BedrockCredentials
-  readonly headers?: Record<string, string>
-}
+} & RouteDefaultsInput
 
 // =============================================================================
 // Request Body Schema
@@ -628,14 +630,18 @@ export const route = Route.make({
   framing,
 })
 
-export const nativeCredentials = BedrockAuth.nativeCredentials
+export const sigV4Auth = BedrockAuth.sigV4
 
 export const model = (input: BedrockConverseModelInput) => {
-  const { credentials, baseURL, ...rest } = input
+  const { id, apiKey, credentials, baseURL, ...rest } = input
   const region = credentials?.region ?? "us-east-1"
   return route
-    .with({ endpoint: { baseURL: baseURL ?? `https://bedrock-runtime.${region}.amazonaws.com` } })
-    .model({ ...rest, native: nativeCredentials(input.native, credentials) })
+    .with({
+      ...rest,
+      endpoint: { baseURL: baseURL ?? `https://bedrock-runtime.${region}.amazonaws.com` },
+      auth: apiKey === undefined ? BedrockAuth.sigV4(credentials) : Auth.bearer(apiKey),
+    })
+    .model({ id })
 }
 
 export * as BedrockConverse from "./bedrock-converse"

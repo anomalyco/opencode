@@ -3,12 +3,11 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { CacheHint, LLM } from "../../src"
 import { LLMClient } from "../../src/route"
-import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
+import * as Anthropic from "../../src/providers/anthropic"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
-const model = AnthropicMessages.model({
-  id: "claude-haiku-4-5-20251001",
+const model = Anthropic.model("claude-haiku-4-5-20251001", {
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
 })
 

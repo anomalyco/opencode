@@ -5,16 +5,14 @@ import * as OpenAIChat from "./openai-chat"
 
 const ADAPTER = "openai-compatible-chat"
 
-export type OpenAICompatibleChatModelInput = Omit<RouteRoutedModelInput, "baseURL"> & {
-  readonly baseURL: string
-}
+export type OpenAICompatibleChatModelInput = RouteRoutedModelInput
 
 /**
  * Route for non-OpenAI providers that expose an OpenAI Chat-compatible
  * `/chat/completions` endpoint. Reuses `OpenAIChat.protocol` end-to-end and
  * overrides only the route id so providers can be resolved per-family without
- * colliding with native OpenAI. The model carries the host on `baseURL`,
- * supplied by whichever profile/provider helper builds it.
+ * colliding with native OpenAI. Provider helpers configure the route endpoint
+ * before model selection.
  */
 export const route = Route.make({
   id: ADAPTER,
@@ -23,6 +21,6 @@ export const route = Route.make({
   framing: Framing.sse,
 })
 
-export const model = route.model<OpenAICompatibleChatModelInput>
+export const model = route.model
 
 export * as OpenAICompatibleChat from "./openai-compatible-chat"

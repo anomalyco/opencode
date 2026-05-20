@@ -1,21 +1,20 @@
 import { Auth } from "../route/auth"
 import { type AtLeastOne, type ProviderAuthOption } from "../route/auth-options"
-import type { Route as RouteDef } from "../route/client"
-import type { ModelInput } from "../llm"
+import type { Route as RouteDef, RouteDefaultsInput } from "../route/client"
 import { ProviderID, type ModelID } from "../schema"
 import * as OpenAIChat from "../protocols/openai-chat"
 import * as OpenAIResponses from "../protocols/openai-responses"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options"
 
 export const id = ProviderID.make("azure")
-const routeAuth = Auth.remove("authorization").andThen(Auth.apiKeyHeader("api-key"))
+const routeAuth = Auth.remove("authorization")
 
 // Azure needs the customer's resource URL; supply either `resourceName`
 // (helper builds the URL) or `baseURL` directly.
 type AzureURL = AtLeastOne<{ readonly resourceName: string; readonly baseURL: string }>
 
 export type ModelOptions = AzureURL &
-  Omit<ModelInput, "id" | "provider" | "route" | "apiKey" | "auth" | "baseURL"> &
+  RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
     readonly apiVersion?: string
     readonly queryParams?: Record<string, string>
@@ -91,9 +90,10 @@ export const configure = (input: Config) => {
   const modelDefaults = defaults(input)
 
   const responses = (modelID: string | ModelID) =>
-    configuredResponsesRoute.model(withOpenAIOptions(modelID, modelDefaults))
+    configuredResponsesRoute.with(withOpenAIOptions(modelID, modelDefaults)).model({ id: modelID })
 
-  const chat = (modelID: string | ModelID) => configuredChatRoute.model(withOpenAIOptions(modelID, modelDefaults))
+  const chat = (modelID: string | ModelID) =>
+    configuredChatRoute.with(withOpenAIOptions(modelID, modelDefaults)).model({ id: modelID })
 
   return {
     id,

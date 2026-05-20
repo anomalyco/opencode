@@ -1,29 +1,26 @@
 import { Redactor } from "@opencode-ai/http-recorder"
-import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
-import * as Gemini from "../../src/protocols/gemini"
-import * as OpenAIChat from "../../src/protocols/openai-chat"
-import * as OpenAIResponses from "../../src/protocols/openai-responses"
+import * as Anthropic from "../../src/providers/anthropic"
 import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare"
+import * as Google from "../../src/providers/google"
 import * as OpenAI from "../../src/providers/openai"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenRouter from "../../src/providers/openrouter"
 import * as XAI from "../../src/providers/xai"
 import { describeRecordedGoldenScenarios } from "../recorded-golden"
 
-const openAIChat = OpenAIChat.model({ id: "gpt-4o-mini", apiKey: process.env.OPENAI_API_KEY ?? "fixture" })
-const openAIResponses = OpenAIResponses.model({ id: "gpt-5.5", apiKey: process.env.OPENAI_API_KEY ?? "fixture" })
-const openAIResponsesWebSocket = OpenAI.configure({
+const openAI = OpenAI.configure({
   apiKey: process.env.OPENAI_API_KEY ?? "fixture",
-}).responsesWebSocket("gpt-4.1-mini")
-const anthropicHaiku = AnthropicMessages.model({
-  id: "claude-haiku-4-5-20251001",
+})
+const openAIChat = openAI.chat("gpt-4o-mini")
+const openAIResponses = openAI.responses("gpt-5.5")
+const openAIResponsesWebSocket = openAI.responsesWebSocket("gpt-4.1-mini")
+const anthropicHaiku = Anthropic.model("claude-haiku-4-5-20251001", {
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
 })
-const anthropicOpus = AnthropicMessages.model({
-  id: "claude-opus-4-7",
+const anthropicOpus = Anthropic.model("claude-opus-4-7", {
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
 })
-const gemini = Gemini.model({ id: "gemini-2.5-flash", apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
+const gemini = Google.model("gemini-2.5-flash", { apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
 const xaiBasic = XAI.model("grok-3-mini", { apiKey: process.env.XAI_API_KEY ?? "fixture" })
 const xaiFlagship = XAI.model("grok-4.3", { apiKey: process.env.XAI_API_KEY ?? "fixture" })
 const cloudflareAIGateway = CloudflareAIGateway.configure({

@@ -141,8 +141,7 @@ starts hiding the real provider-specific config.
    - model id
    - route value
    - provider id
-   - endpoint/auth/defaults from the route at selection time
-   - model/request defaults
+   - configured route value at selection time
 5. **LLM Request**
    - model
    - messages/tools
@@ -151,9 +150,9 @@ starts hiding the real provider-specific config.
      not provider endpoint/auth reconfiguration
 6. **Compile**
    - read route from model
-   - merge route defaults, model overrides, request overrides
+   - merge route defaults and request overrides
    - build final URL from route endpoint
-   - apply route auth from the configured route/model
+   - apply auth from the configured route
    - build body with protocol
    - execute with transport and parse with protocol
 
@@ -524,6 +523,11 @@ App boundary = explicit durable-config -> typed-provider call
       model with the route value attached, not a globally registered route id.
 - [x] Remove the standalone `Route.model(route, defaults, mapInput)` helper;
       configured route instances own model selection.
+- [x] Remove endpoint/auth escape hatches from route model selection; callers must
+      configure endpoint/auth through `route.with(...)` or provider facades before
+      calling `.model(...)`.
+- [x] Remove request-shaping defaults from `Model`; selected models now carry only
+      id, provider, and configured route while defaults live on routes or requests.
 - [x] Rework `LLMClient.prepare` / `stream` / `generate` to read
       `request.model.route` directly instead of calling `registeredRoute(...)`.
 - [x] Remove `Route.make(...)` global registration from the normal execution
@@ -547,6 +551,26 @@ App boundary = explicit durable-config -> typed-provider call
 - [x] Split Cloudflare products into separate facades such as
       `CloudflareAIGateway` and `CloudflareWorkersAI`; do not expose a shared root
       config surface unless one product actually exists.
+- [ ] Migrate remaining built-in provider facades one at a time so configuration
+      happens before model selection and selectors accept only ids:
+  - [ ] xAI: replace `model(id, options)`, `responses(id, options)`,
+        `chat(id, options)`, and `apis` with `XAI.configure(options).model(id)`,
+        `.responses(id)`, and `.chat(id)`.
+  - [ ] GitHub Copilot: move base URL/auth/options into
+        `GitHubCopilot.configure(options)` and make `model`, `responses`, and
+        `chat` id-only selectors.
+  - [ ] OpenRouter: replace `OpenRouter.model(id, options)` with
+        `OpenRouter.configure(options).model(id)`.
+  - [ ] OpenAI-compatible generic/families: replace family-level
+        `model(id, options)` helpers with configured facades such as
+        `OpenAICompatible.deepseek.configure(options).model(id)` and a generic
+        `OpenAICompatible.configure({ provider, baseURL, auth }).model(id)`.
+  - [ ] Anthropic: replace `Anthropic.model(id, options)` with
+        `Anthropic.configure(options).model(id)`.
+  - [ ] Google/Gemini: replace `Google.model(id, options)` with
+        `Google.configure(options).model(id)`.
+  - [ ] Amazon Bedrock: replace `AmazonBedrock.model(id, options)` with
+        `AmazonBedrock.configure({ region, credentials, baseURL }).model(id)`.
 - [ ] Decide whether a tiny `Provider.define(...)` helper is warranted after two
       or three provider conversions; start with plain objects if duplication is not
       yet painful.

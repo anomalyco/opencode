@@ -1,7 +1,7 @@
 import { Effect, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { Auth } from "../auth"
-import { type Endpoint, render as renderEndpoint } from "../endpoint"
+import { render as renderEndpoint } from "../endpoint"
 import { Framing, type Framing as FramingDef } from "../framing"
 import type { Transport, TransportPrepareInput } from "./index"
 import * as ProviderShared from "../../protocols/shared"
@@ -45,23 +45,20 @@ export const jsonRequestParts = <Body>(input: JsonRequestInput<Body>) =>
       input.request.http?.query,
     )
     const body = yield* bodyWithOverlay(input.body, input.request, input.encodeBody)
-    const headers = yield* Auth.toEffect(Auth.isAuth(input.request.model.auth) ? input.request.model.auth : input.auth)(
-      {
-        request: input.request,
-        method: "POST",
-        url,
-        body: body.bodyText,
-        headers: Headers.fromInput({
-          ...(input.headers?.({ request: input.request }) ?? {}),
-          ...input.request.model.headers,
-          ...input.request.http?.headers,
-        }),
-      },
-    )
+    const headers = yield* Auth.toEffect(input.auth)({
+      request: input.request,
+      method: "POST",
+      url,
+      body: body.bodyText,
+      headers: Headers.fromInput({
+        ...input.headers?.({ request: input.request }),
+        ...input.request.http?.headers,
+      }),
+    })
     return { url, jsonBody: body.jsonBody, bodyText: body.bodyText, headers }
   })
 
-export interface HttpJsonInput<Body, Frame> {
+export interface HttpJsonInput<_Body, Frame> {
   readonly framing: FramingDef<Frame>
 }
 

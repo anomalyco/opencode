@@ -12,13 +12,14 @@ import { applyCachePolicy } from "../cache-policy"
 import * as ProviderShared from "../protocols/shared"
 import * as ToolRuntime from "../tool-runtime"
 import type { Tools } from "../tool"
-import type { LLMError, LLMEvent, ModelInput as SchemaModelInput, PreparedRequestOf, ProtocolID } from "../schema"
+import type { LLMError, LLMEvent, PreparedRequestOf, ProtocolID, ProviderOptions } from "../schema"
 import {
   GenerationOptions,
   HttpOptions,
   LLMRequest,
   LLMResponse,
   Model,
+  ModelLimits,
   LLMError as LLMErrorClass,
   PreparedRequest,
   ProviderID,
@@ -44,7 +45,7 @@ export interface Route<Body, Prepared = unknown> {
   readonly defaults: RouteDefaults
   readonly body: RouteBody<Body>
   readonly with: (patch: RoutePatch<Body, Prepared>) => Route<Body, Prepared>
-  readonly model: <Input extends RouteMappedModelInput = RouteModelInput>(input: Input) => Model
+  readonly model: (input: RouteMappedModelInput) => Model
   readonly prepareTransport: (body: Body, request: LLMRequest) => Effect.Effect<Prepared, LLMError>
   readonly streamPrepared: (
     prepared: Prepared,
@@ -61,24 +62,27 @@ export type AnyRoute = Route<any, any>
 
 export type HttpOptionsInput = HttpOptions.Input
 
-type ModelInput = Omit<SchemaModelInput, "auth"> & { readonly auth?: AuthDef }
+export type RouteModelInput = Omit<Model.Input, "provider" | "route">
 
-type EndpointModelInput = {
-  readonly baseURL?: string
-  readonly queryParams?: Record<string, string>
+export type RouteRoutedModelInput = Omit<Model.Input, "route">
+
+export interface RouteDefaults {
+  readonly headers?: Record<string, string>
+  readonly limits?: ModelLimits
+  readonly generation?: GenerationOptions
+  readonly providerOptions?: ProviderOptions
+  readonly http?: HttpOptions
 }
 
-export type RouteModelInput = Omit<ModelInput, "provider" | "route"> & EndpointModelInput
+export interface RouteDefaultsInput {
+  readonly headers?: Record<string, string>
+  readonly limits?: ModelLimits.Input
+  readonly generation?: GenerationOptions.Input
+  readonly providerOptions?: ProviderOptions
+  readonly http?: HttpOptions.Input
+}
 
-export type RouteModelDefaults = Omit<ModelInput, "id" | "route"> & EndpointModelInput
-
-export type RouteRoutedModelInput = Omit<ModelInput, "route"> & EndpointModelInput
-
-export type RouteRoutedModelDefaults = Partial<Omit<ModelInput, "id" | "provider" | "route">>
-
-export type RouteDefaults = Partial<Omit<ModelInput, "id" | "provider" | "route" | "auth">>
-
-export interface RoutePatch<Body, Prepared> extends RouteDefaults {
+export interface RoutePatch<Body, Prepared> extends RouteDefaultsInput {
   readonly id?: string
   readonly provider?: string | ProviderID
   readonly auth?: AuthDef
@@ -88,53 +92,37 @@ export interface RoutePatch<Body, Prepared> extends RouteDefaults {
 
 type RouteMappedModelInput = RouteModelInput | RouteRoutedModelInput
 
-const modelWithDefaults =
-  <Input>(
-    route: AnyRoute,
-    defaults: Partial<Omit<ModelInput, "id" | "route">>,
-    options: { readonly mapInput?: (input: Input) => RouteMappedModelInput },
-  ) =>
-  (input: Input) => {
-    const mapped = options.mapInput === undefined ? (input as RouteMappedModelInput) : options.mapInput(input)
-    const { baseURL, queryParams, ...modelInput } = mapped
-    const provider = defaults.provider ?? route.provider ?? ("provider" in mapped ? mapped.provider : undefined)
-    if (!provider) throw new Error(`Route.model(${route.id}) requires a provider`)
-    const modelRoute = routeWithEndpoint(route, { baseURL, query: queryParams })
-    if (!endpointBaseURL(modelRoute.endpoint))
-      throw new Error(`Route.model(${route.id}) requires an endpoint baseURL — supply it on the route or model input`)
-    const generation = mergeGenerationOptions(route.defaults.generation, defaults.generation)
-    const providerOptions = mergeProviderOptions(route.defaults.providerOptions, defaults.providerOptions)
-    const http = mergeHttpOptions(httpOptions(route.defaults.http), httpOptions(defaults.http))
-    return Model.make({
-      ...route.defaults,
-      ...defaults,
-      ...modelInput,
-      provider,
-      route: modelRoute,
-      limits: mapped.limits ?? defaults.limits ?? route.defaults.limits,
-      generation: mergeGenerationOptions(generation, mapped.generation),
-      providerOptions: mergeProviderOptions(providerOptions, mapped.providerOptions),
-      http: mergeHttpOptions(http, httpOptions(mapped.http)),
-    })
-  }
+const makeRouteModel = (route: AnyRoute, mapped: RouteMappedModelInput) => {
+  const provider = route.provider ?? ("provider" in mapped ? mapped.provider : undefined)
+  if (!provider) throw new Error(`Route.model(${route.id}) requires a provider`)
+  if (!endpointBaseURL(route.endpoint))
+    throw new Error(`Route.model(${route.id}) requires an endpoint baseURL — configure it on the route first`)
+  return Model.make({
+    ...mapped,
+    provider,
+    route,
+  })
+}
 
-const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefaults): RouteDefaults => ({
-  ...base,
-  ...patch,
-  headers: mergeHeaders(base?.headers, patch.headers),
-  limits: patch.limits ?? base?.limits,
-  generation: mergeGenerationOptions(generationOptions(base?.generation), generationOptions(patch.generation)),
-  providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
-  http: mergeHttpOptions(httpOptions(base?.http), httpOptions(patch.http)),
-})
+const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefaultsInput): RouteDefaults => {
+  const headers = mergeHeaders(base?.headers, patch.headers)
+  return {
+    ...base,
+    ...patch,
+    headers,
+    limits: patch.limits === undefined ? base?.limits : ModelLimits.make(patch.limits),
+    generation: mergeGenerationOptions(generationOptions(base?.generation), generationOptions(patch.generation)),
+    providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
+    http: mergeHttpOptions(
+      headers === undefined ? undefined : new HttpOptions({ headers }),
+      base?.http,
+      httpOptions(patch.http),
+    ),
+  }
+}
 
 const endpointBaseURL = <Body>(endpoint: Endpoint<Body>) =>
   typeof endpoint.baseURL === "string" ? endpoint.baseURL : undefined
-
-const routeWithEndpoint = (route: AnyRoute, endpoint: EndpointPatch<unknown>) => {
-  if (!endpoint.baseURL && !endpoint.query) return route
-  return route.with({ endpoint })
-}
 
 const mergeHeaders = (...items: ReadonlyArray<Record<string, string> | undefined>) => {
   const entries = items.flatMap((item) =>
@@ -182,9 +170,10 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/LL
 
 const resolveRequestOptions = (request: LLMRequest) =>
   LLMRequest.update(request, {
-    generation: mergeGenerationOptions(request.model.generation, request.generation) ?? new GenerationOptions({}),
-    providerOptions: mergeProviderOptions(request.model.providerOptions, request.providerOptions),
-    http: mergeHttpOptions(request.model.http, request.http),
+    generation:
+      mergeGenerationOptions(request.model.route.defaults.generation, request.generation) ?? new GenerationOptions({}),
+    providerOptions: mergeProviderOptions(request.model.route.defaults.providerOptions, request.providerOptions),
+    http: mergeHttpOptions(request.model.route.defaults.http, request.http),
   })
 
 export interface MakeInput<Body, Frame, Event, State> {
@@ -202,8 +191,8 @@ export interface MakeInput<Body, Frame, Event, State> {
   readonly framing: Framing<Frame>
   /** Static / per-request headers added before `auth` runs. */
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
-  /** Model defaults used by the route's `.model(...)` helper. */
-  readonly defaults?: RouteDefaults
+  /** Route/request defaults used when compiling requests for this route. */
+  readonly defaults?: RouteDefaultsInput
 }
 
 export interface MakeTransportInput<Body, Prepared, Frame, Event, State> {
@@ -221,8 +210,8 @@ export interface MakeTransportInput<Body, Prepared, Frame, Event, State> {
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
   /** Runnable transport route. */
   readonly transport: Transport<Body, Prepared, Frame>
-  /** Provider/model defaults used by the route's `.model(...)` helper. */
-  readonly defaults?: RouteDefaults
+  /** Route/request defaults used when compiling requests for this route. */
+  readonly defaults?: RouteDefaultsInput
 }
 
 const streamError = (route: string, message: string, cause: Cause.Cause<unknown>) => {
@@ -248,15 +237,19 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       ),
     )
 
-  const build = (routeInput: MakeTransportInput<Body, Prepared, Frame, Event, State>): Route<Body, Prepared> => {
+  type BuiltRouteInput = Omit<MakeTransportInput<Body, Prepared, Frame, Event, State>, "defaults"> & {
+    readonly defaults?: RouteDefaults
+  }
+
+  const build = (routeInput: BuiltRouteInput): Route<Body, Prepared> => {
     const route: Route<Body, Prepared> = {
       id: routeInput.id,
       provider: routeInput.provider === undefined ? undefined : ProviderID.make(routeInput.provider),
       protocol: protocol.id,
       endpoint: routeInput.endpoint,
-      auth: routeInput.auth ?? Auth.bearer(),
+      auth: routeInput.auth ?? Auth.none,
       transport: routeInput.transport,
-      defaults: mergeRouteDefaults(undefined, routeInput.defaults ?? {}),
+      defaults: routeInput.defaults ?? {},
       body: protocol.body,
       with: (patch: RoutePatch<Body, Prepared>) => {
         const { id, provider, auth, transport, endpoint, ...defaults } = patch
@@ -267,17 +260,16 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           auth: auth ?? routeInput.auth,
           endpoint: endpoint ? Endpoint.merge(routeInput.endpoint, endpoint) : routeInput.endpoint,
           transport: (transport as Transport<Body, Prepared, Frame> | undefined) ?? routeInput.transport,
-          defaults: mergeRouteDefaults(routeInput.defaults, defaults),
+          defaults: mergeRouteDefaults(route.defaults, defaults),
         })
       },
-      model: (<Input extends RouteMappedModelInput>(input: Input): Model =>
-        modelWithDefaults<RouteMappedModelInput>(route, {}, {})(input)) as Route<Body, Prepared>["model"],
+      model: (input) => makeRouteModel(route, input),
       prepareTransport: (body, request) =>
         routeInput.transport.prepare({
           body,
           request,
           endpoint: routeInput.endpoint,
-          auth: routeInput.auth ?? Auth.bearer(),
+          auth: routeInput.auth ?? Auth.none,
           encodeBody,
           headers: routeInput.headers,
         }),
@@ -302,7 +294,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
     return route
   }
 
-  return build(input)
+  return build({ ...input, defaults: mergeRouteDefaults(undefined, input.defaults ?? {}) })
 }
 
 export function make<Body, Prepared, Frame, Event, State>(

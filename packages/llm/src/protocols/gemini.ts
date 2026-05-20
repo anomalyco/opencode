@@ -410,7 +410,7 @@ export const route = Route.make({
   endpoint: Endpoint.path(({ request }) => `/models/${request.model.id}:streamGenerateContent?alt=sse`, {
     baseURL: DEFAULT_BASE_URL,
   }),
-  auth: Auth.apiKeyHeader("x-goog-api-key"),
+  auth: Auth.none,
   framing: Framing.sse,
 })
 

@@ -5,7 +5,7 @@ import { LLM, LLMError, Message, Model, ToolCallPart, Usage } from "../../src"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
-import { LLMClient } from "../../src/route"
+import { Auth, LLMClient } from "../../src/route"
 import { it } from "../lib/effect"
 import { dynamicResponse, fixedResponse, truncatedStream } from "../lib/http"
 import { deltaChunk, usageChunk } from "../lib/openai-chunks"
@@ -15,11 +15,9 @@ const TargetJson = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(TargetJson)
 const decodeJson = Schema.decodeUnknownSync(TargetJson)
 
-const model = OpenAIChat.model({
-  id: "gpt-4o-mini",
-  baseURL: "https://api.openai.test/v1/",
-  headers: { authorization: "Bearer test" },
-})
+const model = OpenAIChat.route
+  .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+  .model({ id: "gpt-4o-mini" })
 
 const request = LLM.request({
   id: "req_1",
@@ -116,7 +114,9 @@ describe("OpenAI Chat route", () => {
   it.effect("applies serializable HTTP overlays after payload lowering", () =>
     LLMClient.generate(
       LLM.updateRequest(request, {
-        model: OpenAIChat.model({ ...model, apiKey: "fresh-key", headers: { authorization: "Bearer stale" } }),
+        model: model.route
+          .with({ auth: Auth.bearer("fresh-key"), headers: { authorization: "Bearer stale" } })
+          .model({ id: model.id }),
         http: {
           body: { metadata: { source: "test" } },
           headers: { authorization: "Bearer request", "x-custom": "yes" },

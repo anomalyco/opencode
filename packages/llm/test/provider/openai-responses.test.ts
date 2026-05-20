@@ -11,11 +11,9 @@ import { it } from "../lib/effect"
 import { dynamicResponse, fixedResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
 
-const model = OpenAIResponses.model({
-  id: "gpt-4.1-mini",
-  baseURL: "https://api.openai.test/v1/",
-  headers: { authorization: "Bearer test" },
-})
+const model = OpenAIResponses.route
+  .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+  .model({ id: "gpt-4.1-mini" })
 
 const request = LLM.request({
   id: "req_1",
@@ -273,7 +271,7 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("request OpenAI provider options override model defaults", () =>
+  it.effect("request OpenAI provider options override route defaults", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
         LLM.request({

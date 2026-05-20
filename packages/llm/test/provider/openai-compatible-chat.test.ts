@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, Message, ToolCallPart } from "../../src"
-import { LLMClient } from "../../src/route"
+import { Auth, LLMClient } from "../../src/route"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat"
 import { it } from "../lib/effect"
@@ -12,13 +12,13 @@ import { sseEvents } from "../lib/sse"
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)
 
-const model = OpenAICompatibleChat.model({
-  id: "deepseek-chat",
-  provider: "deepseek",
-  baseURL: "https://api.deepseek.test/v1/",
-  apiKey: "test-key",
-  queryParams: { "api-version": "2026-01-01" },
-})
+const model = OpenAICompatibleChat.route
+  .with({
+    provider: "deepseek",
+    endpoint: { baseURL: "https://api.deepseek.test/v1/", query: { "api-version": "2026-01-01" } },
+    auth: Auth.bearer("test-key"),
+  })
+  .model({ id: "deepseek-chat" })
 
 const request = LLM.request({
   id: "req_1",
@@ -64,7 +64,6 @@ describe("OpenAI-compatible Chat route", () => {
         id: "deepseek-chat",
         provider: "deepseek",
         route: { id: "openai-compatible-chat" },
-        apiKey: "test-key",
       })
       expect(prepared.model.route.endpoint).toMatchObject({
         baseURL: "https://api.deepseek.test/v1/",
@@ -101,7 +100,6 @@ describe("OpenAI-compatible Chat route", () => {
             provider: String(model.provider),
             route: model.route.id,
             baseURL: model.route.endpoint.baseURL,
-            apiKey: model.apiKey,
           }
         }),
       ).toEqual(
@@ -110,7 +108,6 @@ describe("OpenAI-compatible Chat route", () => {
           provider,
           route: "openai-compatible-chat",
           baseURL,
-          apiKey: "test-key",
         })),
       )
 

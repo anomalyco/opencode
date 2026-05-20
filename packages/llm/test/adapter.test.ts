@@ -133,9 +133,8 @@ describe("llm route", () => {
     Effect.gen(function* () {
       const configured = fake.with({ provider: "fake-provider", endpoint: { baseURL: "https://fake.local" } })
 
-      expect(configured.model({ id: "fake-model", native: { region: "us-east-1" } })).toMatchObject({
+      expect(configured.model({ id: "fake-model" })).toMatchObject({
         provider: "fake-provider",
-        native: { region: "us-east-1" },
       })
     }),
   )

@@ -392,8 +392,6 @@ export const protocol = Protocol.make({
   },
 })
 
-const encodeBody = Schema.encodeSync(Schema.fromJsonString(OpenAIChatBody))
-
 export const httpTransport = HttpTransport.sseJson.with<OpenAIChatBody>()
 
 export const route = Route.make({
@@ -401,7 +399,7 @@ export const route = Route.make({
   provider: "openai",
   protocol,
   endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
-  auth: Auth.bearer(),
+  auth: Auth.none,
   transport: httpTransport,
 })
 

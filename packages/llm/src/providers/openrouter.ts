@@ -1,9 +1,10 @@
 import { Effect, Schema } from "effect"
-import { Route, type RouteModelInput } from "../route/client"
+import { Route, type RouteDefaultsInput } from "../route/client"
 import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
 import { Provider } from "../provider"
 import { Protocol } from "../route/protocol"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
 import * as OpenAICompatibleProfiles from "./openai-compatible-profile"
 import * as OpenAIChat from "../protocols/openai-chat"
@@ -24,11 +25,11 @@ export type OpenRouterProviderOptionsInput = ProviderOptions & {
   readonly openrouter?: OpenRouterOptions
 }
 
-export type ModelOptions = Omit<RouteModelInput, "id" | "baseURL" | "providerOptions"> & {
-  readonly baseURL?: string
-  readonly providerOptions?: OpenRouterProviderOptionsInput
-}
-type ModelInput = ModelOptions & Pick<RouteModelInput, "id">
+export type ModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+  ProviderAuthOption<"optional"> & {
+    readonly baseURL?: string
+    readonly providerOptions?: OpenRouterProviderOptionsInput
+  }
 
 const OpenRouterBody = Schema.StructWithRest(Schema.Struct(OpenAIChat.bodyFields), [
   Schema.Record(Schema.String, Schema.Any),
@@ -76,7 +77,16 @@ export const route = Route.make({
 
 export const routes = [route]
 
-export const model = (id: string | ModelID, options: ModelOptions = {}) => route.model<ModelInput>({ ...options, id })
+export const model = (id: string | ModelID, options: ModelOptions = {}) => {
+  const { apiKey: _, auth: _auth, baseURL, ...rest } = options
+  return route
+    .with({
+      ...rest,
+      endpoint: { baseURL: baseURL ?? profile.baseURL },
+      auth: AuthOptions.bearer(options, "OPENROUTER_API_KEY"),
+    })
+    .model({ id })
+}
 
 export const provider = Provider.make({
   id,

@@ -1,7 +1,6 @@
 import { Schema } from "effect"
 import { JsonSchema, ModelID, ProviderID } from "./ids"
 import type { AnyRoute } from "../route/client"
-import type { Auth } from "../route/auth"
 import { isRecord } from "../utils/record"
 
 export const mergeJsonRecords = (
@@ -139,44 +138,18 @@ export class Model {
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: AnyRoute
-  /** Provider-specific API key convenience. Provider helpers normalize this into `auth`. */
-  readonly apiKey?: string
-  /** Optional transport auth policy. Opaque because it may contain functions. */
-  readonly auth?: Auth
-  readonly headers?: Record<string, string>
-  readonly limits: ModelLimits
-  /** Provider-neutral generation defaults. Request-level values override them. */
-  readonly generation?: GenerationOptions
-  /** Provider-owned typed-at-the-facade options for non-portable knobs. */
-  readonly providerOptions?: ProviderOptions
-  /** Serializable raw HTTP overlays applied to the final outgoing request. */
-  readonly http?: HttpOptions
-  /** Provider-specific opaque options. */
-  readonly native?: Record<string, unknown>
 
   constructor(input: Model.ConstructorInput) {
     this.id = input.id
     this.provider = input.provider
     this.route = input.route
-    this.apiKey = input.apiKey
-    this.auth = input.auth
-    this.headers = input.headers
-    this.limits = input.limits
-    this.generation = input.generation
-    this.providerOptions = input.providerOptions
-    this.http = input.http
-    this.native = input.native
   }
 
   static make(input: Model.Input) {
     return new Model({
-      ...input,
       id: ModelID.make(input.id),
       provider: ProviderID.make(input.provider),
       route: input.route,
-      limits: ModelLimits.make(input.limits),
-      generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
-      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
     })
   }
 
@@ -185,14 +158,6 @@ export class Model {
       id: model.id,
       provider: model.provider,
       route: model.route,
-      apiKey: model.apiKey,
-      auth: model.auth,
-      headers: model.headers,
-      limits: model.limits,
-      generation: model.generation,
-      providerOptions: model.providerOptions,
-      http: model.http,
-      native: model.native,
     }
   }
 
@@ -210,23 +175,11 @@ export namespace Model {
     readonly id: ModelID
     readonly provider: ProviderID
     readonly route: AnyRoute
-    readonly apiKey?: string
-    readonly auth?: Auth
-    readonly headers?: Record<string, string>
-    readonly limits: ModelLimits
-    readonly generation?: GenerationOptions
-    readonly providerOptions?: ProviderOptions
-    readonly http?: HttpOptions
-    readonly native?: Record<string, unknown>
   }
 
-  export type Input = Omit<ConstructorInput, "id" | "provider" | "route" | "limits" | "generation" | "http"> & {
+  export type Input = Omit<ConstructorInput, "id" | "provider"> & {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
-    readonly route: AnyRoute
-    readonly limits?: ModelLimits.Input
-    readonly generation?: GenerationOptions.Input
-    readonly http?: HttpOptions.Input
   }
 }
 

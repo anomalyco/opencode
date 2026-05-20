@@ -386,7 +386,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     tools,
     tool_choice: toolChoice,
     stream: true as const,
-    max_tokens: generation?.maxTokens ?? request.model.limits.output ?? 4096,
+    max_tokens: generation?.maxTokens ?? request.model.route.defaults.limits?.output ?? 4096,
     temperature: generation?.temperature,
     top_p: generation?.topP,
     top_k: generation?.topK,
@@ -452,8 +452,8 @@ const mergeUsage = (left: Usage | undefined, right: Usage | undefined) => {
     totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
     providerMetadata: {
       anthropic: {
-        ...(left.providerMetadata?.["anthropic"] ?? {}),
-        ...(right.providerMetadata?.["anthropic"] ?? {}),
+        ...left.providerMetadata?.["anthropic"],
+        ...right.providerMetadata?.["anthropic"],
       },
     },
   })
@@ -676,7 +676,7 @@ export const route = Route.make({
   provider: "anthropic",
   protocol,
   endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
-  auth: Auth.apiKeyHeader("x-api-key"),
+  auth: Auth.none,
   framing: Framing.sse,
   headers: () => ({ "anthropic-version": "2023-06-01" }),
 })

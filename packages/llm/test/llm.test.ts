@@ -43,15 +43,16 @@ describe("llm constructors", () => {
     expect(updated.messages.map((message) => message.role)).toEqual(["user", "assistant"])
   })
 
-  test("keeps request options separate from model defaults", () => {
+  test("keeps request options separate from route defaults", () => {
     const request = LLM.request({
       model: Model.make({
         id: "fake-model",
         provider: "fake",
-        route: chatRoute,
-        generation: { maxTokens: 100, temperature: 1 },
-        providerOptions: { openai: { store: false, metadata: { model: true } } },
-        http: { body: { metadata: { model: true } }, headers: { "x-shared": "model" }, query: { model: "1" } },
+        route: chatRoute.with({
+          generation: { maxTokens: 100, temperature: 1 },
+          providerOptions: { openai: { store: false, metadata: { model: true } } },
+          http: { body: { metadata: { model: true } }, headers: { "x-shared": "model" }, query: { model: "1" } },
+        }),
       }),
       prompt: "Say hello.",
       generation: { temperature: 0 },

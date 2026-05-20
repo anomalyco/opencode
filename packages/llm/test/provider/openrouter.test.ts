@@ -14,9 +14,8 @@ describe("OpenRouter", () => {
         id: "openai/gpt-4o-mini",
         provider: "openrouter",
         route: { id: "openrouter" },
-        baseURL: "https://openrouter.ai/api/v1",
-        apiKey: "test-key",
       })
+      expect(model.route.endpoint.baseURL).toBe("https://openrouter.ai/api/v1")
 
       const prepared = yield* LLMClient.prepare(LLM.request({ model, prompt: "Say hello." }))
 
@@ -34,6 +33,7 @@ describe("OpenRouter", () => {
       const prepared = yield* LLMClient.prepare(
         LLM.request({
           model: OpenRouter.model("anthropic/claude-3.7-sonnet:thinking", {
+            apiKey: "test-key",
             providerOptions: {
               openrouter: {
                 usage: true,

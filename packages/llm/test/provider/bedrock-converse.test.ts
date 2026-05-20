@@ -307,7 +307,7 @@ describe("Bedrock Converse route", () => {
         Effect.flip,
       )
 
-      expect(error.message).toContain("Bedrock Converse requires either model.apiKey")
+      expect(error.message).toContain("Bedrock Converse requires either route bearer auth or AWS credentials")
     }),
   )
 
@@ -325,12 +325,7 @@ describe("Bedrock Converse route", () => {
       const prepared = yield* LLMClient.prepare(LLM.updateRequest(baseRequest, { model: signed }))
 
       expect(prepared.route).toBe("bedrock-converse")
-      // The prepare phase doesn't sign — toHttp does. We assert the credential
-      // is plumbed onto the model native field for the signer to find.
-      expect(prepared.model.native).toMatchObject({
-        aws_credentials: { region: "us-east-1", accessKeyId: "AKIAIOSFODNN7EXAMPLE" },
-        aws_region: "us-east-1",
-      })
+      expect(prepared.model).toBe(signed)
     }),
   )
 
@@ -647,7 +642,6 @@ describe("Bedrock Converse recorded", () => {
 
   recorded.effect.with("drives a tool loop", { tags: ["tool", "tool-loop", "golden"] }, () =>
     Effect.gen(function* () {
-      const llm = yield* LLMClient.Service
       expectWeatherToolLoop(
         yield* runWeatherToolLoop(
           weatherToolLoopRequest({

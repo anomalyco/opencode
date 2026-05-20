@@ -29,7 +29,7 @@ describe("Route.with", () => {
       path: "/chat/completions",
       query: { keep: "patch", base: "1", patch: "1" },
     })
-    expect(route.model({ id: "gpt-test" }).headers).toEqual({
+    expect(route.defaults.headers).toEqual({
       "x-base": "base",
       "x-override": "patch",
       "x-patch": "patch",

@@ -1,8 +1,8 @@
 import type { Config, Redacted } from "effect"
-import { type ModelInput } from "../llm"
 import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat"
 import { Auth } from "../route/auth"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options"
+import type { RouteDefaultsInput } from "../route/client"
 import { ProviderID, type ModelID } from "../schema"
 
 export const aiGatewayID = ProviderID.make("cloudflare-ai-gateway")
@@ -20,7 +20,7 @@ type GatewayURL = AtLeastOne<{
 }
 
 export type AIGatewayOptions = GatewayURL &
-  Omit<ModelInput, "id" | "provider" | "route" | "baseURL" | "apiKey" | "auth"> &
+  RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
     /** Cloudflare AI Gateway authentication token. Sent as `cf-aig-authorization`. */
     readonly gatewayApiKey?: CloudflareSecret
@@ -31,9 +31,7 @@ type WorkersAIURL = AtLeastOne<{
   readonly baseURL: string
 }>
 
-export type WorkersAIOptions = WorkersAIURL &
-  Omit<ModelInput, "id" | "provider" | "route" | "baseURL" | "apiKey" | "auth"> &
-  ProviderAuthOption<"optional">
+export type WorkersAIOptions = WorkersAIURL & RouteDefaultsInput & ProviderAuthOption<"optional">
 
 export const aiGatewayBaseURL = (input: GatewayURL) => {
   if (input.baseURL) return input.baseURL
