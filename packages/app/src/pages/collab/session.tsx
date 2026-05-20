@@ -572,7 +572,12 @@ function CollabSessionInner(props: { me: Me }) {
                 src={sessionUrl}
                 class="flex-1 w-full border-0 bg-zinc-950"
                 title="Collab session"
-                style="flex: 1; width: 100%; height: 100%; display: block;"
+                // Hide the iframe while the Invite modal is open — iframes
+                // can render in their own composited layer that ignores the
+                // parent's stacking context, so even a z-index:99999 modal
+                // can have iframe content bleed through.  Hiding outright
+                // sidesteps the problem entirely.
+                style={`flex: 1; width: 100%; height: 100%; display: block; ${showInvite() ? "visibility: hidden;" : ""}`}
               />
             )
           }}

@@ -21,9 +21,18 @@ export function InviteDialog(props: { onClose: () => void }) {
   }
 
   return (
-    <div class="fixed inset-0 bg-zinc-950 flex items-center justify-center z-50" onClick={props.onClose}>
+    // Use inline styles + a very high z-index because Tailwind class purging
+    // can drop unused colour utilities, and iframes can promote themselves to
+    // their own composited stacking context — z-50 wasn't enough to cover
+    // the opencode iframe sitting underneath.
+    <div
+      class="fixed inset-0 flex items-center justify-center"
+      style="background-color:#09090b;z-index:99999"
+      onClick={props.onClose}
+    >
       <div
-        class="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-md shadow-2xl"
+        class="border border-zinc-700 rounded-xl p-6 w-full max-w-md shadow-2xl"
+        style="background-color:#18181b;position:relative;z-index:100000"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 class="text-base font-semibold text-zinc-100 mb-4">Invite to Collab Session</h2>
