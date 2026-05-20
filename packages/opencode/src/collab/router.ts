@@ -422,29 +422,21 @@ function handleCollabRequestInner(req: Request): Promise<Response> | Response {
   // OAuth start
   if (req.method === "GET" && path === "/collab/auth/github") {
     const c = cfg()
-    const state = randomBytes(16).toString("hex")
     const next = url.searchParams.get("next") ?? ""
+    // Encode `next` directly into the state so we don't depend on a
+    // collab_next cookie surviving the round-trip through GitHub.
+    const state = makeOAuthState({ next: next || undefined })
     const oauthUrl = buildOAuthUrl({
       clientId: c.clientId,
       redirectUri: `${c.baseUrl}/collab/auth/github/callback`,
       state,
       scopes: ["read:org", "read:user"],
     })
-    // Emit each cookie as its own Set-Cookie header.  Comma-joining in a
-    // single header value breaks browser parsing because cookie `Expires`
-    // values legitimately contain commas — the browser then stores ONE
-    // malformed cookie and never sees `collab_oauth_state`.
     const headers = new Headers({ Location: oauthUrl })
     headers.append(
       "Set-Cookie",
       `collab_oauth_state=${state}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`,
     )
-    if (next) {
-      headers.append(
-        "Set-Cookie",
-        `collab_next=${encodeURIComponent(next)}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`,
-      )
-    }
     return new Response(null, { status: 302, headers })
   }
 
@@ -470,8 +462,18 @@ function handleCollabRequestInner(req: Request): Promise<Response> | Response {
   // GET /collab/me — current authenticated user info
   if (req.method === "GET" && path === "/collab/me") {
     const sess = getSession(req)
-    if (!sess) return json({ error: "Unauthorised" }, 401)
-    return json({ githubId: sess.githubId, githubLogin: sess.githubLogin, githubAvatarUrl: sess.githubAvatarUrl })
+    const headers = { "Content-Type": "application/json", "Cache-Control": "no-store" }
+    if (!sess) {
+      return new Response(JSON.stringify({ error: "Unauthorised" }), { status: 401, headers })
+    }
+    return new Response(
+      JSON.stringify({
+        githubId: sess.githubId,
+        githubLogin: sess.githubLogin,
+        githubAvatarUrl: sess.githubAvatarUrl,
+      }),
+      { status: 200, headers },
+    )
   }
 
   // REST API — require auth for all /collab/session/* routes
@@ -484,6 +486,35 @@ function handleCollabRequestInner(req: Request): Promise<Response> | Response {
 
 // ── OAuth callback ───────────────────────────────────────────────────────────────
 
+/**
+ * OAuth state is a base64url-encoded JSON envelope:
+ *   { n: <nonce>, inv?: <invite-token>, next?: <return-to-url> }
+ *
+ * GitHub round-trips the `state` query param unchanged, so encoding the
+ * pending invite token here lets us recover it on the callback EVEN IF the
+ * `collab_pending_invite` cookie is lost or malformed.  We still pair the
+ * state with a cookie of the same value for CSRF protection (the attacker
+ * has the URL state but can't forge the cookie).
+ */
+interface OAuthStatePayload {
+  n: string
+  inv?: string
+  next?: string
+}
+function makeOAuthState(extra: { inv?: string; next?: string } = {}): string {
+  const data: OAuthStatePayload = { n: randomBytes(16).toString("hex"), ...extra }
+  return Buffer.from(JSON.stringify(data), "utf8").toString("base64url")
+}
+function parseOAuthState(state: string | null): OAuthStatePayload | null {
+  if (!state) return null
+  try {
+    const json = Buffer.from(state, "base64url").toString("utf8")
+    const parsed = JSON.parse(json)
+    if (parsed && typeof parsed === "object" && typeof parsed.n === "string") return parsed
+  } catch {}
+  return null
+}
+
 async function handleOAuthCallback(req: Request, url: URL): Promise<Response> {
   const c = cfg()
   const code = url.searchParams.get("code")
@@ -495,6 +526,16 @@ async function handleOAuthCallback(req: Request, url: URL): Promise<Response> {
   if (!cookieState || cookieState !== state) {
     return json({ error: "Invalid OAuth state" }, 400)
   }
+
+  // Decode the envelope.  `inv` and `next` are now self-contained in the
+  // state itself, so they survive cookie drops.  We fall back to the legacy
+  // `collab_pending_invite` / `collab_next` cookies for any old in-flight
+  // OAuth dances that began before this code shipped.
+  const decoded = parseOAuthState(state)
+  const cookies = parseCookies(req.headers.get("cookie") ?? "")
+  const pending = decoded?.inv ?? cookies["collab_pending_invite"]
+  const nextFromCookie = cookies["collab_next"] ? decodeURIComponent(cookies["collab_next"]) : null
+  const nextParam = decoded?.next ?? nextFromCookie
 
   try {
     const accessToken = await exchangeCodeForToken({
@@ -527,18 +568,16 @@ async function handleOAuthCallback(req: Request, url: URL): Promise<Response> {
     })
 
     // Determine post-auth redirect: pending invite > ?next param > /collab/new
-    const cookies = parseCookies(req.headers.get("cookie") ?? "")
-    const pending = cookies["collab_pending_invite"]
-    const nextParam = cookies["collab_next"] ? decodeURIComponent(cookies["collab_next"]) : null
     const location = pending ? `/collab/invite/${pending}` : (nextParam ?? "/collab/new")
 
-    return new Response(null, {
-      status: 302,
-      headers: {
-        Location: location,
-        "Set-Cookie": header,
-      },
-    })
+    // Clear all single-use OAuth cookies on the way out so a refresh of the
+    // callback URL or a subsequent OAuth dance starts from a clean slate.
+    const respHeaders = new Headers({ Location: location })
+    respHeaders.append("Set-Cookie", header)
+    respHeaders.append("Set-Cookie", `collab_oauth_state=; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=0`)
+    respHeaders.append("Set-Cookie", `collab_pending_invite=; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=0`)
+    respHeaders.append("Set-Cookie", `collab_next=; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=0`)
+    return new Response(null, { status: 302, headers: respHeaders })
   } catch (err) {
     return json({ error: String(err) }, 500)
   }
@@ -549,24 +588,30 @@ async function handleOAuthCallback(req: Request, url: URL): Promise<Response> {
 async function handleInviteRedeem(req: Request, token: string): Promise<Response> {
   const sess = getSession(req)
   if (!sess) {
-    // Redirect to OAuth; store pending invite in cookie
+    // Bounce through GitHub OAuth.  We encode the invite token DIRECTLY into
+    // the OAuth state value (which GitHub round-trips unchanged) — this way
+    // the callback can recover the pending invite even if the cookie chain
+    // fails for any reason (browser drops cookies on the redirect, paths
+    // mismatch, third-party cookie blocking, etc.).  The cookie is still
+    // emitted with the same value purely for CSRF (the callback rejects if
+    // the URL state doesn't equal the cookie state).
     const c = cfg()
-    const state = randomBytes(16).toString("hex")
+    const state = makeOAuthState({ inv: token })
     const oauthUrl = buildOAuthUrl({
       clientId: c.clientId,
       redirectUri: `${c.baseUrl}/collab/auth/github/callback`,
       state,
     })
-    // Use Headers.append so each cookie is its own Set-Cookie header — see
-    // the same fix in handleCollabRequestInner's /collab/auth/github branch.
     const respHeaders = new Headers({ Location: oauthUrl })
     respHeaders.append(
       "Set-Cookie",
-      `collab_pending_invite=${token}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`,
+      `collab_oauth_state=${state}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`,
     )
+    // Keep the legacy cookie too — belt-and-braces: if the state decode
+    // fails for any reason the callback falls back to this cookie.
     respHeaders.append(
       "Set-Cookie",
-      `collab_oauth_state=${state}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`,
+      `collab_pending_invite=${token}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`,
     )
     return new Response(null, { status: 302, headers: respHeaders })
   }
