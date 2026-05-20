@@ -1,12 +1,3 @@
-// Centralised npm package identifiers for the AI SDK providers we discriminate
-// behaviour on. Use these constants in `model.api.npm === NPM.X` checks and as
-// keys in `BUNDLED_PROVIDERS` so the canonical strings live in one place.
-//
-// A given npm value may map to more than one canonical loader ID (the
-// `@ai-sdk/openai-compatible` family and the azure pair). Behaviour that
-// genuinely needs to discriminate within those groups must key off the
-// provider ID, not the npm value.
-
 export const NPM = {
   GOOGLE_VERTEX: "@ai-sdk/google-vertex",
   GOOGLE_VERTEX_ANTHROPIC: "@ai-sdk/google-vertex/anthropic",

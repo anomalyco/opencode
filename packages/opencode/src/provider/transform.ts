@@ -208,7 +208,7 @@ function normalizeMessages(
       return msg
     })
   }
-  if (model.api.npm === NPM.ANTHROPIC || model.api.npm === NPM.GOOGLE_VERTEX_ANTHROPIC) {
+  if (([NPM.ANTHROPIC, NPM.GOOGLE_VERTEX_ANTHROPIC] as string[]).includes(model.api.npm)) {
     // Anthropic rejects assistant turns where tool_use blocks are followed by non-tool
     // content, e.g. [tool_use, tool_use, text], with:
     // `tool_use` ids were found without `tool_result` blocks immediately after...
@@ -1229,9 +1229,7 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
   // Other SDKs (xai, mistral, groq, cohere, etc.) use hardcoded keys
   // like "xai" or "cohere" - applying .split(".")[0] would break those.
   const usesDotSplitOptions =
-    model.api.npm === NPM.OPENAI_COMPATIBLE ||
-    model.api.npm === NPM.OPENAI ||
-    model.api.npm === NPM.ANTHROPIC
+    model.api.npm === NPM.OPENAI_COMPATIBLE || model.api.npm === NPM.OPENAI || model.api.npm === NPM.ANTHROPIC
   const key = sdkKey(model.api.npm) ?? (usesDotSplitOptions ? model.providerID.split(".")[0] : model.providerID)
   // @ai-sdk/azure delegates to OpenAIChatLanguageModel which reads from
   // providerOptions["openai"], but OpenAIResponsesLanguageModel checks

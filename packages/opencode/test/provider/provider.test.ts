@@ -1805,7 +1805,7 @@ test("ambiguous npm: openai-compatible alias does not inherit canonical loader b
               npm: "@ai-sdk/openai-compatible",
               api: "https://example.com/v1",
               models: {
-                "small": { name: "Small" },
+                small: { name: "Small" },
               },
               options: { apiKey: "proxy-key" },
             },

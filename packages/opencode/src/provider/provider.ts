@@ -1405,12 +1405,12 @@ export const layer = Layer.effect(
 
         const loaders = custom(dep)
         const resolveLoader = (entryID: string, data: Info): CustomLoader | undefined => {
-          // Exact match: canonical loader entry. Preserves prior behaviour.
+          // Canonical loaders match by exact ID. Same path as before.
           if (loaders[entryID]) return loaders[entryID]
-          // Alias: look at the entry's npm (from any model) and accept a unique
-          // canonical loader whose models.dev npm matches. Ambiguous npm values
-          // (e.g. shared by the @ai-sdk/openai-compatible family) fall through
-          // and the entry is handled by the generic SDK resolver.
+          // Otherwise read the entry's npm from its first model and accept a
+          // canonical loader whose models.dev npm uniquely matches. Where the
+          // npm is shared (the @ai-sdk/openai-compatible family, plus the
+          // @ai-sdk/azure pair), the entry falls through to the generic loader.
           const firstModel = Object.values(data.models)[0]
           const entryNpm = firstModel?.api?.npm
           if (!entryNpm) return undefined
