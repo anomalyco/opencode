@@ -56,6 +56,15 @@ shift
 "$bin" "$@" &
 child="$!"
 
+# Forward shutdown signals to the sidecar instead of dying silently.
+# Without this trap, /bin/sh exits on SIGTERM (sent by the Tauri parent
+# during normal Quit / reload_sidecar) before the cleanup block below ever
+# runs, leaving the sidecar reparented to init (PPID=1) as a zombie service.
+forward() {
+  kill -TERM "$child" 2>/dev/null || true
+}
+trap forward TERM INT HUP
+
 while kill -0 "$pid" 2>/dev/null && kill -0 "$child" 2>/dev/null; do
   sleep 1
 done
@@ -79,6 +88,13 @@ shift
 
 "$bin" "$@" &
 child="$!"
+
+# Forward shutdown signals to the sidecar; otherwise /bin/sh dies on SIGTERM
+# before its cleanup block runs and the sidecar is reparented to init.
+forward() {
+  kill -TERM "$child" 2>/dev/null || true
+}
+trap forward TERM INT HUP
 
 alive() {
   powershell.exe -NoProfile -NonInteractive -Command "if (Get-Process -Id $pid -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >/dev/null 2>&1
