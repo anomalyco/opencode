@@ -651,14 +651,19 @@ function CollabSessionInner(props: { me: Me }) {
             other without fighting opencode's file-mention popover. */}
         <TeamNoteComposer readonly={myRole() === "viewer"} />
 
-        {/* Queue */}
-        <div class="flex-1 overflow-hidden flex flex-col min-h-0">
+        {/* Queue — takes the remaining vertical space in the sidebar and
+            scrolls internally when many prompt suggestions flow in.  The
+            `min-h-0` on both the container AND the scroll child is load-
+            bearing: a flex child defaults to `min-height: auto` (i.e.
+            expand to content), so without it the inner list grows past
+            the allotted flex-1 height and overflow never engages. */}
+        <div class="flex-1 min-h-0 overflow-hidden flex flex-col">
           <button
             onClick={() => {
               setQueueOpen(v => !v)
               collab.clearMentions()
             }}
-            class="w-full px-4 py-2 flex items-center justify-between text-[10px] text-zinc-600 uppercase tracking-wider font-medium hover:text-zinc-400 transition-colors"
+            class="flex-shrink-0 w-full px-4 py-2 flex items-center justify-between text-[10px] text-zinc-600 uppercase tracking-wider font-medium hover:text-zinc-400 transition-colors"
           >
             <span>Queue</span>
             <div class="flex items-center gap-1">
@@ -677,7 +682,7 @@ function CollabSessionInner(props: { me: Me }) {
           </button>
 
           <Show when={queueOpen()}>
-            <div class="flex-1 overflow-y-auto">
+            <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain">
               <Show when={collab.queue().length === 0}>
                 <div class="px-4 py-3 text-xs text-zinc-600">No prompts in queue</div>
               </Show>
