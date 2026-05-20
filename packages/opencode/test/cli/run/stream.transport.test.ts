@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpencodeClient, type GlobalEvent, type GlobalEventErrors } from "@opencode-ai/sdk/v2"
+import { OpencodeClient, type GlobalEvent } from "@opencode-ai/sdk/v2"
 import { createSessionTransport } from "@/cli/cmd/run/stream.transport"
 import type { FooterApi, FooterEvent, RunFilePart, StreamCommit } from "@/cli/cmd/run/types"
 
@@ -98,14 +98,9 @@ function assistant(id: string) {
   } satisfies SdkEvent
 }
 
-const GlobalStreamClosed: GlobalEventErrors = {
-  400: {
-    name: "BadRequest",
-    data: { message: "Global event stream closed" },
-  },
-}
+const StreamClosed = undefined as never
 
-function feed<T, R = void>(returnValue?: R) {
+function feed<T, R = never>(returnValue: R = StreamClosed) {
   const list: T[] = []
   let done = false
   let wake: (() => void) | undefined
@@ -149,7 +144,7 @@ function eventFeed() {
 }
 
 function globalFeed() {
-  return feed<GlobalEvent, GlobalEventErrors>(GlobalStreamClosed)
+  return feed<GlobalEvent>()
 }
 
 function emptyStream(): EventStream {
@@ -178,7 +173,7 @@ function wrapGlobalStream(stream: EventStream): GlobalEventStream {
     for await (const event of stream) {
       yield globalEvent(event)
     }
-    return GlobalStreamClosed
+    return StreamClosed
   })()
 }
 

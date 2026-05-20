@@ -15,7 +15,7 @@
 // The tick counter prevents stale idle events from resolving the wrong turn.
 // We also re-check live session status before resolving an idle event so a
 // delayed idle from an older turn cannot complete a newer busy turn.
-import type { Event, GlobalEvent, GlobalEventErrors, OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { Event, GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Context, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import {
@@ -62,12 +62,7 @@ type Trace = {
   write(type: string, data?: unknown): void
 }
 
-const GlobalStreamClosed: GlobalEventErrors = {
-  400: {
-    name: "BadRequest",
-    data: { message: "Global event stream closed" },
-  },
-}
+const StreamClosed = undefined as never
 
 type StreamInput = {
   sdk: OpencodeClient
@@ -425,12 +420,12 @@ function createLayer(input: StreamInput) {
             ),
             (events) =>
               Effect.sync(() => {
-                void events.stream.return(GlobalStreamClosed).catch(() => {})
+                void events.stream.return(StreamClosed).catch(() => {})
               }),
           ),
         )
         closeStream = () => {
-          void events.stream.return(GlobalStreamClosed).catch(() => {})
+          void events.stream.return(StreamClosed).catch(() => {})
         }
         input.trace?.write("recv.subscribe", {
           sessionID: input.sessionID,
