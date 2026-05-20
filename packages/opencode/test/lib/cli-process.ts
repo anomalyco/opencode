@@ -17,13 +17,13 @@
 // builders (`opencode.serve(opts)`, `opencode.acp(opts)`, `opencode.auth(...)`)
 // without changing the fixture. Long-lived commands like `serve` will need a
 // different return shape — see the TODO at the bottom of OpencodeCli.
-import type { TestOptions } from "bun:test"
-import * as Scope from "effect/Scope"
-import { Effect } from "effect"
+import { test, type TestOptions } from "bun:test"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppProcess } from "@opencode-ai/core/process"
+import { Deferred, Duration, Effect, Layer, Queue, Scope, Stream } from "effect"
+import { FetchHttpClient, HttpClient } from "effect/unstable/http"
+import { ChildProcess } from "effect/unstable/process"
 import path from "node:path"
-import fs from "node:fs/promises"
-import os from "node:os"
-import { Process } from "@/util/process"
 import { TestLLMServer } from "./llm-server"
 import { testProviderConfig } from "./test-provider"
 import { it } from "./effect"
@@ -32,6 +32,30 @@ const opencodeRoot = path.resolve(import.meta.dir, "../../")
 const cliEntry = path.join(opencodeRoot, "src/index.ts")
 
 export const testModelID = "test/test-model"
+
+// Wrap a Bun subprocess pipe (or any ReadableStream<Uint8Array>) as a Stream.
+// Centralizes the `evaluate` + `onError` boilerplate and tags errors with the
+// stream name so a stderr/stdout failure is greppable in logs.
+function fromBunStream(name: string, get: () => ReadableStream<Uint8Array>) {
+  return Stream.fromReadableStream({
+    evaluate: get,
+    onError: (cause) => new Error(`${name} stream error: ${String(cause)}`),
+  })
+}
+
+// Long-lived processes (serve, acp) all want the same stderr drain: read every
+// chunk, push to a tail buffer, swallow stream errors (the child closing the
+// pipe is normal). `log: true` surfaces a real protocol error to logs so a
+// regression doesn't silently disappear.
+function forkStderrDrain(stream: ReadableStream<Uint8Array>, into: string[]) {
+  return Effect.forkScoped(
+    fromBunStream("stderr", () => stream).pipe(
+      Stream.decodeText(),
+      Stream.runForEach((chunk) => Effect.sync(() => into.push(chunk))),
+      Effect.ignore({ log: true }),
+    ),
+  )
+}
 
 function isolatedEnv(home: string, configJson: string): Record<string, string> {
   return {
@@ -71,9 +95,65 @@ export type RunOpts = SpawnOpts & {
   readonly extraArgs?: string[]
 }
 
+// `opencode serve` is a long-lived process — it never exits on its own.
+// `serve(opts)` therefore returns a handle inside the caller's Scope: the
+// subprocess is killed when the scope closes (test end), and the URL the
+// server actually bound to (port 0 means OS-assigned) is parsed off stdout.
+export type ServeOpts = SpawnOpts & {
+  readonly port?: number
+  readonly hostname?: string
+  readonly extraArgs?: string[]
+  // How long to wait for the "listening on http://..." line before failing.
+  // Default 15s — startup is dominated by bun's transpile + plugin init, not
+  // the actual listen() call.
+  readonly readyTimeoutMs?: number
+}
+
+export type ServeHandle = {
+  // Full URL the server is bound to, e.g. "http://127.0.0.1:54321". Use this
+  // as the base for HTTP requests in tests — never assume the port.
+  readonly url: string
+  readonly hostname: string
+  readonly port: number
+  // Sends SIGTERM. The scope finalizer also calls this, so tests rarely need
+  // to invoke it directly — useful for tests that assert exit behavior.
+  readonly kill: () => void
+  // Resolves with the exit code once the process exits. Bun returns a number.
+  readonly exited: Promise<number>
+}
+
+// `opencode acp` speaks newline-delimited JSON-RPC over stdin/stdout. It is
+// long-lived and exits cleanly when stdin is closed. The handle exposes the
+// duplex stream as send/receive rather than raw pipes so tests don't have to
+// reimplement framing on every call site.
+export type AcpOpts = SpawnOpts & {
+  readonly cwd?: string
+  readonly extraArgs?: string[]
+}
+
+export type AcpHandle = {
+  // Writes a single JSON-RPC message to the child's stdin as one ndjson line.
+  readonly send: (msg: object) => Effect.Effect<void>
+  // Resolves with the next parsed JSON-RPC line from the child's stdout.
+  // Lines are buffered in a queue so multiple receives in a row won't drop
+  // anything. Pair with `Effect.timeout` if a test wants a deadline.
+  readonly receive: Effect.Effect<unknown>
+  // Closes stdin. ACP exits cleanly on stdin EOF; the scope finalizer also
+  // calls this, so tests only need it when asserting exit behavior.
+  readonly close: () => void
+  readonly exited: Promise<number>
+}
+
 export type OpencodeCli = {
   // High-level: run a single prompt against the test model. Short-lived.
   readonly run: (message: string, opts?: RunOpts) => Effect.Effect<RunResult>
+  // Spawn `opencode serve` and wait until it's listening. Long-lived: the
+  // returned handle is killed when the caller's Scope closes. Fails if the
+  // listening line doesn't appear within `readyTimeoutMs`.
+  readonly serve: (opts?: ServeOpts) => Effect.Effect<ServeHandle, Error, Scope.Scope>
+  // Spawn `opencode acp` and return a duplex JSON-RPC handle. Long-lived:
+  // the subprocess exits on stdin close, which the scope finalizer triggers.
+  readonly acp: (opts?: AcpOpts) => Effect.Effect<AcpHandle, Error, Scope.Scope>
   // Escape hatch: any CLI invocation with full control over argv. Used to test
   // commands that don't yet have a typed builder.
   readonly spawn: (args: string[], opts?: SpawnOpts) => Effect.Effect<RunResult>
@@ -85,9 +165,6 @@ export type OpencodeCli = {
   // event (see src/cli/cmd/run.ts `emit`). Throws on a malformed line so
   // tests fail loudly rather than silently skipping data.
   readonly parseJsonEvents: (stdout: string) => Array<Record<string, unknown>>
-  // TODO: long-lived builders for `serve` / `acp` / etc. need a different
-  // return shape — they yield a handle with .url / .kill and live inside the
-  // surrounding Scope. Add when the first long-lived command is tested.
 }
 
 export type CliFixture = {
@@ -101,37 +178,63 @@ export type CliFixture = {
 // the caller doesn't need to wire it up — the fixture's lifetime is tied to
 // the surrounding Scope.
 export function withCliFixture<A, E>(
-  fn: (input: CliFixture) => Effect.Effect<A, E>,
+  fn: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope | HttpClient.HttpClient>,
 ): Effect.Effect<A, E | unknown, Scope.Scope> {
   return Effect.gen(function* () {
     const llm = yield* TestLLMServer
+    const fs = yield* AppFileSystem.Service
+    const appProc = yield* AppProcess.Service
 
-    const home = path.join(os.tmpdir(), "oc-cli-" + Math.random().toString(36).slice(2))
-    yield* Effect.promise(() => fs.mkdir(home, { recursive: true }))
-    yield* Effect.addFinalizer(() =>
-      Effect.promise(() => fs.rm(home, { recursive: true, force: true }).catch(() => undefined)),
-    )
+    // FileSystem.makeTempDirectoryScoped handles both creation and scope-tied
+    // cleanup — replaces the old mkdir + addFinalizer pair.
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "oc-cli-" })
 
     const configJson = JSON.stringify(testProviderConfig(llm.url))
     const env = isolatedEnv(home, configJson)
 
-    const spawn = (args: string[], opts?: SpawnOpts): Effect.Effect<RunResult> =>
-      Effect.promise(async () => {
-        const start = Date.now()
-        // Process.run pipes stdout/stderr by default and returns them as Buffers.
-        const result = await Process.run(["bun", "run", "--conditions=browser", cliEntry, ...args], {
-          cwd: home,
-          timeout: opts?.timeoutMs ?? 30_000,
-          env: { ...process.env, ...env, ...opts?.env },
-          nothrow: true,
-        })
-        return {
-          exitCode: result.code,
-          stdout: result.stdout.toString(),
-          stderr: result.stderr.toString(),
-          durationMs: Date.now() - start,
-        }
+    const spawn = Effect.fn("opencode.spawn")(function* (args: string[], opts?: SpawnOpts) {
+      const start = Date.now()
+      const timeoutMs = opts?.timeoutMs ?? 30_000
+      // stdin: "ignore" so the child doesn't see a piped stdin and block
+      // on `Bun.stdin.text()` (see src/cli/cmd/run.ts — non-TTY stdin is
+      // consumed as the prompt). The old Process.run wrapper defaulted to
+      // ignore; ChildProcess.make defaults to pipe, so we set it explicitly.
+      const command = ChildProcess.make("bun", ["run", "--conditions=browser", cliEntry, ...args], {
+        cwd: home,
+        env: { ...env, ...opts?.env },
+        extendEnv: true,
+        stdin: "ignore",
       })
+      // Pass timeout to appProc.run rather than wrapping with
+      // Effect.timeoutOrElse externally: AppProcess.run is itself scoped, so
+      // its built-in timeout triggers the acquireRelease kill finalizer
+      // inside cross-spawn-spawner *before* surfacing the AppProcessError —
+      // guaranteeing the child is dead by the time the test continues.
+      // External timeoutOrElse interrupts the run fiber but races the
+      // scope close, which can leak the child past the test boundary.
+      //
+      // Catch AppProcessError (timeout OR spawn failure) and synthesize a
+      // non-zero result so the test sees it via the usual `expectExit`
+      // path rather than as an unhandled Effect failure.
+      const result = yield* appProc.run(command, { timeout: Duration.millis(timeoutMs) }).pipe(
+        Effect.catchTag("AppProcessError", (err) =>
+          Effect.succeed({
+            command: err.command,
+            exitCode: err.exitCode ?? -1,
+            stdout: Buffer.alloc(0),
+            stderr: Buffer.from((err.stderr ?? String(err.cause ?? err.message)) + "\n"),
+            stdoutTruncated: false,
+            stderrTruncated: false,
+          } satisfies AppProcess.RunResult),
+        ),
+      )
+      return {
+        exitCode: result.exitCode,
+        stdout: result.stdout.toString(),
+        stderr: result.stderr.toString(),
+        durationMs: Date.now() - start,
+      }
+    })
 
     const run = (message: string, opts?: RunOpts): Effect.Effect<RunResult> => {
       const argv: string[] = ["run"]
@@ -145,10 +248,169 @@ export function withCliFixture<A, E>(
       return spawn(argv, opts)
     }
 
-    const opencode: OpencodeCli = { run, spawn, expectExit, parseJsonEvents }
+    const serve = Effect.fn("opencode.serve")(function* (opts?: ServeOpts) {
+      const argv = ["serve"]
+      // Default port 0 — let the OS pick a free port, parse the actual one
+      // off stdout. Hard-coded ports flake under parallel tests.
+      argv.push("--port", String(opts?.port ?? 0))
+      if (opts?.hostname) argv.push("--hostname", opts.hostname)
+      if (opts?.extraArgs) argv.push(...opts.extraArgs)
+
+      // Acquire the subprocess; release sends SIGTERM and awaits exit on
+      // scope close. Wrapped in Effect.ignore so a flaky kill doesn't surface
+      // as a finalizer error during test teardown.
+      const proc = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...argv], {
+            cwd: home,
+            env: { ...process.env, ...env, ...opts?.env },
+            stdout: "pipe",
+            stderr: "pipe",
+          }),
+        ),
+        (p) =>
+          Effect.promise(() => {
+            p.kill()
+            return p.exited
+          }).pipe(Effect.ignore),
+      )
+
+      // Tail buffer so timeout failures can include stderr context. The fork
+      // also keeps the OS pipe buffer from filling and wedging the child.
+      const stderrChunks: string[] = []
+      yield* forkStderrDrain(proc.stderr, stderrChunks)
+
+      // Watch stdout line-by-line for the listening sentinel. Format
+      // (see src/cli/cmd/serve.ts):
+      //   "opencode server listening on http://<host>:<port>"
+      const readyRe = /listening on (http:\/\/([^\s:]+):(\d+))/
+      const readyDeferred = yield* Deferred.make<{ url: string; hostname: string; port: number }>()
+      yield* Effect.forkScoped(
+        fromBunStream("stdout", () => proc.stdout).pipe(
+          Stream.decodeText(),
+          Stream.splitLines,
+          Stream.runForEach((line) => {
+            const m = line.match(readyRe)
+            return m ? Deferred.succeed(readyDeferred, { url: m[1], hostname: m[2], port: Number(m[3]) }) : Effect.void
+          }),
+          Effect.ignore({ log: true }),
+        ),
+      )
+
+      const readyTimeoutMs = opts?.readyTimeoutMs ?? 15_000
+      const match = yield* Deferred.await(readyDeferred).pipe(
+        Effect.timeoutOrElse({
+          duration: Duration.millis(readyTimeoutMs),
+          orElse: () =>
+            Effect.fail(
+              new Error(
+                `opencode serve did not become ready within ${readyTimeoutMs}ms\n` +
+                  `stderr (last 2000):\n${stderrChunks.join("").slice(-2000)}`,
+              ),
+            ),
+        }),
+      )
+
+      return {
+        url: match.url,
+        hostname: match.hostname,
+        port: match.port,
+        kill: () => {
+          proc.kill()
+        },
+        exited: proc.exited as Promise<number>,
+      } satisfies ServeHandle
+    })
+
+    const acp = Effect.fn("opencode.acp")(function* (opts?: AcpOpts) {
+      const argv = ["acp"]
+      if (opts?.cwd) argv.push("--cwd", opts.cwd)
+      if (opts?.extraArgs) argv.push(...opts.extraArgs)
+
+      // Acquire the subprocess. Release ends stdin (clean shutdown — ACP exits
+      // on stdin EOF) and falls back to SIGTERM if it doesn't exit promptly.
+      // Either way we await proc.exited so the test scope doesn't leak.
+      const proc = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...argv], {
+            cwd: opts?.cwd ?? home,
+            env: { ...process.env, ...env, ...opts?.env },
+            stdin: "pipe",
+            stdout: "pipe",
+            stderr: "pipe",
+          }),
+        ),
+        (p) =>
+          // Graceful shutdown: close stdin (ACP exits on EOF), give it a
+          // window to exit, then SIGTERM. The Effect.timeoutOrElse expresses
+          // exactly that race without raw setTimeout or Promise.race.
+          Effect.gen(function* () {
+            yield* Effect.sync(() => p.stdin.end())
+            yield* Effect.promise(() => p.exited).pipe(
+              Effect.timeoutOrElse({
+                duration: Duration.seconds(2),
+                orElse: () =>
+                  Effect.sync(() => {
+                    p.kill()
+                  }),
+              }),
+            )
+            yield* Effect.promise(() => p.exited)
+          }).pipe(Effect.ignore),
+      )
+
+      const stderrChunks: string[] = []
+      yield* forkStderrDrain(proc.stderr, stderrChunks)
+
+      // Each ndjson line becomes one queue entry. JSON.parse failures are
+      // surfaced as the raw string so a malformed protocol message doesn't
+      // silently wedge the test in `receive`.
+      const responses = yield* Queue.unbounded<unknown>()
+      yield* Effect.forkScoped(
+        fromBunStream("stdout", () => proc.stdout).pipe(
+          Stream.decodeText(),
+          Stream.splitLines,
+          Stream.runForEach((line) => {
+            if (line.length === 0) return Effect.void
+            let parsed: unknown
+            try {
+              parsed = JSON.parse(line)
+            } catch {
+              parsed = { _rawLine: line }
+            }
+            return Queue.offer(responses, parsed)
+          }),
+          Effect.ignore({ log: true }),
+        ),
+      )
+
+      return {
+        // `proc.stdin.write` returns `number | Promise<number>`. The promise
+        // form is the backpressure signal — if we don't await it, rapid
+        // successive sends can interleave under pipe-buffer-full conditions
+        // and corrupt the ndjson framing.
+        send: (msg: object) =>
+          Effect.promise(async () => {
+            const ret = proc.stdin.write(JSON.stringify(msg) + "\n")
+            if (typeof ret !== "number") await ret
+          }),
+        receive: Queue.take(responses),
+        // proc.stdin.end() is idempotent in Bun; no try/catch needed.
+        close: () => proc.stdin.end(),
+        exited: proc.exited as Promise<number>,
+      } satisfies AcpHandle
+    })
+
+    const opencode: OpencodeCli = { run, serve, acp, spawn, expectExit, parseJsonEvents }
 
     return yield* fn({ llm, home, opencode })
-  }).pipe(Effect.provide(TestLLMServer.layer))
+    // FetchHttpClient is provided so test bodies can `yield* HttpClient.HttpClient`
+    // and hit endpoints on `opencode.serve()` without rolling their own fetch.
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(TestLLMServer.layer, FetchHttpClient.layer, AppFileSystem.defaultLayer, AppProcess.defaultLayer),
+    ),
+  )
 }
 
 function parseJsonEvents(stdout: string): Array<Record<string, unknown>> {
@@ -177,10 +439,21 @@ function expectExit(result: RunResult, expected: number, label = "opencode") {
 // `it.live(name, () => withCliFixture(fixture))` — one fewer nesting level at
 // every call site. Use this for any test that needs the opencode CLI fixture.
 //
-// Only `.live` is exposed because subprocess tests must run against the real
-// clock — a TestClock-paused environment can't drive a child process. If you
-// need `.only` or `.skip`, fall back to `it.live` + `withCliFixture` directly.
+// Subprocess tests must run against the real clock — a TestClock-paused
+// environment can't drive a child process. If you need `.only` or `.skip`, fall
+// back to `it.live` + `withCliFixture` directly.
+// Body's R is `Scope.Scope | never` so tests can yield* scope-requiring
+// resources (e.g. `opencode.serve`) without an extra `Effect.scoped` wrapper —
+// `withCliFixture`'s outer scope is the natural lifetime.
 export const cliIt = {
-  live: <A, E>(name: string, body: (input: CliFixture) => Effect.Effect<A, E>, opts?: number | TestOptions) =>
-    it.live(name, () => withCliFixture(body), opts),
+  live: <A, E>(
+    name: string,
+    body: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope | HttpClient.HttpClient>,
+    opts?: number | TestOptions,
+  ) => it.live(name, () => withCliFixture(body), opts),
+  concurrent: <A, E>(
+    name: string,
+    body: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope | HttpClient.HttpClient>,
+    opts?: number | TestOptions,
+  ) => test.concurrent(name, () => Effect.runPromise(Effect.scoped(withCliFixture(body))), opts),
 }

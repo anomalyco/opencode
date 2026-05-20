@@ -6,9 +6,8 @@ import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
-import { useDialog } from "../../ui/dialog"
 import { useTuiConfig } from "../../context/tui-config"
-import { useBindings } from "../../keymap"
+import { OPENCODE_BASE_MODE, useBindings } from "../../keymap"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
@@ -120,9 +119,8 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     pick(opt.label)
   }
 
-  const dialog = useDialog()
-
   useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
     enabled: store.editing && !confirm(),
     commands: [
       {
@@ -203,7 +201,8 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     const max = Math.min(total, 9)
 
     return {
-      enabled: dialog.stack.length === 0 && !store.editing,
+      mode: OPENCODE_BASE_MODE,
+      enabled: !store.editing,
       commands: [
         {
           name: "app.exit",
