@@ -284,6 +284,26 @@ const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (request: LLMR
 // Streaming parsers are small state machines: every event returns a new state
 // plus the common `LLMEvent`s produced by that event. Tool calls are accumulated
 // because OpenAI streams JSON arguments across multiple deltas.
+
+// Qwen3 via vLLM with the hermes tool call parser occasionally appends XML
+// tool call closing tags as a response termination artifact after natural
+// language text. Strip them defensively so they don't leak into assistant
+// message content. Only trailing artifacts are removed; mid-text occurrences
+// are preserved.
+const stripDanglingXmlArtifacts = (text: string) => {
+  let result = text
+  let changed = true
+  while (changed) {
+    changed = false
+    const before = result
+    result = result.replace(/\s*\u2410+$/, "")
+    result = result.replace(/\s*<\/function>\s*$/, "")
+    result = result.replace(/\s*<\/parameter>\s*$/, "")
+    if (result !== before) changed = true
+  }
+  return result
+}
+
 const mapFinishReason = (reason: string | null | undefined): FinishReason => {
   if (reason === "stop") return "stop"
   if (reason === "length") return "length"
@@ -325,7 +345,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
     let lifecycle = state.lifecycle
 
-    if (delta?.content) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+    if (delta?.content) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", stripDanglingXmlArtifacts(delta.content))
 
     for (const tool of toolDeltas) {
       const result = ToolStream.appendOrStart(

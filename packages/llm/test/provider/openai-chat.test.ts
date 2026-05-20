@@ -356,6 +356,19 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("strips dangling XML tool call closing tags from text content", () =>
+    Effect.gen(function* () {
+      const dangling = "\n\n  " + "</" + "parameter>" + "\n  " + "</" + "function>" + "\n   " + "␐"
+      const body = sseEvents(
+        deltaChunk({ role: "assistant", content: "The answer is 42." }),
+        deltaChunk({ content: dangling }),
+        deltaChunk({}, "stop"),
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+      expect(response.text).toBe("The answer is 42.")
+    }),
+  )
+
   it.effect("short-circuits the upstream stream when the consumer takes a prefix", () =>
     Effect.gen(function* () {
       // The body has more chunks than we'll consume. If `Stream.take(1)` did
