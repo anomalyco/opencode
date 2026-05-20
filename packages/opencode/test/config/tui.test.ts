@@ -178,6 +178,21 @@ it.instance("resolves attention config defaults and overrides", () =>
   ),
 )
 
+it.instance("loads file context display option", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const test = yield* TestInstance
+
+      expect((yield* getTuiConfig(test.directory)).file_context).toBeUndefined()
+
+      yield* fs.writeJson(path.join(test.directory, "tui.json"), { file_context: false })
+
+      expect((yield* getTuiConfig(test.directory)).file_context).toBe(false)
+    }),
+  ),
+)
+
 it.instance("migrates tui-specific keys from opencode.json when tui.json does not exist", () =>
   withCleanState(
     Effect.gen(function* () {

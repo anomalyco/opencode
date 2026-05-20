@@ -73,6 +73,9 @@ export const TuiInfo = Schema.Struct({
     description: "TUI scroll speed",
   }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
+  file_context: Schema.optional(Schema.Boolean).annotate({
+    description: "Show and submit editor open-file context in the prompt footer (default: true)",
+  }),
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
 })
