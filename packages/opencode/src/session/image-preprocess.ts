@@ -27,6 +27,15 @@ export const preprocessImages = Effect.fn("ImagePreprocess.preprocessImages")(
   }) {
     const { sessionID, message, imageModel: explicitImageModel, textParts, sessions, provider, config, status } = options
 
+    log.info("preprocessImages called", {
+      sessionID,
+      role: message.info.role,
+      model: message.info.role === "user" ? message.info.model : undefined,
+      explicitImageModel,
+      partsCount: message.parts.length,
+      partTypes: message.parts.map((p) => p.type),
+    })
+
     if (message.info.role !== "user") return message
     const userModel = message.info.model
     if (!userModel) {
@@ -49,7 +58,10 @@ export const preprocessImages = Effect.fn("ImagePreprocess.preprocessImages")(
       (part): part is MessageV2.FilePart => part.type === "file" && part.mime.startsWith("image/"),
     )
 
-    if (imageParts.length === 0) return message
+    if (imageParts.length === 0) {
+      log.info("no image parts found in message", { partTypes: message.parts.map((p) => p.type) })
+      return message
+    }
 
     log.info("found images to preprocess", { count: imageParts.length, sessionID })
 
@@ -116,15 +128,19 @@ export const preprocessImages = Effect.fn("ImagePreprocess.preprocessImages")(
       },
     ]
 
-    const language = yield* provider.getLanguage(resolvedImageModel)
-
     const modelLabel = resolvedImageModel.name ?? `${resolvedImageModel.providerID}/${resolvedImageModel.id}`
+
+    const languageExit = yield* Effect.exit(provider.getLanguage(resolvedImageModel))
+    if (Exit.isFailure(languageExit)) {
+      log.error("failed to get image model language client", { cause: Cause.squash(languageExit.cause) })
+      return message
+    }
 
     yield* status.set(SessionID.make(sessionID), { type: "image_processing", model: modelLabel })
 
     const description = yield* Effect.promise(async () => {
       const result = await generateText({
-        model: language,
+        model: languageExit.value,
         system: Agent.PROMPT_IMAGE_DESCRIBE,
         messages,
         maxOutputTokens: 4096,

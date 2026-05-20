@@ -3097,7 +3097,6 @@ export type EventSessionNextToolFailed = {
       }
     }
   }
-
 }
 
 export type SessionNextRetryError = {
@@ -5843,6 +5842,10 @@ export type SessionPromptData = {
       providerID: string
       modelID: string
     }
+    imageModel?: {
+      providerID: string
+      modelID: string
+    }
     agent?: string
     noReply?: boolean
     tools?: {
@@ -6175,6 +6178,10 @@ export type SessionPromptAsyncData = {
   body?: {
     messageID?: string
     model?: {
+      providerID: string
+      modelID: string
+    }
+    imageModel?: {
       providerID: string
       modelID: string
     }

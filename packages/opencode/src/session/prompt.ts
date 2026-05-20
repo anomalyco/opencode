@@ -1227,7 +1227,7 @@ export const layer = Layer.effect(
       }
 
       const textParts = message.parts.filter((p): p is MessageV2.TextPart => p.type === "text")
-      const preprocessed = yield* ImagePreprocess.preprocessImages({
+      const preprocessResult = yield* ImagePreprocess.preprocessImages({
         sessionID: input.sessionID,
         message,
         imageModel: input.imageModel,
@@ -1236,9 +1236,16 @@ export const layer = Layer.effect(
         provider,
         config,
         status,
-      }).pipe(Effect.catch(() => Effect.succeed(message)))
+      }).pipe(
+        Effect.tapError((err) =>
+          Effect.sync(() =>
+            log.error("image preprocessing failed, using original message", { error: err }),
+          ),
+        ),
+        Effect.catch(() => Effect.succeed(message)),
+      )
 
-      if (input.noReply === true) return preprocessed
+      if (input.noReply === true) return preprocessResult
       return yield* loop({ sessionID: input.sessionID })
     })
 
