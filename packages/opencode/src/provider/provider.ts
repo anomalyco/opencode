@@ -1223,9 +1223,7 @@ const layer: Layer.Layer<
             const defaultInterleaved = defaultOpenAICompatibleInterleaved(apiNpm, apiID, reasoning)
             const interleaved =
               model.interleaved ??
-              (existingModel?.capabilities.interleaved && existingModel.capabilities.interleaved !== false
-                ? existingModel.capabilities.interleaved
-                : defaultInterleaved)
+              (existingModel?.capabilities.interleaved ? existingModel.capabilities.interleaved : defaultInterleaved)
             const parsedModel: Model = {
               id: ModelID.make(modelID),
               api: {
