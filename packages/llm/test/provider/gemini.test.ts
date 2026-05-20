@@ -110,7 +110,7 @@ describe("Gemini route", () => {
     }),
   )
 
-  it.effect("sanitizes integer enums, dangling required, untyped arrays, and scalar object keys", () =>
+  it.effect("sanitizes non-string enums, dangling required, untyped arrays, and scalar object keys", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
         LLM.request({
@@ -126,6 +126,7 @@ describe("Gemini route", () => {
                 required: ["status", "missing"],
                 properties: {
                   status: { type: "integer", enum: [1, 2] },
+                  active: { type: "boolean", enum: [true, false] },
                   tags: { type: "array" },
                   name: { type: "string", properties: { ignored: { type: "string" } }, required: ["ignored"] },
                 },
@@ -145,6 +146,7 @@ describe("Gemini route", () => {
                   required: ["status"],
                   properties: {
                     status: { type: "string", enum: ["1", "2"] },
+                    active: { type: "string", enum: ["true", "false"] },
                     tags: { type: "array", items: { type: "string" } },
                     name: { type: "string" },
                   },

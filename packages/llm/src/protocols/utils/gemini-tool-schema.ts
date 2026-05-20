@@ -38,7 +38,7 @@ const sanitizeNode = (schema: unknown): unknown => {
     ]),
   )
 
-  if (Array.isArray(result.enum) && (result.type === "integer" || result.type === "number")) result.type = "string"
+  if (Array.isArray(result.enum) && typeof result.type === "string" && result.type !== "string") result.type = "string"
 
   const properties = result.properties
   if (result.type === "object" && isRecord(properties) && Array.isArray(result.required)) {
