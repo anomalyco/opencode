@@ -72,7 +72,7 @@ OpenAI.responsesWebSocket("gpt-4o")
 Azure.configure({ resourceName, apiKey }).responses("my-deployment")
 Bedrock.model("anthropic.claude-3-5-sonnet-20241022-v2:0")
 
-CloudflareAIGateway.configure({ accountId, gatewayId, gatewayApiKey, providerApiKey }).model("openai/gpt-4o")
+CloudflareAIGateway.configure({ accountId, gatewayId, gatewayApiKey, apiKey }).model("openai/gpt-4o")
 CloudflareWorkersAI.configure({ accountId, apiKey }).model("@cf/meta/llama-3.1-8b-instruct")
 
 OpenAICompatible.configure({
@@ -424,12 +424,12 @@ const configureCloudflareAIGateway = (input: CloudflareAIGatewayConfig) => {
     endpoint: {
       baseURL: `https://gateway.ai.cloudflare.com/v1/${input.accountId}/${input.gatewayId}/openai`,
     },
-    auth: Auth.bearerHeader("cf-aig-authorization", input.gatewayApiKey).andThen(Auth.bearer(input.providerApiKey)),
+    auth: Auth.bearerHeader("cf-aig-authorization", input.gatewayApiKey).andThen(Auth.bearer(input.apiKey)),
   })
 
   return {
     id: cloudflareProvider,
-    model: route.model,
+    model: (modelID: string) => route.model({ id: modelID }),
     configure: configureCloudflareAIGateway,
   }
 }
@@ -443,7 +443,7 @@ const gateway = CloudflareAIGateway.configure({
   accountId: "account",
   gatewayId: "gateway",
   gatewayApiKey,
-  providerApiKey,
+  apiKey,
 })
 
 const model = gateway.model("openai/gpt-4o")
@@ -531,7 +531,7 @@ App boundary = explicit durable-config -> typed-provider call
 - [x] Model endpoint as `{ baseURL, path, query }` on routes, then remove the
       current split where host/query live on the model and path lives in route
       transport setup.
-- [ ] Define `Route.with(...)` with explicit patch semantics for endpoint merge,
+- [x] Define `Route.with(...)` with explicit patch semantics for endpoint merge,
       query merge, header merge, auth replacement, and optional diagnostic id.
 - [x] Make unconfigured transports reusable constants such as
       `HttpTransport.sseJson`; keep transport functions only for configured/fresh
@@ -544,7 +544,7 @@ App boundary = explicit durable-config -> typed-provider call
       `.responsesWebSocket(id)`.
 - [x] Convert Azure to a configured facade where resource/base URL/api version
       setup happens before selecting deployment ids.
-- [ ] Split Cloudflare products into separate facades such as
+- [x] Split Cloudflare products into separate facades such as
       `CloudflareAIGateway` and `CloudflareWorkersAI`; do not expose a shared root
       config surface unless one product actually exists.
 - [ ] Decide whether a tiny `Provider.define(...)` helper is warranted after two

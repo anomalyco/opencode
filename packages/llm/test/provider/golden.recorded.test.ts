@@ -3,7 +3,7 @@ import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import * as Gemini from "../../src/protocols/gemini"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
 import * as OpenAIResponses from "../../src/protocols/openai-responses"
-import * as Cloudflare from "../../src/providers/cloudflare"
+import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare"
 import * as OpenAI from "../../src/providers/openai"
 import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenRouter from "../../src/providers/openrouter"
@@ -26,7 +26,7 @@ const anthropicOpus = AnthropicMessages.model({
 const gemini = Gemini.model({ id: "gemini-2.5-flash", apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
 const xaiBasic = XAI.model("grok-3-mini", { apiKey: process.env.XAI_API_KEY ?? "fixture" })
 const xaiFlagship = XAI.model("grok-4.3", { apiKey: process.env.XAI_API_KEY ?? "fixture" })
-const cloudflareAIGatewayWorkers = Cloudflare.aiGateway("workers-ai/@cf/meta/llama-3.1-8b-instruct", {
+const cloudflareAIGateway = CloudflareAIGateway.configure({
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
   gatewayId:
     process.env.CLOUDFLARE_GATEWAY_ID && process.env.CLOUDFLARE_GATEWAY_ID !== process.env.CLOUDFLARE_ACCOUNT_ID
@@ -34,22 +34,14 @@ const cloudflareAIGatewayWorkers = Cloudflare.aiGateway("workers-ai/@cf/meta/lla
       : undefined,
   gatewayApiKey: process.env.CLOUDFLARE_API_TOKEN ?? "fixture",
 })
-const cloudflareAIGatewayWorkersTools = Cloudflare.aiGateway("workers-ai/@cf/openai/gpt-oss-20b", {
-  accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
-  gatewayId:
-    process.env.CLOUDFLARE_GATEWAY_ID && process.env.CLOUDFLARE_GATEWAY_ID !== process.env.CLOUDFLARE_ACCOUNT_ID
-      ? process.env.CLOUDFLARE_GATEWAY_ID
-      : undefined,
-  gatewayApiKey: process.env.CLOUDFLARE_API_TOKEN ?? "fixture",
-})
-const cloudflareWorkersAI = Cloudflare.workersAI("@cf/meta/llama-3.1-8b-instruct", {
+const cloudflareWorkers = CloudflareWorkersAI.configure({
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
   apiKey: process.env.CLOUDFLARE_API_KEY ?? "fixture",
 })
-const cloudflareWorkersAITools = Cloudflare.workersAI("@cf/openai/gpt-oss-20b", {
-  accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
-  apiKey: process.env.CLOUDFLARE_API_KEY ?? "fixture",
-})
+const cloudflareAIGatewayWorkers = cloudflareAIGateway.model("workers-ai/@cf/meta/llama-3.1-8b-instruct")
+const cloudflareAIGatewayWorkersTools = cloudflareAIGateway.model("workers-ai/@cf/openai/gpt-oss-20b")
+const cloudflareWorkersAI = cloudflareWorkers.model("@cf/meta/llama-3.1-8b-instruct")
+const cloudflareWorkersAITools = cloudflareWorkers.model("@cf/openai/gpt-oss-20b")
 const deepseek = OpenAICompatible.deepseek.model("deepseek-chat", { apiKey: process.env.DEEPSEEK_API_KEY ?? "fixture" })
 const together = OpenAICompatible.togetherai.model("meta-llama/Llama-3.3-70B-Instruct-Turbo", {
   apiKey: process.env.TOGETHER_AI_API_KEY ?? "fixture",

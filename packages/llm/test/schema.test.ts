@@ -13,6 +13,7 @@ const model = new Model({
 })
 
 const decodeLLMRequest = Schema.decodeUnknownSync(LLMRequest as unknown as Schema.Decoder<LLMRequest>)
+const decodeLLMEvent = Schema.decodeUnknownSync(LLMEvent as unknown as Schema.Decoder<LLMEvent>)
 
 describe("llm schema", () => {
   test("decodes a minimal request", () => {
@@ -44,7 +45,7 @@ describe("llm schema", () => {
   })
 
   test("rejects invalid event type", () => {
-    expect(() => Schema.decodeUnknownSync(LLMEvent)({ type: "bogus" })).toThrow()
+    expect(() => decodeLLMEvent({ type: "bogus" })).toThrow()
   })
 
   test("finish constructors accept usage input", () => {

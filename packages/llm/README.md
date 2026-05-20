@@ -7,7 +7,7 @@ import { Effect } from "effect"
 import { LLM, LLMClient } from "@opencode-ai/llm"
 import { OpenAI } from "@opencode-ai/llm/providers"
 
-const model = OpenAI.model("gpt-4o-mini", { apiKey: process.env.OPENAI_API_KEY })
+const model = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY }).responses("gpt-4o-mini")
 
 const request = LLM.request({
   model,
@@ -92,17 +92,19 @@ Normalized cache usage is read back into `response.usage.cacheReadInputTokens` a
 
 ## Providers
 
-Each provider exports a `model(...)` helper that records identity, protocol route, auth, URL, and model/request defaults.
+Provider facades configure endpoint/auth/deployment details first, then expose model selectors that take only a model or deployment id. The selected model carries the executable route value used at runtime.
 
 ```ts
-import { Anthropic } from "@opencode-ai/llm/providers"
+import { OpenAI, CloudflareAIGateway } from "@opencode-ai/llm/providers"
 
-const model = Anthropic.model("claude-sonnet-4-6", {
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY }).responses("gpt-4o-mini")
+const gateway = CloudflareAIGateway.configure({
+  accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+  gatewayApiKey: process.env.CLOUDFLARE_API_TOKEN,
+}).model("workers-ai/@cf/meta/llama-3.1-8b-instruct")
 ```
 
-Included providers: OpenAI, Anthropic, Google (Gemini), Amazon Bedrock, Azure OpenAI, Cloudflare, GitHub Copilot, OpenRouter, xAI, plus generic OpenAI-compatible helpers for DeepSeek, Cerebras, Groq, Fireworks, Together, etc.
+Included providers: OpenAI, Anthropic, Google (Gemini), Amazon Bedrock, Azure OpenAI, Cloudflare AI Gateway, Cloudflare Workers AI, GitHub Copilot, OpenRouter, xAI, plus generic OpenAI-compatible helpers for DeepSeek, Cerebras, Groq, Fireworks, Together, etc.
 
 ## Provider options & HTTP overlays
 
@@ -116,7 +118,7 @@ Model-level defaults are overridden by request-level values for each axis.
 
 ## Routes
 
-Adding a new model or deployment is usually 5–15 lines using `Route.make({ protocol, transport, ... })`. The four orthogonal pieces are protocol (body construction + stream parsing), transport (endpoint + auth + framing + encoding), route/model defaults, and provider facades. Capability/catalog metadata lives outside this low-level package; unsupported request shapes fail during protocol lowering. See `AGENTS.md` for the architectural detail.
+Adding a new model or deployment is usually 5-15 lines using `Route.make({ protocol, endpoint, auth, framing, ... })`. The route owns endpoint/auth/framing and the protocol owns body construction plus stream parsing. Transports are reusable IO templates that receive route endpoint/auth at compile time. Capability/catalog metadata lives outside this low-level package; unsupported request shapes fail during protocol lowering. See `AGENTS.md` for the architectural detail.
 
 ## Effect
 

@@ -121,6 +121,7 @@ const modelWithDefaults =
 const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefaults): RouteDefaults => ({
   ...base,
   ...patch,
+  headers: mergeHeaders(base?.headers, patch.headers),
   limits: patch.limits ?? base?.limits,
   generation: mergeGenerationOptions(generationOptions(base?.generation), generationOptions(patch.generation)),
   providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
@@ -133,6 +134,14 @@ const endpointBaseURL = <Body>(endpoint: Endpoint<Body>) =>
 const routeWithEndpoint = (route: AnyRoute, endpoint: EndpointPatch<unknown>) => {
   if (!endpoint.baseURL && !endpoint.query) return route
   return route.with({ endpoint })
+}
+
+const mergeHeaders = (...items: ReadonlyArray<Record<string, string> | undefined>) => {
+  const entries = items.flatMap((item) =>
+    item === undefined ? [] : Object.entries(item).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  )
+  if (entries.length === 0) return undefined
+  return Object.fromEntries(entries)
 }
 
 export const generationOptions = (input: GenerationOptions.Input | undefined) =>

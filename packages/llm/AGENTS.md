@@ -36,7 +36,7 @@ The intended callsite is:
 
 ```ts
 const request = LLM.request({
-  model: OpenAI.model("gpt-4o-mini", { apiKey }),
+  model: OpenAI.configure({ apiKey }).responses("gpt-4o-mini"),
   system: "You are concise.",
   prompt: "Say hello.",
 })
@@ -44,7 +44,7 @@ const request = LLM.request({
 const response = yield * LLMClient.generate(request)
 ```
 
-`LLM.request(...)` builds an `LLMRequest`. `LLMClient.generate(...)` selects a registered route by `request.model.route`, builds the provider-native body, asks the route's transport for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
+`LLM.request(...)` builds an `LLMRequest`. `LLMClient.generate(...)` reads the executable route carried by `request.model.route`, builds the provider-native body, asks the route's transport for a real `HttpClientRequest.HttpClientRequest`, sends it through `RequestExecutor.Service`, parses the provider stream into common `LLMEvent`s, and finally returns an `LLMResponse`.
 
 Use `LLMClient.stream(request)` when callers want incremental `LLMEvent`s. Use `LLMClient.generate(request)` when callers want those same events collected into an `LLMResponse`. Use `LLMClient.prepare<Body>(request)` to compile a request through the route pipeline without sending it — the optional `Body` type argument narrows `.body` to the route's native shape (e.g. `prepare<OpenAIChatBody>(...)` returns a `PreparedRequestOf<OpenAIChatBody>`). The runtime body is identical; the generic is a type-level assertion.
 
@@ -78,7 +78,7 @@ Route/model defaults are request-shaping defaults such as `headers`, `limits`, `
 
 The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Route.make(...)` call instead of a 300-400 line route clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
 
-When a provider ships a non-HTTP transport (OpenAI's WebSocket Responses backend, hypothetical bidirectional streaming APIs), the seam is `Transport` — `WebSocketTransport.json(...)` constructs a transport whose `prepare` builds a WebSocket URL and message and whose `frames` yields decoded text from the socket. Same protocol, different transport.
+When a provider ships a non-HTTP transport (OpenAI's WebSocket Responses backend, hypothetical bidirectional streaming APIs), the seam is `Transport` — `WebSocketTransport.jsonTransport.with(...)` constructs an IO template whose `prepare` receives the route endpoint/auth at compile time, builds a WebSocket URL and message, and whose `frames` yields decoded text from the socket. Same protocol and endpoint source, different transport.
 
 ### URL Construction
 
@@ -86,32 +86,32 @@ When a provider ships a non-HTTP transport (OpenAI's WebSocket Responses backend
 
 For providers where the URL is derived from typed inputs (Azure resource name, Bedrock region), the provider helper configures the route endpoint before calling `.model(...)`. Use `AtLeastOne<T>` from `route/auth-options.ts` for inputs that accept either of two derivation paths (Azure: `resourceName` or `baseURL`).
 
-### Provider Definitions
+### Provider Facades
 
-Provider-facing APIs are defined with `Provider.make(...)` from `src/provider.ts`:
+Provider-facing APIs are configured facades over route values. Endpoint/auth/resource/API-version setup happens before model selection, and model selectors accept only a model or deployment id:
 
 ```ts
-export const provider = Provider.make({
-  id: ProviderID.make("openai"),
-  model: responses,
-  apis: { responses, chat },
-})
+const openai = OpenAI.configure({ apiKey, baseURL })
+const model = openai.responses("gpt-4o-mini")
 
-export const model = provider.model
-export const apis = provider.apis
+const azure = Azure.configure({ resourceName, apiKey, apiVersion: "v1" })
+const deployment = azure.responses("my-deployment")
+
+const gateway = CloudflareAIGateway.configure({ accountId, gatewayId, gatewayApiKey, apiKey })
+const proxied = gateway.model("openai/gpt-4o-mini")
 ```
 
-Keep provider definitions small and explicit:
+Keep provider facades small and explicit:
 
-- Use only `id`, `model`, and optional `apis` in `Provider.make(...)`.
 - Use branded `ProviderID.make(...)` and `ModelID.make(...)` where ids are constructed directly.
-- Use `model` for the default API path and `apis` for named provider-native alternatives such as OpenAI `responses` versus `chat`.
-- Do not add author-facing `kind`, `version`, or `routes` fields.
+- Use `model` for the default API path and named methods for provider-native alternatives such as OpenAI `responses`, `responsesWebSocket`, and `chat`.
+- Put provider-specific setup on `.configure(...)`; do not add `model(id, overrides)` as a duplicate construction path.
 - Export lower-level `routes` arrays separately only when advanced internal wiring needs them.
 - Prefer `apiKey` as provider-specific sugar and `auth` as the explicit override; keep them mutually exclusive in provider option types with `ProviderAuthOption`.
 - Resolve `apiKey` → `Auth` with `AuthOptions.bearer(options, "<PROVIDER>_API_KEY")` (it honors an explicit `auth` override and falls back to `Auth.config(envVar)` so missing keys surface a typed `Authentication` error rather than a runtime crash).
+- Use separate top-level facades for products with different required setup, such as `CloudflareAIGateway` and `CloudflareWorkersAI`.
 
-Built-in providers are namespace modules from `src/providers/index.ts`, so aliases like `OpenAI.model(...)`, `OpenAI.responses(...)`, and `OpenAI.apis.chat(...)` are fine. External provider packages should default-export the `Provider.make(...)` result and may add named aliases if useful.
+`Provider.make(...)` remains available for simple static provider definitions, but new built-in providers should prefer plain configured facades unless a helper removes real duplication without adding runtime behavior.
 
 ### Folder layout
 
@@ -151,7 +151,7 @@ packages/llm/src/
   providers/
     openai-compatible.ts    generic compatible helper + family model helpers
     openai-compatible-profile.ts family defaults (deepseek, togetherai, ...)
-    azure.ts / amazon-bedrock.ts / github-copilot.ts / google.ts / xai.ts / openai.ts / anthropic.ts / openrouter.ts
+    azure.ts / amazon-bedrock.ts / cloudflare.ts / github-copilot.ts / google.ts / xai.ts / openai.ts / anthropic.ts / openrouter.ts
   tool.ts                   typed tool() helper
   tool-runtime.ts           implementation helpers for LLMClient tool execution
 ```
