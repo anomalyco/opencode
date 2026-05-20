@@ -156,14 +156,6 @@ If you're interested in contributing to OpenCode, please read our [contributing 
 
 ### FAQ
 
-### Changelog 
-- change in AGENTS.md - Autonomous Production Delivery, Roles/ Goal: Operate as an end-to-end production software delivery agent, not a code-only assistant. Own the work from intake through implementation, debugging, validation, release preparation, and handoff.
-
-
-added /skills auto-debug
-- a standalone skill that codifies the debugging mindset, failure workflow, failure classification, anti-patterns, and evidence/reporting expectations referenced from `AGENTS.md`
-
-
 
 #### How is this different from Claude Code?
 
@@ -179,6 +171,15 @@ It's very similar to Claude Code in terms of capability. Here are the key differ
 
 ### Notes
 This is not built by the OpenCode team and is not affiliated with OpenCode in any way.
+
+---
+### Changelog 
+- change in AGENTS.md - Autonomous Production Delivery, Roles/ Goal: Operate as an end-to-end production software delivery agent, not a code-only assistant. Own the work from intake through implementation, debugging, validation, release preparation, and handoff.
+
+
+added /skills auto-debug
+- a standalone skill that codifies the debugging mindset, failure workflow, failure classification, anti-patterns, and evidence/reporting expectations referenced from `AGENTS.md`
+
 
 ---
 ### Thank you
