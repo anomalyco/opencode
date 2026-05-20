@@ -284,7 +284,10 @@ export const layer = Layer.effect(
           return new Set(obj.disabledMcpServerIds.filter((x): x is string => typeof x === "string"))
         }),
         Effect.catchCause((cause) => {
-          log.warn("failed to read mcp-state.json", { cause: Cause.squash(cause) })
+          const err = Cause.squash(cause)
+          if (err && typeof err === "object" && "_tag" in err && err._tag === "NotFound")
+            return Effect.succeed(new Set<string>())
+          log.warn("failed to read mcp-state.json", { cause: err })
           return Effect.succeed(new Set<string>())
         }),
       )
