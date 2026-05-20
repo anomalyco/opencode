@@ -9,7 +9,7 @@ import { Actor } from "@opencode-ai/console-core/actor.js"
 import { Resource } from "@opencode-ai/console-resource"
 import { LiteData } from "@opencode-ai/console-core/lite.js"
 import { BlackData } from "@opencode-ai/console-core/black.js"
-import { User } from "@opencode-ai/console-core/user.js"
+import { Referral } from "@opencode-ai/console-core/referral.js"
 
 export async function POST(input: APIEvent) {
   const body = await Billing.stripe().webhooks.constructEventAsync(
@@ -182,6 +182,13 @@ export async function POST(input: APIEvent) {
                 await Billing.redeemCoupon(userEmail, "GO12MONTHS100")
               }
             }
+          })
+
+          await Referral.completeFromLiteSubscription({
+            workspaceID,
+            userID,
+          }).catch((error) => {
+            console.error("Referral sync failed", error)
           })
         })
       }
