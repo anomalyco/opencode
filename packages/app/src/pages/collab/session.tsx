@@ -314,10 +314,23 @@ function CollabSessionInner(props: { me: Me }) {
             <div class="flex items-center gap-2 mb-0.5">
               {/* "Collab" pill links back to the home / new-session page so
                   any participant can quickly hop to the list of all their
-                  sessions or create a new one. */}
+                  sessions or create a new one.
+
+                  We deliberately force a FULL page navigation rather than a
+                  client-side SPA route change.  @solidjs/router intercepts
+                  same-origin <a href> clicks and tries to dynamic-import
+                  the target route's lazy chunk — that chunk's hashed
+                  filename rotates on every deploy, so a user with a stale
+                  bundle hits "Failed to fetch dynamically imported module".
+                  Hard navigation makes the browser fetch a fresh
+                  index.html + the latest bundle, sidestepping the issue. */}
               <a
                 href="/collab/new"
                 title="Back to your collab sessions"
+                onClick={(e) => {
+                  e.preventDefault()
+                  window.location.href = "/collab/new"
+                }}
                 class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 uppercase tracking-wider hover:bg-blue-500/30 hover:text-blue-300 transition-colors"
               >
                 Collab

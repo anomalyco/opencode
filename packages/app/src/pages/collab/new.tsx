@@ -142,10 +142,16 @@ export default function NewCollabSession() {
         <div class="px-4 py-4 border-b border-zinc-800 flex-shrink-0">
           <div class="flex items-center gap-2 mb-0.5">
             {/* Consistent with the session-page header: the Collab pill links
-                home so users always have a quick way to get back. */}
+                home so users always have a quick way to get back.  Forces a
+                full page navigation (see comment on the same pill in
+                pages/collab/session.tsx for why). */}
             <a
               href="/collab/new"
               title="Back to your collab sessions"
+              onClick={(e) => {
+                e.preventDefault()
+                window.location.href = "/collab/new"
+              }}
               class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 uppercase tracking-wider hover:bg-blue-500/30 hover:text-blue-300 transition-colors"
             >
               Collab
