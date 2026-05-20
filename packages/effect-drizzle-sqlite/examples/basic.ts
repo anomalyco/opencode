@@ -1,9 +1,10 @@
 import { SqliteClient } from "@effect/sql-sqlite-bun"
-import { eq, sql } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as Schema from "effect/Schema"
 import { EffectDrizzleSqlite } from "../src"
 
 const users = sqliteTable("users", {
@@ -11,55 +12,77 @@ const users = sqliteTable("users", {
   name: text().notNull(),
 })
 
+type User = typeof users.$inferSelect
+
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
+type DatabaseShape = Effect.Success<typeof makeDatabase>
 
-class Database extends Context.Service<Database, Effect.Success<typeof makeDatabase>>()("@opencode/example/Database") {}
+const sqliteLayer = SqliteClient.layer({ filename: ":memory:", disableWAL: true })
 
-const SqliteLive = SqliteClient.layer({ filename: ":memory:", disableWAL: true })
+class Database extends Context.Service<Database, DatabaseShape>()("@opencode/example/Database") {
+  static layer = Layer.effect(Database, makeDatabase).pipe(Layer.provide(sqliteLayer))
+}
 
-const DatabaseLive = Layer.effect(Database, makeDatabase).pipe(Layer.provide(SqliteLive))
+class UserStoreError extends Schema.TaggedErrorClass<UserStoreError>()("UserStoreError", {
+  message: Schema.String,
+  cause: Schema.optional(Schema.Defect),
+}) {}
 
-const createSchema = Effect.gen(function* () {
-  const db = yield* Database
+const mapStoreError = (message: string) => (cause: unknown) => new UserStoreError({ message, cause })
 
-  yield* db.run(sql`create table users (id integer primary key autoincrement, name text not null)`)
-})
+interface UserStoreShape {
+  migrate: Effect.Effect<void, UserStoreError>
+  create(name: string): Effect.Effect<void, UserStoreError>
+  rename(from: string, to: string): Effect.Effect<void, UserStoreError>
+  list(): Effect.Effect<User[], UserStoreError>
+}
 
-const createUser = (name: string) =>
-  Effect.gen(function* () {
-    const db = yield* Database
+class UserStore extends Context.Service<UserStore, UserStoreShape>()("@opencode/example/UserStore") {
+  static layer = Layer.effect(
+    UserStore,
+    Effect.gen(function* () {
+      const db = yield* Database
 
-    yield* db.insert(users).values({ name })
-  })
-
-const renameUser = (from: string, to: string) =>
-  Effect.gen(function* () {
-    const db = yield* Database
-
-    yield* db.transaction(
-      (tx) =>
-        tx
-          .insert(users)
-          .values({ name: from })
-          .pipe(Effect.andThen(tx.update(users).set({ name: to }).where(eq(users.name, from)))),
-      { behavior: "immediate" },
-    )
-  })
-
-const listUsers = Effect.gen(function* () {
-  const db = yield* Database
-
-  return yield* db.select().from(users)
-})
+      return UserStore.of({
+        migrate: EffectDrizzleSqlite.migrate(db, { migrationsFolder: `${import.meta.dirname}/migrations` }).pipe(
+          Effect.mapError((cause) => new UserStoreError({ message: "Failed to migrate users", cause })),
+        ),
+        create: (name) =>
+          db
+            .insert(users)
+            .values({ name })
+            .pipe(Effect.asVoid, Effect.mapError(mapStoreError("Failed to create user"))),
+        rename: (from, to) =>
+          db
+            .transaction(
+              (tx) =>
+                tx
+                  .insert(users)
+                  .values({ name: from })
+                  .pipe(Effect.andThen(tx.update(users).set({ name: to }).where(eq(users.name, from)))),
+              { behavior: "immediate" },
+            )
+            .pipe(Effect.asVoid, Effect.mapError(mapStoreError("Failed to rename user"))),
+        list: () =>
+          db
+            .select()
+            .from(users)
+            .pipe(Effect.mapError(mapStoreError("Failed to list users"))),
+      })
+    }),
+  ).pipe(Layer.provide(Database.layer))
+}
 
 const program = Effect.gen(function* () {
-  yield* createSchema
-  yield* createUser("Ada")
-  yield* renameUser("Grace", "Grace Hopper")
+  const userStore = yield* UserStore
 
-  return yield* listUsers
+  yield* userStore.migrate
+  yield* userStore.create("Ada")
+  yield* userStore.rename("Grace", "Grace Hopper")
+
+  return yield* userStore.list()
 })
 
-const rows = await Effect.runPromise(program.pipe(Effect.provide(DatabaseLive), Effect.scoped))
+const rows = await Effect.runPromise(program.pipe(Effect.provide(UserStore.layer), Effect.scoped))
 
 console.log(rows)
