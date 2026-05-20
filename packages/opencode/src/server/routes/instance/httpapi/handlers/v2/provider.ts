@@ -28,20 +28,16 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.provid
           const catalog = yield* Catalog.Service
           const pluginBoot = yield* PluginBoot.Service
           yield* pluginBoot.wait().pipe(Effect.catchDefect(() => Effect.fail(catalogUnavailable)))
-          return yield* catalog.provider
-            .get(ctx.params.providerID)
-            .pipe(
-              Effect.catchTag(
-                "CatalogV2.ProviderNotFound",
-                (error) =>
-                  Effect.fail(
-                    new ProviderNotFoundError({
-                      providerID: error.providerID,
-                      message: `Provider not found: ${error.providerID}`,
-                    }),
-                  ),
+          return yield* catalog.provider.get(ctx.params.providerID).pipe(
+            Effect.catchTag("CatalogV2.ProviderNotFound", (error) =>
+              Effect.fail(
+                new ProviderNotFoundError({
+                  providerID: error.providerID,
+                  message: `Provider not found: ${error.providerID}`,
+                }),
               ),
-            )
+            ),
+          )
         }),
       )
   }),

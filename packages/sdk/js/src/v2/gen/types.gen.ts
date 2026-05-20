@@ -1823,6 +1823,18 @@ export type V2SessionMessagesResponse = {
   }
 }
 
+export type ServiceUnavailableError = {
+  _tag: "ServiceUnavailableError"
+  message: string
+  service?: string
+}
+
+export type ProviderNotFoundError = {
+  _tag: "ProviderNotFoundError"
+  providerID: string
+  message: string
+}
+
 export type EventTuiPromptAppend2 = {
   type: "tui.prompt.append"
   properties: {
@@ -7272,6 +7284,10 @@ export type V2ModelListErrors = {
    * UnauthorizedError
    */
   401: UnauthorizedError
+  /**
+   * ServiceUnavailableError
+   */
+  503: ServiceUnavailableError
 }
 
 export type V2ModelListError = V2ModelListErrors[keyof V2ModelListErrors]
@@ -7306,6 +7322,10 @@ export type V2ProviderListErrors = {
    * UnauthorizedError
    */
   401: UnauthorizedError
+  /**
+   * ServiceUnavailableError
+   */
+  503: ServiceUnavailableError
 }
 
 export type V2ProviderListError = V2ProviderListErrors[keyof V2ProviderListErrors]
@@ -7343,9 +7363,13 @@ export type V2ProviderGetErrors = {
    */
   401: UnauthorizedError
   /**
-   * NotFoundError
+   * ProviderNotFoundError
    */
-  404: NotFoundError
+  404: ProviderNotFoundError
+  /**
+   * ServiceUnavailableError
+   */
+  503: ServiceUnavailableError
 }
 
 export type V2ProviderGetError = V2ProviderGetErrors[keyof V2ProviderGetErrors]
