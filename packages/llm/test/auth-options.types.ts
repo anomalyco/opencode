@@ -82,19 +82,23 @@ OpenAI.chat("gpt-4.1-mini", { auth: RuntimeAuth.bearer("oauth-token") })
 OpenAI.chat("gpt-4.1-mini", { apiKey: "sk-test", auth: RuntimeAuth.bearer("oauth-token") })
 
 // @ts-expect-error Azure requires at least one of `resourceName` or `baseURL`.
-Azure.responses("deployment")
-Azure.responses("deployment", { apiKey: "azure-key", resourceName: "resource" })
-Azure.responses("deployment", { apiKey: configApiKey, resourceName: "resource" })
-Azure.responses("deployment", { auth: RuntimeAuth.header("api-key", "azure-key"), resourceName: "resource" })
+Azure.configure()
+Azure.configure({ apiKey: "azure-key", resourceName: "resource" }).responses("deployment")
+Azure.configure({ apiKey: configApiKey, resourceName: "resource" }).responses("deployment")
+Azure.configure({ auth: RuntimeAuth.header("api-key", "azure-key"), resourceName: "resource" }).responses("deployment")
+
+// @ts-expect-error Azure model selectors only accept deployment ids.
+Azure.configure({ apiKey: "azure-key", resourceName: "resource" }).responses("deployment", {})
 
 // @ts-expect-error auth is an override, so Azure rejects apiKey with auth.
-Azure.responses("deployment", { apiKey: "azure-key", auth: RuntimeAuth.header("api-key", "override") })
+Azure.configure({ resourceName: "resource", apiKey: "azure-key", auth: RuntimeAuth.header("api-key", "override") })
 
-// @ts-expect-error Azure requires at least one of `resourceName` or `baseURL`.
-Azure.chat("deployment")
-Azure.chat("deployment", { apiKey: "azure-key", resourceName: "resource" })
-Azure.chat("deployment", { apiKey: configApiKey, resourceName: "resource" })
-Azure.chat("deployment", { auth: RuntimeAuth.header("api-key", "azure-key"), resourceName: "resource" })
+Azure.configure({ apiKey: "azure-key", resourceName: "resource" }).chat("deployment")
+Azure.configure({ apiKey: configApiKey, resourceName: "resource" }).chat("deployment")
+Azure.configure({ auth: RuntimeAuth.header("api-key", "azure-key"), resourceName: "resource" }).chat("deployment")
+
+// @ts-expect-error Azure chat model selectors only accept deployment ids.
+Azure.configure({ apiKey: "azure-key", resourceName: "resource" }).chat("deployment", {})
 
 // @ts-expect-error auth is an override, so Azure Chat rejects apiKey with auth.
-Azure.chat("deployment", { apiKey: "azure-key", auth: RuntimeAuth.header("api-key", "override") })
+Azure.configure({ resourceName: "resource", apiKey: "azure-key", auth: RuntimeAuth.header("api-key", "override") })

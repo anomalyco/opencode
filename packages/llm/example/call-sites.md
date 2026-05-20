@@ -69,7 +69,7 @@ OpenAI.responses("gpt-4o")
 OpenAI.chat("gpt-4o")
 OpenAI.responsesWebSocket("gpt-4o")
 
-Azure.responses("my-deployment")
+Azure.configure({ resourceName, apiKey }).responses("my-deployment")
 Bedrock.model("anthropic.claude-3-5-sonnet-20241022-v2:0")
 
 CloudflareAIGateway.configure({ accountId, gatewayId, gatewayApiKey, providerApiKey }).model("openai/gpt-4o")
@@ -453,30 +453,24 @@ If a Cloudflare product gains a full lazy env default, it can expose a direct
 selector too. Until then, omitting `CloudflareAIGateway.model(...)` makes missing
 account/gateway configuration unrepresentable.
 
-opencode's dynamic runtime should use a resolver boundary instead of exposing a
-giant unstructured public model constructor:
+opencode's dynamic runtime should construct executable models at its app
+boundary instead of exposing a giant unstructured public model constructor or a
+generic dynamic resolver:
 
 ```ts
 const model =
-  yield *
-  ModelResolver.resolve({
-    providerID,
-    modelID,
-    providerConfig,
-    auth,
-    env,
-  })
+  providerID === "azure"
+    ? Azure.configure(resolvedAzureConfig).responses(apiModelID)
+    : endpoint.websocket
+      ? OpenAI.responsesWebSocket(apiModelID)
+      : OpenAI.responses(apiModelID)
 ```
 
-That resolver can call typed provider APIs internally, for example
-`Azure.configure(resolved).responses(apiModelID)`, while public provider APIs
-stay self-similar.
-
-Transport selection belongs at this resolver boundary too. For example,
-opencode can map catalog metadata like `endpoint.websocket` to
-`OpenAI.responsesWebSocket(apiModelID)`; otherwise it resolves the normal
-`OpenAI.responses(apiModelID)` route. The client runtime only executes the
-route carried by the resolved model.
+That boundary can branch on durable config/catalog metadata and call typed
+provider APIs directly. Transport selection belongs there too: map metadata like
+`endpoint.websocket` to `OpenAI.responsesWebSocket(apiModelID)`; otherwise use
+the normal `OpenAI.responses(apiModelID)` route. The client runtime only executes
+the route carried by the model.
 
 ## Competitive Shape
 
@@ -485,8 +479,9 @@ This follows the strongest parts of adjacent libraries:
 - AI SDK: configured provider instances expose provider-specific model methods.
 - Effect AI: executable models carry provider requirements and can be resolved by
   an app boundary.
-- LiteLLM/opencode config: dynamic `providerID/modelID` resolution belongs in a
-  resolver, not the typed public API.
+- LiteLLM/opencode config: dynamic `providerID/modelID` branching belongs at the
+  app boundary, not in the typed public provider API or a global runtime
+  resolver.
 - LangChain/LlamaIndex: constructor-style config plus model id is convenient,
   but we avoid making model selection also configure endpoint/auth.
 
@@ -496,7 +491,7 @@ The chosen split is:
 Route = execution mechanics
 Provider facade = configured route group
 Model = selected executable model carrying route value
-ModelResolver = dynamic opencode/config bridge
+App boundary = explicit durable-config -> typed-provider call
 ```
 
 ## What This Removes
@@ -547,7 +542,7 @@ ModelResolver = dynamic opencode/config bridge
 - [ ] Convert OpenAI provider APIs to provider-facade shape:
       `OpenAI.configure(config).responses(id)`, `.chat(id)`, and
       `.responsesWebSocket(id)`.
-- [ ] Convert Azure to a configured facade where resource/base URL/api version
+- [x] Convert Azure to a configured facade where resource/base URL/api version
       setup happens before selecting deployment ids.
 - [ ] Split Cloudflare products into separate facades such as
       `CloudflareAIGateway` and `CloudflareWorkersAI`; do not expose a shared root
@@ -555,13 +550,12 @@ ModelResolver = dynamic opencode/config bridge
 - [ ] Decide whether a tiny `Provider.define(...)` helper is warranted after two
       or three provider conversions; start with plain objects if duplication is not
       yet painful.
-- [ ] Add `ModelResolver.resolve(...)` for opencode's dynamic config path and
-      map catalog metadata such as `endpoint.websocket` to the correct named route
-      selector.
-- [ ] Update `packages/opencode/src/session/llm/native-request.ts` to use the
-      resolver instead of the hard-coded `ROUTE` table.
+- [ ] Update `packages/opencode/src/session/llm/native-request.ts` to construct
+      executable models at the session boundary with explicit provider facade
+      calls, mapping catalog metadata such as `endpoint.websocket` to the correct
+      named route selector.
 - [ ] Update tests so direct route/provider tests assert route values are carried
-      by executable models, and opencode/native tests assert resolver-based route
+      by executable models, and opencode/native tests assert boundary-based route
       selection.
 - [ ] Remove compatibility exports or stale docs only after internal call sites
       are migrated; do not keep duplicate constructor paths without an external
