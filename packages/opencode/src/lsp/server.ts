@@ -55,6 +55,30 @@ const NearestRoot = (includePatterns: string[], excludePatterns?: string[]): Roo
   }
 }
 
+const StrictNearestRoot = (includePatterns: string[], excludePatterns?: string[]): RootFunction => {
+  return async (file, ctx) => {
+    if (excludePatterns) {
+      const excludedFiles = Filesystem.up({
+        targets: excludePatterns,
+        start: path.dirname(file),
+        stop: ctx.directory,
+      })
+      const excluded = await excludedFiles.next()
+      await excludedFiles.return()
+      if (excluded.value) return undefined
+    }
+    const files = Filesystem.up({
+      targets: includePatterns,
+      start: path.dirname(file),
+      stop: ctx.directory,
+    })
+    const first = await files.next()
+    await files.return()
+    if (!first.value) return undefined
+    return path.dirname(first.value)
+  }
+}
+
 export interface Info {
   id: string
   extensions: string[]
@@ -1173,31 +1197,63 @@ export const Astro: Info = {
   },
 }
 
+function isModuleOf(pomContent: string, modulePath: string): boolean {
+  const normalized = modulePath.replace(/\\/g, "/").replace(/\/$/, "")
+  if (!normalized) return false
+  const modulesBlocks = pomContent.match(/<modules>([\s\S]*?)<\/modules>/g) ?? []
+  for (const block of modulesBlocks) {
+    const stripped = block.replace(/<!--[\s\S]*?-->/g, "")
+    for (const m of stripped.matchAll(/<module>\s*([^<]+?)\s*<\/module>/g)) {
+      const decl = m[1].replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/$/, "")
+      if (decl === normalized) return true
+    }
+  }
+  return false
+}
+
 export const JDTLS: Info = {
   id: "jdtls",
   root: async (file, ctx) => {
-    // Without exclusions, NearestRoot defaults to instance directory so we can't
-    // distinguish between a) no project found and b) project found at instance dir.
-    // So we can't choose the root from (potential) monorepo markers first.
-    // Look for potential subproject markers first while excluding potential monorepo markers.
     const settingsMarkers = ["settings.gradle", "settings.gradle.kts"]
     const gradleMarkers = ["gradlew", "gradlew.bat"]
-    const exclusionsForMonorepos = gradleMarkers.concat(settingsMarkers)
-
-    const [projectRoot, wrapperRoot, settingsRoot] = await Promise.all([
-      NearestRoot(["pom.xml", "build.gradle", "build.gradle.kts", ".project", ".classpath"], exclusionsForMonorepos)(
-        file,
-        ctx,
-      ),
-      NearestRoot(gradleMarkers, settingsMarkers)(file, ctx),
-      NearestRoot(settingsMarkers)(file, ctx),
+    // 1. Gradle (unchanged from original logic)
+    const [wrapperRoot, settingsRoot] = await Promise.all([
+      StrictNearestRoot(gradleMarkers, settingsMarkers)(file, ctx),
+      StrictNearestRoot(settingsMarkers)(file, ctx),
     ])
-
-    // If projectRoot is undefined we know we are in a monorepo or no project at all.
-    // So can safely fall through to the other roots
-    if (projectRoot) return projectRoot
     if (wrapperRoot) return wrapperRoot
     if (settingsRoot) return settingsRoot
+
+    // 2. Gradle single-project fallback (build.gradle without settings.gradle)
+    const buildRoot = await StrictNearestRoot(["build.gradle", "build.gradle.kts"])(file, ctx)
+    if (buildRoot) return buildRoot
+
+    // 3. Maven: walk up pom.xml chain verifying <module> relationships
+    const pomFiles = await Filesystem.findUp(
+      "pom.xml",
+      path.dirname(file),
+      ctx.directory,
+    )
+    if (pomFiles.length > 0) {
+      let root = path.dirname(pomFiles[0])
+      for (let i = 1; i < pomFiles.length; i++) {
+        const parentDir = path.dirname(pomFiles[i])
+        const rel = path.relative(parentDir, root)
+        const content = await fs.readFile(pomFiles[i], "utf-8").catch(() => null)
+        if (content && isModuleOf(content, rel)) {
+          root = parentDir
+        } else {
+          break
+        }
+      }
+      return root
+    }
+
+    // 4. Eclipse native project fallback
+    const eclipseRoot = await StrictNearestRoot([".project", ".classpath"])(file, ctx)
+    if (eclipseRoot) return eclipseRoot
+
+    return undefined
   },
   extensions: [".java"],
   async spawn(root, _ctx, flags) {
