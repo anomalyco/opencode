@@ -88,17 +88,29 @@ export function shouldEnforce(
   return userAction !== "allow"
 }
 
+// Cache TTL for the user config fetch. The hook fires once per (tool, pattern)
+// pair, so a busy session can trigger this many times per second; short-lived
+// caching keeps the SDK round-trips bounded without breaking "edit opencode.json
+// and see it reflected" within a few seconds.
+const USER_CONFIG_CACHE_TTL_MS = 5_000
+
 export async function PermissionPolicyPlugin(input: PluginInput): Promise<Hooks> {
+  let cached: { permission: ConfigPermission.Info; at: number } | null = null
+
   const readUserPermission = async (): Promise<ConfigPermission.Info> => {
+    if (cached && Date.now() - cached.at < USER_CONFIG_CACHE_TTL_MS) return cached.permission
     try {
       const res = await input.client.config.get({ throwOnError: true })
       const data = (res as { data?: { permission?: ConfigPermission.Info } }).data
-      return data?.permission ?? {}
+      const permission = data?.permission ?? {}
+      cached = { permission, at: Date.now() }
+      return permission
     } catch (err) {
       // Defensive: on any failure (network, transport, malformed response)
       // fall back to an empty ruleset, which means "user has not opted in".
       // The downstream `shouldEnforce` will then raise the status to `ask`
-      // — the safer of the two failure modes.
+      // — the safer of the two failure modes. Failures are not cached so the
+      // next call retries.
       log.warn("failed to read user config; treating as empty permission", { err: String(err) })
       return {}
     }

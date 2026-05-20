@@ -430,6 +430,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               if (escalation.some((rule) => rule.pattern === pattern)) continue
               escalation.push({ permission: req.permission, pattern, action: hookOutput.status })
             }
+            // NOTE: `Permission.evaluate` uses `findLast` (see permission/
+            // evaluate.ts), so rules appended LAST win. We rely on this:
+            // `escalation` is merged AFTER the original ruleset so any `ask`
+            // it appended overrides the matching `allow` from config. If
+            // `Permission.merge` / `evaluate` ever switches to first-match,
+            // this wiring becomes a no-op and the plugin gate is bypassed.
             yield* permission.ask({
               ...req,
               sessionID: input.session.id,
