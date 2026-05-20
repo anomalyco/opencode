@@ -37,7 +37,7 @@ If you are another LLM following this file, do this exactly:
 3. Verify that commit `da4f7e820` is an ancestor of `HEAD`.
 4. Build the binary from the cloned repo.
 5. Run the built binary from the repo `dist` directory. Do not use a globally installed `opencode`.
-6. If `CEREBRAS_API_KEY` is missing but `SA_API_KEY` exists, export `CEREBRAS_API_KEY="$SA_API_KEY"`.
+6. Export `CEREBRAS_API_KEY` in the shell that will run OpenCode.
 7. Use the custom `@ai-sdk/cerebras` provider config in this document for `moonshotai-kimi-k2.6`.
 8. Use a fresh `OPENCODE_DB` path for the test run.
 9. Treat this error as a failure:
@@ -50,7 +50,7 @@ Bad Request: messages.2.assistant.reasoning_content: property 'messages.2.assist
 
 - `git`
 - `bun` on `PATH`
-- a valid Cerebras key in either `CEREBRAS_API_KEY` or `SA_API_KEY`
+- a valid Cerebras key in `CEREBRAS_API_KEY`
 
 If `bun` is missing, install it first:
 
@@ -87,12 +87,8 @@ git merge-base --is-ancestor ee2fa6b64 HEAD
 git merge-base --is-ancestor da4f7e820 HEAD
 
 if [ -z "${CEREBRAS_API_KEY:-}" ]; then
-  if [ -n "${SA_API_KEY:-}" ]; then
-    export CEREBRAS_API_KEY="$SA_API_KEY"
-  else
-    echo "Missing CEREBRAS_API_KEY and SA_API_KEY" >&2
-    exit 1
-  fi
+  echo "Missing CEREBRAS_API_KEY" >&2
+  exit 1
 fi
 
 bun --version
@@ -214,12 +210,10 @@ Then verify it:
 
 ### 4. Export the Cerebras key
 
-If you already have `CEREBRAS_API_KEY`, keep using it.
-
-If you only have `SA_API_KEY`, map it over:
+Export `CEREBRAS_API_KEY` in the shell that will run OpenCode:
 
 ```bash
-export CEREBRAS_API_KEY="$SA_API_KEY"
+export CEREBRAS_API_KEY="your_cerebras_key_here"
 ```
 
 ### 5. Write the K2.6 config file
