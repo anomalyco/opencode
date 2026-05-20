@@ -46,6 +46,7 @@ import {
 import { readFile } from "node:fs/promises"
 import { openCollabPullRequest } from "./github-pr"
 import { toggleReaction, isAllowedEmoji } from "./reactions"
+import { mentionsToEvents } from "./mentions"
 
 /**
  * Read TCP ports the container is currently LISTENING on, by parsing
@@ -1005,6 +1006,16 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       // Direct dispatch — bypass approval.  Executor handles the rest:
       // marks "submitted", broadcasts collab:prompt_submitted, dispatches.
       const suggestion = Queue.enqueue(sessionId, body.content, sess.githubId, sess.githubLogin)
+      // Mention broadcasts even though the suggestion itself won't appear
+      // in the pending queue — Bob still gets a ping if @bob was mentioned.
+      for (const event of mentionsToEvents({
+        text: body.content,
+        collabSession,
+        authorLogin: sess.githubLogin,
+        suggestionId: suggestion.id,
+      })) {
+        broadcastSse(sessionId, event)
+      }
       return json(suggestion, 201)
     }
 
@@ -1012,6 +1023,14 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     const suggestion = Queue.submitToPool(sessionId, body.content, sess.githubId, sess.githubLogin)
     broadcastSse(sessionId, { type: "collab:prompt_suggestion", suggestion })
     broadcastSse(sessionId, { type: "collab:queue_update", queue: collabDb.getPendingPool(sessionId) })
+    for (const event of mentionsToEvents({
+      text: body.content,
+      collabSession,
+      authorLogin: sess.githubLogin,
+      suggestionId: suggestion.id,
+    })) {
+      broadcastSse(sessionId, event)
+    }
     return json(suggestion, 201)
   }
 
@@ -1021,6 +1040,14 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     const body = (await req.json()) as { content: string }
     const suggestion = Queue.submitToPool(sessionId, body.content, sess.githubId, sess.githubLogin)
     broadcastSse(sessionId, { type: "collab:prompt_suggestion", suggestion })
+    for (const event of mentionsToEvents({
+      text: body.content,
+      collabSession,
+      authorLogin: sess.githubLogin,
+      suggestionId: suggestion.id,
+    })) {
+      broadcastSse(sessionId, event)
+    }
     return json(suggestion, 201)
   }
 

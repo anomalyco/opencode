@@ -91,10 +91,26 @@ function ParticipantRow(props: {
   typing: () => boolean
   roleColorClass: string
   roleLabel: string
+  /** Number of unread @-mentions for THIS participant (only ever non-zero for the local user). */
+  unreadMentions?: () => number
 }) {
+  const unread = () => props.unreadMentions?.() ?? 0
   return (
     <div class="flex items-center gap-2">
-      <Avatar participant={props.participant} size="sm" />
+      <div class="relative">
+        <Avatar participant={props.participant} size="sm" />
+        {/* Red mention badge — only shows on the local user's row when
+            they have unread @-mentions. */}
+        <Show when={unread() > 0}>
+          <span
+            class="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center"
+            style={{ "background-color": "#ef4444", color: "#fff" }}
+            title={`${unread()} unread @-mention${unread() === 1 ? "" : "s"}`}
+          >
+            {unread() > 9 ? "9+" : unread()}
+          </span>
+        </Show>
+      </div>
       <span class="text-xs text-zinc-300 flex-1 truncate">{props.participant.githubLogin}</span>
       <Show when={props.typing()}>
         <span
@@ -304,6 +320,37 @@ function PromptInput(props: {
  *  REACTION_EMOJIS in packages/collab/src/types.ts). */
 const REACTION_BAR: readonly string[] = ["👍", "👎", "🔥", "🚀", "❤️", "😄"]
 
+/** Match GitHub-style @-mentions (1–39 chars from [A-Za-z0-9-], start
+ *  with alnum).  Mirrors the server-side MENTION_RE in mentions.ts. */
+const MENTION_RE = /(^|\s)(@[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))/g
+
+/** Render free-text content with @-mentions highlighted as inline pills. */
+function renderMentions(text: string) {
+  const parts: Array<string | { mention: string }> = []
+  let lastIndex = 0
+  MENTION_RE.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = MENTION_RE.exec(text)) !== null) {
+    const start = m.index + m[1]!.length // skip the leading whitespace/start
+    if (start > lastIndex) parts.push(text.slice(lastIndex, start))
+    parts.push({ mention: m[2]! })
+    lastIndex = MENTION_RE.lastIndex
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex))
+  return parts.map((p) =>
+    typeof p === "string" ? (
+      p
+    ) : (
+      <span
+        class="inline-block px-1 rounded font-medium"
+        style={{ "background-color": "rgba(96,165,250,0.18)", color: "#60a5fa" }}
+      >
+        {p.mention}
+      </span>
+    ),
+  )
+}
+
 function QueueItem(props: {
   suggestion: PromptSuggestion
   myRole: CollabRole
@@ -338,7 +385,9 @@ function QueueItem(props: {
           alt={s.authorGithubLogin}
         />
         <div class="min-w-0 flex-1">
-          <p class="text-xs text-zinc-300 whitespace-pre-wrap break-words leading-relaxed">{s.content}</p>
+          <p class="text-xs text-zinc-300 whitespace-pre-wrap break-words leading-relaxed">
+            {renderMentions(s.content)}
+          </p>
           <div class="flex items-center gap-2 mt-1">
             <span class="text-[10px] text-zinc-600">{s.authorGithubLogin}</span>
             <span class={`text-[10px] font-medium ${
@@ -559,6 +608,9 @@ function CollabSessionInner(props: { me: Me }) {
                   typing={() => collab.typingUsers().has(p.githubLogin)}
                   roleColorClass={roleColor(p.role)}
                   roleLabel={roleLabel(p.role)}
+                  unreadMentions={
+                    p.githubId === props.me.githubId ? collab.unreadMentions : undefined
+                  }
                 />
               )}
             </For>
@@ -603,7 +655,10 @@ function CollabSessionInner(props: { me: Me }) {
         {/* Queue */}
         <div class="flex-1 overflow-hidden flex flex-col min-h-0">
           <button
-            onClick={() => setQueueOpen(v => !v)}
+            onClick={() => {
+              setQueueOpen(v => !v)
+              collab.clearMentions()
+            }}
             class="w-full px-4 py-2 flex items-center justify-between text-[10px] text-zinc-600 uppercase tracking-wider font-medium hover:text-zinc-400 transition-colors"
           >
             <span>Queue</span>

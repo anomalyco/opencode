@@ -95,3 +95,12 @@ export type CollabEvent =
   | { type: "collab:session_deleted"; collabSessionId: string }
   | { type: "collab:native_session_linked"; sessionId: string; directory: string }
   | { type: "collab:reaction_changed"; suggestionId: string; reactions: Record<string, string[]> }
+  | {
+      type: "collab:mention"
+      /** GitHub login of the person who was mentioned. */
+      mentionedLogin: string
+      /** GitHub login of the person who wrote the mention. */
+      authorLogin: string
+      /** Where it came from — a prompt suggestion. */
+      context: { kind: "suggestion"; suggestionId: string; excerpt: string }
+    }

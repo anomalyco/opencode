@@ -24,6 +24,10 @@ interface CollabContextValue {
   typingUsers: () => Set<string>
   /** TCP ports the workspace container is currently listening on (likely dev servers). */
   previewPorts: () => number[]
+  /** Number of unread @-mentions for the current user (cleared by clearMentions). */
+  unreadMentions: () => number
+  /** Mark all currently-unread mentions as read (called when the user views the queue/etc.). */
+  clearMentions: () => void
 
   // Actions
   submitPrompt: (content: string) => Promise<void>
@@ -69,6 +73,7 @@ export function CollabProvider(props: CollabProviderProps) {
   const [nativeSessionDirectory, setNativeSessionDirectory] = createSignal<string | null>(null)
   const [typingUsers, setTypingUsers] = createSignal<Set<string>>(new Set())
   const [previewPorts, setPreviewPorts] = createSignal<number[]>([])
+  const [unreadMentions, setUnreadMentions] = createSignal<number>(0)
 
   function markTyping(githubLogin: string, typing: boolean) {
     setTypingUsers((prev) => {
@@ -344,6 +349,51 @@ export function CollabProvider(props: CollabProviderProps) {
           ),
         )
         break
+
+      case "collab:mention":
+        // Only react if it's me being mentioned (every browser receives the
+        // broadcast — we filter client-side so the SSE stream stays simple).
+        if (props.meGithubId != null) {
+          const me = session()?.participants.find((p) => p.githubId === props.meGithubId)
+          if (me && me.githubLogin === event.mentionedLogin) {
+            console.debug("[collab] @-mention received", event)
+            setUnreadMentions((n) => n + 1)
+            fireMentionNotification(event.authorLogin, event.context.excerpt)
+          }
+        }
+        break
+    }
+  }
+
+  /**
+   * Show a browser desktop notification for an @-mention.  Lazily asks for
+   * permission the first time we need to fire one — never up-front, so users
+   * who don't care don't see a prompt.
+   */
+  function fireMentionNotification(authorLogin: string, excerpt: string) {
+    if (typeof Notification === "undefined") return
+    const showOne = () => {
+      try {
+        const n = new Notification(`@${authorLogin} mentioned you`, {
+          body: excerpt,
+          icon: `https://github.com/${authorLogin}.png?size=96`,
+          tag: `collab-mention-${props.collabSessionId}`,
+        })
+        // Clicking the notification surfaces the tab.
+        n.onclick = () => {
+          window.focus()
+          n.close()
+        }
+      } catch {
+        // Some browsers throw on cross-origin icon — ignore.
+      }
+    }
+    if (Notification.permission === "granted") {
+      showOne()
+    } else if (Notification.permission !== "denied") {
+      Notification.requestPermission().then((perm) => {
+        if (perm === "granted") showOne()
+      }).catch(() => {})
     }
   }
 
@@ -369,6 +419,8 @@ export function CollabProvider(props: CollabProviderProps) {
     nativeSessionDirectory,
     typingUsers,
     previewPorts,
+    unreadMentions,
+    clearMentions: () => setUnreadMentions(0),
 
     async submitPrompt(content) {
       await api("/prompt", "POST", { content })
