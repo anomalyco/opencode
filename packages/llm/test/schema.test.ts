@@ -11,6 +11,8 @@ const model = new ModelRef({
   limits: new ModelLimits({}),
 })
 
+const decodeLLMRequest = Schema.decodeUnknownSync(LLMRequest as unknown as Schema.Decoder<LLMRequest>)
+
 describe("llm schema", () => {
   test("decodes a minimal request", () => {
     const input: unknown = {
@@ -22,14 +24,14 @@ describe("llm schema", () => {
       generation: {},
     }
 
-    const decoded = Schema.decodeUnknownSync(LLMRequest)(input)
+    const decoded = decodeLLMRequest(input)
 
     expect(decoded.id).toBe("req_1")
     expect(decoded.messages[0]?.content[0]?.type).toBe("text")
   })
 
   test("accepts custom route ids", () => {
-    const decoded = Schema.decodeUnknownSync(LLMRequest)({
+    const decoded = decodeLLMRequest({
       model: { ...model, route: "custom-route" },
       system: [],
       messages: [],
@@ -41,9 +43,6 @@ describe("llm schema", () => {
   })
 
   test("rejects invalid event type", () => {
-    // Tool-result media support widens the inferred decoding services for the
-    // event union, but this runtime assertion still exercises the decoder.
-    // @ts-expect-error see comment above
     expect(() => Schema.decodeUnknownSync(LLMEvent)({ type: "bogus" })).toThrow()
   })
 
