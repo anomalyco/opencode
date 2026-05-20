@@ -119,10 +119,6 @@ function parts(node: Node) {
   return out
 }
 
-function source(node: Node) {
-  return (node.parent?.type === "redirected_statement" ? node.parent.text : node.text).trim()
-}
-
 function commands(node: Node) {
   return node.descendantsOfType("command").filter((child): child is Node => Boolean(child))
 }
@@ -401,7 +397,20 @@ export const ShellTool = Tool.define(
         }
 
         if (tokens.length && (!cmd || !CWD.has(cmd))) {
-          scan.patterns.add(source(node))
+          // Build the pattern from parts() tokens, which already exclude variable_assignment
+          // nodes (e.g. GITHUB_TOKEN=x), so the pattern only contains the actual command.
+          let pattern = tokens.join(" ")
+          if (node.parent?.type === "redirected_statement") {
+            // Re-attach any redirection suffix (e.g. "2>&1", "> file") that lives on
+            // the parent but outside the command node itself.
+            // Guard with startsWith: tree-sitter guarantees child ranges are within
+            // parent ranges, but .text is a string slice so we verify before slicing.
+            if (node.parent.text.startsWith(node.text)) {
+              const redirectSuffix = node.parent.text.slice(node.text.length).trim()
+              if (redirectSuffix) pattern = pattern + " " + redirectSuffix
+            }
+          }
+          scan.patterns.add(pattern)
           scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
         }
       }

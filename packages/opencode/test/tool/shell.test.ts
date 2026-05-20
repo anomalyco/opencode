@@ -1023,6 +1023,69 @@ describe("tool.shell permissions", () => {
       )
     }),
   )
+
+  each("strips inline env var prefix from permission pattern", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+          yield* fail(
+            { command: 'CI=true git commit -m "test"', description: "Commit with env prefix" },
+            capture(requests, err),
+          )
+          const bashReq = requests.find((r) => r.permission === "bash")
+          expect(bashReq).toBeDefined()
+          expect(bashReq!.patterns).toContain('git commit -m "test"')
+          expect(bashReq!.patterns).not.toContain('CI=true git commit -m "test"')
+        }),
+      )
+    }),
+  )
+
+  each("strips multiple inline env var prefixes from permission pattern", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+          yield* fail(
+            { command: "FOO=1 BAR=2 echo hello", description: "Echo with multiple env prefixes" },
+            capture(requests, err),
+          )
+          const bashReq = requests.find((r) => r.permission === "bash")
+          expect(bashReq).toBeDefined()
+          expect(bashReq!.patterns).toContain("echo hello")
+          expect(bashReq!.patterns).not.toContain("FOO=1")
+        }),
+      )
+    }),
+  )
+
+  each("strips env var prefix and preserves redirection in permission pattern", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+          yield* fail(
+            { command: "CI=true echo hello > output.txt", description: "Redirect with env prefix" },
+            capture(requests, err),
+          )
+          const bashReq = requests.find((r) => r.permission === "bash")
+          expect(bashReq).toBeDefined()
+          expect(bashReq!.patterns).toContain("echo hello > output.txt")
+          expect(bashReq!.patterns).not.toContain("CI=true")
+        }),
+      )
+    }),
+  )
 })
 
 describe("tool.shell abort", () => {
