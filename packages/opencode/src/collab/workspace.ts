@@ -160,6 +160,50 @@ async function checkoutCollabBranch(
 }
 
 /**
+ * Read the current branch checked out in `repoPath` (`git symbolic-ref` style,
+ * `rev-parse --abbrev-ref HEAD`).  Returns null if:
+ *   - the repo doesn't exist (still cloning)
+ *   - we're on a detached HEAD ("HEAD")
+ *   - the git command fails
+ *
+ * Used to surface the actual current branch even for legacy collab sessions
+ * created before `collab_session.branch` was added.
+ */
+export async function readRepoBranch(
+  collabSessionId: string,
+  repoFullName: string,
+): Promise<string | null> {
+  const repoPath = repoWorkspacePath(collabSessionId, repoFullName)
+  if (!existsSync(repoPath)) return null
+  try {
+    const out = await captureGitOutput(
+      ["-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"],
+      process.env,
+    )
+    const branch = out.trim()
+    if (!branch || branch === "HEAD") return null
+    return branch
+  } catch {
+    return null
+  }
+}
+
+/** Bulk variant — reads the current branch for every repo concurrently. */
+export async function readRepoBranches(
+  collabSessionId: string,
+  repos: string[],
+): Promise<Record<string, string>> {
+  const entries = await Promise.all(
+    repos.map(async (repo) => [repo, await readRepoBranch(collabSessionId, repo)] as const),
+  )
+  const out: Record<string, string> = {}
+  for (const [repo, branch] of entries) {
+    if (branch) out[repo] = branch
+  }
+  return out
+}
+
+/**
  * Run a git command and capture stdout (used for `rev-parse` etc.).
  * `runAsync` inherits stdio so we'd lose the output — this variant pipes.
  */

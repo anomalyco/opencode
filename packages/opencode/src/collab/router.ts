@@ -41,6 +41,7 @@ import {
   cleanupSessionWorkspace,
   sessionWorkspacePath,
   nativeSessionDirectory,
+  readRepoBranches,
 } from "./workspace"
 import type { CollabEvent } from "@opencode-ai/collab"
 
@@ -852,9 +853,15 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     // It MUST match the directory we hand to opencode in executePromptOnNativeSession,
     // otherwise the iframe points at a different opencode InstanceStore than the
     // one running the LLM (session-not-found in the iframe).
+    //
+    // repoBranches: read live from each cloned repo's HEAD so the UI can show
+    // the actual current branch — including for legacy sessions where
+    // collab_session.branch is null because the column didn't exist yet.
+    const repoBranches = await readRepoBranches(sessionId, collabSession.repos)
     return json({
       ...collabSession,
       workspacePath: nativeSessionDirectory(sessionId, collabSession.repos),
+      repoBranches,
     })
   }
 

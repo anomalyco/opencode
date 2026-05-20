@@ -28,6 +28,13 @@ export interface CollabSession {
   /** Git branch every linked repo is checked out to for this collab session. */
   branch: string | null
   repos: string[]
+  /**
+   * Live-read git branch per repo (keyed by `<org>/<repo>`).  Reflects the
+   * actual current HEAD of each cloned working copy — so legacy sessions
+   * created before `branch` existed still surface their real branch in the
+   * UI.  Empty object if no repos are cloned yet.
+   */
+  repoBranches?: Record<string, string>
   participants: Participant[]
   createdAt: Date
   deletedAt: Date | null
