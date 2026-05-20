@@ -194,13 +194,71 @@ function preWarmNativeSession(collabSessionId: string, workspacePath: string): v
 
     console.log("[collab] pre-warming native session for collab session:", collabSessionId)
     try {
-      await ensureNativeSession(collabSessionId, workspacePath)
+      const nativeSessionId = await ensureNativeSession(collabSessionId, workspacePath)
       console.log("[collab] native session pre-warm complete for:", collabSessionId)
+
+      // Fire a seed prompt so the LLM has context about being in a collab
+      // session AND so the iframe immediately renders a conversation
+      // (instead of an empty new-session view) when the user opens the page.
+      if (nativeSessionId) {
+        await sendSeedPrompt(nativeSessionId, workspacePath, cs.name, cs.repos)
+      }
     } catch (err) {
       // Non-fatal: the approve path will retry
       console.error("[collab] native session pre-warm failed:", err)
     }
   }, 200) // 200 ms gives the creation response time to flush
+}
+
+/**
+ * Send a single seed prompt to the freshly-created native opencode session.
+ * Establishes context for the LLM (it's in a multi-user collab session and
+ * prompts come through a shared queue) and produces an immediate visible
+ * conversation in the iframe so users aren't staring at an empty composer.
+ */
+async function sendSeedPrompt(
+  nativeSessionId: string,
+  workspacePath: string,
+  sessionName: string,
+  repos: string[],
+): Promise<void> {
+  const reposLine =
+    repos.length > 0
+      ? `Linked repositories (cloned at ${workspacePath}): ${repos.join(", ")}`
+      : `No repositories linked to this session.`
+  const seed = [
+    `Starting a collab session: "${sessionName}".`,
+    "",
+    reposLine,
+    "",
+    "This is a real-time collaborative coding session.  Multiple developers " +
+      "share this conversation through a queue — Drivers can dispatch prompts " +
+      "directly to you, Contributors submit suggestions for a Driver to " +
+      "approve, and Viewers read along.  Every git commit you make inside the " +
+      "workspace is auto-tagged with the collab session metadata via a " +
+      "prepare-commit-msg hook installed in each cloned repo.",
+    "",
+    "Acknowledge readiness in one short sentence — no analysis yet.  The next " +
+      "prompt from a team member will tell you what to work on.",
+  ].join("\n")
+
+  try {
+    const res = await fetch(
+      `http://localhost:4096/session/${nativeSessionId}/prompt_async?directory=${encodeURIComponent(workspacePath)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parts: [{ type: "text", text: seed }] }),
+      },
+    )
+    if (!res.ok) {
+      console.error("[collab] seed prompt failed:", res.status, await res.text().catch(() => ""))
+    } else {
+      console.log("[collab] seed prompt sent for:", nativeSessionId)
+    }
+  } catch (err) {
+    console.error("[collab] seed prompt error:", err)
+  }
 }
 
 /**
@@ -601,7 +659,9 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     // pane all start empty.
     const warmupDirectory = nativeSessionDirectory(created.id, created.repos)
     if (created.repos.length > 0) {
-      initSessionWorkspace(created.id, created.repos)
+      // Pass the session name so initSessionWorkspace can bake it into the
+      // per-repo prepare-commit-msg hook.
+      initSessionWorkspace(created.id, created.repos, created.name)
         .then(() => preWarmNativeSession(created.id, warmupDirectory))
         .catch((err) => {
           console.error("[collab] workspace init failed:", err)

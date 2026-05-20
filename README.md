@@ -111,8 +111,36 @@ Your browser ──── HTTPS ──── ngrok tunnel ──── Docker (l
 - **Sessions persist** across server restarts (SQLite, Docker volume). Disconnect and reconnect — your history is intact.
 - **Repos are cloned server-side** at session creation (using `GITHUB_TOKEN`). Participants never need a local clone — the LLM works inside `/var/opencode/workspaces/<sessionId>/<repo>` on the server.
 - **Co-authored commits.** The Driver who approved the prompt is the git author; all other online participants are added as `Co-authored-by:` trailers using their GitHub noreply email.
+- **Every commit is signed "collaborative".** Each cloned repo gets a `prepare-commit-msg` hook installed at session-init time.  Every fresh commit made inside the workspace automatically gets trailers like:
+  ```
+  Collaborative-Commit: true
+  Collab-Session: Drone API refactor
+  Collab-Session-Id: cs_45d8a93d...
+  Collab-Repo: unleashlive/backend
+  ```
+  Amends, merges and squashes are left alone (re-stamping would duplicate).
+- **Seed prompt fires automatically.** When the workspace finishes cloning, the server sends one seed prompt to the freshly created opencode session: *"Starting a collab session: …"*.  This (a) gives the LLM context that it's in a multi-user collab session, and (b) makes the iframe immediately show a conversation instead of an empty composer.
 - **Submissions route through the queue.** The opencode prompt input (full editor with every shortcut) is rendered inside an `?embed=collab` iframe; submissions are intercepted via `postMessage` and forwarded to the collab API, so the right role/queue/vote flow always applies.
 - **Plugin pre-installed.** The `opencode-claude-auth` plugin is baked into the Docker image at build time so the first session creation doesn't block the event loop installing it.
+
+### Where to find the cloned repos on disk
+
+Workspaces live inside the `collab-workspaces` Docker volume at `/var/opencode/workspaces/<collabSessionId>/<repoName>/`.  Quick ways to inspect them:
+
+```bash
+# List all live sessions
+docker exec opencode-opencode-1 ls /var/opencode/workspaces/
+
+# Drop into a repo's shell
+docker exec -it opencode-opencode-1 bash -c \
+  'cd /var/opencode/workspaces/cs_<id>/<repoName> && exec bash'
+
+# Or just check git status from the host
+docker exec opencode-opencode-1 \
+  git -C /var/opencode/workspaces/cs_<id>/<repoName> status
+```
+
+Inside the iframe the terminal panel is already cwd'd inside the cloned repo — `git status` / `git log` / `git diff` work directly there.  The file tree on the left of the iframe shows that same repo.
 
 ---
 

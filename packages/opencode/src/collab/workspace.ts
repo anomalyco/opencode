@@ -10,7 +10,7 @@
  */
 
 import { spawn } from "child_process"
-import { mkdirSync, rmSync, existsSync } from "fs"
+import { mkdirSync, rmSync, existsSync, writeFileSync } from "fs"
 import { join } from "path"
 import type { Participant } from "@opencode-ai/collab"
 
@@ -68,12 +68,16 @@ export function nativeSessionDirectory(collabSessionId: string, repos: string[])
 }
 
 /**
- * Clone all repos for a Collab Session at session creation.
+ * Clone all repos for a Collab Session at session creation, and install a
+ * prepare-commit-msg hook in each so every commit produced inside the
+ * workspace is signed with collab-session metadata.
+ *
  * Uses GITHUB_TOKEN for authentication (supports private repos).
  */
 export async function initSessionWorkspace(
   collabSessionId: string,
   repos: string[],
+  sessionName: string = "",
 ): Promise<void> {
   const root = sessionWorkspacePath(collabSessionId)
   mkdirSync(root, { recursive: true })
@@ -88,14 +92,84 @@ export async function initSessionWorkspace(
     if (existsSync(dest)) {
       // Already cloned — pull latest (non-blocking)
       await runAsync("git", ["-C", dest, "pull", "--ff-only"], { env })
-      continue
+    } else {
+      const cloneUrl = token
+        ? `https://x-access-token:${token}@github.com/${repo}.git`
+        : `https://github.com/${repo}.git`
+
+      await runAsync("git", ["clone", "--depth", "100", cloneUrl, dest], { env })
     }
 
-    const cloneUrl = token
-      ? `https://x-access-token:${token}@github.com/${repo}.git`
-      : `https://github.com/${repo}.git`
+    // (Re)install the collab commit hook every time — covers fresh clones
+    // and existing checkouts that pre-date the feature.
+    installCollabCommitHook(dest, collabSessionId, sessionName, repo)
+  }
+}
 
-    await runAsync("git", ["clone", "--depth", "100", cloneUrl, dest], { env })
+/**
+ * Install a `prepare-commit-msg` git hook into the cloned repo that
+ * automatically appends collab-session trailers to every commit message:
+ *
+ *   Collaborative-Commit: true
+ *   Collab-Session: <session name>
+ *   Collab-Session-Id: <session id>
+ *   Collab-Repo: <org/repo>
+ *
+ * Trailers are skipped on merge/squash/amend commits (Git sets $2 to
+ * "merge"/"squash"/"commit" in those cases, while a plain new commit has
+ * either "" or "message"/"template"), and we no-op if the trailer is
+ * already present — so re-running git commit --amend won't duplicate.
+ *
+ * The hook is written fresh on every workspace init so it picks up any
+ * rename of the session.
+ */
+function installCollabCommitHook(
+  repoPath: string,
+  sessionId: string,
+  sessionName: string,
+  repoFullName: string,
+): void {
+  const hooksDir = join(repoPath, ".git", "hooks")
+  try {
+    mkdirSync(hooksDir, { recursive: true })
+  } catch {
+    // If .git/hooks isn't writable, just skip — we'd rather not crash session init.
+    return
+  }
+
+  // Single-quote-safe escape for the heredoc body.
+  const safeName = sessionName.replace(/'/g, "'\\''")
+  const safeRepo = repoFullName.replace(/'/g, "'\\''")
+  const safeId = sessionId.replace(/'/g, "'\\''")
+
+  const script = `#!/bin/sh
+# Auto-installed by unleashlive/opencode collab — DO NOT EDIT.
+# Appends collab-session trailers to every fresh commit message so commits
+# produced inside a collab workspace are clearly marked.
+
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="$2"
+
+case "$COMMIT_SOURCE" in
+  ""|"message"|"template")
+    # Only stamp plain commits — leave merges, squashes, and existing
+    # commit messages (via --amend without -m) alone.
+    if ! grep -q '^Collaborative-Commit:' "$COMMIT_MSG_FILE"; then
+      printf '\\n' >> "$COMMIT_MSG_FILE"
+      printf 'Collaborative-Commit: true\\n' >> "$COMMIT_MSG_FILE"
+      printf 'Collab-Session: %s\\n' '${safeName}' >> "$COMMIT_MSG_FILE"
+      printf 'Collab-Session-Id: %s\\n' '${safeId}' >> "$COMMIT_MSG_FILE"
+      printf 'Collab-Repo: %s\\n' '${safeRepo}' >> "$COMMIT_MSG_FILE"
+    fi
+    ;;
+esac
+`
+
+  const hookPath = join(hooksDir, "prepare-commit-msg")
+  try {
+    writeFileSync(hookPath, script, { mode: 0o755 })
+  } catch (err) {
+    console.error("[collab] failed to install commit hook for", repoPath, err)
   }
 }
 
