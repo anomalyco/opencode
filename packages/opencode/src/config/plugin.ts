@@ -51,7 +51,8 @@ export async function resolvePluginSpec(plugin: Spec, configFilepath: string): P
   const spec = pluginSpecifier(plugin)
   if (!isPathPluginSpec(spec)) return plugin
 
-  const base = path.dirname(configFilepath)
+  const configDir = path.dirname(configFilepath)
+  const base = path.basename(configDir) === ".opencode" ? path.dirname(configDir) : configDir
   const file = (() => {
     if (spec.startsWith("file://")) return spec
     if (path.isAbsolute(spec) || /^[A-Za-z]:[\\/]/.test(spec)) return pathToFileURL(spec).href
