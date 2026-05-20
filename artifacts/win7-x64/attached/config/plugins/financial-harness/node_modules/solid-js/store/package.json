@@ -1,0 +1,46 @@
+{
+  "name": "solid-js/store",
+  "main": "./dist/server.cjs",
+  "module": "./dist/server.js",
+  "unpkg": "./dist/store.cjs",
+  "types": "./types/index.d.ts",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "worker": {
+        "types": "./types/index.d.ts",
+        "import": "./dist/server.js",
+        "require": "./dist/server.cjs"
+      },
+      "browser": {
+        "development": {
+          "types": "./types/index.d.ts",
+          "import": "./dist/dev.js",
+          "require": "./dist/dev.cjs"
+        },
+        "types": "./types/index.d.ts",
+        "import": "./dist/store.js",
+        "require": "./dist/store.cjs"
+      },
+      "deno": {
+        "types": "./types/index.d.ts",
+        "import": "./dist/server.js",
+        "require": "./dist/server.cjs"
+      },
+      "node": {
+        "types": "./types/index.d.ts",
+        "import": "./dist/server.js",
+        "require": "./dist/server.cjs"
+      },
+      "development": {
+        "types": "./types/index.d.ts",
+        "import": "./dist/dev.js",
+        "require": "./dist/dev.cjs"
+      },
+      "types": "./types/index.d.ts",
+      "import": "./dist/store.js",
+      "require": "./dist/store.cjs"
+    }
+  }
+}

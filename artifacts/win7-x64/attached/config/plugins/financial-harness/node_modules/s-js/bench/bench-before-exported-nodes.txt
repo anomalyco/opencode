@@ -1,0 +1,22 @@
+
+> s-js@0.4.8 bench /Users/aah/Dropbox/Tech Projects/S/dev/S
+> node --allow-natives-syntax bench/bench.js
+
+createDataSignals: 34
+createComputations0to1: 28
+createComputations1to1: 36
+createComputations2to1: 67
+createComputations4to1: 237
+createComputations1000to1: 461
+createComputations1to2: 85
+createComputations1to4: 113
+createComputations1to8: 107
+createComputations1to1000: 57
+---
+updateComputations1to1: 35
+updateComputations2to1: 24
+updateComputations4to1: 17
+updateComputations1000to1: 26
+updateComputations1to2: 30
+updateComputations1to4: 30
+updateComputations1to1000: 25

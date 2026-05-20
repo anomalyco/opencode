@@ -1,1 +1,0 @@
-﻿LINGXI CODE 插件存放目录

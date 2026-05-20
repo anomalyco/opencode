@@ -1,0 +1,29 @@
+{
+  "prd": {
+    "template": ["default"],
+    "rules": [],
+    "review": [],
+    "max_review_rounds": 3,
+    "output_path": "docs/<FEATURE>/概要设计文档.md"
+  },
+  "design": {
+    "template": ["default"],
+    "rules": [],
+    "review": [],
+    "max_review_rounds": 3,
+    "output_path": "docs/<FEATURE>/详细设计与程序设计文档.md"
+  },
+  "code": {
+    "template": [],
+    "rules": [],
+    "review": [],
+    "max_review_rounds": 2
+  },
+  "test": {
+    "template": ["default"],
+    "rules": [],
+    "review": [],
+    "max_review_rounds": 3,
+    "output_path": "docs/<FEATURE>/测试报告文档.md"
+  }
+}

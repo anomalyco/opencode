@@ -1,0 +1,77 @@
+{
+  "name": "pngjs",
+  "version": "6.0.0",
+  "description": "PNG encoder/decoder in pure JS, supporting any bit size & interlace, async & sync with full test suite.",
+  "contributors": [
+    "Alexandre Paré",
+    "Gaurav Mali",
+    "Gusts Kaksis",
+    "Kuba Niegowski",
+    "Luke Page",
+    "Pietajan De Potter",
+    "Steven Sojka",
+    "liangzeng",
+    "Michael Vogt",
+    "Xin-Xin Wang",
+    "toriningen",
+    "Eugene Kulabuhov"
+  ],
+  "homepage": "https://github.com/lukeapage/pngjs",
+  "keywords": [
+    "PNG",
+    "decoder",
+    "encoder",
+    "js-png",
+    "node-png",
+    "parser",
+    "png",
+    "png-js",
+    "png-parse",
+    "pngjs"
+  ],
+  "engines": {
+    "node": ">=12.13.0"
+  },
+  "main": "./lib/png.js",
+  "directories": {
+    "lib": "lib",
+    "example": "examples",
+    "test": "test"
+  },
+  "files": [
+    "browser.js",
+    "lib/"
+  ],
+  "scripts": {
+    "build": "yarn prepublish",
+    "prepublish": "yarn browserify",
+    "browserify": "browserify lib/png.js --standalone png > browser.js",
+    "coverage": "nyc --reporter=lcov --reporter=text-summary tape test/*-spec.js nolarge",
+    "test": "yarn lint && yarn prettier:check && tape test/*-spec.js | tap-dot && node test/run-compare",
+    "lint": "eslint .",
+    "prettier:write": "prettier --write .",
+    "prettier:check": "prettier --check ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/lukeapage/pngjs.git"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/lukeapage/pngjs/issues"
+  },
+  "devDependencies": {
+    "browserify": "17.0.0",
+    "buffer-equal": "1.0.0",
+    "codecov": "3.7.1",
+    "connect": "3.7.0",
+    "eslint": "7.8.1",
+    "eslint-config-prettier": "6.14.0",
+    "nyc": "15.1.0",
+    "prettier": "2.1.1",
+    "puppeteer": "5.4.0",
+    "serve-static": "1.14.1",
+    "tap-dot": "2.0.0",
+    "tape": "5.0.1"
+  }
+}

@@ -1,0 +1,78 @@
+# Minimal first-run template for qualitative metrics.
+# Start here when true quality requires semantic judgment, not a proxy metric.
+
+name: improve-search-relevance
+description: Improve semantic relevance of search results without obvious failures
+
+metric:
+  primary:
+    type: judge
+    name: mean_score
+    direction: maximize
+  degenerate_gates:
+    - name: result_count
+      check: ">= 5"
+      description: Return enough results to judge quality
+    - name: empty_query_failures
+      check: "== 0"
+      description: Empty or trivial queries must not fail
+  diagnostics:
+    - name: latency_ms
+    - name: recall_at_10
+  judge:
+    rubric: |
+      Rate each result set from 1-5 for relevance:
+      - 5: Results are directly relevant and well ordered
+      - 4: Mostly relevant with minor ordering issues
+      - 3: Mixed relevance or one obvious miss
+      - 2: Weak relevance, several misses, or poor ordering
+      - 1: Mostly irrelevant
+      Also report: ambiguous (boolean)
+    scoring:
+      primary: mean_score
+      secondary:
+        - ambiguous_rate
+    model: haiku
+    sample_size: 10
+    batch_size: 5
+    sample_seed: 42
+    minimum_improvement: 0.2
+    max_total_cost_usd: 5
+
+measurement:
+  command: "python eval_search.py"
+  timeout_seconds: 300
+  working_directory: "tools/eval"
+
+scope:
+  mutable:
+    - "src/search/"
+    - "config/search.yaml"
+  immutable:
+    - "tools/eval/eval_search.py"
+    - "tests/fixtures/"
+    - "docs/"
+
+execution:
+  mode: serial
+  backend: worktree
+  max_concurrent: 1
+
+parallel:
+  port_strategy: none
+  shared_files: []
+
+dependencies:
+  approved: []
+
+constraints:
+  - "Preserve the existing search response shape"
+  - "Do not add new dependencies on the first run"
+
+stopping:
+  max_iterations: 4
+  max_hours: 1
+  plateau_iterations: 3
+  target_reached: true
+
+max_runner_up_merges_per_batch: 0
