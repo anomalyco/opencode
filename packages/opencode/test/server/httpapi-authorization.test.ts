@@ -4,7 +4,12 @@ import { Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup } from "effect/unstable/httpapi"
 import { ServerAuth } from "../../src/server/auth"
-import { Authorization, authorizationLayer } from "../../src/server/routes/instance/httpapi/middleware/authorization"
+import {
+  Authorization,
+  authorizationLayer,
+  V2Authorization,
+  v2AuthorizationLayer,
+} from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { testEffect } from "../lib/effect"
 
 const Api = HttpApi.make("test-authorization").add(
@@ -21,14 +26,33 @@ const Api = HttpApi.make("test-authorization").add(
     .middleware(Authorization),
 )
 
+const V2Api = HttpApi.make("test-v2-authorization").add(
+  HttpApiGroup.make("test.v2")
+    .add(
+      HttpApiEndpoint.get("probe", "/api/probe", {
+        success: Schema.String,
+      }),
+    )
+    .middleware(V2Authorization),
+)
+
 const handlers = HttpApiBuilder.group(Api, "test", (handlers) =>
   handlers
     .handle("probe", () => Effect.succeed("ok"))
     .handle("missing", () => Effect.fail(new HttpApiError.NotFound({}))),
 )
 
+const v2Handlers = HttpApiBuilder.group(V2Api, "test.v2", (handlers) =>
+  handlers.handle("probe", () => Effect.succeed("ok")),
+)
+
 const apiLayer = HttpRouter.serve(
   HttpApiBuilder.layer(Api).pipe(Layer.provide(handlers), Layer.provide(authorizationLayer)),
+  { disableListenLog: true, disableLogger: true },
+).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
+
+const v2ApiLayer = HttpRouter.serve(
+  HttpApiBuilder.layer(V2Api).pipe(Layer.provide(v2Handlers), Layer.provide(v2AuthorizationLayer)),
   { disableListenLog: true, disableLogger: true },
 ).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
 
@@ -39,6 +63,7 @@ const kitSecretLayer = ServerAuth.Config.layer({ password: Option.some("secret")
 const it = testEffect(apiLayer.pipe(Layer.provide(noAuthLayer)))
 const itSecret = testEffect(apiLayer.pipe(Layer.provide(secretLayer)))
 const itKitSecret = testEffect(apiLayer.pipe(Layer.provide(kitSecretLayer)))
+const itV2Secret = testEffect(v2ApiLayer.pipe(Layer.provide(secretLayer)))
 
 const basic = (username: string, password: string) => ServerAuth.header({ username, password }) ?? ""
 
@@ -133,6 +158,17 @@ describe("HttpApi authorization middleware", () => {
       const response = yield* HttpClient.get("/probe?auth_token=not-base64")
 
       expect(response.status).toBe(401)
+    }),
+  )
+
+  itV2Secret.live("returns bodyful v2 unauthorized errors", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClient.get("/api/probe")
+      const body = yield* response.json
+
+      expect(response.status).toBe(401)
+      expect(response.headers["www-authenticate"] ?? "").toContain("Basic")
+      expect(body).toEqual({ _tag: "UnauthorizedError", message: "Authentication required" })
     }),
   )
 })

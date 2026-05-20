@@ -1,8 +1,9 @@
 import { WorkspaceID } from "@/control-plane/schema"
 import { SessionV2 } from "@/v2/session"
-import { DateTime, Effect, Schema } from "effect"
-import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
+import { DateTime, Effect, Option, Schema } from "effect"
+import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
+import { InvalidCursorError, InvalidRequestError } from "../../errors"
 
 const DefaultSessionsLimit = 50
 
@@ -69,6 +70,19 @@ const sessionCursor = {
   },
 }
 
+function decodeWorkspaceID(input: string | undefined) {
+  if (input === undefined) return Effect.succeed(undefined)
+  const workspaceID = Schema.decodeUnknownOption(WorkspaceID)(input)
+  if (Option.isSome(workspaceID)) return Effect.succeed(workspaceID.value)
+  return Effect.fail(
+    new InvalidRequestError({
+      message: "Invalid workspace query parameter",
+      kind: "Query",
+      field: "workspace",
+    }),
+  )
+}
+
 export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* SessionV2.Service
@@ -77,17 +91,19 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
       .handle(
         "sessions",
         Effect.fn(function* (ctx) {
-          if (ctx.query.cursor && hasCursorFilter(ctx.query)) return yield* new HttpApiError.BadRequest({})
+          if (ctx.query.cursor && hasCursorFilter(ctx.query))
+            return yield* new InvalidCursorError({ message: "Cursor cannot be combined with order or filters" })
           const decoded = yield* Effect.try({
             try: () => (ctx.query.cursor ? sessionCursor.decode(ctx.query.cursor) : undefined),
-            catch: () => new HttpApiError.BadRequest({}),
+            catch: () => new InvalidCursorError({ message: "Invalid cursor" }),
           })
-          if (hasCursorRoutingMismatch(ctx.query, decoded)) return yield* new HttpApiError.BadRequest({})
+          if (hasCursorRoutingMismatch(ctx.query, decoded))
+            return yield* new InvalidCursorError({ message: "Cursor does not match requested directory or workspace" })
           const order = decoded?.order ?? ctx.query.order ?? "desc"
           const filters = decoded ?? {
             directory: ctx.query.directory,
             path: ctx.query.path,
-            workspaceID: ctx.query.workspace ? WorkspaceID.make(ctx.query.workspace) : undefined,
+            workspaceID: yield* decodeWorkspaceID(ctx.query.workspace),
             roots: ctx.query.roots,
             start: ctx.query.start,
             search: ctx.query.search,
