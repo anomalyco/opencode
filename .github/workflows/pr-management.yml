@@ -6,6 +6,7 @@ on:
 
 jobs:
   check-duplicates:
+    if: github.repository == 'anomalyco/opencode'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -72,6 +73,7 @@ jobs:
           fi
 
   add-contributor-label:
+    if: github.repository == 'anomalyco/opencode'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
