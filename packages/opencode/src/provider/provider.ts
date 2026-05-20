@@ -27,6 +27,7 @@ import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
 import { ModelStatus } from "./model-status"
+import { NPM } from "./npm"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "provider" })
@@ -501,10 +502,13 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
       }
     }),
-    "google-vertex-anthropic": Effect.fnUntraced(function* () {
+    "google-vertex-anthropic": Effect.fnUntraced(function* (provider: Info) {
       const env = yield* dep.env()
-      const project = env["GOOGLE_CLOUD_PROJECT"] ?? env["GCP_PROJECT"] ?? env["GCLOUD_PROJECT"]
-      const location = env["GOOGLE_CLOUD_LOCATION"] ?? env["VERTEX_LOCATION"] ?? "global"
+      const project =
+        provider.options?.project ?? env["GOOGLE_CLOUD_PROJECT"] ?? env["GCP_PROJECT"] ?? env["GCLOUD_PROJECT"]
+      const location = String(
+        provider.options?.location ?? env["GOOGLE_CLOUD_LOCATION"] ?? env["VERTEX_LOCATION"] ?? "global",
+      )
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
       return {
@@ -1399,15 +1403,26 @@ export const layer = Layer.effect(
           mergeProvider(providerID, patch)
         }
 
-        for (const [id, fn] of Object.entries(custom(dep))) {
+        const loaders = custom(dep)
+        const resolveLoader = (entryID: string, data: Info): CustomLoader | undefined => {
+          // Exact match: canonical loader entry. Preserves prior behaviour.
+          if (loaders[entryID]) return loaders[entryID]
+          // Alias: look at the entry's npm (from any model) and accept a unique
+          // canonical loader whose models.dev npm matches. Ambiguous npm values
+          // (e.g. shared by the @ai-sdk/openai-compatible family) fall through
+          // and the entry is handled by the generic SDK resolver.
+          const firstModel = Object.values(data.models)[0]
+          const entryNpm = firstModel?.api?.npm
+          if (!entryNpm) return undefined
+          const candidates = Object.keys(loaders).filter((id) => modelsDev[id]?.npm === entryNpm)
+          return candidates.length === 1 ? loaders[candidates[0]] : undefined
+        }
+        for (const [id, data] of Object.entries(database)) {
           const providerID = ProviderID.make(id)
           if (disabled.has(providerID)) continue
-          const data = database[providerID]
-          if (!data) {
-            log.error("Provider does not exist in model list " + providerID)
-            continue
-          }
-          const result = yield* fn(data)
+          const loader = resolveLoader(id, data)
+          if (!loader) continue
+          const result = yield* loader(data)
           if (result && (result.autoload || providers[providerID])) {
             if (result.getModel) modelLoaders[providerID] = result.getModel
             if (result.vars) varsLoaders[providerID] = result.vars
@@ -1516,7 +1531,7 @@ export const layer = Layer.effect(
         const provider = s.providers[model.providerID]
         const options = { ...provider.options }
 
-        if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
+        if (model.api.npm === NPM.GOOGLE_VERTEX) {
           delete options.fetch
         }
 
@@ -1746,8 +1761,9 @@ export const layer = Layer.effect(
       if (providerID.startsWith("github-copilot")) {
         priority = ["gpt-5-mini", "claude-haiku-4.5", ...priority]
       }
+      const firstModelNpm = Object.values(provider.models)[0]?.api?.npm
       for (const item of priority) {
-        if (providerID === ProviderID.amazonBedrock) {
+        if (firstModelNpm === NPM.AMAZON_BEDROCK) {
           const crossRegionPrefixes = ["global.", "us.", "eu."]
           const candidates = Object.keys(provider.models).filter((m) => m.includes(item))
 

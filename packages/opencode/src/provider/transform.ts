@@ -4,6 +4,7 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 import type * as Provider from "./provider"
 import type * as ModelsDev from "@opencode-ai/core/models-dev"
 import { iife } from "@/util/iife"
+import { NPM } from "./npm"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -24,24 +25,24 @@ export function sanitizeSurrogates(content: string) {
 // Maps npm package to the key the AI SDK expects for providerOptions
 function sdkKey(npm: string): string | undefined {
   switch (npm) {
-    case "@ai-sdk/github-copilot":
+    case NPM.GITHUB_COPILOT_SHIM:
       return "copilot"
-    case "@ai-sdk/azure":
+    case NPM.AZURE:
       return "azure"
-    case "@ai-sdk/openai":
+    case NPM.OPENAI:
       return "openai"
-    case "@ai-sdk/amazon-bedrock":
+    case NPM.AMAZON_BEDROCK:
       return "bedrock"
-    case "@ai-sdk/anthropic":
-    case "@ai-sdk/google-vertex/anthropic":
+    case NPM.ANTHROPIC:
+    case NPM.GOOGLE_VERTEX_ANTHROPIC:
       return "anthropic"
-    case "@ai-sdk/google-vertex":
+    case NPM.GOOGLE_VERTEX:
       return "vertex"
-    case "@ai-sdk/google":
+    case NPM.GOOGLE:
       return "google"
-    case "@ai-sdk/gateway":
+    case NPM.VERCEL_GATEWAY:
       return "gateway"
-    case "@openrouter/ai-sdk-provider":
+    case NPM.OPENROUTER:
       return "openrouter"
     case "ai-gateway-provider":
       // ai-gateway-provider/unified wraps createOpenAICompatible({ name: "Unified" }),
@@ -124,7 +125,7 @@ function normalizeMessages(
 
   // Anthropic rejects messages with empty content - filter out empty string messages
   // and remove empty text/reasoning parts from array content
-  if (model.api.npm === "@ai-sdk/anthropic") {
+  if (model.api.npm === NPM.ANTHROPIC) {
     msgs = msgs
       .map((msg) => {
         if (typeof msg.content === "string") {
@@ -152,7 +153,7 @@ function normalizeMessages(
   }
 
   // Bedrock specific transforms
-  if (model.api.npm === "@ai-sdk/amazon-bedrock") {
+  if (model.api.npm === NPM.AMAZON_BEDROCK) {
     msgs = msgs
       .map((msg) => {
         if (typeof msg.content === "string") {
@@ -207,7 +208,7 @@ function normalizeMessages(
       return msg
     })
   }
-  if (["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(model.api.npm)) {
+  if (model.api.npm === NPM.ANTHROPIC || model.api.npm === NPM.GOOGLE_VERTEX_ANTHROPIC) {
     // Anthropic rejects assistant turns where tool_use blocks are followed by non-tool
     // content, e.g. [tool_use, tool_use, text], with:
     // `tool_use` ids were found without `tool_result` blocks immediately after...
@@ -233,7 +234,7 @@ function normalizeMessages(
     })
   }
   if (
-    model.providerID === "mistral" ||
+    model.api.npm === NPM.MISTRAL ||
     model.api.id.toLowerCase().includes("mistral") ||
     model.api.id.toLocaleLowerCase().includes("devstral")
   ) {
@@ -303,7 +304,7 @@ function normalizeMessages(
   if (
     typeof model.capabilities.interleaved === "object" &&
     model.capabilities.interleaved.field &&
-    model.api.npm !== "@openrouter/ai-sdk-provider"
+    model.api.npm !== NPM.OPENROUTER
   ) {
     const field = model.capabilities.interleaved.field
     return msgs.map((msg) => {
@@ -364,9 +365,9 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
 
   for (const msg of unique([...system, ...final])) {
     const useMessageLevelOptions =
-      model.providerID === "anthropic" ||
-      model.providerID.includes("bedrock") ||
-      model.api.npm === "@ai-sdk/amazon-bedrock"
+      model.api.npm === NPM.ANTHROPIC ||
+      model.api.npm === NPM.GOOGLE_VERTEX_ANTHROPIC ||
+      model.api.npm === NPM.AMAZON_BEDROCK
     const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
     if (shouldUseContentOptions) {
@@ -430,15 +431,14 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
   if (
-    (model.providerID === "anthropic" ||
-      model.providerID === "google-vertex-anthropic" ||
+    (model.api.npm === NPM.ANTHROPIC ||
+      model.api.npm === NPM.GOOGLE_VERTEX_ANTHROPIC ||
       model.api.id.includes("anthropic") ||
       model.api.id.includes("claude") ||
       model.id.includes("anthropic") ||
       model.id.includes("claude") ||
-      model.api.npm === "@ai-sdk/anthropic" ||
-      model.api.npm === "@ai-sdk/alibaba") &&
-    model.api.npm !== "@ai-sdk/gateway"
+      model.api.npm === NPM.ALIBABA) &&
+    model.api.npm !== NPM.VERCEL_GATEWAY
   ) {
     msgs = applyCaching(msgs, model)
   }
@@ -637,7 +637,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 
   // see: https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks
   if (id.includes("grok") && id.includes("grok-3-mini")) {
-    if (model.api.npm === "@openrouter/ai-sdk-provider") {
+    if (model.api.npm === NPM.OPENROUTER) {
       return {
         low: { reasoning: { effort: "low" } },
         high: { reasoning: { effort: "high" } },
@@ -651,7 +651,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   if (id.includes("grok")) return {}
 
   switch (model.api.npm) {
-    case "@openrouter/ai-sdk-provider":
+    case NPM.OPENROUTER:
       if (!id.includes("gpt") && !id.includes("gemini-3") && !id.includes("claude")) return {}
       return Object.fromEntries(
         (id.includes("gpt") ? openaiCompatibleReasoningEfforts(id) : OPENAI_EFFORTS).map((effort) => [
@@ -674,7 +674,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
     }
 
-    case "@ai-sdk/gateway":
+    case NPM.VERCEL_GATEWAY:
       if (model.id.includes("anthropic")) {
         if (adaptiveEfforts) {
           return Object.fromEntries(
@@ -735,7 +735,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         openaiCompatibleReasoningEfforts(model.api.id).map((effort) => [effort, { reasoningEffort: effort }]),
       )
 
-    case "@ai-sdk/github-copilot":
+    case NPM.GITHUB_COPILOT_SHIM:
       if (model.id.includes("gemini")) {
         // currently github copilot only returns thinking
         return {}
@@ -769,16 +769,16 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     // https://v5.ai-sdk.dev/providers/ai-sdk-providers/xai
     case "@ai-sdk/deepinfra":
     // https://v5.ai-sdk.dev/providers/ai-sdk-providers/deepinfra
-    case "venice-ai-sdk-provider":
+    case NPM.VENICE:
     // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
-    case "@ai-sdk/openai-compatible":
+    case NPM.OPENAI_COMPATIBLE:
       const efforts = [...WIDELY_SUPPORTED_EFFORTS]
       if (model.api.id.toLowerCase().includes("deepseek-v4")) {
         efforts.push("max")
       }
       return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
 
-    case "@ai-sdk/azure":
+    case NPM.AZURE:
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
       if (id === "o1-mini") return {}
       return Object.fromEntries(
@@ -794,7 +794,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           },
         ]),
       )
-    case "@ai-sdk/openai": {
+    case NPM.OPENAI: {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
       const efforts = openaiReasoningEfforts(model.api.id, model.release_date)
       return Object.fromEntries(
@@ -809,9 +809,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       )
     }
 
-    case "@ai-sdk/anthropic":
+    case NPM.ANTHROPIC:
     // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
-    case "@ai-sdk/google-vertex/anthropic":
+    case NPM.GOOGLE_VERTEX_ANTHROPIC:
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
       if (adaptiveEfforts) {
         let efforts = [...adaptiveEfforts]
@@ -857,7 +857,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         },
       }
 
-    case "@ai-sdk/amazon-bedrock":
+    case NPM.AMAZON_BEDROCK:
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock
       if (adaptiveEfforts) {
         return Object.fromEntries(
@@ -906,9 +906,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         ]),
       )
 
-    case "@ai-sdk/google-vertex":
+    case NPM.GOOGLE_VERTEX:
     // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex
-    case "@ai-sdk/google":
+    case NPM.GOOGLE:
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-generative-ai
       if (id.includes("2.5")) {
         return {
@@ -939,7 +939,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         ]),
       )
 
-    case "@ai-sdk/mistral":
+    case NPM.MISTRAL:
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/mistral
       // https://docs.mistral.ai/capabilities/reasoning/adjustable
       if (!model.capabilities.reasoning) return {}
@@ -1038,27 +1038,23 @@ export function options(input: {
   const result: Record<string, any> = {}
 
   if (
-    input.model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
-    (!input.model.api.id.includes("claude") && input.model.api.npm === "@ai-sdk/anthropic")
+    input.model.api.npm === NPM.GOOGLE_VERTEX_ANTHROPIC ||
+    (!input.model.api.id.includes("claude") && input.model.api.npm === NPM.ANTHROPIC)
   ) {
     result["toolStreaming"] = false
   }
 
   // openai and providers using openai package should set store to false by default.
-  if (
-    input.model.providerID === "openai" ||
-    input.model.api.npm === "@ai-sdk/openai" ||
-    input.model.api.npm === "@ai-sdk/github-copilot"
-  ) {
+  if (input.model.api.npm === NPM.OPENAI || input.model.api.npm === NPM.GITHUB_COPILOT_SHIM) {
     result["store"] = false
   }
 
-  if (input.model.api.npm === "@ai-sdk/azure") {
+  if (input.model.api.npm === NPM.AZURE) {
     result["store"] = false
     result["promptCacheKey"] = input.sessionID
   }
 
-  if (input.model.api.npm === "@openrouter/ai-sdk-provider" || input.model.api.npm === "@llmgateway/ai-sdk-provider") {
+  if (input.model.api.npm === NPM.OPENROUTER || input.model.api.npm === "@llmgateway/ai-sdk-provider") {
     result["usage"] = {
       include: true,
     }
@@ -1076,7 +1072,7 @@ export function options(input: {
 
   if (
     ["zai", "zhipuai"].some((id) => input.model.providerID.includes(id)) &&
-    input.model.api.npm === "@ai-sdk/openai-compatible"
+    input.model.api.npm === NPM.OPENAI_COMPATIBLE
   ) {
     result["thinking"] = {
       type: "enabled",
@@ -1084,11 +1080,11 @@ export function options(input: {
     }
   }
 
-  if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
+  if (input.model.api.npm === NPM.OPENAI || input.providerOptions?.setCacheKey) {
     result["promptCacheKey"] = input.sessionID
   }
 
-  if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
+  if (input.model.api.npm === NPM.GOOGLE || input.model.api.npm === NPM.GOOGLE_VERTEX) {
     if (input.model.capabilities.reasoning) {
       result["thinkingConfig"] = {
         includeThoughts: true,
@@ -1102,7 +1098,7 @@ export function options(input: {
   // Enable thinking by default for kimi models using anthropic SDK
   const modelId = input.model.api.id.toLowerCase()
   if (
-    (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
+    (input.model.api.npm === NPM.ANTHROPIC || input.model.api.npm === NPM.GOOGLE_VERTEX_ANTHROPIC) &&
     (modelId.includes("k2p") || modelId.includes("kimi-k2.") || modelId.includes("kimi-k2p"))
   ) {
     result["thinking"] = {
@@ -1119,13 +1115,13 @@ export function options(input: {
   if (
     input.model.providerID === "alibaba-cn" &&
     input.model.capabilities.reasoning &&
-    input.model.api.npm === "@ai-sdk/openai-compatible" &&
+    input.model.api.npm === NPM.OPENAI_COMPATIBLE &&
     !modelId.includes("kimi-k2-thinking")
   ) {
     result["enable_thinking"] = true
   }
 
-  if (input.model.api.npm === "@ai-sdk/azure" && input.model.api.id.includes("gpt-5.5")) {
+  if (input.model.api.npm === NPM.AZURE && input.model.api.id.includes("gpt-5.5")) {
     result["reasoningSummary"] = "auto"
     return result
   }
@@ -1142,7 +1138,7 @@ export function options(input: {
       input.model.api.id.includes("gpt-5.") &&
       !input.model.api.id.includes("codex") &&
       !input.model.api.id.includes("-chat") &&
-      input.model.providerID !== "azure"
+      input.model.api.npm !== NPM.AZURE
     ) {
       result["textVerbosity"] = "low"
     }
@@ -1154,14 +1150,14 @@ export function options(input: {
     }
   }
 
-  if (input.model.providerID === "venice") {
+  if (input.model.api.npm === NPM.VENICE) {
     result["promptCacheKey"] = input.sessionID
   }
 
-  if (input.model.providerID === "openrouter") {
+  if (input.model.api.npm === NPM.OPENROUTER) {
     result["prompt_cache_key"] = input.sessionID
   }
-  if (input.model.api.npm === "@ai-sdk/gateway") {
+  if (input.model.api.npm === NPM.VERCEL_GATEWAY) {
     result["gateway"] = {
       caching: "auto",
     }
@@ -1172,21 +1168,17 @@ export function options(input: {
 
 export function smallOptions(model: Provider.Model) {
   const small = Object.values(model.variants ?? {})[0] ?? {}
-  if (
-    model.providerID === "openai" ||
-    model.api.npm === "@ai-sdk/openai" ||
-    model.api.npm === "@ai-sdk/github-copilot"
-  ) {
+  if (model.api.npm === NPM.OPENAI || model.api.npm === NPM.GITHUB_COPILOT_SHIM) {
     const base = { store: false }
     return mergeDeep(base, small)
   }
-  if (model.providerID === "openrouter" || model.providerID === "llmgateway") {
+  if (model.api.npm === NPM.OPENROUTER || model.providerID === "llmgateway") {
     if (Object.keys(small).length === 0 && model.api.id.includes("google")) {
       return { reasoning: { enabled: false } }
     }
   }
 
-  if (model.providerID === "venice") {
+  if (model.api.npm === NPM.VENICE) {
     if (Object.keys(small).length > 0) return small
     return { veniceParameters: { disableThinking: true } }
   }
@@ -1201,7 +1193,7 @@ const SLUG_OVERRIDES: Record<string, string> = {
 }
 
 export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
-  if (model.api.npm === "@ai-sdk/gateway") {
+  if (model.api.npm === NPM.VERCEL_GATEWAY) {
     // Gateway providerOptions are split across two namespaces:
     // - `gateway`: gateway-native routing/caching controls (order, only, byok, etc.)
     // - `<upstream slug>`: provider-specific model options (anthropic/openai/...)
@@ -1237,14 +1229,14 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
   // Other SDKs (xai, mistral, groq, cohere, etc.) use hardcoded keys
   // like "xai" or "cohere" - applying .split(".")[0] would break those.
   const usesDotSplitOptions =
-    model.api.npm === "@ai-sdk/openai-compatible" ||
-    model.api.npm === "@ai-sdk/openai" ||
-    model.api.npm === "@ai-sdk/anthropic"
+    model.api.npm === NPM.OPENAI_COMPATIBLE ||
+    model.api.npm === NPM.OPENAI ||
+    model.api.npm === NPM.ANTHROPIC
   const key = sdkKey(model.api.npm) ?? (usesDotSplitOptions ? model.providerID.split(".")[0] : model.providerID)
   // @ai-sdk/azure delegates to OpenAIChatLanguageModel which reads from
   // providerOptions["openai"], but OpenAIResponsesLanguageModel checks
   // "azure" first. Pass both so model options work on either code path.
-  if (model.api.npm === "@ai-sdk/azure") {
+  if (model.api.npm === NPM.AZURE) {
     return { openai: options, azure: options }
   }
   return { [key]: options }
@@ -1292,7 +1284,7 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
   }
 
   // Convert integer enums to string enums for Google/Gemini
-  if (model.providerID === "google" || model.api.id.includes("gemini")) {
+  if (model.api.npm === NPM.GOOGLE || model.api.id.includes("gemini")) {
     const isPlainObject = (node: unknown): node is Record<string, any> =>
       typeof node === "object" && node !== null && !Array.isArray(node)
     const hasCombiner = (node: unknown) =>
