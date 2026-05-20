@@ -114,6 +114,71 @@ export function CollabProvider(props: CollabProviderProps) {
     }
   })
 
+  // Periodically re-read the current branch of each repo so the left-panel
+  // display tracks `git checkout` operations performed by the LLM (or by
+  // a user via the iframe's terminal panel).  Lightweight — the endpoint
+  // runs one `rev-parse --abbrev-ref HEAD` per repo, typically <30 ms total.
+  // Pauses when the tab is hidden to avoid burning cycles on backgrounded
+  // sessions.
+  onMount(() => {
+    let timer: ReturnType<typeof setInterval> | null = null
+    async function pollOnce() {
+      if (typeof document !== "undefined" && document.hidden) return
+      try {
+        const r = await fetch(`/collab/session/${props.collabSessionId}/branches`)
+        if (!r.ok) return
+        const data = (await r.json()) as { repoBranches?: Record<string, string> }
+        if (!data.repoBranches) return
+        setSession((prev) =>
+          prev && !shallowBranchesEqual(prev.repoBranches, data.repoBranches)
+            ? { ...prev, repoBranches: data.repoBranches }
+            : prev,
+        )
+      } catch {
+        // network blip — try again next interval
+      }
+    }
+    function start() {
+      if (timer) return
+      pollOnce()
+      timer = setInterval(pollOnce, 4000)
+    }
+    function stop() {
+      if (!timer) return
+      clearInterval(timer)
+      timer = null
+    }
+    start()
+    const onVisibility = () => {
+      if (typeof document === "undefined") return
+      if (document.hidden) stop()
+      else start()
+    }
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibility)
+    }
+    onCleanup(() => {
+      stop()
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibility)
+      }
+    })
+  })
+
+  /** True iff both maps have the same keys and the same string values. */
+  function shallowBranchesEqual(
+    a: Record<string, string> | undefined,
+    b: Record<string, string> | undefined,
+  ): boolean {
+    if (!a) return !b || Object.keys(b).length === 0
+    if (!b) return Object.keys(a).length === 0
+    const ka = Object.keys(a)
+    const kb = Object.keys(b)
+    if (ka.length !== kb.length) return false
+    for (const k of ka) if (a[k] !== b[k]) return false
+    return true
+  }
+
   function handleEvent(event: CollabEvent) {
     switch (event.type) {
       case "collab:participant_joined":

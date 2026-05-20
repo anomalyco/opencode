@@ -882,6 +882,17 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     return json(repos)
   }
 
+  // GET /collab/session/:id/branches — live current-HEAD per repo.
+  // Lightweight endpoint the client polls so the left-panel branch
+  // display updates when the LLM (or anyone) does `git checkout`.
+  if (req.method === "GET" && parts[3] === "branches") {
+    const repoBranches = await readRepoBranches(sessionId, collabSession.repos)
+    return new Response(JSON.stringify({ repoBranches }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    })
+  }
+
   // POST /collab/session/:id/invite — Driver only
   if (req.method === "POST" && parts[3] === "invite") {
     if (caller.role !== "driver") return json({ error: "Forbidden — Drivers only" }, 403)
