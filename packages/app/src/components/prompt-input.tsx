@@ -1363,7 +1363,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   return (
-    <div class="relative size-full _max-h-[512px] flex flex-col gap-0">
+    <div
+      classList={{
+        "relative flex w-full flex-col gap-0": true,
+        "h-[448px] max-h-[512px]": store.mode === "doc",
+        "size-full max-h-[512px] min-h-0": store.mode !== "doc",
+      }}
+    >
       <PromptPopover
         popover={store.popover}
         setSlashPopoverRef={(el) => (slashPopoverRef = el)}
@@ -1385,6 +1391,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           "group/prompt-input": true,
           "focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
+          "flex min-h-0 flex-1 flex-col": canvasMode(store.mode),
           [props.class ?? ""]: !!props.class,
         }}
       >
@@ -1416,7 +1423,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           removeLabel={language.t("prompt.attachment.remove")}
         />
         <div
-          class="relative"
+          classList={{
+            relative: true,
+            "flex min-h-0 flex-1 flex-col": canvasMode(store.mode),
+          }}
           onMouseDown={(e) => {
             if (canvasMode(store.mode)) return
             const target = e.target
@@ -1524,7 +1534,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               type="file"
               multiple
               accept={ACCEPTED_FILE_TYPES.join(",")}
-              class="hidden"
+              hidden
+              tabindex={-1}
+              aria-hidden="true"
               onChange={(e) => {
                 const list = e.currentTarget.files
                 if (list) void addAttachments(Array.from(list))

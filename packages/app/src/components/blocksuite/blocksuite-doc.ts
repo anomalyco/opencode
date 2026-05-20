@@ -83,15 +83,45 @@ export async function createPage(input: DocMountInput) {
     inline?.focusEnd()
   }
 
+  let resize: ResizeObserver | undefined
+
+  const fit = (host: HTMLElement) => {
+    const height = host.clientHeight
+    const width = host.clientWidth
+    if (height <= 0) return
+    editor.style.display = "block"
+    editor.style.height = `${height}px`
+    editor.style.width = width > 0 ? `${width}px` : "100%"
+    const viewport = editor.querySelector(".affine-page-viewport")
+    if (viewport instanceof HTMLElement) {
+      viewport.style.width = width > 0 ? `${width}px` : "100%"
+      viewport.style.height = `${height}px`
+      viewport.style.minHeight = `${height}px`
+    }
+    const root = editor.querySelector(".affine-page-root-block-container")
+    if (root instanceof HTMLElement) {
+      root.style.maxWidth = "none"
+      root.style.margin = "0"
+      if (width > 0) root.style.width = `${width}px`
+    }
+  }
+
   const attach = async (el: HTMLElement) => {
     const attached = editor.parentElement === el
     if (!attached) el.replaceChildren(editor)
     await editor.updateComplete
+    await editor.host?.updateComplete
     applyTheme()
+    fit(el)
+    resize?.disconnect()
+    resize = new ResizeObserver(() => fit(el))
+    resize.observe(el)
     if (!attached) focus()
   }
 
   const detach = () => {
+    resize?.disconnect()
+    resize = undefined
     editor.remove()
   }
 
@@ -150,6 +180,8 @@ export async function createPage(input: DocMountInput) {
       editor.std.get(ThemeProvider).app$.value = scheme(theme)
     },
     dispose: () => {
+      resize?.disconnect()
+      resize = undefined
       detach()
       doc.dispose()
     },

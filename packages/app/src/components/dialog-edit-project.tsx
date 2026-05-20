@@ -188,7 +188,9 @@ export function DialogEditProject(props: { project: LocalProject }) {
                 }}
                 type="file"
                 accept="image/*"
-                class="hidden"
+                hidden
+                tabindex={-1}
+                aria-hidden="true"
                 onChange={handleInputChange}
               />
               <div class="flex flex-col gap-1.5 text-12-regular text-text-weak self-center">

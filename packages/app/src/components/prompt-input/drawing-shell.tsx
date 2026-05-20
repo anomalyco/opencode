@@ -31,9 +31,15 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
   return (
     <div
       data-component={props.variant === "doc" ? "prompt-doc-shell" : "prompt-draw-shell"}
-      class="flex max-h-[448px] flex-col overflow-hidden"
+      class="flex w-full max-h-[448px] flex-col overflow-hidden"
     >
-      <div class="h-[352px] min-h-0 shrink-0" onMouseDown={(e) => e.stopPropagation()}>
+      <div
+        classList={{
+          "h-[400px] min-h-0 w-full shrink-0": props.variant === "doc",
+          "h-[352px] min-h-0 shrink-0": props.variant === "draw",
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <Show when={props.variant === "doc"} fallback={<PromptDrawingPanel drawing={props.drawing} />}>
           <PromptDocPanel doc={props.doc} />
         </Show>
