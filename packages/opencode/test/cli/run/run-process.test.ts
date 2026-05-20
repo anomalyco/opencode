@@ -10,7 +10,7 @@ import { cliIt } from "../../lib/cli-process"
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
   // If this fails, all the others likely will too — debug here first.
-  cliIt.live(
+  cliIt.concurrent(
     "exits 0 and writes the response to stdout on a successful prompt",
     ({ llm, opencode }) =>
       Effect.gen(function* () {
@@ -27,7 +27,7 @@ describe("opencode run (non-interactive subprocess)", () => {
   // makes the SDK call surface an error promptly so the process exits nonzero.
   // We assert nonzero exit AND wall-clock under the harness timeout — a hang
   // would expire the timeout and produce a different (signal-killed) failure.
-  cliIt.live(
+  cliIt.concurrent(
     "exits nonzero promptly when the model is unknown (regression for #27371)",
     ({ opencode }) =>
       Effect.gen(function* () {
@@ -47,7 +47,7 @@ describe("opencode run (non-interactive subprocess)", () => {
   //
   // This is debatable — a future cleanup might flip it to exit 1. If you're
   // changing this expectation, do it deliberately and say so in the PR.
-  cliIt.live(
+  cliIt.concurrent(
     "mid-stream LLM error still exits 0 today (contract lock-in)",
     ({ llm, opencode }) =>
       Effect.gen(function* () {
@@ -61,7 +61,7 @@ describe("opencode run (non-interactive subprocess)", () => {
   // --format json puts one JSON object per line on stdout for each emitted
   // event. Consumers (CI scripts, tooling) parse this stream. Asserts the
   // shape so a future event-emit change has to update this expectation.
-  cliIt.live(
+  cliIt.concurrent(
     "--format json emits parseable line-delimited JSON to stdout",
     ({ llm, opencode }) =>
       Effect.gen(function* () {

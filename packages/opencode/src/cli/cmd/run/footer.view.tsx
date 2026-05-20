@@ -265,6 +265,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     onRows: props.onRows,
     onStatus: props.onStatus,
   })
+  const shell = createMemo(() => prompt() && composer.shell())
   const menu = createMemo(() => prompt() && composer.visible())
 
   createEffect(() => {
@@ -487,18 +488,20 @@ export function RunFooterView(props: RunFooterViewProps) {
                     paddingTop={1}
                   >
                     <text id="run-direct-footer-agent" fg={theme().highlight} wrapMode="none" truncate flexShrink={0}>
-                      {props.agent}
+                      {shell() ? "Shell" : props.agent}
                     </text>
-                    <text
-                      id="run-direct-footer-model"
-                      fg={theme().text}
-                      wrapMode="none"
-                      truncate
-                      flexGrow={1}
-                      flexShrink={1}
-                    >
-                      {props.state().model}
-                    </text>
+                    <Show when={!shell()}>
+                      <text
+                        id="run-direct-footer-model"
+                        fg={theme().text}
+                        wrapMode="none"
+                        truncate
+                        flexGrow={1}
+                        flexShrink={1}
+                      >
+                        {props.state().model}
+                      </text>
+                    </Show>
                   </box>
                 </Show>
               </box>
@@ -629,19 +632,30 @@ export function RunFooterView(props: RunFooterViewProps) {
                       flexShrink={0}
                       justifyContent="flex-end"
                     >
-                      <Show when={queue() > 0}>
-                        <text id="run-direct-footer-queue" fg={theme().muted} wrapMode="none" truncate>
-                          {queue()} queued
-                        </text>
-                      </Show>
-                      <Show when={usage().length > 0}>
-                        <text id="run-direct-footer-usage" fg={theme().muted} wrapMode="none" truncate>
-                          {usage()}
-                        </text>
-                      </Show>
-                      <Show when={command().length > 0 && hints().command}>
-                        <text id="run-direct-footer-hint-command" fg={theme().text} wrapMode="none" truncate>
-                          {command()} <span style={{ fg: theme().muted }}>commands</span>
+                      <Show
+                        when={shell()}
+                        fallback={
+                          <>
+                            <Show when={queue() > 0}>
+                              <text id="run-direct-footer-queue" fg={theme().muted} wrapMode="none" truncate>
+                                {queue()} queued
+                              </text>
+                            </Show>
+                            <Show when={usage().length > 0}>
+                              <text id="run-direct-footer-usage" fg={theme().muted} wrapMode="none" truncate>
+                                {usage()}
+                              </text>
+                            </Show>
+                            <Show when={command().length > 0 && hints().command}>
+                              <text id="run-direct-footer-hint-command" fg={theme().text} wrapMode="none" truncate>
+                                {command()} <span style={{ fg: theme().muted }}>commands</span>
+                              </text>
+                            </Show>
+                          </>
+                        }
+                      >
+                        <text id="run-direct-footer-hint-shell" fg={theme().text} wrapMode="none" truncate>
+                          esc <span style={{ fg: theme().muted }}>exit shell mode</span>
                         </text>
                       </Show>
                     </box>
