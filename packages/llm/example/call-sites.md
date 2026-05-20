@@ -70,14 +70,14 @@ OpenAI.chat("gpt-4o")
 OpenAI.responsesWebSocket("gpt-4o")
 
 Azure.configure({ resourceName, apiKey }).responses("my-deployment")
-Bedrock.model("anthropic.claude-3-5-sonnet-20241022-v2:0")
+AmazonBedrock.configure({ region, credentials }).model("anthropic.claude-3-5-sonnet-20241022-v2:0")
 
 CloudflareAIGateway.configure({ accountId, gatewayId, gatewayApiKey, apiKey }).model("openai/gpt-4o")
 CloudflareWorkersAI.configure({ accountId, apiKey }).model("@cf/meta/llama-3.1-8b-instruct")
 
 OpenAICompatible.configure({
-  id: ProviderID.make("custom"),
-  endpoint: { baseURL: "https://custom.example/v1" },
+  provider: "custom",
+  baseURL: "https://custom.example/v1",
   auth: Auth.bearer(apiKey),
 }).model("custom-model")
 ```
@@ -553,28 +553,28 @@ App boundary = explicit durable-config -> typed-provider call
       config surface unless one product actually exists.
 - [ ] Migrate remaining built-in provider facades one at a time so configuration
       happens before model selection and selectors accept only ids:
-  - [ ] xAI: replace `model(id, options)`, `responses(id, options)`,
+  - [x] xAI: replace `model(id, options)`, `responses(id, options)`,
         `chat(id, options)`, and `apis` with `XAI.configure(options).model(id)`,
         `.responses(id)`, and `.chat(id)`.
-  - [ ] GitHub Copilot: move base URL/auth/options into
+  - [x] GitHub Copilot: move base URL/auth/options into
         `GitHubCopilot.configure(options)` and make `model`, `responses`, and
         `chat` id-only selectors.
-  - [ ] OpenRouter: replace `OpenRouter.model(id, options)` with
+  - [x] OpenRouter: replace `OpenRouter.model(id, options)` with
         `OpenRouter.configure(options).model(id)`.
-  - [ ] OpenAI-compatible generic/families: replace family-level
+  - [x] OpenAI-compatible generic/families: replace family-level
         `model(id, options)` helpers with configured facades such as
         `OpenAICompatible.deepseek.configure(options).model(id)` and a generic
         `OpenAICompatible.configure({ provider, baseURL, auth }).model(id)`.
-  - [ ] Anthropic: replace `Anthropic.model(id, options)` with
+  - [x] Anthropic: replace `Anthropic.model(id, options)` with
         `Anthropic.configure(options).model(id)`.
-  - [ ] Google/Gemini: replace `Google.model(id, options)` with
+  - [x] Google/Gemini: replace `Google.model(id, options)` with
         `Google.configure(options).model(id)`.
-  - [ ] Amazon Bedrock: replace `AmazonBedrock.model(id, options)` with
+  - [x] Amazon Bedrock: replace `AmazonBedrock.model(id, options)` with
         `AmazonBedrock.configure({ region, credentials, baseURL }).model(id)`.
 - [ ] Decide whether a tiny `Provider.define(...)` helper is warranted after two
       or three provider conversions; start with plain objects if duplication is not
       yet painful.
-- [ ] Update `packages/opencode/src/session/llm/native-request.ts` to construct
+- [x] Update `packages/opencode/src/session/llm/native-request.ts` to construct
       executable models at the session boundary with explicit provider facade
       calls, mapping catalog metadata such as `endpoint.websocket` to the correct
       named route selector.

@@ -41,8 +41,8 @@ export function status(input: Pick<StreamInput, "model" | "provider" | "auth">):
   if (providerID !== "openai" && providerID !== "anthropic" && !providerID.startsWith("opencode"))
     return { type: "unsupported", reason: "provider is not openai, opencode, or anthropic" }
   const npm = input.model.api.npm
-  if (npm !== "@ai-sdk/openai" && npm !== "@ai-sdk/anthropic")
-    return { type: "unsupported", reason: "provider package is not OpenAI or Anthropic" }
+  if (npm !== "@ai-sdk/openai" && npm !== "@ai-sdk/openai-compatible" && npm !== "@ai-sdk/anthropic")
+    return { type: "unsupported", reason: "provider package is not OpenAI, OpenAI-compatible, or Anthropic" }
   if (input.auth?.type === "oauth") return { type: "unsupported", reason: "OAuth auth is not supported" }
 
   const apiKey = typeof input.provider.options.apiKey === "string" ? input.provider.options.apiKey : input.provider.key

@@ -8,7 +8,7 @@ import { it } from "../lib/effect"
 describe("OpenRouter", () => {
   it.effect("prepares OpenRouter models through the OpenAI-compatible Chat route", () =>
     Effect.gen(function* () {
-      const model = OpenRouter.model("openai/gpt-4o-mini", { apiKey: "test-key" })
+      const model = OpenRouter.configure({ apiKey: "test-key" }).model("openai/gpt-4o-mini")
 
       expect(model).toMatchObject({
         id: "openai/gpt-4o-mini",
@@ -32,7 +32,7 @@ describe("OpenRouter", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
         LLM.request({
-          model: OpenRouter.model("anthropic/claude-3.7-sonnet:thinking", {
+          model: OpenRouter.configure({
             apiKey: "test-key",
             providerOptions: {
               openrouter: {
@@ -41,7 +41,7 @@ describe("OpenRouter", () => {
                 promptCacheKey: "session_123",
               },
             },
-          }),
+          }).model("anthropic/claude-3.7-sonnet:thinking"),
           prompt: "Think briefly.",
         }),
       )

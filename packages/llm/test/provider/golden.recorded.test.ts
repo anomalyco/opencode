@@ -14,15 +14,16 @@ const openAI = OpenAI.configure({
 const openAIChat = openAI.chat("gpt-4o-mini")
 const openAIResponses = openAI.responses("gpt-5.5")
 const openAIResponsesWebSocket = openAI.responsesWebSocket("gpt-4.1-mini")
-const anthropicHaiku = Anthropic.model("claude-haiku-4-5-20251001", {
+const anthropic = Anthropic.configure({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
 })
-const anthropicOpus = Anthropic.model("claude-opus-4-7", {
-  apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
-})
-const gemini = Google.model("gemini-2.5-flash", { apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
-const xaiBasic = XAI.model("grok-3-mini", { apiKey: process.env.XAI_API_KEY ?? "fixture" })
-const xaiFlagship = XAI.model("grok-4.3", { apiKey: process.env.XAI_API_KEY ?? "fixture" })
+const anthropicHaiku = anthropic.model("claude-haiku-4-5-20251001")
+const anthropicOpus = anthropic.model("claude-opus-4-7")
+const google = Google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
+const gemini = google.model("gemini-2.5-flash")
+const xai = XAI.configure({ apiKey: process.env.XAI_API_KEY ?? "fixture" })
+const xaiBasic = xai.model("grok-3-mini")
+const xaiFlagship = xai.model("grok-4.3")
 const cloudflareAIGateway = CloudflareAIGateway.configure({
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
   gatewayId:
@@ -39,16 +40,23 @@ const cloudflareAIGatewayWorkers = cloudflareAIGateway.model("workers-ai/@cf/met
 const cloudflareAIGatewayWorkersTools = cloudflareAIGateway.model("workers-ai/@cf/openai/gpt-oss-20b")
 const cloudflareWorkersAI = cloudflareWorkers.model("@cf/meta/llama-3.1-8b-instruct")
 const cloudflareWorkersAITools = cloudflareWorkers.model("@cf/openai/gpt-oss-20b")
-const deepseek = OpenAICompatible.deepseek.model("deepseek-chat", { apiKey: process.env.DEEPSEEK_API_KEY ?? "fixture" })
-const together = OpenAICompatible.togetherai.model("meta-llama/Llama-3.3-70B-Instruct-Turbo", {
-  apiKey: process.env.TOGETHER_AI_API_KEY ?? "fixture",
-})
-const groq = OpenAICompatible.groq.model("llama-3.3-70b-versatile", { apiKey: process.env.GROQ_API_KEY ?? "fixture" })
-const openrouter = OpenRouter.model("openai/gpt-4o-mini", { apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" })
-const openrouterGpt55 = OpenRouter.model("openai/gpt-5.5", { apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" })
-const openrouterOpus = OpenRouter.model("anthropic/claude-opus-4.7", {
+const deepseek = OpenAICompatible.deepseek
+  .configure({ apiKey: process.env.DEEPSEEK_API_KEY ?? "fixture" })
+  .model("deepseek-chat")
+const together = OpenAICompatible.togetherai
+  .configure({
+    apiKey: process.env.TOGETHER_AI_API_KEY ?? "fixture",
+  })
+  .model("meta-llama/Llama-3.3-70B-Instruct-Turbo")
+const groq = OpenAICompatible.groq
+  .configure({ apiKey: process.env.GROQ_API_KEY ?? "fixture" })
+  .model("llama-3.3-70b-versatile")
+const openRouter = OpenRouter.configure({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" })
+const openrouter = openRouter.model("openai/gpt-4o-mini")
+const openrouterGpt55 = openRouter.model("openai/gpt-5.5")
+const openrouterOpus = OpenRouter.configure({
   apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
-})
+}).model("anthropic/claude-opus-4.7")
 
 const redactCloudflareURL = (url: string) =>
   url

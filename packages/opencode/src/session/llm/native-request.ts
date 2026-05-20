@@ -1,13 +1,14 @@
 import type { JsonSchema, LLMRequest, ProviderMetadata } from "@opencode-ai/llm"
-import { Auth, LLM, Message, Model, SystemPart, ToolCallPart, ToolDefinition, ToolResultPart } from "@opencode-ai/llm"
-import { OpenRouter, Azure } from "@opencode-ai/llm/providers"
+import { LLM, Message, SystemPart, ToolCallPart, ToolDefinition, ToolResultPart } from "@opencode-ai/llm"
 import {
-  AnthropicMessages,
-  BedrockConverse,
-  Gemini,
-  OpenAICompatibleChat,
-  OpenAIResponses,
-} from "@opencode-ai/llm/protocols"
+  AmazonBedrock,
+  Anthropic,
+  Azure,
+  Google,
+  OpenAI,
+  OpenAICompatible,
+  OpenRouter,
+} from "@opencode-ai/llm/providers"
 import type { ModelMessage } from "ai"
 import type { Provider } from "@/provider/provider"
 import { isRecord } from "@/util/record"
@@ -31,24 +32,6 @@ export type RequestInput = {
   readonly maxOutputTokens?: number
   readonly providerOptions?: LLMRequest["providerOptions"]
   readonly headers?: Record<string, string>
-}
-
-const DEFAULT_BASE_URL: Record<string, string> = {
-  "@ai-sdk/openai": "https://api.openai.com/v1",
-  "@ai-sdk/anthropic": "https://api.anthropic.com/v1",
-  "@ai-sdk/google": "https://generativelanguage.googleapis.com/v1beta",
-  "@ai-sdk/amazon-bedrock": "https://bedrock-runtime.us-east-1.amazonaws.com",
-  "@openrouter/ai-sdk-provider": "https://openrouter.ai/api/v1",
-}
-
-const ROUTE: Record<string, Model.Input["route"]> = {
-  "@ai-sdk/openai": OpenAIResponses.route,
-  "@ai-sdk/azure": Azure.routes[0],
-  "@ai-sdk/anthropic": AnthropicMessages.route,
-  "@ai-sdk/google": Gemini.route,
-  "@ai-sdk/amazon-bedrock": BedrockConverse.route,
-  "@ai-sdk/openai-compatible": OpenAICompatibleChat.route,
-  "@openrouter/ai-sdk-provider": OpenRouter.route,
 }
 
 const providerMetadata = (value: unknown): ProviderMetadata | undefined => {
@@ -154,31 +137,40 @@ const generation = (input: RequestInput) => {
   return Object.values(result).some((value) => value !== undefined) ? result : undefined
 }
 
-const baseURL = (model: Provider.Model) => {
-  if (model.api.url) return model.api.url
-  const fallback = DEFAULT_BASE_URL[model.api.npm]
-  if (fallback) return fallback
+const baseURL = (input: Provider.Model | RequestInput) =>
+  "model" in input ? (input.baseURL ?? (input.model.api.url || undefined)) : input.api.url || undefined
+
+const requireBaseURL = (model: Provider.Model, url: string | undefined) => {
+  if (url) return url
   throw new Error(`Native LLM request adapter requires a base URL for ${model.providerID}/${model.id}`)
 }
 
 export const model = (input: Provider.Model | RequestInput, headers?: Record<string, string>) => {
   const model = "model" in input ? input.model : input
-  const route = ROUTE[model.api.npm]
-  if (!route) throw new Error(`Native LLM request adapter does not support provider package ${model.api.npm}`)
-  return Model.make({
-    id: model.api.id,
-    provider: model.providerID,
-    route: route.with({
-      endpoint: { baseURL: "model" in input && input.baseURL ? input.baseURL : baseURL(model) },
-      ...("model" in input && input.apiKey ? { auth: Auth.bearer(input.apiKey) } : {}),
-      headers:
-        Object.keys({ ...model.headers, ...headers }).length === 0 ? undefined : { ...model.headers, ...headers },
-      limits: {
-        context: model.limit.context,
-        output: model.limit.output,
-      },
-    }),
-  })
+  const url = baseURL(input)
+  const options = {
+    ...("model" in input && input.apiKey ? { apiKey: input.apiKey } : {}),
+    ...(url ? { baseURL: url } : {}),
+    headers: Object.keys({ ...model.headers, ...headers }).length === 0 ? undefined : { ...model.headers, ...headers },
+    limits: {
+      context: model.limit.context,
+      output: model.limit.output,
+    },
+  }
+  if (model.api.npm === "@ai-sdk/openai") return OpenAI.configure(options).responses(model.api.id)
+  if (model.api.npm === "@ai-sdk/azure")
+    return Azure.configure({ ...options, baseURL: requireBaseURL(model, url) }).responses(model.api.id)
+  if (model.api.npm === "@ai-sdk/anthropic") return Anthropic.configure(options).model(model.api.id)
+  if (model.api.npm === "@ai-sdk/google") return Google.configure(options).model(model.api.id)
+  if (model.api.npm === "@ai-sdk/amazon-bedrock") return AmazonBedrock.configure(options).model(model.api.id)
+  if (model.api.npm === "@ai-sdk/openai-compatible")
+    return OpenAICompatible.configure({
+      ...options,
+      provider: String(model.providerID),
+      baseURL: requireBaseURL(model, url),
+    }).model(model.api.id)
+  if (model.api.npm === "@openrouter/ai-sdk-provider") return OpenRouter.configure(options).model(model.api.id)
+  throw new Error(`Native LLM request adapter does not support provider package ${model.api.npm}`)
 }
 
 export const request = (input: RequestInput) => {

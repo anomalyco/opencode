@@ -211,25 +211,22 @@ describe("session.llm-native.request", () => {
     ])
   })
 
-  test("selects native routes from existing provider packages", () => {
-    const anthropic = LLMNative.model({ ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/anthropic" } })
+  test("selects native routes for supported provider packages", () => {
+    const openai = LLMNative.model({
+      model: { ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/openai" } },
+      apiKey: "test-key",
+      messages: [],
+    })
+    expect(openai.route.id).toBe("openai-responses")
+    expect(openai.route.endpoint.baseURL).toBe("https://api.openai.com/v1")
+
+    const anthropic = LLMNative.model({
+      model: { ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/anthropic" } },
+      apiKey: "test-key",
+      messages: [],
+    })
     expect(anthropic.route.id).toBe("anthropic-messages")
     expect(anthropic.route.endpoint.baseURL).toBe("https://api.anthropic.com/v1")
-
-    const gemini = LLMNative.model({ ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/google" } })
-    expect(gemini.route.id).toBe("gemini")
-    expect(gemini.route.endpoint.baseURL).toBe("https://generativelanguage.googleapis.com/v1beta")
-
-    const compatible = LLMNative.model({ ...baseModel, api: { ...baseModel.api, npm: "@ai-sdk/openai-compatible" } })
-    expect(compatible.route.id).toBe("openai-compatible-chat")
-    expect(compatible.route.endpoint.baseURL).toBe("https://api.openai.com/v1")
-
-    const openrouter = LLMNative.model({
-      ...baseModel,
-      api: { ...baseModel.api, url: "", npm: "@openrouter/ai-sdk-provider" },
-    })
-    expect(openrouter.route.id).toBe("openrouter")
-    expect(openrouter.route.endpoint.baseURL).toBe("https://openrouter.ai/api/v1")
   })
 
   test("fails fast for unsupported provider packages", () => {
@@ -258,6 +255,20 @@ describe("session.llm-native.request", () => {
     })
     expect(
       LLMNativeRuntime.status({
+        model: {
+          ...baseModel,
+          providerID: ProviderID.make("opencode"),
+          api: { ...baseModel.api, npm: "@ai-sdk/openai-compatible" },
+        },
+        provider: { ...providerInfo, id: ProviderID.make("opencode") },
+        auth: undefined,
+      }),
+    ).toMatchObject({
+      type: "supported",
+      apiKey: "test-openai-key",
+    })
+    expect(
+      LLMNativeRuntime.status({
         model: { ...baseModel, providerID: ProviderID.make("google") },
         provider: { ...providerInfo, id: ProviderID.make("google") },
         auth: undefined,
@@ -277,7 +288,7 @@ describe("session.llm-native.request", () => {
         provider: providerInfo,
         auth: undefined,
       }),
-    ).toEqual({ type: "unsupported", reason: "provider package is not OpenAI or Anthropic" })
+    ).toEqual({ type: "unsupported", reason: "provider package is not OpenAI, OpenAI-compatible, or Anthropic" })
 
     expect(
       LLMNativeRuntime.status({
@@ -378,6 +389,7 @@ describe("session.llm-native.request", () => {
       LLMClient.prepare(
         LLMNative.request({
           model: baseModel,
+          apiKey: "test-openai-key",
           messages: [{ role: "user", content: "hello" }],
           providerOptions: { openai: { store: false } },
           maxOutputTokens: 512,

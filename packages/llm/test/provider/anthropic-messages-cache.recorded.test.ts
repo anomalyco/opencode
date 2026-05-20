@@ -7,9 +7,9 @@ import * as Anthropic from "../../src/providers/anthropic"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
-const model = Anthropic.model("claude-haiku-4-5-20251001", {
+const model = Anthropic.configure({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
-})
+}).model("claude-haiku-4-5-20251001")
 
 // Two identical generations in a row. The first call writes the prefix into
 // Anthropic's cache; the second should report a cache read against the same

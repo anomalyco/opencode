@@ -1,5 +1,4 @@
 import type { RouteDefaultsInput } from "../route/client"
-import { Provider } from "../provider"
 import { Auth } from "../route/auth"
 import type { ProviderAuthOption } from "../route/auth-options"
 import { ProviderID, type ModelID } from "../schema"
@@ -9,7 +8,7 @@ export const id = ProviderID.make("google")
 
 export const routes = [Gemini.route]
 
-type ModelOptions = RouteDefaultsInput & ProviderAuthOption<"optional"> & { readonly baseURL?: string }
+export type Config = RouteDefaultsInput & ProviderAuthOption<"optional"> & { readonly baseURL?: string }
 
 const auth = (options: ProviderAuthOption<"optional">) => {
   if ("auth" in options && options.auth) return options.auth
@@ -18,12 +17,19 @@ const auth = (options: ProviderAuthOption<"optional">) => {
     .pipe(Auth.header("x-goog-api-key"))
 }
 
-export const model = (id: string | ModelID, options: ModelOptions = {}) => {
-  const { apiKey: _, auth: _auth, baseURL, ...rest } = options
-  return Gemini.route.with({ ...rest, endpoint: { baseURL }, auth: auth(options) }).model({ id })
+const configuredRoute = (input: Config) => {
+  const { apiKey: _, auth: _auth, baseURL, ...rest } = input
+  return Gemini.route.with({ ...rest, endpoint: { baseURL }, auth: auth(input) })
 }
 
-export const provider = Provider.make({
-  id,
-  model,
-})
+export const configure = (input: Config = {}) => {
+  const route = configuredRoute(input)
+  return {
+    id,
+    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    configure,
+  }
+}
+
+export const provider = configure()
+export const model = provider.model

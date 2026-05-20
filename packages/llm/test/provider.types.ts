@@ -22,6 +22,8 @@ const requiredProvider = Provider.make({
   model: requiredModel,
 })
 
+// Provider.make is advanced structural typing coverage; built-in providers use
+// configure(...).model(id) facades instead of second-argument selectors.
 requiredProvider.model("custom", { baseURL: "https://example.com/v1" })
 
 // @ts-expect-error Provider.make preserves required model options.

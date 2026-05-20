@@ -1,5 +1,5 @@
 import { Config, Effect, Formatter, Layer, Schema, Stream } from "effect"
-import { LLM, LLMClient, Provider, ProviderID, Tool, type ProviderModelOptions } from "@opencode-ai/llm"
+import { LLM, LLMClient, ProviderID, Tool } from "@opencode-ai/llm"
 import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
 import { OpenAI } from "@opencode-ai/llm/providers"
 
@@ -200,12 +200,15 @@ const FakeAdapter = Route.make({
   framing: Framing.sse,
 })
 
-// A provider module exports a Provider definition. The default `model` helper
-// selects a model id from an already configured route.
-const FakeEcho = Provider.make({
+// A provider module exports a configured facade. Configuration happens before
+// model selection; model selectors accept ids only.
+const FakeEcho = {
   id: ProviderID.make("fake-echo"),
-  model: (id: string, options: ProviderModelOptions = {}) => FakeAdapter.model({ id, ...options }),
-})
+  configure: () => ({
+    id: ProviderID.make("fake-echo"),
+    model: (id: string) => FakeAdapter.model({ id }),
+  }),
+}
 
 // `LLMClient.prepare` is the lower-level inspection hook: it compiles through
 // body conversion, validation, endpoint, auth, and HTTP construction without
@@ -213,7 +216,7 @@ const FakeEcho = Provider.make({
 const inspectFakeProvider = Effect.gen(function* () {
   const prepared = yield* LLMClient.prepare(
     LLM.request({
-      model: FakeEcho.model("tiny-echo"),
+      model: FakeEcho.configure().model("tiny-echo"),
       prompt: "Show me the provider pipeline.",
     }),
   )

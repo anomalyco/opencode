@@ -1,4 +1,3 @@
-import { Provider } from "../provider"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
 import type { RouteDefaultsInput } from "../route/client"
 import { ProviderID, type ModelID } from "../schema"
@@ -33,33 +32,35 @@ const defaults = (options: ModelOptions) => {
   return rest
 }
 
-export const responses = (modelID: string | ModelID, options: ModelOptions) =>
-  responsesRoute
-    .with({
-      ...withOpenAIOptions(modelID, defaults(options)),
-      endpoint: { baseURL: options.baseURL },
-      auth: AuthOptions.bearer(options, []),
-    })
-    .model({ id: modelID })
+const configuredResponsesRoute = (options: ModelOptions) =>
+  responsesRoute.with({
+    endpoint: { baseURL: options.baseURL },
+    auth: AuthOptions.bearer(options, []),
+  })
 
-export const chat = (modelID: string | ModelID, options: ModelOptions) =>
-  chatRoute
-    .with({
-      ...withOpenAIOptions(modelID, defaults(options)),
-      endpoint: { baseURL: options.baseURL },
-      auth: AuthOptions.bearer(options, []),
-    })
-    .model({ id: modelID })
+const configuredChatRoute = (options: ModelOptions) =>
+  chatRoute.with({
+    endpoint: { baseURL: options.baseURL },
+    auth: AuthOptions.bearer(options, []),
+  })
 
-export const model = (modelID: string | ModelID, options: ModelOptions) => {
-  if (shouldUseResponsesApi(modelID)) return responses(modelID, options)
-  return chat(modelID, options)
+export const configure = (options: ModelOptions) => {
+  const responsesRoute = configuredResponsesRoute(options)
+  const chatRoute = configuredChatRoute(options)
+  const responses = (modelID: string | ModelID) =>
+    responsesRoute.with(withOpenAIOptions(modelID, defaults(options))).model({ id: modelID })
+  const chat = (modelID: string | ModelID) =>
+    chatRoute.with(withOpenAIOptions(modelID, defaults(options))).model({ id: modelID })
+  return {
+    id,
+    model: (modelID: string | ModelID) => (shouldUseResponsesApi(modelID) ? responses(modelID) : chat(modelID)),
+    responses,
+    chat,
+    configure,
+  }
 }
 
-export const provider = Provider.make({
+export const provider = {
   id,
-  model,
-  apis: { responses, chat },
-})
-
-export const apis = provider.apis
+  configure,
+}

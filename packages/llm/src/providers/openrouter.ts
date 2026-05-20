@@ -2,7 +2,6 @@ import { Effect, Schema } from "effect"
 import { Route, type RouteDefaultsInput } from "../route/client"
 import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
-import { Provider } from "../provider"
 import { Protocol } from "../route/protocol"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
@@ -77,18 +76,23 @@ export const route = Route.make({
 
 export const routes = [route]
 
-export const model = (id: string | ModelID, options: ModelOptions = {}) => {
-  const { apiKey: _, auth: _auth, baseURL, ...rest } = options
-  return route
-    .with({
-      ...rest,
-      endpoint: { baseURL: baseURL ?? profile.baseURL },
-      auth: AuthOptions.bearer(options, "OPENROUTER_API_KEY"),
-    })
-    .model({ id })
+const configuredRoute = (input: ModelOptions) => {
+  const { apiKey: _, auth: _auth, baseURL, ...rest } = input
+  return route.with({
+    ...rest,
+    endpoint: { baseURL: baseURL ?? profile.baseURL },
+    auth: AuthOptions.bearer(input, "OPENROUTER_API_KEY"),
+  })
 }
 
-export const provider = Provider.make({
-  id,
-  model,
-})
+export const configure = (input: ModelOptions = {}) => {
+  const route = configuredRoute(input)
+  return {
+    id,
+    model: (modelID: string | ModelID) => route.model({ id: modelID }),
+    configure,
+  }
+}
+
+export const provider = configure()
+export const model = provider.model

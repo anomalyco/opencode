@@ -1,4 +1,3 @@
-import { Provider } from "../provider"
 import { ProviderID, type ModelID } from "../schema"
 import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat"
 import type { RouteDefaultsInput } from "../route/client"
@@ -6,12 +5,6 @@ import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
 import { profiles, type OpenAICompatibleProfile } from "./openai-compatible-profile"
 
 export const id = ProviderID.make("openai-compatible")
-
-export type ModelOptions = RouteDefaultsInput &
-  ProviderAuthOption<"optional"> & {
-    readonly provider: string
-    readonly baseURL: string
-  }
 
 type GenericModelOptions = RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
@@ -26,47 +19,42 @@ export type FamilyModelOptions = RouteDefaultsInput &
 
 export const routes = [OpenAICompatibleChat.route]
 
-export const model = (id: string | ModelID, options: ModelOptions) => {
-  const { provider, baseURL, apiKey: _, auth: _auth, ...rest } = options
-  return OpenAICompatibleChat.route
-    .with({
-      ...rest,
-      provider,
-      endpoint: { baseURL },
-      auth: AuthOptions.bearer(options, []),
-    })
-    .model({ id, provider: ProviderID.make(provider) })
+export const configure = (input: GenericModelOptions) => {
+  const provider = input.provider ?? "openai-compatible"
+  const { provider: _, baseURL, apiKey: _apiKey, auth: _auth, ...rest } = input
+  const route = OpenAICompatibleChat.route.with({
+    ...rest,
+    provider,
+    endpoint: { baseURL },
+    auth: AuthOptions.bearer(input, []),
+  })
+  return {
+    id: ProviderID.make(provider),
+    model: (modelID: string | ModelID) => route.model({ id: modelID, provider: ProviderID.make(provider) }),
+    configure,
+  }
 }
 
-export const profileModel = (
-  profile: OpenAICompatibleProfile,
-  id: string | ModelID,
-  options: FamilyModelOptions = {},
-) =>
-  model(id, {
-    ...options,
-    baseURL: options.baseURL ?? profile.baseURL,
-    provider: profile.provider,
-  })
-
-const define = (profile: OpenAICompatibleProfile) =>
-  Provider.make({
-    id: ProviderID.make(profile.provider),
-    model: (id: string | ModelID, options: FamilyModelOptions = {}) => profileModel(profile, id, options),
-  })
-
-export const provider = Provider.make({
-  id,
-  model: (id: string | ModelID, options: GenericModelOptions) => {
-    const provider = options.provider ?? "openai-compatible"
-    if ("auth" in options) {
-      const { provider: _, ...rest } = options
-      return model(id, { ...rest, provider })
+const define = (profile: OpenAICompatibleProfile) => {
+  const configureProfile = (input: FamilyModelOptions = {}) => {
+    const facade = configure({
+      ...input,
+      baseURL: input.baseURL ?? profile.baseURL,
+      provider: profile.provider,
+    })
+    return {
+      id: ProviderID.make(profile.provider),
+      model: facade.model,
+      configure: configureProfile,
     }
-    const { provider: _, ...rest } = options
-    return model(id, { ...rest, provider })
-  },
-})
+  }
+  return configureProfile()
+}
+
+export const provider = {
+  id,
+  configure,
+}
 
 export const baseten = define(profiles.baseten)
 export const cerebras = define(profiles.cerebras)

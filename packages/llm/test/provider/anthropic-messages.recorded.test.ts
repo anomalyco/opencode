@@ -7,9 +7,9 @@ import * as Anthropic from "../../src/providers/anthropic"
 import { weatherToolName } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
-const model = Anthropic.model("claude-haiku-4-5-20251001", {
+const model = Anthropic.configure({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
-})
+}).model("claude-haiku-4-5-20251001")
 
 const malformedToolOrderRequest = LLM.request({
   id: "recorded_anthropic_malformed_tool_order",

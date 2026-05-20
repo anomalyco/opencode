@@ -3,6 +3,11 @@ import type { Model, ModelID, ProviderID } from "./schema"
 
 export type ModelOptions = RouteDefaultsInput
 
+/**
+ * Advanced structural provider definition helper. Built-in providers should
+ * prefer explicit `configure(options).model(id)` facades so deployment config is
+ * chosen before model selection.
+ */
 export type ModelFactory<Options extends ModelOptions = ModelOptions> = (
   id: string | ModelID,
   options?: Options,
