@@ -536,7 +536,7 @@ App boundary = explicit durable-config -> typed-provider call
 - [ ] Make unconfigured transports reusable constants such as
       `HttpTransport.sseJson`; keep transport functions only for configured/fresh
       state construction.
-- [ ] Collapse the public WebSocket runtime split so one `LLMClient.layer`
+- [x] Collapse the public WebSocket runtime split so one `LLMClient.layer`
       exposes available transport capabilities and selected routes fail with typed
       transport config errors when a required capability is missing.
 - [ ] Convert OpenAI provider APIs to provider-facade shape:

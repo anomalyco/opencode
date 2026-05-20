@@ -1,6 +1,6 @@
 import { Config, Effect, Formatter, Layer, Schema, Stream } from "effect"
 import { LLM, LLMClient, Provider, ProviderID, Tool, type ProviderModelOptions } from "@opencode-ai/llm"
-import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@opencode-ai/llm/route"
+import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
 import { OpenAI } from "@opencode-ai/llm/providers"
 
 /**
@@ -227,7 +227,8 @@ const inspectFakeProvider = Effect.gen(function* () {
 // enabled at a time so the tutorial can demonstrate generate, prepare, stream,
 // or tool-loop behavior without spending tokens on every example.
 const requestExecutorLayer = RequestExecutor.defaultLayer
-const llmClientLayer = LLMClient.layer.pipe(Layer.provide(requestExecutorLayer))
+const llmDeps = Layer.mergeAll(requestExecutorLayer, WebSocketExecutor.layer)
+const llmClientLayer = LLMClient.layer.pipe(Layer.provide(llmDeps))
 
 const program = Effect.gen(function* () {
   // yield* generateOnce
@@ -237,6 +238,6 @@ const program = Effect.gen(function* () {
   // yield* generateStructuredObject
   // yield* generateDynamicObject.pipe(Effect.andThen((response) => Effect.sync(() => console.log(response.object))))
   yield* streamWithTools
-}).pipe(Effect.provide(Layer.mergeAll(requestExecutorLayer, llmClientLayer)))
+}).pipe(Effect.provide(Layer.mergeAll(llmDeps, llmClientLayer)))
 
 Effect.runPromise(program)

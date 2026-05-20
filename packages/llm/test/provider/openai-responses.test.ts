@@ -98,7 +98,7 @@ describe("OpenAI Responses route", () => {
           model: OpenAI.responsesWebSocket("gpt-4.1-mini", { baseURL: "https://api.openai.test/v1/", apiKey: "test" }),
           prompt: "Say hello.",
         }),
-      ).pipe(Effect.provide(LLMClient.layerWithWebSocket.pipe(Layer.provide(deps))))
+      ).pipe(Effect.provide(LLMClient.layer.pipe(Layer.provide(deps))))
 
       expect(response.text).toBe("Hi")
       expect(opened).toEqual([{ url: "wss://api.openai.test/v1/responses", authorization: "Bearer test" }])
@@ -110,33 +110,6 @@ describe("OpenAI Responses route", () => {
         input: [{ role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
         store: false,
       })
-    }),
-  )
-
-  it.effect("requires WebSocket runtime for OpenAI Responses WebSocket", () =>
-    Effect.gen(function* () {
-      const error = yield* LLMClient.generate(
-        LLM.request({
-          model: OpenAI.responsesWebSocket("gpt-4.1-mini", { baseURL: "https://api.openai.test/v1/", apiKey: "test" }),
-          prompt: "Say hello.",
-        }),
-      ).pipe(
-        Effect.provide(
-          LLMClient.layer.pipe(
-            Layer.provide(
-              Layer.succeed(
-                RequestExecutor.Service,
-                RequestExecutor.Service.of({
-                  execute: () => Effect.die("unexpected HTTP request"),
-                }),
-              ),
-            ),
-          ),
-        ),
-        Effect.flip,
-      )
-
-      expect(error.message).toContain("requires WebSocketExecutor.Service")
     }),
   )
 

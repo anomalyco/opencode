@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Queue, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Queue, Stream } from "effect"
 import { Headers } from "effect/unstable/http"
 import { Auth, type Auth as AuthDef } from "../auth"
 import type { Endpoint } from "../endpoint"
@@ -134,6 +134,8 @@ export const open = (input: WebSocketRequest) =>
         kind: "open",
       }),
   }).pipe(Effect.flatMap((ws) => fromWebSocket(ws, input)))
+
+export const layer: Layer.Layer<Service> = Layer.succeed(Service, Service.of({ open }))
 
 export const fromWebSocket = (
   ws: globalThis.WebSocket,
@@ -274,6 +276,7 @@ export const json = <Body, Message>(input: JsonInput<Body, Message>): JsonTransp
 
 export const WebSocketExecutor = {
   Service,
+  layer,
   open,
   fromWebSocket,
   messageText,

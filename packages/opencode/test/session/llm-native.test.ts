@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { ToolFailure } from "@opencode-ai/llm"
-import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
+import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
 import { jsonSchema, tool, type ModelMessage } from "ai"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { LLMNative } from "@/session/llm/native-request"
 import { LLMNativeRuntime } from "@/session/llm/native-runtime"
 import type { Provider } from "@/provider/provider"
@@ -387,7 +387,10 @@ describe("session.llm-native.request", () => {
           maxOutputTokens: 512,
           headers: { "x-request": "request-header" },
         }),
-      ).pipe(Effect.provide(LLMClient.layer), Effect.provide(RequestExecutor.defaultLayer)),
+      ).pipe(
+        Effect.provide(LLMClient.layer),
+        Effect.provide(Layer.mergeAll(RequestExecutor.defaultLayer, WebSocketExecutor.layer)),
+      ),
     )
 
     expect(prepared).toMatchObject({

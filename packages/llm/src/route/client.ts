@@ -425,34 +425,24 @@ export const streamRequest = (request: LLMRequest) =>
     }),
   )
 
-export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
+export const layer: Layer.Layer<Service, never, RequestExecutor.Service | WebSocketExecutorService> = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const stream = streamWith(streamRequestWith({ http: yield* RequestExecutor.Service }))
+    const stream = streamWith(
+      streamRequestWith({
+        http: yield* RequestExecutor.Service,
+        webSocket: yield* WebSocketExecutor.Service,
+      }),
+    )
     return Service.of({ prepare: prepareWith as Interface["prepare"], stream, generate: generateWith(stream) })
   }),
 )
-
-export const layerWithWebSocket: Layer.Layer<Service, never, RequestExecutor.Service | WebSocketExecutorService> =
-  Layer.effect(
-    Service,
-    Effect.gen(function* () {
-      const stream = streamWith(
-        streamRequestWith({
-          http: yield* RequestExecutor.Service,
-          webSocket: yield* WebSocketExecutor.Service,
-        }),
-      )
-      return Service.of({ prepare: prepareWith as Interface["prepare"], stream, generate: generateWith(stream) })
-    }),
-  )
 
 export const Route = { make } as const
 
 export const LLMClient = {
   Service,
   layer,
-  layerWithWebSocket,
   prepare,
   stream,
   generate,
