@@ -1,5 +1,5 @@
 import type { JsonSchema, LLMRequest, ProviderMetadata } from "@opencode-ai/llm"
-import { LLM, Message, SystemPart, ToolCallPart, ToolDefinition, ToolResultPart } from "@opencode-ai/llm"
+import { LLM, Message, Model, SystemPart, ToolCallPart, ToolDefinition, ToolResultPart } from "@opencode-ai/llm"
 import "@opencode-ai/llm/providers"
 import type { ModelMessage } from "ai"
 import type { Provider } from "@/provider/provider"
@@ -158,7 +158,7 @@ export const model = (input: Provider.Model | RequestInput, headers?: Record<str
   const model = "model" in input ? input.model : input
   const route = ROUTE[model.api.npm]
   if (!route) throw new Error(`Native LLM request adapter does not support provider package ${model.api.npm}`)
-  return LLM.model({
+  return Model.make({
     id: model.api.id,
     provider: model.providerID,
     route,

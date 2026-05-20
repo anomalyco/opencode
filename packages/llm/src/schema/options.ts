@@ -135,7 +135,7 @@ export namespace ModelLimits {
     input instanceof ModelLimits ? input : new ModelLimits(input ?? {})
 }
 
-export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
+export class Model extends Schema.Class<Model>("LLM.Model")({
   id: ModelID,
   provider: ProviderID,
   route: RouteID,
@@ -167,8 +167,8 @@ export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
    */
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {
-  static override make(input: ModelRefInput) {
-    return new ModelRef({
+  static override make(input: Model.Input) {
+    return new Model({
       ...input,
       id: ModelID.make(input.id),
       provider: ProviderID.make(input.provider),
@@ -179,7 +179,7 @@ export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
     })
   }
 
-  static input(model: ModelRef): ConstructorParameters<typeof ModelRef>[0] {
+  static input(model: Model): ConstructorParameters<typeof Model>[0] {
     return {
       id: model.id,
       provider: model.provider,
@@ -197,26 +197,30 @@ export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
     }
   }
 
-  static update(model: ModelRef, patch: Partial<ModelRefInput>) {
+  static update(model: Model, patch: Partial<Model.Input>) {
     if (Object.keys(patch).length === 0) return model
-    return ModelRef.make({
-      ...ModelRef.input(model),
+    return Model.make({
+      ...Model.input(model),
       ...patch,
     })
   }
 }
 
-export type ModelRefInput = Omit<
-  ConstructorParameters<typeof ModelRef>[0],
-  "id" | "provider" | "route" | "limits" | "generation" | "http"
-> & {
-  readonly id: string | ModelID
-  readonly provider: string | ProviderID
-  readonly route: string | RouteID
-  readonly limits?: ModelLimits.Input
-  readonly generation?: GenerationOptions.Input
-  readonly http?: HttpOptions.Input
+export namespace Model {
+  export type Input = Omit<
+    ConstructorParameters<typeof Model>[0],
+    "id" | "provider" | "route" | "limits" | "generation" | "http"
+  > & {
+    readonly id: string | ModelID
+    readonly provider: string | ProviderID
+    readonly route: string | RouteID
+    readonly limits?: ModelLimits.Input
+    readonly generation?: GenerationOptions.Input
+    readonly http?: HttpOptions.Input
+  }
 }
+
+export type ModelInput = Model.Input
 
 export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
   type: Schema.Literals(["ephemeral", "persistent"]),

@@ -515,8 +515,55 @@ ModelResolver = dynamic opencode/config bridge
   route selector such as `responses` versus `responsesWebSocket`.
 - No separate public `LLMClient.layerWithWebSocket`. The runtime should expose one
   client layer with the available transport capabilities.
-- No `modelRef(...)` / `LLM.model(...)` alias. If a raw durable model reference
-  remains useful, keep it separate from executable model handles.
+- No executable `ModelRef`. The executable handle is `Model`; durable model
+  identity stays separate and cannot execute on its own.
+
+## Implementation Todo
+
+- [x] Replace the current executable `ModelRef` with `Model`.
+- [ ] Change `Model.route` to carry a route value, not a `RouteID` string.
+- [ ] Keep a separate durable model identity type for persisted/session/catalog
+      data, likely `{ providerID, modelID }`, and make it clear that it cannot
+      execute without resolver context.
+- [ ] Change route model selectors so `route.model(id)` returns an executable
+      model with the route value attached, not a globally registered route id.
+- [ ] Rework `LLMClient.prepare` / `stream` / `generate` to read
+      `request.model.route` directly instead of calling `registeredRoute(...)`.
+- [ ] Remove `Route.make(...)` global registration from the normal execution
+      path; keep route ids only as diagnostics/provider API labels.
+- [ ] Model endpoint as `{ baseURL, path, query }` on routes, then remove the
+      current split where host/query live on the model and path lives in route
+      transport setup.
+- [ ] Define `Route.with(...)` with explicit patch semantics for endpoint merge,
+      query merge, header merge, auth replacement, and optional diagnostic id.
+- [ ] Make unconfigured transports reusable constants such as
+      `HttpTransport.sseJson`; keep transport functions only for configured/fresh
+      state construction.
+- [ ] Collapse the public WebSocket runtime split so one `LLMClient.layer`
+      exposes available transport capabilities and selected routes fail with typed
+      transport config errors when a required capability is missing.
+- [ ] Convert OpenAI provider APIs to provider-facade shape:
+      `OpenAI.configure(config).responses(id)`, `.chat(id)`, and
+      `.responsesWebSocket(id)`.
+- [ ] Convert Azure to a configured facade where resource/base URL/api version
+      setup happens before selecting deployment ids.
+- [ ] Split Cloudflare products into separate facades such as
+      `CloudflareAIGateway` and `CloudflareWorkersAI`; do not expose a shared root
+      config surface unless one product actually exists.
+- [ ] Decide whether a tiny `Provider.define(...)` helper is warranted after two
+      or three provider conversions; start with plain objects if duplication is not
+      yet painful.
+- [ ] Add `ModelResolver.resolve(...)` for opencode's dynamic config path and
+      map catalog metadata such as `endpoint.websocket` to the correct named route
+      selector.
+- [ ] Update `packages/opencode/src/session/llm/native-request.ts` to use the
+      resolver instead of the hard-coded `ROUTE` table.
+- [ ] Update tests so direct route/provider tests assert route values are carried
+      by executable models, and opencode/native tests assert resolver-based route
+      selection.
+- [ ] Remove compatibility exports or stale docs only after internal call sites
+      are migrated; do not keep duplicate constructor paths without an external
+      compatibility need.
 
 ## Open Questions
 

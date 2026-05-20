@@ -12,13 +12,13 @@ import { applyCachePolicy } from "../cache-policy"
 import * as ProviderShared from "../protocols/shared"
 import * as ToolRuntime from "../tool-runtime"
 import type { Tools } from "../tool"
-import type { LLMError, LLMEvent, ModelRefInput as SchemaModelRefInput, PreparedRequestOf, ProtocolID } from "../schema"
+import type { LLMError, LLMEvent, ModelInput as SchemaModelInput, PreparedRequestOf, ProtocolID } from "../schema"
 import {
   GenerationOptions,
   HttpOptions,
   LLMRequest,
   LLMResponse,
-  ModelRef,
+  Model,
   LLMError as LLMErrorClass,
   NoRouteReason,
   PreparedRequest,
@@ -43,7 +43,7 @@ export interface Route<Body, Prepared = unknown> {
   readonly defaults: RouteDefaults
   readonly body: RouteBody<Body>
   readonly with: (patch: RoutePatch<Body, Prepared>) => Route<Body, Prepared>
-  readonly model: <Input extends RouteModelInput = RouteModelInput>(input: Input) => ModelRef
+  readonly model: <Input extends RouteModelInput = RouteModelInput>(input: Input) => Model
   readonly prepareTransport: (body: Body, request: LLMRequest) => Effect.Effect<Prepared, LLMError>
   readonly streamPrepared: (
     prepared: Prepared,
@@ -60,9 +60,9 @@ export type AnyRoute = Route<any, any>
 
 const routeRegistry = new Map<string, AnyRoute>()
 
-// Route lookup is intentionally global: model refs name a route id, and
+// Route lookup is intentionally global: models name a route id, and
 // importing the provider/protocol/custom-route module registers the runnable
-// implementation. Duplicate ids are bugs because model refs cannot disambiguate
+// implementation. Duplicate ids are bugs because models cannot disambiguate
 // them.
 const register = <R extends AnyRoute>(route: R): R => {
   const existing = routeRegistry.get(route.id)
@@ -75,28 +75,28 @@ const registeredRoute = (id: string) => routeRegistry.get(id)
 
 export type HttpOptionsInput = HttpOptions.Input
 
-type ModelRefInput = Omit<SchemaModelRefInput, "auth"> & { readonly auth?: AuthDef }
+type ModelInput = Omit<SchemaModelInput, "auth"> & { readonly auth?: AuthDef }
 
-// `baseURL` is required on `ModelRefInput` (every materialized `ModelRef` has
+// `baseURL` is required on `ModelInput` (every materialized `Model` has
 // a host) but optional at the route-input layers below. The route's `defaults`
 // can supply a canonical URL (e.g. OpenAI/Anthropic) so the user's input may
 // omit it. Routes without a canonical URL (OpenAI-compatible, GitHub Copilot)
 // re-tighten this in their own input type.
-export type RouteModelInput = Omit<ModelRefInput, "provider" | "route" | "baseURL"> & {
+export type RouteModelInput = Omit<ModelInput, "provider" | "route" | "baseURL"> & {
   readonly baseURL?: string
 }
 
-export type RouteModelDefaults = Omit<ModelRefInput, "id" | "route" | "baseURL"> & {
+export type RouteModelDefaults = Omit<ModelInput, "id" | "route" | "baseURL"> & {
   readonly baseURL?: string
 }
 
-export type RouteRoutedModelInput = Omit<ModelRefInput, "route" | "baseURL"> & {
+export type RouteRoutedModelInput = Omit<ModelInput, "route" | "baseURL"> & {
   readonly baseURL?: string
 }
 
-export type RouteRoutedModelDefaults = Partial<Omit<ModelRefInput, "id" | "provider" | "route">>
+export type RouteRoutedModelDefaults = Partial<Omit<ModelInput, "id" | "provider" | "route">>
 
-export type RouteDefaults = Partial<Omit<ModelRefInput, "id" | "provider" | "route">>
+export type RouteDefaults = Partial<Omit<ModelInput, "id" | "provider" | "route">>
 
 export interface RoutePatch<Body, Prepared> extends RouteDefaults {
   readonly id: string
@@ -120,7 +120,7 @@ export interface RouteMappedModelOptions<Input, Output extends RouteMappedModelI
 const modelWithDefaults =
   <Input>(
     route: AnyRoute,
-    defaults: Partial<Omit<ModelRefInput, "id" | "route">>,
+    defaults: Partial<Omit<ModelInput, "id" | "route">>,
     options: { readonly mapInput?: (input: Input) => RouteMappedModelInput },
   ) =>
   (input: Input) => {
@@ -133,7 +133,7 @@ const modelWithDefaults =
     const generation = mergeGenerationOptions(route.defaults.generation, defaults.generation)
     const providerOptions = mergeProviderOptions(route.defaults.providerOptions, defaults.providerOptions)
     const http = mergeHttpOptions(httpOptions(route.defaults.http), httpOptions(defaults.http))
-    return ModelRef.make({
+    return Model.make({
       ...route.defaults,
       ...defaults,
       ...mapped,
@@ -168,20 +168,20 @@ function model<Input extends RouteModelInput = RouteModelInput>(
   route: AnyRoute,
   defaults: RouteModelDefaults,
   options?: RouteModelOptions<Input, RouteModelInput>,
-): (input: Input) => ModelRef
+): (input: Input) => Model
 function model<Input extends RouteRoutedModelInput = RouteRoutedModelInput>(
   route: AnyRoute,
   defaults?: RouteRoutedModelDefaults,
   options?: RouteModelOptions<Input, RouteRoutedModelInput>,
-): (input: Input) => ModelRef
+): (input: Input) => Model
 function model<Input, Output extends RouteMappedModelInput = RouteMappedModelInput>(
   route: AnyRoute,
-  defaults: Partial<Omit<ModelRefInput, "id" | "route">>,
+  defaults: Partial<Omit<ModelInput, "id" | "route">>,
   options: RouteMappedModelOptions<Input, Output>,
-): (input: Input) => ModelRef
+): (input: Input) => Model
 function model<Input>(
   route: AnyRoute,
-  defaults: Partial<Omit<ModelRefInput, "id" | "route">> = {},
+  defaults: Partial<Omit<ModelInput, "id" | "route">> = {},
   options: { readonly mapInput?: (input: Input) => RouteMappedModelInput } = {},
 ) {
   return modelWithDefaults(route, defaults, options)
@@ -215,7 +215,7 @@ export interface GenerateMethod {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
 
-const noRoute = (model: ModelRef) =>
+const noRoute = (model: Model) =>
   new LLMErrorClass({
     module: "LLMClient",
     method: "resolveRoute",
@@ -302,7 +302,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           defaults: mergeRouteDefaults(routeInput.defaults, defaults),
         })
       },
-      model: (input: RouteModelInput): ModelRef => modelWithDefaults<RouteModelInput>(route, {}, {})(input),
+      model: (input: RouteModelInput): Model => modelWithDefaults<RouteModelInput>(route, {}, {})(input),
       prepareTransport: routeInput.transport.prepare,
       streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime) => {
         const route = `${request.model.provider}/${request.model.route}`

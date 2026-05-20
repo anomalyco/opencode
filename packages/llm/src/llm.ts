@@ -9,7 +9,7 @@ import {
   LLMRequest,
   LLMResponse,
   Message,
-  type ModelRefInput,
+  type ModelInput as SchemaModelInput,
   SystemPart,
   ToolChoice,
   ToolDefinition,
@@ -19,7 +19,7 @@ import {
 } from "./schema"
 import { make as makeTool, type ToolSchema } from "./tool"
 
-export type ModelInput = ModelRefInput
+export type ModelInput = SchemaModelInput
 
 export type MessageInput = Message.Input
 

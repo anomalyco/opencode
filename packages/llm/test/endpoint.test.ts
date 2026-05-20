@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { LLM } from "../src"
 import { Endpoint } from "../src/route"
-import { ModelRef } from "../src/schema"
+import { Model } from "../src/schema"
 
 const request = (input: { readonly baseURL: string; readonly queryParams?: Record<string, string> }) =>
   LLM.request({
-    model: ModelRef.make({
+    model: Model.make({
       id: "model-1",
       provider: "test",
       route: "test-route",

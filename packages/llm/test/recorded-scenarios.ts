@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMEvent, LLMResponse, Message, ToolChoice, ToolDefinition, type LLMRequest, type ModelRef } from "../src"
+import { LLM, LLMEvent, LLMResponse, Message, ToolChoice, ToolDefinition, type LLMRequest, type Model } from "../src"
 import { LLMClient } from "../src/route"
 import { tool } from "../src/tool"
 
@@ -41,7 +41,7 @@ export const weatherRuntimeTool = tool({
 
 export const textRequest = (input: {
   readonly id: string
-  readonly model: ModelRef
+  readonly model: Model
   readonly prompt?: string
   readonly maxTokens?: number
   readonly temperature?: number | false
@@ -61,7 +61,7 @@ export const textRequest = (input: {
 
 export const weatherToolRequest = (input: {
   readonly id: string
-  readonly model: ModelRef
+  readonly model: Model
   readonly maxTokens?: number
   readonly temperature?: number | false
 }) =>
@@ -81,7 +81,7 @@ export const weatherToolRequest = (input: {
 
 export const weatherToolLoopRequest = (input: {
   readonly id: string
-  readonly model: ModelRef
+  readonly model: Model
   readonly system?: string
   readonly maxTokens?: number
   readonly temperature?: number | false
@@ -100,7 +100,7 @@ export const weatherToolLoopRequest = (input: {
 
 export const goldenWeatherToolLoopRequest = (input: {
   readonly id: string
-  readonly model: ModelRef
+  readonly model: Model
   readonly maxTokens?: number
   readonly temperature?: number | false
 }) =>
@@ -117,7 +117,7 @@ const restroomImage = () =>
 
 export const imageRequest = (input: {
   readonly id: string
-  readonly model: ModelRef
+  readonly model: Model
   readonly image: string
   readonly maxTokens?: number
   readonly temperature?: number | false
@@ -196,7 +196,7 @@ export type GoldenScenarioID = "text" | "tool-call" | "tool-loop" | "image"
 
 export interface GoldenScenarioContext {
   readonly id: string
-  readonly model: ModelRef
+  readonly model: Model
   readonly maxTokens?: number
   readonly temperature?: number | false
 }

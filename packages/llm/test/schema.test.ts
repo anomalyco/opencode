@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { ContentPart, LLMEvent, LLMRequest, ModelID, ModelLimits, ModelRef, ProviderID, Usage } from "../src/schema"
+import { ContentPart, LLMEvent, LLMRequest, Model, ModelID, ModelLimits, ProviderID, Usage } from "../src/schema"
 import { ProviderShared } from "../src/protocols/shared"
 
-const model = new ModelRef({
+const model = new Model({
   id: ModelID.make("fake-model"),
   provider: ProviderID.make("fake-provider"),
   route: "openai-chat",
