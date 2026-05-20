@@ -3,7 +3,7 @@ import { and, asc, eq, isNull, sql, Database } from "./drizzle"
 import { Actor } from "./actor"
 import { Identifier } from "./identifier"
 import { LiteTable } from "./schema/billing.sql"
-import { ReferralRewardTable, ReferralTable } from "./schema/referral.sql"
+import { ReferralCodeTable, ReferralRewardTable, ReferralTable } from "./schema/referral.sql"
 import { AuthTable } from "./schema/auth.sql"
 import { UserTable } from "./schema/user.sql"
 import { WorkspaceTable } from "./schema/workspace.sql"
@@ -26,38 +26,29 @@ export namespace Referral {
   }
 
   function generateCode() {
-    return ulid().slice(-CODE_LENGTH)
+    return ulid().slice(-CODE_LENGTH).toUpperCase()
   }
 
   async function ensureCode(workspaceID = Actor.workspace()) {
-    return Database.transaction(async (tx) => {
-      const existing = await tx
-        .select({ code: WorkspaceTable.referralCode })
-        .from(WorkspaceTable)
-        .where(and(eq(WorkspaceTable.id, workspaceID), isNull(WorkspaceTable.timeDeleted)))
+    return Database.use(async (db) => {
+      const existing = await db
+        .select({ code: ReferralCodeTable.code })
+        .from(ReferralCodeTable)
+        .where(eq(ReferralCodeTable.workspaceID, workspaceID))
         .then((rows) => rows[0])
-      if (!existing) throw new Error("Workspace not found")
-      if (existing.code) return { code: existing.code }
+      if (existing) return { code: existing.code }
 
-      for (const _ of Array.from({ length: 5 })) {
-        await tx
-          .update(WorkspaceTable)
-          .set({ referralCode: generateCode() })
-          .where(
-            and(
-              eq(WorkspaceTable.id, workspaceID),
-              isNull(WorkspaceTable.referralCode),
-              isNull(WorkspaceTable.timeDeleted),
-            ),
-          )
+      await db.insert(ReferralCodeTable).ignore().values({
+        workspaceID,
+        code: generateCode(),
+      })
 
-        const created = await tx
-          .select({ code: WorkspaceTable.referralCode })
-          .from(WorkspaceTable)
-          .where(and(eq(WorkspaceTable.id, workspaceID), isNull(WorkspaceTable.timeDeleted)))
-          .then((rows) => rows[0])
-        if (created?.code) return { code: created.code }
-      }
+      const created = await db
+        .select({ code: ReferralCodeTable.code })
+        .from(ReferralCodeTable)
+        .where(eq(ReferralCodeTable.workspaceID, workspaceID))
+        .then((rows) => rows[0])
+      if (created) return { code: created.code }
 
       throw new Error("Failed to generate referral code")
     })
@@ -300,9 +291,15 @@ export namespace Referral {
 
     return Database.transaction(async (tx) => {
       const code = await tx
-        .select({ workspaceID: WorkspaceTable.id })
-        .from(WorkspaceTable)
-        .where(and(eq(WorkspaceTable.referralCode, referralCode), isNull(WorkspaceTable.timeDeleted)))
+        .select({ workspaceID: ReferralCodeTable.workspaceID })
+        .from(ReferralCodeTable)
+        .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, ReferralCodeTable.workspaceID))
+        .where(
+          and(
+            eq(ReferralCodeTable.code, referralCode),
+            isNull(WorkspaceTable.timeDeleted),
+          ),
+        )
         .then((rows) => rows[0])
       if (!code) throw new Error("Referral code invalid")
 
