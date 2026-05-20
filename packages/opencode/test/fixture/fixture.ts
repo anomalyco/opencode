@@ -6,6 +6,7 @@ import path from "path"
 import { Effect, Context, Layer, ManagedRuntime } from "effect"
 import type * as PlatformError from "effect/PlatformError"
 import type * as Scope from "effect/Scope"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import type { Config } from "@/config/config"
@@ -209,7 +210,7 @@ export const withTmpdirInstance =
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped(options)
       return yield* self.pipe(Effect.provideService(TestInstance, { directory }), provideInstanceEffect(directory))
-    }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer))
+    }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(AppFileSystem.defaultLayer), Effect.provide(CrossSpawnSpawner.defaultLayer))
 
 export function provideTmpdirServer<A, E, R>(
   self: (input: { dir: string; llm: TestLLMServer["Service"] }) => Effect.Effect<A, E, R>,

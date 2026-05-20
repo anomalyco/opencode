@@ -1,3 +1,5 @@
+import path from "path"
+import { Global } from "@opencode-ai/core/global"
 import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "ai"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
@@ -26,7 +28,7 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
-import { Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
+import { Cause, Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -233,6 +235,7 @@ interface State {
   status: Record<string, Status>
   clients: Record<string, MCPClient>
   defs: Record<string, MCPToolDef[]>
+  disabledFromPersistence: Set<string>
 }
 
 export interface Interface {
@@ -270,6 +273,33 @@ export const layer = Layer.effect(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const auth = yield* McpAuth.Service
     const bus = yield* Bus.Service
+    const fs = yield* AppFileSystem.Service
+
+    const readDisabledState = Effect.fnUntraced(function* () {
+      return yield* fs.readJson(path.join(Global.Path.state, "mcp-state.json")).pipe(
+        Effect.map((data) => {
+          if (data === null || typeof data !== "object") return new Set<string>()
+          const obj = data as Record<string, unknown>
+          if (!Array.isArray(obj.disabledMcpServerIds)) return new Set<string>()
+          return new Set(obj.disabledMcpServerIds.filter((x): x is string => typeof x === "string"))
+        }),
+        Effect.catchCause((cause) => {
+          log.warn("failed to read mcp-state.json", { cause: Cause.squash(cause) })
+          return Effect.succeed(new Set<string>())
+        }),
+      )
+    })
+
+    const writeDisabledState = Effect.fnUntraced(function* (ids: Set<string>) {
+      yield* fs
+        .writeJson(path.join(Global.Path.state, "mcp-state.json"), { disabledMcpServerIds: [...ids].sort() }, 0o600)
+        .pipe(
+          Effect.catch((error) => {
+            log.error("failed to write mcp-state.json", { error })
+            return Effect.void
+          }),
+        )
+    })
 
     type Transport = StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport
 
@@ -515,10 +545,12 @@ export const layer = Layer.effect(
         const cfg = yield* cfgSvc.get()
         const bridge = yield* EffectBridge.make()
         const config = cfg.mcp ?? {}
+        const disabled = yield* readDisabledState()
         const s: State = {
           status: {},
           clients: {},
           defs: {},
+          disabledFromPersistence: disabled,
         }
 
         yield* Effect.forEach(
@@ -531,6 +563,11 @@ export const layer = Layer.effect(
               }
 
               if (mcp.enabled === false) {
+                s.status[key] = { status: "disabled" }
+                return
+              }
+
+              if (s.disabledFromPersistence.has(key)) {
                 s.status[key] = { status: "disabled" }
                 return
               }
@@ -644,6 +681,9 @@ export const layer = Layer.effect(
         log.error("MCP config not found or invalid", { name })
         return
       }
+      const s = yield* InstanceState.get(state)
+      s.disabledFromPersistence.delete(name)
+      yield* writeDisabledState(s.disabledFromPersistence)
       yield* createAndStore(name, { ...mcp, enabled: true })
     })
 
@@ -652,6 +692,8 @@ export const layer = Layer.effect(
       yield* closeClient(s, name)
       delete s.clients[name]
       s.status[name] = { status: "disabled" }
+      s.disabledFromPersistence.add(name)
+      yield* writeDisabledState(s.disabledFromPersistence)
     })
 
     const tools = Effect.fn("MCP.tools")(function* () {

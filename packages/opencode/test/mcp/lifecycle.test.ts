@@ -2,6 +2,9 @@ import { expect, mock, beforeEach } from "bun:test"
 import { Effect, Exit } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { testEffect } from "../lib/effect"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Global } from "@opencode-ai/core/global"
+import path from "path"
 
 // --- Mock infrastructure ---
 
@@ -879,4 +882,203 @@ it.instance(
       }),
     ),
   { config: { mcp: {} } },
+)
+
+// ========================================================================
+// Persistence Tests: MCP Disabled State Persistence (mcp-state.json)
+// ========================================================================
+
+it.instance(
+  "disconnect persists disabled ID to mcp-state.json",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "persist-disc-server"
+        getOrCreateClientState("persist-disc-server")
+
+        yield* mcp.add("persist-disc-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+        yield* mcp.disconnect("persist-disc-server")
+
+        const fs = yield* AppFileSystem.Service
+        const data = yield* fs
+          .readJson(path.join(Global.Path.state, "mcp-state.json"))
+          .pipe(Effect.catch(() => Effect.succeed(null)))
+        expect(data).not.toBeNull()
+        const arr = (data as any).disabledMcpServerIds
+        expect(Array.isArray(arr)).toBe(true)
+        expect(arr).toContain("persist-disc-server")
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "connect removes disabled ID from mcp-state.json",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "reconn-persist-server"
+        const serverState = getOrCreateClientState("reconn-persist-server")
+        serverState.tools = [
+          { name: "my_tool", description: "a tool", inputSchema: { type: "object", properties: {} } },
+        ]
+
+        yield* mcp.add("reconn-persist-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+        yield* mcp.disconnect("reconn-persist-server")
+
+        lastCreatedClientName = "reconn-persist-server"
+        yield* mcp.connect("reconn-persist-server")
+
+        const fs = yield* AppFileSystem.Service
+        const data = yield* fs.readJson(path.join(Global.Path.state, "mcp-state.json"))
+        const arr = (data as any).disabledMcpServerIds
+        expect(Array.isArray(arr)).toBe(true)
+        expect(arr).not.toContain("reconn-persist-server")
+      }),
+    ),
+  {
+    config: {
+      mcp: {
+        "reconn-persist-server": {
+          type: "local",
+          command: ["echo", "test"],
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "init reads disabled state from pre-written mcp-state.json",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const filepath = path.join(Global.Path.state, "mcp-state.json")
+      yield* fs.remove(filepath).pipe(Effect.catch(() => Effect.void))
+      yield* fs.writeJson(filepath, { disabledMcpServerIds: ["pre-disabled-server"] }, 0o600)
+
+      const mcp = yield* MCP.Service
+      const status = yield* mcp.status()
+      expect(status["pre-disabled-server"]?.status).toBe("disabled")
+    }),
+  {
+    config: {
+      mcp: {
+        "pre-disabled-server": {
+          type: "local",
+          command: ["echo", "test"],
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "missing mcp-state.json defaults to all MCPs enabled",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const filepath = path.join(Global.Path.state, "mcp-state.json")
+      yield* fs.remove(filepath).pipe(Effect.catch(() => Effect.void))
+
+      lastCreatedClientName = "no-state-server"
+      getOrCreateClientState("no-state-server")
+
+      const mcp = yield* MCP.Service
+      const status = yield* mcp.status()
+      expect(status["no-state-server"]?.status).toBe("connected")
+    }),
+  {
+    config: {
+      mcp: {
+        "no-state-server": {
+          type: "local",
+          command: ["echo", "test"],
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "corrupt mcp-state.json defaults to all MCPs enabled",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const filepath = path.join(Global.Path.state, "mcp-state.json")
+      yield* fs.remove(filepath).pipe(Effect.catch(() => Effect.void))
+      yield* fs.writeFileString(filepath, "{invalid json!!!")
+
+      lastCreatedClientName = "corrupt-state-server"
+      getOrCreateClientState("corrupt-state-server")
+
+      const mcp = yield* MCP.Service
+      const status = yield* mcp.status()
+      expect(status["corrupt-state-server"]?.status).toBe("connected")
+    }),
+  {
+    config: {
+      mcp: {
+        "corrupt-state-server": {
+          type: "local",
+          command: ["echo", "test"],
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "config enabled:false takes precedence over persisted state",
+  () =>
+    Effect.gen(function* () {
+      const mcp = yield* MCP.Service
+      const status = yield* mcp.status()
+      expect(status["config-disabled-server"]?.status).toBe("disabled")
+    }),
+  {
+    config: {
+      mcp: {
+        "config-disabled-server": {
+          type: "local",
+          command: ["echo", "test"],
+          enabled: false,
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "stale disabled ID in mcp-state.json is silently ignored",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const filepath = path.join(Global.Path.state, "mcp-state.json")
+      yield* fs.remove(filepath).pipe(Effect.catch(() => Effect.void))
+      yield* fs.writeJson(filepath, { disabledMcpServerIds: ["removed-mcp", "stale-id"] }, 0o600)
+
+      lastCreatedClientName = "active-server"
+      getOrCreateClientState("active-server")
+
+      const mcp = yield* MCP.Service
+      const status = yield* mcp.status()
+      expect(status["active-server"]?.status).toBe("connected")
+    }),
+  {
+    config: {
+      mcp: {
+        "active-server": {
+          type: "local",
+          command: ["echo", "test"],
+        },
+      },
+    },
+  },
 )
