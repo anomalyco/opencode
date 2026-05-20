@@ -305,6 +305,20 @@
         "@parcel/watcher-win32-x64": "2.5.1",
       },
     },
+    "packages/effect-drizzle-sqlite": {
+      "name": "@opencode-ai/effect-drizzle-sqlite",
+      "version": "1.15.5",
+      "dependencies": {
+        "drizzle-orm": "catalog:",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@effect/sql-sqlite-bun": "catalog:",
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+      },
+    },
     "packages/enterprise": {
       "name": "@opencode-ai/enterprise",
       "version": "1.15.5",
@@ -717,6 +731,7 @@
     "@cloudflare/workers-types": "4.20251008.0",
     "@effect/opentelemetry": "4.0.0-beta.66",
     "@effect/platform-node": "4.0.0-beta.66",
+    "@effect/sql-sqlite-bun": "4.0.0-beta.66",
     "@hono/zod-validator": "0.4.2",
     "@kobalte/core": "0.13.11",
     "@lydell/node-pty": "1.2.0-beta.10",
@@ -1113,6 +1128,8 @@
     "@effect/platform-node": ["@effect/platform-node@4.0.0-beta.66", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-beta.66", "mime": "^4.1.0", "undici": "^8.0.2" }, "peerDependencies": { "effect": "^4.0.0-beta.66", "ioredis": "^5.7.0" } }, "sha512-s/0RgaQFuszzdorRnX1PwEQNnSOi+JgMJo3zEe9O2NR3sosMhTr0Uk+1AF6bUOI9uJ2CPT3KpTIIU7q5/TpOkg=="],
 
     "@effect/platform-node-shared": ["@effect/platform-node-shared@4.0.0-beta.66", "", { "dependencies": { "@types/ws": "^8.18.1", "ws": "^8.20.0" }, "peerDependencies": { "effect": "^4.0.0-beta.66" } }, "sha512-+ymrhBnESv/hmn5SKTe2//IY9Ox/hGPeoogEWhW47ZGyhFI5eMYFxdEUBa+3IAV05rrBzrxON9lynu68n0DM7w=="],
+
+    "@effect/sql-sqlite-bun": ["@effect/sql-sqlite-bun@4.0.0-beta.66", "", { "peerDependencies": { "effect": "^4.0.0-beta.66" } }, "sha512-UYsrAb/5T0ZRypeN9Kmv3/ZInibGCjM6dtoiAWtfG+xKyuq8N05wmuVCXB0+XgVmUBxDWjw/S1fu4ivS0vZVuw=="],
 
     "@electron/asar": ["@electron/asar@3.4.1", "", { "dependencies": { "commander": "^5.0.0", "glob": "^7.1.6", "minimatch": "^3.0.4" }, "bin": { "asar": "bin/asar.js" } }, "sha512-i4/rNPRS84t0vSRa2HorerGRXWyF4vThfHesw0dmcWHp+cspK743UanA0suA5Q5y8kzY2y6YKrvbIUn69BCAiA=="],
 
@@ -1541,6 +1558,8 @@
     "@opencode-ai/core": ["@opencode-ai/core@workspace:packages/core"],
 
     "@opencode-ai/desktop": ["@opencode-ai/desktop@workspace:packages/desktop"],
+
+    "@opencode-ai/effect-drizzle-sqlite": ["@opencode-ai/effect-drizzle-sqlite@workspace:packages/effect-drizzle-sqlite"],
 
     "@opencode-ai/enterprise": ["@opencode-ai/enterprise@workspace:packages/enterprise"],
 
