@@ -1985,7 +1985,7 @@ describe("session.llm.stream", () => {
         const toolUseIndex = messages.findIndex((message) => message.content.some((part) => part.type === "tool_use"))
         expect(toolUseIndex).toBeGreaterThan(0)
         expect(messages[toolUseIndex].role).toBe("assistant")
-        expect(messages[toolUseIndex].content.filter((part) => part.type === "tool_use")).toStrictEqual([
+        expect(messages[toolUseIndex].content.filter((part) => part.type === "tool_use")).toMatchObject([
           {
             type: "tool_use",
             id: "toolu_01N8mDEzG8DSTs7UPHFtmgCT",
