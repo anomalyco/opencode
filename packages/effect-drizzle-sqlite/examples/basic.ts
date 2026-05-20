@@ -31,7 +31,7 @@ class UserStoreError extends Schema.TaggedErrorClass<UserStoreError>()("UserStor
 const mapStoreError = (message: string) => (cause: unknown) => new UserStoreError({ message, cause })
 
 interface UserStoreShape {
-  migrate: Effect.Effect<void, UserStoreError>
+  migrate(): Effect.Effect<void, UserStoreError>
   create(name: string): Effect.Effect<void, UserStoreError>
   rename(from: string, to: string): Effect.Effect<void, UserStoreError>
   list(): Effect.Effect<User[], UserStoreError>
@@ -44,30 +44,34 @@ class UserStore extends Context.Service<UserStore, UserStoreShape>()("@opencode/
       const db = yield* Database
 
       return UserStore.of({
-        migrate: EffectDrizzleSqlite.migrate(db, { migrationsFolder: `${import.meta.dirname}/migrations` }).pipe(
-          Effect.mapError((cause) => new UserStoreError({ message: "Failed to migrate users", cause })),
-        ),
-        create: (name) =>
-          db
+        migrate: Effect.fn("UserStore.migrate")(function* () {
+          yield* EffectDrizzleSqlite.migrate(db, { migrationsFolder: `${import.meta.dirname}/migrations` }).pipe(
+            Effect.mapError((cause) => new UserStoreError({ message: "Failed to migrate users", cause })),
+          )
+        }),
+        create: Effect.fn("UserStore.create")(function* (name: string) {
+          yield* db
             .insert(users)
             .values({ name })
-            .pipe(Effect.asVoid, Effect.mapError(mapStoreError("Failed to create user"))),
-        rename: (from, to) =>
-          db
+            .pipe(Effect.asVoid, Effect.mapError(mapStoreError("Failed to create user")))
+        }),
+        rename: Effect.fn("UserStore.rename")(function* (from: string, to: string) {
+          yield* db
             .transaction(
-              (tx) =>
-                tx
-                  .insert(users)
-                  .values({ name: from })
-                  .pipe(Effect.andThen(tx.update(users).set({ name: to }).where(eq(users.name, from)))),
+              Effect.fnUntraced(function* (tx) {
+                yield* tx.insert(users).values({ name: from })
+                yield* tx.update(users).set({ name: to }).where(eq(users.name, from))
+              }),
               { behavior: "immediate" },
             )
-            .pipe(Effect.asVoid, Effect.mapError(mapStoreError("Failed to rename user"))),
-        list: () =>
-          db
+            .pipe(Effect.asVoid, Effect.mapError(mapStoreError("Failed to rename user")))
+        }),
+        list: Effect.fn("UserStore.list")(function* () {
+          return yield* db
             .select()
             .from(users)
-            .pipe(Effect.mapError(mapStoreError("Failed to list users"))),
+            .pipe(Effect.mapError(mapStoreError("Failed to list users")))
+        }),
       })
     }),
   ).pipe(Layer.provide(Database.layer))
@@ -76,13 +80,13 @@ class UserStore extends Context.Service<UserStore, UserStoreShape>()("@opencode/
 const program = Effect.gen(function* () {
   const userStore = yield* UserStore
 
-  yield* userStore.migrate
+  yield* userStore.migrate()
   yield* userStore.create("Ada")
   yield* userStore.rename("Grace", "Grace Hopper")
 
   return yield* userStore.list()
 })
 
-const rows = await Effect.runPromise(program.pipe(Effect.provide(UserStore.layer), Effect.scoped))
+const rows = await Effect.runPromise(program.pipe(Effect.provide(UserStore.layer)))
 
 console.log(rows)
