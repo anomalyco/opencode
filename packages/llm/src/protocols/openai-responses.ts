@@ -536,20 +536,17 @@ export const protocol = Protocol.make({
 })
 
 const encodeBody = Schema.encodeSync(Schema.fromJsonString(OpenAIResponsesBody))
-const transportBase = {
-  endpoint: Endpoint.path<OpenAIResponsesBody>(PATH, { baseURL: DEFAULT_BASE_URL }),
-  auth: Auth.bearer(),
-  encodeBody,
-}
+const endpoint = Endpoint.path<OpenAIResponsesBody>(PATH, { baseURL: DEFAULT_BASE_URL })
+const auth = Auth.bearer()
 
-export const httpTransport = HttpTransport.sseJson.with({
-  ...transportBase,
-})
+export const httpTransport = HttpTransport.sseJson.with<OpenAIResponsesBody>()
 
 export const route = Route.make({
   id: ADAPTER,
   provider: "openai",
   protocol,
+  endpoint,
+  auth,
   transport: httpTransport,
 })
 
@@ -563,8 +560,10 @@ const webSocketMessage = (body: OpenAIResponsesBody | Record<string, unknown>) =
     return yield* decodeWebSocketMessage({ ...message, type: "response.create" })
   })
 
-export const webSocketTransport = WebSocketTransport.jsonTransport.with({
-  ...transportBase,
+export const webSocketTransport = WebSocketTransport.jsonTransport.with<
+  OpenAIResponsesBody,
+  OpenAIResponsesWebSocketMessage
+>({
   toMessage: webSocketMessage,
   encodeMessage: encodeWebSocketMessage,
 })
@@ -573,6 +572,8 @@ export const webSocketRoute = Route.make({
   id: `${ADAPTER}-websocket`,
   provider: "openai",
   protocol,
+  endpoint,
+  auth,
   transport: webSocketTransport,
 })
 

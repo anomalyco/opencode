@@ -29,19 +29,19 @@ const resourceBaseURL = (resourceName: string) => `https://${resourceName.trim()
 const responsesRoute = OpenAIResponses.route.with({
   id: "azure-openai-responses",
   provider: id,
+  auth: routeAuth,
   endpoint: {
     query: { "api-version": "v1" },
   },
-  transport: OpenAIResponses.httpTransport.with({ auth: routeAuth }),
 })
 
 const chatRoute = OpenAIChat.route.with({
   id: "azure-openai-chat",
   provider: id,
+  auth: routeAuth,
   endpoint: {
     query: { "api-version": "v1" },
   },
-  transport: OpenAIChat.httpTransport.with({ auth: routeAuth }),
 })
 
 export const routes = [responsesRoute, chatRoute]

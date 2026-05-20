@@ -1,7 +1,6 @@
 import { Cause, Context, Effect, Layer, Queue, Stream } from "effect"
 import { Headers } from "effect/unstable/http"
-import { Auth, type Auth as AuthDef } from "../auth"
-import type { Endpoint } from "../endpoint"
+import { Auth } from "../auth"
 import { LLMError, TransportReason, type LLMRequest } from "../../schema"
 import * as HttpTransport from "./http"
 import type { Transport } from "./index"
@@ -215,34 +214,23 @@ export interface JsonPrepared {
 }
 
 export interface JsonInput<Body, Message> {
-  readonly endpoint: Endpoint<Body>
-  readonly auth?: AuthDef
-  readonly encodeBody: (body: Body) => string
   readonly toMessage: (body: Body | Record<string, unknown>) => Effect.Effect<Message, LLMError>
   readonly encodeMessage: (message: Message) => string
-  readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
 }
 
 export type JsonPatch<Body, Message> = Partial<JsonInput<Body, Message>>
 
 export interface JsonTransport<Body, Message> extends Transport<Body, JsonPrepared, string> {
-  readonly endpoint: Endpoint<Body>
   readonly with: (patch: JsonPatch<Body, Message>) => JsonTransport<Body, Message>
 }
 
 export const json = <Body, Message>(input: JsonInput<Body, Message>): JsonTransport<Body, Message> => ({
   id: "websocket-json",
-  endpoint: input.endpoint,
   with: (patch) => json({ ...input, ...patch }),
-  prepare: (body, request) =>
+  prepare: (prepareInput) =>
     Effect.gen(function* () {
       const parts = yield* HttpTransport.jsonRequestParts({
-        body,
-        request,
-        endpoint: input.endpoint,
-        auth: input.auth ?? Auth.bearer(),
-        encodeBody: input.encodeBody,
-        headers: input.headers,
+        ...prepareInput,
       })
       return {
         url: yield* webSocketUrl(parts.url),

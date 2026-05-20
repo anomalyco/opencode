@@ -18,13 +18,13 @@ const apiKey = Config.redacted("OPENAI_API_KEY")
 
 // 1. Pick a model. The provider helper records provider identity, protocol
 // choice, capabilities, deployment options, authentication, and defaults.
-const model = OpenAI.model("gpt-4o-mini", {
+const model = OpenAI.configure({
   apiKey,
   generation: { maxTokens: 160 },
   providerOptions: {
     openai: { store: false },
   },
-})
+}).model("gpt-4o-mini")
 
 // 2. Build a provider-neutral request. This is useful when reusing one request
 // across generate and stream examples.

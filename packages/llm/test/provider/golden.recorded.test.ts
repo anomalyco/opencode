@@ -12,9 +12,9 @@ import { describeRecordedGoldenScenarios } from "../recorded-golden"
 
 const openAIChat = OpenAIChat.model({ id: "gpt-4o-mini", apiKey: process.env.OPENAI_API_KEY ?? "fixture" })
 const openAIResponses = OpenAIResponses.model({ id: "gpt-5.5", apiKey: process.env.OPENAI_API_KEY ?? "fixture" })
-const openAIResponsesWebSocket = OpenAI.responsesWebSocket("gpt-4.1-mini", {
+const openAIResponsesWebSocket = OpenAI.configure({
   apiKey: process.env.OPENAI_API_KEY ?? "fixture",
-})
+}).responsesWebSocket("gpt-4.1-mini")
 const anthropicHaiku = AnthropicMessages.model({
   id: "claude-haiku-4-5-20251001",
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",

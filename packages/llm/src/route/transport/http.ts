@@ -1,20 +1,13 @@
 import { Effect, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { Auth, type Auth as AuthDef } from "../auth"
+import { Auth } from "../auth"
 import { type Endpoint, render as renderEndpoint } from "../endpoint"
 import { Framing, type Framing as FramingDef } from "../framing"
-import type { Transport } from "./index"
+import type { Transport, TransportPrepareInput } from "./index"
 import * as ProviderShared from "../../protocols/shared"
 import { mergeJsonRecords, type LLMRequest } from "../../schema"
 
-export interface JsonRequestInput<Body> {
-  readonly body: Body
-  readonly request: LLMRequest
-  readonly endpoint: Endpoint<Body>
-  readonly auth: AuthDef
-  readonly encodeBody: (body: Body) => string
-  readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
-}
+export type JsonRequestInput<Body> = TransportPrepareInput<Body>
 
 export interface JsonRequestParts<Body = unknown> {
   readonly url: string
@@ -69,34 +62,21 @@ export const jsonRequestParts = <Body>(input: JsonRequestInput<Body>) =>
   })
 
 export interface HttpJsonInput<Body, Frame> {
-  readonly endpoint: Endpoint<Body>
-  readonly auth?: AuthDef
   readonly framing: FramingDef<Frame>
-  readonly encodeBody: (body: Body) => string
-  readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
 }
-
-export type HttpSseJsonInput<Body> = Omit<HttpJsonInput<Body, string>, "framing">
 
 export type HttpJsonPatch<Body, Frame> = Partial<HttpJsonInput<Body, Frame>>
 
 export interface HttpJsonTransport<Body, Frame> extends Transport<Body, HttpPrepared<Frame>, Frame> {
-  readonly endpoint: Endpoint<Body>
   readonly with: (patch: HttpJsonPatch<Body, Frame>) => HttpJsonTransport<Body, Frame>
 }
 
 export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJsonTransport<Body, Frame> => ({
   id: "http-json",
-  endpoint: input.endpoint,
   with: (patch) => httpJson({ ...input, ...patch }),
-  prepare: (body, request) =>
+  prepare: (prepareInput) =>
     jsonRequestParts({
-      body,
-      request,
-      endpoint: input.endpoint,
-      auth: input.auth ?? Auth.bearer(),
-      encodeBody: input.encodeBody,
-      headers: input.headers,
+      ...prepareInput,
     }).pipe(
       Effect.map((parts) => ({
         request: ProviderShared.jsonPost({ url: parts.url, body: parts.bodyText, headers: parts.headers }),
@@ -127,5 +107,5 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
 
 export const sseJson = {
   id: "http-json/sse",
-  with: <Body>(input: HttpSseJsonInput<Body>) => httpJson({ ...input, framing: Framing.sse }),
+  with: <Body>() => httpJson<Body, string>({ framing: Framing.sse }),
 } as const

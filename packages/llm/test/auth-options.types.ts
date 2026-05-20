@@ -45,41 +45,47 @@ requiredAuthModel("custom-model", {})
 requiredAuthModel("custom-model", { apiKey: "key", auth })
 
 OpenAI.responses("gpt-4.1-mini")
-OpenAI.responses("gpt-4.1-mini", {})
-OpenAI.responses("gpt-4.1-mini", { apiKey: "sk-test" })
-OpenAI.responses("gpt-4.1-mini", { apiKey: configApiKey })
-OpenAI.responses("gpt-4.1-mini", { auth: RuntimeAuth.bearer("oauth-token") })
-OpenAI.responses("gpt-4.1-mini", {
+OpenAI.configure({}).responses("gpt-4.1-mini")
+OpenAI.configure({ apiKey: "sk-test" }).responses("gpt-4.1-mini")
+OpenAI.configure({ apiKey: configApiKey }).responses("gpt-4.1-mini")
+OpenAI.configure({ auth: RuntimeAuth.bearer("oauth-token") }).responses("gpt-4.1-mini")
+OpenAI.configure({
   auth: RuntimeAuth.headers({ authorization: "Bearer gateway" }),
   baseURL: "https://gateway.example.com/v1",
-})
-OpenAI.responses("gpt-4.1-mini", {
+}).responses("gpt-4.1-mini")
+OpenAI.configure({
   generation: { maxTokens: 100 },
   providerOptions: { openai: { store: false } },
-})
+}).responses("gpt-4.1-mini")
+
+// @ts-expect-error OpenAI model selectors only accept model ids.
+OpenAI.configure({ apiKey: "sk-test" }).responses("gpt-4.1-mini", {})
 
 // @ts-expect-error apiKey only accepts string, Redacted<string>, or Config<string | Redacted<string>>.
-OpenAI.responses("gpt-4.1-mini", { apiKey: 123 })
+OpenAI.configure({ apiKey: 123 })
 
 // @ts-expect-error provider helpers reject unknown top-level options.
-OpenAI.responses("gpt-4.1-mini", { bogus: true })
+OpenAI.configure({ bogus: true })
 
 // @ts-expect-error common generation options remain typed.
-OpenAI.responses("gpt-4.1-mini", { generation: { maxTokens: "many" } })
+OpenAI.configure({ generation: { maxTokens: "many" } })
 
 // @ts-expect-error provider-native options remain typed.
-OpenAI.responses("gpt-4.1-mini", { providerOptions: { openai: { store: "false" } } })
+OpenAI.configure({ providerOptions: { openai: { store: "false" } } })
 
 // @ts-expect-error auth is an override, so OpenAI rejects apiKey with auth.
-OpenAI.responses("gpt-4.1-mini", { apiKey: "sk-test", auth: RuntimeAuth.bearer("oauth-token") })
+OpenAI.configure({ apiKey: "sk-test", auth: RuntimeAuth.bearer("oauth-token") })
 
 OpenAI.chat("gpt-4.1-mini")
-OpenAI.chat("gpt-4.1-mini", { apiKey: "sk-test" })
-OpenAI.chat("gpt-4.1-mini", { apiKey: configApiKey })
-OpenAI.chat("gpt-4.1-mini", { auth: RuntimeAuth.bearer("oauth-token") })
+OpenAI.configure({ apiKey: "sk-test" }).chat("gpt-4.1-mini")
+OpenAI.configure({ apiKey: configApiKey }).chat("gpt-4.1-mini")
+OpenAI.configure({ auth: RuntimeAuth.bearer("oauth-token") }).chat("gpt-4.1-mini")
+
+// @ts-expect-error OpenAI chat selectors only accept model ids.
+OpenAI.configure({ apiKey: "sk-test" }).chat("gpt-4.1-mini", {})
 
 // @ts-expect-error auth is an override, so OpenAI Chat rejects apiKey with auth.
-OpenAI.chat("gpt-4.1-mini", { apiKey: "sk-test", auth: RuntimeAuth.bearer("oauth-token") })
+OpenAI.configure({ apiKey: "sk-test", auth: RuntimeAuth.bearer("oauth-token") })
 
 // @ts-expect-error Azure requires at least one of `resourceName` or `baseURL`.
 Azure.configure()

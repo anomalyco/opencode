@@ -539,7 +539,7 @@ App boundary = explicit durable-config -> typed-provider call
 - [x] Collapse the public WebSocket runtime split so one `LLMClient.layer`
       exposes available transport capabilities and selected routes fail with typed
       transport config errors when a required capability is missing.
-- [ ] Convert OpenAI provider APIs to provider-facade shape:
+- [x] Convert OpenAI provider APIs to provider-facade shape:
       `OpenAI.configure(config).responses(id)`, `.chat(id)`, and
       `.responsesWebSocket(id)`.
 - [x] Convert Azure to a configured facade where resource/base URL/api version

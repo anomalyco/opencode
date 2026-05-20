@@ -1,5 +1,5 @@
 import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
-import type { Auth as AuthDef } from "./auth"
+import { Auth, type Auth as AuthDef } from "./auth"
 import { Endpoint, type EndpointPatch } from "./endpoint"
 import { RequestExecutor } from "./executor"
 import type { Framing } from "./framing"
@@ -38,6 +38,8 @@ export interface Route<Body, Prepared = unknown> {
   readonly id: string
   readonly provider?: ProviderID
   readonly protocol: ProtocolID
+  readonly endpoint: Endpoint<Body>
+  readonly auth: AuthDef
   readonly transport: Transport<Body, Prepared, unknown>
   readonly defaults: RouteDefaults
   readonly body: RouteBody<Body>
@@ -74,11 +76,12 @@ export type RouteRoutedModelInput = Omit<ModelInput, "route"> & EndpointModelInp
 
 export type RouteRoutedModelDefaults = Partial<Omit<ModelInput, "id" | "provider" | "route">>
 
-export type RouteDefaults = Partial<Omit<ModelInput, "id" | "provider" | "route">>
+export type RouteDefaults = Partial<Omit<ModelInput, "id" | "provider" | "route" | "auth">>
 
 export interface RoutePatch<Body, Prepared> extends RouteDefaults {
   readonly id?: string
   readonly provider?: string | ProviderID
+  readonly auth?: AuthDef
   readonly transport?: Transport<Body, Prepared, unknown>
   readonly endpoint?: EndpointPatch<Body>
 }
@@ -97,7 +100,7 @@ const modelWithDefaults =
     const provider = defaults.provider ?? route.provider ?? ("provider" in mapped ? mapped.provider : undefined)
     if (!provider) throw new Error(`Route.model(${route.id}) requires a provider`)
     const modelRoute = routeWithEndpoint(route, { baseURL, query: queryParams })
-    if (!endpointBaseURL(modelRoute.transport))
+    if (!endpointBaseURL(modelRoute.endpoint))
       throw new Error(`Route.model(${route.id}) requires an endpoint baseURL — supply it on the route or model input`)
     const generation = mergeGenerationOptions(route.defaults.generation, defaults.generation)
     const providerOptions = mergeProviderOptions(route.defaults.providerOptions, defaults.providerOptions)
@@ -124,22 +127,12 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
   http: mergeHttpOptions(httpOptions(base?.http), httpOptions(patch.http)),
 })
 
-const endpointBaseURL = <Body, Prepared, Frame>(transport: Transport<Body, Prepared, Frame>) =>
-  typeof transport.endpoint?.baseURL === "string" ? transport.endpoint.baseURL : undefined
+const endpointBaseURL = <Body>(endpoint: Endpoint<Body>) =>
+  typeof endpoint.baseURL === "string" ? endpoint.baseURL : undefined
 
 const routeWithEndpoint = (route: AnyRoute, endpoint: EndpointPatch<unknown>) => {
   if (!endpoint.baseURL && !endpoint.query) return route
   return route.with({ endpoint })
-}
-
-const applyEndpointPatch = <Body, Prepared, Frame>(
-  transport: Transport<Body, Prepared, Frame>,
-  patch: EndpointPatch<Body> | undefined,
-) => {
-  if (!patch) return transport
-  if (!transport.endpoint || !transport.with)
-    throw new Error(`Transport(${transport.id}) does not support endpoint patching`)
-  return transport.with({ endpoint: Endpoint.merge(transport.endpoint, patch) })
 }
 
 export const generationOptions = (input: GenerationOptions.Input | undefined) =>
@@ -211,6 +204,12 @@ export interface MakeTransportInput<Body, Prepared, Frame, Event, State> {
   readonly provider?: string | ProviderID
   /** Semantic API contract — owns body construction, body schema, and parsing. */
   readonly protocol: Protocol<Body, Frame, Event, State>
+  /** Where the request is sent. */
+  readonly endpoint: Endpoint<Body>
+  /** Per-request transport auth. Model-level `Auth` overrides this. */
+  readonly auth?: AuthDef
+  /** Static / per-request headers added before `auth` runs. */
+  readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
   /** Runnable transport route. */
   readonly transport: Transport<Body, Prepared, Frame>
   /** Provider/model defaults used by the route's `.model(...)` helper. */
@@ -227,6 +226,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
   input: MakeTransportInput<Body, Prepared, Frame, Event, State>,
 ): Route<Body, Prepared> {
   const protocol = input.protocol
+  const encodeBody = Schema.encodeSync(Schema.fromJsonString(protocol.body.schema))
   const decodeEventEffect = Schema.decodeUnknownEffect(protocol.stream.event)
   const decodeEvent = (route: string) => (frame: Frame) =>
     decodeEventEffect(frame).pipe(
@@ -244,26 +244,34 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       id: routeInput.id,
       provider: routeInput.provider === undefined ? undefined : ProviderID.make(routeInput.provider),
       protocol: protocol.id,
+      endpoint: routeInput.endpoint,
+      auth: routeInput.auth ?? Auth.bearer(),
       transport: routeInput.transport,
       defaults: mergeRouteDefaults(undefined, routeInput.defaults ?? {}),
       body: protocol.body,
       with: (patch: RoutePatch<Body, Prepared>) => {
-        const { id, provider, transport, endpoint, ...defaults } = patch
-        const nextTransport = applyEndpointPatch(
-          (transport as Transport<Body, Prepared, Frame> | undefined) ?? routeInput.transport,
-          endpoint,
-        )
+        const { id, provider, auth, transport, endpoint, ...defaults } = patch
         return build({
           ...routeInput,
           id: id ?? routeInput.id,
           provider: provider ?? routeInput.provider,
-          transport: nextTransport,
+          auth: auth ?? routeInput.auth,
+          endpoint: endpoint ? Endpoint.merge(routeInput.endpoint, endpoint) : routeInput.endpoint,
+          transport: (transport as Transport<Body, Prepared, Frame> | undefined) ?? routeInput.transport,
           defaults: mergeRouteDefaults(routeInput.defaults, defaults),
         })
       },
       model: (<Input extends RouteMappedModelInput>(input: Input): Model =>
         modelWithDefaults<RouteMappedModelInput>(route, {}, {})(input)) as Route<Body, Prepared>["model"],
-      prepareTransport: routeInput.transport.prepare,
+      prepareTransport: (body, request) =>
+        routeInput.transport.prepare({
+          body,
+          request,
+          endpoint: routeInput.endpoint,
+          auth: routeInput.auth ?? Auth.bearer(),
+          encodeBody,
+          headers: routeInput.headers,
+        }),
       streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime) => {
         const route = `${request.model.provider}/${request.model.route.id}`
         const events = routeInput.transport
@@ -314,18 +322,14 @@ export function make<Body, Prepared, Frame, Event, State>(
 ): Route<Body, Prepared> | Route<Body, HttpTransport.HttpPrepared<Frame>> {
   if ("transport" in input) return makeFromTransport(input)
   const protocol = input.protocol
-  const encodeBody = Schema.encodeSync(Schema.fromJsonString(protocol.body.schema))
   return makeFromTransport({
     id: input.id,
     provider: input.provider,
     protocol,
-    transport: HttpTransport.httpJson({
-      endpoint: input.endpoint,
-      auth: input.auth,
-      framing: input.framing,
-      encodeBody,
-      headers: input.headers,
-    }),
+    endpoint: input.endpoint,
+    auth: input.auth,
+    headers: input.headers,
+    transport: HttpTransport.httpJson({ framing: input.framing }),
     defaults: input.defaults,
   })
 }

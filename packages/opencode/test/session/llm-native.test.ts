@@ -148,7 +148,7 @@ describe("session.llm-native.request", () => {
         output: 32_000,
       },
     })
-    expect(request.model.route.transport.endpoint?.baseURL).toBe("https://api.openai.com/v1")
+    expect(request.model.route.endpoint.baseURL).toBe("https://api.openai.com/v1")
     expect(request.system).toEqual([
       { type: "text", text: "agent system" },
       { type: "text", text: "system from messages" },
@@ -214,22 +214,22 @@ describe("session.llm-native.request", () => {
   test("selects native routes from existing provider packages", () => {
     const anthropic = LLMNative.model({ ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/anthropic" } })
     expect(anthropic.route.id).toBe("anthropic-messages")
-    expect(anthropic.route.transport.endpoint?.baseURL).toBe("https://api.anthropic.com/v1")
+    expect(anthropic.route.endpoint.baseURL).toBe("https://api.anthropic.com/v1")
 
     const gemini = LLMNative.model({ ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/google" } })
     expect(gemini.route.id).toBe("gemini")
-    expect(gemini.route.transport.endpoint?.baseURL).toBe("https://generativelanguage.googleapis.com/v1beta")
+    expect(gemini.route.endpoint.baseURL).toBe("https://generativelanguage.googleapis.com/v1beta")
 
     const compatible = LLMNative.model({ ...baseModel, api: { ...baseModel.api, npm: "@ai-sdk/openai-compatible" } })
     expect(compatible.route.id).toBe("openai-compatible-chat")
-    expect(compatible.route.transport.endpoint?.baseURL).toBe("https://api.openai.com/v1")
+    expect(compatible.route.endpoint.baseURL).toBe("https://api.openai.com/v1")
 
     const openrouter = LLMNative.model({
       ...baseModel,
       api: { ...baseModel.api, url: "", npm: "@openrouter/ai-sdk-provider" },
     })
     expect(openrouter.route.id).toBe("openrouter")
-    expect(openrouter.route.transport.endpoint?.baseURL).toBe("https://openrouter.ai/api/v1")
+    expect(openrouter.route.endpoint.baseURL).toBe("https://openrouter.ai/api/v1")
   })
 
   test("fails fast for unsupported provider packages", () => {

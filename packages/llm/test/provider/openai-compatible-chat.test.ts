@@ -66,7 +66,7 @@ describe("OpenAI-compatible Chat route", () => {
         route: { id: "openai-compatible-chat" },
         apiKey: "test-key",
       })
-      expect(prepared.model.route.transport.endpoint).toMatchObject({
+      expect(prepared.model.route.endpoint).toMatchObject({
         baseURL: "https://api.deepseek.test/v1/",
         query: { "api-version": "2026-01-01" },
       })
@@ -100,7 +100,7 @@ describe("OpenAI-compatible Chat route", () => {
             id: String(model.id),
             provider: String(model.provider),
             route: model.route.id,
-            baseURL: model.route.transport.endpoint?.baseURL,
+            baseURL: model.route.endpoint.baseURL,
             apiKey: model.apiKey,
           }
         }),
@@ -122,7 +122,7 @@ describe("OpenAI-compatible Chat route", () => {
         provider: "deepseek",
         route: { id: "openai-compatible-chat" },
       })
-      expect(custom.route.transport.endpoint?.baseURL).toBe("https://custom.deepseek.test/v1")
+      expect(custom.route.endpoint.baseURL).toBe("https://custom.deepseek.test/v1")
     }),
   )
 

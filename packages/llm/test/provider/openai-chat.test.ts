@@ -56,7 +56,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
         LLM.request({
-          model: OpenAI.chat("gpt-4o-mini", { baseURL: "https://api.openai.test/v1/" }),
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4o-mini"),
           prompt: "think",
           providerOptions: { openai: { reasoningEffort: "low" } },
         }),
