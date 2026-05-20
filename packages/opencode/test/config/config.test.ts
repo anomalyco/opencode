@@ -2278,3 +2278,30 @@ test("parseManagedPlist handles empty config", async () => {
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")
 })
+
+test("parseManagedPlist parses auth_provider in provider config", async () => {
+  const config = ConfigParse.schema(
+    Config.Info,
+    ConfigParse.jsonc(
+      await ConfigManaged.parseManagedPlist(
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "custom-github-copilot": {
+              name: "Custom GitHub Copilot",
+              auth_provider: "github-copilot",
+              env: [],
+              models: {
+                "gpt-4o": { name: "GPT-4o", limit: { context: 128000, output: 4096 } },
+              },
+            },
+          },
+        }),
+      ),
+      "test:mobileconfig",
+    ),
+    "test:mobileconfig",
+  )
+  expect(config.provider?.["custom-github-copilot"]?.name).toBe("Custom GitHub Copilot")
+  expect(config.provider?.["custom-github-copilot"]?.auth_provider).toBe("github-copilot")
+})

@@ -2612,6 +2612,44 @@ test("opencode loader keeps paid models when config apiKey is present", async ()
   expect(keyedCount).toBeGreaterThan(0)
 })
 
+test("provider with auth_provider is parsed and listed without errors", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "my-custom-provider": {
+              name: "My Custom Provider",
+              auth_provider: "openai",
+              env: [],
+              models: {
+                "my-model": {
+                  name: "My Model",
+                  tool_call: true,
+                  limit: { context: 8192, output: 2048 },
+                },
+              },
+              options: { apiKey: "test-key" },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await withTestInstance({
+    directory: tmp.path,
+    fn: async (ctx) => {
+      const providers = await list(ctx)
+      const pid = ProviderID.make("my-custom-provider")
+      expect(providers[pid]).toBeDefined()
+      expect(providers[pid].name).toBe("My Custom Provider")
+      expect(providers[pid].models["my-model"]).toBeDefined()
+    },
+  })
+})
+
 test("opencode loader keeps paid models when auth exists", async () => {
   await using base = await tmpdir({
     init: async (dir) => {

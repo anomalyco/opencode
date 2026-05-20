@@ -1394,6 +1394,32 @@ export const layer = Layer.effect(
           const opts = options ?? {}
           const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
           mergeProvider(providerID, patch)
+
+          // auth provider aliases - config providers that reuse this plugin's auth flow
+          for (const [aliasID, aliasCfg] of configProviders) {
+            if (!aliasCfg.auth_provider) continue
+            if (ProviderID.make(aliasCfg.auth_provider) !== providerID) continue
+
+            const aliasProviderID = ProviderID.make(aliasID)
+            if (disabled.has(aliasProviderID)) continue
+
+            const aliasStored = yield* auth.get(aliasProviderID).pipe(
+              Effect.orDie,
+              Effect.map((x) => x ?? stored),
+            )
+
+            const aliasOptions = yield* Effect.promise(() =>
+              plugin.auth!.loader!(
+                () => bridge.promise(auth.get(aliasProviderID).pipe(Effect.orDie)) as any,
+                toPublicInfo(database[aliasProviderID] ?? database[providerID]),
+              ),
+            )
+            const aliasOpts = aliasOptions ?? {}
+            const aliasPatch: Partial<Info> = providers[aliasProviderID]
+              ? { options: aliasOpts }
+              : { source: "custom", options: aliasOpts }
+            mergeProvider(aliasProviderID, aliasPatch)
+          }
         }
 
         for (const [id, fn] of Object.entries(custom(dep))) {
