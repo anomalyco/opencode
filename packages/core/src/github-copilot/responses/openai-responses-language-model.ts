@@ -1226,14 +1226,17 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
             } else if (isResponseReasoningSummaryPartAddedChunk(value)) {
               const activeItem =
                 currentReasoningOutputIndex !== null ? activeReasoning[currentReasoningOutputIndex] : null
+              const summaryIndex = value.summary_index ?? 0
 
-              // the first reasoning start is pushed in isResponseOutputItemAddedReasoningChunk.
-              if (activeItem && value.summary_index > 0) {
-                activeItem.summaryParts.push(value.summary_index)
+              // Some Copilot-compatible Responses implementations omit summary_index for
+              // the first summary part. Normalize it to 0 so deltas attach to the
+              // reasoning-start emitted from response.output_item.added.
+              if (activeItem && summaryIndex > 0) {
+                activeItem.summaryParts.push(summaryIndex)
 
                 controller.enqueue({
                   type: "reasoning-start",
-                  id: `${activeItem.canonicalId}:${value.summary_index}`,
+                  id: `${activeItem.canonicalId}:${summaryIndex}`,
                   providerMetadata: {
                     openai: {
                       itemId: activeItem.canonicalId,
@@ -1245,11 +1248,12 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
             } else if (isResponseReasoningSummaryTextDeltaChunk(value)) {
               const activeItem =
                 currentReasoningOutputIndex !== null ? activeReasoning[currentReasoningOutputIndex] : null
+              const summaryIndex = value.summary_index ?? 0
 
               if (activeItem) {
                 controller.enqueue({
                   type: "reasoning-delta",
-                  id: `${activeItem.canonicalId}:${value.summary_index}`,
+                  id: `${activeItem.canonicalId}:${summaryIndex}`,
                   delta: value.delta,
                   providerMetadata: {
                     openai: {
@@ -1542,13 +1546,13 @@ const responseAnnotationAddedSchema = z.object({
 const responseReasoningSummaryPartAddedSchema = z.object({
   type: z.literal("response.reasoning_summary_part.added"),
   item_id: z.string(),
-  summary_index: z.number(),
+  summary_index: z.number().optional().default(0),
 })
 
 const responseReasoningSummaryTextDeltaSchema = z.object({
   type: z.literal("response.reasoning_summary_text.delta"),
   item_id: z.string(),
-  summary_index: z.number(),
+  summary_index: z.number().optional().default(0),
   delta: z.string(),
 })
 
