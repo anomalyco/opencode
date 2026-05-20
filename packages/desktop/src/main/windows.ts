@@ -9,6 +9,8 @@ const rendererRoot = join(root, "../renderer")
 const rendererProtocol = "oc"
 const rendererHost = "renderer"
 const clipboardWritePermission = "clipboard-sanitized-write"
+const notificationPermission = "notifications"
+const rendererPermissions = new Set([clipboardWritePermission, notificationPermission])
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -84,6 +86,7 @@ export function createMainWindow() {
     width: state.width,
     height: state.height,
     show: false,
+    autoHideMenuBar: true,
     title: "OpenCode",
     icon: iconPath(),
     backgroundColor,
@@ -108,7 +111,7 @@ export function createMainWindow() {
     },
   })
 
-  allowClipboardWrite(win)
+  allowRendererPermissions(win)
 
   win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
     const { requestHeaders } = details
@@ -142,6 +145,7 @@ export function createLoadingWindow() {
     resizable: false,
     center: true,
     show: true,
+    autoHideMenuBar: true,
     icon: iconPath(),
     backgroundColor,
     ...(process.platform === "darwin" ? { titleBarStyle: "hidden" as const } : {}),
@@ -160,7 +164,7 @@ export function createLoadingWindow() {
     },
   })
 
-  allowClipboardWrite(win)
+  allowRendererPermissions(win)
 
   loadWindow(win, "loading.html")
 
@@ -197,16 +201,16 @@ function loadWindow(win: BrowserWindow, html: string) {
   void win.loadURL(`${rendererProtocol}://${rendererHost}/${html}`)
 }
 
-function allowClipboardWrite(win: BrowserWindow) {
+function allowRendererPermissions(win: BrowserWindow) {
   win.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(
-      permission === clipboardWritePermission &&
+      rendererPermissions.has(permission) &&
         isTrustedRendererUrl(details.requestingUrl) &&
         webContents.id === win.webContents.id,
     )
   })
   win.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-    if (permission !== clipboardWritePermission) return false
+    if (!rendererPermissions.has(permission)) return false
     if (webContents && webContents.id !== win.webContents.id) return false
     return isTrustedRendererUrl(details.requestingUrl) || isTrustedRendererUrl(requestingOrigin)
   })
