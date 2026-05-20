@@ -4,7 +4,7 @@ import { Identifier } from "./util/identifier"
 import { NonNegativeInt, withStatics } from "./schema"
 import { Global } from "./global"
 import { AppFileSystem } from "./filesystem"
-import { PluginV2 } from "./plugin"
+import { EventV2 } from "./event"
 
 export const ID = Schema.String.pipe(
   Schema.brand("AccountV2.ID"),
@@ -49,6 +49,29 @@ export class FileWriteError extends Schema.TaggedErrorClass<FileWriteError>()("A
 
 export type Error = FileWriteError
 
+export const Event = {
+  Added: EventV2.define({
+    type: "account.added",
+    schema: {
+      account: Info,
+    },
+  }),
+  Removed: EventV2.define({
+    type: "account.removed",
+    schema: {
+      account: Info,
+    },
+  }),
+  Switched: EventV2.define({
+    type: "account.switched",
+    schema: {
+      serviceID: ServiceID,
+      from: Schema.optional(ID),
+      to: Schema.optional(ID),
+    },
+  }),
+}
+
 interface Writable {
   version: 2
   accounts: Record<string, Info>
@@ -85,7 +108,6 @@ export interface Interface {
     serviceID: ServiceID
     credential: Credential
     description?: string
-    active?: boolean
   }) => Effect.Effect<Info | undefined, Error>
   readonly update: (id: ID, updates: Partial<Pick<Info, "description" | "credential">>) => Effect.Effect<void, Error>
   readonly remove: (id: ID) => Effect.Effect<void, Error>
@@ -101,7 +123,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const fsys = yield* AppFileSystem.Service
     const global = yield* Global.Service
-    const plugin = yield* PluginV2.Service
+    const events = yield* EventV2.Service
     const file = path.join(global.data, "account.json")
     const legacyFile = path.join(global.data, "auth.json")
 
@@ -149,6 +171,24 @@ export const layer = Layer.effect(
 
     const state = SynchronizedRef.makeUnsafe(yield* load())
 
+    const activate = Effect.fn("AccountV2.activate")(function* (id: ID) {
+      const data = yield* SynchronizedRef.get(state)
+      const account = data.accounts[id]
+      if (!account) return
+      const activated = yield* SynchronizedRef.modifyEffect(
+        state,
+        Effect.fnUntraced(function* (data) {
+          const nextAccount = data.accounts[id]
+          if (!nextAccount) return [undefined, data] as const
+
+          const next = { ...data, active: { ...data.active, [nextAccount.serviceID]: id } }
+          yield* write(next)
+          return [{ serviceID: nextAccount.serviceID, from: data.active[nextAccount.serviceID], to: id }, next] as const
+        }),
+      )
+      if (activated) yield* events.publish(Event.Switched, activated)
+    })
+
     const result: Interface = {
       get: Effect.fn("AccountV2.get")(function* (id) {
         return (yield* SynchronizedRef.get(state)).accounts[id]
@@ -171,49 +211,36 @@ export const layer = Layer.effect(
 
       create: Effect.fn("AccountV2.add")(function* (input) {
         const id = ID.make(Identifier.ascending())
-        const updated = yield* plugin.trigger(
-          "account.update",
-          { id, serviceID: input.serviceID },
-          { description: input.description ?? "default", credential: input.credential, cancel: false },
-        )
-        if (updated.cancel) return undefined
         const account = new Info({
           id,
           serviceID: input.serviceID,
-          description: updated.description,
-          credential: updated.credential,
+          description: input.description ?? "default",
+          credential: input.credential,
         })
-        return yield* SynchronizedRef.modifyEffect(
+        const added = yield* SynchronizedRef.modifyEffect(
           state,
           Effect.fnUntraced(function* (data) {
             const next = {
               ...data,
               accounts: { ...data.accounts, [account.id]: account },
-              active:
-                (input.active ?? Object.values(data.accounts).every((a) => a.serviceID !== input.serviceID))
-                  ? { ...data.active, [input.serviceID]: account.id }
-                  : data.active,
+              active: { ...data.active, [account.serviceID]: account.id },
             }
 
             yield* write(next)
-            return [account, next] as const
+            return [
+              { account, switched: { serviceID: account.serviceID, from: data.active[account.serviceID], to: account.id } },
+              next,
+            ] as const
           }),
         )
+        yield* events.publish(Event.Added, { account: added.account })
+        yield* events.publish(Event.Switched, added.switched)
+        return added.account
       }),
 
       update: Effect.fn("AccountV2.update")(function* (id, updates) {
         const existing = (yield* SynchronizedRef.get(state)).accounts[id]
         if (!existing) return
-        const updated = yield* plugin.trigger(
-          "account.update",
-          { id, serviceID: existing.serviceID },
-          {
-            description: updates.description ?? existing.description,
-            credential: updates.credential ?? existing.credential,
-            cancel: false,
-          },
-        )
-        if (updated.cancel) return
         yield* SynchronizedRef.modifyEffect(
           state,
           Effect.fnUntraced(function* (data) {
@@ -226,8 +253,8 @@ export const layer = Layer.effect(
                 [id]: new Info({
                   id,
                   serviceID: existing.serviceID,
-                  description: updated.description,
-                  credential: updated.credential,
+                  description: updates.description ?? existing.description,
+                  credential: updates.credential ?? existing.credential,
                 }),
               },
             }
@@ -239,48 +266,39 @@ export const layer = Layer.effect(
       }),
 
       remove: Effect.fn("AccountV2.remove")(function* (id) {
-        const account = (yield* SynchronizedRef.get(state)).accounts[id]
-        if (!account) return
-        if ((yield* plugin.trigger("account.remove", { account }, { cancel: false })).cancel) return
-        yield* SynchronizedRef.modifyEffect(
+        const removed = yield* SynchronizedRef.modifyEffect(
           state,
           Effect.fnUntraced(function* (data) {
             const accounts = { ...data.accounts }
             const active = { ...data.active }
-            if (!accounts[id]) return [undefined, data] as const
-            if (accounts[id] && active[accounts[id].serviceID] === id) delete active[accounts[id].serviceID]
+            const removed = accounts[id]
+            if (!removed) return [undefined, data] as const
+            const wasActive = active[removed.serviceID] === id
             delete accounts[id]
+            const replacement = Object.values(accounts).find((account) => account.serviceID === removed.serviceID)
+            if (wasActive) {
+              if (replacement) active[removed.serviceID] = replacement.id
+              else delete active[removed.serviceID]
+            }
 
             const next = { ...data, accounts, active }
             yield* write(next)
-            return [undefined, next] as const
+            return [
+              {
+                account: removed,
+                switched: wasActive ? { serviceID: removed.serviceID, from: id, to: replacement?.id } : undefined,
+              },
+              next,
+            ] as const
           }),
         )
+        if (removed) {
+          yield* events.publish(Event.Removed, { account: removed.account })
+          if (removed.switched) yield* events.publish(Event.Switched, removed.switched)
+        }
       }),
 
-      activate: Effect.fn("AccountV2.activate")(function* (id) {
-        const data = yield* SynchronizedRef.get(state)
-        const account = data.accounts[id]
-        if (!account) return
-        const updated = yield* plugin.trigger(
-          "account.activate",
-          {},
-          { from: data.active[account.serviceID], to: id, cancel: false },
-        )
-        if (updated.cancel) return
-        const activated = yield* SynchronizedRef.modifyEffect(
-          state,
-          Effect.fnUntraced(function* (data) {
-            const nextAccount = data.accounts[updated.to]
-            if (!nextAccount) return [undefined, data] as const
-
-            const next = { ...data, active: { ...data.active, [nextAccount.serviceID]: updated.to } }
-            yield* write(next)
-            return [{ from: updated.from, to: updated.to }, next] as const
-          }),
-        )
-        if (activated) yield* plugin.trigger("account.activated", activated, {})
-      }),
+      activate,
     }
 
     return Service.of(result)
@@ -290,7 +308,7 @@ export const layer = Layer.effect(
 export const defaultLayer = layer.pipe(
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Global.defaultLayer),
-  Layer.provideMerge(PluginV2.defaultLayer),
+  Layer.provideMerge(EventV2.defaultLayer),
 )
 
 export * as AccountV2 from "./account"

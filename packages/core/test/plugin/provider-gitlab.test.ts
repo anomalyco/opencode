@@ -2,11 +2,14 @@ import { describe, expect, mock } from "bun:test"
 import { Effect, Layer } from "effect"
 import { AccountV2 } from "@opencode-ai/core/account"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { EventV2 } from "@opencode-ai/core/event"
+import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { AccountPlugin } from "@opencode-ai/core/plugin/account"
 import { GitLabPlugin } from "@opencode-ai/core/plugin/provider/gitlab"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
-import { catalogLayer, it, model, npmLayer, provider, withEnv } from "./provider-helper"
+import { it, model, npmLayer, withEnv } from "./provider-helper"
 
 const gitlabSDKOptions: Record<string, unknown>[] = []
 
@@ -23,7 +26,15 @@ void mock.module("gitlab-ai-provider", () => ({
   isWorkflowModel: (id: string) => id === "duo-workflow" || id === "duo-workflow-exact",
 }))
 
-const itWithAccount = testEffect(Layer.mergeAll(PluginV2.defaultLayer, AccountV2.defaultLayer, catalogLayer, npmLayer))
+const itWithAccount = testEffect(
+  Catalog.layer.pipe(
+    Layer.provideMerge(PluginV2.defaultLayer),
+    Layer.provideMerge(AccountV2.defaultLayer),
+    Layer.provideMerge(EventV2.defaultLayer),
+    Layer.provideMerge(Layer.succeed(Location.Service, Location.Service.of({ directory: "test" }))),
+    Layer.provideMerge(npmLayer),
+  ),
+)
 
 describe("GitLabPlugin", () => {
   it.effect("creates SDKs with legacy default instance URL, token env, headers, and feature flags", () =>
@@ -153,26 +164,29 @@ describe("GitLabPlugin", () => {
           const plugin = yield* PluginV2.Service
           const accounts = yield* AccountV2.Service
           const catalog = yield* Catalog.Service
+          const events = yield* EventV2.Service
           yield* accounts.create({
             serviceID: AccountV2.ServiceID.make("gitlab"),
             credential: new AccountV2.ApiKeyCredential({ type: "api", key: "account-token" }),
-            active: true,
           })
           yield* plugin.add({
             ...AccountPlugin,
             effect: AccountPlugin.effect.pipe(
               Effect.provideService(AccountV2.Service, accounts),
               Effect.provideService(Catalog.Service, catalog),
+              Effect.provideService(EventV2.Service, events),
             ),
           })
           yield* plugin.add(GitLabPlugin)
-          const updated = yield* plugin.trigger("provider.update", {}, { provider: provider("gitlab"), cancel: false })
+          const load = yield* catalog.loader()
+          yield* load((catalog) => catalog.provider.update(ProviderV2.ID.make("gitlab"), () => {}))
+          const provider = yield* catalog.provider.get(ProviderV2.ID.make("gitlab"))
           yield* plugin.trigger(
             "aisdk.sdk",
             {
               model: model("gitlab", "claude"),
               package: "gitlab-ai-provider",
-              options: updated.provider.options.aisdk.provider,
+              options: provider.options.aisdk.provider,
             },
             {},
           )
@@ -192,6 +206,7 @@ describe("GitLabPlugin", () => {
           const plugin = yield* PluginV2.Service
           const accounts = yield* AccountV2.Service
           const catalog = yield* Catalog.Service
+          const events = yield* EventV2.Service
           yield* accounts.create({
             serviceID: AccountV2.ServiceID.make("gitlab"),
             credential: new AccountV2.OAuthCredential({
@@ -200,23 +215,25 @@ describe("GitLabPlugin", () => {
               access: "account-oauth-token",
               expires: 9999999999999,
             }),
-            active: true,
           })
           yield* plugin.add({
             ...AccountPlugin,
             effect: AccountPlugin.effect.pipe(
               Effect.provideService(AccountV2.Service, accounts),
               Effect.provideService(Catalog.Service, catalog),
+              Effect.provideService(EventV2.Service, events),
             ),
           })
           yield* plugin.add(GitLabPlugin)
-          const updated = yield* plugin.trigger("provider.update", {}, { provider: provider("gitlab"), cancel: false })
+          const load = yield* catalog.loader()
+          yield* load((catalog) => catalog.provider.update(ProviderV2.ID.make("gitlab"), () => {}))
+          const provider = yield* catalog.provider.get(ProviderV2.ID.make("gitlab"))
           yield* plugin.trigger(
             "aisdk.sdk",
             {
               model: model("gitlab", "claude"),
               package: "gitlab-ai-provider",
-              options: updated.provider.options.aisdk.provider,
+              options: provider.options.aisdk.provider,
             },
             {},
           )

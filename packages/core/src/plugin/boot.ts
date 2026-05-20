@@ -1,9 +1,10 @@
 export * as PluginBoot from "./boot"
 
-import { Context, Deferred, Effect, Layer } from "effect"
+import { Context, Deferred, Effect, Layer, Scope } from "effect"
 import { AccountV2 } from "../account"
 import { AgentV2 } from "../agent"
 import { Catalog } from "../catalog"
+import { EventV2 } from "../event"
 import { Npm } from "../npm"
 import { PluginV2 } from "../plugin"
 import { AccountPlugin } from "./account"
@@ -13,11 +14,7 @@ import { ProviderPlugins } from "./provider"
 
 type Plugin = {
   id: PluginV2.ID
-  effect: Effect.Effect<
-    PluginV2.HookFunctions | void,
-    never,
-    AgentV2.Service | Catalog.Service | AccountV2.Service | Npm.Service
-  >
+  effect: PluginV2.Effect<unknown>
 }
 
 export interface Interface {
@@ -26,11 +23,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/PluginBoot") {}
 
-export const layer: Layer.Layer<
-  Service,
-  never,
-  AgentV2.Service | Catalog.Service | PluginV2.Service | AccountV2.Service | Npm.Service
-> =
+export const layer =
   Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -39,6 +32,7 @@ export const layer: Layer.Layer<
       const plugin = yield* PluginV2.Service
       const accounts = yield* AccountV2.Service
       const npm = yield* Npm.Service
+      const events = yield* EventV2.Service
       const done = yield* Deferred.make<void>()
 
       const add = Effect.fn("PluginBoot.add")(function* (input: Plugin) {
@@ -49,6 +43,7 @@ export const layer: Layer.Layer<
             Effect.provideService(AgentV2.Service, agent),
             Effect.provideService(AccountV2.Service, accounts),
             Effect.provideService(Npm.Service, npm),
+            Effect.provideService(EventV2.Service, events),
           ),
         })
       })
@@ -77,6 +72,7 @@ export const layer: Layer.Layer<
 export const defaultLayer = layer.pipe(
   Layer.provide(AgentV2.defaultLayer),
   Layer.provide(Catalog.defaultLayer),
+  Layer.provideMerge(EventV2.defaultLayer),
   Layer.provide(PluginV2.defaultLayer),
   Layer.provide(Layer.orDie(AccountV2.defaultLayer)),
   Layer.provide(Npm.defaultLayer),

@@ -1,9 +1,10 @@
 import path from "path"
 import { describe, expect } from "bun:test"
 import { produce } from "immer"
-import { Effect, Layer, Option } from "effect"
+import { Effect, Fiber, Layer, Option, Stream } from "effect"
 import { AccountV2 } from "@opencode-ai/core/account"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { EventV2 } from "@opencode-ai/core/event"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Global } from "@opencode-ai/core/global"
 import { PluginV2 } from "@opencode-ai/core/plugin"
@@ -15,9 +16,42 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(PluginV2.defaultLayer)
 
+function context(
+  records: { provider: ProviderV2.Info; models: Map<ModelV2.ID, ModelV2.Info> }[],
+  updates: Array<{ id: ProviderV2.ID; enabled: ProviderV2.Info["enabled"]; apiKey?: string }>,
+): Catalog.Context {
+  return {
+    data: records,
+    updateProvider: (providerID, fn) => context(records, updates).provider.update(providerID, fn),
+    updateModel: (providerID, modelID, fn) => context(records, updates).model.update(providerID, modelID, fn),
+    provider: {
+      update: (providerID, fn) => {
+        const record = records.find((item) => item.provider.id === providerID)
+        const provider = produce(record?.provider ?? ProviderV2.Info.empty(providerID), fn)
+        if (record) record.provider = provider
+        else records.push({ provider, models: new Map<ModelV2.ID, ModelV2.Info>() })
+        updates.push({
+          id: providerID,
+          enabled: provider.enabled,
+          apiKey: typeof provider.options.aisdk.provider.apiKey === "string" ? provider.options.aisdk.provider.apiKey : undefined,
+        })
+      },
+      remove: (providerID) => {
+        const index = records.findIndex((item) => item.provider.id === providerID)
+        if (index !== -1) records.splice(index, 1)
+      },
+    },
+    model: {
+      update: () => {},
+      remove: () => {},
+    },
+  }
+}
+
 function testLayer(dir: string) {
   return AccountV2.layer.pipe(
     Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provideMerge(EventV2.defaultLayer),
     Layer.provide(
       Global.layerWith({
         data: dir,
@@ -34,7 +68,7 @@ function testLayer(dir: string) {
 }
 
 describe("AccountV2", () => {
-  it.live("runs account lifecycle hooks", () =>
+  it.live("emits account lifecycle events", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -42,32 +76,18 @@ describe("AccountV2", () => {
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const accounts = yield* AccountV2.Service
-          const plugin = yield* PluginV2.Service
-          let blocked: AccountV2.ID | undefined
+          const eventSvc = yield* EventV2.Service
+          const addedFiber = yield* eventSvc
+            .subscribe(AccountV2.Event.Added)
+            .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+          const switchedFiber = yield* eventSvc
+            .subscribe(AccountV2.Event.Switched)
+            .pipe(Stream.take(3), Stream.runCollect, Effect.forkScoped)
+          const removedFiber = yield* eventSvc
+            .subscribe(AccountV2.Event.Removed)
+            .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
 
-          yield* plugin.add({
-            id: PluginV2.ID.make("test.account"),
-            effect: Effect.succeed({
-              "account.update": (evt) =>
-                Effect.gen(function* () {
-                  if (evt.description === "cancel") {
-                    evt.cancel = true
-                    return
-                  }
-                  const existing = yield* accounts.get(evt.id).pipe(Effect.orDie)
-                  evt.description = existing ? `${evt.description}:updated` : `created:${evt.serviceID}`
-                  if (evt.credential.type === "api") evt.credential.key = existing ? "updated-key" : "created-key"
-                }),
-              "account.remove": (evt) =>
-                Effect.sync(() => {
-                  if (evt.account.description.includes("keep")) evt.cancel = true
-                }),
-              "account.activate": (evt) =>
-                Effect.sync(() => {
-                  if (blocked && evt.to === blocked) evt.cancel = true
-                }),
-            }),
-          })
+          yield* Effect.yieldNow
 
           const first = yield* accounts.create({
             serviceID: AccountV2.ServiceID.make("provider"),
@@ -75,45 +95,84 @@ describe("AccountV2", () => {
           })
           expect(first).toBeDefined()
           if (!first) return
-          expect(first.description).toBe("created:provider")
+          expect(first.description).toBe("default")
           expect(first.credential.type).toBe("api")
-          if (first.credential.type === "api") expect(first.credential.key).toBe("created-key")
+          if (first.credential.type === "api") expect(first.credential.key).toBe("raw-key")
 
           yield* accounts.update(first.id, { description: "keep" })
           const updated = yield* accounts.get(first.id)
-          expect(updated?.description).toBe("keep:updated")
+          expect(updated?.description).toBe("keep")
           expect(updated?.credential.type).toBe("api")
-          if (updated?.credential.type === "api") expect(updated.credential.key).toBe("updated-key")
-
-          yield* accounts.update(first.id, { description: "cancel" })
-          expect((yield* accounts.get(first.id))?.description).toBe("keep:updated")
-
-          const cancelled = yield* accounts.create({
-            serviceID: AccountV2.ServiceID.make("provider"),
-            credential: new AccountV2.ApiKeyCredential({ type: "api", key: "cancel-key" }),
-            description: "cancel",
-          })
-          expect(cancelled).toBeUndefined()
-
-          yield* accounts.remove(first.id)
-          expect(yield* accounts.get(first.id)).toBeDefined()
+          if (updated?.credential.type === "api") expect(updated.credential.key).toBe("raw-key")
 
           const second = yield* accounts.create({
             serviceID: AccountV2.ServiceID.make("provider"),
             credential: new AccountV2.ApiKeyCredential({ type: "api", key: "second-key" }),
-            active: false,
           })
           expect(second).toBeDefined()
           if (!second) return
-          blocked = second.id
-          yield* accounts.activate(second.id)
-          expect((yield* accounts.active(AccountV2.ServiceID.make("provider")))?.id).toBe(first.id)
+
+          yield* accounts.remove(second.id)
+          const added = Array.from(yield* Fiber.join(addedFiber))
+          const switched = Array.from(yield* Fiber.join(switchedFiber))
+          const removed = Array.from(yield* Fiber.join(removedFiber))
+          expect(added.map((event) => event.data.account.id)).toEqual([first.id, second.id])
+          expect(switched.map((event) => event.data)).toEqual([
+            { serviceID: AccountV2.ServiceID.make("provider"), from: undefined, to: first.id },
+            { serviceID: AccountV2.ServiceID.make("provider"), from: first.id, to: second.id },
+            { serviceID: AccountV2.ServiceID.make("provider"), from: second.id, to: first.id },
+          ])
+          expect(removed[0]?.data.account.id).toBe(second.id)
         }).pipe(Effect.provide(testLayer(tmp.path))),
       ),
     ),
   )
 
-  it.live("account plugin refreshes providers on activation", () =>
+  it.live("always switches to newly created accounts", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const accounts = yield* AccountV2.Service
+          const eventSvc = yield* EventV2.Service
+          const switchedFiber = yield* eventSvc
+            .subscribe(AccountV2.Event.Switched)
+            .pipe(Stream.take(3), Stream.runCollect, Effect.forkScoped)
+
+          yield* Effect.yieldNow
+
+          const first = yield* accounts.create({
+            serviceID: AccountV2.ServiceID.make("provider"),
+            credential: new AccountV2.ApiKeyCredential({ type: "api", key: "first-key" }),
+          })
+          const second = yield* accounts.create({
+            serviceID: AccountV2.ServiceID.make("provider"),
+            credential: new AccountV2.ApiKeyCredential({ type: "api", key: "second-key" }),
+          })
+          const third = yield* accounts.create({
+            serviceID: AccountV2.ServiceID.make("provider"),
+            credential: new AccountV2.ApiKeyCredential({ type: "api", key: "third-key" }),
+          })
+
+          expect(first).toBeDefined()
+          expect(second).toBeDefined()
+          expect(third).toBeDefined()
+          if (!first || !second || !third) return
+
+          expect((yield* accounts.active(AccountV2.ServiceID.make("provider")))?.id).toBe(third.id)
+          expect(Array.from(yield* Fiber.join(switchedFiber)).map((event) => event.data)).toEqual([
+            { serviceID: AccountV2.ServiceID.make("provider"), from: undefined, to: first.id },
+            { serviceID: AccountV2.ServiceID.make("provider"), from: first.id, to: second.id },
+            { serviceID: AccountV2.ServiceID.make("provider"), from: second.id, to: third.id },
+          ])
+        }).pipe(Effect.provide(testLayer(tmp.path))),
+      ),
+    ),
+  )
+
+  it.live("account plugin refreshes providers on account lifecycle events", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -122,28 +181,17 @@ describe("AccountV2", () => {
         Effect.gen(function* () {
           const accounts = yield* AccountV2.Service
           const plugin = yield* PluginV2.Service
+          const records = [{ provider: ProviderV2.Info.empty(ProviderV2.ID.make("provider")), models: new Map<ModelV2.ID, ModelV2.Info>() }]
           const updates: Array<{ id: ProviderV2.ID; enabled: ProviderV2.Info["enabled"]; apiKey?: string }> = []
           const catalog = Catalog.Service.of({
+            loader: () => Effect.die("unexpected catalog.loader"),
             provider: {
               get: () => Effect.die("unexpected provider.get"),
-              update: (providerID, fn) =>
-                Effect.sync(() => {
-                  const provider = produce(ProviderV2.Info.empty(providerID), fn)
-                  updates.push({
-                    id: providerID,
-                    enabled: provider.enabled,
-                    apiKey:
-                      typeof provider.options.aisdk.provider.apiKey === "string"
-                        ? provider.options.aisdk.provider.apiKey
-                        : undefined,
-                  })
-                }),
               all: () => Effect.succeed([]),
               available: () => Effect.succeed([]),
             },
             model: {
               get: () => Effect.die("unexpected model.get"),
-              update: () => Effect.die("unexpected model.update"),
               all: () => Effect.succeed([]),
               available: () => Effect.succeed([]),
               default: () => Effect.succeed(Option.none<ModelV2.Info>()),
@@ -152,37 +200,74 @@ describe("AccountV2", () => {
             },
           })
 
+          const eventSvc = yield* EventV2.Service
           yield* plugin.add({
             ...AccountPlugin,
             effect: AccountPlugin.effect.pipe(
               Effect.provideService(AccountV2.Service, accounts),
               Effect.provideService(Catalog.Service, catalog),
+              Effect.provideService(EventV2.Service, eventSvc),
             ),
           })
+          yield* Effect.yieldNow
 
-          const previous = yield* accounts.create({
-            serviceID: AccountV2.ServiceID.make("old-provider"),
-            credential: new AccountV2.ApiKeyCredential({ type: "api", key: "old-key" }),
+          const first = yield* accounts.create({
+            serviceID: AccountV2.ServiceID.make("provider"),
+            credential: new AccountV2.ApiKeyCredential({ type: "api", key: "first-key" }),
           })
-          const next = yield* accounts.create({
-            serviceID: AccountV2.ServiceID.make("new-provider"),
-            credential: new AccountV2.ApiKeyCredential({ type: "api", key: "new-key" }),
-            active: false,
-          })
-          expect(previous).toBeDefined()
-          expect(next).toBeDefined()
-          if (!previous || !next) return
-
-          yield* plugin.trigger("account.activated", { from: previous.id, to: next.id }, {})
-
+          expect(first).toBeDefined()
+          if (!first) return
+          yield* plugin.trigger("catalog.transform", context(records, updates), {})
           expect(updates).toEqual([
-            { id: ProviderV2.ID.make("old-provider"), enabled: false, apiKey: undefined },
             {
-              id: ProviderV2.ID.make("new-provider"),
-              enabled: { via: "account", service: AccountV2.ServiceID.make("new-provider") },
-              apiKey: "new-key",
+              id: ProviderV2.ID.make("provider"),
+              enabled: { via: "account", service: AccountV2.ServiceID.make("provider") },
+              apiKey: "first-key",
             },
           ])
+
+          updates.length = 0
+          const second = yield* accounts.create({
+            serviceID: AccountV2.ServiceID.make("provider"),
+            credential: new AccountV2.ApiKeyCredential({ type: "api", key: "second-key" }),
+          })
+          expect(second).toBeDefined()
+          if (!second) return
+          yield* plugin.trigger("catalog.transform", context(records, updates), {})
+          expect(updates).toEqual([
+            {
+              id: ProviderV2.ID.make("provider"),
+              enabled: { via: "account", service: AccountV2.ServiceID.make("provider") },
+              apiKey: "second-key",
+            },
+          ])
+
+          updates.length = 0
+          yield* accounts.activate(first.id)
+          yield* plugin.trigger("catalog.transform", context(records, updates), {})
+          expect(updates).toEqual([
+            {
+              id: ProviderV2.ID.make("provider"),
+              enabled: { via: "account", service: AccountV2.ServiceID.make("provider") },
+              apiKey: "first-key",
+            },
+          ])
+
+          updates.length = 0
+          yield* accounts.remove(first.id)
+          yield* plugin.trigger("catalog.transform", context(records, updates), {})
+          expect(updates).toEqual([
+            {
+              id: ProviderV2.ID.make("provider"),
+              enabled: { via: "account", service: AccountV2.ServiceID.make("provider") },
+              apiKey: "second-key",
+            },
+          ])
+
+          updates.length = 0
+          yield* accounts.remove(second.id)
+          yield* plugin.trigger("catalog.transform", context(records, updates), {})
+          expect(updates).toEqual([])
         }).pipe(Effect.provide(testLayer(tmp.path))),
       ),
     ),
