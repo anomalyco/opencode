@@ -302,6 +302,42 @@ describe("acp.agent session.error handling", () => {
     })
   })
 
+  test("does NOT emit agent_error for MessageAbortedError (user cancellation)", async () => {
+    await using tmp = await tmpdir()
+    await WithInstance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, sessionUpdates, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            id: "evt_err_3",
+            type: "session.error",
+            properties: {
+              sessionID: sessionId,
+              error: {
+                name: "MessageAbortedError",
+                data: { message: "Aborted" },
+              },
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        const errorUpdates = sessionUpdates.filter(
+          (u) => u.sessionId === sessionId && (u.update as any).sessionUpdate === "agent_error",
+        )
+        expect(errorUpdates.length).toBe(0)
+
+        stop()
+      },
+    })
+  })
+
   test("ignores session.error for unknown sessions (no emit)", async () => {
     await using tmp = await tmpdir()
     await WithInstance.provide({
@@ -312,7 +348,7 @@ describe("acp.agent session.error handling", () => {
         controller.push({
           directory: "/tmp/opencode-acp-test",
           payload: {
-            id: "evt_err_3",
+            id: "evt_err_4",
             type: "session.error",
             properties: {
               sessionID: "ses_does_not_exist",
