@@ -2,8 +2,8 @@
 
 This file lives at the root because every collab feature is built on the same
 small set of domain terms.  Update it as the model evolves.  Reach for an ADR
-in `docs/adr/` only when a decision is hard to reverse, surprising without
-context, and the result of a real trade-off.
+in [`docs/adr/`](docs/adr/README.md) only when a decision is hard to reverse,
+surprising without context, and the result of a real trade-off.
 
 ---
 

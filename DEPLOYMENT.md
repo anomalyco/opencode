@@ -1,5 +1,12 @@
 # Deploying unleashlive/opencode collab on AWS ECS
 
+> **Before deploying**, read [`docs/adr/README.md`](docs/adr/README.md).  ADRs
+> 0001–0005 cover security gaps in the configuration described below; ADRs
+> 0006–0009 cover operational improvements (background GC, health checks,
+> single-replica contract).  The steps below remain the deployment recipe;
+> the ADRs are the open work items that must close before this is production-
+> safe.
+
 This document walks an operator through standing up the collab fork behind
 `https://collab.unleashlive.com` on AWS ECS, plus answers two recurring
 questions from the team:
