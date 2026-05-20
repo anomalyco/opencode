@@ -1,6 +1,7 @@
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Option } from "effect"
 
 import { InstanceState } from "@/effect/instance-state"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
 import PROMPT_DEFAULT from "./prompt/default.txt"
@@ -43,10 +44,12 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const skill = yield* Skill.Service
+    const flags = yield* RuntimeFlags.Service
 
     return Service.of({
       environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
         const ctx = yield* InstanceState.context
+        const dateStr = Option.getOrElse(flags.dateOverride, () => new Date().toDateString())
         return [
           [
             `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
@@ -56,7 +59,7 @@ export const layer = Layer.effect(
             `  Workspace root folder: ${ctx.worktree}`,
             `  Is directory a git repo: ${ctx.project.vcs === "git" ? "yes" : "no"}`,
             `  Platform: ${process.platform}`,
-            `  Today's date: ${new Date().toDateString()}`,
+            `  Today's date: ${dateStr}`,
             `</env>`,
           ].join("\n"),
         ]
@@ -79,6 +82,9 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Skill.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(Skill.defaultLayer),
+  Layer.provide(RuntimeFlags.defaultLayer),
+)
 
 export * as SystemPrompt from "./system"

@@ -52,6 +52,7 @@ export class Service extends ConfigService.Service<Service>()("@opencode/Runtime
   bashDefaultTimeoutMs: positiveInteger("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS"),
   experimentalNativeLlm: enabledByExperimental("OPENCODE_EXPERIMENTAL_NATIVE_LLM"),
   client: Config.string("OPENCODE_CLIENT").pipe(Config.withDefault("cli")),
+  dateOverride: Config.string("OPENCODE_DATE").pipe(Config.option),
 }) {}
 
 export type Info = Context.Service.Shape<typeof Service>

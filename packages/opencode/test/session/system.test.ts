@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import type { Agent } from "../../src/agent/agent"
 import { NamedError } from "@opencode-ai/core/util/error"
+import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Skill } from "../../src/skill"
 import { Permission } from "../../src/permission"
 import { SystemPrompt } from "../../src/session/system"
@@ -53,6 +54,7 @@ const it = testEffect(
         }),
       ),
     ),
+    Layer.provide(RuntimeFlags.defaultLayer),
   ),
 )
 
