@@ -51,7 +51,7 @@
 ### Installation
 ```bash
 git clone https://github.com/tomtyiu/Autoopencode.git
-cd autocoder
+cd Autoopencode
 npm run dev
 ```
 
