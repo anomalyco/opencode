@@ -34,6 +34,7 @@ export type RunProvider = NonNullable<Awaited<ReturnType<OpencodeClient["provide
 export type RunPrompt = {
   text: string
   parts: RunPromptPart[]
+  mode?: "shell"
   command?: {
     name: string
     arguments: string
@@ -302,6 +303,10 @@ export type StreamCommit = {
   interrupted?: boolean
   toolState?: StreamToolState
   toolError?: string
+  shell?: {
+    callID: string
+    command: string
+  }
 }
 
 // The public contract between the stream transport / prompt queue and
