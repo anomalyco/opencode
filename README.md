@@ -1,5 +1,5 @@
-<p align="center"><h1>Autoopencode</h1></p>
-<p align="center"><h2>This is fork from opencode, this fork is autonomous open source ai agent</h2></p>
+<p align="center">Autoopencode</p>
+<p align="center">This is fork from opencode, this fork is autonomous open source ai agent</p>
 
 
 <p align="center">
