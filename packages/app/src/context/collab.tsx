@@ -11,7 +11,7 @@ import {
   useContext,
   type ParentProps,
 } from "solid-js"
-import type { CollabSession, CollabEvent, PromptSuggestion, Participant } from "@opencode-ai/collab"
+import type { CollabSession, CollabEvent, PromptSuggestion, Participant, CollabNote } from "@opencode-ai/collab"
 
 interface CollabContextValue {
   session: () => CollabSession | null
@@ -28,6 +28,10 @@ interface CollabContextValue {
   unreadMentions: () => number
   /** Mark all currently-unread mentions as read (called when the user views the queue/etc.). */
   clearMentions: () => void
+  /** Team-chat notes for this session, oldest-first (chronological). */
+  notes: () => CollabNote[]
+  /** Post a side-channel team note (does NOT go to the LLM). */
+  postNote: (content: string) => Promise<void>
 
   // Actions
   submitPrompt: (content: string) => Promise<void>
@@ -74,6 +78,7 @@ export function CollabProvider(props: CollabProviderProps) {
   const [typingUsers, setTypingUsers] = createSignal<Set<string>>(new Set())
   const [previewPorts, setPreviewPorts] = createSignal<number[]>([])
   const [unreadMentions, setUnreadMentions] = createSignal<number>(0)
+  const [notes, setNotes] = createSignal<CollabNote[]>([])
 
   function markTyping(githubLogin: string, typing: boolean) {
     setTypingUsers((prev) => {
@@ -148,6 +153,24 @@ export function CollabProvider(props: CollabProviderProps) {
       setQueue(data)
     }
   })
+
+  // Hydrate the team-chat notes feed on first load.  Subsequent updates
+  // come through the collab:note_added SSE event.
+  onMount(async () => {
+    try {
+      const res = await fetch(`/collab/session/${props.collabSessionId}/notes`)
+      if (!res.ok) return
+      const data = (await res.json()) as { notes?: CollabNote[] }
+      if (data.notes) setNotes(data.notes.map(deserializeNote))
+    } catch {
+      // ignore — notes feed is non-critical
+    }
+  })
+
+  /** SSE payloads put Dates through JSON; turn them back into Date objects. */
+  function deserializeNote(n: CollabNote): CollabNote {
+    return { ...n, createdAt: new Date(n.createdAt as unknown as string) }
+  }
 
   // Periodically re-read the current branch of each repo so the left-panel
   // display tracks `git checkout` operations performed by the LLM (or by
@@ -350,6 +373,10 @@ export function CollabProvider(props: CollabProviderProps) {
         )
         break
 
+      case "collab:note_added":
+        setNotes((prev) => [...prev, deserializeNote(event.note)])
+        break
+
       case "collab:mention":
         // Only react if it's me being mentioned (every browser receives the
         // broadcast — we filter client-side so the SSE stream stays simple).
@@ -421,6 +448,7 @@ export function CollabProvider(props: CollabProviderProps) {
     previewPorts,
     unreadMentions,
     clearMentions: () => setUnreadMentions(0),
+    notes,
 
     async submitPrompt(content) {
       await api("/prompt", "POST", { content })
@@ -456,6 +484,9 @@ export function CollabProvider(props: CollabProviderProps) {
     },
     async deleteSession() {
       await api("", "DELETE")
+    },
+    async postNote(content) {
+      await api("/note", "POST", { content })
     },
     async setTyping(typing) {
       // Fire-and-forget: typing is a UX nicety, not worth retrying.

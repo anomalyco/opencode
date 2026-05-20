@@ -22,6 +22,7 @@ import {
 import { useParams } from "@solidjs/router"
 import { CollabProvider, useCollab } from "@/context/collab"
 import { InviteDialog } from "@/components/collab/InviteDialog"
+import { TeamNoteComposer } from "@/components/collab/TeamNoteComposer"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import type { CollabRole, Participant, PromptSuggestion } from "@opencode-ai/collab"
 
@@ -620,37 +621,35 @@ function CollabSessionInner(props: { me: Me }) {
         {/* Prompt input — the actual textarea lives in the opencode iframe on
             the right (so users get all the opencode shortcuts: ⌘P, /, @,
             attachments, drag/drop, history, etc).  Submissions there are
-            intercepted and routed through the collab queue via postMessage. */}
-        <div class="px-3 py-3 border-b border-zinc-800/60 flex-shrink-0">
-          <Show
-            when={myRole() !== "viewer"}
-            fallback={
-              <div class="text-[11px] text-zinc-600 text-center py-1.5">
-                Viewer — read only
-              </div>
-            }
-          >
-            <div class="text-[11px] text-zinc-500 leading-relaxed">
-              <span class="text-zinc-300">Type prompts in the editor on the right →</span>
-              <br />
-              <span class="text-zinc-600">
-                {myRole() === "driver" && collab.session()?.queueMode === "fifo"
+            intercepted and routed through the collab queue via postMessage.
+            A compact one-line hint points users at the editor; the larger
+            real estate goes to the Team Notes composer below for human-to-
+            human side-chat with @-mentions (which fight opencode's `@` key
+            inside the iframe). */}
+        <div class="px-3 py-2 border-b border-zinc-800/60 flex-shrink-0 space-y-1">
+          <div class="text-[11px] text-zinc-500 leading-snug">
+            <span class="text-zinc-300">Prompt the LLM in the editor on the right →</span>{" "}
+            <span class="text-zinc-600">
+              {myRole() === "viewer"
+                ? "(Viewers read along.)"
+                : myRole() === "driver" && collab.session()?.queueMode === "fifo"
                   ? "Sent prompts go straight to the LLM."
                   : myRole() === "driver"
-                    ? "Your prompts join the vote pool — resolve it to execute."
+                    ? "Your prompts join the vote pool."
                     : "Your prompts go to the queue for Driver approval."}
-              </span>
-              <div class="text-[10px] text-zinc-700 mt-1.5">
-                Press <kbd class="px-1 py-0.5 rounded bg-zinc-800 border border-zinc-700 font-mono">⌘P</kbd> in the editor for the command palette.
-              </div>
-            </div>
-          </Show>
+            </span>
+          </div>
           <Show when={submitError()}>
-            <div class="mt-2 text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded px-2 py-1">
+            <div class="mt-1 text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded px-2 py-1">
               {submitError()}
             </div>
           </Show>
         </div>
+
+        {/* Team Notes — side-channel chat for the participants, never reaches
+            the LLM.  Owns its own `@` autocomplete so people can ping each
+            other without fighting opencode's file-mention popover. */}
+        <TeamNoteComposer readonly={myRole() === "viewer"} />
 
         {/* Queue */}
         <div class="flex-1 overflow-hidden flex flex-col min-h-0">

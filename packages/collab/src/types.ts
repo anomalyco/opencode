@@ -67,6 +67,21 @@ export interface PromptSuggestion {
 export const REACTION_EMOJIS = ["👍", "👎", "🔥", "🚀", "❤️", "😄"] as const
 export type ReactionEmoji = typeof REACTION_EMOJIS[number]
 
+/**
+ * A side-channel team note — short human-to-human message visible to all
+ * participants of a collab session, separate from prompt suggestions.
+ * Notes do NOT dispatch to the LLM; they exist so the team can ping each
+ * other (e.g. `@bob can you check this diff?`) without burning a turn.
+ */
+export interface CollabNote {
+  id: string
+  collabSessionId: string
+  authorGithubId: number
+  authorGithubLogin: string
+  content: string
+  createdAt: Date
+}
+
 export interface InviteToken {
   token: string
   collabSessionId: string
@@ -101,6 +116,9 @@ export type CollabEvent =
       mentionedLogin: string
       /** GitHub login of the person who wrote the mention. */
       authorLogin: string
-      /** Where it came from — a prompt suggestion. */
-      context: { kind: "suggestion"; suggestionId: string; excerpt: string }
+      /** Where it came from — either an LLM-bound suggestion or a team note. */
+      context:
+        | { kind: "suggestion"; suggestionId: string; excerpt: string }
+        | { kind: "note"; noteId: string; excerpt: string }
     }
+  | { type: "collab:note_added"; note: CollabNote }

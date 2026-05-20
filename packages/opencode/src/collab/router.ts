@@ -47,6 +47,7 @@ import { readFile } from "node:fs/promises"
 import { openCollabPullRequest } from "./github-pr"
 import { toggleReaction, isAllowedEmoji } from "./reactions"
 import { mentionsToEvents } from "./mentions"
+import { insertNote, listRecentNotes } from "./notes"
 
 /**
  * Read TCP ports the container is currently LISTENING on, by parsing
@@ -1012,7 +1013,7 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
         text: body.content,
         collabSession,
         authorLogin: sess.githubLogin,
-        suggestionId: suggestion.id,
+        context: { kind: "suggestion", suggestionId: suggestion.id },
       })) {
         broadcastSse(sessionId, event)
       }
@@ -1103,6 +1104,53 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       githubLogin: sess.githubLogin,
     })
     return json({ ok: true })
+  }
+
+  // GET /collab/session/:id/notes — last 100 team notes, oldest-first.
+  // Hydration on page reload + every collab:note_added SSE event appends.
+  if (req.method === "GET" && parts[3] === "notes") {
+    const notes = listRecentNotes(sessionId, 100)
+    return new Response(JSON.stringify({ notes }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    })
+  }
+
+  // POST /collab/session/:id/note — side-channel team chat message.
+  // Doesn't dispatch to opencode; just broadcasts the note + any
+  // @-mentions to all participants.
+  if (req.method === "POST" && parts[3] === "note") {
+    if (caller.role === "viewer") {
+      return json({ error: "Forbidden — Viewers cannot post notes" }, 403)
+    }
+    const body = (await req.json().catch(() => ({}))) as { content?: string }
+    const content = typeof body.content === "string" ? body.content.trim() : ""
+    if (!content) return json({ error: "Note content is empty" }, 400)
+    if (content.length > 2000) return json({ error: "Note too long (max 2000 chars)" }, 400)
+
+    const note = insertNote({
+      collabSessionId: sessionId,
+      authorGithubId: sess.githubId,
+      authorGithubLogin: sess.githubLogin,
+      content,
+    })
+    console.log("[collab.note]", {
+      sessionId,
+      noteId: note.id,
+      authorLogin: sess.githubLogin,
+      length: content.length,
+    })
+
+    broadcastSse(sessionId, { type: "collab:note_added", note })
+    for (const event of mentionsToEvents({
+      text: content,
+      collabSession,
+      authorLogin: sess.githubLogin,
+      context: { kind: "note", noteId: note.id },
+    })) {
+      broadcastSse(sessionId, event)
+    }
+    return json({ note }, 201)
   }
 
   // POST /collab/session/:id/react/:sid — toggle an emoji reaction.

@@ -100,6 +100,28 @@ export const CollabReactionTable = sqliteTable(
   ],
 )
 
+/**
+ * Side-channel team notes — separate from CollabSuggestionTable (which is
+ * about prompts that may dispatch to the LLM).  A "note" is a short
+ * human-to-human message that lives only in the left-panel team chat;
+ * it never reaches opencode.  Used to coordinate via @-mentions without
+ * burning an LLM turn.
+ */
+export const CollabNoteTable = sqliteTable(
+  "collab_note",
+  {
+    id: text().primaryKey(),
+    collab_session_id: text()
+      .notNull()
+      .references(() => CollabSessionTable.id, { onDelete: "cascade" }),
+    author_github_id: integer().notNull(),
+    author_github_login: text().notNull(),
+    content: text().notNull(),
+    created_at: integer({ mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [index("collab_note_session_idx").on(t.collab_session_id)],
+)
+
 // Persisted GitHub OAuth sessions — survives server restarts.
 // The in-memory Map used originally was wiped on every container restart.
 export const CollabAuthSessionTable = sqliteTable("collab_auth_session", {

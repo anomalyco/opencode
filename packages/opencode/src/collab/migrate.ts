@@ -61,6 +61,15 @@ const SQL = `
     PRIMARY KEY (suggestion_id, voter_github_login, emoji)
   );
   CREATE INDEX IF NOT EXISTS collab_reaction_suggestion_idx ON collab_reaction(suggestion_id);
+  CREATE TABLE IF NOT EXISTS collab_note (
+    id TEXT PRIMARY KEY,
+    collab_session_id TEXT NOT NULL REFERENCES collab_session(id) ON DELETE CASCADE,
+    author_github_id INTEGER NOT NULL,
+    author_github_login TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS collab_note_session_idx ON collab_note(collab_session_id);
   CREATE TABLE IF NOT EXISTS collab_invite (
     token TEXT PRIMARY KEY,
     collab_session_id TEXT NOT NULL REFERENCES collab_session(id) ON DELETE CASCADE,

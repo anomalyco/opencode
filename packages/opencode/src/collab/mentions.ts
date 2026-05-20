@@ -68,27 +68,36 @@ export function buildExcerpt(text: string, mentionedLogin: string, maxLen = 120)
 }
 
 /**
- * Compose the SSE events for a single mention-bearing suggestion — one
- * collab:mention event per resolved participant.  Caller broadcasts each.
+ * Compose the SSE events for one piece of mention-bearing text — one
+ * `collab:mention` event per resolved, non-self participant.  Caller
+ * broadcasts each.  The context discriminates between a prompt
+ * suggestion (the original site) and a team note (the v2 carrier).
  */
 export function mentionsToEvents(input: {
   text: string
   collabSession: CollabSession
   authorLogin: string
-  suggestionId: string
+  context: { kind: "suggestion"; suggestionId: string } | { kind: "note"; noteId: string }
 }): CollabEvent[] {
   const logins = resolveMentionsToParticipants(input.text, input.collabSession)
   return logins
     // Don't notify the author of their own mention.
     .filter((l) => l !== input.authorLogin)
-    .map((login) => ({
+    .map((login): CollabEvent => ({
       type: "collab:mention",
       mentionedLogin: login,
       authorLogin: input.authorLogin,
-      context: {
-        kind: "suggestion",
-        suggestionId: input.suggestionId,
-        excerpt: buildExcerpt(input.text, login),
-      },
+      context:
+        input.context.kind === "suggestion"
+          ? {
+              kind: "suggestion",
+              suggestionId: input.context.suggestionId,
+              excerpt: buildExcerpt(input.text, login),
+            }
+          : {
+              kind: "note",
+              noteId: input.context.noteId,
+              excerpt: buildExcerpt(input.text, login),
+            },
     }))
 }
