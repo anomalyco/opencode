@@ -74,19 +74,39 @@ export function buildFileTree(files: readonly FileTreeItem[]): FileTree {
 
 export function flattenFileTree(tree: FileTree, expanded?: ReadonlySet<number>): FileTreeRow[] {
   const rows: FileTreeRow[] = []
-  const visit = (id: number) => {
+  const visit = (id: number, depth: number) => {
     const node = tree.nodes[id]!
+    if (node.kind === "file") {
+      rows.push({
+        id: node.id,
+        depth,
+        kind: node.kind,
+        name: node.name,
+        fileIndex: node.fileIndex,
+      })
+      return
+    }
+
+    const chain = collapsedFileTreeDirectoryChain(tree, node.id)
+    const last = chain[chain.length - 1]!
     rows.push({
       id: node.id,
-      depth: node.depth,
+      depth,
       kind: node.kind,
-      name: node.name,
+      name: chain.map((item) => item.name).join("/"),
       fileIndex: node.fileIndex,
     })
-    if (node.kind === "directory" && (!expanded || expanded.has(node.id))) node.children.forEach(visit)
+    if (!expanded || expanded.has(node.id)) last.children.forEach((child) => visit(child, depth + 1))
   }
-  tree.roots.forEach(visit)
+  tree.roots.forEach((root) => visit(root, 0))
   return rows
+}
+
+function collapsedFileTreeDirectoryChain(tree: FileTree, id: number): FileTreeNode[] {
+  const node = tree.nodes[id]!
+  const child = node.children.length === 1 ? tree.nodes[node.children[0]!] : undefined
+  if (child?.kind !== "directory") return [node]
+  return [node, ...collapsedFileTreeDirectoryChain(tree, child.id)]
 }
 
 export function compareFileTreeNodes(tree: FileTree, left: number, right: number) {

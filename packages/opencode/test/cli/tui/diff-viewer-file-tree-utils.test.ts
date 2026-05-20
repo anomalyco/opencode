@@ -60,6 +60,52 @@ describe("diff viewer file tree utilities", () => {
     expect(flattenFileTree(tree).map((row) => row.name)).toEqual(["alpha.ts", "beta.ts", "zeta.ts"])
   })
 
+  test("collapses unary directory chains while flattening", () => {
+    const rows = flattenFileTree(
+      buildFileTree([
+        { file: "packages/opencode/src/cli/app.ts" },
+        { file: "packages/opencode/src/server/server.ts" },
+      ]),
+    )
+
+    expect(rows.map((row) => `${"  ".repeat(row.depth)}${row.kind}:${row.name}`)).toEqual([
+      "directory:packages/opencode/src",
+      "  directory:cli",
+      "    file:app.ts",
+      "  directory:server",
+      "    file:server.ts",
+    ])
+  })
+
+  test("does not collapse a directory into a file row", () => {
+    const rows = flattenFileTree(buildFileTree([{ file: "packages/opencode/src/app.ts" }]))
+
+    expect(rows.map((row) => `${"  ".repeat(row.depth)}${row.kind}:${row.name}`)).toEqual([
+      "directory:packages/opencode/src",
+      "  file:app.ts",
+    ])
+  })
+
+  test("stops collapsing at branches", () => {
+    const rows = flattenFileTree(
+      buildFileTree([
+        { file: "packages/opencode/src/cli/app.ts" },
+        { file: "packages/opencode/src/server/server.ts" },
+        { file: "packages/readme.md" },
+      ]),
+    )
+
+    expect(rows.map((row) => `${"  ".repeat(row.depth)}${row.kind}:${row.name}`)).toEqual([
+      "directory:packages",
+      "  directory:opencode/src",
+      "    directory:cli",
+      "      file:app.ts",
+      "    directory:server",
+      "      file:server.ts",
+      "  file:readme.md",
+    ])
+  })
+
   test("keeps same directory names under different parents separate", () => {
     const rows = flattenFileTree(
       buildFileTree([{ file: "components/button.ts" }, { file: "docs/components/usage.md" }]),
@@ -68,9 +114,8 @@ describe("diff viewer file tree utilities", () => {
     expect(rows.map((row) => `${"  ".repeat(row.depth)}${row.kind}:${row.name}`)).toEqual([
       "directory:components",
       "  file:button.ts",
-      "directory:docs",
-      "  directory:components",
-      "    file:usage.md",
+      "directory:docs/components",
+      "  file:usage.md",
     ])
   })
 
@@ -79,15 +124,27 @@ describe("diff viewer file tree utilities", () => {
       buildFileTree([{ file: "src/config/tui.ts" }, { file: "src/config/keybind.ts" }, { file: "README.md" }]),
     )
 
-    expect(rows.map((row) => ({ name: row.name, kind: row.kind, depth: row.depth, fileIndex: row.fileIndex }))).toEqual(
-      [
-        { name: "src", kind: "directory", depth: 0, fileIndex: undefined },
-        { name: "config", kind: "directory", depth: 1, fileIndex: undefined },
-        { name: "keybind.ts", kind: "file", depth: 2, fileIndex: 1 },
-        { name: "tui.ts", kind: "file", depth: 2, fileIndex: 0 },
-        { name: "README.md", kind: "file", depth: 0, fileIndex: 2 },
-      ],
-    )
+    expect(rows.map((row) => ({ name: row.name, kind: row.kind, depth: row.depth, fileIndex: row.fileIndex }))).toEqual([
+      { name: "src/config", kind: "directory", depth: 0, fileIndex: undefined },
+      { name: "keybind.ts", kind: "file", depth: 1, fileIndex: 1 },
+      { name: "tui.ts", kind: "file", depth: 1, fileIndex: 0 },
+      { name: "README.md", kind: "file", depth: 0, fileIndex: 2 },
+    ])
+  })
+
+  test("collapses expanded unary children under the first visible directory id", () => {
+    const tree = buildFileTree([
+      { file: "packages/opencode/src/cli/app.ts" },
+      { file: "packages/opencode/src/server/server.ts" },
+    ])
+    const packages = tree.nodes.find((node) => node.kind === "directory" && node.name === "packages")!
+
+    expect(flattenFileTree(tree, new Set()).map((row) => row.name)).toEqual(["packages/opencode/src"])
+    expect(flattenFileTree(tree, new Set([packages.id])).map((row) => row.name)).toEqual([
+      "packages/opencode/src",
+      "cli",
+      "server",
+    ])
   })
 
   test("flattens only expanded directory descendants when expansion is provided", () => {
@@ -148,7 +205,7 @@ describe("diff viewer file tree utilities", () => {
 
     const collapsed = toggleFileTreeDirectory(tree, expanded, src.id)
     expect(collapsed.has(src.id)).toBe(false)
-    expect(flattenFileTree(tree, collapsed).map((row) => row.name)).toEqual(["src", "README.md"])
+    expect(flattenFileTree(tree, collapsed).map((row) => row.name)).toEqual(["src/config", "README.md"])
 
     const reopened = toggleFileTreeDirectory(tree, collapsed, src.id)
     expect(reopened.has(src.id)).toBe(true)
