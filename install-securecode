@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
 # Acompany SecureCode one-shot installer.
 #
-# Recommended invocation (during private staging, internal use):
-#   gh release download -R acompany-develop/securecode-release --pattern install -O - | bash
+# Three invocation modes:
 #
-# Recommended invocation (once securecode-release is flipped public):
-#   curl -fsSL https://github.com/acompany-develop/securecode-release/releases/latest/download/install | bash
+# 1. Engineers with `gh auth login` set up (private staging):
+#      gh release download -R acompany-develop/securecode --pattern install -O - | bash
 #
-# Or for a pinned version:
-#   gh release download -R acompany-develop/securecode-release --pattern install -O - | bash -s -- --version 0.1.0
+# 2. Once the distribution repo is flipped public:
+#      curl -fsSL https://github.com/acompany-develop/securecode/releases/latest/download/install | bash
 #
-# When the repository is private, this script transparently uses the `gh` CLI
+# 3. Offline / non-engineer flow (e.g. archive distributed via Notion):
+#    Drop `install` and the platform archive (e.g. `securecode-darwin-arm64.zip`)
+#    in the same directory and run:
+#      bash install
+#    The script auto-detects an archive matching the current platform that
+#    sits next to it on disk, skips network fetch, and installs from that
+#    local file.
+#
+# When the repository is private, network mode transparently uses the `gh` CLI
 # (must be authenticated via `gh auth login`) for both metadata lookup and
 # archive download. If `gh` is unavailable or unauthenticated, it falls back to
 # bare curl, which only works for public repositories.
@@ -20,7 +27,16 @@ set -euo pipefail
 
 APP=securecode
 ARCHIVE_PREFIX=securecode
-GH_REPO=acompany-develop/securecode-release
+GH_REPO=acompany-develop/securecode
+
+# Resolve the directory containing this script when invoked via a file (e.g.
+# `bash install`, `./install`). When piped from curl, BASH_SOURCE[0] is not a
+# real path; script_dir stays empty so the local-archive lookup below will
+# always miss and we fall through to the network path.
+script_dir=""
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
 
 # Hold the download-path scratch directory at script scope so the EXIT trap
 # below can read it after main() returns. A `local tmp` inside main() goes out
@@ -45,6 +61,7 @@ Options:
   -h, --help              Show this help message
   -v, --version <ver>     Install a specific version (e.g. 0.1.0). Defaults to latest.
   -b, --binary <path>     Install from a local SecureCode binary instead of downloading.
+  -a, --archive <path>    Install from a local platform archive (.zip / .tar.gz).
       --install-dir <dir> Override install dir (default \$HOME/.local/bin).
       --no-modify-path    Don't append PATH entries to shell rc files.
       --no-config         Skip running the bundled setup/install.sh (plugin/config seed).
@@ -57,13 +74,21 @@ Examples:
   # Public repo (when applicable)
   curl -fsSL https://github.com/${GH_REPO}/releases/latest/download/install | bash
 
-  # Local archive
-  ./install --binary /path/to/SecureCode
+  # Offline / Notion flow: drop \`install\` and \`securecode-<target>.{zip,tar.gz}\`
+  # in the same directory and run:
+  bash install
+
+  # Explicit local archive
+  ./install --archive ./securecode-darwin-arm64.zip
+
+  # Local already-extracted binary
+  ./install --binary /path/to/securecode
 EOF
 }
 
 requested_version=${VERSION:-}
 binary_path=""
+archive_path=""
 install_dir="${SECURECODE_INSTALL_DIR:-$HOME/.local/bin}"
 no_modify_path=false
 no_config=false
@@ -78,6 +103,10 @@ while [[ $# -gt 0 ]]; do
     -b|--binary)
       if [[ -n "${2:-}" ]]; then binary_path="$2"; shift 2
       else echo -e "${RED}Error: --binary requires a path${NC}" >&2; exit 1
+      fi ;;
+    -a|--archive)
+      if [[ -n "${2:-}" ]]; then archive_path="$2"; shift 2
+      else echo -e "${RED}Error: --archive requires a path${NC}" >&2; exit 1
       fi ;;
     --install-dir)
       if [[ -n "${2:-}" ]]; then install_dir="$2"; shift 2
@@ -327,17 +356,34 @@ main() {
       fi
     fi
   else
-    local version filename url
-    version=$(resolve_version)
+    local filename
     filename=$(resolve_target_filename)
-    url="https://github.com/${GH_REPO}/releases/download/v${version}/${filename}"
+
+    # Auto-detect an archive that sits next to the install script on disk so
+    # offline / Notion-distributed users only need to "drop both files in the
+    # same directory and run bash install" (refs #159).
+    if [ -z "$archive_path" ] && [ -n "$script_dir" ] && [ -f "${script_dir}/${filename}" ]; then
+      archive_path="${script_dir}/${filename}"
+      info "Found local archive next to install script: ${archive_path}"
+    fi
 
     tmp=$(mktemp -d -t securecode-install-XXXXXX)
+    local staged="$tmp/$filename"
 
-    info "Downloading ${filename} (v${version})..."
-    download_archive "$url" "$tmp/$filename" "$version" "$filename"
+    if [ -n "$archive_path" ]; then
+      [ -f "$archive_path" ] || { err "Archive not found: $archive_path"; exit 1; }
+      info "Using local archive: ${archive_path}"
+      cp "$archive_path" "$staged"
+    else
+      local version url
+      version=$(resolve_version)
+      url="https://github.com/${GH_REPO}/releases/download/v${version}/${filename}"
+      info "Downloading ${filename} (v${version})..."
+      download_archive "$url" "$staged" "$version" "$filename"
+    fi
+
     info "Extracting ${filename}..."
-    extract_archive "$tmp/$filename" "$tmp/unpacked"
+    extract_archive "$staged" "$tmp/unpacked"
 
     local bin
     bin=$(find_binary "$tmp/unpacked") || { err "Could not locate ${ARCHIVE_PREFIX} binary inside ${filename}"; exit 1; }
