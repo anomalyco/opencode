@@ -28,7 +28,7 @@ Use in user lists and headers.
 
 export default {
   title: "UI V2/Avatar",
-  id: "components-avatar",
+  id: "components-avatar-v2",
   component: Avatar,
   tags: ["autodocs"],
   parameters: {

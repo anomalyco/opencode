@@ -13,6 +13,7 @@ import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
+import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
 import { useGlobalSync } from "@/context/global-sync"
 import { decodeDirectory } from "@/pages/directory-layout"
@@ -58,6 +59,7 @@ export function Titlebar() {
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
+  const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
   const web = createMemo(() => platform.platform === "web")
   const zoom = () => platform.webviewZoom?.() ?? 1
   const titlebarZoom = () => (windows() ? Math.max(zoom(), minTitlebarZoom) : zoom())
@@ -267,6 +269,9 @@ export function Titlebar() {
             return (
               <div class="h-full flex-1 flex flex-row items-center gap-1.5 pr-3">
                 <ChannelIndicator />
+                <Show when={windows() || linux()}>
+                  <WindowsAppMenu command={command} platform={platform} />
+                </Show>
                 <IconButtonV2
                   as="a"
                   href="/"
@@ -349,6 +354,9 @@ export function Titlebar() {
                 "pl-2": !mac(),
               }}
             >
+              <Show when={windows() || linux()}>
+                <WindowsAppMenu command={command} platform={platform} />
+              </Show>
               <Show when={mac()}>
                 <div class="h-full shrink-0" style={{ width: `${72 / zoom()}px` }} />
                 <div class="xl:hidden w-10 shrink-0 flex items-center justify-center">

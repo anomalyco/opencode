@@ -33,23 +33,27 @@ const applyZoom = (next: number) => {
     })
 }
 
+const resetZoom = () => applyZoom(1)
+const zoomIn = () => applyZoom(clamp(requestedZoom + 0.2))
+const zoomOut = () => applyZoom(clamp(requestedZoom - 0.2))
+
 window.addEventListener("keydown", (event) => {
   if (!(OS_NAME === "macos" ? event.metaKey : event.ctrlKey)) return
 
   if (event.key === "-") {
     event.preventDefault()
-    applyZoom(clamp(requestedZoom - 0.2))
+    zoomOut()
     return
   }
   if (event.key === "=" || event.key === "+") {
     event.preventDefault()
-    applyZoom(clamp(requestedZoom + 0.2))
+    zoomIn()
     return
   }
   if (event.key === "0") {
     event.preventDefault()
-    applyZoom(1)
+    resetZoom()
   }
 })
 
-export { webviewZoom }
+export { webviewZoom, resetZoom, zoomIn, zoomOut }
