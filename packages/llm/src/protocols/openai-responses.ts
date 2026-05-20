@@ -2,7 +2,6 @@ import { Effect, Schema } from "effect"
 import { Route } from "../route/client"
 import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
-import { Framing } from "../route/framing"
 import { HttpTransport, WebSocketTransport } from "../route/transport"
 import { Protocol } from "../route/protocol"
 import {
@@ -543,9 +542,8 @@ const transportBase = {
   encodeBody,
 }
 
-export const httpTransport = HttpTransport.httpJson({
+export const httpTransport = HttpTransport.sseJson.with({
   ...transportBase,
-  framing: Framing.sse,
 })
 
 export const route = Route.make({
@@ -565,7 +563,7 @@ const webSocketMessage = (body: OpenAIResponsesBody | Record<string, unknown>) =
     return yield* decodeWebSocketMessage({ ...message, type: "response.create" })
   })
 
-export const webSocketTransport = WebSocketTransport.json({
+export const webSocketTransport = WebSocketTransport.jsonTransport.with({
   ...transportBase,
   toMessage: webSocketMessage,
   encodeMessage: encodeWebSocketMessage,

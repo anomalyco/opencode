@@ -274,6 +274,11 @@ export const json = <Body, Message>(input: JsonInput<Body, Message>): JsonTransp
   },
 })
 
+export const jsonTransport = {
+  id: "websocket-json",
+  with: json,
+} as const
+
 export const WebSocketExecutor = {
   Service,
   layer,
@@ -284,4 +289,5 @@ export const WebSocketExecutor = {
 
 export const WebSocketTransport = {
   json,
+  jsonTransport,
 } as const

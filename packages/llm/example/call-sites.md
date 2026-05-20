@@ -533,7 +533,7 @@ App boundary = explicit durable-config -> typed-provider call
       transport setup.
 - [ ] Define `Route.with(...)` with explicit patch semantics for endpoint merge,
       query merge, header merge, auth replacement, and optional diagnostic id.
-- [ ] Make unconfigured transports reusable constants such as
+- [x] Make unconfigured transports reusable constants such as
       `HttpTransport.sseJson`; keep transport functions only for configured/fresh
       state construction.
 - [x] Collapse the public WebSocket runtime split so one `LLMClient.layer`

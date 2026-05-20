@@ -2,7 +2,6 @@ import { Array as Arr, Effect, Schema } from "effect"
 import { Route } from "../route/client"
 import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
-import { Framing } from "../route/framing"
 import { HttpTransport } from "../route/transport"
 import { Protocol } from "../route/protocol"
 import {
@@ -395,10 +394,9 @@ export const protocol = Protocol.make({
 
 const encodeBody = Schema.encodeSync(Schema.fromJsonString(OpenAIChatBody))
 
-export const httpTransport = HttpTransport.httpJson({
+export const httpTransport = HttpTransport.sseJson.with({
   endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
   auth: Auth.bearer(),
-  framing: Framing.sse,
   encodeBody,
 })
 
