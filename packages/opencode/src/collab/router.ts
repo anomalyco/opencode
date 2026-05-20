@@ -44,6 +44,7 @@ import {
   readRepoBranches,
 } from "./workspace"
 import { readFile } from "node:fs/promises"
+import { openCollabPullRequest } from "./github-pr"
 
 /**
  * Read TCP ports the container is currently LISTENING on, by parsing
@@ -965,6 +966,20 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     )
     const c = cfg()
     return json({ ...invite, url: Invite.inviteUrl(c.baseUrl, invite.token) }, 201)
+  }
+
+  // POST /collab/session/:id/pr — Driver only.  git push + open PR on GitHub.
+  if (req.method === "POST" && parts[3] === "pr") {
+    if (caller.role !== "driver") return json({ error: "Forbidden — Drivers only" }, 403)
+    const c = cfg()
+    console.log("[collab.pr]", { sessionId, login: sess.githubLogin })
+    const result = await openCollabPullRequest(collabSession, c.baseUrl)
+    if (!result.ok) {
+      console.error("[collab.pr] failed", { sessionId, status: result.status, error: result.error })
+      return json({ error: result.error }, result.status)
+    }
+    console.log("[collab.pr] opened", { sessionId, url: result.url })
+    return json({ url: result.url }, 201)
   }
 
   // POST /collab/session/:id/prompt — submit a prompt.

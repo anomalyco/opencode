@@ -34,6 +34,8 @@ interface CollabContextValue {
   resolvePool: () => Promise<void>
   changeRole: (githubId: number, role: string) => Promise<void>
   createInvite: (role: string) => Promise<{ url: string; token: string }>
+  /** Driver-only: git push + open a GitHub PR with collab session metadata in the body. */
+  openPullRequest: () => Promise<{ url: string }>
   deleteSession: () => Promise<void>
   /** Broadcast that the local user has started/stopped typing.  Debounced by caller. */
   setTyping: (typing: boolean) => Promise<void>
@@ -378,6 +380,10 @@ export function CollabProvider(props: CollabProviderProps) {
     async createInvite(role) {
       const res = await api("/invite", "POST", { role })
       return res.json()
+    },
+    async openPullRequest() {
+      const res = await api("/pr", "POST")
+      return res.json() as Promise<{ url: string }>
     },
     async deleteSession() {
       await api("", "DELETE")

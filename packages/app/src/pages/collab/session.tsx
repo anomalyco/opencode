@@ -124,6 +124,86 @@ function ParticipantRow(props: {
   )
 }
 
+// ── Open-PR button ────────────────────────────────────────────────────────────
+
+/**
+ * Driver-only button rendered in the left collab panel.  Calls
+ * POST /collab/session/:id/pr which git-pushes the current branch and
+ * opens a pull request on GitHub.  Surfaces the PR URL on success;
+ * surfaces the GitHub error verbatim on failure (e.g. "no commits
+ * yet").
+ */
+function OpenPrButton() {
+  const collab = useCollab()
+  const [busy, setBusy] = createSignal(false)
+  const [prUrl, setPrUrl] = createSignal<string | null>(null)
+  const [error, setError] = createSignal<string | null>(null)
+
+  async function openPr() {
+    setBusy(true)
+    setError(null)
+    try {
+      const { url } = await collab.openPullRequest()
+      setPrUrl(url)
+      // Auto-open the PR in a new tab for the Driver.
+      window.open(url, "_blank", "noreferrer")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div class="px-3 py-3 border-t border-zinc-800/60 flex-shrink-0 space-y-1.5">
+      <button
+        type="button"
+        onClick={openPr}
+        disabled={busy()}
+        class="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white transition-colors"
+      >
+        <Show
+          when={!busy()}
+          fallback={
+            <>
+              <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Opening PR…
+            </>
+          }
+        >
+          {/* git-pull-request icon */}
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="6" cy="6" r="2" />
+            <circle cx="6" cy="18" r="2" />
+            <circle cx="18" cy="18" r="2" />
+            <path stroke-linecap="round" d="M6 8v8M18 8v8" />
+          </svg>
+          Open Pull Request
+        </Show>
+      </button>
+      <Show when={prUrl()}>
+        <a
+          href={prUrl()!}
+          target="_blank"
+          rel="noreferrer"
+          class="block text-[11px] text-emerald-400 hover:text-emerald-300 truncate"
+          title={prUrl()!}
+        >
+          → {prUrl()}
+        </a>
+      </Show>
+      <Show when={error()}>
+        <div class="text-[11px] text-red-400 bg-red-400/10 border border-red-400/20 rounded px-2 py-1 whitespace-pre-wrap">
+          {error()}
+        </div>
+      </Show>
+    </div>
+  )
+}
+
 // ── Prompt input (role-aware) ─────────────────────────────────────────────────
 
 function PromptInput(props: {
@@ -523,6 +603,11 @@ function CollabSessionInner(props: { me: Me }) {
             </div>
           </Show>
         </div>
+
+        {/* Open PR — Drivers only, only when at least one repo is linked. */}
+        <Show when={myRole() === "driver" && (collab.session()?.repos?.length ?? 0) > 0}>
+          <OpenPrButton />
+        </Show>
 
         {/* Repos — each row also shows the active branch in that repo */}
         <Show when={(collab.session()?.repos?.length ?? 0) > 0}>
