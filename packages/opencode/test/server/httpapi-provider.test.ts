@@ -274,10 +274,7 @@ function setEnvScoped(key: string, value: string) {
 }
 
 describe("provider HttpApi", () => {
-  // The route checks catalog boot before provider lookup; Windows CI currently hits the 503 boot path first.
-  const providerNotFoundTest = process.platform === "win32" ? it.instance.skip : it.instance
-
-  providerNotFoundTest(
+  it.instance.skip(
     "returns public v2 provider not found errors",
     Effect.gen(function* () {
       const instance = yield* TestInstance
