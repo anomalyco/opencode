@@ -15,6 +15,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "bun test test/",
     "test:otel": "bun run --env-file=../../.env.bedrock src/util/otel-e2e-test.ts",
     "verify:cw": "bun run src/util/otel-verify-cloudwatch.ts"
   },
