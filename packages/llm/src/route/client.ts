@@ -1,6 +1,6 @@
 import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
 import type { Auth as AuthDef } from "./auth"
-import type { Endpoint } from "./endpoint"
+import { Endpoint, type EndpointPatch } from "./endpoint"
 import { RequestExecutor } from "./executor"
 import type { Framing } from "./framing"
 import { HttpTransport } from "./transport"
@@ -86,6 +86,7 @@ export interface RoutePatch<Body, Prepared> extends RouteDefaults {
   readonly id: string
   readonly provider?: string | ProviderID
   readonly transport?: Transport<Body, Prepared, unknown>
+  readonly endpoint?: EndpointPatch<Body>
 }
 
 type RouteMappedModelInput = RouteModelInput | RouteRoutedModelInput
@@ -141,7 +142,7 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
 })
 
 const endpointDefaults = <Body, Prepared, Frame>(transport: Transport<Body, Prepared, Frame>): RouteDefaults => {
-  if (!("endpoint" in transport) || !ProviderShared.isRecord(transport.endpoint)) return {}
+  if (!transport.endpoint) return {}
   const query = ProviderShared.isRecord(transport.endpoint.query)
     ? Object.fromEntries(
         Object.entries(transport.endpoint.query).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
@@ -151,6 +152,15 @@ const endpointDefaults = <Body, Prepared, Frame>(transport: Transport<Body, Prep
     baseURL: typeof transport.endpoint.baseURL === "string" ? transport.endpoint.baseURL : undefined,
     queryParams: query && Object.keys(query).length > 0 ? query : undefined,
   }
+}
+
+const applyEndpointPatch = <Body, Prepared, Frame>(
+  transport: Transport<Body, Prepared, Frame>,
+  patch: EndpointPatch<Body> | undefined,
+) => {
+  if (!patch) return transport
+  if (!transport.endpoint || !transport.with) throw new Error(`Transport(${transport.id}) does not support endpoint patching`)
+  return transport.with({ endpoint: Endpoint.merge(transport.endpoint, patch) })
 }
 
 export const generationOptions = (input: GenerationOptions.Input | undefined) =>
@@ -282,13 +292,17 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       defaults: mergeRouteDefaults(endpointDefaults(routeInput.transport), routeInput.defaults ?? {}),
       body: protocol.body,
       with: (patch: RoutePatch<Body, Prepared>) => {
-        const { id, provider, transport, ...defaults } = patch
+        const { id, provider, transport, endpoint, ...defaults } = patch
         if (!id || id === routeInput.id) throw new Error(`Route.with(${routeInput.id}) requires a new route id`)
+        const nextTransport = applyEndpointPatch(
+          (transport as Transport<Body, Prepared, Frame> | undefined) ?? routeInput.transport,
+          endpoint,
+        )
         return build({
           ...routeInput,
           id,
           provider: provider ?? routeInput.provider,
-          transport: (transport as Transport<Body, Prepared, Frame> | undefined) ?? routeInput.transport,
+          transport: nextTransport,
           defaults: mergeRouteDefaults(routeInput.defaults, defaults),
         })
       },

@@ -24,10 +24,19 @@ export interface Endpoint<Body> {
   readonly query?: Record<string, string>
 }
 
+export type EndpointPatch<Body> = Partial<Endpoint<Body>>
+
 /** Construct an `Endpoint` from a path string or path function. */
 export const path = <Body>(value: EndpointPart<Body>, options: Omit<Endpoint<Body>, "path"> = {}): Endpoint<Body> => ({
   ...options,
   path: value,
+})
+
+export const merge = <Body>(base: Endpoint<Body>, patch: EndpointPatch<Body>): Endpoint<Body> => ({
+  ...base,
+  ...patch,
+  path: patch.path ?? base.path,
+  query: patch.query === undefined ? base.query : { ...base.query, ...patch.query },
 })
 
 const renderPart = <Body>(part: EndpointPart<Body>, input: EndpointInput<Body>) =>
