@@ -156,6 +156,55 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("lowers image content in tool-result messages", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_tool_image",
+          model,
+          messages: [
+            Message.user("Capture the screen."),
+            Message.assistant([ToolCallPart.make({ id: "tool_1", name: "screenshot", input: {} })]),
+            Message.tool({
+              id: "tool_1",
+              name: "screenshot",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "Screenshot captured." },
+                  { type: "media", mediaType: "image/png", data: "AAAA" },
+                ],
+              },
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        messages: [
+          { role: "user", content: [{ text: "Capture the screen." }] },
+          {
+            role: "assistant",
+            content: [{ toolUse: { toolUseId: "tool_1", name: "screenshot", input: {} } }],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                toolResult: {
+                  toolUseId: "tool_1",
+                  content: [{ text: "Screenshot captured." }, { image: { format: "png", source: { bytes: "AAAA" } } }],
+                  status: "success",
+                },
+              },
+            ],
+          },
+        ],
+      })
+    }),
+  )
+
   it.effect("decodes text-delta + messageStop + metadata usage from binary event stream", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(

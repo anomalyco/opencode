@@ -132,6 +132,7 @@ export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 
 export const toolResultText = (part: ToolResultPart) => {
   if (part.result.type === "text" || part.result.type === "error") return String(part.result.value)
+  if (part.result.type === "content") return encodeJson(part.result.value)
   return encodeJson(part.result.value)
 }
 

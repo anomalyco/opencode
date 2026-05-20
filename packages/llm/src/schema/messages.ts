@@ -41,17 +41,49 @@ export const MediaPart = Schema.Struct({
 }).annotate({ identifier: "LLM.Content.Media" })
 export type MediaPart = Schema.Schema.Type<typeof MediaPart>
 
+export const ToolResultMediaPart = Schema.Struct({
+  type: Schema.Literal("media"),
+  mediaType: Schema.String,
+  data: Schema.String,
+  filename: Schema.optional(Schema.String),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+}).annotate({ identifier: "LLM.ToolResult.Media" })
+export type ToolResultMediaPart = Schema.Schema.Type<typeof ToolResultMediaPart>
+
+export const ToolResultContentPart = Schema.Union([TextPart, ToolResultMediaPart])
+export type ToolResultContentPart = Schema.Schema.Type<typeof ToolResultContentPart>
+
 const isToolResultValue = (value: unknown): value is ToolResultValue =>
-  isRecord(value) && (value.type === "text" || value.type === "json" || value.type === "error") && "value" in value
+  isRecord(value) &&
+  (value.type === "text" || value.type === "json" || value.type === "error" || value.type === "content") &&
+  "value" in value
 
 export const ToolResultValue = Object.assign(
-  Schema.Struct({
-    type: Schema.Literals(["json", "text", "error"]),
-    value: Schema.Unknown,
-  }).annotate({ identifier: "LLM.ToolResult" }),
+  Schema.Union([
+    Schema.Struct({
+      type: Schema.Literal("json"),
+      value: Schema.Unknown,
+    }),
+    Schema.Struct({
+      type: Schema.Literal("text"),
+      value: Schema.Unknown,
+    }),
+    Schema.Struct({
+      type: Schema.Literal("error"),
+      value: Schema.Unknown,
+    }),
+    Schema.Struct({
+      type: Schema.Literal("content"),
+      value: Schema.Array(ToolResultContentPart),
+    }),
+  ]).annotate({ identifier: "LLM.ToolResult" }),
   {
-    make: (value: unknown, type: ToolResultValue["type"] = "json"): ToolResultValue =>
-      isToolResultValue(value) ? value : { type, value },
+    is: isToolResultValue,
+    make: (value: unknown, type: ToolResultValue["type"] = "json"): ToolResultValue => {
+      if (isToolResultValue(value)) return value
+      if (type === "content") return { type, value: Array.isArray(value) ? value : [] }
+      return { type, value }
+    },
   },
 )
 export type ToolResultValue = Schema.Schema.Type<typeof ToolResultValue>

@@ -61,6 +61,7 @@ type BedrockToolUseBlock = Schema.Schema.Type<typeof BedrockToolUseBlock>
 const BedrockToolResultContentItem = Schema.Union([
   Schema.Struct({ text: Schema.String }),
   Schema.Struct({ json: Schema.Unknown }),
+  BedrockMedia.ImageBlock,
 ])
 
 const BedrockToolResultBlock = Schema.Struct({
@@ -261,15 +262,33 @@ const lowerToolCall = (part: ToolCallPart): BedrockToolUseBlock => ({
   },
 })
 
-const lowerToolResult = (part: ToolResultPart): BedrockToolResultBlock => ({
-  toolResult: {
-    toolUseId: part.id,
-    content:
-      part.result.type === "text" || part.result.type === "error"
-        ? [{ text: ProviderShared.toolResultText(part) }]
-        : [{ json: part.result.value }],
-    status: part.result.type === "error" ? "error" : "success",
-  },
+const lowerToolResultContent = Effect.fn("BedrockConverse.lowerToolResultContent")(function* (part: ToolResultPart) {
+  if (part.result.type === "text" || part.result.type === "error")
+    return [{ text: ProviderShared.toolResultText(part) }]
+  if (part.result.type === "json") return [{ json: part.result.value }]
+
+  const content: Array<Schema.Schema.Type<typeof BedrockToolResultContentItem>> = []
+  for (const item of part.result.value) {
+    if (item.type === "text") {
+      content.push({ text: item.text })
+      continue
+    }
+    const media = yield* BedrockMedia.lower(item)
+    if (!("image" in media))
+      return yield* ProviderShared.invalidRequest("Bedrock Converse only supports image media in tool results")
+    content.push(media)
+  }
+  return content
+})
+
+const lowerToolResult = Effect.fn("BedrockConverse.lowerToolResult")(function* (part: ToolResultPart) {
+  return {
+    toolResult: {
+      toolUseId: part.id,
+      content: yield* lowerToolResultContent(part),
+      status: part.result.type === "error" ? "error" : "success",
+    },
+  } satisfies BedrockToolResultBlock
 })
 
 const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
@@ -331,7 +350,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent("Bedrock Converse", "tool", ["tool-result"])
-      content.push(lowerToolResult(part))
+      content.push(yield* lowerToolResult(part))
       const cachePoint = BedrockCache.block(breakpoints, part.cache)
       if (cachePoint) content.push(cachePoint)
     }

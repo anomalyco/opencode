@@ -141,6 +141,45 @@ describe("LLMClient tools", () => {
     }),
   )
 
+  it.effect("preserves content tool results from dynamic tools", () =>
+    Effect.gen(function* () {
+      const screenshot = tool({
+        description: "Capture a screenshot.",
+        jsonSchema: { type: "object", properties: {} },
+        execute: () =>
+          Effect.succeed({
+            type: "content" as const,
+            value: [
+              { type: "text" as const, text: "Screenshot captured." },
+              { type: "media" as const, mediaType: "image/png", data: "AAAA" },
+            ],
+          }),
+      })
+
+      const events = Array.from(
+        yield* LLMClient.stream({ request: baseRequest, tools: { screenshot } }).pipe(
+          Stream.runCollect,
+          Effect.provide(
+            scriptedResponses([sseEvents(toolCallChunk("call_1", "screenshot", "{}"), finishChunk("tool_calls"))]),
+          ),
+        ),
+      )
+
+      expect(events.find(LLMEvent.is.toolResult)).toMatchObject({
+        type: "tool-result",
+        id: "call_1",
+        name: "screenshot",
+        result: {
+          type: "content",
+          value: [
+            { type: "text", text: "Screenshot captured." },
+            { type: "media", mediaType: "image/png", data: "AAAA" },
+          ],
+        },
+      })
+    }),
+  )
+
   it.effect("executes tool calls for one step without looping by default", () =>
     Effect.gen(function* () {
       const layer = scriptedResponses([
