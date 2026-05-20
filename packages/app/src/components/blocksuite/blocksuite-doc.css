@@ -1,0 +1,14 @@
+@import "@toeverything/theme/style.css";
+
+[data-component="prompt-doc"] page-editor {
+  display: block;
+  height: 100%;
+  width: 100%;
+  font-family: var(--affine-font-family);
+  background: var(--affine-background-primary-color);
+  color: var(--affine-text-primary-color);
+}
+
+[data-component="prompt-doc"] .affine-page-viewport {
+  height: 100%;
+}

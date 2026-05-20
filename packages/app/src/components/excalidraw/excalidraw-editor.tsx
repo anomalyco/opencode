@@ -13,7 +13,6 @@ import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types"
 import "@excalidraw/excalidraw/index.css"
 import "@/components/excalidraw/excalidraw-draw-overrides.css"
 import { bundledLibraries } from "@/components/excalidraw/excalidraw-libraries"
-
 export type DrawEditorProps = {
   theme: "light" | "dark"
   onApi: (api: ExcalidrawImperativeAPI) => void
@@ -34,6 +33,7 @@ function DrawEditor(props: DrawEditorProps) {
       <Excalidraw
         excalidrawAPI={onApi}
         theme={props.theme}
+        viewModeEnabled={false}
         initialData={{
           libraryItems: bundledLibraries,
           ...props.initialData,

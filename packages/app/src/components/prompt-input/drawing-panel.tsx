@@ -21,11 +21,5 @@ export const PromptDrawingPanel: Component<PanelProps> = (props) => {
 
   onCleanup(() => props.drawing.dispose())
 
-  return (
-    <div
-      data-component="prompt-drawing"
-      ref={root}
-      class="h-full w-full overflow-hidden bg-transparent"
-    />
-  )
+  return <div data-component="prompt-drawing" ref={root} class="h-full w-full overflow-hidden bg-transparent" />
 }

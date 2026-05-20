@@ -170,14 +170,14 @@ type PromptSubmitInput = {
   imageAttachments: Accessor<ImageAttachmentPart[]>
   commentCount: Accessor<number>
   autoAccept: Accessor<boolean>
-  mode: Accessor<"normal" | "shell" | "draw">
+  mode: Accessor<"normal" | "shell" | "draw" | "doc">
   working: Accessor<boolean>
   editor: () => HTMLDivElement | undefined
   queueScroll: () => void
   promptLength: (prompt: Prompt) => number
-  addToHistory: (prompt: Prompt, mode: "normal" | "shell" | "draw") => void
+  addToHistory: (prompt: Prompt, mode: "normal" | "shell" | "draw" | "doc") => void
   resetHistoryNavigation: () => void
-  setMode: (mode: "normal" | "shell" | "draw") => void
+  setMode: (mode: "normal" | "shell" | "draw" | "doc") => void
   setPopover: (popover: "at" | "slash" | null) => void
   newSessionWorktree?: Accessor<string | undefined>
   onNewSessionWorktreeReset?: () => void
@@ -308,7 +308,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
-    input.addToHistory(currentPrompt, mode === "draw" ? "normal" : mode)
+    input.addToHistory(currentPrompt, mode === "draw" || mode === "doc" ? "normal" : mode)
     input.resetHistoryNavigation()
 
     const projectDirectory = sdk.directory

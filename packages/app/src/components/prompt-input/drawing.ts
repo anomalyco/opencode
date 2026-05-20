@@ -38,7 +38,6 @@ export function createPromptDrawing(input: DrawingInput) {
   let unmount: VoidFunction | undefined
   let toolbar: VoidFunction | undefined
   let root: HTMLElement | undefined
-
   const [store, setStore] = createStore({
     elements: [] as readonly ExcalidrawElement[],
     files: {} as BinaryFiles,

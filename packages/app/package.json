@@ -41,6 +41,11 @@
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
+    "@blocksuite/affine-model": "0.0.0-canary-20250316001624",
+    "@blocksuite/blocks": "0.0.0-canary-20250316001624",
+    "@blocksuite/icons": "2.1.75",
+    "@blocksuite/presets": "0.0.0-canary-20250316001624",
+    "@blocksuite/store": "0.0.0-canary-20250316001624",
     "@excalidraw/excalidraw": "0.18.1",
     "@kobalte/core": "catalog:",
     "@opencode-ai/sdk": "workspace:*",
@@ -63,6 +68,7 @@
     "@tanstack/solid-query": "5.91.4",
     "@team-monolith/post-message-manager": "^1.1.0",
     "@thisbeyond/solid-dnd": "0.7.5",
+    "@toeverything/theme": "1.1.1",
     "diff": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "catalog:",

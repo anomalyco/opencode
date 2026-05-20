@@ -111,6 +111,7 @@
   "overrides": {
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "@blocksuite/icons": "2.1.75",
     "ghostty-web": "github:anomalyco/ghostty-web#4af877d52b523754f113b87084b69835b752fb2c"
   },
   "patchedDependencies": {

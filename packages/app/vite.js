@@ -21,6 +21,14 @@ export default [
             "@": fileURLToPath(new URL("./src", import.meta.url)),
           },
         },
+        optimizeDeps: {
+          include: [
+            "@blocksuite/presets",
+            "@blocksuite/blocks",
+            "@blocksuite/store",
+            "@blocksuite/block-std",
+          ],
+        },
         worker: {
           format: "es",
         },
