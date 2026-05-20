@@ -316,6 +316,53 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("does not forward resolved MCP resource parts as file downloads", async () => {
+    const messageID = "m-user"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "p1"),
+            type: "text",
+            text: "Reading MCP resource: status (status://info)",
+            synthetic: true,
+          },
+          {
+            ...basePart(messageID, "p2"),
+            type: "text",
+            text: '{"ok":true}',
+            synthetic: true,
+          },
+          {
+            ...basePart(messageID, "p3"),
+            type: "file",
+            mime: "application/json",
+            filename: "status",
+            url: "status://info",
+            source: {
+              type: "resource",
+              clientName: "status-server",
+              uri: "status://info",
+              text: { value: "@status", start: 0, end: 7 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Reading MCP resource: status (status://info)" },
+          { type: "text", text: '{"ok":true}' },
+        ],
+      },
+    ])
+  })
+
   test("converts assistant tool completion into tool-call + tool-result messages with attachments", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
