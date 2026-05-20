@@ -32,6 +32,7 @@ function url(opts: DocSyncOpts, path: string) {
 
 export class OpencodeDocSource implements DocSource {
   name = "opencode"
+  ready = Promise.resolve()
   private ws?: WebSocket
   private unsub?: () => void
 
@@ -60,11 +61,22 @@ export class OpencodeDocSource implements DocSource {
     if (!res.ok) throw new Error("doc sync push failed")
   }
 
-  subscribe(cb: (docId: string, data: Uint8Array) => void, disconnect: (reason: string) => void) {
+  subscribe(cb: (docId: string, data: Uint8Array) => void, _disconnect: (reason: string) => void) {
     const next = url(this.opts, `/doc/${this.opts.docID}/connect`)
+    next.searchParams.set("kind", "doc")
     next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
-    const ws = new WebSocket(next)
-    ws.binaryType = "arraybuffer"
+    let done = false
+    let closed = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let poll: ReturnType<typeof setInterval> | undefined
+    let pulling = false
+    let ready: ((stop: () => void) => void) | undefined
+    let synced: (() => void) | undefined
+    let ws: WebSocket | undefined
+    const docs = new Set([this.opts.docID])
+    this.ready = new Promise<void>((resolve) => {
+      synced = resolve
+    })
 
     const onMsg = (event: MessageEvent) => {
       const raw =
@@ -76,21 +88,85 @@ export class OpencodeDocSource implements DocSource {
       if (!raw || raw.length === 0) return
       const msg = unpack(raw)
       if (msg?.type === MSG_DOC) {
+        docs.add(msg.guid)
         cb(msg.guid, msg.data)
         return
       }
       if (raw[0] === MSG_DOC) cb(this.opts.docID, raw.subarray(1))
     }
 
-    ws.addEventListener("message", onMsg)
-    ws.addEventListener("close", () => disconnect("closed"))
-    ws.addEventListener("error", () => disconnect("error"))
-
-    this.ws = ws
-    this.unsub = () => {
-      if (ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) ws.close(1000)
+    const stop = () => {
+      closed = true
+      if (timer) clearTimeout(timer)
+      if (poll) clearInterval(poll)
+      ws?.removeEventListener("message", onMsg)
+      if (ws && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) ws.close(1000)
+      if (done) return
+      done = true
+      ready?.(stop)
     }
-    return this.unsub
+    this.unsub = stop
+
+    const retry = () => {
+      if (closed || timer) return
+      timer = setTimeout(() => {
+        timer = undefined
+        connect()
+      }, 250)
+    }
+
+    const connect = () => {
+      if (closed) return
+      const socket = new WebSocket(next)
+      socket.binaryType = "arraybuffer"
+      ws = socket
+      this.ws = socket
+      socket.addEventListener("message", onMsg)
+      socket.addEventListener("open", () => {
+        if (done) return
+        done = true
+        ready?.(stop)
+      })
+      socket.addEventListener("close", () => {
+        if (ws === socket) this.ws = undefined
+        retry()
+      })
+      socket.addEventListener("error", () => {
+        if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) socket.close()
+        retry()
+      })
+    }
+
+    const pull = () => {
+      if (closed || pulling) return
+      pulling = true
+      const ids = Array.from(docs).filter((id) => id !== this.opts.docID)
+      void Promise.all([this.pull(this.opts.docID, new Uint8Array()), ...ids.map((id) => this.pull(id, new Uint8Array()))])
+        .then(([root, ...rest]) => {
+          if (closed) return
+          if (root?.data.length) cb(this.opts.docID, root.data)
+          rest.forEach((doc, i) => {
+            if (doc?.data.length) cb(ids[i]!, doc.data)
+          })
+        })
+        .finally(() => {
+          synced?.()
+          synced = undefined
+          pulling = false
+        })
+    }
+
+    connect()
+    pull()
+    poll = setInterval(pull, 750)
+
+    return new Promise<() => void>((resolve) => {
+      if (done) {
+        resolve(stop)
+        return
+      }
+      ready = resolve
+    })
   }
 
   close() {
@@ -111,34 +187,29 @@ export class OpencodeAwarenessSource implements AwarenessSource {
   connect(awareness: import("y-protocols/awareness").Awareness) {
     this.awareness = awareness
     const next = url(this.opts, `/doc/${this.opts.docID}/connect`)
+    next.searchParams.set("kind", "awareness")
     next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
-    const ws = new WebSocket(next)
-    ws.binaryType = "arraybuffer"
-    this.ws = ws
+    let closed = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let ws: WebSocket | undefined
 
     const onUpdate = (
       changes: { added: number[]; updated: number[]; removed: number[] },
       origin: unknown,
     ) => {
       if (origin === "remote") return
-      if (ws.readyState !== WebSocket.OPEN) return
+      if (ws?.readyState !== WebSocket.OPEN) return
       const changed = changes.added.concat(changes.updated, changes.removed)
       if (changed.length === 0) return
       void import("y-protocols/awareness").then((mod) => {
         const update = mod.encodeAwarenessUpdate(awareness, changed)
-        ws.send(pack(MSG_AWARENESS, "", update))
+        ws?.send(pack(MSG_AWARENESS, "", update))
       })
     }
 
     awareness.on("update", onUpdate)
 
-    ws.addEventListener("open", () => {
-      void import("y-protocols/awareness").then((mod) => {
-        ws.send(pack(MSG_AWARENESS, "", mod.encodeAwarenessUpdate(awareness, [awareness.clientID])))
-      })
-    })
-
-    ws.addEventListener("message", (event) => {
+    const onMsg = (event: MessageEvent) => {
       const raw =
         event.data instanceof ArrayBuffer
           ? new Uint8Array(event.data)
@@ -152,12 +223,46 @@ export class OpencodeAwarenessSource implements AwarenessSource {
       void import("y-protocols/awareness").then((mod) => {
         mod.applyAwarenessUpdate(awareness, data, "remote")
       })
-    })
+    }
+
+    const retry = () => {
+      if (closed || timer) return
+      timer = setTimeout(() => {
+        timer = undefined
+        connect()
+      }, 250)
+    }
+
+    const connect = () => {
+      if (closed) return
+      const socket = new WebSocket(next)
+      socket.binaryType = "arraybuffer"
+      ws = socket
+      this.ws = socket
+      socket.addEventListener("open", () => {
+        void import("y-protocols/awareness").then((mod) => {
+          socket.send(pack(MSG_AWARENESS, "", mod.encodeAwarenessUpdate(awareness, [awareness.clientID])))
+        })
+      })
+      socket.addEventListener("message", onMsg)
+      socket.addEventListener("close", () => {
+        if (ws === socket) this.ws = undefined
+        retry()
+      })
+      socket.addEventListener("error", () => {
+        if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) socket.close()
+        retry()
+      })
+    }
+
+    connect()
 
     this.stop = () => {
-      if (ws.readyState === WebSocket.OPEN) awareness.setLocalState(null)
+      closed = true
+      if (timer) clearTimeout(timer)
+      if (ws?.readyState === WebSocket.OPEN) awareness.setLocalState(null)
       awareness.off("update", onUpdate)
-      if (ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) ws.close(1000)
+      if (ws && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) ws.close(1000)
     }
   }
 

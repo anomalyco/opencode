@@ -2,7 +2,7 @@ import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { Doc } from "./index"
-import { ActorID } from "./schema"
+import { ActorID, DocID } from "./schema"
 import { SessionID } from "@/session/schema"
 import { errors } from "../server/error"
 
@@ -36,7 +36,7 @@ export const SessionDocRoutes = () =>
       describeRoute({
         summary: "Advance session prompt doc",
         description:
-          "Create a new collaborative prompt doc for the session and notify connected clients to switch.",
+          "Create a new collaborative prompt doc for the session.",
         operationId: "session.promptDoc.advance",
         responses: {
           200: {
@@ -58,6 +58,38 @@ export const SessionDocRoutes = () =>
           Doc.promptAdvance({
             sessionID: c.req.valid("param").sessionID,
             clientID: json?.clientID,
+          }),
+        )
+      },
+    )
+    .post(
+      "/:sessionID/prompt-doc/ready",
+      describeRoute({
+        summary: "Activate session prompt doc",
+        description:
+          "Mark a collaborative prompt doc as ready for the session and notify connected clients to switch.",
+        operationId: "session.promptDoc.ready",
+        responses: {
+          200: {
+            description: "Ready prompt doc",
+            content: {
+              "application/json": {
+                schema: resolver(Doc.PromptDocInfo),
+              },
+            },
+          },
+          ...errors(404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      async (c) => {
+        const body = await c.req.json()
+        const json = z.object({ docID: DocID.zod, clientID: z.string().optional() }).parse(body)
+        return c.json(
+          Doc.promptReady({
+            sessionID: c.req.valid("param").sessionID,
+            docID: json.docID,
+            clientID: json.clientID,
           }),
         )
       },

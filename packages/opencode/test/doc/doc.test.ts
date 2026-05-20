@@ -37,7 +37,7 @@ describe("doc", () => {
     })
   })
 
-  test("prompt advance rotates session doc", async () => {
+  test("prompt advance rotates session doc after ready", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
@@ -48,8 +48,11 @@ describe("doc", () => {
         const first = Doc.prompt(session.id)
         const second = Doc.promptAdvance({ sessionID: session.id })
         expect(second.docID).not.toBe(first.docID)
-        const current = Doc.prompt(session.id)
-        expect(current.docID).toBe(second.docID)
+        expect(Doc.prompt(session.id).docID).toBe(first.docID)
+
+        const ready = Doc.promptReady({ sessionID: session.id, docID: second.docID })
+        expect(ready.docID).toBe(second.docID)
+        expect(Doc.prompt(session.id).docID).toBe(second.docID)
       },
     })
   })

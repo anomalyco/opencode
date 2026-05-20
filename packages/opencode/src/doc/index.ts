@@ -111,17 +111,36 @@ export namespace Doc {
       const docID = DocID.ascending()
       Database.use((db) => {
         db.insert(DocTable).values({ id: docID, kind: "prompt" }).run()
+      })
+      return { docID, sessionID }
+    },
+  )
+
+  export const promptReady = fn(
+    z.object({
+      sessionID: SessionID.zod,
+      docID: DocID.zod,
+      clientID: z.string().optional(),
+    }),
+    (input) => {
+      Session.get(input.sessionID)
+      get(input.docID)
+      Database.use((db) => {
         db
           .insert(SessionPromptDocTable)
-          .values({ session_id: sessionID, doc_id: docID })
+          .values({ session_id: input.sessionID, doc_id: input.docID })
           .onConflictDoUpdate({
             target: SessionPromptDocTable.session_id,
-            set: { doc_id: docID },
+            set: { doc_id: input.docID },
           })
           .run()
       })
-      Bus.publish(Doc.PromptDocRotated, { sessionID, docID, clientID: input.clientID })
-      return { docID, sessionID }
+      Bus.publish(Doc.PromptDocRotated, {
+        sessionID: input.sessionID,
+        docID: input.docID,
+        clientID: input.clientID,
+      })
+      return { docID: input.docID, sessionID: input.sessionID }
     },
   )
 

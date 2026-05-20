@@ -76,122 +76,113 @@ function frame() {
 }
 
 async function settled(done?: Promise<unknown>) {
-  if (!done) return
-  await Promise.race([done, frame()])
+  if (done) await done
+  await frame()
+}
+
+type Inline = {
+  focusEnd: () => void
+  mounted: boolean
+  rendering: boolean
+  waitForUpdate: () => Promise<void>
+}
+
+type Rich = HTMLElement & {
+  inlineEditor?: Inline | null
+  updateComplete?: Promise<unknown>
+}
+
+type EditorEl = HTMLElement & { host?: { querySelector: HTMLElement["querySelector"] } | null }
+type YDoc = InstanceType<typeof DocCollection.Y.Doc>
+
+function rich(editor: EditorEl) {
+  const rich = editor.host?.querySelector("rich-text") ?? editor.querySelector("rich-text")
+  if (!rich || !("inlineEditor" in rich)) return
+  return rich as Rich
+}
+
+async function inlineReady(editor: EditorEl) {
+  while (true) {
+    const el = rich(editor)
+    await el?.updateComplete
+    const next = el?.inlineEditor
+    if (next?.mounted && !next.rendering) {
+      await next.waitForUpdate()
+      if (next.mounted && !next.rendering) return next
+    }
+    await frame()
+  }
+}
+
+function add(doc: Doc, flavour: string, id: string, parent?: string) {
+  return doc.addBlock(flavour as never, { id }, parent)
 }
 
 function initDoc(doc: Doc) {
   doc.load()
   if (doc.root) return
   doc.withoutTransact(() => {
-    const rootId = doc.addBlock("affine:page", {})
-    doc.addBlock("affine:surface", {}, rootId)
-    const noteId = doc.addBlock("affine:note", {}, rootId)
-    doc.addBlock("affine:paragraph", {}, noteId)
+    const root = add(doc, "affine:page", "prompt-page")
+    add(doc, "affine:surface", "prompt-surface", root)
+    const note = add(doc, "affine:note", "prompt-note", root)
+    add(doc, "affine:paragraph", "prompt-paragraph", note)
   })
 }
 
-function saved(collection: DocCollection) {
-  const status = collection.docSync.status
-  const main = status.main
-  if (status.retrying) return true
-  if (!main) return true
-  return main.pendingPushUpdates === 0
+function subdoc(collection: DocCollection, page: string) {
+  return collection.doc.spaces.get(page)
 }
 
-function synced(collection: DocCollection) {
-  const status = collection.docSync.status
-  const main = status.main
-  if (!main || status.retrying) return false
-  const docs = 1 + collection.doc.getSubdocs().size
-  return main.loadedDocs >= docs && main.totalDocs >= docs && main.pendingPushUpdates === 0
-}
-
-async function flush(collection: DocCollection) {
-  if (!saved(collection)) {
-    await new Promise<void>((resolve) => {
-      let sub: { dispose: () => void } | undefined
-      const done = () => {
-        sub?.dispose()
-        resolve()
-      }
-      sub = collection.docSync.onStatusChange.on(() => {
-        if (saved(collection)) done()
-      })
-      if (saved(collection)) done()
+function bind(collection: DocCollection, page: string) {
+  const doc = collection.getDoc(page)
+  if (doc) return doc
+  if (!subdoc(collection, page)) return null
+  if (!collection.meta.getDocMeta(page)) {
+    collection.meta.addDocMeta({
+      id: page,
+      title: "",
+      createDate: Date.now(),
+      tags: [],
     })
   }
+  return collection.getDoc(page)
 }
 
-async function wait(collection: DocCollection) {
-  if (!synced(collection)) {
-    await new Promise<void>((resolve) => {
-      let sub: { dispose: () => void } | undefined
-      const done = () => {
-        sub?.dispose()
-        resolve()
-      }
-      sub = collection.docSync.onStatusChange.on(() => {
-        if (synced(collection)) done()
-      })
-      if (synced(collection)) done()
-    })
+async function load(source: OpencodeDocSource, id: string, doc: YDoc) {
+  const next = await source.pull(id, DocCollection.Y.encodeStateVector(doc))
+  if (next?.data.length) DocCollection.Y.applyUpdate(doc, next.data, source.name)
+}
+
+async function link(source: OpencodeDocSource, root: YDoc, page: YDoc) {
+  const apply = (id: string, data: Uint8Array) => {
+    if (id !== page.guid) return
+    DocCollection.Y.applyUpdate(page, data, source.name)
+  }
+  const stop = await source.subscribe(apply, () => undefined)
+  await load(source, root.guid, root)
+  await load(source, page.guid, page)
+  await source.push(root.guid, DocCollection.Y.encodeStateAsUpdate(root))
+  await source.push(page.guid, DocCollection.Y.encodeStateAsUpdate(page))
+  const push = (data: Uint8Array, origin: unknown, doc: YDoc) => {
+    if (origin === source.name) return
+    void source.push(doc.guid, data)
+  }
+  page.on("update", push)
+  return () => {
+    page.off("update", push)
+    stop()
+    source.close()
   }
 }
 
-async function pageReady(collection: DocCollection, page: string): Promise<Doc> {
-  let doc: Doc | null = collection.getDoc(page)
-  const ready = () => {
-    doc = collection.getDoc(page)
-    if (!doc) return false
-    if (!doc.loaded) doc.load()
-    return Boolean(doc.root)
-  }
-  if (ready() && doc) return doc
-  await new Promise<void>((resolve) => {
-    const subs: { dispose: () => void }[] = []
-    let root: { dispose: () => void } | undefined
-    let timer: ReturnType<typeof setInterval> | undefined
-    let pulling = false
-    const done = () => {
-      if (!ready()) {
-        if (doc && !root) {
-          root = doc.slots.rootAdded.on(done)
-          subs.push(root)
-        }
-        return
-      }
-      if (timer) clearInterval(timer)
-      subs.forEach((sub) => sub.dispose())
-      resolve()
-    }
-    const pull = () => {
-      if (pulling || ready()) {
-        done()
-        return
-      }
-      pulling = true
-      collection.start()
-      void collection.waitForSynced().finally(() => {
-        pulling = false
-        done()
-      })
-    }
-    subs.push(collection.slots.docAdded.on(done))
-    subs.push(collection.docSync.onStatusChange.on(done))
-    collection.doc.on("subdocs", done)
-    subs.push({ dispose: () => collection.doc.off("subdocs", done) })
-    timer = setInterval(pull, 500)
-    done()
-  })
-  const next = doc
-  if (!next) throw new Error("prompt doc page missing")
-  return next
-}
-
-async function stop(collection: DocCollection) {
-  await flush(collection)
-  collection.forceStop()
+async function remote(source: OpencodeDocSource, collection: DocCollection, root: string, page: string) {
+  await load(source, root, collection.doc)
+  const doc = bind(collection, page)
+  if (!doc) return
+  if (!doc.loaded) doc.load()
+  await load(source, page, doc.spaceDoc)
+  if (!doc.root) return
+  return doc
 }
 
 export type DocMountInput = {
@@ -208,38 +199,52 @@ export async function createPage(input: DocMountInput) {
   ])
 
   const schema = new Schema().register(AffineSchemas)
+  const page = "page"
+  let doc: Doc | undefined
   let collection: DocCollection
-  let source: OpencodeDocSource | undefined
+  let direct: OpencodeDocSource | undefined
+  let unlink: (() => void) | undefined
   let awareness: OpencodeAwarenessSource | undefined
 
   if (input.sync) {
-    source = new OpencodeDocSource(input.sync)
+    direct = new OpencodeDocSource(input.sync)
     awareness = new OpencodeAwarenessSource(input.sync)
     collection = new DocCollection({
       schema,
       id: input.sync.docID,
-      docSources: { main: source },
       awarenessSources: [awareness],
     })
     collection.meta.initialize()
     collection.awarenessStore.awareness.setLocalStateField("user", { name: input.sync.name })
     collection.awarenessStore.awareness.setLocalStateField("color", input.sync.color)
-    collection.start()
-    await collection.waitForSynced()
+    if (input.init !== false) {
+      doc = await remote(direct, collection, input.sync.docID, page)
+      doc = doc ?? collection.getDoc(page) ?? collection.createDoc({ id: page })
+      if (!doc.loaded) doc.load()
+      await load(direct, page, doc.spaceDoc)
+      if (!doc.root) initDoc(doc)
+      baseline(doc)
+    }
+    collection.awarenessSync.connect()
+    if (input.init === false) {
+      while (!doc) {
+        doc = await remote(direct, collection, input.sync.docID, page)
+        if (doc) break
+        await frame()
+      }
+    }
   } else {
     collection = new DocCollection({ schema })
     collection.meta.initialize()
   }
 
-  const page = "page"
-  const doc =
-    input.sync && input.init === false
-      ? await pageReady(collection, page)
-      : (collection.getDoc(page) ?? collection.createDoc({ id: page }))
+  doc = doc ?? collection.getDoc(page) ?? collection.createDoc({ id: page })
   if (!doc.loaded) doc.load()
   if (!doc.root && input.init !== false) initDoc(doc)
   baseline(doc)
-  if (input.sync) await wait(collection)
+  if (input.sync) {
+    unlink = await link(direct!, collection.doc, doc.spaceDoc)
+  }
 
   const editor = new PageEditor()
   editor.doc = doc
@@ -249,15 +254,11 @@ export async function createPage(input: DocMountInput) {
     editor.std.get(ThemeProvider).app$.value = scheme(input.theme())
   }
 
-  const focus = () => {
+  const focus = async (ready?: Inline) => {
     ensureEditable(doc)
-    const host = editor.host
-    const rich = host?.querySelector("rich-text") ?? editor.querySelector("rich-text")
-    const inline =
-      rich && "inlineEditor" in rich
-        ? (rich as { inlineEditor?: { focusEnd: () => void } }).inlineEditor
-        : undefined
-    inline?.focusEnd()
+    const next = ready ?? (await inlineReady(editor))
+    next.focusEnd()
+    await next.waitForUpdate()
   }
 
   let resize: ResizeObserver | undefined
@@ -285,15 +286,25 @@ export async function createPage(input: DocMountInput) {
 
   const attach = async (el: HTMLElement) => {
     const attached = editor.parentElement === el
+    const events = el.style.pointerEvents
+    el.style.pointerEvents = "none"
+    el.setAttribute("aria-busy", "true")
     if (!attached) el.replaceChildren(editor)
-    await settled(editor.updateComplete)
-    await settled(editor.host?.updateComplete)
-    applyTheme()
-    fit(el)
-    resize?.disconnect()
-    resize = new ResizeObserver(() => fit(el))
-    resize.observe(el)
-    if (!attached) focus()
+    try {
+      await settled(editor.updateComplete)
+      await settled(editor.host?.updateComplete)
+      const ready = await inlineReady(editor)
+      applyTheme()
+      fit(el)
+      resize?.disconnect()
+      resize = new ResizeObserver(() => fit(el))
+      resize.observe(el)
+      if (!attached) await focus(ready)
+      await frame()
+    } finally {
+      el.style.pointerEvents = events
+      el.removeAttribute("aria-busy")
+    }
   }
 
   const detach = () => {
@@ -330,14 +341,14 @@ export async function createPage(input: DocMountInput) {
     if (!doc.canUndo) return
     doc.undo()
     settle()
-    requestAnimationFrame(focus)
+    requestAnimationFrame(() => void focus())
   }
 
   const redo = () => {
     if (!doc.canRedo) return
     doc.redo()
     onHistory()
-    requestAnimationFrame(focus)
+    requestAnimationFrame(() => void focus())
   }
 
   return {
@@ -362,8 +373,8 @@ export async function createPage(input: DocMountInput) {
       resize = undefined
       detach()
       if (input.sync) {
-        await stop(collection)
-        source?.close()
+        unlink?.()
+        direct?.close()
         awareness?.disconnect()
         collection.dispose()
       }

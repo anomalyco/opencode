@@ -137,22 +137,22 @@ export function createPromptDoc(input: PromptDocInput) {
     init = opts?.init ?? init
     if (opts?.sessionID) session = opts.sessionID
     await fresh.attach(el)
+    if (opts?.keep) await current?.dispose()
     live = id
     setDocID(id)
     setReady(true)
     syncHistory()
     bindHistory()
-    if (opts?.keep) void current?.dispose().catch(() => undefined)
   }
 
-  const pivot = (sessionID: string, next: string, opts?: { init?: boolean }) => {
-    if (live === next && handle?.collection.id === next && sync?.docID === next) return Promise.resolve()
+  const pivot = (sessionID: string, next: string, opts?: { init?: boolean; force?: boolean }) => {
+    if (!opts?.force && live === next && handle?.collection.id === next && sync?.docID === next) return Promise.resolve()
     const should = opts?.init ?? true
-    if (pending?.id === next && (pending.init || !should)) return pending.task
+    if (!opts?.force && pending?.id === next && (pending.init || !should)) return pending.task
     const mark = ++seq
 
     const run = async () => {
-      if (handle?.collection.id === next && session === sessionID && sync?.docID === next) return
+      if (!opts?.force && handle?.collection.id === next && session === sessionID && sync?.docID === next) return
 
       if (session !== sessionID || !sync) await ensure(sessionID)
       if (!sync) return
@@ -162,7 +162,6 @@ export function createPromptDoc(input: PromptDocInput) {
         init: should,
         sessionID,
         docID: next,
-        keep: Boolean(handle && mounted),
         seq: mark,
       })
     }
@@ -266,6 +265,13 @@ export function createPromptDoc(input: PromptDocInput) {
     const next = (await res.json()) as { docID: string }
     if (!next.docID) throw new Error("prompt doc advance failed")
     await pivot(sessionID, next.docID, { init: true })
+    const ready = await input.fetch(api(input, `/session/${sessionID}/prompt-doc/ready`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ docID: next.docID, clientID }),
+    })
+    const readyType = ready.headers.get("content-type") ?? ""
+    if (!ready.ok || !readyType.includes("application/json")) throw new Error("prompt doc ready failed")
     return next.docID
   }
 
