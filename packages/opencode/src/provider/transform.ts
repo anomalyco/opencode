@@ -1039,7 +1039,13 @@ export function options(input: {
 
   if (
     input.model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
-    (!input.model.api.id.includes("claude") && input.model.api.npm === "@ai-sdk/anthropic")
+    (!input.model.api.id.includes("claude") && input.model.api.npm === "@ai-sdk/anthropic") ||
+    // Bedrock and Bedrock-compatible proxies reject eager_input_streaming for
+    // claude-3.x and claude-sonnet-4-5; disable tool streaming for these models.
+    (input.model.api.npm === "@ai-sdk/anthropic" && (
+      input.model.api.id.includes("claude-3") ||
+      input.model.api.id.includes("claude-sonnet-4-5")
+    ))
   ) {
     result["toolStreaming"] = false
   }
