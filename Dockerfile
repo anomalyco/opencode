@@ -1,28 +1,102 @@
-# syntax=docker/dockerfile:1
-FROM oven/bun:1.3
+# syntax=docker/dockerfile:1.7
+#
+# Multi-stage build optimised for fast iteration during development.
+#
+# Layer-cache strategy:
+#   1. apt deps + plugin pre-install     → stable, change rarely → top of file
+#   2. manifests-only COPY → bun install → cached unless package.json/lockfile changes
+#   3. full source COPY → bun run build  → only this stage re-runs on source edits
+#
+# Typical iteration after a source edit: only stage 3 rebuilds.
+# Cold build time: ~the same.  Warm rebuild after a source-only edit: ~minutes saved.
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 1 — extract only the files `bun install` needs so the install layer is
+# cached independently of source-code edits.
+#
+# We COPY the whole context (invalidates on any change) then strip everything
+# except:
+#   - package.json files (every workspace + root)
+#   - bun.lock / bun.lockb
+#   - patches/* — referenced by `patchedDependencies` in root package.json;
+#                 bun install fails immediately if any patch file is missing
+#   - .npmrc / .bunfig.toml — registry/auth config, if present
+#
+# The OUTPUT of this stage is content-addressed: if none of those files change,
+# downstream COPY --from=manifests is a cache hit and `bun install` is skipped.
+# ─────────────────────────────────────────────────────────────────────────────
+FROM busybox AS manifests
+WORKDIR /m
+COPY . .
+RUN find . -type f \
+      ! -name 'package.json' \
+      ! -name 'bun.lock' \
+      ! -name 'bun.lockb' \
+      ! -name '.npmrc' \
+      ! -name 'bunfig.toml' \
+      ! -path './patches/*' \
+      -delete && \
+    find . -type d -empty -delete
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 2 — system deps + opencode plugin pre-install + workspace deps install.
+# Anything in this stage is reused as long as manifests don't change.
+# ─────────────────────────────────────────────────────────────────────────────
+FROM oven/bun:1.3 AS deps
 WORKDIR /app
 
-# git for server-side repo cloning; build tools for native npm packages
+# System packages — git for the workspace repo cloning at runtime; build tools
+# in case native modules need to compile (tree-sitter / pty fall back to wasm
+# when --ignore-scripts is used, but g++/python3/make are still cheap insurance);
+# nodejs/npm are required by @npmcli/arborist (opencode's plugin loader).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git ca-certificates python3 make g++ nodejs npm \
-    && rm -rf /var/lib/apt/lists/*
+        git ca-certificates python3 make g++ nodejs npm && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy source
-COPY . .
+# Pre-install opencode-claude-auth into opencode's npm package cache.
+# Lives at /root/.cache/opencode/packages/<sanitized-pkg>/node_modules/<name>.
+# At runtime, @opencode-ai/core/npm.ts checks `existsSafe(...)` and short-circuits,
+# avoiding an ~18 s arborist.reify() that would otherwise block the event loop
+# the first time a collab session is created.
+#
+# Cache mount on /root/.npm keeps the npm download cache between builds so this
+# step is ~instant on subsequent builds (uses cached tarballs).
+RUN --mount=type=cache,target=/root/.npm \
+    PLUGIN_CACHE=/root/.cache/opencode/packages/opencode-claude-auth@latest && \
+    mkdir -p "$PLUGIN_CACHE" && \
+    printf '{"name":"opencode-plugin-cache","version":"1.0.0","private":true,"dependencies":{"opencode-claude-auth":"latest"}}\n' \
+      > "$PLUGIN_CACHE/package.json" && \
+    npm install --prefix "$PLUGIN_CACHE" --ignore-scripts --no-audit --no-fund 2>&1 | tail -3 && \
+    echo "opencode-claude-auth pre-install complete" || \
+    echo "WARNING: opencode-claude-auth pre-install failed; will install lazily at runtime"
 
-# Install — cache mount keeps tarballs between builds, --ignore-scripts skips
-# native compilation (tree-sitter/pty) so the image starts fast;
-# those features work fine without native binaries via wasm/fallback.
+# Pre-create directories that opencode and the collab workspace need at runtime.
+RUN mkdir -p /var/opencode/workspaces /root/.local/share/opencode /root/.config/opencode && \
+    printf '{"plugin":["opencode-claude-auth@latest"]}\n' > /root/.config/opencode/opencode.json
+
+# Bring in ONLY manifests, then install workspace deps.
+# Cache mount on /root/.bun/install/cache keeps the bun package store between builds.
+COPY --from=manifests /m/ ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --no-optional --ignore-scripts
 
-# Build the SolidJS web app (collab features in packages/app/src/pages/collab/)
-RUN bun run --cwd packages/app build
 
-# Workspace dirs + opencode config with claude-auth plugin
-RUN mkdir -p /var/opencode/workspaces /root/.local/share/opencode /root/.config/opencode && \
-    printf '{"plugin":["opencode-claude-auth@latest"]}\n' > /root/.config/opencode/opencode.json
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 3 — build the SolidJS web app.  Only this stage re-runs on source edits.
+# Inherits node_modules + all caches from the `deps` stage.
+# ─────────────────────────────────────────────────────────────────────────────
+FROM deps AS build
+WORKDIR /app
+
+# Copy the full source.  This invalidates on every source change — that's fine,
+# because the expensive `bun install` above is already done.
+COPY . .
+
+# Build the web app (Vite + SolidJS).  Cache mount keeps Vite's dep optimizer
+# warm between builds — ~10–20 s saved on subsequent builds.
+RUN --mount=type=cache,target=/app/packages/app/node_modules/.vite \
+    bun run --cwd packages/app build
 
 ENV NODE_ENV=production
 EXPOSE 4096

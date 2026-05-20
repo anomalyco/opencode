@@ -17,7 +17,7 @@ export interface CollabDB {
     createdAt: number
   }): void
 
-  updateSuggestionStatus(id: string, status: "approved" | "rejected"): void
+  updateSuggestionStatus(id: string, status: "approved" | "rejected" | "submitted"): void
 
   incrementVoteScore(suggestionId: string): { newScore: number }
 

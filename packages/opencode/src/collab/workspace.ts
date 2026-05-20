@@ -9,10 +9,26 @@
  * (configurable via COLLAB_WORKSPACE_ROOT env var)
  */
 
-import { execSync, spawnSync } from "child_process"
+import { spawn } from "child_process"
 import { mkdirSync, rmSync, existsSync } from "fs"
 import { join } from "path"
 import type { Participant } from "@opencode-ai/collab"
+
+/** Run a command asynchronously and resolve/reject when it exits. */
+function runAsync(cmd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; cwd?: string } = {}): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, {
+      stdio: "inherit",
+      env: opts.env ?? process.env,
+      cwd: opts.cwd,
+    })
+    child.on("close", (code) => {
+      if (code === 0) resolve()
+      else reject(new Error(`${cmd} ${args.join(" ")} exited with code ${code}`))
+    })
+    child.on("error", reject)
+  })
+}
 
 function workspaceRoot(): string {
   return process.env["COLLAB_WORKSPACE_ROOT"] ?? "/var/opencode/workspaces"
@@ -28,6 +44,22 @@ export function repoWorkspacePath(collabSessionId: string, repoFullName: string)
 }
 
 /**
+ * Directory we hand to the native opencode session.
+ *
+ * Single-repo collab session: use the repo subdirectory directly so that
+ * opencode's git/diff tooling, file tree, and the "review" pane see a proper
+ * git repository (the LLM gets correct context for code edits + commits).
+ *
+ * Multi-repo / repo-less collab session: fall back to the session workspace
+ * root.  The LLM can navigate between repo subdirs manually; opencode's
+ * repo-aware features won't be active.
+ */
+export function nativeSessionDirectory(collabSessionId: string, repos: string[]): string {
+  if (repos.length === 1) return repoWorkspacePath(collabSessionId, repos[0]!)
+  return sessionWorkspacePath(collabSessionId)
+}
+
+/**
  * Clone all repos for a Collab Session at session creation.
  * Uses GITHUB_TOKEN for authentication (supports private repos).
  */
@@ -39,14 +71,15 @@ export async function initSessionWorkspace(
   mkdirSync(root, { recursive: true })
 
   const token = process.env["GITHUB_TOKEN"] ?? ""
+  const env = { ...process.env, GIT_TERMINAL_PROMPT: "0" }
 
   for (const repo of repos) {
     const repoName = repo.split("/").pop() ?? repo
     const dest = join(root, repoName)
 
     if (existsSync(dest)) {
-      // Already cloned — pull latest
-      spawnSync("git", ["-C", dest, "pull", "--ff-only"], { stdio: "inherit" })
+      // Already cloned — pull latest (non-blocking)
+      await runAsync("git", ["-C", dest, "pull", "--ff-only"], { env })
       continue
     }
 
@@ -54,17 +87,7 @@ export async function initSessionWorkspace(
       ? `https://x-access-token:${token}@github.com/${repo}.git`
       : `https://github.com/${repo}.git`
 
-    const result = spawnSync("git", ["clone", "--depth", "100", cloneUrl, dest], {
-      stdio: "inherit",
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: "0",
-      },
-    })
-
-    if (result.status !== 0) {
-      throw new Error(`Failed to clone ${repo} into ${dest}`)
-    }
+    await runAsync("git", ["clone", "--depth", "100", cloneUrl, dest], { env })
   }
 }
 
@@ -100,20 +123,20 @@ export function buildCoAuthorTrailers(
 /**
  * Set git identity for a workspace directory using the Driver's GitHub identity.
  */
-export function configureWorkspaceGitIdentity(
+export async function configureWorkspaceGitIdentity(
   repoPath: string,
   githubLogin: string,
   githubId: number,
-): void {
+): Promise<void> {
   const email = `${githubId}+${githubLogin}@users.noreply.github.com`
-  execSync(`git -C "${repoPath}" config user.name "${githubLogin}"`)
-  execSync(`git -C "${repoPath}" config user.email "${email}"`)
+  await runAsync("git", ["-C", repoPath, "config", "user.name", githubLogin])
+  await runAsync("git", ["-C", repoPath, "config", "user.email", email])
 }
 
 /**
  * Push committed changes for a workspace repo back to the GitHub remote.
  */
-export function pushWorkspace(repoPath: string): { success: boolean; error?: string } {
+export async function pushWorkspace(repoPath: string): Promise<{ success: boolean; error?: string }> {
   const token = process.env["GITHUB_TOKEN"] ?? ""
   const env = token
     ? {
@@ -124,13 +147,10 @@ export function pushWorkspace(repoPath: string): { success: boolean; error?: str
       }
     : process.env
 
-  const result = spawnSync("git", ["-C", repoPath, "push", "origin", "HEAD"], {
-    env,
-    encoding: "utf8",
-  })
-
-  if (result.status !== 0) {
-    return { success: false, error: result.stderr }
+  try {
+    await runAsync("git", ["-C", repoPath, "push", "origin", "HEAD"], { env })
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
   }
-  return { success: true }
 }

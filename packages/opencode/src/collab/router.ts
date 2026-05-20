@@ -36,14 +36,55 @@ import * as Queue from "@opencode-ai/collab"
 import * as Room from "./room"
 import { runCollabMigrations } from "./migrate"
 import { collabDb } from "./db-impl"
-import { initSessionWorkspace, cleanupSessionWorkspace, sessionWorkspacePath } from "./workspace"
+import {
+  initSessionWorkspace,
+  cleanupSessionWorkspace,
+  sessionWorkspacePath,
+  nativeSessionDirectory,
+} from "./workspace"
 import type { CollabEvent } from "@opencode-ai/collab"
+
+/**
+ * Register the queue executor for a collab session.
+ *
+ * The executor is called by _scheduleNext whenever a suggestion reaches
+ * "approved" status.  It immediately marks the suggestion as "submitted"
+ * (removing it from the approved queue so the loop doesn't repeat) and
+ * then dispatches the prompt to the native opencode session.
+ *
+ * This must be called:
+ *   1. At session creation (POST /collab/session)
+ *   2. From ensureQueueRegistered — handles server restarts where in-memory
+ *      queue state is lost but DB sessions survive.
+ */
+function registerQueueExecutor(collabSessionId: string): void {
+  Queue.registerSession(collabSessionId, collabDb, async (suggestion) => {
+    // Mark "submitted" immediately — this removes the suggestion from
+    // getApprovedQueue so _scheduleNext won't call us again for this item.
+    collabDb.updateSuggestionStatus(suggestion.id, "submitted")
+
+    // Notify listeners that the prompt is being processed
+    broadcastSse(collabSessionId, {
+      type: "collab:prompt_submitted",
+      suggestion: { ...suggestion, status: "submitted" },
+      queuePosition: 0,
+    })
+
+    // Dispatch to native opencode session.  Single-repo sessions hand opencode
+    // the repo subdir directly (so git diff / review pane see a real repo).
+    const cs = Session.getCollabSession(collabSessionId)
+    if (!cs) return
+    const workspacePath = nativeSessionDirectory(collabSessionId, cs.repos)
+    await executePromptOnNativeSession(cs, suggestion.content, workspacePath)
+  })
+}
 
 function ensureQueueRegistered(collabSessionId: string) {
   try {
     Queue.getQueue(collabSessionId)
   } catch {
-    Queue.registerSession(collabSessionId, collabDb, async () => {})
+    // Session not yet registered (server restart) — register with full executor
+    registerQueueExecutor(collabSessionId)
   }
 }
 import { Database } from "@/storage/db"
@@ -52,29 +93,111 @@ import { eq, gt } from "drizzle-orm"
 
 // ── Native session execution ────────────────────────────────────────────────────
 // Sends a prompt to the underlying opencode session, creating it first if needed.
+//
+// ⚠️  Self-HTTP calls (fetch to localhost:4096) within the server process can
+//     block the Bun/Node event loop if the receiving handler triggers
+//     @npmcli/arborist to install packages synchronously.  To avoid this:
+//
+//  1. The Dockerfile pre-installs opencode-claude-auth so Npm.add() is a fast
+//     cache-hit at runtime (no arborist.reify needed).
+//  2. We pre-warm the native session at COLLAB SESSION CREATION time
+//     (preWarmNativeSession), so by the time the user clicks Approve the
+//     InstanceStore for the workspace directory is already bootstrapped and
+//     collabSession.sessionId is set.  The approve path then only needs the
+//     lightweight prompt_async call.
 
+/**
+ * Ensure a native opencode session exists for the given workspace path,
+ * creating one if necessary.  Stores the result in the collab session and
+ * broadcasts `collab:native_session_linked`.
+ *
+ * Returns the native session ID, or null on failure.
+ */
+async function ensureNativeSession(
+  collabSessionId: string,
+  workspacePath: string,
+): Promise<string | null> {
+  const collabSession = Session.getCollabSession(collabSessionId)
+  if (!collabSession) return null
+
+  // Fast path: session already created
+  if (collabSession.sessionId) return collabSession.sessionId
+
+  const { mkdirSync } = await import("fs")
+  mkdirSync(workspacePath, { recursive: true })
+
+  console.log("[collab] creating native session for directory:", workspacePath)
+  const createRes = await fetch(
+    `http://localhost:4096/session?directory=${encodeURIComponent(workspacePath)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // Pass the collab session name through as the opencode session title
+      // so the right-hand pane shows "Fix login bug" instead of "New Session".
+      body: JSON.stringify({ title: collabSession.name }),
+    },
+  )
+  if (!createRes.ok) {
+    const body = await createRes.text()
+    console.error("[collab] failed to create native session:", createRes.status, body)
+    return null
+  }
+  const created = (await createRes.json()) as { id: string }
+  console.log("[collab] native session created:", created.id)
+
+  // Persist the link and notify all connected clients
+  Session.linkNativeSession(collabSessionId, created.id)
+  broadcastSse(collabSessionId, {
+    type: "collab:native_session_linked",
+    sessionId: created.id,
+    directory: workspacePath,
+  })
+
+  return created.id
+}
+
+/**
+ * Pre-warms the native opencode session shortly after a collab session is
+ * created.  This moves the slow InstanceStore.load / plugin bootstrap out of
+ * the approve-click hot-path so approvals are near-instant.
+ *
+ * Runs fire-and-forget after a small delay to let the collab session creation
+ * HTTP response flush before we make the self-fetch.
+ */
+function preWarmNativeSession(collabSessionId: string, workspacePath: string): void {
+  setTimeout(async () => {
+    const cs = Session.getCollabSession(collabSessionId)
+    if (!cs) return // session already deleted
+    if (cs.sessionId) return // already pre-warmed
+
+    console.log("[collab] pre-warming native session for collab session:", collabSessionId)
+    try {
+      await ensureNativeSession(collabSessionId, workspacePath)
+      console.log("[collab] native session pre-warm complete for:", collabSessionId)
+    } catch (err) {
+      // Non-fatal: the approve path will retry
+      console.error("[collab] native session pre-warm failed:", err)
+    }
+  }, 200) // 200 ms gives the creation response time to flush
+}
+
+/**
+ * Dispatches an approved prompt to the native opencode session.
+ * The native session must already exist (pre-warmed at creation time);
+ * if it doesn't, we create it inline as a fallback.
+ */
 async function executePromptOnNativeSession(
   collabSession: NonNullable<ReturnType<typeof Session.getCollabSession>>,
   content: string,
   workspacePath: string,
 ): Promise<void> {
-  let nativeSessionId = collabSession.sessionId
-
+  const nativeSessionId = await ensureNativeSession(collabSession.id, workspacePath)
   if (!nativeSessionId) {
-    const createRes = await fetch(
-      `http://localhost:4096/session?directory=${encodeURIComponent(workspacePath)}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
-    )
-    if (!createRes.ok) {
-      console.error("[collab] failed to create native session:", await createRes.text())
-      return
-    }
-    const created = (await createRes.json()) as { id: string }
-    nativeSessionId = created.id
-    Session.linkNativeSession(collabSession.id, nativeSessionId)
-    broadcastSse(collabSession.id, { type: "collab:native_session_linked", sessionId: nativeSessionId, directory: workspacePath })
+    console.error("[collab] cannot dispatch prompt — no native session available")
+    return
   }
 
+  console.log("[collab] sending prompt to native session:", nativeSessionId)
   const promptRes = await fetch(
     `http://localhost:4096/session/${nativeSessionId}/prompt_async?directory=${encodeURIComponent(workspacePath)}`,
     {
@@ -84,7 +207,10 @@ async function executePromptOnNativeSession(
     },
   )
   if (!promptRes.ok) {
-    console.error("[collab] failed to send prompt:", await promptRes.text())
+    const body = await promptRes.text()
+    console.error("[collab] failed to send prompt:", promptRes.status, body)
+  } else {
+    console.log("[collab] prompt dispatched to native session:", nativeSessionId)
   }
 }
 
@@ -436,18 +562,26 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       visibilityMode: (body.visibilityMode as any) ?? "submitted",
       queueMode: (body.queueMode as any) ?? "fifo",
     })
-    // Register queue engine for this session
-    Queue.registerSession(created.id, collabDb, async (suggestion) => {
-      broadcastSse(created.id, { type: "collab:prompt_submitted", suggestion, queuePosition: 0 })
-      // Actual LLM execution is handled by the existing opencode session pipeline
-      // The collab session is linked to a native session which does the real work
-    })
-    // Clone selected repos into server workspace (non-blocking)
+    // Register queue executor — handles dispatch + "submitted" status tracking
+    registerQueueExecutor(created.id)
+
+    // Clone repos, THEN pre-warm the native session pointed at the cloned
+    // directory.  Sequencing matters: opencode needs the repo on disk before
+    // InstanceStore.load — otherwise the file tree, git status, and diff/review
+    // pane all start empty.
+    const warmupDirectory = nativeSessionDirectory(created.id, created.repos)
     if (created.repos.length > 0) {
-      initSessionWorkspace(created.id, created.repos).catch((err) => {
-        console.error("[collab] workspace init failed:", err)
-      })
+      initSessionWorkspace(created.id, created.repos)
+        .then(() => preWarmNativeSession(created.id, warmupDirectory))
+        .catch((err) => {
+          console.error("[collab] workspace init failed:", err)
+          // Still pre-warm against the workspace root so the iframe at least loads
+          preWarmNativeSession(created.id, sessionWorkspacePath(created.id))
+        })
+    } else {
+      preWarmNativeSession(created.id, warmupDirectory)
     }
+
     return json(created, 201)
   }
 
@@ -463,8 +597,14 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
 
   // GET /collab/session/:id
   if (req.method === "GET" && parts.length === 3) {
-    // Include workspacePath so the client can build the iframe URL on page reload
-    return json({ ...collabSession, workspacePath: sessionWorkspacePath(sessionId) })
+    // workspacePath is what the client uses to build the iframe URL on page reload.
+    // It MUST match the directory we hand to opencode in executePromptOnNativeSession,
+    // otherwise the iframe points at a different opencode InstanceStore than the
+    // one running the LLM (session-not-found in the iframe).
+    return json({
+      ...collabSession,
+      workspacePath: nativeSessionDirectory(sessionId, collabSession.repos),
+    })
   }
 
   // DELETE /collab/session/:id — Drivers only
@@ -498,11 +638,32 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     return json({ ...invite, url: Invite.inviteUrl(c.baseUrl, invite.token) }, 201)
   }
 
-  // POST /collab/session/:id/prompt — add to queue as pending (Drivers + Contributors)
+  // POST /collab/session/:id/prompt — submit a prompt.
+  //
+  // Routing depends on (queueMode, caller.role):
+  //
+  //   FIFO  + Driver       → instant dispatch to opencode (no approval needed).
+  //                          Queue.enqueue inserts as "approved" and triggers
+  //                          _scheduleNext → executor → LLM.
+  //
+  //   FIFO  + Contributor  → queue as "pending"; a Driver must approve.
+  //
+  //   Vote  + anyone       → queue as "pending" in the vote pool; Drivers
+  //                          resolve via /resolve.  Drivers do NOT get to
+  //                          unilaterally bypass voting in vote mode.
   if (req.method === "POST" && parts[3] === "prompt") {
     if (caller.role === "viewer") return json({ error: "Forbidden — Viewers cannot submit prompts" }, 403)
     const body = (await req.json()) as { content: string }
     ensureQueueRegistered(sessionId)
+
+    if (collabSession.queueMode === "fifo" && caller.role === "driver") {
+      // Direct dispatch — bypass approval.  Executor handles the rest:
+      // marks "submitted", broadcasts collab:prompt_submitted, dispatches.
+      const suggestion = Queue.enqueue(sessionId, body.content, sess.githubId, sess.githubLogin)
+      return json(suggestion, 201)
+    }
+
+    // Pending — needs Driver approval (FIFO contributor) or pool resolve (Vote).
     const suggestion = Queue.submitToPool(sessionId, body.content, sess.githubId, sess.githubLogin)
     broadcastSse(sessionId, { type: "collab:prompt_suggestion", suggestion })
     broadcastSse(sessionId, { type: "collab:queue_update", queue: collabDb.getPendingPool(sessionId) })
@@ -526,11 +687,8 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     if (!approved) return json({ error: "Suggestion not found" }, 404)
     broadcastSse(sessionId, { type: "collab:suggestion_approved", suggestionId: parts[4], approvedBy: sess.githubLogin })
     broadcastSse(sessionId, { type: "collab:queue_update", queue: collabDb.getPendingPool(sessionId) })
-
-    // Execute on native session
-    const workspacePath = sessionWorkspacePath(sessionId)
-    executePromptOnNativeSession(collabSession, approved.content, workspacePath).catch(console.error)
-
+    // LLM dispatch is handled by the queue executor (registerQueueExecutor).
+    // Queue.approveSuggestion → _scheduleNext → executor → executePromptOnNativeSession
     return json(approved)
   }
 
@@ -539,6 +697,28 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     if (caller.role !== "driver") return json({ error: "Forbidden — Drivers only" }, 403)
     Queue.rejectSuggestion(sessionId, parts[4])
     broadcastSse(sessionId, { type: "collab:suggestion_rejected", suggestionId: parts[4], rejectedBy: sess.githubLogin })
+    // Refresh the pending pool so the rejected item disappears from the UI.
+    // Without this the suggestion stays visible — client handleEvent has no
+    // case for collab:suggestion_rejected, only for queue_update.
+    broadcastSse(sessionId, { type: "collab:queue_update", queue: collabDb.getPendingPool(sessionId) })
+    return json({ ok: true })
+  }
+
+  // POST /collab/session/:id/typing — debounced typing indicator
+  //
+  // Body: { typing: boolean }
+  // Broadcasts `collab:typing_start` / `collab:typing_stop` so other clients
+  // can render a "[name] is typing…" hint next to the participant.
+  // Respects visibilityMode — silently no-ops when the session is set to
+  // "submitted" (since the whole point of that mode is to NOT leak typing).
+  if (req.method === "POST" && parts[3] === "typing") {
+    if (caller.role === "viewer") return json({ ok: true })
+    if (collabSession.visibilityMode !== "typing") return json({ ok: true })
+    const body = (await req.json().catch(() => ({}))) as { typing?: boolean }
+    broadcastSse(sessionId, {
+      type: body.typing ? "collab:typing_start" : "collab:typing_stop",
+      githubLogin: sess.githubLogin,
+    })
     return json({ ok: true })
   }
 
@@ -558,11 +738,13 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
   // POST /collab/session/:id/resolve — Driver resolves vote pool
   if (req.method === "POST" && parts[3] === "resolve") {
     if (caller.role !== "driver") return json({ error: "Forbidden — Drivers only" }, 403)
+    ensureQueueRegistered(sessionId)
     const winner = Queue.resolvePool(sessionId)
     if (!winner) return json({ error: "No pending suggestions" }, 404)
     broadcastSse(sessionId, { type: "collab:vote_winner", suggestionId: winner.id, content: winner.content })
-    const queue = Queue.getQueue(sessionId)
-    broadcastSse(sessionId, { type: "collab:queue_update", queue })
+    // Show the remaining pending pool (not the approved queue)
+    broadcastSse(sessionId, { type: "collab:queue_update", queue: collabDb.getPendingPool(sessionId) })
+    // LLM dispatch is handled by the queue executor — resolvePool → _scheduleNext → executor
     return json(winner)
   }
 
@@ -634,6 +816,9 @@ function handleSse(
     cancel() {
       unregister?.()
       Participant.setOnline(collabSessionId, sess.githubId, false)
+      // Clear any lingering "is typing…" indicator from this user — if they
+      // disconnect while typing, others would otherwise see the dot forever.
+      broadcastSse(collabSessionId, { type: "collab:typing_stop", githubLogin: sess.githubLogin })
       broadcastSse(collabSessionId, { type: "collab:participant_left", githubLogin: sess.githubLogin })
     },
   })

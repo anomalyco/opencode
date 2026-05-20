@@ -1,10 +1,20 @@
 export type CollabRole = "driver" | "contributor" | "viewer"
 
-export type VisibilityMode = "submitted" | "typing" | "live"
+/**
+ * How much of a participant's pre-submit activity is visible to others.
+ *   "submitted" — others only see the prompt once it has been sent
+ *   "typing"   — others see a "[name] is typing…" indicator (no content)
+ *
+ * NOTE: a previous "live" mode that broadcast keystroke-by-keystroke drafts
+ * has been removed; the keystroke event type is retained for back-compat
+ * deserialization but is never emitted by the server anymore.
+ */
+export type VisibilityMode = "submitted" | "typing"
 
 export type QueueMode = "fifo" | "vote"
 
-export type SuggestionStatus = "pending" | "approved" | "rejected"
+/** "submitted" means the prompt has been dispatched to the LLM; it is no longer in the approved queue. */
+export type SuggestionStatus = "pending" | "approved" | "rejected" | "submitted"
 
 export interface CollabSession {
   id: string

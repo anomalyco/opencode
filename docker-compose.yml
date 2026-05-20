@@ -25,9 +25,15 @@ services:
 
       # Serve our locally-built app instead of proxying app.opencode.ai
       - OPENCODE_LOCAL_UI_PATH=/app/packages/app/dist
+      # Skip the embedded-UI dynamic import (opencode-web-ui.gen.ts).
+      # Without this, every GET / hangs waiting for the import to fail, which
+      # blocks the health check and all other requests for the entire session.
+      - OPENCODE_DISABLE_EMBEDDED_WEB_UI=true
 
-      # LLM provider keys — pass through whatever is set in .env
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # LLM — use Claude Code subscription credentials (bind-mounted below).
+      # Set to "dummy" so opencode's provider loader sees a non-empty value and
+      # lets the opencode-claude-auth plugin take over authentication.
+      - ANTHROPIC_API_KEY=dummy
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
 
     volumes:
