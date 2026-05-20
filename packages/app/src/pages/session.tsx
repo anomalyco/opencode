@@ -1935,8 +1935,18 @@ export default function Page() {
               <ResizeHandle
                 direction="horizontal"
                 size={layout.session.width()}
-                min={450}
-                max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
+                // Allow a much wider drag range than upstream so users can
+                // either stretch the LLM-chat column very wide (collapsing
+                // the review/git-changes panel down to a thin sidebar) or
+                // narrow it to give the review panel most of the width.
+                // min: 280px — still wide enough for the conversation to be
+                //               readable
+                // max: innerWidth - 240 — leaves a 240px minimum for the
+                //               review panel (so its toggle/scroll stay
+                //               reachable).  Use the review-panel toggle to
+                //               hide it entirely.
+                min={280}
+                max={typeof window === "undefined" ? 1200 : Math.max(280, window.innerWidth - 240)}
                 onResize={(width) => {
                   size.touch()
                   layout.session.resize(width)
