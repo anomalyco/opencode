@@ -3,8 +3,9 @@ import { SessionMessage } from "@opencode-ai/core/session-message"
 import { Prompt } from "@opencode-ai/core/session-prompt"
 import { SessionV2 } from "@/v2/session"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { Authorization } from "../../middleware/authorization"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { InvalidCursorError, InvalidRequestError } from "../../errors"
+import { V2Authorization } from "../../middleware/authorization"
 import { WorkspaceRoutingQuery, WorkspaceRoutingQueryFields } from "../../middleware/workspace-routing"
 import { QueryBoolean } from "../query"
 
@@ -41,7 +42,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
           next: Schema.String.pipe(Schema.optional),
         }),
       }).annotate({ identifier: "V2SessionsResponse" }),
-      error: HttpApiError.BadRequest,
+      error: [InvalidCursorError, InvalidRequestError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.list",
@@ -113,4 +114,4 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       description: "Experimental v2 routes.",
     }),
   )
-  .middleware(Authorization)
+  .middleware(V2Authorization)
