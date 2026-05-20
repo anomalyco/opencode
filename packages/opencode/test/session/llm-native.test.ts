@@ -139,16 +139,16 @@ describe("session.llm-native.request", () => {
       id: "gpt-5-mini",
       provider: "openai",
       route: { id: "openai-responses" },
-      headers: {
-        "x-model": "model-header",
-        "x-request": "request-header",
-      },
-      limits: {
-        context: 128_000,
-        output: 32_000,
-      },
     })
     expect(request.model.route.endpoint.baseURL).toBe("https://api.openai.com/v1")
+    expect(request.model.route.defaults.headers).toEqual({
+      "x-model": "model-header",
+      "x-request": "request-header",
+    })
+    expect(request.model.route.defaults.limits).toMatchObject({
+      context: 128_000,
+      output: 32_000,
+    })
     expect(request.system).toEqual([
       { type: "text", text: "agent system" },
       { type: "text", text: "system from messages" },

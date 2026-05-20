@@ -1,5 +1,5 @@
 import type { JsonSchema, LLMRequest, ProviderMetadata } from "@opencode-ai/llm"
-import { LLM, Message, Model, SystemPart, ToolCallPart, ToolDefinition, ToolResultPart } from "@opencode-ai/llm"
+import { Auth, LLM, Message, Model, SystemPart, ToolCallPart, ToolDefinition, ToolResultPart } from "@opencode-ai/llm"
 import { OpenRouter, Azure } from "@opencode-ai/llm/providers"
 import {
   AnthropicMessages,
@@ -168,13 +168,16 @@ export const model = (input: Provider.Model | RequestInput, headers?: Record<str
   return Model.make({
     id: model.api.id,
     provider: model.providerID,
-    route: route.with({ endpoint: { baseURL: "model" in input && input.baseURL ? input.baseURL : baseURL(model) } }),
-    apiKey: "model" in input ? input.apiKey : undefined,
-    headers: Object.keys({ ...model.headers, ...headers }).length === 0 ? undefined : { ...model.headers, ...headers },
-    limits: {
-      context: model.limit.context,
-      output: model.limit.output,
-    },
+    route: route.with({
+      endpoint: { baseURL: "model" in input && input.baseURL ? input.baseURL : baseURL(model) },
+      ...("model" in input && input.apiKey ? { auth: Auth.bearer(input.apiKey) } : {}),
+      headers:
+        Object.keys({ ...model.headers, ...headers }).length === 0 ? undefined : { ...model.headers, ...headers },
+      limits: {
+        context: model.limit.context,
+        output: model.limit.output,
+      },
+    }),
   })
 }
 

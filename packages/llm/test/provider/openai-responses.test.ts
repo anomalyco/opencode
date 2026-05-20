@@ -509,17 +509,36 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("lowers user image content", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          id: "req_media",
+          model,
+          messages: [Message.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          role: "user",
+          content: [{ type: "input_image", image_url: "data:image/png;base64,AAECAw==" }],
+        },
+      ])
+    }),
+  )
+
   it.effect("rejects unsupported user media content", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.prepare(
         LLM.request({
           id: "req_media",
           model,
-          messages: [Message.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [Message.user({ type: "media", mediaType: "application/pdf", data: "AAECAw==" })],
         }),
       ).pipe(Effect.flip)
 
-      expect(error.message).toContain("OpenAI Responses user messages only support text content for now")
+      expect(error.message).toContain("OpenAI Responses user media content only supports images")
     }),
   )
 

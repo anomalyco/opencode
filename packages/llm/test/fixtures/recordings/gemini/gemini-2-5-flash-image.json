@@ -7,14 +7,7 @@
     "route": "gemini",
     "transport": "http",
     "model": "gemini-2.5-flash",
-    "tags": [
-      "prefix:gemini",
-      "provider:google",
-      "media",
-      "image",
-      "vision",
-      "golden"
-    ]
+    "tags": ["prefix:gemini", "provider:google", "media", "image", "vision", "golden"]
   },
   "interactions": [
     {
