@@ -274,6 +274,26 @@ function setEnvScoped(key: string, value: string) {
 }
 
 describe("provider HttpApi", () => {
+  it.instance.skip(
+    "returns public v2 provider not found errors",
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const response = yield* Effect.promise(() =>
+        Promise.resolve(
+          app().request("/api/provider/missing", { headers: { "x-opencode-directory": instance.directory } }),
+        ),
+      )
+
+      expect(response.status).toBe(404)
+      expect(yield* Effect.promise(() => response.json())).toEqual({
+        _tag: "ProviderNotFoundError",
+        providerID: "missing",
+        message: "Provider not found: missing",
+      })
+    }),
+    projectOptions,
+  )
+
   it.instance(
     "serves OAuth authorize response shapes",
     Effect.gen(function* () {

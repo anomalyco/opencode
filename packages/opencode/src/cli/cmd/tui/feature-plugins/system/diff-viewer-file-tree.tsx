@@ -1,7 +1,11 @@
 /** @jsxImportSource @opentui/solid */
 import type { ColorInput, ScrollBoxRenderable } from "@opentui/core"
+import { Locale } from "@/util/locale"
 import { createEffect, createMemo, For, Match, Switch } from "solid-js"
 import { buildFileTree, flattenFileTree, type FileTreeItem } from "./diff-viewer-file-tree-utils"
+
+const FILE_TREE_WIDTH = 32
+const FILE_TREE_HORIZONTAL_PADDING = 2
 
 export type DiffViewerFileTreeTheme = {
   readonly background: ColorInput
@@ -41,7 +45,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
 
   return (
     <box
-      width={32}
+      width={FILE_TREE_WIDTH}
       flexShrink={0}
       backgroundColor={props.theme.backgroundPanel}
       paddingLeft={1}
@@ -68,11 +72,15 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
             <For each={rows()}>
               {(row) => {
                 const highlighted = () => props.focused && props.highlightedNode === row.id
+                const prefix = () =>
+                  `${"  ".repeat(row.depth)}${row.kind === "directory" ? (props.expandedNodes && !props.expandedNodes.has(row.id) ? "▸ " : "▾ ") : "  "}`
+                const name = () =>
+                  Locale.truncate(
+                    row.name,
+                    Math.max(1, FILE_TREE_WIDTH - FILE_TREE_HORIZONTAL_PADDING - prefix().length),
+                  )
                 return (
-                  <box flexDirection="row">
-                    <text fg={row.kind === "directory" ? props.theme.textMuted : props.theme.text} wrapMode="none">
-                      {`${"  ".repeat(row.depth)}${row.kind === "directory" ? (props.expandedNodes && !props.expandedNodes.has(row.id) ? "▸ " : "▾ ") : "  "}`}
-                    </text>
+                  <box flexDirection="row" width="100%">
                     <text
                       fg={
                         highlighted()
@@ -83,9 +91,25 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                       }
                       bg={highlighted() ? props.theme.primary : undefined}
                       wrapMode="none"
+                      flexShrink={0}
                     >
-                      {row.name}
+                      {prefix()}
                     </text>
+                    <box flexGrow={1} minWidth={0}>
+                      <text
+                        fg={
+                          highlighted()
+                            ? props.theme.background
+                            : row.kind === "directory"
+                              ? props.theme.textMuted
+                              : props.theme.text
+                        }
+                        bg={highlighted() ? props.theme.primary : undefined}
+                        wrapMode="none"
+                      >
+                        {name()}
+                      </text>
+                    </box>
                   </box>
                 )
               }}

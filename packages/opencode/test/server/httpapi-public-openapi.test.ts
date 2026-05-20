@@ -17,10 +17,7 @@ type OpenApiSpec = { readonly paths: Record<string, OpenApiPathItem> }
 
 const methods = ["get", "post", "put", "delete", "patch"] as const
 
-const allowedV2BuiltInEndpointErrors = [
-  "GET /api/session 400 effect_HttpApiError_BadRequest",
-  "GET /api/session/{sessionID}/message 400 effect_HttpApiError_BadRequest",
-]
+const allowedV2BuiltInEndpointErrors: string[] = []
 
 function v2Operations(spec: OpenApiSpec) {
   return Object.entries(spec.paths).flatMap(([path, item]) =>
@@ -64,9 +61,9 @@ describe("PublicApi OpenAPI v2 errors", () => {
           return ref ? [`${route.method.toUpperCase()} ${route.path} ${status} ${componentName(ref)}`] : []
         }),
       )
-      .filter((entry) => entry.includes("BadRequestError") || entry.includes("NotFoundError"))
+      .filter((entry) => entry.endsWith(" BadRequestError") || entry.endsWith(" NotFoundError"))
 
-    expect(refs).toEqual(["GET /api/provider/{providerID} 404 NotFoundError"])
+    expect(refs).toEqual([])
   })
 
   test("new /api endpoint errors cannot use built-in components without an explicit allowlist", () => {
@@ -84,5 +81,22 @@ describe("PublicApi OpenAPI v2 errors", () => {
       .sort()
 
     expect(builtInEndpointErrors).toEqual(allowedV2BuiltInEndpointErrors)
+  })
+
+  test("documents v2 provider and model catalog errors", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    expect(componentName(responseRef(spec.paths["/api/provider"]?.get?.responses?.["503"]) ?? "")).toBe(
+      "ServiceUnavailableError",
+    )
+    expect(componentName(responseRef(spec.paths["/api/model"]?.get?.responses?.["503"]) ?? "")).toBe(
+      "ServiceUnavailableError",
+    )
+    expect(componentName(responseRef(spec.paths["/api/provider/{providerID}"]?.get?.responses?.["404"]) ?? "")).toBe(
+      "ProviderNotFoundError",
+    )
+    expect(componentName(responseRef(spec.paths["/api/provider/{providerID}"]?.get?.responses?.["503"]) ?? "")).toBe(
+      "ServiceUnavailableError",
+    )
   })
 })
