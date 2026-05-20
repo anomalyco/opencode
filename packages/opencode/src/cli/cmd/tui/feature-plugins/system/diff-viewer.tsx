@@ -127,7 +127,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     const next =
       lastHighlighted !== undefined && fileRows().some((row) => row.id === lastHighlighted)
         ? lastHighlighted
-        : fileRows()[0]?.id
+        : fileRows().find((row) => row.fileIndex !== undefined)?.id
     setHighlightedFileNode(next)
   }
 
