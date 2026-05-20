@@ -12,6 +12,7 @@ import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
+import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
 
 type TauriDesktopWindow = {
@@ -191,6 +192,9 @@ export function Titlebar() {
             "pl-2": !mac(),
           }}
         >
+          <Show when={windows()}>
+            <WindowsAppMenu command={command} platform={platform} />
+          </Show>
           <Show when={mac()}>
             <div class="h-full shrink-0" style={{ width: `${72 / zoom()}px` }} />
             <div class="xl:hidden w-10 shrink-0 flex items-center justify-center">

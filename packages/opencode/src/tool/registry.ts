@@ -25,6 +25,7 @@ import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
 import { RepoCloneTool } from "./repo_clone"
 import { RepoOverviewTool } from "./repo_overview"
+import { RepositoryCache } from "@/reference/repository-cache"
 import * as Log from "@opencode-ai/core/util/log"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
@@ -39,6 +40,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "../file/ripgrep"
 import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
+import { EffectBridge } from "@/effect/bridge"
 import { Question } from "../question"
 import { Todo } from "../session/todo"
 import { LSP } from "@/lsp/lsp"
@@ -93,6 +95,7 @@ export const layer: Layer.Layer<
   | BackgroundJob.Service
   | Provider.Service
   | Git.Service
+  | RepositoryCache.Service
   | Reference.Service
   | LSP.Service
   | Instruction.Service
@@ -142,9 +145,12 @@ export const layer: Layer.Layer<
         function fromPlugin(id: string, def: ToolDefinition): Tool.Def {
           // Plugin tools still expose Zod args publicly; keep that compatibility
           // boxed at the registry boundary and give the LLM the original JSON Schema.
-          const entries = Object.entries(def.args)
+          // Normalize missing args to `{}` once — pre-1.14.49 the code was
+          // `z.object(def.args)` and Zod silently tolerated undefined (#27451, #27630).
+          const args = def.args ?? {}
+          const entries = Object.entries(args)
           const allZod = entries.every((entry) => isZodType(entry[1]))
-          const zodParams = allZod ? z.object(def.args) : undefined
+          const zodParams = allZod ? z.object(args) : undefined
           const jsonSchema = zodParams ? zodJsonSchema(zodParams) : legacyJsonSchema(entries)
           const parameters = zodParams
             ? Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success)
@@ -156,9 +162,12 @@ export const layer: Layer.Layer<
             description: def.description,
             execute: (args, toolCtx) =>
               Effect.gen(function* () {
+                // Bridge the host's Effect-based `ask` into a Promise-returning
+                // function for the plugin to make sure context persists
+                const bridge = yield* EffectBridge.make()
                 const pluginCtx: PluginToolContext = {
                   ...toolCtx,
-                  ask: (req) => toolCtx.ask(req),
+                  ask: (req) => bridge.promise(toolCtx.ask(req)),
                   directory: ctx.directory,
                   worktree: ctx.worktree,
                 }
@@ -378,7 +387,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Session.defaultLayer),
       Layer.provide(Layer.mergeAll(SessionStatus.defaultLayer, BackgroundJob.defaultLayer)),
       Layer.provide(Provider.defaultLayer),
-      Layer.provide(Git.defaultLayer),
+      Layer.provide(Layer.mergeAll(Git.defaultLayer, RepositoryCache.defaultLayer)),
       Layer.provide(Reference.defaultLayer),
       Layer.provide(LSP.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
