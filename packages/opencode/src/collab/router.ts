@@ -372,19 +372,22 @@ function handleCollabRequestInner(req: Request): Promise<Response> | Response {
       state,
       scopes: ["read:org", "read:user"],
     })
-    const cookies = [
+    // Emit each cookie as its own Set-Cookie header.  Comma-joining in a
+    // single header value breaks browser parsing because cookie `Expires`
+    // values legitimately contain commas — the browser then stores ONE
+    // malformed cookie and never sees `collab_oauth_state`.
+    const headers = new Headers({ Location: oauthUrl })
+    headers.append(
+      "Set-Cookie",
       `collab_oauth_state=${state}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`,
-    ]
+    )
     if (next) {
-      cookies.push(`collab_next=${encodeURIComponent(next)}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`)
+      headers.append(
+        "Set-Cookie",
+        `collab_next=${encodeURIComponent(next)}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`,
+      )
     }
-    return new Response(null, {
-      status: 302,
-      headers: {
-        Location: oauthUrl,
-        "Set-Cookie": cookies.join(", "),
-      },
-    })
+    return new Response(null, { status: 302, headers })
   }
 
   // OAuth callback
@@ -496,16 +499,18 @@ async function handleInviteRedeem(req: Request, token: string): Promise<Response
       redirectUri: `${c.baseUrl}/collab/auth/github/callback`,
       state,
     })
-    return new Response(null, {
-      status: 302,
-      headers: {
-        Location: oauthUrl,
-        "Set-Cookie": [
-          `collab_pending_invite=${token}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`,
-          `collab_oauth_state=${state}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`,
-        ].join(", "),
-      },
-    })
+    // Use Headers.append so each cookie is its own Set-Cookie header — see
+    // the same fix in handleCollabRequestInner's /collab/auth/github branch.
+    const respHeaders = new Headers({ Location: oauthUrl })
+    respHeaders.append(
+      "Set-Cookie",
+      `collab_pending_invite=${token}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`,
+    )
+    respHeaders.append(
+      "Set-Cookie",
+      `collab_oauth_state=${state}; Path=/collab; HttpOnly; SameSite=Lax; Max-Age=600`,
+    )
+    return new Response(null, { status: 302, headers: respHeaders })
   }
 
   const invite = Invite.validateInvite(token)
