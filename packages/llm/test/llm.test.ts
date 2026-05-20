@@ -6,7 +6,7 @@ describe("llm constructors", () => {
   test("builds canonical schema classes from ergonomic input", () => {
     const request = LLM.request({
       id: "req_1",
-      model: LLM.model({ id: "fake-model", provider: "fake", route: "openai-chat", baseURL: "https://fake.local" }),
+      model: ModelRef.make({ id: "fake-model", provider: "fake", route: "openai-chat", baseURL: "https://fake.local" }),
       system: "You are concise.",
       prompt: "Say hello.",
     })
@@ -23,7 +23,7 @@ describe("llm constructors", () => {
   test("updates requests without spreading schema class instances", () => {
     const base = LLM.request({
       id: "req_1",
-      model: LLM.model({ id: "fake-model", provider: "fake", route: "openai-chat", baseURL: "https://fake.local" }),
+      model: ModelRef.make({ id: "fake-model", provider: "fake", route: "openai-chat", baseURL: "https://fake.local" }),
       prompt: "Say hello.",
     })
     const updated = LLM.updateRequest(base, {
@@ -40,7 +40,7 @@ describe("llm constructors", () => {
 
   test("keeps request options separate from model defaults", () => {
     const request = LLM.request({
-      model: LLM.model({
+      model: ModelRef.make({
         id: "fake-model",
         provider: "fake",
         route: "openai-chat",
@@ -67,7 +67,7 @@ describe("llm constructors", () => {
   test("updates canonical requests from the request datatype", () => {
     const base = LLM.request({
       id: "req_1",
-      model: LLM.model({ id: "fake-model", provider: "fake", route: "openai-chat", baseURL: "https://fake.local" }),
+      model: ModelRef.make({ id: "fake-model", provider: "fake", route: "openai-chat", baseURL: "https://fake.local" }),
       prompt: "Say hello.",
     })
     const updated = LLMRequest.update(base, { messages: [...base.messages, Message.assistant("Hi.")] })
@@ -80,7 +80,12 @@ describe("llm constructors", () => {
   })
 
   test("updates canonical models from the model datatype", () => {
-    const base = LLM.model({ id: "fake-model", provider: "fake", route: "openai-chat", baseURL: "https://fake.local" })
+    const base = ModelRef.make({
+      id: "fake-model",
+      provider: "fake",
+      route: "openai-chat",
+      baseURL: "https://fake.local",
+    })
     const updated = ModelRef.update(base, { route: "openai-responses" })
 
     expect(updated).toBeInstanceOf(ModelRef)
@@ -105,7 +110,12 @@ describe("llm constructors", () => {
     expect(ToolChoice.make("required")).toEqual(new ToolChoice({ type: "required" }))
     expect(
       LLM.request({
-        model: LLM.model({ id: "fake-model", provider: "fake", route: "openai-chat", baseURL: "https://fake.local" }),
+        model: ModelRef.make({
+          id: "fake-model",
+          provider: "fake",
+          route: "openai-chat",
+          baseURL: "https://fake.local",
+        }),
         prompt: "Use tools if needed.",
         toolChoice: "required",
       }).toolChoice,

@@ -75,12 +75,12 @@ export const route = Route.make({
 
 export const routes = [route]
 
-const modelRef = Route.model<ModelInput>(route, {
+const routeModel = Route.model<ModelInput>(route, {
   provider: profile.provider,
   baseURL: profile.baseURL,
 })
 
-export const model = (id: string | ModelID, options: ModelOptions = {}) => modelRef({ ...options, id })
+export const model = (id: string | ModelID, options: ModelOptions = {}) => routeModel({ ...options, id })
 
 export const provider = Provider.make({
   id,

@@ -166,34 +166,56 @@ export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
    * one route should grow into a typed field instead.
    */
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}) {}
-
-export namespace ModelRef {
-  export type Input = ConstructorParameters<typeof ModelRef>[0]
-
-  export const input = (model: ModelRef): Input => ({
-    id: model.id,
-    provider: model.provider,
-    route: model.route,
-    baseURL: model.baseURL,
-    apiKey: model.apiKey,
-    auth: model.auth,
-    headers: model.headers,
-    queryParams: model.queryParams,
-    limits: model.limits,
-    generation: model.generation,
-    providerOptions: model.providerOptions,
-    http: model.http,
-    native: model.native,
-  })
-
-  export const update = (model: ModelRef, patch: Partial<Input>) => {
-    if (Object.keys(patch).length === 0) return model
+}) {
+  static override make(input: ModelRefInput) {
     return new ModelRef({
-      ...input(model),
+      ...input,
+      id: ModelID.make(input.id),
+      provider: ProviderID.make(input.provider),
+      route: RouteID.make(input.route),
+      limits: ModelLimits.make(input.limits),
+      generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
+      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+    })
+  }
+
+  static input(model: ModelRef): ConstructorParameters<typeof ModelRef>[0] {
+    return {
+      id: model.id,
+      provider: model.provider,
+      route: model.route,
+      baseURL: model.baseURL,
+      apiKey: model.apiKey,
+      auth: model.auth,
+      headers: model.headers,
+      queryParams: model.queryParams,
+      limits: model.limits,
+      generation: model.generation,
+      providerOptions: model.providerOptions,
+      http: model.http,
+      native: model.native,
+    }
+  }
+
+  static update(model: ModelRef, patch: Partial<ModelRefInput>) {
+    if (Object.keys(patch).length === 0) return model
+    return ModelRef.make({
+      ...ModelRef.input(model),
       ...patch,
     })
   }
+}
+
+export type ModelRefInput = Omit<
+  ConstructorParameters<typeof ModelRef>[0],
+  "id" | "provider" | "route" | "limits" | "generation" | "http"
+> & {
+  readonly id: string | ModelID
+  readonly provider: string | ProviderID
+  readonly route: string | RouteID
+  readonly limits?: ModelLimits.Input
+  readonly generation?: GenerationOptions.Input
+  readonly http?: HttpOptions.Input
 }
 
 export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({

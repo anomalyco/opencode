@@ -41,6 +41,9 @@ describe("llm schema", () => {
   })
 
   test("rejects invalid event type", () => {
+    // Tool-result media support widens the inferred decoding services for the
+    // event union, but this runtime assertion still exercises the decoder.
+    // @ts-expect-error see comment above
     expect(() => Schema.decodeUnknownSync(LLMEvent)({ type: "bogus" })).toThrow()
   })
 

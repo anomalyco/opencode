@@ -10,7 +10,7 @@
 
 ## Conventions
 
-Per-type constructors live on the type's namespace, not as top-level re-exports. Use `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for the request-shaped call API: `LLM.request`, `LLM.generate`, `LLM.stream`, `LLM.model`, `LLM.updateRequest`, `LLM.generateObject`. Two ways to construct the same thing is one too many.
+Per-type constructors live on the type, not as top-level re-exports. Use `Message.user(...)`, `Message.assistant(...)`, `Message.tool(...)`, `ModelRef.make(...)`, `ToolDefinition.make(...)`, `ToolCallPart.make(...)`, `ToolResultPart.make(...)`, `ToolChoice.make(...)`, `ToolChoice.named(...)`, `SystemPart.make(...)`, and `GenerationOptions.make(...)` directly. The top-level `LLM` namespace is reserved for request-shaped call APIs: `LLM.request`, `LLM.generate`, `LLM.stream`, `LLM.updateRequest`, and `LLM.generateObject`. Two ways to construct the same thing is one too many.
 
 ## Tests
 
@@ -20,6 +20,15 @@ Per-type constructors live on the type's namespace, not as top-level re-exports.
 ## Architecture
 
 This package is an Effect Schema-first LLM core. The Schema classes in `src/schema/` are the canonical runtime data model. Convenience functions in `src/llm.ts` are thin constructors that return those same Schema class instances; they should improve callsites without creating a second model.
+
+Primary in-repo integration point:
+
+- `packages/opencode/src/session/llm.ts` is the session-owned orchestration layer that decides whether a request uses AI SDK or this package's native route runtime.
+- `packages/opencode/src/session/llm/native-request.ts` is the lowering adapter from opencode's session/AI SDK-shaped data into this package's `LLMRequest` model.
+- `packages/opencode/src/session/llm/native-runtime.ts` is the execution adapter that calls `LLMClient.stream(...)` and bridges opencode tools into this package's tool runtime.
+- `packages/opencode/src/session/llm/ai-sdk.ts` keeps the default AI SDK path compatible by converting AI SDK stream parts into this package's shared `LLMEvent`s.
+
+Keep this package independent of session concerns. Session auth, permissions, plugins, telemetry headers, and runtime selection belong in `packages/opencode/src/session/llm.ts` and its local adapters.
 
 ### Request Flow
 
@@ -65,10 +74,11 @@ export const route = Route.make({
   }),
   defaults: {
     baseURL: "https://api.openai.com/v1",
-    capabilities: capabilities({ tools: { calls: true, streamingInput: true } }),
   },
 })
 ```
+
+Route/model defaults are transport and request-shaping defaults such as `baseURL`, `headers`, `queryParams`, `limits`, `generation`, `providerOptions`, `http`, and `native`. Model capability/catalog metadata lives outside this package; protocol support is enforced by request lowering and typed `LLMError`s.
 
 The four-axis decomposition is the reason DeepSeek, TogetherAI, Cerebras, Baseten, Fireworks, and DeepInfra all reuse `OpenAIChat.protocol` verbatim — each provider deployment is a 5-15 line `Route.make(...)` call instead of a 300-400 line route clone. Bug fixes in one protocol propagate to every consumer of that protocol in a single commit.
 
@@ -113,7 +123,7 @@ Built-in providers are namespace modules from `src/providers/index.ts`, so alias
 packages/llm/src/
   schema/                   canonical Schema model, split by concern
     ids.ts                  branded IDs, literal types, ProviderMetadata
-    options.ts              Generation/Provider/Http options, Capabilities, Limits, ModelRef
+    options.ts              Generation/Provider/Http options, Limits, ModelRef, cache policy
     messages.ts             content parts, Message, ToolDefinition, LLMRequest
     events.ts               Usage, individual events, LLMEvent, PreparedRequest, LLMResponse
     errors.ts               error reasons, LLMError, ToolFailure
@@ -150,7 +160,7 @@ packages/llm/src/
   tool-runtime.ts           implementation helpers for LLMClient tool execution
 ```
 
-The dependency arrow points down: `providers/*.ts` files import `protocols`, `endpoint`, `auth`, and `framing`; protocols do not import provider metadata. Lower-level modules know nothing about specific providers.
+The dependency arrow points down: `providers/*.ts` files import protocol route/model helpers and auth-option utilities; protocol modules import `endpoint`, `auth`, `framing`, and transport pieces. Protocols do not import provider facades. Lower-level modules know nothing about provider catalog metadata.
 
 ### Shared protocol helpers
 
@@ -251,8 +261,8 @@ Use this order for every protocol module:
 
 - Keep protocol files focused on the protocol. Move provider-specific projection, signing, media normalization, or other bulky transformations into `src/protocols/utils/*`.
 - Use `Effect.fn("Provider.fromRequest")` for request body construction entrypoints. Use `Effect.fn(...)` for event handlers that yield effects; keep purely synchronous handlers as plain functions returning a `StepResult` that the dispatcher lifts via `Effect.succeed(...)`.
-- Parser state owns terminal information. The state machine records finish reason, usage, and pending tool calls; emit one terminal `request-finish` (or `provider-error`) when a `terminal` event arrives. If a provider splits reason and usage across events, merge them in parser state before flushing.
-- Emit exactly one terminal `request-finish` event for a completed response. Use `stream.terminal` to signal the run is over and have `step` emit the final event.
+- Parser state owns terminal information. The state machine records finish reason, usage, and pending tool calls; emit one terminal `finish` event (or `provider-error`) for each completed response. If a provider splits reason and usage across events, merge them in parser state before flushing.
+- Emit exactly one terminal `finish` event for a completed response, normally after a matching `step-finish`. Use `stream.terminal` to stop reading when the provider has a completion sentinel; use `stream.onHalt` when the final event must be flushed after the framed stream ends.
 - Use shared helpers for repeated protocol policy such as text joining, usage totals, JSON parsing, and tool-call accumulation. `ToolStream` (`protocols/utils/tool-stream.ts`) accumulates streamed tool-call arguments uniformly.
 - Make intentional provider differences explicit in helper names or comments. If two protocol files differ visually, the reason should be obvious from the names.
 - Prefer dispatched per-event handlers (`onMessageStart`, `onContentBlockDelta`, ...) called from a small top-level `step` switch over a long if-chain. The dispatcher keeps the event surface visible at a glance.

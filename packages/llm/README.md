@@ -28,10 +28,10 @@ Run `LLMClient.stream(request)` instead of `generate` when you want incremental 
 
 - **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
 - **`LLM.generate` / `LLM.stream`** — re-exported from `LLMClient` for one-import use.
-- **`LLM.user(...)` / `LLM.assistant(...)` / `LLM.toolMessage(...)`** — message constructors.
-- **`LLM.toolCall(...)` / `LLM.toolResult(...)` / `LLM.toolDefinition(...)`** — tool-related parts.
+- **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
+- **`ModelRef.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMClient.prepare(request)`** — compile a request through protocol body construction, validation, and HTTP preparation without sending. Useful for inspection and testing.
-- **`LLMEvent.is.*`** — typed guards (`is.text`, `is.toolCall`, `is.requestFinish`, …) for filtering streams.
+- **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
 
 ## Caching
 
@@ -92,7 +92,7 @@ Normalized cache usage is read back into `response.usage.cacheReadInputTokens` a
 
 ## Providers
 
-Each provider exports a `model(...)` helper that records identity, protocol, capabilities, auth, and defaults.
+Each provider exports a `model(...)` helper that records identity, protocol route, auth, URL, and model/request defaults.
 
 ```ts
 import { Anthropic } from "@opencode-ai/llm/providers"
@@ -116,11 +116,11 @@ Model-level defaults are overridden by request-level values for each axis.
 
 ## Routes
 
-Adding a new model or deployment is usually 5–15 lines using `Route.make({ protocol, transport, ... })`. The four orthogonal pieces are protocol (body construction + stream parsing), transport (endpoint + auth + framing + encoding), defaults, and capabilities. See `AGENTS.md` for the architectural detail.
+Adding a new model or deployment is usually 5–15 lines using `Route.make({ protocol, transport, ... })`. The four orthogonal pieces are protocol (body construction + stream parsing), transport (endpoint + auth + framing + encoding), route/model defaults, and provider facades. Capability/catalog metadata lives outside this low-level package; unsupported request shapes fail during protocol lowering. See `AGENTS.md` for the architectural detail.
 
 ## Effect
 
-This package is built on Effect. Public methods return `Effect` or `Stream`; provide `LLMClient.layer` (the default registers every shipped route) for runtime dispatch. The example at `example/tutorial.ts` is a runnable walkthrough.
+This package is built on Effect. Public methods return `Effect` or `Stream`; provide `LLMClient.layer` for runtime dispatch and import the provider/protocol modules for the routes you use. The example at `example/tutorial.ts` is a runnable walkthrough.
 
 ## See also
 

@@ -1,5 +1,5 @@
 import { Effect, JsonSchema, Schema } from "effect"
-import { LLMClient, modelLimits, modelRef, type ModelRefInput } from "./route/client"
+import { LLMClient } from "./route/client"
 import {
   GenerationOptions,
   HttpOptions,
@@ -9,6 +9,7 @@ import {
   LLMRequest,
   LLMResponse,
   Message,
+  type ModelRefInput,
   SystemPart,
   ToolChoice,
   ToolDefinition,
@@ -41,10 +42,6 @@ export type RequestInput = Omit<
   readonly providerOptions?: ConstructorParameters<typeof LLMRequest>[0]["providerOptions"]
   readonly http?: HttpOptions.Input
 }
-
-export const limits = modelLimits
-
-export const model = modelRef
 
 export const generate = LLMClient.generate
 

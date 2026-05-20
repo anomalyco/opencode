@@ -12,20 +12,17 @@ import { applyCachePolicy } from "../cache-policy"
 import * as ProviderShared from "../protocols/shared"
 import * as ToolRuntime from "../tool-runtime"
 import type { Tools } from "../tool"
-import type { LLMError, LLMEvent, PreparedRequestOf, ProtocolID } from "../schema"
+import type { LLMError, LLMEvent, ModelRefInput as SchemaModelRefInput, PreparedRequestOf, ProtocolID } from "../schema"
 import {
   GenerationOptions,
   HttpOptions,
   LLMRequest,
   LLMResponse,
-  ModelID,
-  ModelLimits,
   ModelRef,
   LLMError as LLMErrorClass,
   NoRouteReason,
   PreparedRequest,
   ProviderID,
-  RouteID,
   mergeGenerationOptions,
   mergeHttpOptions,
   mergeProviderOptions,
@@ -78,18 +75,7 @@ const registeredRoute = (id: string) => routeRegistry.get(id)
 
 export type HttpOptionsInput = HttpOptions.Input
 
-export type ModelRefInput = Omit<
-  ConstructorParameters<typeof ModelRef>[0],
-  "id" | "provider" | "route" | "limits" | "generation" | "http" | "auth"
-> & {
-  readonly id: string | ModelID
-  readonly provider: string | ProviderID
-  readonly route: string | RouteID
-  readonly auth?: AuthDef
-  readonly limits?: ModelLimits.Input
-  readonly generation?: GenerationOptions.Input
-  readonly http?: HttpOptionsInput
-}
+type ModelRefInput = Omit<SchemaModelRefInput, "auth"> & { readonly auth?: AuthDef }
 
 // `baseURL` is required on `ModelRefInput` (every materialized `ModelRef` has
 // a host) but optional at the route-input layers below. The route's `defaults`
@@ -147,7 +133,7 @@ const modelWithDefaults =
     const generation = mergeGenerationOptions(route.defaults.generation, defaults.generation)
     const providerOptions = mergeProviderOptions(route.defaults.providerOptions, defaults.providerOptions)
     const http = mergeHttpOptions(httpOptions(route.defaults.http), httpOptions(defaults.http))
-    return modelRef({
+    return ModelRef.make({
       ...route.defaults,
       ...defaults,
       ...mapped,
@@ -170,8 +156,6 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
   http: mergeHttpOptions(httpOptions(base?.http), httpOptions(patch.http)),
 })
 
-export const modelLimits = ModelLimits.make
-
 export const generationOptions = (input: GenerationOptions.Input | undefined) =>
   input === undefined ? undefined : GenerationOptions.make(input)
 
@@ -179,17 +163,6 @@ export const httpOptions = (input: HttpOptionsInput | undefined) => {
   if (input === undefined) return input
   return HttpOptions.make(input)
 }
-
-export const modelRef = (input: ModelRefInput) =>
-  new ModelRef({
-    ...input,
-    id: ModelID.make(input.id),
-    provider: ProviderID.make(input.provider),
-    route: RouteID.make(input.route),
-    limits: modelLimits(input.limits),
-    generation: generationOptions(input.generation),
-    http: httpOptions(input.http),
-  })
 
 function model<Input extends RouteModelInput = RouteModelInput>(
   route: AnyRoute,

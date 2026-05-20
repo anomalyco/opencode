@@ -2,11 +2,11 @@ import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { LLM } from "../src"
 import { Route, Endpoint, LLMClient, Protocol, type RouteModelInput, type FramingDef } from "../src/route"
-import { ModelRef } from "../src/schema"
+import { ModelRef, type ModelRefInput } from "../src/schema"
 import { testEffect } from "./lib/effect"
 import { dynamicResponse } from "./lib/http"
 
-const updateModel = (model: ModelRef, patch: Partial<ModelRef.Input>) => ModelRef.update(model, patch)
+const updateModel = (model: ModelRef, patch: Partial<ModelRefInput>) => ModelRef.update(model, patch)
 
 const Json = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(Json)
@@ -40,7 +40,7 @@ const fakeFraming: FramingDef<FakeEvent> = {
 
 const request = LLM.request({
   id: "req_1",
-  model: LLM.model({
+  model: ModelRef.make({
     id: "fake-model",
     provider: "fake-provider",
     route: "fake",
