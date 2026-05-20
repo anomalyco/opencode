@@ -37,6 +37,7 @@ import { DialogModel } from "@tui/component/dialog-model"
 import { useConnected } from "@tui/component/use-connected"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
+import { DialogUsage } from "@tui/component/dialog-usage"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "@tui/component/dialog-agent"
@@ -623,6 +624,15 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         slashName: "status",
         run: () => {
           dialog.replace(() => <DialogStatus />)
+        },
+        category: "System",
+      },
+      {
+        name: "opencode.usage",
+        title: "Token usage",
+        slashName: "usage",
+        run: () => {
+          dialog.replace(() => <DialogUsage />)
         },
         category: "System",
       },

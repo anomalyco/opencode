@@ -18,6 +18,7 @@ import { ServeCommand } from "./cli/cmd/serve"
 import { Filesystem } from "@/util/filesystem"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
+import { UsageCommand } from "./cli/cmd/usage"
 import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
@@ -171,6 +172,7 @@ const cli = yargs(args)
   .command(WebCommand)
   .command(ModelsCommand)
   .command(StatsCommand)
+  .command(UsageCommand)
   .command(ExportCommand)
   .command(ImportCommand)
   .command(GithubCommand)
@@ -186,6 +188,7 @@ const cli = yargs(args)
     ) {
       if (err) throw err
       cli.showHelp(show)
+      return
     }
     if (err) throw err
     process.exit(1)
@@ -223,15 +226,15 @@ try {
     }
   }
 
-  if (e instanceof ResolveMessage) {
+  if (e instanceof Error && e.name === "ResolveMessage" && "code" in e && "specifier" in e) {
     Object.assign(data, {
       name: e.name,
       message: e.message,
-      code: e.code,
-      specifier: e.specifier,
-      referrer: e.referrer,
-      position: e.position,
-      importKind: e.importKind,
+      code: (e as any).code,
+      specifier: (e as any).specifier,
+      referrer: (e as any).referrer,
+      position: (e as any).position,
+      importKind: (e as any).importKind,
     })
   }
   Log.Default.error("fatal", data)

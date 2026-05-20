@@ -1,5 +1,5 @@
 import type { APIEvent } from "@solidjs/start/server"
-import { and, Database, eq, isNull, lt, or, sql } from "@opencode-ai/console-core/drizzle/index.js"
+import { and, Database, eq, isNull, lt, or, sql, gte } from "@opencode-ai/console-core/drizzle/index.js"
 import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
 import { BillingTable, LiteTable, SubscriptionTable, UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { centsToMicroCents } from "@opencode-ai/console-core/util/price.js"
@@ -266,7 +266,8 @@ export async function handler(
         const costInfo = calculateCost(modelInfo, usageInfo)
         await trialLimiter?.track(usageInfo)
         await modelTpmLimiter?.track(providerInfo.id, providerInfo.model, usageInfo)
-        await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
+        // For non-streaming responses estimate timing using startTimestamp
+        await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo, startTimestamp, Date.now())
         await reload(billingSource, authInfo, costInfo)
         json.cost = calculateOccurredCost(billingSource, costInfo)
       }
@@ -329,7 +330,7 @@ export async function handler(
                     timestampLastByte,
                     usageInfo,
                   )
-                  await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
+                  await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo, timestampFirstByte, timestampLastByte)
                   await reload(billingSource, authInfo, costInfo)
                   const cost = calculateOccurredCost(billingSource, costInfo)
                   c.enqueue(encoder.encode(buildCostChunk(opts.format, cost)))
@@ -952,6 +953,8 @@ export async function handler(
     providerInfo: ProviderInfo,
     usageInfo: UsageInfo,
     costInfo: CostInfo,
+    tsFirstByte?: number,
+    tsLastByte?: number,
   ) {
     const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
       usageInfo
@@ -1120,6 +1123,75 @@ export async function handler(
         })(),
       ]),
     )
+
+    // Emit aggregate metrics: session totals and time-windowed sums (day/week/month/total)
+    try {
+      const sessionKey = sessionId.substring(0, 30)
+      const now = new Date()
+      const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0))
+      const week = getWeekBounds(new Date())
+      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0))
+
+      // helper SQL expression for total tokens per row
+      const totalTokensExpr = sql`COALESCE(${UsageTable.inputTokens},0)+COALESCE(${UsageTable.outputTokens},0)+COALESCE(${UsageTable.reasoningTokens},0)+COALESCE(${UsageTable.cacheReadTokens},0)+COALESCE(${UsageTable.cacheWrite5mTokens},0)+COALESCE(${UsageTable.cacheWrite1hTokens},0)`
+
+      // Query aggregates for workspace/session
+      if (authInfo) {
+        const workspaceID = authInfo.workspaceID
+        const [sessionAgg] = await Database.use((db) =>
+          db
+            .select({ total: sql<number>`SUM(${totalTokensExpr})` })
+            .from(UsageTable)
+            .where(and(eq(UsageTable.workspaceID, workspaceID), eq(UsageTable.sessionID, sessionKey))),
+        )
+
+        const [dayAgg] = await Database.use((db) =>
+          db
+            .select({ total: sql<number>`SUM(${totalTokensExpr})` })
+            .from(UsageTable)
+            .where(and(eq(UsageTable.workspaceID, workspaceID), gte(UsageTable.timeCreated, dayStart))),
+        )
+
+        const [weekAgg] = await Database.use((db) =>
+          db
+            .select({ total: sql<number>`SUM(${totalTokensExpr})` })
+            .from(UsageTable)
+            .where(and(eq(UsageTable.workspaceID, workspaceID), gte(UsageTable.timeCreated, week.start))),
+        )
+
+        const [monthAgg] = await Database.use((db) =>
+          db
+            .select({ total: sql<number>`SUM(${totalTokensExpr})` })
+            .from(UsageTable)
+            .where(and(eq(UsageTable.workspaceID, workspaceID), gte(UsageTable.timeCreated, monthStart))),
+        )
+
+        const [totalAgg] = await Database.use((db) =>
+          db.select({ total: sql<number>`SUM(${totalTokensExpr})` }).from(UsageTable).where(eq(UsageTable.workspaceID, workspaceID)),
+        )
+
+        const sessionTotal = (sessionAgg?.total as number) ?? 0
+        const dayTotal = (dayAgg?.total as number) ?? 0
+        const weekTotal = (weekAgg?.total as number) ?? 0
+        const monthTotal = (monthAgg?.total as number) ?? 0
+        const total = (totalAgg?.total as number) ?? 0
+
+        const durationMs = tsFirstByte && tsLastByte && tsLastByte > tsFirstByte ? tsLastByte - tsFirstByte : undefined
+        const tps = durationMs ? Math.round(((outputTokens ?? 0) / durationMs) * 1000) : undefined
+
+        logger.metric({
+          tokens_session_total: sessionTotal,
+          tokens_daily: dayTotal,
+          tokens_weekly: weekTotal,
+          tokens_monthly: monthTotal,
+          tokens_total: total,
+          tokens_per_second: tps,
+        })
+      }
+    } catch (e) {
+      // Don't fail request on metrics collection errors; just log
+      logger.metric({ "metrics.error": String(e) })
+    }
 
     return { costInMicroCents: cost }
   }

@@ -3,7 +3,9 @@ import { Actor } from "@opencode-ai/console-core/actor.js"
 import { action, json, query } from "@solidjs/router"
 import { withActor } from "~/context/auth.withActor"
 import { Billing } from "@opencode-ai/console-core/billing.js"
-import { and, Database, desc, eq, isNull } from "@opencode-ai/console-core/drizzle/index.js"
+import { and, Database, desc, eq, isNull, gte, sql } from "@opencode-ai/console-core/drizzle/index.js"
+import { UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
+import { getWeekBounds, getMonthlyBounds } from "@opencode-ai/console-core/util/date.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 
@@ -120,3 +122,75 @@ export const queryBillingInfo = query(async (workspaceID: string) => {
     }
   }, workspaceID)
 }, "billing.get")
+
+export const queryUsageMetrics = query(async (workspaceID: string, sessionID?: string) => {
+  "use server"
+  return withActor(async () => {
+    const now = new Date()
+    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0))
+    const week = getWeekBounds(new Date())
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0))
+    const minuteAgo = new Date(Date.now() - 60 * 1000)
+
+    const totalTokensExpr = sql`COALESCE(${UsageTable.inputTokens},0)+COALESCE(${UsageTable.outputTokens},0)+COALESCE(${UsageTable.reasoningTokens},0)+COALESCE(${UsageTable.cacheReadTokens},0)+COALESCE(${UsageTable.cacheWrite5mTokens},0)+COALESCE(${UsageTable.cacheWrite1hTokens},0)`
+
+    return Database.use(async (tx) => {
+      const workspaceFilter = eq(UsageTable.workspaceID, workspaceID)
+      const sessionFilter = sessionID ? eq(UsageTable.sessionID, sessionID.substring(0, 30)) : undefined
+
+      const [[sessionAgg]] = await tx
+        .select({ total: sql<number>`SUM(${totalTokensExpr})` })
+        .from(UsageTable)
+        .where(sessionID ? and(workspaceFilter, sessionFilter) : workspaceFilter)
+        .then((r) => [r])
+
+      const [[dayAgg]] = await tx
+        .select({ total: sql<number>`SUM(${totalTokensExpr})` })
+        .from(UsageTable)
+        .where(and(workspaceFilter, gte(UsageTable.timeCreated, dayStart)))
+        .then((r) => [r])
+
+      const [[weekAgg]] = await tx
+        .select({ total: sql<number>`SUM(${totalTokensExpr})` })
+        .from(UsageTable)
+        .where(and(workspaceFilter, gte(UsageTable.timeCreated, week.start)))
+        .then((r) => [r])
+
+      const [[monthAgg]] = await tx
+        .select({ total: sql<number>`SUM(${totalTokensExpr})` })
+        .from(UsageTable)
+        .where(and(workspaceFilter, gte(UsageTable.timeCreated, monthStart)))
+        .then((r) => [r])
+
+      const [[totalAgg]] = await tx
+        .select({ total: sql<number>`SUM(${totalTokensExpr})` })
+        .from(UsageTable)
+        .where(workspaceFilter)
+        .then((r) => [r])
+
+      const [[minuteAgg]] = await tx
+        .select({ total: sql<number>`SUM(${UsageTable.outputTokens})` })
+        .from(UsageTable)
+        .where(and(workspaceFilter, gte(UsageTable.timeCreated, minuteAgo)))
+        .then((r) => [r])
+
+      const sessionTotal = (sessionAgg?.total as number) ?? 0
+      const dayTotal = (dayAgg?.total as number) ?? 0
+      const weekTotal = (weekAgg?.total as number) ?? 0
+      const monthTotal = (monthAgg?.total as number) ?? 0
+      const total = (totalAgg?.total as number) ?? 0
+      const minuteOutput = (minuteAgg?.total as number) ?? 0
+      const tokensPerSecond = Math.round(minuteOutput / 60)
+
+      return {
+        tokens_session_total: sessionTotal,
+        tokens_daily: dayTotal,
+        tokens_weekly: weekTotal,
+        tokens_monthly: monthTotal,
+        tokens_total: total,
+        tokens_per_second: tokensPerSecond,
+      }
+    })
+  }, workspaceID)
+}, "usage.metrics")
+
