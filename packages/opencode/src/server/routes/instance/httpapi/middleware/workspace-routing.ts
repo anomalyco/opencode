@@ -71,7 +71,10 @@ function selectedWorkspaceID(url: URL, sessionWorkspaceID?: WorkspaceID): Worksp
   return sessionWorkspaceID ?? (workspaceParam ? WorkspaceID.make(workspaceParam) : undefined)
 }
 
-function selectedV2WorkspaceID(url: URL, sessionWorkspaceID?: WorkspaceID): WorkspaceID | typeof InvalidWorkspaceID | undefined {
+function selectedV2WorkspaceID(
+  url: URL,
+  sessionWorkspaceID?: WorkspaceID,
+): WorkspaceID | typeof InvalidWorkspaceID | undefined {
   if (sessionWorkspaceID) return sessionWorkspaceID
   const workspaceParam = url.searchParams.get("workspace")
   if (!workspaceParam) return undefined

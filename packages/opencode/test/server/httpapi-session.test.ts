@@ -361,7 +361,9 @@ describe("session HttpApi", () => {
           message: "Invalid cursor",
         })
 
-        const mismatchedRouting = yield* request(`/api/session?cursor=${sessionCursor}&directory=/elsewhere`, { headers })
+        const mismatchedRouting = yield* request(`/api/session?cursor=${sessionCursor}&directory=/elsewhere`, {
+          headers,
+        })
         expect(mismatchedRouting.status).toBe(400)
         expect(yield* responseJson(mismatchedRouting)).toMatchObject({
           _tag: "InvalidCursorError",
