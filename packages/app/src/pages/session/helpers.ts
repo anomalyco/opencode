@@ -202,6 +202,50 @@ export const createVcsRefreshScheduler = (fn: () => Promise<unknown> | unknown, 
   }
 }
 
+export const createVcsRefreshManager = <T,>(input: {
+  key: Accessor<T>
+  refresh: (key: T) => Promise<unknown> | unknown
+  cleanup?: (key: T) => void
+  wait: number
+}) => {
+  const schedulers = new Set<ReturnType<typeof createVcsRefreshScheduler>>()
+  const pending = new Set<T>()
+  const create = (key: T) => {
+    const scheduler = createVcsRefreshScheduler(() => {
+      pending.delete(key)
+      return input.refresh(key)
+    }, input.wait)
+    schedulers.add(scheduler)
+    return scheduler
+  }
+  let currentKey = input.key()
+  let current = create(currentKey)
+  const sync = () => {
+    const key = input.key()
+    if (Object.is(key, currentKey)) return
+    if (pending.delete(currentKey)) input.cleanup?.(currentKey)
+    current.dispose()
+    schedulers.delete(current)
+    currentKey = key
+    current = create(key)
+  }
+  onCleanup(() => {
+    for (const scheduler of schedulers) scheduler.dispose()
+    schedulers.clear()
+    for (const key of pending) input.cleanup?.(key)
+    pending.clear()
+  })
+
+  return {
+    sync,
+    schedule() {
+      sync()
+      pending.add(currentKey)
+      current.schedule()
+    },
+  }
+}
+
 export const isGitMetadataPath = (file: string) => {
   const normalized = file.replaceAll("\\", "/")
   return normalized === ".git" || normalized.endsWith("/.git") || normalized.startsWith(".git/") || normalized.includes("/.git/")

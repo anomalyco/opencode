@@ -1,8 +1,10 @@
 import { describe, expect, test, vi } from "bun:test"
-import { createMemo, createRoot } from "solid-js"
+import { QueryClient } from "@tanstack/solid-query"
+import { createMemo, createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
   createOpenReviewFile,
+  createVcsRefreshManager,
   createVcsRefreshScheduler,
   createOpenSessionFileTab,
   createSessionTabs,
@@ -246,6 +248,204 @@ describe("createVcsRefreshScheduler", () => {
       vi.advanceTimersByTime(100)
 
       expect(calls).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test("drops queued refreshes from a disposed directory scheduler", async () => {
+    vi.useFakeTimers()
+    try {
+      const calls: string[] = []
+      const first = createVcsRefreshScheduler(() => calls.push("first"), 100)
+
+      first.schedule()
+      first.dispose()
+      const second = createVcsRefreshScheduler(() => calls.push("second"), 100)
+      second.schedule()
+
+      vi.advanceTimersByTime(100)
+      await Promise.resolve()
+      expect(calls).toEqual(["second"])
+      second.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe("createVcsRefreshManager", () => {
+  test("cleans superseded pending refreshes when the key changes", async () => {
+    vi.useFakeTimers()
+    try {
+      const calls: string[] = []
+      const cleanup: string[] = []
+      let setKey: (key: string) => void = () => undefined
+      let manager: { schedule(): void; sync(): void } | undefined
+      const dispose = createRoot((dispose) => {
+        const [key, set] = createSignal("first")
+        setKey = (value) => set(value)
+        manager = createVcsRefreshManager({
+          key,
+          refresh: (value) => calls.push(value),
+          cleanup: (value) => cleanup.push(value),
+          wait: 100,
+        })
+        return dispose
+      })
+
+      manager?.schedule()
+      setKey("second")
+      await Promise.resolve()
+      manager?.schedule()
+      vi.advanceTimersByTime(100)
+      await Promise.resolve()
+
+      expect(calls).toEqual(["second"])
+      expect(cleanup).toEqual(["first"])
+      dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test("disposes every scheduler created across key changes", async () => {
+    vi.useFakeTimers()
+    try {
+      const calls: string[] = []
+      const cleanup: string[] = []
+      let setKey: (key: string) => void = () => undefined
+      let manager: { schedule(): void; sync(): void } | undefined
+      const dispose = createRoot((dispose) => {
+        const [key, set] = createSignal("first")
+        setKey = (value) => set(value)
+        manager = createVcsRefreshManager({
+          key,
+          refresh: (value) => calls.push(value),
+          cleanup: (value) => cleanup.push(value),
+          wait: 100,
+        })
+        return dispose
+      })
+
+      manager?.schedule()
+      setKey("second")
+      await Promise.resolve()
+      manager?.schedule()
+      dispose()
+      vi.advanceTimersByTime(100)
+      await Promise.resolve()
+
+      expect(calls).toEqual([])
+      expect(cleanup).toEqual(["first", "second"])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test("clears pending VCS query cache entries on cleanup before refresh", async () => {
+    vi.useFakeTimers()
+    try {
+      const client = new QueryClient({ defaultOptions: { queries: { refetchOnMount: false } } })
+      const first = ["session-vcs", "first"] as const
+      const second = ["session-vcs", "second"] as const
+      client.setQueryData([...first, "main", "main", "git"], ["old-first"])
+      client.setQueryData([...second, "main", "main", "git"], ["old-second"])
+      let setKey: (key: readonly string[]) => void = () => undefined
+      let manager: { schedule(): void; sync(): void } | undefined
+      const dispose = createRoot((dispose) => {
+        const [key, set] = createSignal<readonly string[]>(first)
+        setKey = (value) => set(() => value)
+        manager = createVcsRefreshManager({
+          key,
+          refresh: (queryKey) => client.invalidateQueries({ queryKey }),
+          cleanup: (queryKey) => client.removeQueries({ queryKey }),
+          wait: 100,
+        })
+        return dispose
+      })
+
+      manager?.schedule()
+      setKey(second)
+      manager?.schedule()
+      dispose()
+      vi.advanceTimersByTime(100)
+      await Promise.resolve()
+
+      expect(client.getQueryData([...first, "main", "main", "git"])).toBeUndefined()
+      expect(client.getQueryData([...second, "main", "main", "git"])).toBeUndefined()
+      client.clear()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test("removes stale VCS cache for superseded pending keys", async () => {
+    vi.useFakeTimers()
+    try {
+      const client = new QueryClient({ defaultOptions: { queries: { refetchOnMount: false } } })
+      const first = ["session-vcs", "first"] as const
+      const second = ["session-vcs", "second"] as const
+      client.setQueryData([...first, "main", "main", "git"], ["old-first"])
+      client.setQueryData([...second, "main", "main", "git"], ["old-second"])
+      let setKey: (key: readonly string[]) => void = () => undefined
+      let manager: { schedule(): void; sync(): void } | undefined
+      const dispose = createRoot((dispose) => {
+        const [key, set] = createSignal<readonly string[]>(first)
+        setKey = (value) => set(() => value)
+        manager = createVcsRefreshManager({
+          key,
+          refresh: (queryKey) => client.invalidateQueries({ queryKey }),
+          cleanup: (queryKey) => client.removeQueries({ queryKey }),
+          wait: 100,
+        })
+        return dispose
+      })
+
+      manager?.schedule()
+      setKey(second)
+      manager?.schedule()
+      vi.advanceTimersByTime(100)
+      await Promise.resolve()
+
+      expect(client.getQueryData([...first, "main", "main", "git"])).toBeUndefined()
+      expect(client.getQueryData<string[]>([...second, "main", "main", "git"])).toEqual(["old-second"])
+      dispose()
+      client.clear()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test("cleans a superseded pending key even without another schedule call", async () => {
+    vi.useFakeTimers()
+    try {
+      const calls: string[] = []
+      const cleanup: string[] = []
+      let setKey: (key: string) => void = () => undefined
+      let manager: { schedule(): void; sync(): void } | undefined
+      const dispose = createRoot((dispose) => {
+        const [key, set] = createSignal("first")
+        setKey = (value) => set(value)
+        manager = createVcsRefreshManager({
+          key,
+          refresh: (value) => calls.push(value),
+          cleanup: (value) => cleanup.push(value),
+          wait: 100,
+        })
+        return dispose
+      })
+
+      manager?.schedule()
+      setKey("second")
+      manager?.sync()
+      await Promise.resolve()
+      vi.advanceTimersByTime(100)
+      await Promise.resolve()
+
+      expect(calls).toEqual([])
+      expect(cleanup).toEqual(["first"])
+      dispose()
     } finally {
       vi.useRealTimers()
     }

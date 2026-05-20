@@ -45,7 +45,7 @@ import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import {
   createOpenReviewFile,
-  createVcsRefreshScheduler,
+  createVcsRefreshManager,
   createSessionTabs,
   createSizing,
   focusTerminalById,
@@ -480,9 +480,14 @@ export default function Page() {
         : skipToken,
     }
   })
-  const refreshVcs = () => queryClient.invalidateQueries({ queryKey: vcsQueryPrefix() })
-  const watcherRefreshVcs = createVcsRefreshScheduler(refreshVcs, 100)
-  onCleanup(watcherRefreshVcs.dispose)
+  const watcherRefreshVcs = createVcsRefreshManager({
+    key: vcsQueryPrefix,
+    refresh: (queryKey) => queryClient.invalidateQueries({ queryKey }),
+    cleanup: (queryKey) => queryClient.removeQueries({ queryKey }),
+    wait: 100,
+  })
+  createEffect(on(vcsQueryPrefix, watcherRefreshVcs.sync, { defer: true }))
+  const scheduleVcsRefresh = () => watcherRefreshVcs.schedule()
   const reviewDiffs = () => {
     if (store.changes === "git" || store.changes === "branch")
       // avoids suspense
@@ -717,7 +722,7 @@ export default function Page() {
 
   const stopVcs = sdk.event.listen((evt) => {
     if (evt.details.type === "vcs.branch.updated") {
-      watcherRefreshVcs.schedule()
+      scheduleVcsRefresh()
       return
     }
     if (evt.details.type !== "file.watcher.updated") return
@@ -728,7 +733,7 @@ export default function Page() {
     const file = typeof props?.file === "string" ? props.file : undefined
     if (!file) return
     if (isGitMetadataPath(file) && !isGitHeadPath(file)) return
-    watcherRefreshVcs.schedule()
+    scheduleVcsRefresh()
   })
   onCleanup(stopVcs)
 
@@ -866,7 +871,7 @@ export default function Page() {
       () => sync.data.session_status[params.id ?? ""]?.type,
       (next, prev) => {
         if (next !== "idle" || prev === undefined || prev === "idle") return
-        refreshVcs()
+        scheduleVcsRefresh()
       },
       { defer: true },
     ),
