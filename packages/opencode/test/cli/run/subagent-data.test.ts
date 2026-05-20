@@ -354,7 +354,7 @@ describe("run subagent data", () => {
     expect(visible(snapshot.details["child-1"]?.commits ?? [])).toEqual([
       "› Inspect footer tabs",
       "_Thinking:_ planning next steps",
-      "# Shell\n$ git status --short",
+      "$ git status --short",
       "hello world",
     ])
     expect(snapshot.permissions).toEqual([
