@@ -25,6 +25,8 @@ export interface CollabSession {
   queueMode: QueueMode
   /** FK to opencode's native Session (null until the session is started) */
   sessionId: string | null
+  /** Git branch every linked repo is checked out to for this collab session. */
+  branch: string | null
   repos: string[]
   participants: Participant[]
   createdAt: Date

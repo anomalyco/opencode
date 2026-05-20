@@ -9,6 +9,8 @@ export const CollabSessionTable = sqliteTable("collab_session", {
   visibility_mode: text().$type<VisibilityMode>().notNull().default("submitted"),
   queue_mode: text().$type<QueueMode>().notNull().default("fifo"),
   session_id: text(),
+  /** Git branch name created/used by this collab session in every linked repo. */
+  branch: text(),
   created_at: integer({ mode: "timestamp_ms" }).notNull(),
   deleted_at: integer({ mode: "timestamp_ms" }),
 })

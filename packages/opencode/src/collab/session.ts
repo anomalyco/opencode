@@ -15,11 +15,30 @@ export interface CreateCollabSessionInput {
   repos: string[]
   visibilityMode?: VisibilityMode
   queueMode?: QueueMode
+  /** Git branch to create/check out in every linked repo. */
+  branch?: string
+}
+
+/**
+ * Build a git-safe branch name from a free-text session name.
+ * Lowercases, replaces non [a-z0-9-/_] with "-", trims dashes, caps length.
+ * Refs can't be empty / start with - / contain ".." / end with ".lock".
+ */
+function defaultBranchName(sessionName: string, sessionId: string): string {
+  const slug = sessionName
+    .toLowerCase()
+    .replace(/[^a-z0-9-_/]+/g, "-")
+    .replace(/^[-./]+|[-./]+$/g, "")
+    .replace(/\.lock$/i, "")
+    .slice(0, 40)
+  const suffix = sessionId.slice(-6)
+  return `collab/${slug || "session"}-${suffix}`
 }
 
 export function createCollabSession(input: CreateCollabSessionInput): CollabSession {
   const id = collabId("cs")
   const now = Date.now()
+  const branch = (input.branch?.trim() || defaultBranchName(input.name, id)).slice(0, 100)
 
   Database.transaction((db) => {
     db.insert(CollabSessionTable).values({
@@ -30,6 +49,7 @@ export function createCollabSession(input: CreateCollabSessionInput): CollabSess
       visibility_mode: input.visibilityMode ?? "typing",
       queue_mode: input.queueMode ?? "fifo",
       session_id: null,
+      branch,
       created_at: now,
       deleted_at: null,
     }).run()
@@ -88,6 +108,7 @@ export function getCollabSession(id: string): CollabSession | null {
       visibilityMode: session.visibility_mode,
       queueMode: session.queue_mode,
       sessionId: session.session_id ?? null,
+      branch: session.branch ?? null,
       repos: repos.map((r) => r.repo_full_name),
       participants: participants.map((p) => ({
         githubId: p.github_id,

@@ -13,6 +13,7 @@ const SQL = `
     visibility_mode TEXT NOT NULL DEFAULT 'submitted',
     queue_mode TEXT NOT NULL DEFAULT 'fifo',
     session_id TEXT,
+    branch TEXT,
     created_at INTEGER NOT NULL,
     deleted_at INTEGER
   );
@@ -76,5 +77,13 @@ const SQL = `
 export function runCollabMigrations() {
   Database.use((db) => {
     db.$client.exec(SQL)
+
+    // Backfill: add `branch` to collab_session for older deployments where
+    // the table was created before this column existed.  SQLite has no
+    // "ADD COLUMN IF NOT EXISTS", so we probe via PRAGMA table_info first.
+    const cols = db.$client.prepare("PRAGMA table_info(collab_session)").all() as Array<{ name: string }>
+    if (!cols.some((c) => c.name === "branch")) {
+      db.$client.exec("ALTER TABLE collab_session ADD COLUMN branch TEXT")
+    }
   })
 }

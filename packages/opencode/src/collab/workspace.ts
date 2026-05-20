@@ -68,9 +68,10 @@ export function nativeSessionDirectory(collabSessionId: string, repos: string[])
 }
 
 /**
- * Clone all repos for a Collab Session at session creation, and install a
- * prepare-commit-msg hook in each so every commit produced inside the
- * workspace is signed with collab-session metadata.
+ * Clone all repos for a Collab Session at session creation, check out the
+ * collab branch in each, and install a prepare-commit-msg hook so every
+ * commit produced inside the workspace is signed with collab-session
+ * metadata.
  *
  * Uses GITHUB_TOKEN for authentication (supports private repos).
  */
@@ -78,6 +79,7 @@ export async function initSessionWorkspace(
   collabSessionId: string,
   repos: string[],
   sessionName: string = "",
+  branch: string | null = null,
 ): Promise<void> {
   const root = sessionWorkspacePath(collabSessionId)
   mkdirSync(root, { recursive: true })
@@ -91,7 +93,9 @@ export async function initSessionWorkspace(
 
     if (existsSync(dest)) {
       // Already cloned — pull latest (non-blocking)
-      await runAsync("git", ["-C", dest, "pull", "--ff-only"], { env })
+      await runAsync("git", ["-C", dest, "pull", "--ff-only"], { env }).catch((err) =>
+        console.error("[collab] git pull failed:", err),
+      )
     } else {
       const cloneUrl = token
         ? `https://x-access-token:${token}@github.com/${repo}.git`
@@ -100,10 +104,75 @@ export async function initSessionWorkspace(
       await runAsync("git", ["clone", "--depth", "100", cloneUrl, dest], { env })
     }
 
+    // Check out the collab branch.  Try to switch to an existing local or
+    // remote branch first; otherwise create a fresh one off the current HEAD
+    // (which is the repo's default branch after a fresh clone).
+    if (branch) {
+      await checkoutCollabBranch(dest, branch, env)
+    }
+
     // (Re)install the collab commit hook every time — covers fresh clones
     // and existing checkouts that pre-date the feature.
-    installCollabCommitHook(dest, collabSessionId, sessionName, repo)
+    installCollabCommitHook(dest, collabSessionId, sessionName, repo, branch)
   }
+}
+
+/**
+ * Check out the given branch in `repoPath`.  Tries, in order:
+ *   1. Switch to an existing local branch with that name
+ *   2. Switch to / create a tracking branch from origin/<name>
+ *   3. Create a fresh branch off the current HEAD
+ *
+ * Errors at every stage are logged but non-fatal — we don't want a stale
+ * checkout to take down the entire collab session creation.
+ */
+async function checkoutCollabBranch(
+  repoPath: string,
+  branch: string,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  // Already on this branch? no-op.
+  try {
+    const head = await captureGitOutput(["-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"], env)
+    if (head.trim() === branch) return
+  } catch { /* fall through */ }
+
+  // Try local
+  try {
+    await runAsync("git", ["-C", repoPath, "checkout", branch], { env })
+    return
+  } catch { /* fall through */ }
+
+  // Try tracking remote
+  try {
+    await runAsync("git", ["-C", repoPath, "fetch", "origin", branch], { env })
+    await runAsync("git", ["-C", repoPath, "checkout", "-b", branch, `origin/${branch}`], { env })
+    return
+  } catch { /* fall through */ }
+
+  // Create new branch off current HEAD
+  try {
+    await runAsync("git", ["-C", repoPath, "checkout", "-b", branch], { env })
+    console.log("[collab] created new branch", branch, "in", repoPath)
+  } catch (err) {
+    console.error("[collab] failed to create branch", branch, "in", repoPath, err)
+  }
+}
+
+/**
+ * Run a git command and capture stdout (used for `rev-parse` etc.).
+ * `runAsync` inherits stdio so we'd lose the output — this variant pipes.
+ */
+function captureGitOutput(args: string[], env: NodeJS.ProcessEnv): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("git", args, { stdio: ["ignore", "pipe", "pipe"], env })
+    let out = ""
+    let err = ""
+    child.stdout?.on("data", (b: Buffer) => (out += b.toString()))
+    child.stderr?.on("data", (b: Buffer) => (err += b.toString()))
+    child.on("close", (code) => (code === 0 ? resolve(out) : reject(new Error(err || `git exited ${code}`))))
+    child.on("error", reject)
+  })
 }
 
 /**
@@ -128,6 +197,7 @@ function installCollabCommitHook(
   sessionId: string,
   sessionName: string,
   repoFullName: string,
+  branch: string | null,
 ): void {
   const hooksDir = join(repoPath, ".git", "hooks")
   try {
@@ -141,6 +211,7 @@ function installCollabCommitHook(
   const safeName = sessionName.replace(/'/g, "'\\''")
   const safeRepo = repoFullName.replace(/'/g, "'\\''")
   const safeId = sessionId.replace(/'/g, "'\\''")
+  const safeBranch = (branch ?? "").replace(/'/g, "'\\''")
 
   const script = `#!/bin/sh
 # Auto-installed by unleashlive/opencode collab — DO NOT EDIT.
@@ -160,6 +231,7 @@ case "$COMMIT_SOURCE" in
       printf 'Collab-Session: %s\\n' '${safeName}' >> "$COMMIT_MSG_FILE"
       printf 'Collab-Session-Id: %s\\n' '${safeId}' >> "$COMMIT_MSG_FILE"
       printf 'Collab-Repo: %s\\n' '${safeRepo}' >> "$COMMIT_MSG_FILE"
+      ${safeBranch ? `printf 'Collab-Branch: %s\\n' '${safeBranch}' >> "$COMMIT_MSG_FILE"` : `# (no collab branch configured)`}
     fi
     ;;
 esac

@@ -201,7 +201,7 @@ function preWarmNativeSession(collabSessionId: string, workspacePath: string): v
       // session AND so the iframe immediately renders a conversation
       // (instead of an empty new-session view) when the user opens the page.
       if (nativeSessionId) {
-        await sendSeedPrompt(nativeSessionId, workspacePath, cs.name, cs.repos)
+        await sendSeedPrompt(nativeSessionId, workspacePath, cs.name, cs.repos, cs.branch)
       }
     } catch (err) {
       // Non-fatal: the approve path will retry
@@ -221,15 +221,20 @@ async function sendSeedPrompt(
   workspacePath: string,
   sessionName: string,
   repos: string[],
+  branch: string | null,
 ): Promise<void> {
   const reposLine =
     repos.length > 0
       ? `Linked repositories (cloned at ${workspacePath}): ${repos.join(", ")}`
       : `No repositories linked to this session.`
+  const branchLine = branch
+    ? `Working on git branch: ${branch}.  Every commit you make here will land on this branch.`
+    : `No collab branch configured — commits will land on whatever branch is currently checked out.`
   const seed = [
     `Starting a collab session: "${sessionName}".`,
     "",
     reposLine,
+    branchLine,
     "",
     "This is a real-time collaborative coding session.  Multiple developers " +
       "share this conversation through a queue — Drivers can dispatch prompts " +
@@ -685,6 +690,7 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       repos: string[]
       visibilityMode?: string
       queueMode?: string
+      branch?: string
     }
     const created = Session.createCollabSession({
       name: body.name,
@@ -694,6 +700,7 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       repos: body.repos ?? [],
       visibilityMode: (body.visibilityMode as any) ?? "typing",
       queueMode: (body.queueMode as any) ?? "fifo",
+      branch: body.branch,
     })
     // Register queue executor — handles dispatch + "submitted" status tracking
     registerQueueExecutor(created.id)
@@ -704,9 +711,9 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     // pane all start empty.
     const warmupDirectory = nativeSessionDirectory(created.id, created.repos)
     if (created.repos.length > 0) {
-      // Pass the session name so initSessionWorkspace can bake it into the
-      // per-repo prepare-commit-msg hook.
-      initSessionWorkspace(created.id, created.repos, created.name)
+      // Pass the session name + branch so initSessionWorkspace can check out
+      // the branch and bake the metadata into the per-repo commit hook.
+      initSessionWorkspace(created.id, created.repos, created.name, created.branch)
         .then(() => preWarmNativeSession(created.id, warmupDirectory))
         .catch((err) => {
           console.error("[collab] workspace init failed:", err)

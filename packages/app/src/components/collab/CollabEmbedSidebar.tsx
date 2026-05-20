@@ -160,6 +160,18 @@ export function CollabEmbedSidebar() {
                     </div>
                   </Show>
 
+                  <Show when={session.branch}>
+                    <div class="flex items-center gap-1 mt-1 text-[10px] text-emerald-400/80 font-mono truncate">
+                      <svg class="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <circle cx="6" cy="6" r="2" />
+                        <circle cx="6" cy="18" r="2" />
+                        <circle cx="18" cy="12" r="2" />
+                        <path stroke-linecap="round" d="M6 8v8M6 12c0-3.314 2.686-6 6-6h4" />
+                      </svg>
+                      <span class="truncate">{session.branch}</span>
+                    </div>
+                  </Show>
+
                   <div class="flex items-center gap-2 mt-1">
                     <Show when={(session.participants?.length ?? 0) > 0}>
                       <div class="flex -space-x-1">

@@ -23,6 +23,7 @@ export default function NewCollabSession() {
   const navigate = useNavigate()
   const [name, setName] = createSignal("")
   const [selectedRepos, setSelectedRepos] = createSignal<string[]>([])
+  const [branch, setBranch] = createSignal("")
   const [visibilityMode, setVisibilityMode] = createSignal("typing")
   const [queueMode, setQueueMode] = createSignal("fifo")
   const [submitting, setSubmitting] = createSignal(false)
@@ -104,6 +105,7 @@ export default function NewCollabSession() {
           repos: selectedRepos(),
           visibilityMode: visibilityMode(),
           queueMode: queueMode(),
+          branch: branch().trim() || undefined,
         }),
       })
       if (res.status === 401) {
@@ -343,6 +345,25 @@ export default function NewCollabSession() {
                     </For>
                   </div>
                 </Show>
+              </div>
+
+              {/* Branch */}
+              <div>
+                <label class="block text-sm font-medium text-zinc-300 mb-1.5">
+                  Git branch
+                  <span class="text-zinc-600 font-normal ml-1">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={branch()}
+                  onInput={(e) => setBranch(e.currentTarget.value)}
+                  placeholder="e.g. collab/drone-api-refactor — leave blank for auto-generated"
+                  class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500"
+                />
+                <p class="mt-1 text-[11px] text-zinc-600">
+                  Every linked repo will be checked out to this branch.  If empty, a
+                  branch named <code class="text-zinc-400">collab/&lt;slug&gt;-&lt;id&gt;</code> is created from the default branch.
+                </p>
               </div>
 
               {/* Visibility mode */}

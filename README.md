@@ -66,7 +66,8 @@ The server is running at: **https://corrosive-cola-chalice.ngrok-free.dev**
 2. Sign in with your GitHub account (unleashlive org member)
 3. Fill in your session:
    - **Session name** — e.g. "Drone API refactor". This becomes the opencode session title too.
-   - **Repositories** — pick from the org. For a single repo the LLM operates inside that repo (git diff / review pane / file tree all work). For multiple repos it works in the parent workspace.
+   - **Repositories** — pick from the org. The LLM operates inside the first repo (single-repo gets the full git/diff/file-tree experience; multi-repo sees siblings one directory up).
+   - **Git branch** *(optional)* — explicit name like `collab/drone-api-refactor`, or leave blank and a `collab/<slug>-<id>` branch is auto-created off the repo's default branch.  Every commit produced in the session lands on this branch and is tagged with `Collab-Branch:` in its trailer.
    - **Visibility while typing** — choose how much teammates see before you submit a prompt:
      - *Typing indicator* (default) — pulsing dots show next to participants who are composing, without revealing content
      - *Submitted only* — no live indicator; others see your prompt only once you send
@@ -117,8 +118,10 @@ Your browser ──── HTTPS ──── ngrok tunnel ──── Docker (l
   Collab-Session: Drone API refactor
   Collab-Session-Id: cs_45d8a93d...
   Collab-Repo: unleashlive/backend
+  Collab-Branch: collab/drone-api-refactor-bd3a63
   ```
   Amends, merges and squashes are left alone (re-stamping would duplicate).
+- **One git branch per collab session.**  At session creation each linked repo is checked out to the session's branch (auto-created off the default branch if missing).  The branch name is visible in the left collab panel and on each session card in the sidebar — so participants always know where their commits are landing.
 - **Seed prompt fires automatically.** When the workspace finishes cloning, the server sends one seed prompt to the freshly created opencode session: *"Starting a collab session: …"*.  This (a) gives the LLM context that it's in a multi-user collab session, and (b) makes the iframe immediately show a conversation instead of an empty composer.
 - **Submissions route through the queue.** The opencode prompt input (full editor with every shortcut) is rendered inside an `?embed=collab` iframe; submissions are intercepted via `postMessage` and forwarded to the collab API, so the right role/queue/vote flow always applies.
 - **Plugin pre-installed.** The `opencode-claude-auth` plugin is baked into the Docker image at build time so the first session creation doesn't block the event loop installing it.

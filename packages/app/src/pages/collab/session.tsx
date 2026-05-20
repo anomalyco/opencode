@@ -469,20 +469,48 @@ function CollabSessionInner(props: { me: Me }) {
           </Show>
         </div>
 
-        {/* Repos */}
-        <Show when={(collab.session()?.repos?.length ?? 0) > 0}>
-          <div class="px-4 py-3 border-t border-zinc-800/60 flex-shrink-0">
-            <div class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium mb-1.5">Repos</div>
-            <For each={collab.session()?.repos ?? []}>
-              {(repo) => (
-                <div class="flex items-center gap-1.5 py-0.5">
-                  <svg class="w-3 h-3 text-zinc-600 flex-shrink-0" fill="currentColor" viewBox="0 0 16 16">
-                    <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8z" />
-                  </svg>
-                  <span class="text-xs text-zinc-500 truncate">{repo.split("/")[1] ?? repo}</span>
+        {/* Repos + branch */}
+        <Show when={(collab.session()?.repos?.length ?? 0) > 0 || collab.session()?.branch}>
+          <div class="px-4 py-3 border-t border-zinc-800/60 flex-shrink-0 space-y-2">
+            <Show when={(collab.session()?.repos?.length ?? 0) > 0}>
+              <div>
+                <div class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium mb-1.5">Repos</div>
+                <For each={collab.session()?.repos ?? []}>
+                  {(repo) => (
+                    <div class="flex items-center gap-1.5 py-0.5">
+                      <svg class="w-3 h-3 text-zinc-600 flex-shrink-0" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8z" />
+                      </svg>
+                      <span class="text-xs text-zinc-500 truncate">{repo.split("/")[1] ?? repo}</span>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+
+            {/* Active branch — every commit lands here */}
+            <Show when={collab.session()?.branch}>
+              <div>
+                <div class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium mb-1.5">
+                  Branch
                 </div>
-              )}
-            </For>
+                <div
+                  class="flex items-center gap-1.5 py-0.5"
+                  title={`All commits in this collab session land on ${collab.session()!.branch}`}
+                >
+                  {/* git-branch icon */}
+                  <svg class="w-3 h-3 text-emerald-500/80 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <circle cx="6" cy="6" r="2" />
+                    <circle cx="6" cy="18" r="2" />
+                    <circle cx="18" cy="12" r="2" />
+                    <path stroke-linecap="round" d="M6 8v8M6 12c0-3.314 2.686-6 6-6h4" />
+                  </svg>
+                  <span class="text-xs text-emerald-400 font-mono truncate">
+                    {collab.session()!.branch}
+                  </span>
+                </div>
+              </div>
+            </Show>
           </div>
         </Show>
       </div>
