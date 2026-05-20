@@ -13,11 +13,32 @@
 
 A Collab Session lets two or more developers share a single opencode session — same conversation, same codebase, same LLM context. One person drives, others contribute or watch.
 
-- **Driver** — sends prompts directly to the LLM, approves suggestions from Contributors, manages roles
-- **Contributor** — submits prompt suggestions for the Driver to approve before execution, votes in Vote Pool mode
+- **Driver** — sends prompts directly to the LLM (FIFO mode) or to the vote pool (Vote mode), approves Contributor suggestions, manages roles, deletes sessions
+- **Contributor** — submits prompt suggestions for a Driver to approve before execution, votes in Vote Pool mode
 - **Viewer** — read-only access to the full session in real time
 
 The server runs on one machine. Everyone else joins in their browser — **no install required for collaborators.**
+
+### What you see in a session
+
+```
+┌────────────────────┬──────────────────────────────────────────┐
+│  Collab panel      │  Conversation (opencode)                  │
+│                    │  ┌────────────────────────────────────┐   │
+│  • Participants    │  │  ⌘ hamburger → collab sessions     │   │
+│  • Pulsing dots    │  ├────────────────────────────────────┤   │
+│    next to who     │  │                                    │   │
+│    is typing       │  │  LLM conversation thread           │   │
+│  • Pending queue   │  │                                    │   │
+│  • Vote / approve  │  ├────────────────────────────────────┤   │
+│  • Session list    │  │  Prompt input (full opencode UX:   │   │
+│    with X delete   │  │  ⌘P palette, /, @, attachments,    │   │
+│                    │  │  history, model + agent pickers)   │   │
+│                    │  └────────────────────────────────────┘   │
+└────────────────────┴──────────────────────────────────────────┘
+```
+
+The prompt input lives on the right (full opencode editor with every shortcut). When you submit, it is routed through the collab queue — so Contributor prompts wait for a Driver to approve, while Driver prompts in FIFO mode dispatch instantly to the LLM. The left panel shows the queue, participants (with pulsing dots when they're typing), and lets you switch between sessions or delete them.
 
 ---
 
@@ -44,16 +65,33 @@ The server is running at: **https://corrosive-cola-chalice.ngrok-free.dev**
 1. Go to [`/collab/new`](https://corrosive-cola-chalice.ngrok-free.dev/collab/new)
 2. Sign in with your GitHub account (unleashlive org member)
 3. Fill in your session:
-   - **Session name** — e.g. "Drone API refactor"
+   - **Session name** — e.g. "Drone API refactor". This becomes the opencode session title too.
+   - **Repositories** — pick from the org. For a single repo the LLM operates inside that repo (git diff / review pane / file tree all work). For multiple repos it works in the parent workspace.
    - **Visibility while typing** — choose how much teammates see before you submit a prompt:
-     - *Submitted only* — they see prompts only after you send
-     - *Typing indicator* — shows "Hanno is typing…" while you compose
-     - *Live preview* — they see your draft in real time
+     - *Typing indicator* (default) — pulsing dots show next to participants who are composing, without revealing content
+     - *Submitted only* — no live indicator; others see your prompt only once you send
    - **Prompt queue mode**:
-     - *FIFO* — prompts execute in the order received
-     - *Vote Pool* — team votes on suggestions; highest score runs first
+     - *FIFO* — Driver prompts dispatch instantly to the LLM; Contributor suggestions queue for Driver approval
+     - *Vote Pool* — everyone (Drivers + Contributors) adds to the pool; team votes; Driver resolves to execute the winner
 4. Click **Create Collab Session**
 5. From the session page, click **Invite** → pick a role → copy the link → share it
+6. To delete a session you own, hover over it in the left sidebar list and click the **×** that appears
+
+### Prompt input shortcuts
+
+The editor on the right is the full opencode prompt input. Inside it:
+
+| Shortcut | Action |
+|---|---|
+| `⌘P` / `Ctrl-P` | Command palette |
+| `/` | Slash command popover (mode, agent, model commands) |
+| `@` | Mention files or agents |
+| `⌘↵` / `Ctrl-↵` | Send |
+| `⌘U` / `Ctrl-U` | Attach a file |
+| Drag/drop | Drop files or images into the editor |
+| ↑ / ↓ | Cycle through prompt history |
+
+The model picker, agent selector and mode/variant dropdowns at the bottom of the editor stay editable in collab mode — whatever you have selected when a prompt is dispatched is what the LLM uses.
 
 ---
 
@@ -71,6 +109,10 @@ Your browser ──── HTTPS ──── ngrok tunnel ──── Docker (l
 - **LLM calls are server-side.** The server holds the Claude credentials. Teammates' own Claude accounts are not involved — this is a shared session billed to the server owner.
 - **GitHub OAuth** only verifies org membership. No GitHub permissions beyond that are granted.
 - **Sessions persist** across server restarts (SQLite, Docker volume). Disconnect and reconnect — your history is intact.
+- **Repos are cloned server-side** at session creation (using `GITHUB_TOKEN`). Participants never need a local clone — the LLM works inside `/var/opencode/workspaces/<sessionId>/<repo>` on the server.
+- **Co-authored commits.** The Driver who approved the prompt is the git author; all other online participants are added as `Co-authored-by:` trailers using their GitHub noreply email.
+- **Submissions route through the queue.** The opencode prompt input (full editor with every shortcut) is rendered inside an `?embed=collab` iframe; submissions are intercepted via `postMessage` and forwarded to the collab API, so the right role/queue/vote flow always applies.
+- **Plugin pre-installed.** The `opencode-claude-auth` plugin is baked into the Docker image at build time so the first session creation doesn't block the event loop installing it.
 
 ---
 
@@ -83,9 +125,31 @@ git clone https://github.com/unleashlive/opencode
 cd opencode
 cp .env.example .env
 # Fill in GITHUB_OAUTH_CLIENT_ID, GITHUB_OAUTH_CLIENT_SECRET,
-# GITHUB_TOKEN, SESSION_SECRET, OPENCODE_BASE_URL, and LLM credentials
+# GITHUB_TOKEN, GITHUB_ORG_NAME, SESSION_SECRET, OPENCODE_BASE_URL
+
+# Export your Claude Code credentials so the server can authenticate to Claude:
+security find-generic-password -s "Claude Code-credentials" -w > ~/.claude/.credentials.json
+
 ngrok http 4096              # note your https URL → set as OPENCODE_BASE_URL
 docker compose up --build -d
+```
+
+After source-only changes, rebuild is fast — the Dockerfile uses a multi-stage
+manifests-only extraction so `bun install` only re-runs when a `package.json`
+or `bun.lock` actually changes. Force a clean container after a build with:
+
+```bash
+docker compose up -d --build --force-recreate
+```
+
+If the container reports "Claude Code credentials are unavailable or expired",
+re-export them from your keychain (running `claude` on the host refreshes the
+keychain but doesn't update the bind-mounted file):
+
+```bash
+rm -f ~/.claude/.credentials.json
+security find-generic-password -s "Claude Code-credentials" -w > ~/.claude/.credentials.json
+docker compose restart opencode
 ```
 
 Full setup details in [COLLAB.md](./COLLAB.md).
