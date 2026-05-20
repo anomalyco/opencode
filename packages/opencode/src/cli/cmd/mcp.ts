@@ -271,6 +271,9 @@ export const McpAuthCommand = effectCmd({
         Effect.sync(() => {
           if (status.status === "connected") {
             spinner.stop("Authentication successful!")
+          } else if (status.status === "needs_auth") {
+            spinner.stop("Authentication did not complete", 1)
+            prompts.log.error("Server connected without storing OAuth credentials")
           } else if (status.status === "needs_client_registration") {
             spinner.stop("Authentication failed", 1)
             prompts.log.error(status.error)

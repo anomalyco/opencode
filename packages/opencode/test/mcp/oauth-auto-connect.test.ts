@@ -21,6 +21,7 @@ const transportCalls: Array<{
 // auth flow (which calls provider.state()) or a simple UnauthorizedError.
 let simulateAuthFlow = true
 let connectSucceedsImmediately = false
+let directAuthResult: "REDIRECT" | "AUTHORIZED" = "REDIRECT"
 
 // Mock the transport constructors to simulate OAuth auto-auth on 401
 void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
@@ -102,12 +103,26 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 // Mock UnauthorizedError in the auth module so instanceof checks work
 void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
   UnauthorizedError: MockUnauthorizedError,
+  auth: async (
+    provider: {
+      state?: () => Promise<string>
+      saveCodeVerifier?: (v: string) => Promise<void>
+      redirectToAuthorization?: (url: URL) => Promise<void>
+    },
+  ) => {
+    if (directAuthResult === "AUTHORIZED") return "AUTHORIZED"
+    await provider.state?.()
+    await provider.saveCodeVerifier?.("test-verifier")
+    await provider.redirectToAuthorization?.(new URL("https://auth.example.com/authorize?state=test"))
+    return "REDIRECT"
+  },
 }))
 
 beforeEach(() => {
   transportCalls.length = 0
   simulateAuthFlow = true
   connectSucceedsImmediately = false
+  directAuthResult = "REDIRECT"
 })
 
 // Import modules after mocking
@@ -210,11 +225,39 @@ mcpTest.instance("state() returns existing state when one is saved", () =>
   }),
 )
 
+mcpTest.instance("invalidateCredentials() removes entries that only retain serverUrl", () =>
+  Effect.gen(function* () {
+    const auth = yield* McpAuth.Service
+    const provider = new McpOAuthProvider(
+      "test-stale-server-url",
+      "https://example.com/mcp",
+      {},
+      { onRedirect: async () => {} },
+      auth,
+    )
+
+    yield* Effect.promise(() =>
+      provider.saveTokens({
+        access_token: "token",
+        token_type: "Bearer",
+      }),
+    )
+
+    expect((yield* auth.get("test-stale-server-url"))?.serverUrl).toBe("https://example.com/mcp")
+
+    yield* Effect.promise(() => provider.invalidateCredentials("tokens"))
+
+    expect(yield* auth.get("test-stale-server-url")).toBeUndefined()
+    expect((yield* auth.all())["test-stale-server-url"]).toBeUndefined()
+  }),
+)
+
 mcpTest.instance(
-  "authenticate() stores a connected client when auth completes without redirect",
+  "authenticate() fails clearly when transport reconnects without stored tokens",
   () =>
     MCP.Service.use((mcp) =>
       Effect.gen(function* () {
+        const auth = yield* McpAuth.Service
         const added = yield* mcp.add("test-oauth-connect", {
           type: "remote",
           url: "https://example.com/mcp",
@@ -222,15 +265,39 @@ mcpTest.instance(
         const before = added.status as Record<string, { status: string; error?: string }>
         expect(before["test-oauth-connect"]?.status).toBe("needs_auth")
 
+        directAuthResult = "AUTHORIZED"
         simulateAuthFlow = false
         connectSucceedsImmediately = true
 
         const result = yield* mcp.authenticate("test-oauth-connect")
-        expect(result.status).toBe("connected")
+        expect(result.status).toBe("failed")
+        if (result.status === "failed") {
+          expect(result.error).toContain("may not support interactive OAuth authentication")
+        }
+
+        const entry = yield* auth.get("test-oauth-connect")
+        expect(entry).toBeUndefined()
 
         const after = yield* mcp.status()
-        expect(after["test-oauth-connect"]?.status).toBe("connected")
+        expect(after["test-oauth-connect"]?.status).toBe("needs_auth")
       }),
     ),
   { config: config("test-oauth-connect") },
+)
+
+mcpTest.instance(
+  "startAuth() returns an authorization URL even when transport can connect anonymously",
+  () =>
+    MCP.Service.use((mcp) =>
+      Effect.gen(function* () {
+        simulateAuthFlow = false
+        connectSucceedsImmediately = true
+        directAuthResult = "REDIRECT"
+
+        const result = yield* mcp.startAuth("test-oauth-direct")
+        expect(result.authorizationUrl).toContain("https://auth.example.com/authorize")
+        expect(result.oauthState.length).toBeGreaterThan(0)
+      }),
+    ),
+  { config: config("test-oauth-direct") },
 )
