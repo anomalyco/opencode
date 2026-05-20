@@ -4,9 +4,12 @@
 # What this does:
 #   - copy securecode.json into ~/.config/securecode/    (preserves any existing one)
 #   - copy tui.json into  ~/.config/securecode/         (preserves any existing one)
+#   - copy themes/*.json into ~/.config/securecode/themes/ (preserves any existing one)
 #
 # Branding (SecureCode wordmark / sidebar badge) is shipped inside the binary
-# and does not need a separate plugin file.
+# and does not need a separate plugin file. The bundled TUI theme that
+# tui.json.example selects (`theme: "securecode"`) lives in `themes/` and is
+# copied alongside.
 #
 # After install, set SECURECODE_QWEN3_API_KEY in your shell environment to the
 # Qwen3.6-35B-A3B-FP8 API key your Acompany contact issued for you, then run:
@@ -39,3 +42,15 @@ if [ ! -e "$dest/securecode.json" ]; then
 else
   echo "skipped (already exists): $dest/securecode.json"
 fi
+
+mkdir -p "$dest/themes"
+for theme in "$src/themes"/*.json; do
+  [ -e "$theme" ] || continue
+  name=$(basename "$theme")
+  if [ ! -e "$dest/themes/$name" ]; then
+    cp "$theme" "$dest/themes/$name"
+    echo "installed: $dest/themes/$name"
+  else
+    echo "skipped (already exists): $dest/themes/$name"
+  fi
+done
