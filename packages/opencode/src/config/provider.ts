@@ -105,6 +105,9 @@ export const Info = Schema.Struct({
     ),
   ),
   models: Schema.optional(Schema.Record(Schema.String, Model)),
+  auth_provider: Schema.optional(Schema.String).annotate({
+    description: "Reuse auth flow (OAuth/credentials) from another provider while storing credentials under this provider ID",
+  }),
 }).annotate({ identifier: "ProviderConfig" })
 export type Info = Schema.Schema.Type<typeof Info>
 
