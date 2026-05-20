@@ -72,8 +72,11 @@ export function CollabProvider(props: CollabProviderProps) {
         const data = await res.json()
         const { workspacePath, ...sessionData } = data as CollabSession & { workspacePath?: string }
         setSession(sessionData)
-        // Recover workspace directory for the iframe URL on page reload
-        if (workspacePath && sessionData.sessionId) {
+        // Always set the workspace directory as soon as we know it, even if
+        // no native opencode session exists yet — the iframe on the right
+        // uses this to render the editor immediately so the user can type
+        // and submit their first prompt without waiting for pre-warm.
+        if (workspacePath) {
           setNativeSessionDirectory(workspacePath)
         }
       }

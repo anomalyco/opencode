@@ -112,7 +112,16 @@ import { eq, gt } from "drizzle-orm"
  * broadcasts `collab:native_session_linked`.
  *
  * Returns the native session ID, or null on failure.
+ *
+ * In-flight deduplication: concurrent callers (pre-warm + the queue executor
+ * triggered by a fast first user submit) would otherwise race and create
+ * multiple native sessions for the same workspace, with the prompt landing
+ * in whichever the executor used while the iframe ended up pointed at the
+ * other.  We keep a per-collab-session Promise so a second caller awaits
+ * the first one's result.
  */
+const inFlightCreate = new Map<string, Promise<string | null>>()
+
 async function ensureNativeSession(
   collabSessionId: string,
   workspacePath: string,
@@ -123,37 +132,50 @@ async function ensureNativeSession(
   // Fast path: session already created
   if (collabSession.sessionId) return collabSession.sessionId
 
-  const { mkdirSync } = await import("fs")
-  mkdirSync(workspacePath, { recursive: true })
+  // Concurrent caller? Reuse the existing in-flight create.
+  const pending = inFlightCreate.get(collabSessionId)
+  if (pending) return pending
 
-  console.log("[collab] creating native session for directory:", workspacePath)
-  const createRes = await fetch(
-    `http://localhost:4096/session?directory=${encodeURIComponent(workspacePath)}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      // Pass the collab session name through as the opencode session title
-      // so the right-hand pane shows "Fix login bug" instead of "New Session".
-      body: JSON.stringify({ title: collabSession.name }),
-    },
-  )
-  if (!createRes.ok) {
-    const body = await createRes.text()
-    console.error("[collab] failed to create native session:", createRes.status, body)
-    return null
+  const createPromise = (async (): Promise<string | null> => {
+    const { mkdirSync } = await import("fs")
+    mkdirSync(workspacePath, { recursive: true })
+
+    console.log("[collab] creating native session for directory:", workspacePath)
+    const createRes = await fetch(
+      `http://localhost:4096/session?directory=${encodeURIComponent(workspacePath)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Pass the collab session name through as the opencode session title
+        // so the right-hand pane shows "Fix login bug" instead of "New Session".
+        body: JSON.stringify({ title: collabSession.name }),
+      },
+    )
+    if (!createRes.ok) {
+      const body = await createRes.text()
+      console.error("[collab] failed to create native session:", createRes.status, body)
+      return null
+    }
+    const created = (await createRes.json()) as { id: string }
+    console.log("[collab] native session created:", created.id)
+
+    // Persist the link and notify all connected clients
+    Session.linkNativeSession(collabSessionId, created.id)
+    broadcastSse(collabSessionId, {
+      type: "collab:native_session_linked",
+      sessionId: created.id,
+      directory: workspacePath,
+    })
+
+    return created.id
+  })()
+
+  inFlightCreate.set(collabSessionId, createPromise)
+  try {
+    return await createPromise
+  } finally {
+    inFlightCreate.delete(collabSessionId)
   }
-  const created = (await createRes.json()) as { id: string }
-  console.log("[collab] native session created:", created.id)
-
-  // Persist the link and notify all connected clients
-  Session.linkNativeSession(collabSessionId, created.id)
-  broadcastSse(collabSessionId, {
-    type: "collab:native_session_linked",
-    sessionId: created.id,
-    directory: workspacePath,
-  })
-
-  return created.id
 }
 
 /**
