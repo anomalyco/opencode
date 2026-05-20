@@ -1,6 +1,16 @@
-import { bigint, mysqlTable, primaryKey, uniqueIndex } from "drizzle-orm/mysql-core"
+import { bigint, mysqlTable, primaryKey, uniqueIndex, varchar } from "drizzle-orm/mysql-core"
 import { timestamps, ulid, utc, workspaceColumns } from "../drizzle/types"
 import { workspaceIndexes } from "./workspace.sql"
+
+export const ReferralCodeTable = mysqlTable(
+  "referral_code",
+  {
+    workspaceID: ulid("workspace_id").notNull(),
+    code: varchar("code", { length: 10 }).notNull(),
+    ...timestamps,
+  },
+  (table) => [primaryKey({ columns: [table.workspaceID] }), uniqueIndex("code").on(table.code)],
+)
 
 export const ReferralTable = mysqlTable(
   "referral",
@@ -9,7 +19,7 @@ export const ReferralTable = mysqlTable(
     ...timestamps,
     inviteeAccountID: ulid("invitee_account_id").notNull(),
   },
-  (table) => [...workspaceIndexes(table), uniqueIndex("referral_invitee_account_id").on(table.inviteeAccountID)],
+  (table) => [...workspaceIndexes(table), uniqueIndex("invitee_account_id").on(table.inviteeAccountID)],
 )
 
 export const ReferralRewardTable = mysqlTable(

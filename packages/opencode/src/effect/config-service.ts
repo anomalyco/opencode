@@ -50,12 +50,10 @@ export const Service =
       static get defaultLayer() {
         return Layer.effect(
           this,
-          Config.all(fields)
-            .asEffect()
-            .pipe(
-              // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Config.all preserves the field shape, but its conditional return type also supports iterable inputs.
-              Effect.map((config) => this.of(config as Shape<Fields>)),
-            ),
+          Config.all(fields).pipe(
+            // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Config.all preserves the field shape, but its conditional return type also supports iterable inputs.
+            Effect.map((config) => this.of(config as Shape<Fields>)),
+          ),
         )
       }
     }
