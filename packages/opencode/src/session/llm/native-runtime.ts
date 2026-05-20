@@ -59,6 +59,8 @@ export function stream(input: StreamInput): StreamResult {
   const current = status(input)
   if (current.type === "unsupported") return current
 
+  // Integration point with @opencode-ai/llm: native-request lowers session data
+  // into an LLMRequest, then LLMClient handles route selection and transport.
   return {
     ...current,
     stream: input.llmClient.stream({
@@ -99,6 +101,8 @@ export function nativeTools(tools: Record<string, Tool>, input: Pick<StreamInput
   return Object.fromEntries(
     Object.entries(tools).map(([name, item]) => [
       name,
+      // Tool execution remains opencode-owned. The native runtime only adapts
+      // the @opencode-ai/llm tool call back into the AI SDK Tool.execute shape.
       nativeTool({
         description: item.description ?? "",
         jsonSchema: nativeSchema(item.inputSchema),

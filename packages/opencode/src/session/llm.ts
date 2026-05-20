@@ -349,6 +349,8 @@ const live: Layer.Layer<
         ...headers,
       }
 
+      // Runtime seam: native is an opt-in adapter over @opencode-ai/llm. It
+      // either returns a ready LLMEvent stream or a concrete fallback reason.
       if (flags.experimentalNativeLlm) {
         const native = LLMNativeRuntime.stream({
           model: input.model,
@@ -399,6 +401,8 @@ const live: Layer.Layer<
           "llm.model": input.model.id,
         }),
       )
+      // Default runtime path: AI SDK owns provider execution and tool dispatch;
+      // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
       return {
         type: "ai-sdk" as const,
         result: streamText({
@@ -481,6 +485,8 @@ const live: Layer.Layer<
 
             if (result.type === "native") return result.stream
 
+            // Adapter seam: both runtimes expose the same LLMEvent stream. Native
+            // already returns one; AI SDK streams are converted here.
             const state = LLMAISDK.adapterState()
             return Stream.fromAsyncIterable(result.result.fullStream, (e) =>
               e instanceof Error ? e : new Error(String(e)),
