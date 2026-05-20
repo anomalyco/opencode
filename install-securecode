@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
 # Acompany SecureCode one-shot installer.
 #
-# Recommended invocation (private repo, internal use):
-#   gh release download -R acompany-develop/securecode --pattern install -O - | bash
+# Recommended invocation (during private staging, internal use):
+#   gh release download -R acompany-develop/securecode-release --pattern install -O - | bash
 #
-# Recommended invocation (when the repo is public):
-#   curl -fsSL https://github.com/acompany-develop/securecode/releases/latest/download/install | bash
+# Recommended invocation (once securecode-release is flipped public):
+#   curl -fsSL https://github.com/acompany-develop/securecode-release/releases/latest/download/install | bash
 #
 # Or for a pinned version:
-#   gh release download -R acompany-develop/securecode --pattern install -O - | bash -s -- --version 0.1.0
+#   gh release download -R acompany-develop/securecode-release --pattern install -O - | bash -s -- --version 0.1.0
 #
 # When the repository is private, this script transparently uses the `gh` CLI
 # (must be authenticated via `gh auth login`) for both metadata lookup and
 # archive download. If `gh` is unavailable or unauthenticated, it falls back to
 # bare curl, which only works for public repositories.
 #
-# Refs https://github.com/acompany-develop/securecode/issues/82.
+# Refs https://github.com/acompany-develop/securecode/issues/82 and #159.
 set -euo pipefail
 
 APP=securecode
 ARCHIVE_PREFIX=securecode
-GH_REPO=acompany-develop/securecode
+GH_REPO=acompany-develop/securecode-release
 
 # Hold the download-path scratch directory at script scope so the EXIT trap
 # below can read it after main() returns. A `local tmp` inside main() goes out

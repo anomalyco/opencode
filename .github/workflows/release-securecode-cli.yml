@@ -1,5 +1,16 @@
 name: release-securecode-cli
 
+# Builds SecureCode CLI binaries and uploads them as Release assets to the
+# public-facing distribution repo `acompany-develop/securecode-release`.
+#
+# Requires the secret `SECURECODE_RELEASE_TOKEN` — a fine-grained PAT (or
+# GitHub App installation token) with `contents:write` on
+# `acompany-develop/securecode-release`. The workflow's default
+# `github.token` only has access to the source repo and cannot write to the
+# release repo.
+#
+# Refs #159.
+
 on:
   release:
     types:
@@ -12,7 +23,10 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  RELEASE_REPO: acompany-develop/securecode-release
 
 jobs:
   cli:
@@ -43,22 +57,22 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Ensure release exists
+      - name: Ensure release exists on release repo
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.SECURECODE_RELEASE_TOKEN }}
           TAG: ${{ steps.vars.outputs.tag }}
         run: |
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if gh release view "$TAG" --repo "$RELEASE_REPO" >/dev/null 2>&1; then
             gh release edit "$TAG" \
               --title "Acompany SecureCode ${TAG}" \
-              --repo "$GITHUB_REPOSITORY"
+              --repo "$RELEASE_REPO"
             exit 0
           fi
 
           gh release create "$TAG" \
             --title "Acompany SecureCode ${TAG}" \
             --notes "Acompany SecureCode CLI release." \
-            --repo "$GITHUB_REPOSITORY"
+            --repo "$RELEASE_REPO"
 
       - name: Build CLI binaries
         env:
@@ -67,8 +81,8 @@ jobs:
 
       - name: Upload release assets
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.SECURECODE_RELEASE_TOKEN }}
+          GH_REPO: ${{ env.RELEASE_REPO }}
           OPENCODE_VERSION: ${{ steps.vars.outputs.version }}
           SECURECODE_TAG: ${{ steps.vars.outputs.tag }}
         run: bun ./script/release-securecode.ts
