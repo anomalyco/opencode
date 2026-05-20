@@ -101,7 +101,7 @@ const modelWithDefaults =
     const mapped = options.mapInput === undefined ? (input as RouteMappedModelInput) : options.mapInput(input)
     const provider = defaults.provider ?? route.provider ?? ("provider" in mapped ? mapped.provider : undefined)
     if (!provider) throw new Error(`Route.model(${route.id}) requires a provider`)
-    const baseURL = mapped.baseURL ?? defaults.baseURL ?? route.defaults.baseURL
+    const baseURL = mapped.baseURL ?? defaults.baseURL ?? route.defaults.baseURL ?? endpointBaseURL(route.transport)
     if (!baseURL)
       throw new Error(`Route.model(${route.id}) requires a baseURL — supply it via input, defaults, or route defaults`)
     const generation = mergeGenerationOptions(route.defaults.generation, defaults.generation)
@@ -130,20 +130,8 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
   http: mergeHttpOptions(httpOptions(base?.http), httpOptions(patch.http)),
 })
 
-const endpointDefaults = <Body, Prepared, Frame>(transport: Transport<Body, Prepared, Frame>): RouteDefaults => {
-  if (!transport.endpoint) return {}
-  const query = ProviderShared.isRecord(transport.endpoint.query)
-    ? Object.fromEntries(
-        Object.entries(transport.endpoint.query).filter(
-          (entry): entry is [string, string] => typeof entry[1] === "string",
-        ),
-      )
-    : undefined
-  return {
-    baseURL: typeof transport.endpoint.baseURL === "string" ? transport.endpoint.baseURL : undefined,
-    queryParams: query && Object.keys(query).length > 0 ? query : undefined,
-  }
-}
+const endpointBaseURL = <Body, Prepared, Frame>(transport: Transport<Body, Prepared, Frame>) =>
+  typeof transport.endpoint?.baseURL === "string" ? transport.endpoint.baseURL : undefined
 
 const applyEndpointPatch = <Body, Prepared, Frame>(
   transport: Transport<Body, Prepared, Frame>,
@@ -258,7 +246,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       provider: routeInput.provider === undefined ? undefined : ProviderID.make(routeInput.provider),
       protocol: protocol.id,
       transport: routeInput.transport,
-      defaults: mergeRouteDefaults(endpointDefaults(routeInput.transport), routeInput.defaults ?? {}),
+      defaults: mergeRouteDefaults(undefined, routeInput.defaults ?? {}),
       body: protocol.body,
       with: (patch: RoutePatch<Body, Prepared>) => {
         const { id, provider, transport, endpoint, ...defaults } = patch

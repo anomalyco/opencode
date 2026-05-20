@@ -2,9 +2,7 @@ import { Schema } from "effect"
 import { JsonSchema, ModelID, ProviderID } from "./ids"
 import type { AnyRoute } from "../route/client"
 import type { Auth } from "../route/auth"
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
+import { isRecord } from "../utils/record"
 
 export const mergeJsonRecords = (
   ...items: ReadonlyArray<Record<string, unknown> | undefined>
@@ -231,10 +229,7 @@ export namespace Model {
     readonly native?: Record<string, unknown>
   }
 
-  export type Input = Omit<
-    ConstructorInput,
-    "id" | "provider" | "route" | "limits" | "generation" | "http"
-  > & {
+  export type Input = Omit<ConstructorInput, "id" | "provider" | "route" | "limits" | "generation" | "http"> & {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
     readonly route: AnyRoute
