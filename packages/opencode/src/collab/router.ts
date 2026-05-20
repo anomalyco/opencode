@@ -552,15 +552,38 @@ async function handleOAuthCallback(req: Request, url: URL): Promise<Response> {
 
     const ghUser = await getGitHubUser(accessToken)
 
-    // Check org membership
+    // Check org membership.  Pass the user's OAuth token so we can ask GitHub
+    // "is THIS person a member of <org>" directly (works for private members);
+    // we fall back to the server PAT check inside isOrgMember.
     const isMember = await isOrgMember({
       orgName: c.orgName,
       githubLogin: ghUser.login,
       serverToken: c.serverToken,
+      userToken: accessToken,
     })
     if (!isMember) {
+      console.error("[collab.auth] org membership denied", {
+        org: c.orgName,
+        login: ghUser.login,
+        id: ghUser.id,
+      })
       return html(
-        `<h1>Access denied</h1><p>You must be a member of the <strong>${c.orgName}</strong> GitHub organisation to use this tool.</p>`,
+        `
+          <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 520px; margin: 4rem auto; padding: 1.5rem; line-height: 1.5;">
+            <h1 style="margin: 0 0 0.5rem 0;">Access denied</h1>
+            <p>
+              You signed in as <strong>${ghUser.login}</strong>, but we couldn't verify that you're a member of the
+              <strong>${c.orgName}</strong> GitHub organisation.
+            </p>
+            <p>If you believe this is wrong, check:</p>
+            <ul>
+              <li>That <strong>${ghUser.login}</strong> is actually a member of <strong>${c.orgName}</strong> at <a href="https://github.com/orgs/${c.orgName}/people">github.com/orgs/${c.orgName}/people</a>.</li>
+              <li>That you authorised the OAuth app for <strong>read:org</strong> scope (you may need to revoke and re-authorise: <a href="https://github.com/settings/applications">github.com/settings/applications</a>).</li>
+              <li>If <strong>${c.orgName}</strong> uses SAML/SSO, you may need to authorise the OAuth token for SSO on the same page.</li>
+            </ul>
+            <p>The server admin can also inspect docker logs for the exact GitHub API status code returned for your account.</p>
+          </div>
+        `,
         403,
       )
     }
@@ -631,9 +654,20 @@ async function handleInviteRedeem(req: Request, token: string): Promise<Response
     orgName: c.orgName,
     githubLogin: sess.githubLogin,
     serverToken: c.serverToken,
+    // The user's own OAuth token is stashed in the session — pass it so the
+    // membership probe works for private members and SSO-protected orgs.
+    userToken: sess.githubAccessToken,
   })
   if (!isMember) {
-    return html(`<h1>Access denied</h1><p>You must be a member of the ${c.orgName} organisation.</p>`, 403)
+    console.error("[collab.auth] invite redeem org membership denied", {
+      org: c.orgName,
+      login: sess.githubLogin,
+      id: sess.githubId,
+    })
+    return html(
+      `<h1>Access denied</h1><p>You must be a member of the <strong>${c.orgName}</strong> organisation to redeem this invite.</p>`,
+      403,
+    )
   }
 
   const collabSession = Session.getCollabSession(invite.collabSessionId)
