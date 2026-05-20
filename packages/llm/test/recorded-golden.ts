@@ -38,6 +38,7 @@ const scenarioInput = (input: ScenarioInput) => (typeof input === "string" ? { i
 const scenarioTitle = (id: GoldenScenarioID) => {
   if (id === "text") return "streams text"
   if (id === "tool-call") return "streams tool call"
+  if (id === "image") return "reads image text"
   return "drives a tool loop"
 }
 

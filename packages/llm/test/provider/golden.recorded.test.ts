@@ -120,7 +120,7 @@ describeRecordedGoldenScenarios([
     prefix: "gemini",
     model: gemini,
     requires: ["GOOGLE_GENERATIVE_AI_API_KEY"],
-    scenarios: [{ id: "text", maxTokens: 80 }, "tool-call"],
+    scenarios: [{ id: "text", maxTokens: 80 }, "tool-call", { id: "image", maxTokens: 160 }],
   },
   {
     name: "xAI Grok 3 Mini",
