@@ -1,6 +1,13 @@
 import type { JsonSchema, LLMRequest, ProviderMetadata } from "@opencode-ai/llm"
 import { LLM, Message, Model, SystemPart, ToolCallPart, ToolDefinition, ToolResultPart } from "@opencode-ai/llm"
-import "@opencode-ai/llm/providers"
+import { OpenRouter, Azure } from "@opencode-ai/llm/providers"
+import {
+  AnthropicMessages,
+  BedrockConverse,
+  Gemini,
+  OpenAICompatibleChat,
+  OpenAIResponses,
+} from "@opencode-ai/llm/protocols"
 import type { ModelMessage } from "ai"
 import type { Provider } from "@/provider/provider"
 import { isRecord } from "@/util/record"
@@ -34,14 +41,14 @@ const DEFAULT_BASE_URL: Record<string, string> = {
   "@openrouter/ai-sdk-provider": "https://openrouter.ai/api/v1",
 }
 
-const ROUTE: Record<string, string> = {
-  "@ai-sdk/openai": "openai-responses",
-  "@ai-sdk/azure": "azure-openai-responses",
-  "@ai-sdk/anthropic": "anthropic-messages",
-  "@ai-sdk/google": "gemini",
-  "@ai-sdk/amazon-bedrock": "bedrock-converse",
-  "@ai-sdk/openai-compatible": "openai-compatible-chat",
-  "@openrouter/ai-sdk-provider": "openrouter",
+const ROUTE: Record<string, Model.Input["route"]> = {
+  "@ai-sdk/openai": OpenAIResponses.route,
+  "@ai-sdk/azure": Azure.routes[0],
+  "@ai-sdk/anthropic": AnthropicMessages.route,
+  "@ai-sdk/google": Gemini.route,
+  "@ai-sdk/amazon-bedrock": BedrockConverse.route,
+  "@ai-sdk/openai-compatible": OpenAICompatibleChat.route,
+  "@openrouter/ai-sdk-provider": OpenRouter.route,
 }
 
 const providerMetadata = (value: unknown): ProviderMetadata | undefined => {

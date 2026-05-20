@@ -521,15 +521,15 @@ ModelResolver = dynamic opencode/config bridge
 ## Implementation Todo
 
 - [x] Replace the current executable `ModelRef` with `Model`.
-- [ ] Change `Model.route` to carry a route value, not a `RouteID` string.
+- [x] Change `Model.route` to carry a route value, not a `RouteID` string.
 - [ ] Keep a separate durable model identity type for persisted/session/catalog
       data, likely `{ providerID, modelID }`, and make it clear that it cannot
       execute without resolver context.
 - [ ] Change route model selectors so `route.model(id)` returns an executable
       model with the route value attached, not a globally registered route id.
-- [ ] Rework `LLMClient.prepare` / `stream` / `generate` to read
+- [x] Rework `LLMClient.prepare` / `stream` / `generate` to read
       `request.model.route` directly instead of calling `registeredRoute(...)`.
-- [ ] Remove `Route.make(...)` global registration from the normal execution
+- [x] Remove `Route.make(...)` global registration from the normal execution
       path; keep route ids only as diagnostics/provider API labels.
 - [ ] Model endpoint as `{ baseURL, path, query }` on routes, then remove the
       current split where host/query live on the model and path lives in route

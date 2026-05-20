@@ -13,7 +13,7 @@ describe("OpenRouter", () => {
       expect(model).toMatchObject({
         id: "openai/gpt-4o-mini",
         provider: "openrouter",
-        route: "openrouter",
+        route: { id: "openrouter" },
         baseURL: "https://openrouter.ai/api/v1",
         apiKey: "test-key",
       })

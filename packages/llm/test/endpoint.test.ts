@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { LLM } from "../src"
+import * as OpenAIChat from "../src/protocols/openai-chat"
 import { Endpoint } from "../src/route"
 import { Model } from "../src/schema"
 
@@ -8,7 +9,7 @@ const request = (input: { readonly baseURL: string; readonly queryParams?: Recor
     model: Model.make({
       id: "model-1",
       provider: "test",
-      route: "test-route",
+      route: OpenAIChat.route,
       baseURL: input.baseURL,
       queryParams: input.queryParams,
     }),

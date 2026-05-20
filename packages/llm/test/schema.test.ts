@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
+import * as OpenAIChat from "../src/protocols/openai-chat"
+import * as OpenAIResponses from "../src/protocols/openai-responses"
 import { ContentPart, LLMEvent, LLMRequest, Model, ModelID, ModelLimits, ProviderID, Usage } from "../src/schema"
 import { ProviderShared } from "../src/protocols/shared"
 
 const model = new Model({
   id: ModelID.make("fake-model"),
   provider: ProviderID.make("fake-provider"),
-  route: "openai-chat",
+  route: OpenAIChat.route,
   baseURL: "https://fake.local",
   limits: new ModelLimits({}),
 })
@@ -32,14 +34,14 @@ describe("llm schema", () => {
 
   test("accepts custom route ids", () => {
     const decoded = decodeLLMRequest({
-      model: { ...model, route: "custom-route" },
+      model: Model.update(model, { route: OpenAIResponses.route }),
       system: [],
       messages: [],
       tools: [],
       generation: {},
     })
 
-    expect(decoded.model.route).toBe("custom-route")
+    expect(decoded.model.route.id).toBe("openai-responses")
   })
 
   test("rejects invalid event type", () => {

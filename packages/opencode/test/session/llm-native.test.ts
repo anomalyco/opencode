@@ -138,7 +138,7 @@ describe("session.llm-native.request", () => {
     expect(request.model).toMatchObject({
       id: "gpt-5-mini",
       provider: "openai",
-      route: "openai-responses",
+      route: { id: "openai-responses" },
       baseURL: "https://api.openai.com/v1",
       headers: {
         "x-model": "model-header",
@@ -215,23 +215,23 @@ describe("session.llm-native.request", () => {
     expect(
       LLMNative.model({ ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/anthropic" } }),
     ).toMatchObject({
-      route: "anthropic-messages",
+      route: { id: "anthropic-messages" },
       baseURL: "https://api.anthropic.com/v1",
     })
     expect(LLMNative.model({ ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/google" } })).toMatchObject({
-      route: "gemini",
+      route: { id: "gemini" },
       baseURL: "https://generativelanguage.googleapis.com/v1beta",
     })
     expect(
       LLMNative.model({ ...baseModel, api: { ...baseModel.api, npm: "@ai-sdk/openai-compatible" } }),
     ).toMatchObject({
-      route: "openai-compatible-chat",
+      route: { id: "openai-compatible-chat" },
       baseURL: "https://api.openai.com/v1",
     })
     expect(
       LLMNative.model({ ...baseModel, api: { ...baseModel.api, url: "", npm: "@openrouter/ai-sdk-provider" } }),
     ).toMatchObject({
-      route: "openrouter",
+      route: { id: "openrouter" },
       baseURL: "https://openrouter.ai/api/v1",
     })
   })

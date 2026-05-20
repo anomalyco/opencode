@@ -45,13 +45,13 @@ const scenarioTitle = (id: GoldenScenarioID) => {
 const defaultPrefix = (target: TargetInput) => {
   if (target.prefix) return target.prefix
   const transport = target.transport === "websocket" ? "-websocket" : ""
-  return `${target.model.provider}-${target.protocol ?? target.model.route}${transport}`
+  return `${target.model.provider}-${target.protocol ?? target.model.route.id}${transport}`
 }
 
 const metadata = (target: TargetInput) => ({
   provider: target.model.provider,
   protocol: target.protocol,
-  route: target.model.route,
+  route: target.model.route.id,
   transport: target.transport ?? "http",
   model: target.model.id,
   ...target.metadata,

@@ -52,7 +52,7 @@ export const textRequest = (input: {
     system: "You are concise.",
     prompt: input.prompt ?? "Reply with exactly: Hello!",
     cache: "none",
-    providerOptions: input.model.route === "gemini" ? { gemini: { thinkingConfig: { thinkingBudget: 0 } } } : undefined,
+    providerOptions: input.model.route.id === "gemini" ? { gemini: { thinkingConfig: { thinkingBudget: 0 } } } : undefined,
     generation:
       input.temperature === false
         ? { maxTokens: input.maxTokens ?? 80 }

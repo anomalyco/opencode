@@ -37,12 +37,8 @@ describe("public exports", () => {
     expect(XAI.provider.model).toBe(XAI.model)
     expect(XAI.apis.responses).toBe(XAI.responses)
     expect(XAI.apis.chat).toBe(XAI.chat)
-    expect(XAI.responses("grok-4.3", { apiKey: "fixture" })).toMatchObject({
-      route: "openai-responses",
-    })
-    expect(XAI.chat("grok-4.3", { apiKey: "fixture" })).toMatchObject({
-      route: "openai-compatible-chat",
-    })
+    expect(XAI.responses("grok-4.3", { apiKey: "fixture" }).route.id).toBe("openai-responses")
+    expect(XAI.chat("grok-4.3", { apiKey: "fixture" }).route.id).toBe("openai-compatible-chat")
     expect(GitHubCopilot.model).toBeFunction()
   })
 

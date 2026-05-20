@@ -20,7 +20,6 @@ import {
   LLMResponse,
   Model,
   LLMError as LLMErrorClass,
-  NoRouteReason,
   PreparedRequest,
   ProviderID,
   mergeGenerationOptions,
@@ -57,21 +56,6 @@ export interface Route<Body, Prepared = unknown> {
 // when preparing a request with a protocol-specific type assertion.
 // oxlint-disable-next-line typescript-eslint/no-explicit-any
 export type AnyRoute = Route<any, any>
-
-const routeRegistry = new Map<string, AnyRoute>()
-
-// Route lookup is intentionally global: models name a route id, and
-// importing the provider/protocol/custom-route module registers the runnable
-// implementation. Duplicate ids are bugs because models cannot disambiguate
-// them.
-const register = <R extends AnyRoute>(route: R): R => {
-  const existing = routeRegistry.get(route.id)
-  if (existing && existing !== route) throw new Error(`Duplicate LLM route id "${route.id}"`)
-  routeRegistry.set(route.id, route)
-  return route
-}
-
-const registeredRoute = (id: string) => routeRegistry.get(id)
 
 export type HttpOptionsInput = HttpOptions.Input
 
@@ -139,7 +123,7 @@ const modelWithDefaults =
       ...mapped,
       baseURL,
       provider,
-      route: route.id,
+      route,
       limits: mapped.limits ?? defaults.limits ?? route.defaults.limits,
       generation: mergeGenerationOptions(generation, mapped.generation),
       providerOptions: mergeProviderOptions(providerOptions, mapped.providerOptions),
@@ -215,13 +199,6 @@ export interface GenerateMethod {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
 
-const noRoute = (model: Model) =>
-  new LLMErrorClass({
-    module: "LLMClient",
-    method: "resolveRoute",
-    reason: new NoRouteReason({ route: model.route, provider: model.provider, model: model.id }),
-  })
-
 const resolveRequestOptions = (request: LLMRequest) =>
   LLMRequest.update(request, {
     generation: mergeGenerationOptions(request.model.generation, request.generation) ?? new GenerationOptions({}),
@@ -230,7 +207,7 @@ const resolveRequestOptions = (request: LLMRequest) =>
   })
 
 export interface MakeInput<Body, Frame, Event, State> {
-  /** Route id used in registry lookup and error messages. */
+  /** Route id used in diagnostics and prepared request metadata. */
   readonly id: string
   /** Provider identity for route-owned model construction. */
   readonly provider?: string | ProviderID
@@ -249,7 +226,7 @@ export interface MakeInput<Body, Frame, Event, State> {
 }
 
 export interface MakeTransportInput<Body, Prepared, Frame, Event, State> {
-  /** Route id used in registry lookup and error messages. */
+  /** Route id used in diagnostics and prepared request metadata. */
   readonly id: string
   /** Provider identity for route-owned model construction. */
   readonly provider?: string | ProviderID
@@ -305,7 +282,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       model: (input: RouteModelInput): Model => modelWithDefaults<RouteModelInput>(route, {}, {})(input),
       prepareTransport: routeInput.transport.prepare,
       streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime) => {
-        const route = `${request.model.provider}/${request.model.route}`
+        const route = `${request.model.provider}/${request.model.route.id}`
         const events = routeInput.transport
           .frames(prepared, request, runtime)
           .pipe(
@@ -322,7 +299,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
         )
       },
     } satisfies Route<Body, Prepared>
-    return register(route)
+    return route
   }
 
   return build(input)
@@ -375,8 +352,7 @@ export function make<Body, Prepared, Frame, Event, State>(
 // execute transport.
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
   const resolved = applyCachePolicy(resolveRequestOptions(request))
-  const route = registeredRoute(resolved.model.route)
-  if (!route) return yield* noRoute(resolved.model)
+  const route = resolved.model.route
 
   const body = yield* route.body
     .from(resolved)

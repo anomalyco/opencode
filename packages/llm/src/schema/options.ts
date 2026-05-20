@@ -1,5 +1,7 @@
 import { Schema } from "effect"
-import { JsonSchema, ModelID, ProviderID, RouteID } from "./ids"
+import { JsonSchema, ModelID, ProviderID } from "./ids"
+import type { AnyRoute } from "../route/client"
+import type { Auth } from "../route/auth"
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -135,51 +137,57 @@ export namespace ModelLimits {
     input instanceof ModelLimits ? input : new ModelLimits(input ?? {})
 }
 
-export class Model extends Schema.Class<Model>("LLM.Model")({
-  id: ModelID,
-  provider: ProviderID,
-  route: RouteID,
-  baseURL: Schema.String,
+export class Model {
+  readonly id: ModelID
+  readonly provider: ProviderID
+  readonly route: AnyRoute
+  readonly baseURL: string
   /** Provider-specific API key convenience. Provider helpers normalize this into `auth`. */
-  apiKey: Schema.optional(Schema.String),
+  readonly apiKey?: string
   /** Optional transport auth policy. Opaque because it may contain functions. */
-  auth: Schema.optional(Schema.Any),
-  headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  /**
-   * Query params appended to the request URL by `Endpoint.baseURL`. Used for
-   * deployment-level URL-scoped settings such as Azure's `api-version` or any
-   * provider that requires a per-request key in the URL. Generic concern, so
-   * lives as a typed first-class field instead of `native`.
-   */
-  queryParams: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  limits: ModelLimits,
+  readonly auth?: Auth
+  readonly headers?: Record<string, string>
+  /** Query params appended to the request URL by `Endpoint.baseURL`. */
+  readonly queryParams?: Record<string, string>
+  readonly limits: ModelLimits
   /** Provider-neutral generation defaults. Request-level values override them. */
-  generation: Schema.optional(GenerationOptions),
+  readonly generation?: GenerationOptions
   /** Provider-owned typed-at-the-facade options for non-portable knobs. */
-  providerOptions: Schema.optional(ProviderOptions),
+  readonly providerOptions?: ProviderOptions
   /** Serializable raw HTTP overlays applied to the final outgoing request. */
-  http: Schema.optional(HttpOptions),
-  /**
-   * Provider-specific opaque options. Reach for this only when the value is
-   * genuinely provider-private and does not fit a typed axis (e.g. Bedrock's
-   * `aws_credentials` / `aws_region` for SigV4). Anything used by more than
-   * one route should grow into a typed field instead.
-   */
-  native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}) {
-  static override make(input: Model.Input) {
+  readonly http?: HttpOptions
+  /** Provider-specific opaque options. */
+  readonly native?: Record<string, unknown>
+
+  constructor(input: Model.ConstructorInput) {
+    this.id = input.id
+    this.provider = input.provider
+    this.route = input.route
+    this.baseURL = input.baseURL
+    this.apiKey = input.apiKey
+    this.auth = input.auth
+    this.headers = input.headers
+    this.queryParams = input.queryParams
+    this.limits = input.limits
+    this.generation = input.generation
+    this.providerOptions = input.providerOptions
+    this.http = input.http
+    this.native = input.native
+  }
+
+  static make(input: Model.Input) {
     return new Model({
       ...input,
       id: ModelID.make(input.id),
       provider: ProviderID.make(input.provider),
-      route: RouteID.make(input.route),
+      route: input.route,
       limits: ModelLimits.make(input.limits),
       generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
       http: input.http === undefined ? undefined : HttpOptions.make(input.http),
     })
   }
 
-  static input(model: Model): ConstructorParameters<typeof Model>[0] {
+  static input(model: Model): Model.ConstructorInput {
     return {
       id: model.id,
       provider: model.provider,
@@ -207,13 +215,29 @@ export class Model extends Schema.Class<Model>("LLM.Model")({
 }
 
 export namespace Model {
+  export type ConstructorInput = {
+    readonly id: ModelID
+    readonly provider: ProviderID
+    readonly route: AnyRoute
+    readonly baseURL: string
+    readonly apiKey?: string
+    readonly auth?: Auth
+    readonly headers?: Record<string, string>
+    readonly queryParams?: Record<string, string>
+    readonly limits: ModelLimits
+    readonly generation?: GenerationOptions
+    readonly providerOptions?: ProviderOptions
+    readonly http?: HttpOptions
+    readonly native?: Record<string, unknown>
+  }
+
   export type Input = Omit<
-    ConstructorParameters<typeof Model>[0],
+    ConstructorInput,
     "id" | "provider" | "route" | "limits" | "generation" | "http"
   > & {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
-    readonly route: string | RouteID
+    readonly route: AnyRoute
     readonly limits?: ModelLimits.Input
     readonly generation?: GenerationOptions.Input
     readonly http?: HttpOptions.Input
@@ -221,6 +245,8 @@ export namespace Model {
 }
 
 export type ModelInput = Model.Input
+
+export const ModelSchema = Schema.declare((value): value is Model => value instanceof Model, { expected: "LLM.Model" })
 
 export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
   type: Schema.Literals(["ephemeral", "persistent"]),

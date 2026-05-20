@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { JsonSchema, MessageRole, ProviderMetadata } from "./ids"
-import { CacheHint, CachePolicy, GenerationOptions, HttpOptions, Model, ProviderOptions } from "./options"
+import { CacheHint, CachePolicy, GenerationOptions, HttpOptions, ModelSchema, ProviderOptions } from "./options"
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -229,7 +229,7 @@ export type ResponseFormat = Schema.Schema.Type<typeof ResponseFormat>
 
 export class LLMRequest extends Schema.Class<LLMRequest>("LLM.Request")({
   id: Schema.optional(Schema.String),
-  model: Model,
+  model: ModelSchema,
   system: Schema.Array(SystemPart),
   messages: Schema.Array(Message),
   tools: Schema.Array(ToolDefinition),

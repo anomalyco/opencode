@@ -109,8 +109,8 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
               response.stream.pipe(
                 Stream.mapError((error) =>
                   ProviderShared.eventError(
-                    `${request.model.provider}/${request.model.route}`,
-                    `Failed to read ${request.model.provider}/${request.model.route} stream`,
+                    `${request.model.provider}/${request.model.route.id}`,
+                    `Failed to read ${request.model.provider}/${request.model.route.id} stream`,
                     ProviderShared.errorText(error),
                   ),
                 ),

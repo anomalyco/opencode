@@ -30,7 +30,7 @@ describe("Cloudflare", () => {
       expect(model).toMatchObject({
         id: "workers-ai/@cf/meta/llama-3.3-70b-instruct",
         provider: "cloudflare-ai-gateway",
-        route: "cloudflare-ai-gateway",
+        route: { id: "cloudflare-ai-gateway" },
         baseURL: "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/compat",
       })
 
@@ -151,7 +151,7 @@ describe("Cloudflare", () => {
       expect(model).toMatchObject({
         id: "@cf/meta/llama-3.1-8b-instruct",
         provider: "cloudflare-workers-ai",
-        route: "cloudflare-workers-ai",
+        route: { id: "cloudflare-workers-ai" },
         baseURL: "https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1",
       })
 
