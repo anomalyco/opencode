@@ -199,7 +199,6 @@ describe("file/index Filesystem patterns", () => {
           expect(yield* fsys.existsSafe(gitignorePath)).toBe(true)
           expect(yield* fsys.readFileString(gitignorePath)).toContain("node_modules")
         }),
-      { git: true },
     )
 
     it.instance(
@@ -214,7 +213,6 @@ describe("file/index Filesystem patterns", () => {
           expect(yield* fsys.existsSafe(ignorePath)).toBe(true)
           expect(yield* fsys.readFileString(ignorePath)).toContain("*.log")
         }),
-      { git: true },
     )
 
     it.instance(
@@ -229,7 +227,6 @@ describe("file/index Filesystem patterns", () => {
           const nodes = yield* list()
           expect(Array.isArray(nodes)).toBe(true)
         }),
-      { git: true },
     )
   })
 
@@ -246,7 +243,6 @@ describe("file/index Filesystem patterns", () => {
           const content = yield* fsys.readFileString(untrackedPath)
           expect(content.split("\n").length).toBe(2)
         }),
-      { git: true },
     )
   })
 
@@ -519,7 +515,6 @@ describe("file/index Filesystem patterns", () => {
             expect(["file", "directory"]).toContain(node.type)
           }
         }),
-      { git: true },
     )
 
     it.instance(
@@ -543,7 +538,6 @@ describe("file/index Filesystem patterns", () => {
           expect(dirs.map((dir) => dir.name)).toEqual(dirs.map((dir) => dir.name).toSorted())
           expect(files.map((file) => file.name)).toEqual(files.map((file) => file.name).toSorted())
         }),
-      { git: true },
     )
 
     it.instance(
@@ -551,6 +545,7 @@ describe("file/index Filesystem patterns", () => {
       () =>
         Effect.gen(function* () {
           const test = yield* TestInstance
+          yield* Effect.promise(() => fs.mkdir(path.join(test.directory, ".git")))
           yield* Effect.promise(() => fs.writeFile(path.join(test.directory, ".DS_Store"), "", "utf-8"))
           yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "visible.txt"), "", "utf-8"))
 
@@ -559,7 +554,6 @@ describe("file/index Filesystem patterns", () => {
           expect(names).not.toContain(".DS_Store")
           expect(names).toContain("visible.txt")
         }),
-      { git: true },
     )
 
     it.instance(
@@ -594,7 +588,6 @@ describe("file/index Filesystem patterns", () => {
           expect(nodes.map((node) => node.name).sort()).toEqual(["a.txt", "b.txt"])
           expect(nodes[0].path.replaceAll("\\", "/").startsWith("sub/")).toBe(true)
         }),
-      { git: true },
     )
 
     it.instance(
@@ -603,7 +596,6 @@ describe("file/index Filesystem patterns", () => {
         Effect.gen(function* () {
           expect(yield* failureMessage(list("../outside"))).toContain("Access denied")
         }),
-      { git: true },
     )
 
     it.instance("works without git", () =>
@@ -632,7 +624,6 @@ describe("file/index Filesystem patterns", () => {
           const result = yield* search({ query: "", type: "file" })
           expect(result.length).toBeGreaterThan(0)
         }),
-      { git: true },
     )
 
     it.instance(
@@ -645,7 +636,6 @@ describe("file/index Filesystem patterns", () => {
           const result = yield* search({ query: "main", type: "file" })
           expect(result.some((file) => file.includes("main"))).toBe(true)
         }),
-      { git: true },
     )
 
     it.instance(
@@ -668,7 +658,6 @@ describe("file/index Filesystem patterns", () => {
             expect(firstHidden).toBeGreaterThan(lastVisible)
           }
         }),
-      { git: true },
     )
 
     it.instance(
@@ -682,7 +671,6 @@ describe("file/index Filesystem patterns", () => {
           const result = yield* search({ query: "main", type: "file" })
           expect(result.some((file) => file.includes("main"))).toBe(true)
         }),
-      { git: true },
     )
 
     it.instance(
@@ -698,7 +686,6 @@ describe("file/index Filesystem patterns", () => {
             expect(file.endsWith("/")).toBe(false)
           }
         }),
-      { git: true },
     )
 
     it.instance(
@@ -714,7 +701,6 @@ describe("file/index Filesystem patterns", () => {
             expect(dir.endsWith("/")).toBe(true)
           }
         }),
-      { git: true },
     )
 
     it.instance(
@@ -728,7 +714,6 @@ describe("file/index Filesystem patterns", () => {
           const result = yield* search({ query: "", type: "file", limit: 2 })
           expect(result.length).toBeLessThanOrEqual(2)
         }),
-      { git: true },
     )
 
     it.instance(
@@ -743,7 +728,6 @@ describe("file/index Filesystem patterns", () => {
           expect(result.length).toBeGreaterThan(0)
           expect(result[0]).toContain(".hidden")
         }),
-      { git: true },
     )
 
     it.instance(
@@ -759,7 +743,6 @@ describe("file/index Filesystem patterns", () => {
 
           expect(yield* search({ query: "fresh", type: "file" })).toContain("fresh.ts")
         }),
-      { git: true },
     )
   })
 
@@ -843,9 +826,8 @@ describe("file/index Filesystem patterns", () => {
             yield* init()
             expect(yield* search({ query: "b.ts", type: "file" })).toContain("b.ts")
             expect(yield* search({ query: "a.ts", type: "file" })).not.toContain("a.ts")
-          }).pipe(withTmpdirInstance({ git: true }))
+          }).pipe(withTmpdirInstance())
         }),
-      { git: true },
     )
 
     it.instance(
@@ -866,7 +848,6 @@ describe("file/index Filesystem patterns", () => {
           expect(yield* search({ query: "after", type: "file" })).toContain("after.ts")
           expect(yield* search({ query: "before", type: "file" })).not.toContain("before.ts")
         }),
-      { git: true },
     )
   })
 })
