@@ -4,7 +4,7 @@ import { Effect, Schema } from "effect"
 import * as DateTime from "effect/DateTime"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
-import { InvalidCursorError } from "../../errors"
+import { InvalidCursorError, SessionNotFoundError } from "../../errors"
 
 const DefaultMessagesLimit = 50
 
@@ -47,7 +47,16 @@ export const messageHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.message
           limit: ctx.query.limit ?? DefaultMessagesLimit,
           order,
           cursor: decoded ? { id: decoded.id, time: decoded.time, direction: decoded.direction } : undefined,
-        })
+        }).pipe(
+          Effect.catchTag("Session.NotFoundError", (error) =>
+            Effect.fail(
+              new SessionNotFoundError({
+                sessionID: error.sessionID,
+                message: `Session not found: ${error.sessionID}`,
+              }),
+            ),
+          ),
+        )
         const first = messages[0]
         const last = messages.at(-1)
         return {
