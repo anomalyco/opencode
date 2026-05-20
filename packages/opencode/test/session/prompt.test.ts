@@ -1453,6 +1453,276 @@ it.instance("assertNotBusy fails with BusyError when loop running", () =>
     yield* prompt.cancel(chat.id)
     yield* Fiber.await(fiber)
   }),
+  3_000,
+)
+
+it.instance(
+  "does not fan out assistant siblings when a new prompt arrives during a tool round-trip (#28202)",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const toolResultGate = yield* Deferred.make<void>()
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+
+      yield* llm.push(reply().tool("test", { input: "u1" }).toolCalls())
+      yield* llm.hold("continuation from U1", deferredAsPromise(toolResultGate))
+      yield* llm.text("U2 response")
+
+      const u1ID = MessageID.ascending()
+      const u2ID = MessageID.ascending()
+
+      const u1Fiber = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          messageID: u1ID,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "U1" }],
+        })
+        .pipe(Effect.forkChild)
+
+      yield* llm.wait(1)
+
+      const u2Fiber = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          messageID: u2ID,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "U2" }],
+        })
+        .pipe(Effect.forkChild)
+
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const msgs = yield* sessions.messages({ sessionID: chat.id })
+          return msgs.some((m) => m.info.role === "user" && m.info.id === u2ID) ? true : undefined
+        }),
+        "U2 user message did not persist before gate release",
+      )
+
+      yield* Deferred.succeed(toolResultGate, void 0)
+
+      const [eu1, eu2] = yield* Effect.all([Fiber.await(u1Fiber), Fiber.await(u2Fiber)])
+      expect(Exit.isSuccess(eu1)).toBe(true)
+      expect(Exit.isSuccess(eu2)).toBe(true)
+
+      const msgs = yield* sessions.messages({ sessionID: chat.id })
+      const assistants = msgs.filter((msg) => msg.info.role === "assistant")
+
+      const u1Assistants = assistants.filter(
+        (a): a is SessionV1.WithParts & { info: SessionV1.Assistant } =>
+          a.info.role === "assistant" && a.info.parentID === u1ID,
+      )
+      const u2Assistants = assistants.filter(
+        (a): a is SessionV1.WithParts & { info: SessionV1.Assistant } =>
+          a.info.role === "assistant" && a.info.parentID === u2ID,
+      )
+
+      // Exactly one tool-call assistant + one continuation under U1. The original
+      // #28202 bug fans out same-parent siblings and pushes this above 2.
+      expect(u1Assistants.length).toBe(2)
+      expect(u2Assistants.length).toBe(1)
+
+      const lastU1Assistant = u1Assistants[u1Assistants.length - 1]
+      expect(lastU1Assistant).toBeDefined()
+      if (!lastU1Assistant || lastU1Assistant.info.role !== "assistant") throw new Error("expected assistant")
+      expect(lastU1Assistant.info.finish).toBe("stop")
+      const u1TextPart = lastU1Assistant.parts.find((p: SessionV1.Part): p is SessionV1.TextPart => p.type === "text")
+      expect(u1TextPart).toBeDefined()
+
+      const firstU1Assistant = u1Assistants[0]
+      if (!firstU1Assistant || firstU1Assistant.info.role !== "assistant")
+        throw new Error("expected assistant")
+      expect(firstU1Assistant.info.finish).toBe("tool-calls")
+      const u1ToolPart = firstU1Assistant.parts.find(
+        (p: SessionV1.Part): p is CompletedToolPart => p.type === "tool" && p.state.status === "completed",
+      )
+      expect(u1ToolPart).toBeDefined()
+
+      const lastU2Assistant = u2Assistants[u2Assistants.length - 1]
+      expect(lastU2Assistant).toBeDefined()
+      if (!lastU2Assistant || lastU2Assistant.info.role !== "assistant")
+        throw new Error("expected assistant")
+      expect(lastU2Assistant.info.finish).toBe("stop")
+      const u2TextPart = lastU2Assistant.parts.find((p: SessionV1.Part): p is SessionV1.TextPart => p.type === "text")
+      expect(u2TextPart).toBeDefined()
+    }),
+  3_000,
+)
+
+it.instance(
+  "U1→U2→U3 chain produces exactly one terminal assistant per parent (#28202 regression 1)",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "U123Chain" })
+
+      yield* llm.text("R1")
+      yield* llm.text("R2")
+      yield* llm.text("R3")
+
+      const u1ID = MessageID.ascending()
+      const u2ID = MessageID.ascending()
+      const u3ID = MessageID.ascending()
+
+      const eu1 = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          messageID: u1ID,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "U1" }],
+        })
+        .pipe(Effect.exit)
+      expect(Exit.isSuccess(eu1)).toBe(true)
+
+      const eu2 = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          messageID: u2ID,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "U2" }],
+        })
+        .pipe(Effect.exit)
+      expect(Exit.isSuccess(eu2)).toBe(true)
+
+      const eu3 = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          messageID: u3ID,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "U3" }],
+        })
+        .pipe(Effect.exit)
+      expect(Exit.isSuccess(eu3)).toBe(true)
+
+      const msgs = yield* sessions.messages({ sessionID: chat.id })
+      const assistants = msgs.filter(
+        (msg): msg is SessionV1.WithParts & { info: SessionV1.Assistant } => msg.info.role === "assistant",
+      )
+
+      const u1Assistants = assistants.filter((a) => a.info.parentID === u1ID)
+      const u2Assistants = assistants.filter((a) => a.info.parentID === u2ID)
+      const u3Assistants = assistants.filter((a) => a.info.parentID === u3ID)
+
+      expect(u1Assistants.length).toBe(1)
+      expect(u2Assistants.length).toBe(1)
+      expect(u3Assistants.length).toBe(1)
+
+      expect(u1Assistants[0].info.finish).toBe("stop")
+      expect(u2Assistants[0].info.finish).toBe("stop")
+      expect(u3Assistants[0].info.finish).toBe("stop")
+
+      const u1Text = u1Assistants[0].parts.find((p: SessionV1.Part): p is SessionV1.TextPart => p.type === "text")
+      const u2Text = u2Assistants[0].parts.find((p: SessionV1.Part): p is SessionV1.TextPart => p.type === "text")
+      const u3Text = u3Assistants[0].parts.find((p: SessionV1.Part): p is SessionV1.TextPart => p.type === "text")
+      expect(u1Text).toBeDefined()
+      expect(u2Text).toBeDefined()
+      expect(u3Text).toBeDefined()
+    }),
+  3_000,
+)
+
+it.instance(
+  "U2 with tool round-trip lands under U2, not U1 (#28202 regression 2)",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const toolResultGate = yield* Deferred.make<void>()
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "U2ToolRoundTrip" })
+
+      yield* llm.text("U1 response")
+      yield* llm.push(reply().tool("test", { input: "u2" }).toolCalls())
+      yield* llm.hold("continuation from U2", deferredAsPromise(toolResultGate))
+
+      const u1ID = MessageID.ascending()
+      const u2ID = MessageID.ascending()
+
+      const u1Fiber = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          messageID: u1ID,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "U1" }],
+        })
+        .pipe(Effect.forkChild)
+
+      yield* llm.wait(1)
+
+      const u2Fiber = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          messageID: u2ID,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "U2" }],
+        })
+        .pipe(Effect.forkChild)
+
+      yield* llm.wait(1)
+
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const msgs = yield* sessions.messages({ sessionID: chat.id })
+          const u2Assistants = msgs.filter(
+            (m) => m.info.role === "assistant" && m.info.parentID === u2ID,
+          )
+          return u2Assistants.length > 0 ? true : undefined
+        }),
+        "U2 tool assistant did not persist before gate release",
+      )
+
+      yield* Deferred.succeed(toolResultGate, void 0)
+
+      const [eu1, eu2] = yield* Effect.all([Fiber.await(u1Fiber), Fiber.await(u2Fiber)])
+      expect(Exit.isSuccess(eu1)).toBe(true)
+      expect(Exit.isSuccess(eu2)).toBe(true)
+
+      const msgs = yield* sessions.messages({ sessionID: chat.id })
+      const assistants = msgs.filter(
+        (msg): msg is SessionV1.WithParts & { info: SessionV1.Assistant } => msg.info.role === "assistant",
+      )
+
+      const u1Assistants = assistants.filter((a) => a.info.parentID === u1ID)
+      const u2Assistants = assistants.filter((a) => a.info.parentID === u2ID)
+
+      expect(u1Assistants.length).toBe(1)
+      expect(u1Assistants[0].info.finish).toBe("stop")
+      const u1Text = u1Assistants[0].parts.find((p: SessionV1.Part): p is SessionV1.TextPart => p.type === "text")
+      expect(u1Text).toBeDefined()
+
+      expect(u2Assistants.length).toBe(2)
+
+      const firstU2Assistant = u2Assistants[0]
+      expect(firstU2Assistant.info.finish).toBe("tool-calls")
+      const u2ToolPart = firstU2Assistant.parts.find(
+        (p: SessionV1.Part): p is CompletedToolPart => p.type === "tool" && p.state.status === "completed",
+      )
+      expect(u2ToolPart).toBeDefined()
+
+      const lastU2Assistant = u2Assistants[u2Assistants.length - 1]
+      expect(lastU2Assistant.info.finish).toBe("stop")
+      const u2ContinuationText = lastU2Assistant.parts.find(
+        (p: SessionV1.Part): p is SessionV1.TextPart => p.type === "text",
+      )
+      expect(u2ContinuationText).toBeDefined()
+
+      const otherAssistants = assistants.filter(
+        (a) => a.info.parentID !== u1ID && a.info.parentID !== u2ID,
+      )
+      expect(otherAssistants.length).toBe(0)
+    }),
+  3_000,
 )
 
 noLLMServer.instance("assertNotBusy succeeds when idle", () =>
