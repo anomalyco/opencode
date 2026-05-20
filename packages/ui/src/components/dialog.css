@@ -4,7 +4,10 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background-color: hsl(from var(--background-base) h s l / 0.2);
+  /* Fully opaque backdrop — dialogs should not be see-through against
+     the page underneath.  Was previously 0.2 alpha which made every
+     popup feel translucent. */
+  background-color: var(--background-base);
 }
 
 [data-component="dialog"] {
