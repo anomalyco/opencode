@@ -3,6 +3,8 @@
 > **This is the [unleashlive](https://github.com/unleashlive) fork of [opencode](https://github.com/anomalyco/opencode).**
 > It adds **Collab Sessions** — real-time multi-user AI coding sessions where your whole team shares one LLM context, with role-based participation and a shared prompt queue.
 >
+> **Our differentiator: a team of humans sharing one LLM context, with frictionless web onboarding.**
+>
 > Upstream opencode docs and install instructions are preserved below.
 
 ---
