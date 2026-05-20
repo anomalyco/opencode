@@ -1192,6 +1192,102 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   })
 })
 
+describe("ProviderTransform.message - Kimi K2.5/K2.6 reasoning content", () => {
+  const buildKimiModel = (apiId: string) =>
+    ({
+      id: ModelID.make(`moonshotai/${apiId}`),
+      providerID: ProviderID.make("moonshotai"),
+      api: {
+        id: apiId,
+        url: "https://api.moonshot.ai",
+        npm: "@ai-sdk/openai-compatible" as const,
+      },
+      name: apiId,
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
+      limit: { context: 256000, output: 16384 },
+      status: "active" as const,
+      options: {},
+      headers: {},
+      release_date: "2026-04-20",
+    }) as any
+
+  test("Kimi K2.6 injects empty reasoning placeholder on assistant tool-call without reasoning", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "test",
+            toolName: "bash",
+            input: { command: "echo hi" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, buildKimiModel("kimi-k2.6"), {})
+    expect(result).toHaveLength(1)
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("")
+    expect((result[0].content as any[]).some((p) => p.type === "tool-call")).toBe(true)
+  })
+
+  test("Kimi K2.5 preserves existing reasoning content in providerOptions", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "I need to call bash" },
+          {
+            type: "tool-call",
+            toolCallId: "test",
+            toolName: "bash",
+            input: { command: "ls" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, buildKimiModel("kimi-k2.5"), {})
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("I need to call bash")
+    expect((result[0].content as any[]).every((p) => p.type !== "reasoning")).toBe(true)
+  })
+
+  test("Kimi K2-Thinking is NOT touched (returns reasoning_content natively)", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "answer" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, buildKimiModel("kimi-k2-thinking"), {})
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+    expect((result[0].content as any[]).every((p) => p.type !== "reasoning")).toBe(true)
+  })
+
+  test("Kimi K2 base (non-K2.5/K2.6) is not affected", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "answer" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, buildKimiModel("kimi-k2"), {})
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.message - surrogate sanitization", () => {
   const model = {
     id: "test/test-model",

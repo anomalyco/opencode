@@ -282,8 +282,24 @@ function normalizeMessages(
     return result
   }
 
-  // Deepseek requires all assistant messages to have reasoning on them
-  if (model.api.id.toLowerCase().includes("deepseek")) {
+  // DeepSeek requires all assistant messages to have reasoning on them.
+  // Kimi K2.5/K2.6 have the same requirement when thinking is enabled (the
+  // default on Moonshot, Cloudflare Workers AI, Cerebras, etc. via the
+  // openai-compatible SDK): the API rejects multi-turn tool-calling
+  // requests with "thinking is enabled but reasoning_content is missing
+  // in assistant tool call message". Kimi K2-Thinking is excluded — it
+  // returns reasoning_content by default and the SDK path differs.
+  const lowerId = model.api.id.toLowerCase()
+  const isKimiK2RequiringReasoning =
+    lowerId.includes("kimi-k2") &&
+    !lowerId.includes("k2-thinking") &&
+    (lowerId.includes("k2.5") ||
+      lowerId.includes("k2.6") ||
+      lowerId.includes("k2p5") ||
+      lowerId.includes("k2p6") ||
+      lowerId.includes("k2-5") ||
+      lowerId.includes("k2-6"))
+  if (lowerId.includes("deepseek") || isKimiK2RequiringReasoning) {
     msgs = msgs.map((msg) => {
       if (msg.role !== "assistant") return msg
       if (Array.isArray(msg.content)) {
@@ -297,6 +313,36 @@ function normalizeMessages(
           { type: "reasoning" as const, text: "" },
         ],
       }
+    })
+  }
+
+  // Ensure Kimi K2.5/K2.6 always get reasoning_content placed into
+  // providerOptions for downstream openai-compatible SDK serialization,
+  // even when models.dev does not yet declare interleaved={field:"reasoning_content"}
+  // for these models. Mirrors how DeepSeek is configured.
+  if (
+    isKimiK2RequiringReasoning &&
+    model.api.npm === "@ai-sdk/openai-compatible" &&
+    !(typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field)
+  ) {
+    return msgs.map((msg) => {
+      if (msg.role === "assistant" && Array.isArray(msg.content)) {
+        const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
+        const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+        const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
+        return {
+          ...msg,
+          content: filteredContent,
+          providerOptions: {
+            ...msg.providerOptions,
+            openaiCompatible: {
+              ...msg.providerOptions?.openaiCompatible,
+              reasoning_content: reasoningText,
+            },
+          },
+        }
+      }
+      return msg
     })
   }
 
