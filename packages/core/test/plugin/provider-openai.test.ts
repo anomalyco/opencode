@@ -55,6 +55,33 @@ describe("OpenAIPlugin", () => {
     }),
   )
 
+  it.effect("defaults @ai-sdk/openai languageModel() to the Responses API", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      yield* plugin.add(OpenAIPlugin)
+
+      const result = yield* plugin.trigger(
+        "aisdk.sdk",
+        {
+          model: model("custom-openai", "alias", {
+            apiID: ModelV2.ID.make("gpt-5"),
+            endpoint: {
+              type: "aisdk",
+              package: "@ai-sdk/openai",
+            },
+          }),
+          package: "@ai-sdk/openai",
+          options: { name: "custom-openai", apiKey: "test" },
+        },
+        {},
+      )
+
+      const provider = result.sdk?.languageModel("gpt-5").provider
+      expect(provider).toMatch(/\.responses$/)
+      expect(provider).not.toMatch(/\.chat$/)
+    }),
+  )
+
   it.effect("ignores non-OpenAI providers", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
