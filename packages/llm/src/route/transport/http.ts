@@ -79,11 +79,13 @@ export interface HttpJsonInput<Body, Frame> {
 export type HttpJsonPatch<Body, Frame> = Partial<HttpJsonInput<Body, Frame>>
 
 export interface HttpJsonTransport<Body, Frame> extends Transport<Body, HttpPrepared<Frame>, Frame> {
+  readonly endpoint: Endpoint<Body>
   readonly with: (patch: HttpJsonPatch<Body, Frame>) => HttpJsonTransport<Body, Frame>
 }
 
 export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJsonTransport<Body, Frame> => ({
   id: "http-json",
+  endpoint: input.endpoint,
   with: (patch) => httpJson({ ...input, ...patch }),
   prepare: (body, request) =>
     jsonRequestParts({

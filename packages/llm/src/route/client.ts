@@ -140,6 +140,19 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
   http: mergeHttpOptions(httpOptions(base?.http), httpOptions(patch.http)),
 })
 
+const endpointDefaults = <Body, Prepared, Frame>(transport: Transport<Body, Prepared, Frame>): RouteDefaults => {
+  if (!("endpoint" in transport) || !ProviderShared.isRecord(transport.endpoint)) return {}
+  const query = ProviderShared.isRecord(transport.endpoint.query)
+    ? Object.fromEntries(
+        Object.entries(transport.endpoint.query).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+      )
+    : undefined
+  return {
+    baseURL: typeof transport.endpoint.baseURL === "string" ? transport.endpoint.baseURL : undefined,
+    queryParams: query && Object.keys(query).length > 0 ? query : undefined,
+  }
+}
+
 export const generationOptions = (input: GenerationOptions.Input | undefined) =>
   input === undefined ? undefined : GenerationOptions.make(input)
 
@@ -266,7 +279,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       provider: routeInput.provider === undefined ? undefined : ProviderID.make(routeInput.provider),
       protocol: protocol.id,
       transport: routeInput.transport,
-      defaults: routeInput.defaults ?? {},
+      defaults: mergeRouteDefaults(endpointDefaults(routeInput.transport), routeInput.defaults ?? {}),
       body: protocol.body,
       with: (patch: RoutePatch<Body, Prepared>) => {
         const { id, provider, transport, ...defaults } = patch

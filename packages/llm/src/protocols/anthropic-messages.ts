@@ -674,7 +674,7 @@ export const protocol = Protocol.make({
 export const route = Route.make({
   id: ADAPTER,
   protocol,
-  endpoint: Endpoint.path(PATH),
+  endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
   auth: Auth.apiKeyHeader("x-api-key"),
   framing: Framing.sse,
   headers: () => ({ "anthropic-version": "2023-06-01" }),
@@ -685,7 +685,6 @@ export const route = Route.make({
 // =============================================================================
 export const model = Route.model(route, {
   provider: "anthropic",
-  baseURL: DEFAULT_BASE_URL,
 })
 
 export * as AnthropicMessages from "./anthropic-messages"

@@ -224,11 +224,13 @@ export interface JsonInput<Body, Message> {
 export type JsonPatch<Body, Message> = Partial<JsonInput<Body, Message>>
 
 export interface JsonTransport<Body, Message> extends Transport<Body, JsonPrepared, string> {
+  readonly endpoint: Endpoint<Body>
   readonly with: (patch: JsonPatch<Body, Message>) => JsonTransport<Body, Message>
 }
 
 export const json = <Body, Message>(input: JsonInput<Body, Message>): JsonTransport<Body, Message> => ({
   id: "websocket-json",
+  endpoint: input.endpoint,
   with: (patch) => json({ ...input, ...patch }),
   prepare: (body, request) =>
     Effect.gen(function* () {
