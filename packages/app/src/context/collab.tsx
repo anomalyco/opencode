@@ -47,6 +47,13 @@ export function useCollab() {
 
 interface CollabProviderProps extends ParentProps {
   collabSessionId: string
+  /**
+   * Current user's GitHub numeric id.  Used to optimistically mark the
+   * local participant as online the moment the SSE stream opens — the
+   * server-driven update can lag behind a refresh / network blip, so the
+   * green dot needs a client-side path to flip without waiting.
+   */
+  meGithubId?: number
 }
 
 export function CollabProvider(props: CollabProviderProps) {
@@ -89,6 +96,22 @@ export function CollabProvider(props: CollabProviderProps) {
 
     es.onopen = () => {
       setIsConnected(true)
+      // Optimistically mark our own avatar as online — the server has
+      // already called setOnline(true) by the time the SSE response
+      // arrives, but fetchSession can race and a stale GET response
+      // would otherwise keep our own dot dark for a beat.
+      if (props.meGithubId != null) {
+        setSession((prev) =>
+          prev
+            ? {
+                ...prev,
+                participants: prev.participants.map((p) =>
+                  p.githubId === props.meGithubId ? { ...p, isOnline: true } : p,
+                ),
+              }
+            : prev,
+        )
+      }
       fetchSession()
     }
 
@@ -246,10 +269,12 @@ export function CollabProvider(props: CollabProviderProps) {
         break
 
       case "collab:typing_start":
+        console.debug("[collab] typing_start", event.githubLogin)
         markTyping(event.githubLogin, true)
         break
 
       case "collab:typing_stop":
+        console.debug("[collab] typing_stop", event.githubLogin)
         markTyping(event.githubLogin, false)
         break
     }

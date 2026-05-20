@@ -857,12 +857,21 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
     // repoBranches: read live from each cloned repo's HEAD so the UI can show
     // the actual current branch — including for legacy sessions where
     // collab_session.branch is null because the column didn't exist yet.
+    //
+    // Cache-Control: no-store — participant.isOnline flips frequently, we
+    // can't risk a stale 200 sitting in a proxy/CDN/browser cache.
     const repoBranches = await readRepoBranches(sessionId, collabSession.repos)
-    return json({
-      ...collabSession,
-      workspacePath: nativeSessionDirectory(sessionId, collabSession.repos),
-      repoBranches,
-    })
+    return new Response(
+      JSON.stringify({
+        ...collabSession,
+        workspacePath: nativeSessionDirectory(sessionId, collabSession.repos),
+        repoBranches,
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      },
+    )
   }
 
   // DELETE /collab/session/:id — Drivers only
@@ -987,8 +996,16 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
   if (req.method === "POST" && parts[3] === "typing") {
     if (caller.role === "viewer") return json({ ok: true })
     const body = (await req.json().catch(() => ({}))) as { typing?: boolean }
+    const isTyping = Boolean(body.typing)
+    const clientCount = sseClients.get(sessionId)?.size ?? 0
+    console.log("[collab.typing]", {
+      sessionId,
+      login: sess.githubLogin,
+      typing: isTyping,
+      fanout: clientCount,
+    })
     broadcastSse(sessionId, {
-      type: body.typing ? "collab:typing_start" : "collab:typing_stop",
+      type: isTyping ? "collab:typing_start" : "collab:typing_stop",
       githubLogin: sess.githubLogin,
     })
     return json({ ok: true })
@@ -1054,30 +1071,69 @@ function handleSse(
   collabSessionId: string,
   sess: { githubId: number; githubLogin: string },
 ): Response {
-  // Mark participant online
+  // We need to defer events until the ReadableStream's controller exists.
+  // The bug we're fixing: previously, setOnline + the collab:participant_joined
+  // broadcast ran here at the top of handleSse, which meant the new client's
+  // own `send` callback wasn't registered yet (it gets registered inside
+  // stream.start()).  So the connecting user never received their OWN
+  // joined event and their own avatar stayed isOnline:false until something
+  // else triggered a session re-fetch.
+  //
+  // Fix: queue events into a buffer up-front, register the send callback
+  // immediately inside stream.start(), THEN flush the buffer + register
+  // with the broadcaster.  The connecting client now sees its own
+  // participant_joined event in the very first batch of SSE messages.
+  let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null
+  let unregister: (() => void) | null = null
+  const encoder = new TextEncoder()
+  const pending: CollabEvent[] = []
+
+  const send = (event: CollabEvent) => {
+    if (!controllerRef) {
+      pending.push(event)
+      return
+    }
+    try {
+      const data = `data: ${JSON.stringify(event)}\n\n`
+      controllerRef.enqueue(encoder.encode(data))
+    } catch {
+      unregister?.()
+    }
+  }
+
+  // Mark the participant online + broadcast — now safe because the SENDER's
+  // own `send` will buffer the event and flush it once the stream opens.
   const collabSession = Session.getCollabSession(collabSessionId)
   if (collabSession) {
     Participant.setOnline(collabSessionId, sess.githubId, true)
     const participant = collabSession.participants.find((p) => p.githubId === sess.githubId)
     if (participant) {
-      broadcastSse(collabSessionId, { type: "collab:participant_joined", participant: { ...participant, isOnline: true } })
+      const event: CollabEvent = {
+        type: "collab:participant_joined",
+        participant: { ...participant, isOnline: true },
+      }
+      // Send to ALL existing clients (so other browsers update).  The
+      // sender's own send is wired into broadcasts below via registerSse,
+      // so we also push directly into our pending buffer for this case
+      // (broadcastSse fans out to currently-registered clients only).
+      send(event)
+      broadcastSse(collabSessionId, event)
     }
   }
 
-  let unregister: (() => void) | null = null
-
   const stream = new ReadableStream({
     start(controller) {
-      const encoder = new TextEncoder()
-      const send = (event: CollabEvent) => {
+      controllerRef = controller
+      // Flush any events that arrived before the stream was ready.
+      for (const ev of pending) {
         try {
-          const data = `data: ${JSON.stringify(event)}\n\n`
-          controller.enqueue(encoder.encode(data))
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`))
         } catch {
-          unregister?.()
+          break
         }
       }
-      // Send current session state immediately
+      pending.length = 0
+      // Send current queue state immediately.
       const current = Session.getCollabSession(collabSessionId)
       if (current) {
         ensureQueueRegistered(collabSessionId)

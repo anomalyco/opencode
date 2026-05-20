@@ -58,9 +58,68 @@ function Avatar(props: { participant: Participant; size?: "sm" | "md" }) {
         alt={props.participant.githubLogin}
         class={`${s} rounded-full bg-zinc-800`}
       />
+      {/* Online dot uses INLINE style for the bg colour so it doesn't depend
+          on Tailwind JIT detection of the conditional class — that turned out
+          to be unreliable for the collab page in earlier builds, leaving the
+          dot transparent / page-coloured (looked black). */}
       <span
-        class={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-zinc-900 ${props.participant.isOnline ? "bg-emerald-400" : "bg-zinc-600"}`}
+        class="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-zinc-900"
+        style={{
+          "background-color": props.participant.isOnline ? "#34d399" : "#52525b",
+        }}
+        title={props.participant.isOnline ? "Online" : "Offline"}
       />
+    </div>
+  )
+}
+
+// ── Participant row (Avatar + name + typing dots + role) ───────────────────────
+
+/**
+ * One row of the participants list.
+ *
+ * Pulled out as its own component to give the typing-dots a clean reactive
+ * boundary.  Previously the dots were rendered inline inside the `<For>`
+ * callback in CollabSessionInner — Solid's tracking *should* pick that up
+ * (the `typing()` accessor reads the `typingUsers` signal) but the
+ * compiler was apparently optimising the access away, and the dots never
+ * appeared even though the SSE event fired.  An explicit component
+ * boundary makes the dependency explicit.
+ */
+function ParticipantRow(props: {
+  participant: Participant
+  typing: () => boolean
+  roleColorClass: string
+  roleLabel: string
+}) {
+  return (
+    <div class="flex items-center gap-2">
+      <Avatar participant={props.participant} size="sm" />
+      <span class="text-xs text-zinc-300 flex-1 truncate">{props.participant.githubLogin}</span>
+      <Show when={props.typing()}>
+        <span
+          class="flex items-center gap-1"
+          title={`${props.participant.githubLogin} is typing…`}
+          aria-label={`${props.participant.githubLogin} is typing`}
+        >
+          {/* Inline bg-colour + animation-delay so neither Tailwind JIT
+              detection nor arbitrary-value class compilation can break
+              the indicator. */}
+          <span
+            class="w-1.5 h-1.5 rounded-full animate-pulse"
+            style={{ "background-color": "#60a5fa", "animation-delay": "0ms" }}
+          />
+          <span
+            class="w-1.5 h-1.5 rounded-full animate-pulse"
+            style={{ "background-color": "#60a5fa", "animation-delay": "200ms" }}
+          />
+          <span
+            class="w-1.5 h-1.5 rounded-full animate-pulse"
+            style={{ "background-color": "#60a5fa", "animation-delay": "400ms" }}
+          />
+        </span>
+      </Show>
+      <span class={`text-[10px] ${props.roleColorClass}`}>{props.roleLabel}</span>
     </div>
   )
 }
@@ -376,38 +435,14 @@ function CollabSessionInner(props: { me: Me }) {
           </div>
           <div class="space-y-1.5">
             <For each={collab.participants()}>
-              {(p) => {
-                const typing = () => collab.typingUsers().has(p.githubLogin)
-                return (
-                  <div class="flex items-center gap-2">
-                    <Avatar participant={p} size="sm" />
-                    <span class="text-xs text-zinc-300 flex-1 truncate">{p.githubLogin}</span>
-                    {/* Pulsing three-dot indicator while the participant is
-                        actively typing in their prompt editor. */}
-                    <Show when={typing()}>
-                      <span
-                        class="flex items-center gap-1"
-                        title={`${p.githubLogin} is typing…`}
-                        aria-label={`${p.githubLogin} is typing`}
-                      >
-                        <span
-                          class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"
-                          style="animation-delay:0ms"
-                        />
-                        <span
-                          class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"
-                          style="animation-delay:200ms"
-                        />
-                        <span
-                          class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"
-                          style="animation-delay:400ms"
-                        />
-                      </span>
-                    </Show>
-                    <span class={`text-[10px] ${roleColor(p.role)}`}>{roleLabel(p.role)}</span>
-                  </div>
-                )
-              }}
+              {(p) => (
+                <ParticipantRow
+                  participant={p}
+                  typing={() => collab.typingUsers().has(p.githubLogin)}
+                  roleColorClass={roleColor(p.role)}
+                  roleLabel={roleLabel(p.role)}
+                />
+              )}
             </For>
           </div>
         </div>
@@ -644,7 +679,7 @@ export default function CollabSessionPage() {
       }
     >
       {(meVal) => (
-        <CollabProvider collabSessionId={params.id}>
+        <CollabProvider collabSessionId={params.id} meGithubId={meVal().githubId}>
           <CollabSessionInner me={meVal()} />
         </CollabProvider>
       )}

@@ -1102,26 +1102,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
    */
   let typingActive = false
   let typingStopTimer: ReturnType<typeof setTimeout> | undefined
+  function postTyping(typing: boolean) {
+    // Diagnostic — appears in the iframe's DevTools console.  Confirms that
+    // the embed-mode detection + postMessage chain is firing.
+    console.debug("[collab.embed] typing", typing)
+    try {
+      window.parent.postMessage(
+        { type: "opencode:collab-typing", typing },
+        window.location.origin,
+      )
+    } catch {
+      /* ignore */
+    }
+  }
   function notifyEmbeddedTyping() {
     if (!isCollabEmbed()) return
     if (!typingActive) {
       typingActive = true
-      try {
-        window.parent.postMessage(
-          { type: "opencode:collab-typing", typing: true },
-          window.location.origin,
-        )
-      } catch { /* ignore */ }
+      postTyping(true)
     }
     if (typingStopTimer) clearTimeout(typingStopTimer)
     typingStopTimer = setTimeout(() => {
       typingActive = false
-      try {
-        window.parent.postMessage(
-          { type: "opencode:collab-typing", typing: false },
-          window.location.origin,
-        )
-      } catch { /* ignore */ }
+      postTyping(false)
     }, 2000)
   }
   function stopEmbeddedTyping() {
@@ -1129,12 +1132,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (typingStopTimer) clearTimeout(typingStopTimer)
     if (typingActive) {
       typingActive = false
-      try {
-        window.parent.postMessage(
-          { type: "opencode:collab-typing", typing: false },
-          window.location.origin,
-        )
-      } catch { /* ignore */ }
+      postTyping(false)
     }
   }
 
