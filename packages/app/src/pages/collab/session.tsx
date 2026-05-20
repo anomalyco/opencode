@@ -703,11 +703,33 @@ function CollabSessionInner(props: { me: Me }) {
           <OpenPrButton />
         </Show>
 
-        {/* Repos — each row also shows the active branch in that repo */}
+        {/* Repos — each row also shows the active branch in that repo.
+            The "preview :port" pills live next to the Repos title (rather
+            than top-right over the iframe) so they're anchored to the
+            workspace context they belong to. */}
         <Show when={(collab.session()?.repos?.length ?? 0) > 0}>
           <div class="px-4 py-3 border-t border-zinc-800/60 flex-shrink-0">
-            <div class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium mb-1.5">
-              Repos
+            <div class="flex items-center gap-1.5 mb-1.5 flex-wrap">
+              <div class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">
+                Repos
+              </div>
+              <For each={collab.previewPorts()}>
+                {(port) => (
+                  <a
+                    href={`/preview/${port}/`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`Open live preview for port ${port} (proxied via /preview/${port}/)`}
+                    class="flex items-center gap-1 text-[10px] text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-1.5 py-0.5 rounded-full border border-emerald-500/30 transition-colors"
+                  >
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    preview :{port}
+                    <svg class="w-2 h-2" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                  </a>
+                )}
+              </For>
             </div>
             <For each={collab.session()?.repos ?? []}>
               {(repo) => {
@@ -753,35 +775,14 @@ function CollabSessionInner(props: { me: Me }) {
       {/* ── RIGHT: Conversation (3/4) — opencode session iframe ─────────── */}
       <div class="flex-1 flex flex-col min-w-0 relative">
 
-        {/* Top-right chrome — preview-port chips + connection status */}
-        <div class="absolute top-2 right-3 z-10 flex items-center gap-1.5">
-          {/* Live preview chips — one per TCP port the workspace container
-              is listening on.  Clicking opens /preview/<port>/ in a new tab
-              (HTTP + WebSocket proxied through to 127.0.0.1:<port>). */}
-          <For each={collab.previewPorts()}>
-            {(port) => (
-              <a
-                href={`/preview/${port}/`}
-                target="_blank"
-                rel="noreferrer"
-                title={`Open live preview for port ${port} (proxied via /preview/${port}/)`}
-                class="flex items-center gap-1.5 text-[11px] text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-1 rounded-full border border-emerald-500/30 transition-colors"
-              >
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                preview :{port}
-                <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                </svg>
-              </a>
-            )}
-          </For>
-          <Show when={!collab.isConnected()}>
-            <div class="flex items-center gap-1.5 text-xs text-amber-500 bg-zinc-900/80 px-2 py-1 rounded-full border border-zinc-700/50">
-              <div class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-              Reconnecting…
-            </div>
-          </Show>
-        </div>
+        {/* Top-right chrome — connection status only.  The preview-port
+            pills now live next to the "Repos" title in the left panel. */}
+        <Show when={!collab.isConnected()}>
+          <div class="absolute top-2 right-3 z-10 flex items-center gap-1.5 text-xs text-amber-500 bg-zinc-900/80 px-2 py-1 rounded-full border border-zinc-700/50">
+            <div class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            Reconnecting…
+          </div>
+        </Show>
 
         <Show
           when={collab.nativeSessionDirectory()}
