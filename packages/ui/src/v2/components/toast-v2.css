@@ -1,0 +1,201 @@
+[data-component="toast-v2-region"] {
+  position: fixed;
+  bottom: 48px;
+  right: 32px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: min(320px, calc(100vw - 64px));
+  max-height: none;
+  width: 100%;
+  overflow: visible;
+  pointer-events: none;
+
+  [data-slot="toast-v2-list"] {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: none;
+    overflow-y: visible;
+    overflow-x: visible;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+}
+
+[data-component="toast-v2"] {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 320px;
+  padding: 12px;
+  max-height: min(420px, calc(100dvh - 96px));
+  overflow: hidden;
+  pointer-events: auto;
+  transition: transform 140ms ease-out;
+
+  border-radius: 8px;
+  color: var(--text-text-base);
+  background: var(--background-bg-layer-01);
+  box-shadow: var(--elevation-floating);
+
+  &[data-opened] {
+    animation: toastV2PopIn 140ms ease-out;
+  }
+
+  &[data-closed] {
+    animation: toastV2PopOut 100ms ease-in forwards;
+  }
+
+  [data-slot="toast-v2-header"] {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+  }
+
+  [data-slot="toast-v2-icon"] {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 20px;
+    min-width: 16px;
+    min-height: 20px;
+
+    [data-component="icon"] {
+      color: var(--text-text-base);
+      width: 16px;
+      height: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    > * {
+      width: 16px;
+      height: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    svg {
+      width: 16px;
+      height: 16px;
+      display: block;
+      flex-shrink: 0;
+    }
+  }
+
+  [data-slot="toast-v2-content"] {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  [data-slot="toast-v2-title"] {
+    color: var(--text-text-base);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: "Inter Variable";
+    font-size: 13px;
+    font-style: normal;
+    font-weight: 530;
+    line-height: 20px;
+    letter-spacing: -0.04px;
+    font-synthesis: none;
+    margin: 0;
+  }
+
+  [data-slot="toast-v2-description"] {
+    color: var(--text-text-muted);
+    text-wrap-style: pretty;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    font-family: "Inter Variable";
+    font-size: 13px;
+    font-style: normal;
+    font-weight: 440;
+    line-height: 20px;
+    letter-spacing: -0.04px;
+    font-synthesis: none;
+    margin: 0;
+  }
+
+  [data-slot="toast-v2-actions"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-left: 28px;
+  }
+
+  [data-slot="toast-v2-actions"] [data-component="button-v2"] {
+    min-height: 24px;
+    font-family: "Inter Variable";
+    font-size: 13px;
+    font-style: normal;
+    font-weight: 530;
+    line-height: 20px;
+    letter-spacing: -0.04px;
+    font-synthesis: none;
+  }
+
+  [data-slot="toast-v2-close-button"] {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    svg {
+      width: 16px;
+      height: 16px;
+      display: block;
+    }
+  }
+}
+
+@keyframes toastV2PopIn {
+  from {
+    opacity: 0.8;
+    transform: translateY(6px);
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toastV2PopOut {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(6px);
+    opacity: 0.8;
+  }
+}
