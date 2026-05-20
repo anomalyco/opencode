@@ -616,6 +616,7 @@ export const protocol = Protocol.make({
 
 export const route = Route.make({
   id: ADAPTER,
+  provider: "bedrock",
   protocol,
   // Bedrock's URL embeds the region in the host (set on `model.baseURL` by
   // the provider helper from credentials) and the validated modelId in the
@@ -630,24 +631,12 @@ export const route = Route.make({
 
 export const nativeCredentials = BedrockAuth.nativeCredentials
 
-const bedrockModel = Route.model(
-  route,
-  {
-    provider: "bedrock",
-  },
-  {
-    mapInput: (input: BedrockConverseModelInput) => {
-      const { credentials, ...rest } = input
-      const region = credentials?.region ?? "us-east-1"
-      return {
-        ...rest,
-        baseURL: rest.baseURL ?? `https://bedrock-runtime.${region}.amazonaws.com`,
-        native: nativeCredentials(input.native, credentials),
-      }
-    },
-  },
-)
-
-export const model = bedrockModel
+export const model = (input: BedrockConverseModelInput) => {
+  const { credentials, baseURL, ...rest } = input
+  const region = credentials?.region ?? "us-east-1"
+  return route
+    .with({ endpoint: { baseURL: baseURL ?? `https://bedrock-runtime.${region}.amazonaws.com` } })
+    .model({ ...rest, native: nativeCredentials(input.native, credentials) })
+}
 
 export * as BedrockConverse from "./bedrock-converse"

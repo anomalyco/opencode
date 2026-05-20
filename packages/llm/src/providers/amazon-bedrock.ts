@@ -1,4 +1,4 @@
-import { Route, type RouteModelInput } from "../route/client"
+import type { RouteModelInput } from "../route/client"
 import { Provider } from "../provider"
 import { ProviderID, type ModelID } from "../schema"
 import * as BedrockConverse from "../protocols/bedrock-converse"
@@ -21,26 +21,13 @@ export const routes = [BedrockConverse.route]
 
 const bedrockBaseURL = (region: string) => `https://bedrock-runtime.${region}.amazonaws.com`
 
-const converseModel = Route.model<ModelInput>(
-  BedrockConverse.route,
-  {
-    provider: "amazon-bedrock",
-  },
-  {
-    mapInput: (input) => {
-      const { credentials, region, baseURL, ...rest } = input
-      const resolvedRegion = region ?? credentials?.region ?? "us-east-1"
-      return {
-        ...rest,
-        baseURL: baseURL ?? bedrockBaseURL(resolvedRegion),
-        native: BedrockConverse.nativeCredentials(input.native, credentials),
-      }
-    },
-  },
-)
-
-export const model = (modelID: string | ModelID, options: ModelOptions = {}) =>
-  converseModel({ ...options, id: modelID })
+export const model = (modelID: string | ModelID, options: ModelOptions = {}) => {
+  const { credentials, region, baseURL, ...rest } = options
+  const resolvedRegion = region ?? credentials?.region ?? "us-east-1"
+  return BedrockConverse.route
+    .with({ provider: id, endpoint: { baseURL: baseURL ?? bedrockBaseURL(resolvedRegion) } })
+    .model({ ...rest, id: modelID, native: BedrockConverse.nativeCredentials(options.native, credentials) })
+}
 
 export const provider = Provider.make({
   id,

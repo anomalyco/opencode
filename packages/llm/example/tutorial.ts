@@ -193,18 +193,18 @@ const FakeProtocol = Protocol.make<FakeBody, string, string, void>({
 // axes that the protocol deliberately does not know: URL, auth, and framing.
 const FakeAdapter = Route.make({
   id: "fake-echo",
+  provider: "fake-echo",
   protocol: FakeProtocol,
-  endpoint: Endpoint.path("/v1/echo"),
+  endpoint: Endpoint.path("/v1/echo", { baseURL: "https://fake.local" }),
   auth: Auth.passthrough,
   framing: Framing.sse,
 })
 
 // A provider module exports a Provider definition. The default `model` helper
-// sets provider identity, protocol id, and the route id resolved by the registry.
-const fakeEchoModel = Route.model(FakeAdapter, { provider: "fake-echo", baseURL: "https://fake.local" })
+// selects a model id from an already configured route.
 const FakeEcho = Provider.make({
   id: ProviderID.make("fake-echo"),
-  model: (id: string, options: ProviderModelOptions = {}) => fakeEchoModel({ id, ...options }),
+  model: (id: string, options: ProviderModelOptions = {}) => FakeAdapter.model({ id, ...options }),
 })
 
 // `LLMClient.prepare` is the lower-level inspection hook: it compiles through

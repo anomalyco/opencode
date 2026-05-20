@@ -4,7 +4,6 @@ import { Provider } from "../provider"
 import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat"
 import { Auth } from "../route/auth"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options"
-import { Route } from "../route/client"
 import { ProviderID, type ModelID } from "../schema"
 
 export const aiGatewayID = ProviderID.make("cloudflare-ai-gateway")
@@ -48,7 +47,7 @@ export const aiGatewayBaseURL = (input: GatewayURL) => {
   return `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(input.accountId)}/${encodeURIComponent(input.gatewayId?.trim() || "default")}/compat`
 }
 
-const aiGatewayAuth = (input: AIGatewayInput) => {
+const aiGatewayAuth = (input: AIGatewayOptions) => {
   if ("auth" in input && input.auth) return input.auth
   const gateway = Auth.optional(input.gatewayApiKey, "gatewayApiKey")
     .orElse(Auth.config("CLOUDFLARE_API_TOKEN"))
@@ -65,7 +64,7 @@ export const workersAIBaseURL = (input: WorkersAIURL) => {
   return `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(input.accountId)}/ai/v1`
 }
 
-const workersAIAuth = (input: WorkersAIInput) => {
+const workersAIAuth = (input: WorkersAIOptions) => {
   return AuthOptions.bearer(input, workersAIAuthEnvVars)
 }
 
@@ -81,52 +80,27 @@ export const workersAIRoute = OpenAICompatibleChat.route.with({
 
 export const routes = [aiGatewayRoute, workersAIRoute]
 
-const aiGatewayModel = Route.model<AIGatewayInput>(
-  aiGatewayRoute,
-  {
-    provider: id,
-  },
-  {
-    mapInput: (input) => {
-      const {
-        accountId: _accountId,
-        gatewayId: _gatewayId,
-        apiKey: _apiKey,
-        gatewayApiKey: _gatewayApiKey,
-        auth: _auth,
-        ...rest
-      } = input
-      return {
-        ...rest,
-        auth: aiGatewayAuth(input),
-        baseURL: aiGatewayBaseURL(input),
-      }
-    },
-  },
-)
+export const aiGateway = (modelID: string | ModelID, options: AIGatewayOptions) => {
+  const {
+    accountId: _accountId,
+    gatewayId: _gatewayId,
+    apiKey: _apiKey,
+    gatewayApiKey: _gatewayApiKey,
+    baseURL: _baseURL,
+    auth: _auth,
+    ...rest
+  } = options
+  return aiGatewayRoute
+    .with({ endpoint: { baseURL: aiGatewayBaseURL(options) } })
+    .model({ ...rest, id: modelID, auth: aiGatewayAuth(options) })
+}
 
-const workersAIModel = Route.model<WorkersAIInput>(
-  workersAIRoute,
-  {
-    provider: workersAIID,
-  },
-  {
-    mapInput: (input) => {
-      const { accountId: _accountId, apiKey: _apiKey, auth: _auth, ...rest } = input
-      return {
-        ...rest,
-        auth: workersAIAuth(input),
-        baseURL: workersAIBaseURL(input),
-      }
-    },
-  },
-)
-
-export const aiGateway = (modelID: string | ModelID, options: AIGatewayOptions) =>
-  aiGatewayModel({ ...options, id: modelID })
-
-export const workersAI = (modelID: string | ModelID, options: WorkersAIOptions) =>
-  workersAIModel({ ...options, id: modelID })
+export const workersAI = (modelID: string | ModelID, options: WorkersAIOptions) => {
+  const { accountId: _accountId, apiKey: _apiKey, auth: _auth, baseURL: _baseURL, ...rest } = options
+  return workersAIRoute
+    .with({ endpoint: { baseURL: workersAIBaseURL(options) } })
+    .model({ ...rest, id: modelID, auth: workersAIAuth(options) })
+}
 
 export const model = aiGateway
 

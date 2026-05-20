@@ -1,4 +1,3 @@
-import { Route } from "../route/client"
 import type { ModelInput } from "../llm"
 import { Provider } from "../provider"
 import { ProviderID, type ModelID } from "../schema"
@@ -26,17 +25,18 @@ export const routes = [OpenAIResponses.route, OpenAIChat.route]
 
 const mapInput = (input: CopilotModelInput) => withOpenAIOptions(input.id, input)
 
-const chatModel = Route.model<CopilotModelInput>(OpenAIChat.route, { provider: id }, { mapInput })
-const responsesModel = Route.model<CopilotModelInput>(OpenAIResponses.route, { provider: id }, { mapInput })
+const chatRoute = OpenAIChat.route.with({ provider: id })
+const responsesRoute = OpenAIResponses.route.with({ provider: id })
 
 export const responses = (modelID: string | ModelID, options: ModelOptions) =>
-  responsesModel({ ...options, id: modelID })
+  responsesRoute.model(mapInput({ ...options, id: modelID }))
 
-export const chat = (modelID: string | ModelID, options: ModelOptions) => chatModel({ ...options, id: modelID })
+export const chat = (modelID: string | ModelID, options: ModelOptions) =>
+  chatRoute.model(mapInput({ ...options, id: modelID }))
 
 export const model = (modelID: string | ModelID, options: ModelOptions) => {
-  const create = shouldUseResponsesApi(modelID) ? responsesModel : chatModel
-  return create({ ...options, id: modelID })
+  if (shouldUseResponsesApi(modelID)) return responses(modelID, options)
+  return chat(modelID, options)
 }
 
 export const provider = Provider.make({

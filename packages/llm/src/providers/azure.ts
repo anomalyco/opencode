@@ -1,6 +1,6 @@
 import { Auth } from "../route/auth"
 import { type AtLeastOne, type ProviderAuthOption } from "../route/auth-options"
-import { Route } from "../route/client"
+import type { Route as RouteDef } from "../route/client"
 import type { ModelInput } from "../llm"
 import { Provider } from "../provider"
 import { ProviderID, type ModelID } from "../schema"
@@ -47,7 +47,15 @@ const chatRoute = OpenAIChat.route.with({
 export const routes = [responsesRoute, chatRoute]
 
 const mapInput = (input: AzureModelInput) => {
-  const { apiKey: _, apiVersion, resourceName, useCompletionUrls, ...rest } = input
+  const {
+    apiKey: _,
+    apiVersion: _apiVersion,
+    resourceName: _resourceName,
+    useCompletionUrls: _useCompletionUrls,
+    baseURL: _baseURL,
+    queryParams: _queryParams,
+    ...rest
+  } = input
   return {
     ...withOpenAIOptions(input.id, rest),
     auth:
@@ -58,22 +66,26 @@ const mapInput = (input: AzureModelInput) => {
               .orElse(Auth.config("AZURE_OPENAI_API_KEY"))
               .pipe(Auth.header("api-key")),
           ),
-    // AtLeastOne guarantees at least one is set; baseURL wins if both are.
-    baseURL: rest.baseURL ?? resourceBaseURL(resourceName!),
-    queryParams: {
-      ...(apiVersion ? { "api-version": apiVersion } : {}),
-      ...rest.queryParams,
-    },
   }
 }
 
-const chatModel = Route.model<AzureModelInput>(chatRoute, {}, { mapInput })
-const responsesModel = Route.model<AzureModelInput>(responsesRoute, {}, { mapInput })
+const configuredRoute = <Body, Prepared>(route: RouteDef<Body, Prepared>, input: ModelOptions) =>
+  route.with({
+    endpoint: {
+      // AtLeastOne guarantees at least one is set; baseURL wins if both are.
+      baseURL: input.baseURL ?? resourceBaseURL(input.resourceName!),
+      query: {
+        ...(input.apiVersion ? { "api-version": input.apiVersion } : {}),
+        ...input.queryParams,
+      },
+    },
+  })
 
 export const responses = (modelID: string | ModelID, options: ModelOptions) =>
-  responsesModel({ ...options, id: modelID })
+  configuredRoute(responsesRoute, options).model(mapInput({ ...options, id: modelID }))
 
-export const chat = (modelID: string | ModelID, options: ModelOptions) => chatModel({ ...options, id: modelID })
+export const chat = (modelID: string | ModelID, options: ModelOptions) =>
+  configuredRoute(chatRoute, options).model(mapInput({ ...options, id: modelID }))
 
 export const model = (modelID: string | ModelID, options: ModelOptions) => {
   if (options.useCompletionUrls === true) return chat(modelID, options)

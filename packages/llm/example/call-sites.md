@@ -525,8 +525,10 @@ ModelResolver = dynamic opencode/config bridge
 - [ ] Keep a separate durable model identity type for persisted/session/catalog
       data, likely `{ providerID, modelID }`, and make it clear that it cannot
       execute without resolver context.
-- [ ] Change route model selectors so `route.model(id)` returns an executable
+- [x] Change route model selectors so `route.model(id)` returns an executable
       model with the route value attached, not a globally registered route id.
+- [x] Remove the standalone `Route.model(route, defaults, mapInput)` helper;
+      configured route instances own model selection.
 - [x] Rework `LLMClient.prepare` / `stream` / `generate` to read
       `request.model.route` directly instead of calling `registeredRoute(...)`.
 - [x] Remove `Route.make(...)` global registration from the normal execution

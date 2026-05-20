@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { LLM } from "../src"
-import { Route, Endpoint, LLMClient, Protocol, type RouteModelInput, type FramingDef } from "../src/route"
+import { Route, Endpoint, LLMClient, Protocol, type FramingDef } from "../src/route"
 import { Model } from "../src/schema"
 import { testEffect } from "./lib/effect"
 import { dynamicResponse } from "./lib/http"
@@ -120,26 +120,23 @@ describe("llm route", () => {
   it.effect("selects routes by model route value", () =>
     Effect.gen(function* () {
       const llm = yield* LLMClient.Service
-      const prepared = yield* llm.prepare(LLM.updateRequest(request, { model: updateModel(request.model, { route: gemini }) }))
+      const prepared = yield* llm.prepare(
+        LLM.updateRequest(request, { model: updateModel(request.model, { route: gemini }) }),
+      )
 
       expect(prepared.route).toBe("gemini-fake")
     }),
   )
 
-  it.effect("maps model input before building refs", () =>
+  it.effect("builds models from configured routes", () =>
     Effect.gen(function* () {
-      const mapped = Route.model<RouteModelInput & { readonly region?: string }>(
-        fake,
-        { provider: "fake-provider", baseURL: "https://fake.local" },
-        {
-          mapInput: (input) => {
-            const { region, ...rest } = input
-            return { ...rest, native: { region } }
-          },
-        },
-      )
+      const configured = fake.with({ provider: "fake-provider", endpoint: { baseURL: "https://fake.local" } })
 
-      expect(mapped({ id: "fake-model", region: "us-east-1" }).native).toEqual({ region: "us-east-1" })
+      expect(configured.model({ id: "fake-model", native: { region: "us-east-1" } })).toMatchObject({
+        provider: "fake-provider",
+        baseURL: "https://fake.local",
+        native: { region: "us-east-1" },
+      })
     }),
   )
 

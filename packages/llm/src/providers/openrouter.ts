@@ -68,19 +68,15 @@ const bodyOptions = (input: unknown) => {
 
 export const route = Route.make({
   id: ADAPTER,
+  provider: profile.provider,
   protocol,
-  endpoint: Endpoint.path("/chat/completions"),
+  endpoint: Endpoint.path("/chat/completions", { baseURL: profile.baseURL }),
   framing: Framing.sse,
 })
 
 export const routes = [route]
 
-const routeModel = Route.model<ModelInput>(route, {
-  provider: profile.provider,
-  baseURL: profile.baseURL,
-})
-
-export const model = (id: string | ModelID, options: ModelOptions = {}) => routeModel({ ...options, id })
+export const model = (id: string | ModelID, options: ModelOptions = {}) => route.model<ModelInput>({ ...options, id })
 
 export const provider = Provider.make({
   id,

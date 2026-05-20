@@ -42,7 +42,7 @@ export interface Route<Body, Prepared = unknown> {
   readonly defaults: RouteDefaults
   readonly body: RouteBody<Body>
   readonly with: (patch: RoutePatch<Body, Prepared>) => Route<Body, Prepared>
-  readonly model: <Input extends RouteModelInput = RouteModelInput>(input: Input) => Model
+  readonly model: <Input extends RouteMappedModelInput = RouteModelInput>(input: Input) => Model
   readonly prepareTransport: (body: Body, request: LLMRequest) => Effect.Effect<Prepared, LLMError>
   readonly streamPrepared: (
     prepared: Prepared,
@@ -83,24 +83,13 @@ export type RouteRoutedModelDefaults = Partial<Omit<ModelInput, "id" | "provider
 export type RouteDefaults = Partial<Omit<ModelInput, "id" | "provider" | "route">>
 
 export interface RoutePatch<Body, Prepared> extends RouteDefaults {
-  readonly id: string
+  readonly id?: string
   readonly provider?: string | ProviderID
   readonly transport?: Transport<Body, Prepared, unknown>
   readonly endpoint?: EndpointPatch<Body>
 }
 
 type RouteMappedModelInput = RouteModelInput | RouteRoutedModelInput
-
-export interface RouteModelOptions<
-  Input extends RouteMappedModelInput,
-  Output extends RouteMappedModelInput = RouteMappedModelInput,
-> {
-  readonly mapInput?: (input: Input) => Output
-}
-
-export interface RouteMappedModelOptions<Input, Output extends RouteMappedModelInput = RouteMappedModelInput> {
-  readonly mapInput: (input: Input) => Output
-}
 
 const modelWithDefaults =
   <Input>(
@@ -145,7 +134,9 @@ const endpointDefaults = <Body, Prepared, Frame>(transport: Transport<Body, Prep
   if (!transport.endpoint) return {}
   const query = ProviderShared.isRecord(transport.endpoint.query)
     ? Object.fromEntries(
-        Object.entries(transport.endpoint.query).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+        Object.entries(transport.endpoint.query).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string",
+        ),
       )
     : undefined
   return {
@@ -159,7 +150,8 @@ const applyEndpointPatch = <Body, Prepared, Frame>(
   patch: EndpointPatch<Body> | undefined,
 ) => {
   if (!patch) return transport
-  if (!transport.endpoint || !transport.with) throw new Error(`Transport(${transport.id}) does not support endpoint patching`)
+  if (!transport.endpoint || !transport.with)
+    throw new Error(`Transport(${transport.id}) does not support endpoint patching`)
   return transport.with({ endpoint: Endpoint.merge(transport.endpoint, patch) })
 }
 
@@ -169,29 +161,6 @@ export const generationOptions = (input: GenerationOptions.Input | undefined) =>
 export const httpOptions = (input: HttpOptionsInput | undefined) => {
   if (input === undefined) return input
   return HttpOptions.make(input)
-}
-
-function model<Input extends RouteModelInput = RouteModelInput>(
-  route: AnyRoute,
-  defaults: RouteModelDefaults,
-  options?: RouteModelOptions<Input, RouteModelInput>,
-): (input: Input) => Model
-function model<Input extends RouteRoutedModelInput = RouteRoutedModelInput>(
-  route: AnyRoute,
-  defaults?: RouteRoutedModelDefaults,
-  options?: RouteModelOptions<Input, RouteRoutedModelInput>,
-): (input: Input) => Model
-function model<Input, Output extends RouteMappedModelInput = RouteMappedModelInput>(
-  route: AnyRoute,
-  defaults: Partial<Omit<ModelInput, "id" | "route">>,
-  options: RouteMappedModelOptions<Input, Output>,
-): (input: Input) => Model
-function model<Input>(
-  route: AnyRoute,
-  defaults: Partial<Omit<ModelInput, "id" | "route">> = {},
-  options: { readonly mapInput?: (input: Input) => RouteMappedModelInput } = {},
-) {
-  return modelWithDefaults(route, defaults, options)
 }
 
 export interface Interface {
@@ -293,20 +262,20 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       body: protocol.body,
       with: (patch: RoutePatch<Body, Prepared>) => {
         const { id, provider, transport, endpoint, ...defaults } = patch
-        if (!id || id === routeInput.id) throw new Error(`Route.with(${routeInput.id}) requires a new route id`)
         const nextTransport = applyEndpointPatch(
           (transport as Transport<Body, Prepared, Frame> | undefined) ?? routeInput.transport,
           endpoint,
         )
         return build({
           ...routeInput,
-          id,
+          id: id ?? routeInput.id,
           provider: provider ?? routeInput.provider,
           transport: nextTransport,
           defaults: mergeRouteDefaults(routeInput.defaults, defaults),
         })
       },
-      model: (input: RouteModelInput): Model => modelWithDefaults<RouteModelInput>(route, {}, {})(input),
+      model: (<Input extends RouteMappedModelInput>(input: Input): Model =>
+        modelWithDefaults<RouteMappedModelInput>(route, {}, {})(input)) as Route<Body, Prepared>["model"],
       prepareTransport: routeInput.transport.prepare,
       streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime) => {
         const route = `${request.model.provider}/${request.model.route.id}`
@@ -490,7 +459,7 @@ export const layerWithWebSocket: Layer.Layer<Service, never, RequestExecutor.Ser
     }),
   )
 
-export const Route = { make, model } as const
+export const Route = { make } as const
 
 export const LLMClient = {
   Service,

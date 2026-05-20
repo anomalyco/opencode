@@ -23,6 +23,6 @@ export const route = Route.make({
   framing: Framing.sse,
 })
 
-export const model = Route.model<OpenAICompatibleChatModelInput>(route)
+export const model = route.model<OpenAICompatibleChatModelInput>
 
 export * as OpenAICompatibleChat from "./openai-compatible-chat"
