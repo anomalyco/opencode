@@ -1,3 +1,7 @@
+# Autoopencode-cli
+## This is fork from opencode, this fork is autonomous open source ai agent
+
+
 <p align="center">
   <a href="https://opencode.ai">
     <picture>
@@ -41,8 +45,6 @@
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
-# Autoopencode-cli
-## This is fork from opencode, this fork is autonomous open source ai agent
 
 ---
 
