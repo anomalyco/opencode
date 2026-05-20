@@ -1,5 +1,5 @@
-<center># Autoopencode-cli</center>
-<center>## This is fork from opencode, this fork is autonomous open source ai agent</center>
+<center>Autoopencode-cli</center>
+<center>This is fork from opencode, this fork is autonomous open source ai agent</center>
 
 
 <p align="center">
