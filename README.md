@@ -49,7 +49,13 @@
 ---
 
 ### Installation
+```bash
+git clone https://github.com/tomtyiu/Autoopencode.git
+cd autocoder
+npm run dev
+```
 
+### orignal opencode
 ```bash
 # YOLO
 curl -fsSL https://opencode.ai/install | bash
