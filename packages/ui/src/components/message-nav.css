@@ -102,7 +102,7 @@
   color: var(--text-base);
 }
 
-[data-slot="message-nav-tooltip-content"] {
+[data-slot="message-nav-hovercard-content"] {
   z-index: 1000;
   display: flex;
   padding: 4px 4px 6px 4px;

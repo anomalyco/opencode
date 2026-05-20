@@ -90,7 +90,7 @@ export function MessageNav(
             {content()}
           </HoverCard.Trigger>
           <HoverCard.Portal>
-            <HoverCard.Content data-slot="message-nav-tooltip-content">
+            <HoverCard.Content data-slot="message-nav-hovercard-content">
               <MessageNav {...props} size="normal" class="" onMessageSelect={selectMessage} />
             </HoverCard.Content>
           </HoverCard.Portal>
