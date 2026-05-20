@@ -341,7 +341,7 @@ function rewriteRefs(input: unknown, from: string, to: string): void {
 }
 
 function normalizeLegacyErrorResponses(operation: OpenApiOperation) {
-  if (operation.responses?.["400"] && isBuiltInErrorResponse(operation.responses["400"], "BadRequest")) {
+  if (operation.responses?.["400"] && isLegacyBadRequestResponse(operation.responses["400"])) {
     operation.responses["400"] = legacyErrorResponse("Bad request", "BadRequestError")
   }
   if (operation.responses?.["404"] && isBuiltInErrorResponse(operation.responses["404"], "NotFound")) {
@@ -394,6 +394,10 @@ function isRefResponse(response: OpenApiResponse, name: string) {
 
 function isBuiltInErrorResponse(response: OpenApiResponse, name: "BadRequest" | "NotFound") {
   return response.description === name || isRefResponse(response, `EffectHttpApiError${name}`)
+}
+
+function isLegacyBadRequestResponse(response: OpenApiResponse) {
+  return isBuiltInErrorResponse(response, "BadRequest") || isRefResponse(response, "InvalidRequestError")
 }
 
 function legacyErrorResponse(description: string, name: "BadRequestError" | "NotFoundError"): OpenApiResponse {

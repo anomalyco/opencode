@@ -17,10 +17,7 @@ type OpenApiSpec = { readonly paths: Record<string, OpenApiPathItem> }
 
 const methods = ["get", "post", "put", "delete", "patch"] as const
 
-const allowedV2BuiltInEndpointErrors = [
-  "GET /api/session 400 effect_HttpApiError_BadRequest",
-  "GET /api/session/{sessionID}/message 400 effect_HttpApiError_BadRequest",
-]
+const allowedV2BuiltInEndpointErrors: string[] = []
 
 function v2Operations(spec: OpenApiSpec) {
   return Object.entries(spec.paths).flatMap(([path, item]) =>

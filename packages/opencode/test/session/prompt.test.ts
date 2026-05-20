@@ -164,7 +164,7 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
-function makeHttp(input?: { processor?: "blocking" }) {
+function makePrompt(input?: { processor?: "blocking" }) {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
@@ -215,29 +215,37 @@ function makeHttp(input?: { processor?: "blocking" }) {
     Layer.provideMerge(proc),
     Layer.provideMerge(deps),
   )
-  return Layer.mergeAll(
-    TestLLMServer.layer,
-    SessionPrompt.layer.pipe(
-      Layer.provide(SessionRevert.defaultLayer),
-      Layer.provide(Image.defaultLayer),
-      Layer.provide(Reference.defaultLayer),
-      Layer.provide(summary),
-      Layer.provideMerge(run),
-      Layer.provideMerge(compact),
-      Layer.provideMerge(proc),
-      Layer.provideMerge(registry),
-      Layer.provideMerge(trunc),
-      Layer.provide(Instruction.defaultLayer),
-      Layer.provide(SystemPrompt.defaultLayer),
-      Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-      Layer.provideMerge(deps),
-    ),
-  ).pipe(Layer.provide(summary))
+  return SessionPrompt.layer.pipe(
+    Layer.provide(SessionRevert.defaultLayer),
+    Layer.provide(Image.defaultLayer),
+    Layer.provide(Reference.defaultLayer),
+    Layer.provide(summary),
+    Layer.provideMerge(run),
+    Layer.provideMerge(compact),
+    Layer.provideMerge(proc),
+    Layer.provideMerge(registry),
+    Layer.provideMerge(trunc),
+    Layer.provide(Instruction.defaultLayer),
+    Layer.provide(SystemPrompt.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provideMerge(deps),
+    Layer.provide(summary),
+  )
+}
+
+function makeHttp(input?: { processor?: "blocking" }) {
+  return Layer.mergeAll(TestLLMServer.layer, makePrompt(input))
+}
+
+function makeHttpNoLLMServer(input?: { processor?: "blocking" }) {
+  return makePrompt(input)
 }
 
 const it = testEffect(makeHttp())
-const race = testEffect(makeHttp({ processor: "blocking" }))
+const noLLMServer = testEffect(makeHttpNoLLMServer())
+const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
+const unixNoLLMServer = process.platform !== "win32" ? noLLMServer.instance : noLLMServer.instance.skip
 
 // Config that registers a custom "test" provider with a "test-model" model
 // so provider model lookup succeeds inside the loop.
@@ -433,19 +441,20 @@ const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
 
 // Loop semantics
 
-it.instance("loop exits immediately when last assistant has stop finish", () =>
-  Effect.gen(function* () {
-    const { llm } = yield* useServerConfig(providerCfg)
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({ title: "Pinned" })
-    yield* seed(chat.id, { finish: "stop" })
+noLLMServer.instance(
+  "loop exits immediately when last assistant has stop finish",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* seed(chat.id, { finish: "stop" })
 
-    const result = yield* prompt.loop({ sessionID: chat.id })
-    expect(result.info.role).toBe("assistant")
-    if (result.info.role === "assistant") expect(result.info.finish).toBe("stop")
-    expect(yield* llm.calls).toBe(0)
-  }),
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") expect(result.info.finish).toBe("stop")
+    }),
+  { config: cfg },
 )
 
 it.instance("loop calls LLM and returns assistant message", () =>
@@ -473,43 +482,45 @@ it.instance("loop calls LLM and returns assistant message", () =>
   }),
 )
 
-it.instance("prompt emits v2 prompted and synthetic events", () =>
-  Effect.gen(function* () {
-    yield* useServerConfig(providerCfg)
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({ title: "Pinned" })
+noLLMServer.instance(
+  "prompt emits v2 prompted and synthetic events",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
 
-    yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "build",
-      noReply: true,
-      parts: [
-        { type: "text", text: "hello v2" },
-        {
-          type: "file",
-          mime: "text/plain",
-          filename: "note.txt",
-          url: "data:text/plain;base64,bm90ZSBjb250ZW50",
-        },
-      ],
-    })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "hello v2" },
+          {
+            type: "file",
+            mime: "text/plain",
+            filename: "note.txt",
+            url: "data:text/plain;base64,bm90ZSBjb250ZW50",
+          },
+        ],
+      })
 
-    const messages = yield* SessionV2.Service.use((session) => session.messages({ sessionID: chat.id })).pipe(
-      Effect.provide(SessionV2.layer),
-    )
-    const row = Database.use((db) =>
-      db.select().from(SessionMessageTable).where(Database.eq(SessionMessageTable.session_id, chat.id)).get(),
-    )
-    expect(messages.find((message) => message.type === "user")).toMatchObject({ type: "user", text: "hello v2" })
-    expect(typeof row?.data.time.created).toBe("number")
-    expect(messages).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: "synthetic", text: expect.stringContaining("Called the Read tool") }),
-        expect.objectContaining({ type: "synthetic", text: "note content" }),
-      ]),
-    )
-  }),
+      const messages = yield* SessionV2.Service.use((session) => session.messages({ sessionID: chat.id })).pipe(
+        Effect.provide(SessionV2.layer),
+      )
+      const row = Database.use((db) =>
+        db.select().from(SessionMessageTable).where(Database.eq(SessionMessageTable.session_id, chat.id)).get(),
+      )
+      expect(messages.find((message) => message.type === "user")).toMatchObject({ type: "user", text: "hello v2" })
+      expect(typeof row?.data.time.created).toBe("number")
+      expect(messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "synthetic", text: expect.stringContaining("Called the Read tool") }),
+          expect.objectContaining({ type: "synthetic", text: "note content" }),
+        ]),
+      )
+    }),
+  { config: cfg },
 )
 
 it.instance("static loop returns assistant text through local provider", () =>
@@ -876,11 +887,10 @@ it.instance(
   3_000,
 )
 
-race.instance(
+raceNoLLMServer.instance(
   "finalizes assistant when cancelled before processor creation completes",
   () =>
     Effect.gen(function* () {
-      yield* useServerConfig(providerCfg)
       processorCreateStarted.length = 0
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
@@ -962,10 +972,11 @@ race.instance(
         expect(lastAssistant.info.parentID).toBe(lastUser?.info.id)
       }
     }),
+  { config: cfg },
   3_000,
 )
 
-it.instance(
+noLLMServer.instance(
   "cancel finalizes subtask tool state",
   () =>
     Effect.gen(function* () {
@@ -1077,7 +1088,7 @@ it.instance(
 
 // Queue semantics
 
-it.instance("concurrent loop callers get same result", () =>
+noLLMServer.instance("concurrent loop callers get same result", () =>
   Effect.gen(function* () {
     const { prompt, run, chat } = yield* boot()
     yield* seed(chat.id, { finish: "stop" })
@@ -1210,7 +1221,7 @@ it.instance(
   3_000,
 )
 
-it.instance("assertNotBusy succeeds when idle", () =>
+noLLMServer.instance("assertNotBusy succeeds when idle", () =>
   Effect.gen(function* () {
     const run = yield* SessionRunState.Service
     const sessions = yield* Session.Service
@@ -1250,7 +1261,7 @@ it.instance(
   3_000,
 )
 
-unix(
+unixNoLLMServer(
   "shell captures stdout and stderr in completed tool output",
   () =>
     Effect.gen(function* () {
@@ -1274,7 +1285,7 @@ unix(
   { config: cfg },
 )
 
-unix(
+unixNoLLMServer(
   "shell completes a fast command on the preferred shell",
   () =>
     Effect.gen(function* () {
@@ -1298,7 +1309,7 @@ unix(
   { config: cfg },
 )
 
-unix(
+unixNoLLMServer(
   "shell uses configured shell over env shell",
   () =>
     withSh(() =>
@@ -1321,7 +1332,7 @@ unix(
   30_000,
 )
 
-unix(
+unixNoLLMServer(
   "shell commands can change directory after startup",
   () =>
     Effect.gen(function* () {
@@ -1345,7 +1356,7 @@ unix(
   { config: cfg },
 )
 
-unix(
+unixNoLLMServer(
   "shell lists files from the project directory",
   () =>
     Effect.gen(function* () {
@@ -1371,7 +1382,7 @@ unix(
   { config: cfg },
 )
 
-unix(
+unixNoLLMServer(
   "shell captures stderr from a failing command",
   () =>
     Effect.gen(function* () {
@@ -1393,7 +1404,7 @@ unix(
   { config: cfg },
 )
 
-unix(
+unixNoLLMServer(
   "shell updates running metadata before process exit",
   () =>
     withSh(() =>
@@ -1531,7 +1542,7 @@ unix(
   30_000,
 )
 
-unix(
+unixNoLLMServer(
   "cancel interrupts shell and resolves cleanly",
   () =>
     withSh(() =>
@@ -1565,7 +1576,7 @@ unix(
   30_000,
 )
 
-unix(
+unixNoLLMServer(
   "cancel persists aborted shell result when shell ignores TERM",
   () =>
     withSh(() =>
@@ -1658,7 +1669,7 @@ unix(
   30_000,
 )
 
-unix(
+unixNoLLMServer(
   "cancel interrupts loop queued behind shell",
   () =>
     Effect.gen(function* () {
@@ -1685,7 +1696,7 @@ unix(
   30_000,
 )
 
-unix(
+unixNoLLMServer(
   "shell rejects when another shell is already running",
   () =>
     withSh(() =>
@@ -1729,7 +1740,7 @@ function hangUntilAborted(tool: { execute: (...args: any[]) => any }) {
   })
 }
 
-it.instance(
+noLLMServer.instance(
   "interrupt propagates abort signal to read tool via file part (text/plain)",
   () =>
     Effect.gen(function* () {
@@ -1767,7 +1778,7 @@ it.instance(
   30_000,
 )
 
-it.instance(
+noLLMServer.instance(
   "interrupt propagates abort signal to read tool via file part (directory)",
   () =>
     Effect.gen(function* () {
@@ -1804,7 +1815,7 @@ it.instance(
 
 // Missing file handling
 
-it.instance(
+noLLMServer.instance(
   "does not fail the prompt when a file part is missing",
   () =>
     Effect.gen(function* () {
@@ -1840,7 +1851,7 @@ it.instance(
   { config: cfg },
 )
 
-it.instance(
+noLLMServer.instance(
   "keeps stored part order stable when file resolution is async",
   () =>
     Effect.gen(function* () {
@@ -1882,7 +1893,7 @@ it.instance(
   { config: cfg },
 )
 
-it.instance(
+noLLMServer.instance(
   "resolves configured reference mentions before workspace paths and agents",
   () =>
     Effect.gen(function* () {
@@ -1937,7 +1948,7 @@ it.instance(
   },
 )
 
-it.instance(
+noLLMServer.instance(
   "injects metadata for bare configured reference mentions",
   () =>
     Effect.gen(function* () {
@@ -1976,7 +1987,7 @@ it.instance(
   },
 )
 
-it.instance(
+noLLMServer.instance(
   "injects metadata for configured reference file attachments",
   () =>
     Effect.gen(function* () {
@@ -2043,7 +2054,7 @@ it.instance(
 
 // Special characters in filenames
 
-it.instance(
+noLLMServer.instance(
   "handles filenames with # character",
   () =>
     Effect.gen(function* () {
@@ -2147,7 +2158,7 @@ it.instance(
 
 // Agent variant
 
-it.instance(
+noLLMServer.instance(
   "applies agent variant only when using agent model",
   () =>
     Effect.gen(function* () {
@@ -2218,7 +2229,7 @@ it.instance(
 
 // Agent / command resolution errors
 
-it.instance(
+noLLMServer.instance(
   "unknown agent throws typed error",
   () =>
     Effect.gen(function* () {
@@ -2247,7 +2258,7 @@ it.instance(
   30_000,
 )
 
-it.instance(
+noLLMServer.instance(
   "unknown agent error includes available agent names",
   () =>
     Effect.gen(function* () {
@@ -2275,7 +2286,7 @@ it.instance(
   30_000,
 )
 
-it.instance(
+noLLMServer.instance(
   "unknown command throws typed error with available names",
   () =>
     Effect.gen(function* () {

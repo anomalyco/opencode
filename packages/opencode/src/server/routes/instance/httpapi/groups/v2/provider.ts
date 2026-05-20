@@ -2,7 +2,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ApiNotFoundError } from "../../errors"
-import { Authorization } from "../../middleware/authorization"
+import { V2Authorization } from "../../middleware/authorization"
 import { LocationQuery, locationQueryOpenApi, V2LocationMiddleware } from "./location"
 
 export const ProviderGroup = HttpApiGroup.make("v2.provider")
@@ -44,4 +44,4 @@ export const ProviderGroup = HttpApiGroup.make("v2.provider")
     }),
   )
   .middleware(V2LocationMiddleware)
-  .middleware(Authorization)
+  .middleware(V2Authorization)
