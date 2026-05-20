@@ -602,7 +602,15 @@ const scenarios: Scenario[] = [
   http.protected
     .get("/api/session", "v2.session.list")
     .at((ctx) => ({ path: "/api/session?roots=true", headers: ctx.headers() }))
-    .json(404, object, "status"),
+    .json(
+      200,
+      (body) => {
+        object(body)
+        array(body.items)
+        object(body.cursor)
+      },
+      "none",
+    ),
   http.protected
     .get("/api/session", "v2.session.list.filters")
     .at((ctx) => ({
@@ -617,7 +625,15 @@ const scenarios: Scenario[] = [
       })}`,
       headers: ctx.headers(),
     }))
-    .json(404, object, "status"),
+    .json(
+      200,
+      (body) => {
+        object(body)
+        array(body.items)
+        object(body.cursor)
+      },
+      "none",
+    ),
   http.protected
     .get("/api/session", "v2.session.list.cursor")
     .at((ctx) => ({
@@ -676,15 +692,7 @@ const scenarios: Scenario[] = [
       })}`,
       headers: ctx.headers(),
     }))
-    .json(
-      200,
-      (body) => {
-        object(body)
-        array(body.items)
-        object(body.cursor)
-      },
-      "none",
-    ),
+    .json(404, object, "status"),
   http.protected
     .get("/api/session/{sessionID}/message", "v2.session.messages.cursor")
     .at((ctx) => ({
@@ -695,15 +703,7 @@ const scenarios: Scenario[] = [
       })}`,
       headers: ctx.headers(),
     }))
-    .json(
-      200,
-      (body) => {
-        object(body)
-        array(body.items)
-        object(body.cursor)
-      },
-      "none",
-    ),
+    .json(404, object, "status"),
   http.protected
     .get("/api/session/{sessionID}/message", "v2.session.messages.cursor.invalid")
     .at((ctx) => ({
