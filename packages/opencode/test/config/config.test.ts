@@ -1204,67 +1204,37 @@ test("keeps plugin origins aligned with merged plugin list", async () => {
 
 // Legacy tools migration tests
 
-test("migrates legacy tools config to permissions - allow", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test: {
-              tools: {
-                bash: true,
-                read: true,
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test"]?.permission).toEqual({
-        bash: "allow",
-        read: "allow",
-      })
-    },
-  })
-})
+it.instance("migrates legacy tools config to permissions - allow", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      agent: { test: { tools: { bash: true, read: true } } },
+    })
 
-test("migrates legacy tools config to permissions - deny", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test: {
-              tools: {
-                bash: false,
-                webfetch: false,
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.agent?.["test"]?.permission).toEqual({
-        bash: "deny",
-        webfetch: "deny",
-      })
-    },
-  })
-})
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test"]?.permission).toEqual({
+      bash: "allow",
+      read: "allow",
+    })
+  }),
+)
+
+it.instance("migrates legacy tools config to permissions - deny", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      agent: { test: { tools: { bash: false, webfetch: false } } },
+    })
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.agent?.["test"]?.permission).toEqual({
+      bash: "deny",
+      webfetch: "deny",
+    })
+  }),
+)
 
 it.instance("migrates legacy write tool to edit permission", () =>
   Effect.gen(function* () {
@@ -1446,159 +1416,131 @@ test("config parser preserves permission order while rejecting unknown top-level
 
 // MCP config merging tests
 
-test("project config can override MCP server enabled status", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      // Simulates a base config (like from remote .well-known) with disabled MCP
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          mcp: {
-            jira: {
-              type: "remote",
-              url: "https://jira.example.com/mcp",
-              enabled: false,
-            },
-            wiki: {
-              type: "remote",
-              url: "https://wiki.example.com/mcp",
-              enabled: false,
-            },
-          },
-        }),
-      )
-      // Project config enables just jira
-      await Filesystem.write(
-        path.join(dir, "opencode.jsonc"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          mcp: {
-            jira: {
-              type: "remote",
-              url: "https://jira.example.com/mcp",
-              enabled: true,
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      // jira should be enabled (overridden by project config)
-      expect(config.mcp?.jira).toEqual({
-        type: "remote",
-        url: "https://jira.example.com/mcp",
-        enabled: true,
-      })
-      // wiki should still be disabled (not overridden)
-      expect(config.mcp?.wiki).toEqual({
-        type: "remote",
-        url: "https://wiki.example.com/mcp",
-        enabled: false,
-      })
-    },
-  })
-})
-
-test("MCP config deep merges preserving base config properties", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      // Base config with full MCP definition
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          mcp: {
-            myserver: {
-              type: "remote",
-              url: "https://myserver.example.com/mcp",
-              enabled: false,
-              headers: {
-                "X-Custom-Header": "value",
-              },
-            },
-          },
-        }),
-      )
-      // Override just enables it, should preserve other properties
-      await Filesystem.write(
-        path.join(dir, "opencode.jsonc"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          mcp: {
-            myserver: {
-              type: "remote",
-              url: "https://myserver.example.com/mcp",
-              enabled: true,
-            },
-          },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.mcp?.myserver).toEqual({
-        type: "remote",
-        url: "https://myserver.example.com/mcp",
-        enabled: true,
-        headers: {
-          "X-Custom-Header": "value",
+it.instance("project config can override MCP server enabled status", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    // Simulates a base config (like from remote .well-known) with disabled MCP.
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      mcp: {
+        jira: {
+          type: "remote",
+          url: "https://jira.example.com/mcp",
+          enabled: false,
         },
-      })
-    },
-  })
-})
+        wiki: {
+          type: "remote",
+          url: "https://wiki.example.com/mcp",
+          enabled: false,
+        },
+      },
+    })
+    // Project config enables just jira.
+    yield* writeConfigEffect(
+      test.directory,
+      {
+        $schema: "https://opencode.ai/config.json",
+        mcp: {
+          jira: {
+            type: "remote",
+            url: "https://jira.example.com/mcp",
+            enabled: true,
+          },
+        },
+      },
+      "opencode.jsonc",
+    )
 
-test("local .opencode config can override MCP from project config", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      // Project config with disabled MCP
-      await Filesystem.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          mcp: {
-            docs: {
-              type: "remote",
-              url: "https://docs.example.com/mcp",
-              enabled: false,
-            },
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.mcp?.jira).toEqual({
+      type: "remote",
+      url: "https://jira.example.com/mcp",
+      enabled: true,
+    })
+    expect(config.mcp?.wiki).toEqual({
+      type: "remote",
+      url: "https://wiki.example.com/mcp",
+      enabled: false,
+    })
+  }),
+)
+
+it.instance("MCP config deep merges preserving base config properties", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      mcp: {
+        myserver: {
+          type: "remote",
+          url: "https://myserver.example.com/mcp",
+          enabled: false,
+          headers: {
+            "X-Custom-Header": "value",
           },
-        }),
-      )
-      // Local .opencode directory config enables it
-      const opencodeDir = path.join(dir, ".opencode")
-      await fs.mkdir(opencodeDir, { recursive: true })
-      await Filesystem.write(
-        path.join(opencodeDir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          mcp: {
-            docs: {
-              type: "remote",
-              url: "https://docs.example.com/mcp",
-              enabled: true,
-            },
+        },
+      },
+    })
+    yield* writeConfigEffect(
+      test.directory,
+      {
+        $schema: "https://opencode.ai/config.json",
+        mcp: {
+          myserver: {
+            type: "remote",
+            url: "https://myserver.example.com/mcp",
+            enabled: true,
           },
-        }),
-      )
-    },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const config = await load(ctx)
-      expect(config.mcp?.docs?.enabled).toBe(true)
-    },
-  })
-})
+        },
+      },
+      "opencode.jsonc",
+    )
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.mcp?.myserver).toEqual({
+      type: "remote",
+      url: "https://myserver.example.com/mcp",
+      enabled: true,
+      headers: {
+        "X-Custom-Header": "value",
+      },
+    })
+  }),
+)
+
+it.instance("local .opencode config can override MCP from project config", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      mcp: {
+        docs: {
+          type: "remote",
+          url: "https://docs.example.com/mcp",
+          enabled: false,
+        },
+      },
+    })
+    yield* mkdirEffect(path.join(test.directory, ".opencode"))
+    yield* writeConfigEffect(
+      path.join(test.directory, ".opencode"),
+      {
+        $schema: "https://opencode.ai/config.json",
+        mcp: {
+          docs: {
+            type: "remote",
+            url: "https://docs.example.com/mcp",
+            enabled: true,
+          },
+        },
+      },
+      "opencode.json",
+    )
+
+    const config = yield* Config.Service.use((svc) => svc.get())
+    expect(config.mcp?.docs?.enabled).toBe(true)
+  }),
+)
 
 test("project config overrides remote well-known config", async () => {
   const originalFetch = globalThis.fetch
@@ -2132,6 +2074,34 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
         delete process.env["OPENCODE_CONFIG_DIR"]
       } else {
         process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
+      }
+    }
+  })
+})
+
+// Regression for #28206: malformed OPENCODE_PERMISSION JSON used to crash
+// the app on startup with an unhandled SyntaxError. Loading the config with
+// an invalid JSON value in this env var should not throw.
+describe("OPENCODE_PERMISSION env var", () => {
+  test("does not crash when OPENCODE_PERMISSION contains invalid JSON", async () => {
+    const original = process.env["OPENCODE_PERMISSION"]
+    process.env["OPENCODE_PERMISSION"] = "{invalid"
+    try {
+      await using tmp = await tmpdir()
+      await withTestInstance({
+        directory: tmp.path,
+        fn: async (ctx) => {
+          const config = await load(ctx)
+          // We don't assert on permission shape; the regression is that
+          // load() throws before returning anything.
+          expect(config).toBeDefined()
+        },
+      })
+    } finally {
+      if (original !== undefined) {
+        process.env["OPENCODE_PERMISSION"] = original
+      } else {
+        delete process.env["OPENCODE_PERMISSION"]
       }
     }
   })
