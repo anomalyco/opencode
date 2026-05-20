@@ -71,7 +71,7 @@ export namespace AppFileSystem {
             return entries.map(
               (e): DirEntry => ({
                 name: e.name,
-                type: e.isDirectory() ? "directory" : e.isSymbolicLink() ? "symlink" : e.isFile() ? "file" : "other",
+                type: e.isSymbolicLink() ? (e.isDirectory() ? "directory" : "symlink") : e.isDirectory() ? "directory" : e.isFile() ? "file" : "other",
               }),
             )
           },
