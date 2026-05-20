@@ -31,6 +31,8 @@ interface CollabContextValue {
   approvesuggestion: (suggestionId: string) => Promise<void>
   rejectSuggestion: (suggestionId: string) => Promise<void>
   castVote: (suggestionId: string) => Promise<void>
+  /** Toggle an emoji reaction on a suggestion. */
+  react: (suggestionId: string, emoji: string) => Promise<void>
   resolvePool: () => Promise<void>
   changeRole: (githubId: number, role: string) => Promise<void>
   createInvite: (role: string) => Promise<{ url: string; token: string }>
@@ -330,6 +332,18 @@ export function CollabProvider(props: CollabProviderProps) {
         console.debug("[collab] typing_stop", event.githubLogin)
         markTyping(event.githubLogin, false)
         break
+
+      case "collab:reaction_changed":
+        // Merge the new reaction map into whichever suggestion it belongs
+        // to (could be in queue() or future approved/submitted lists).
+        setQueue((prev) =>
+          prev.map((s) =>
+            s.id === event.suggestionId
+              ? { ...s, reactions: Object.keys(event.reactions).length > 0 ? event.reactions : undefined }
+              : s,
+          ),
+        )
+        break
     }
   }
 
@@ -370,6 +384,9 @@ export function CollabProvider(props: CollabProviderProps) {
     },
     async castVote(suggestionId) {
       await api(`/vote/${suggestionId}`, "POST")
+    },
+    async react(suggestionId, emoji) {
+      await api(`/react/${suggestionId}`, "POST", { emoji })
     },
     async resolvePool() {
       await api("/resolve", "POST")

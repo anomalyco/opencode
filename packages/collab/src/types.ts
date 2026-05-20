@@ -58,8 +58,14 @@ export interface PromptSuggestion {
   status: SuggestionStatus
   voteScore: number
   votes: string[] // array of githubLogins who voted
+  /** Emoji reactions on this suggestion: { "🔥": ["alice","bob"], "👎": ["carol"] }. */
+  reactions?: Record<string, string[]>
   createdAt: Date
 }
+
+/** Allowed reaction emoji set — keep this small so the UI bar stays compact. */
+export const REACTION_EMOJIS = ["👍", "👎", "🔥", "🚀", "❤️", "😄"] as const
+export type ReactionEmoji = typeof REACTION_EMOJIS[number]
 
 export interface InviteToken {
   token: string
@@ -88,3 +94,4 @@ export type CollabEvent =
   | { type: "collab:keystroke"; githubLogin: string; draft: string }
   | { type: "collab:session_deleted"; collabSessionId: string }
   | { type: "collab:native_session_linked"; sessionId: string; directory: string }
+  | { type: "collab:reaction_changed"; suggestionId: string; reactions: Record<string, string[]> }

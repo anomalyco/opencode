@@ -3,7 +3,7 @@
  * Injected into the queue engine at session start.
  */
 import { Database, eq, and, asc } from "@/storage/db"
-import { CollabSuggestionTable, CollabVoteTable } from "./schema.sql"
+import { CollabSuggestionTable, CollabVoteTable, CollabReactionTable } from "./schema.sql"
 import type { CollabDB } from "@opencode-ai/collab"
 import type { PromptSuggestion } from "@opencode-ai/collab"
 import { collabId } from "@opencode-ai/collab"
@@ -11,6 +11,7 @@ import { collabId } from "@opencode-ai/collab"
 function rowToSuggestion(
   row: typeof CollabSuggestionTable.$inferSelect,
   votes: string[],
+  reactions: Record<string, string[]>,
 ): PromptSuggestion {
   return {
     id: row.id,
@@ -21,8 +22,25 @@ function rowToSuggestion(
     status: row.status,
     voteScore: row.vote_score,
     votes,
+    reactions: Object.keys(reactions).length > 0 ? reactions : undefined,
     createdAt: new Date(row.created_at),
   }
+}
+
+/**
+ * Read all reactions for one suggestion as { emoji: [reactor logins] }.
+ * Inlined here (rather than reused from reactions.ts) to share the same DB
+ * handle and avoid an extra Database.use scope per row.
+ */
+function readReactions(db: any, suggestionId: string): Record<string, string[]> {
+  const rows = db
+    .select({ emoji: CollabReactionTable.emoji, voter: CollabReactionTable.voter_github_login })
+    .from(CollabReactionTable)
+    .where(eq(CollabReactionTable.suggestion_id, suggestionId))
+    .all() as Array<{ emoji: string; voter: string }>
+  const out: Record<string, string[]> = {}
+  for (const r of rows) (out[r.emoji] ??= []).push(r.voter)
+  return out
 }
 
 export const collabDb: CollabDB = {
@@ -99,7 +117,7 @@ export const collabDb: CollabDB = {
           .from(CollabVoteTable)
           .where(eq(CollabVoteTable.suggestion_id, r.id))
           .all()
-        return rowToSuggestion(r, votes.map((v) => v.voter))
+        return rowToSuggestion(r, votes.map((v) => v.voter), readReactions(db, r.id))
       })
     })
   },
@@ -124,7 +142,7 @@ export const collabDb: CollabDB = {
           .from(CollabVoteTable)
           .where(eq(CollabVoteTable.suggestion_id, r.id))
           .all()
-        return rowToSuggestion(r, votes.map((v) => v.voter))
+        return rowToSuggestion(r, votes.map((v) => v.voter), readReactions(db, r.id))
       })
     })
   },
@@ -142,7 +160,7 @@ export const collabDb: CollabDB = {
         .from(CollabVoteTable)
         .where(eq(CollabVoteTable.suggestion_id, id))
         .all()
-      return rowToSuggestion(row, votes.map((v) => v.voter))
+      return rowToSuggestion(row, votes.map((v) => v.voter), readReactions(db, id))
     })
   },
 }

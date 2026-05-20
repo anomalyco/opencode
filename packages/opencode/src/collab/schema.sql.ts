@@ -79,6 +79,27 @@ export const CollabVoteTable = sqliteTable(
   ],
 )
 
+/**
+ * Lightweight emoji reactions on suggestions.  Distinct from CollabVoteTable
+ * (which is the structured Vote-Pool ▲ count).  One row per
+ * (suggestion, reactor, emoji) tuple — toggling re-adds or removes that row.
+ */
+export const CollabReactionTable = sqliteTable(
+  "collab_reaction",
+  {
+    suggestion_id: text()
+      .notNull()
+      .references(() => CollabSuggestionTable.id, { onDelete: "cascade" }),
+    voter_github_login: text().notNull(),
+    emoji: text().notNull(),
+    created_at: integer({ mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.suggestion_id, t.voter_github_login, t.emoji] }),
+    index("collab_reaction_suggestion_idx").on(t.suggestion_id),
+  ],
+)
+
 // Persisted GitHub OAuth sessions — survives server restarts.
 // The in-memory Map used originally was wiped on every container restart.
 export const CollabAuthSessionTable = sqliteTable("collab_auth_session", {

@@ -300,12 +300,18 @@ function PromptInput(props: {
 
 // ── Queue item ────────────────────────────────────────────────────────────────
 
+/** The fixed set of emoji shown in the reaction bar (kept in sync with
+ *  REACTION_EMOJIS in packages/collab/src/types.ts). */
+const REACTION_BAR: readonly string[] = ["👍", "👎", "🔥", "🚀", "❤️", "😄"]
+
 function QueueItem(props: {
   suggestion: PromptSuggestion
   myRole: CollabRole
+  myLogin: string
   onApprove?: (id: string) => Promise<void>
   onReject?: (id: string) => void
   onVote?: (id: string) => void
+  onReact?: (id: string, emoji: string) => void
 }) {
   const s = props.suggestion
   const [approving, setApproving] = createSignal(false)
@@ -376,6 +382,38 @@ function QueueItem(props: {
         >
           ▲ Vote
         </button>
+      </Show>
+
+      {/* Reaction bar — non-Viewers only.  Each emoji is its own toggle;
+          re-clicking removes your own reaction.  Counts come from the
+          server-broadcast reaction map. */}
+      <Show when={props.myRole !== "viewer"}>
+        <div class="flex flex-wrap gap-1 mt-1.5">
+          <For each={REACTION_BAR}>
+            {(emoji) => {
+              const reactors = () => s.reactions?.[emoji] ?? []
+              const mine = () => reactors().includes(props.myLogin)
+              const count = () => reactors().length
+              return (
+                <button
+                  type="button"
+                  onClick={() => props.onReact?.(s.id, emoji)}
+                  title={count() > 0 ? reactors().join(", ") : `React with ${emoji}`}
+                  classList={{
+                    "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] border transition-colors": true,
+                    "bg-blue-500/20 text-blue-300 border-blue-500/40": mine(),
+                    "bg-zinc-800/60 text-zinc-500 border-zinc-700/40 hover:bg-zinc-700/60 hover:text-zinc-300": !mine(),
+                  }}
+                >
+                  <span>{emoji}</span>
+                  <Show when={count() > 0}>
+                    <span class="font-mono">{count()}</span>
+                  </Show>
+                </button>
+              )
+            }}
+          </For>
+        </div>
       </Show>
     </div>
   )
@@ -594,9 +632,11 @@ function CollabSessionInner(props: { me: Me }) {
                   <QueueItem
                     suggestion={s}
                     myRole={myRole()}
+                    myLogin={props.me.githubLogin}
                     onApprove={(id) => collab.approvesuggestion(id)}
                     onReject={(id) => { collab.rejectSuggestion(id).catch(console.error) }}
                     onVote={(id) => { collab.castVote(id).catch(console.error) }}
+                    onReact={(id, emoji) => { collab.react(id, emoji).catch(console.error) }}
                   />
                 )}
               </For>

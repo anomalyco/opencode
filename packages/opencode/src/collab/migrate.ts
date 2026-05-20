@@ -53,6 +53,14 @@ const SQL = `
     UNIQUE (suggestion_id, voter_github_login)
   );
   CREATE INDEX IF NOT EXISTS collab_vote_suggestion_idx ON collab_vote(suggestion_id);
+  CREATE TABLE IF NOT EXISTS collab_reaction (
+    suggestion_id TEXT NOT NULL REFERENCES collab_suggestion(id) ON DELETE CASCADE,
+    voter_github_login TEXT NOT NULL,
+    emoji TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (suggestion_id, voter_github_login, emoji)
+  );
+  CREATE INDEX IF NOT EXISTS collab_reaction_suggestion_idx ON collab_reaction(suggestion_id);
   CREATE TABLE IF NOT EXISTS collab_invite (
     token TEXT PRIMARY KEY,
     collab_session_id TEXT NOT NULL REFERENCES collab_session(id) ON DELETE CASCADE,

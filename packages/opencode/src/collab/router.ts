@@ -45,6 +45,7 @@ import {
 } from "./workspace"
 import { readFile } from "node:fs/promises"
 import { openCollabPullRequest } from "./github-pr"
+import { toggleReaction, isAllowedEmoji } from "./reactions"
 
 /**
  * Read TCP ports the container is currently LISTENING on, by parsing
@@ -1075,6 +1076,24 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
       githubLogin: sess.githubLogin,
     })
     return json({ ok: true })
+  }
+
+  // POST /collab/session/:id/react/:sid — toggle an emoji reaction.
+  // Body: { emoji: "🔥" }.  Re-posting the same emoji removes it.
+  if (req.method === "POST" && parts[3] === "react" && parts[4]) {
+    if (caller.role === "viewer") return json({ error: "Forbidden — Viewers cannot react" }, 403)
+    const body = (await req.json().catch(() => ({}))) as { emoji?: string }
+    const emoji = body.emoji
+    if (!emoji || !isAllowedEmoji(emoji)) {
+      return json({ error: "Invalid emoji" }, 400)
+    }
+    const { reactions } = toggleReaction(parts[4], sess.githubLogin, emoji)
+    broadcastSse(sessionId, {
+      type: "collab:reaction_changed",
+      suggestionId: parts[4],
+      reactions,
+    })
+    return json({ reactions })
   }
 
   // POST /collab/session/:id/vote/:sid — non-Viewer votes
