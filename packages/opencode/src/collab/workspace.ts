@@ -44,18 +44,26 @@ export function repoWorkspacePath(collabSessionId: string, repoFullName: string)
 }
 
 /**
- * Directory we hand to the native opencode session.
+ * Directory we hand to the native opencode session — this becomes the cwd
+ * for the terminal panel inside the iframe, the root of opencode's file
+ * tree, and the working directory for git/diff/review tooling.
  *
- * Single-repo collab session: use the repo subdirectory directly so that
- * opencode's git/diff tooling, file tree, and the "review" pane see a proper
- * git repository (the LLM gets correct context for code edits + commits).
+ * We always scope to a specific repo subdirectory when ANY repo is linked
+ * to the session.  This isolates the opencode terminal and file tree to
+ * the project's "GitHub folder" rather than the broader workspace root
+ * (which would also expose any sibling repos cloned for multi-repo
+ * sessions — confusing and wider than the user typically wants).
  *
- * Multi-repo / repo-less collab session: fall back to the session workspace
- * root.  The LLM can navigate between repo subdirs manually; opencode's
- * repo-aware features won't be active.
+ * - Single-repo session  → /var/opencode/workspaces/<id>/<repoName>
+ * - Multi-repo session   → first repo (LLM can `cd ../<other>` if needed)
+ * - Repo-less session    → /var/opencode/workspaces/<id> (workspace root)
+ *
+ * The first-repo choice for multi-repo sessions keeps the iframe focused
+ * on one project at a time; the cloned siblings are still on disk one
+ * directory up and reachable by an explicit cd.
  */
 export function nativeSessionDirectory(collabSessionId: string, repos: string[]): string {
-  if (repos.length === 1) return repoWorkspacePath(collabSessionId, repos[0]!)
+  if (repos.length > 0) return repoWorkspacePath(collabSessionId, repos[0]!)
   return sessionWorkspacePath(collabSessionId)
 }
 
