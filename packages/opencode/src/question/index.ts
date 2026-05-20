@@ -20,7 +20,7 @@ export class Option extends Schema.Class<Option>("QuestionOption")({
 }) {}
 
 const base = {
-  question: Schema.String.annotate({
+  question: Schema.optional(Schema.String).annotate({
     description: "Complete question",
   }),
   header: Schema.String.annotate({
