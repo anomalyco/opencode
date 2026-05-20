@@ -31,8 +31,10 @@ describe("Cloudflare", () => {
         id: "workers-ai/@cf/meta/llama-3.3-70b-instruct",
         provider: "cloudflare-ai-gateway",
         route: { id: "cloudflare-ai-gateway" },
-        baseURL: "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/compat",
       })
+      expect(model.route.transport.endpoint?.baseURL).toBe(
+        "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/compat",
+      )
 
       const prepared = yield* LLMClient.prepare(LLM.request({ model, prompt: "Say hello." }))
 
@@ -90,7 +92,7 @@ describe("Cloudflare", () => {
           accountId: "test-account",
           gatewayId: "",
           gatewayApiKey: "test-token",
-        }).baseURL,
+        }).route.transport.endpoint?.baseURL,
       ).toBe("https://gateway.ai.cloudflare.com/v1/test-account/default/compat")
     }),
   )
@@ -137,7 +139,7 @@ describe("Cloudflare", () => {
         }),
       )
 
-      expect(prepared.model.baseURL).toBe("https://gateway.proxy.test/v1/custom/compat")
+      expect(prepared.model.route.transport.endpoint?.baseURL).toBe("https://gateway.proxy.test/v1/custom/compat")
     }),
   )
 
@@ -152,8 +154,10 @@ describe("Cloudflare", () => {
         id: "@cf/meta/llama-3.1-8b-instruct",
         provider: "cloudflare-workers-ai",
         route: { id: "cloudflare-workers-ai" },
-        baseURL: "https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1",
       })
+      expect(model.route.transport.endpoint?.baseURL).toBe(
+        "https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1",
+      )
 
       const prepared = yield* LLMClient.prepare(LLM.request({ model, prompt: "Say hello." }))
 

@@ -139,14 +139,11 @@ export class Model {
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: AnyRoute
-  readonly baseURL: string
   /** Provider-specific API key convenience. Provider helpers normalize this into `auth`. */
   readonly apiKey?: string
   /** Optional transport auth policy. Opaque because it may contain functions. */
   readonly auth?: Auth
   readonly headers?: Record<string, string>
-  /** Query params appended to the request URL by `Endpoint.baseURL`. */
-  readonly queryParams?: Record<string, string>
   readonly limits: ModelLimits
   /** Provider-neutral generation defaults. Request-level values override them. */
   readonly generation?: GenerationOptions
@@ -161,11 +158,9 @@ export class Model {
     this.id = input.id
     this.provider = input.provider
     this.route = input.route
-    this.baseURL = input.baseURL
     this.apiKey = input.apiKey
     this.auth = input.auth
     this.headers = input.headers
-    this.queryParams = input.queryParams
     this.limits = input.limits
     this.generation = input.generation
     this.providerOptions = input.providerOptions
@@ -190,11 +185,9 @@ export class Model {
       id: model.id,
       provider: model.provider,
       route: model.route,
-      baseURL: model.baseURL,
       apiKey: model.apiKey,
       auth: model.auth,
       headers: model.headers,
-      queryParams: model.queryParams,
       limits: model.limits,
       generation: model.generation,
       providerOptions: model.providerOptions,
@@ -217,11 +210,9 @@ export namespace Model {
     readonly id: ModelID
     readonly provider: ProviderID
     readonly route: AnyRoute
-    readonly baseURL: string
     readonly apiKey?: string
     readonly auth?: Auth
     readonly headers?: Record<string, string>
-    readonly queryParams?: Record<string, string>
     readonly limits: ModelLimits
     readonly generation?: GenerationOptions
     readonly providerOptions?: ProviderOptions

@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
+import { LLM, LLMError, Message, Model, ToolCallPart, Usage } from "../../src"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
@@ -69,7 +69,9 @@ describe("OpenAI Chat route", () => {
 
   it.effect("adds native query params to the Chat Completions URL", () =>
     LLMClient.generate(
-      LLM.updateRequest(request, { model: OpenAIChat.model({ ...model, queryParams: { "api-version": "v1" } }) }),
+      LLM.updateRequest(request, {
+        model: Model.update(model, { route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }) }),
+      }),
     ).pipe(
       Effect.provide(
         dynamicResponse((input) =>

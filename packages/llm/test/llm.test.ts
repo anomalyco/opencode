@@ -11,7 +11,7 @@ describe("llm constructors", () => {
   test("builds canonical schema classes from ergonomic input", () => {
     const request = LLM.request({
       id: "req_1",
-      model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute, baseURL: "https://fake.local" }),
+      model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       system: "You are concise.",
       prompt: "Say hello.",
     })
@@ -28,7 +28,7 @@ describe("llm constructors", () => {
   test("updates requests without spreading schema class instances", () => {
     const base = LLM.request({
       id: "req_1",
-      model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute, baseURL: "https://fake.local" }),
+      model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       prompt: "Say hello.",
     })
     const updated = LLM.updateRequest(base, {
@@ -49,7 +49,6 @@ describe("llm constructors", () => {
         id: "fake-model",
         provider: "fake",
         route: chatRoute,
-        baseURL: "https://fake.local",
         generation: { maxTokens: 100, temperature: 1 },
         providerOptions: { openai: { store: false, metadata: { model: true } } },
         http: { body: { metadata: { model: true } }, headers: { "x-shared": "model" }, query: { model: "1" } },
@@ -72,7 +71,7 @@ describe("llm constructors", () => {
   test("updates canonical requests from the request datatype", () => {
     const base = LLM.request({
       id: "req_1",
-      model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute, baseURL: "https://fake.local" }),
+      model: Model.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       prompt: "Say hello.",
     })
     const updated = LLMRequest.update(base, { messages: [...base.messages, Message.assistant("Hi.")] })
@@ -89,7 +88,6 @@ describe("llm constructors", () => {
       id: "fake-model",
       provider: "fake",
       route: chatRoute,
-      baseURL: "https://fake.local",
     })
     const updated = Model.update(base, { route: responsesRoute })
 
@@ -119,7 +117,6 @@ describe("llm constructors", () => {
           id: "fake-model",
           provider: "fake",
           route: chatRoute,
-          baseURL: "https://fake.local",
         }),
         prompt: "Use tools if needed.",
         toolChoice: "required",

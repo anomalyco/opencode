@@ -168,8 +168,7 @@ export const model = (input: Provider.Model | RequestInput, headers?: Record<str
   return Model.make({
     id: model.api.id,
     provider: model.providerID,
-    route,
-    baseURL: "model" in input && input.baseURL ? input.baseURL : baseURL(model),
+    route: route.with({ endpoint: { baseURL: "model" in input && input.baseURL ? input.baseURL : baseURL(model) } }),
     apiKey: "model" in input ? input.apiKey : undefined,
     headers: Object.keys({ ...model.headers, ...headers }).length === 0 ? undefined : { ...model.headers, ...headers },
     limits: {

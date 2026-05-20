@@ -9,7 +9,6 @@ const model = new Model({
   id: ModelID.make("fake-model"),
   provider: ProviderID.make("fake-provider"),
   route: OpenAIChat.route,
-  baseURL: "https://fake.local",
   limits: new ModelLimits({}),
 })
 

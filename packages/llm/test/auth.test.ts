@@ -9,7 +9,7 @@ import { it } from "./lib/effect"
 
 const request = LLM.request({
   id: "req_auth",
-  model: Model.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route, baseURL: "https://fake.local" }),
+  model: Model.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route }),
   prompt: "hello",
 })
 

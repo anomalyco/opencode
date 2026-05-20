@@ -61,22 +61,16 @@ export type HttpOptionsInput = HttpOptions.Input
 
 type ModelInput = Omit<SchemaModelInput, "auth"> & { readonly auth?: AuthDef }
 
-// `baseURL` is required on `ModelInput` (every materialized `Model` has
-// a host) but optional at the route-input layers below. The route's `defaults`
-// can supply a canonical URL (e.g. OpenAI/Anthropic) so the user's input may
-// omit it. Routes without a canonical URL (OpenAI-compatible, GitHub Copilot)
-// re-tighten this in their own input type.
-export type RouteModelInput = Omit<ModelInput, "provider" | "route" | "baseURL"> & {
+type EndpointModelInput = {
   readonly baseURL?: string
+  readonly queryParams?: Record<string, string>
 }
 
-export type RouteModelDefaults = Omit<ModelInput, "id" | "route" | "baseURL"> & {
-  readonly baseURL?: string
-}
+export type RouteModelInput = Omit<ModelInput, "provider" | "route"> & EndpointModelInput
 
-export type RouteRoutedModelInput = Omit<ModelInput, "route" | "baseURL"> & {
-  readonly baseURL?: string
-}
+export type RouteModelDefaults = Omit<ModelInput, "id" | "route"> & EndpointModelInput
+
+export type RouteRoutedModelInput = Omit<ModelInput, "route"> & EndpointModelInput
 
 export type RouteRoutedModelDefaults = Partial<Omit<ModelInput, "id" | "provider" | "route">>
 
@@ -99,21 +93,21 @@ const modelWithDefaults =
   ) =>
   (input: Input) => {
     const mapped = options.mapInput === undefined ? (input as RouteMappedModelInput) : options.mapInput(input)
+    const { baseURL, queryParams, ...modelInput } = mapped
     const provider = defaults.provider ?? route.provider ?? ("provider" in mapped ? mapped.provider : undefined)
     if (!provider) throw new Error(`Route.model(${route.id}) requires a provider`)
-    const baseURL = mapped.baseURL ?? defaults.baseURL ?? route.defaults.baseURL ?? endpointBaseURL(route.transport)
-    if (!baseURL)
-      throw new Error(`Route.model(${route.id}) requires a baseURL — supply it via input, defaults, or route defaults`)
+    const modelRoute = routeWithEndpoint(route, { baseURL, query: queryParams })
+    if (!endpointBaseURL(modelRoute.transport))
+      throw new Error(`Route.model(${route.id}) requires an endpoint baseURL — supply it on the route or model input`)
     const generation = mergeGenerationOptions(route.defaults.generation, defaults.generation)
     const providerOptions = mergeProviderOptions(route.defaults.providerOptions, defaults.providerOptions)
     const http = mergeHttpOptions(httpOptions(route.defaults.http), httpOptions(defaults.http))
     return Model.make({
       ...route.defaults,
       ...defaults,
-      ...mapped,
-      baseURL,
+      ...modelInput,
       provider,
-      route,
+      route: modelRoute,
       limits: mapped.limits ?? defaults.limits ?? route.defaults.limits,
       generation: mergeGenerationOptions(generation, mapped.generation),
       providerOptions: mergeProviderOptions(providerOptions, mapped.providerOptions),
@@ -132,6 +126,11 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
 
 const endpointBaseURL = <Body, Prepared, Frame>(transport: Transport<Body, Prepared, Frame>) =>
   typeof transport.endpoint?.baseURL === "string" ? transport.endpoint.baseURL : undefined
+
+const routeWithEndpoint = (route: AnyRoute, endpoint: EndpointPatch<unknown>) => {
+  if (!endpoint.baseURL && !endpoint.query) return route
+  return route.with({ endpoint })
+}
 
 const applyEndpointPatch = <Body, Prepared, Frame>(
   transport: Transport<Body, Prepared, Frame>,

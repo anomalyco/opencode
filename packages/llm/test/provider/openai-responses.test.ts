@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Layer, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
+import { LLM, LLMError, Message, Model, ToolCallPart, Usage } from "../../src"
 import { Auth, LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
@@ -128,7 +128,7 @@ describe("OpenAI Responses route", () => {
     Effect.gen(function* () {
       yield* LLMClient.generate(
         LLM.updateRequest(request, {
-          model: OpenAIResponses.model({ ...model, queryParams: { "api-version": "v1" } }),
+          model: Model.update(model, { route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }) }),
         }),
       ).pipe(
         Effect.provide(

@@ -18,6 +18,7 @@ export type ModelOptions = AzureURL &
   Omit<ModelInput, "id" | "provider" | "route" | "apiKey" | "auth" | "baseURL"> &
   ProviderAuthOption<"optional"> & {
     readonly apiVersion?: string
+    readonly queryParams?: Record<string, string>
     readonly useCompletionUrls?: boolean
     readonly providerOptions?: OpenAIProviderOptionsInput
   }

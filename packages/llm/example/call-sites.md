@@ -528,7 +528,7 @@ App boundary = explicit durable-config -> typed-provider call
       `request.model.route` directly instead of calling `registeredRoute(...)`.
 - [x] Remove `Route.make(...)` global registration from the normal execution
       path; keep route ids only as diagnostics/provider API labels.
-- [ ] Model endpoint as `{ baseURL, path, query }` on routes, then remove the
+- [x] Model endpoint as `{ baseURL, path, query }` on routes, then remove the
       current split where host/query live on the model and path lives in route
       transport setup.
 - [ ] Define `Route.with(...)` with explicit patch semantics for endpoint merge,

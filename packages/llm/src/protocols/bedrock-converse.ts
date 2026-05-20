@@ -618,10 +618,9 @@ export const route = Route.make({
   id: ADAPTER,
   provider: "bedrock",
   protocol,
-  // Bedrock's URL embeds the region in the host (set on `model.baseURL` by
-  // the provider helper from credentials) and the validated modelId in the
-  // path. We read the validated body so the URL matches the body that gets
-  // signed.
+  // Bedrock's URL embeds the region in the route endpoint host and the
+  // validated modelId in the path. We read the validated body so the URL
+  // matches the body that gets signed.
   endpoint: Endpoint.path<BedrockConverseBody>(
     ({ body }) => `/model/${encodeURIComponent(body.modelId)}/converse-stream`,
   ),
