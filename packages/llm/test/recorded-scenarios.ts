@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMEvent, LLMResponse, ToolChoice, ToolDefinition, type LLMRequest, type ModelRef } from "../src"
+import { LLM, LLMEvent, LLMResponse, Message, ToolChoice, ToolDefinition, type LLMRequest, type Model } from "../src"
 import { LLMClient } from "../src/route"
 import { tool } from "../src/tool"
 
@@ -41,7 +41,7 @@ export const weatherRuntimeTool = tool({
 
 export const textRequest = (input: {
   readonly id: string
-  readonly model: ModelRef
+  readonly model: Model
   readonly prompt?: string
   readonly maxTokens?: number
   readonly temperature?: number | false
@@ -52,15 +52,17 @@ export const textRequest = (input: {
     system: "You are concise.",
     prompt: input.prompt ?? "Reply with exactly: Hello!",
     cache: "none",
+    providerOptions:
+      input.model.route.id === "gemini" ? { gemini: { thinkingConfig: { thinkingBudget: 0 } } } : undefined,
     generation:
       input.temperature === false
-        ? { maxTokens: input.maxTokens ?? 20 }
-        : { maxTokens: input.maxTokens ?? 20, temperature: input.temperature ?? 0 },
+        ? { maxTokens: input.maxTokens ?? 80 }
+        : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
   })
 
 export const weatherToolRequest = (input: {
   readonly id: string
-  readonly model: ModelRef
+  readonly model: Model
   readonly maxTokens?: number
   readonly temperature?: number | false
 }) =>
@@ -80,7 +82,7 @@ export const weatherToolRequest = (input: {
 
 export const weatherToolLoopRequest = (input: {
   readonly id: string
-  readonly model: ModelRef
+  readonly model: Model
   readonly system?: string
   readonly maxTokens?: number
   readonly temperature?: number | false
@@ -99,13 +101,46 @@ export const weatherToolLoopRequest = (input: {
 
 export const goldenWeatherToolLoopRequest = (input: {
   readonly id: string
-  readonly model: ModelRef
+  readonly model: Model
   readonly maxTokens?: number
   readonly temperature?: number | false
 }) =>
   weatherToolLoopRequest({
     ...input,
     system: "Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.",
+  })
+
+const RESTROOM_IMAGE_TEXT = "jiggling restroom prison"
+const restroomImage = () =>
+  Effect.promise(() => Bun.file(new URL("./fixtures/media/restroom.png", import.meta.url)).bytes()).pipe(
+    Effect.map((bytes) => Buffer.from(bytes).toString("base64")),
+  )
+
+export const imageRequest = (input: {
+  readonly id: string
+  readonly model: Model
+  readonly image: string
+  readonly maxTokens?: number
+  readonly temperature?: number | false
+}) =>
+  LLM.request({
+    id: input.id,
+    model: input.model,
+    system: "Read images carefully. Reply only with the visible text.",
+    messages: [
+      Message.user([
+        {
+          type: "text",
+          text: "The image contains exactly three lowercase English words. Read them left to right and reply with only those words.",
+        },
+        { type: "media", mediaType: "image/png", data: input.image },
+      ]),
+    ],
+    cache: "none",
+    generation:
+      input.temperature === false
+        ? { maxTokens: input.maxTokens ?? 20 }
+        : { maxTokens: input.maxTokens ?? 20, temperature: input.temperature ?? 0 },
   })
 
 export const runWeatherToolLoop = (request: LLMRequest) =>
@@ -158,20 +193,28 @@ export const expectGoldenWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => 
   expect(LLMResponse.text({ events }).trim()).toMatch(/^Paris is sunny\.?$/)
 }
 
-export type GoldenScenarioID = "text" | "tool-call" | "tool-loop"
+export type GoldenScenarioID = "text" | "tool-call" | "tool-loop" | "image"
 
 export interface GoldenScenarioContext {
   readonly id: string
-  readonly model: ModelRef
+  readonly model: Model
   readonly maxTokens?: number
   readonly temperature?: number | false
 }
 
 const generate = (request: LLMRequest) => LLMClient.generate(request)
 
+const normalizeImageText = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+
 export const goldenScenarioTags = (id: GoldenScenarioID) => {
   if (id === "text") return ["text", "golden"]
   if (id === "tool-call") return ["tool", "tool-call", "golden"]
+  if (id === "image") return ["media", "image", "vision", "golden"]
   return ["tool", "tool-loop", "golden"]
 }
 
@@ -203,6 +246,21 @@ export const runGoldenScenario = (id: GoldenScenarioID, context: GoldenScenarioC
       )
       expectWeatherToolCall(response)
       expectFinish(response.events, "tool-calls")
+      return
+    }
+
+    if (id === "image") {
+      const response = yield* generate(
+        imageRequest({
+          id: context.id,
+          model: context.model,
+          image: yield* restroomImage(),
+          maxTokens: context.maxTokens ?? 20,
+          temperature: context.temperature,
+        }),
+      )
+      expect(normalizeImageText(response.text)).toBe(RESTROOM_IMAGE_TEXT)
+      expectFinish(response.events, "stop")
       return
     }
 

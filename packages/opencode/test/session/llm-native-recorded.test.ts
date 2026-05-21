@@ -13,7 +13,7 @@ import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Filesystem } from "@/util/filesystem"
 import { LLMEvent, LLMResponse } from "@opencode-ai/llm"
-import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
+import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import type { Agent } from "../../src/agent/agent"
 import { LLM } from "../../src/session/llm"
@@ -137,7 +137,7 @@ async function loadFixture(providerID: string, modelID: string) {
 function recordedNativeLLMLayer(spec: ProviderSpec) {
   // Only the HTTP client is recorded; RequestExecutor and the opencode LLM stack remain real.
   const recordedClient = LLMClient.layer.pipe(
-    Layer.provide(RequestExecutor.layer),
+    Layer.provide(Layer.mergeAll(RequestExecutor.layer, WebSocketExecutor.layer)),
     Layer.provide(
       HttpRecorder.recordingLayer(spec.cassette, {
         mode: shouldRecord ? "record" : "replay",
