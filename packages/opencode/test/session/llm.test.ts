@@ -916,47 +916,47 @@ describe("session.llm.stream", () => {
         const model = loadFixture("openai", "gpt-5.2").model
 
         const responseChunks = [
-      {
-        type: "response.created",
-        response: {
-          id: "resp-1",
-          created_at: Math.floor(Date.now() / 1000),
-          model: model.id,
-          service_tier: null,
-        },
-      },
-      {
-        type: "response.output_item.added",
-        output_index: 0,
-        item: { type: "message", id: "item-1", status: "in_progress", role: "assistant", content: [] },
-      },
-      {
-        type: "response.content_part.added",
-        item_id: "item-1",
-        output_index: 0,
-        content_index: 0,
-        part: { type: "output_text", text: "", annotations: [] },
-      },
-      {
-        type: "response.output_text.delta",
-        item_id: "item-1",
-        delta: "Hello",
-        logprobs: null,
-      },
-      {
-        type: "response.completed",
-        response: {
-          incomplete_details: null,
-          usage: {
-            input_tokens: 1,
-            input_tokens_details: null,
-            output_tokens: 1,
-            output_tokens_details: null,
+          {
+            type: "response.created",
+            response: {
+              id: "resp-1",
+              created_at: Math.floor(Date.now() / 1000),
+              model: model.id,
+              service_tier: null,
+            },
           },
-          service_tier: null,
-        },
-      },
-    ]
+          {
+            type: "response.output_item.added",
+            output_index: 0,
+            item: { type: "message", id: "item-1", status: "in_progress", role: "assistant", content: [] },
+          },
+          {
+            type: "response.content_part.added",
+            item_id: "item-1",
+            output_index: 0,
+            content_index: 0,
+            part: { type: "output_text", text: "", annotations: [] },
+          },
+          {
+            type: "response.output_text.delta",
+            item_id: "item-1",
+            delta: "Hello",
+            logprobs: null,
+          },
+          {
+            type: "response.completed",
+            response: {
+              incomplete_details: null,
+              usage: {
+                input_tokens: 1,
+                input_tokens_details: null,
+                output_tokens: 1,
+                output_tokens_details: null,
+              },
+              service_tier: null,
+            },
+          },
+        ]
         const request = waitRequest("/responses", createEventResponse(responseChunks, true))
 
         const resolved = yield* Provider.use.getModel(ProviderID.openai, ModelID.make(model.id))
@@ -1481,41 +1481,41 @@ describe("session.llm.stream", () => {
         const model = loadFixture(minimaxFixture.providerID, minimaxFixture.modelID).model
 
         const chunks = [
-      {
-        type: "message_start",
-        message: {
-          id: "msg-1",
-          model: model.id,
-          usage: {
-            input_tokens: 3,
-            cache_creation_input_tokens: null,
-            cache_read_input_tokens: null,
+          {
+            type: "message_start",
+            message: {
+              id: "msg-1",
+              model: model.id,
+              usage: {
+                input_tokens: 3,
+                cache_creation_input_tokens: null,
+                cache_read_input_tokens: null,
+              },
+            },
           },
-        },
-      },
-      {
-        type: "content_block_start",
-        index: 0,
-        content_block: { type: "text", text: "" },
-      },
-      {
-        type: "content_block_delta",
-        index: 0,
-        delta: { type: "text_delta", text: "Hello" },
-      },
-      { type: "content_block_stop", index: 0 },
-      {
-        type: "message_delta",
-        delta: { stop_reason: "end_turn", stop_sequence: null, container: null },
-        usage: {
-          input_tokens: 3,
-          output_tokens: 2,
-          cache_creation_input_tokens: null,
-          cache_read_input_tokens: null,
-        },
-      },
-      { type: "message_stop" },
-    ]
+          {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "text", text: "" },
+          },
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text: "Hello" },
+          },
+          { type: "content_block_stop", index: 0 },
+          {
+            type: "message_delta",
+            delta: { stop_reason: "end_turn", stop_sequence: null, container: null },
+            usage: {
+              input_tokens: 3,
+              output_tokens: 2,
+              cache_creation_input_tokens: null,
+              cache_read_input_tokens: null,
+            },
+          },
+          { type: "message_stop" },
+        ]
         const request = waitRequest("/messages", createEventResponse(chunks))
 
         const resolved = yield* Provider.use.getModel(
@@ -1578,41 +1578,41 @@ describe("session.llm.stream", () => {
       Effect.gen(function* () {
         const model = loadFixture("anthropic", "claude-opus-4-6").model
         const chunks = [
-      {
-        type: "message_start",
-        message: {
-          id: "msg-tool-order",
-          model: model.id,
-          usage: {
-            input_tokens: 3,
-            cache_creation_input_tokens: null,
-            cache_read_input_tokens: null,
+          {
+            type: "message_start",
+            message: {
+              id: "msg-tool-order",
+              model: model.id,
+              usage: {
+                input_tokens: 3,
+                cache_creation_input_tokens: null,
+                cache_read_input_tokens: null,
+              },
+            },
           },
-        },
-      },
-      {
-        type: "content_block_start",
-        index: 0,
-        content_block: { type: "text", text: "" },
-      },
-      {
-        type: "content_block_delta",
-        index: 0,
-        delta: { type: "text_delta", text: "ok" },
-      },
-      { type: "content_block_stop", index: 0 },
-      {
-        type: "message_delta",
-        delta: { stop_reason: "end_turn", stop_sequence: null, container: null },
-        usage: {
-          input_tokens: 3,
-          output_tokens: 2,
-          cache_creation_input_tokens: null,
-          cache_read_input_tokens: null,
-        },
-      },
-      { type: "message_stop" },
-    ]
+          {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "text", text: "" },
+          },
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text: "ok" },
+          },
+          { type: "content_block_stop", index: 0 },
+          {
+            type: "message_delta",
+            delta: { stop_reason: "end_turn", stop_sequence: null, container: null },
+            usage: {
+              input_tokens: 3,
+              output_tokens: 2,
+              cache_creation_input_tokens: null,
+              cache_read_input_tokens: null,
+            },
+          },
+          { type: "message_stop" },
+        ]
         const request = waitRequest("/messages", createEventResponse(chunks))
 
         const resolved = yield* Provider.use.getModel(ProviderID.make("anthropic"), ModelID.make(model.id))
@@ -1808,18 +1808,13 @@ describe("session.llm.stream", () => {
 
         const chunks = [
           {
-            candidates: [
-              { content: { parts: [{ text: "Hello" }] }, finishReason: "STOP" },
-            ],
+            candidates: [{ content: { parts: [{ text: "Hello" }] }, finishReason: "STOP" }],
             usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 },
           },
         ]
         const request = waitRequest(pathSuffix, createEventResponse(chunks))
 
-        const resolved = yield* Provider.use.getModel(
-          ProviderID.make(geminiFixture.providerID),
-          ModelID.make(model.id),
-        )
+        const resolved = yield* Provider.use.getModel(ProviderID.make(geminiFixture.providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-4")
         const agent = {
           name: "test",

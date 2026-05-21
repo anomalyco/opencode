@@ -119,7 +119,10 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
 }
 
 /** Effectful scoped tmpdir. Cleaned up when the scope closes. Make sure these stay in sync */
-export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.Info> | (() => Partial<Config.Info>) }) {
+export function tmpdirScoped(options?: {
+  git?: boolean
+  config?: Partial<Config.Info> | (() => Partial<Config.Info>)
+}) {
   return Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const dirpath = sanitizePath(path.join(os.tmpdir(), "opencode-test-" + Math.random().toString(36).slice(2)))

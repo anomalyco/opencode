@@ -20,6 +20,14 @@ export type WindowConfig = {
   updaterEnabled: boolean
 }
 
+export type FatalRendererError = {
+  error: string
+  url: string
+  version?: string
+  platform: string
+  os?: string
+}
+
 export type ElectronAPI = {
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
@@ -78,4 +86,6 @@ export type ElectronAPI = {
   checkUpdate: () => Promise<{ updateAvailable: boolean; version?: string }>
   installUpdate: () => Promise<void>
   setBackgroundColor: (color: string) => Promise<void>
+  exportDebugLogs: () => Promise<string>
+  recordFatalRendererError: (error: FatalRendererError) => Promise<void>
 }

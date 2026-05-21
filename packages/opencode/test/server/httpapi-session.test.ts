@@ -403,6 +403,85 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "returns v2 public not found errors for missing sessions",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const missing = SessionID.descending()
+        const expected = {
+          _tag: "SessionNotFoundError",
+          sessionID: missing,
+          message: `Session not found: ${missing}`,
+        }
+
+        const messages = yield* request(`/api/session/${missing}/message`, { headers })
+        expect(messages.status).toBe(404)
+        expect(yield* responseJson(messages)).toEqual(expected)
+
+        const context = yield* request(`/api/session/${missing}/context`, { headers })
+        expect(context.status).toBe(404)
+        expect(yield* responseJson(context)).toEqual(expected)
+
+        const compact = yield* request(`/api/session/${missing}/compact`, { method: "POST", headers })
+        expect(compact.status).toBe(404)
+        expect(yield* responseJson(compact)).toEqual(expected)
+
+        const wait = yield* request(`/api/session/${missing}/wait`, { method: "POST", headers })
+        expect(wait.status).toBe(404)
+        expect(yield* responseJson(wait)).toEqual(expected)
+
+        const prompt = yield* request(`/api/session/${missing}/prompt`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ prompt: { text: "hello" } }),
+        })
+        expect(prompt.status).toBe(404)
+        expect(yield* responseJson(prompt)).toEqual(expected)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "returns v2 public unavailable errors for unfinished session mutations",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const session = yield* createSession({ title: "v2 unavailable" })
+
+        const prompt = yield* request(`/api/session/${session.id}/prompt`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ prompt: { text: "hello" } }),
+        })
+        expect(prompt.status).toBe(503)
+        expect(yield* responseJson(prompt)).toEqual({
+          _tag: "ServiceUnavailableError",
+          message: "V2 session prompt is not available yet",
+          service: "v2.session.prompt",
+        })
+
+        const compact = yield* request(`/api/session/${session.id}/compact`, { method: "POST", headers })
+        expect(compact.status).toBe(503)
+        expect(yield* responseJson(compact)).toEqual({
+          _tag: "ServiceUnavailableError",
+          message: "V2 session compact is not available yet",
+          service: "v2.session.compact",
+        })
+
+        const wait = yield* request(`/api/session/${session.id}/wait`, { method: "POST", headers })
+        expect(wait.status).toBe(503)
+        expect(yield* responseJson(wait)).toEqual({
+          _tag: "ServiceUnavailableError",
+          message: "V2 session wait is not available yet",
+          service: "v2.session.wait",
+        })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "serves sessions with migrated summary diffs missing file details",
     () =>
       Effect.gen(function* () {
