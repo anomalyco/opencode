@@ -205,10 +205,10 @@ test(
     const { config, restore } = mockTuiRuntime(tmp.path, [tmp.extra.spec])
 
     try {
-      await TuiPluginRuntime.init({ api: createTuiPluginApi(), config })
+      await TuiPluginRuntime.init({ api: createTuiPluginApi(), config, disposeTimeoutMs: 25 })
 
       const done = await new Promise<string>((resolve) => {
-        const timer = setTimeout(() => resolve("timeout"), 7000)
+        const timer = setTimeout(() => resolve("timeout"), 500)
         void TuiPluginRuntime.dispose().then(() => {
           clearTimeout(timer)
           resolve("done")
