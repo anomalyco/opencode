@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { PtyID } from "../../src/pty/schema"
-import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import * as Log from "@opencode-ai/core/util/log"
@@ -10,7 +9,7 @@ import { disposeAllInstances, tmpdir, tmpdirScoped } from "../fixture/fixture"
 import { Config, Effect, Layer, Queue, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
-import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
+import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { Pty } from "../../src/pty"
 import { testEffect } from "../lib/effect"
 
@@ -30,7 +29,7 @@ const testStateLayer = Layer.effectDiscard(
 )
 
 const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer> = HttpRouter.serve(
-  ExperimentalHttpApiServer.routes,
+  HttpApiApp.routes,
   { disableListenLog: true, disableLogger: true },
 )
 

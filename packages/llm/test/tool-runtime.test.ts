@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { GenerationOptions, LLM, LLMEvent, LLMRequest, LLMResponse, ToolChoice } from "../src"
-import { LLMClient } from "../src/route"
+import { Auth, LLMClient } from "../src/route"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import { tool, ToolFailure, type ToolExecuteContext } from "../src/tool"
@@ -12,11 +12,9 @@ import { dynamicResponse, scriptedResponses } from "./lib/http"
 import { deltaChunk, finishChunk, toolCallChunk } from "./lib/openai-chunks"
 import { sseEvents } from "./lib/sse"
 
-const model = OpenAIChat.model({
-  id: "gpt-4o-mini",
-  baseURL: "https://api.openai.test/v1/",
-  headers: { authorization: "Bearer test" },
-})
+const model = OpenAIChat.route
+  .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+  .model({ id: "gpt-4o-mini" })
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)
 
@@ -25,6 +23,7 @@ const baseRequest = LLM.request({
   model,
   prompt: "Use the tool.",
 })
+const weatherFailureCause = new Error("weather lookup denied")
 
 const get_weather = tool({
   description: "Get current weather for a city.",
@@ -32,7 +31,8 @@ const get_weather = tool({
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
   execute: ({ city }) =>
     Effect.gen(function* () {
-      if (city === "FAIL") return yield* new ToolFailure({ message: `Weather lookup failed for ${city}` })
+      if (city === "FAIL")
+        return yield* new ToolFailure({ message: `Weather lookup failed for ${city}`, error: weatherFailureCause })
       return { temperature: 22, condition: "sunny" }
     }),
 })
@@ -85,23 +85,27 @@ describe("LLMClient tools", () => {
         tools: { get_weather },
       }).pipe(Stream.runCollect, Effect.provide(layer))
 
-      const second = bodies[1] as {
-        readonly messages?: ReadonlyArray<Record<string, unknown>>
-        readonly tools?: ReadonlyArray<unknown>
-        readonly tool_choice?: unknown
-        readonly max_tokens?: unknown
-      }
+      const second = bodies[1]
+      if (!second || typeof second !== "object") throw new Error("Expected second request body")
+      const messages = Reflect.get(second, "messages")
+      const tools = Reflect.get(second, "tools")
 
-      expect(second.max_tokens).toBe(50)
-      expect(second.tool_choice).toBe("auto")
-      expect(second.tools).toHaveLength(1)
-      expect(second.messages?.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
-      expect(second.messages?.[1]).toMatchObject({
+      expect(Reflect.get(second, "max_tokens")).toBe(50)
+      expect(Reflect.get(second, "tool_choice")).toBe("auto")
+      expect(tools).toHaveLength(1)
+      expect(
+        Array.isArray(messages)
+          ? messages.map((message) =>
+              message && typeof message === "object" ? Reflect.get(message, "role") : undefined,
+            )
+          : undefined,
+      ).toEqual(["user", "assistant", "tool"])
+      expect(Array.isArray(messages) ? messages[1] : undefined).toMatchObject({
         role: "assistant",
         content: null,
         tool_calls: [{ id: "call_1", type: "function", function: { name: "get_weather" } }],
       })
-      expect(second.messages?.[2]).toMatchObject({
+      expect(Array.isArray(messages) ? messages[2] : undefined).toMatchObject({
         role: "tool",
         tool_call_id: "call_1",
         content: '{"temperature":22,"condition":"sunny"}',
@@ -132,6 +136,45 @@ describe("LLMClient tools", () => {
       })
       expect(events.at(-1)?.type).toBe("finish")
       expect(LLMResponse.text({ events })).toBe("It's sunny in Paris.")
+    }),
+  )
+
+  it.effect("preserves content tool results from dynamic tools", () =>
+    Effect.gen(function* () {
+      const screenshot = tool({
+        description: "Capture a screenshot.",
+        jsonSchema: { type: "object", properties: {} },
+        execute: () =>
+          Effect.succeed({
+            type: "content" as const,
+            value: [
+              { type: "text" as const, text: "Screenshot captured." },
+              { type: "media" as const, mediaType: "image/png", data: "AAAA" },
+            ],
+          }),
+      })
+
+      const events = Array.from(
+        yield* LLMClient.stream({ request: baseRequest, tools: { screenshot } }).pipe(
+          Stream.runCollect,
+          Effect.provide(
+            scriptedResponses([sseEvents(toolCallChunk("call_1", "screenshot", "{}"), finishChunk("tool_calls"))]),
+          ),
+        ),
+      )
+
+      expect(events.find(LLMEvent.is.toolResult)).toMatchObject({
+        type: "tool-result",
+        id: "call_1",
+        name: "screenshot",
+        result: {
+          type: "content",
+          value: [
+            { type: "text", text: "Screenshot captured." },
+            { type: "media", mediaType: "image/png", data: "AAAA" },
+          ],
+        },
+      })
     }),
   )
 
@@ -243,7 +286,9 @@ describe("LLMClient tools", () => {
 
       yield* TestToolRuntime.runTools({
         request: LLM.updateRequest(baseRequest, {
-          model: AnthropicMessages.model({ id: "claude-sonnet-4-5", apiKey: "test" }),
+          model: AnthropicMessages.route
+            .with({ auth: Auth.header("x-api-key", "test") })
+            .model({ id: "claude-sonnet-4-5" }),
         }),
         tools: { get_weather },
       }).pipe(Stream.runCollect, Effect.provide(layer))
@@ -327,6 +372,7 @@ describe("LLMClient tools", () => {
       const toolError = events.find(LLMEvent.is.toolError)
       expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "get_weather" })
       expect(toolError?.message).toBe("Weather lookup failed for FAIL")
+      expect(toolError?.error).toBe(weatherFailureCause)
     }),
   )
 
@@ -489,7 +535,9 @@ describe("LLMClient tools", () => {
       const events = Array.from(
         yield* TestToolRuntime.runTools({
           request: LLM.updateRequest(baseRequest, {
-            model: AnthropicMessages.model({ id: "claude-sonnet-4-5", apiKey: "test" }),
+            model: AnthropicMessages.route
+              .with({ auth: Auth.header("x-api-key", "test") })
+              .model({ id: "claude-sonnet-4-5" }),
           }),
           tools: {},
         }).pipe(Stream.runCollect, Effect.provide(layer)),

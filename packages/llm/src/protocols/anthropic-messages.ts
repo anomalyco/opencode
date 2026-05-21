@@ -386,7 +386,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     tools,
     tool_choice: toolChoice,
     stream: true as const,
-    max_tokens: generation?.maxTokens ?? request.model.limits.output ?? 4096,
+    max_tokens: generation?.maxTokens ?? request.model.route.defaults.limits?.output ?? 4096,
     temperature: generation?.temperature,
     top_p: generation?.topP,
     top_k: generation?.topK,
@@ -452,8 +452,8 @@ const mergeUsage = (left: Usage | undefined, right: Usage | undefined) => {
     totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
     providerMetadata: {
       anthropic: {
-        ...(left.providerMetadata?.["anthropic"] ?? {}),
-        ...(right.providerMetadata?.["anthropic"] ?? {}),
+        ...left.providerMetadata?.["anthropic"],
+        ...right.providerMetadata?.["anthropic"],
       },
     },
   })
@@ -673,19 +673,12 @@ export const protocol = Protocol.make({
 
 export const route = Route.make({
   id: ADAPTER,
+  provider: "anthropic",
   protocol,
-  endpoint: Endpoint.path(PATH),
-  auth: Auth.apiKeyHeader("x-api-key"),
+  endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
+  auth: Auth.none,
   framing: Framing.sse,
   headers: () => ({ "anthropic-version": "2023-06-01" }),
-})
-
-// =============================================================================
-// Model Helper
-// =============================================================================
-export const model = Route.model(route, {
-  provider: "anthropic",
-  baseURL: DEFAULT_BASE_URL,
 })
 
 export * as AnthropicMessages from "./anthropic-messages"

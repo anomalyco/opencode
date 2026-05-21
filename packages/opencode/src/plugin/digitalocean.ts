@@ -59,7 +59,7 @@ function buildAuthorizeUrl(state: string): string {
     response_type: "token",
     client_id: DO_OAUTH_CLIENT_ID,
     redirect_uri: redirectUri(),
-    scope: "read write",
+    scope: "genai:create genai:read",
     state,
   })
   return `${DO_AUTHORIZE_URL}?${params.toString()}`

@@ -106,10 +106,6 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "GatewayKv": {
-      "namespaceId": string
-      "type": "sst.cloudflare.Kv"
-    }
     "HONEYCOMB_API_KEY": {
       "type": "sst.sst.Secret"
       "value": string
@@ -155,6 +151,7 @@ declare module "sst" {
     }
     "Stat": {
       "type": "sst.cloudflare.Worker"
+      "url": string
     }
     "Teams": {
       "type": "sst.cloudflare.SolidStart"

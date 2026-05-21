@@ -31,7 +31,7 @@ function request(path: string, directory: string, init: RequestInit = {}) {
 }
 
 function createSession(input?: Session.CreateInput) {
-  return Session.Service.use((svc) => svc.create(input))
+  return Session.use.create(input)
 }
 
 function json<T>(response: Response) {
@@ -190,6 +190,23 @@ describe("experimental HttpApi", () => {
         },
       },
     },
+  )
+
+  it.instance("returns declared worktree errors", () =>
+    Effect.gen(function* () {
+      const tmp = yield* TestInstance
+      const response = yield* request(ExperimentalPaths.worktree, tmp.directory, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      })
+
+      expect(response.status).toBe(400)
+      expect(yield* json(response)).toEqual({
+        name: "WorktreeNotGitError",
+        data: { message: "Worktrees are only supported for git projects" },
+      })
+    }),
   )
 
   it.instance(

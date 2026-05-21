@@ -1,4 +1,6 @@
 import { describe, expect } from "bun:test"
+import { realpathSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { Effect, Exit, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { AppProcess } from "@opencode-ai/core/process"
@@ -18,7 +20,8 @@ describe("AppProcess", () => {
         const result = yield* svc.run(cmd("-e", "process.stdout.write('hi\\n')"))
         expect(result.exitCode).toBe(0)
         expect(result.stdout.toString("utf8")).toBe("hi\n")
-        expect(result.truncated).toBe(false)
+        expect(result.stdoutTruncated).toBe(false)
+        expect(result.stderrTruncated).toBe(false)
       }),
     )
 
@@ -82,14 +85,28 @@ describe("AppProcess", () => {
     )
 
     it.effect(
-      "truncates output when maxOutputBytes is set",
+      "truncates stdout when maxOutputBytes is set",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
         const result = yield* svc.run(cmd("-e", "process.stdout.write('0123456789')"), { maxOutputBytes: 5 })
         expect(result.exitCode).toBe(0)
-        expect(result.truncated).toBe(true)
+        expect(result.stdoutTruncated).toBe(true)
+        expect(result.stderrTruncated).toBe(false)
         expect(result.stdout.length).toBe(5)
         expect(result.stdout.toString("utf8")).toBe("01234")
+      }),
+    )
+
+    it.effect(
+      "truncates stderr when maxErrorBytes is set",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const result = yield* svc.run(cmd("-e", "process.stderr.write('0123456789')"), { maxErrorBytes: 5 })
+        expect(result.exitCode).toBe(0)
+        expect(result.stdoutTruncated).toBe(false)
+        expect(result.stderrTruncated).toBe(true)
+        expect(result.stderr.length).toBe(5)
+        expect(result.stderr.toString("utf8")).toBe("01234")
       }),
     )
 
@@ -123,6 +140,82 @@ describe("AppProcess", () => {
     )
   })
 
+  describe("run with stdin option", () => {
+    const echoStdin = "process.stdin.on('data', c => process.stdout.write(c))"
+
+    it.effect(
+      "feeds a string to stdin and returns it on stdout",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const result = yield* svc.run(cmd("-e", echoStdin), { stdin: "hello" })
+        expect(result.exitCode).toBe(0)
+        expect(result.stdout.toString("utf8")).toBe("hello")
+      }),
+    )
+
+    it.effect(
+      "feeds a Uint8Array to stdin",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const bytes = new TextEncoder().encode("bytes")
+        const result = yield* svc.run(cmd("-e", echoStdin), { stdin: bytes })
+        expect(result.exitCode).toBe(0)
+        expect(result.stdout.toString("utf8")).toBe("bytes")
+      }),
+    )
+
+    it.effect(
+      "feeds a Stream of Uint8Array chunks to stdin",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const enc = new TextEncoder()
+        const stream = Stream.fromIterable([enc.encode("one"), enc.encode("-two"), enc.encode("-three")])
+        const result = yield* svc.run(cmd("-e", echoStdin), { stdin: stream })
+        expect(result.exitCode).toBe(0)
+        expect(result.stdout.toString("utf8")).toBe("one-two-three")
+      }),
+    )
+
+    it.effect(
+      "completes correctly with empty input",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const result = yield* svc.run(cmd("-e", echoStdin), { stdin: "" })
+        expect(result.exitCode).toBe(0)
+        expect(result.stdout.toString("utf8")).toBe("")
+      }),
+    )
+
+    it.effect(
+      "carries existing Command options like env",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const script =
+          "process.stdout.write(process.env.FEED + ':'); process.stdin.on('data', c => process.stdout.write(c))"
+        const command = ChildProcess.make(NODE, ["-e", script], { env: { FEED: "envset" }, extendEnv: true })
+        const result = yield* svc.run(command, { stdin: "payload" })
+        expect(result.exitCode).toBe(0)
+        expect(result.stdout.toString("utf8")).toBe("envset:payload")
+      }),
+    )
+
+    it.effect(
+      "carries existing Command options like cwd",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const dir = realpathSync(tmpdir())
+        const script =
+          "process.stdout.write(process.cwd() + '|'); process.stdin.on('data', c => process.stdout.write(c))"
+        const command = ChildProcess.make(NODE, ["-e", script], { cwd: dir })
+        const result = yield* svc.run(command, { stdin: "ok" })
+        expect(result.exitCode).toBe(0)
+        const [cwd, stdin] = result.stdout.toString("utf8").split("|")
+        expect(realpathSync(cwd)).toBe(dir)
+        expect(stdin).toBe("ok")
+      }),
+    )
+  })
+
   describe("runStream", () => {
     it.live(
       "emits lines incrementally and ends cleanly on exit 0",
@@ -136,11 +229,17 @@ describe("AppProcess", () => {
     )
 
     it.live(
-      "fails with AppProcessError when exit not in okExitCodes",
+      "okExitCodes determines whether a non-zero exit fails the stream",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
+        const allowed = yield* svc
+          .runStream(cmd("-e", "console.log('only'); process.exit(1)"), { okExitCodes: [0, 1] })
+          .pipe(Stream.runCollect)
+        expect(Array.from(allowed)).toEqual(["only"])
         const exit = yield* Effect.exit(
-          svc.runStream(cmd("-e", "console.log('a'); process.exit(2)"), { okExitCodes: [0] }).pipe(Stream.runCollect),
+          svc
+            .runStream(cmd("-e", "console.log('a'); process.exit(2)"), { okExitCodes: [0, 1] })
+            .pipe(Stream.runCollect),
         )
         expect(Exit.isFailure(exit)).toBe(true)
         if (Exit.isFailure(exit)) {
@@ -149,17 +248,6 @@ describe("AppProcess", () => {
             expect(reason.error).toBeInstanceOf(AppProcess.AppProcessError)
           }
         }
-      }),
-    )
-
-    it.live(
-      "okExitCodes allowlist treats non-zero as success",
-      Effect.gen(function* () {
-        const svc = yield* AppProcess.Service
-        const result = yield* svc
-          .runStream(cmd("-e", "console.log('only'); process.exit(1)"), { okExitCodes: [0, 1] })
-          .pipe(Stream.runCollect)
-        expect(Array.from(result)).toEqual(["only"])
       }),
     )
 
@@ -177,12 +265,10 @@ describe("AppProcess", () => {
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
         const controller = new AbortController()
-        setTimeout(() => controller.abort(), 50)
+        controller.abort()
         const exit = yield* Effect.exit(
           svc
-            .runStream(cmd("-e", "setInterval(() => console.log('tick'), 100); setTimeout(() => {}, 60_000)"), {
-              signal: controller.signal,
-            })
+            .runStream(cmd("-e", "setInterval(() => {}, 60_000)"), { signal: controller.signal })
             .pipe(Stream.runCollect),
         )
         expect(Exit.isFailure(exit)).toBe(true)

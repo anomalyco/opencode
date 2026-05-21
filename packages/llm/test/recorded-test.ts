@@ -69,8 +69,6 @@ export const recordedTests = (options: RecordedTestsOptions) =>
         requestExecutor,
         webSocketCassetteLayer(cassette, { metadata: recorderMetadata, mode }),
       )
-      return Layer.mergeAll(deps, LLMClient.layerWithWebSocket.pipe(Layer.provide(deps))).pipe(
-        Layer.provide(cassetteService),
-      )
+      return Layer.mergeAll(deps, LLMClient.layer.pipe(Layer.provide(deps))).pipe(Layer.provide(cassetteService))
     },
   })

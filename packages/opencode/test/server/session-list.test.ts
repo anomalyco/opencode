@@ -1,28 +1,37 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import * as Log from "@opencode-ai/core/util/log"
 import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { mkdir } from "fs/promises"
 import path from "path"
 import { Database } from "@/storage/db"
 import { SessionTable } from "@/session/session.sql"
 import { eq } from "drizzle-orm"
 import { testEffect } from "../lib/effect"
+import { Bus } from "@/bus"
+import { Storage } from "@/storage/storage"
+import { SyncEvent } from "@/sync"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { BackgroundJob } from "@/background/job"
 
 void Log.init({ print: false })
-const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
-const it = testEffect(SessionNs.defaultLayer)
+const it = testEffect(
+  SessionNs.layer.pipe(
+    Layer.provide(Bus.layer),
+    Layer.provide(Storage.defaultLayer),
+    Layer.provide(SyncEvent.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
+    Layer.provide(BackgroundJob.defaultLayer),
+  ),
+)
 
 const withSession = (input?: Parameters<SessionNs.Interface["create"]>[0]) =>
-  Effect.acquireRelease(
-    SessionNs.Service.use((session) => session.create(input)),
-    (created) => SessionNs.Service.use((session) => session.remove(created.id).pipe(Effect.ignore)),
+  Effect.acquireRelease(SessionNs.use.create(input), (created) =>
+    SessionNs.Service.use((session) => session.remove(created.id).pipe(Effect.ignore)),
   )
 
 afterEach(async () => {
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = originalWorkspaces
   await disposeAllInstances()
 })
 
@@ -31,7 +40,6 @@ describe("session.list", () => {
     "does not filter by directory when directory is omitted",
     () =>
       Effect.gen(function* () {
-        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = false
         const test = yield* TestInstance
         yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "opencode"), { recursive: true }))
         yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "app"), { recursive: true }))
@@ -47,7 +55,7 @@ describe("session.list", () => {
           provideInstance(path.join(test.directory, "packages", "app")),
         )
 
-        const ids = (yield* SessionNs.Service.use((session) => session.list())).map((session) => session.id)
+        const ids = (yield* SessionNs.use.list()).map((session) => session.id)
         expect(ids).toContain(root.id)
         expect(ids).toContain(parent.id)
         expect(ids).toContain(current.id)
@@ -60,7 +68,6 @@ describe("session.list", () => {
     "filters by directory when directory is provided",
     () =>
       Effect.gen(function* () {
-        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = false
         const test = yield* TestInstance
         yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "opencode"), { recursive: true }))
         yield* Effect.promise(() => mkdir(path.join(test.directory, "packages", "app"), { recursive: true }))
@@ -91,7 +98,6 @@ describe("session.list", () => {
     "filters by path and ignores directory when path is provided",
     () =>
       Effect.gen(function* () {
-        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = false
         const test = yield* TestInstance
         yield* Effect.promise(() =>
           mkdir(path.join(test.directory, "packages", "opencode", "src", "deep"), { recursive: true }),
@@ -129,7 +135,6 @@ describe("session.list", () => {
     "falls back to directory when filtering legacy sessions without path",
     () =>
       Effect.gen(function* () {
-        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = false
         const test = yield* TestInstance
         yield* Effect.promise(() =>
           mkdir(path.join(test.directory, "packages", "opencode", "src"), { recursive: true }),
@@ -173,7 +178,7 @@ describe("session.list", () => {
         const root = yield* withSession({ title: "root-session" })
         const child = yield* withSession({ title: "child-session", parentID: root.id })
 
-        const sessions = yield* SessionNs.Service.use((session) => session.list({ roots: true }))
+        const sessions = yield* SessionNs.use.list({ roots: true })
         const ids = sessions.map((session) => session.id)
 
         expect(ids).toContain(root.id)
@@ -200,7 +205,7 @@ describe("session.list", () => {
         yield* withSession({ title: "unique-search-term-abc" })
         yield* withSession({ title: "other-session-xyz" })
 
-        const sessions = yield* SessionNs.Service.use((session) => session.list({ search: "unique-search" }))
+        const sessions = yield* SessionNs.use.list({ search: "unique-search" })
         const titles = sessions.map((session) => session.title)
 
         expect(titles).toContain("unique-search-term-abc")
@@ -217,7 +222,7 @@ describe("session.list", () => {
         yield* withSession({ title: "session-2" })
         yield* withSession({ title: "session-3" })
 
-        const sessions = yield* SessionNs.Service.use((session) => session.list({ limit: 2 }))
+        const sessions = yield* SessionNs.use.list({ limit: 2 })
         expect(sessions.length).toBe(2)
       }),
     { git: true },

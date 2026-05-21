@@ -647,6 +647,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     if (model.api.npm === "@ai-sdk/anthropic") return true
     if (model.api.npm === "@ai-sdk/openai") return true
     if (model.api.npm === "@ai-sdk/amazon-bedrock") return attachment.mime.startsWith("image/")
+    if (model.api.npm === "@ai-sdk/xai") return attachment.mime.startsWith("image/")
     if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
     if (model.api.npm === "@ai-sdk/google") {
       const id = model.api.id.toLowerCase()
@@ -919,7 +920,11 @@ export function toModelMessages(
   return Effect.runPromise(toModelMessagesEffect(input, model, options).pipe(Effect.provide(EffectLogger.layer)))
 }
 
-export function page(input: { sessionID: SessionID; limit: number; before?: string }) {
+export const page = Effect.fn("MessageV2.page")(function* (input: {
+  sessionID: SessionID
+  limit: number
+  before?: string
+}) {
   const before = input.before ? cursor.decode(input.before) : undefined
   const where = before
     ? and(eq(MessageTable.session_id, input.sessionID), older(before))
@@ -937,7 +942,7 @@ export function page(input: { sessionID: SessionID; limit: number; before?: stri
     const row = Database.use((db) =>
       db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.id, input.sessionID)).get(),
     )
-    if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+    if (!row) return yield* new NotFoundError({ message: `Session not found: ${input.sessionID}` })
     return {
       items: [] as WithParts[],
       more: false,
@@ -954,13 +959,19 @@ export function page(input: { sessionID: SessionID; limit: number; before?: stri
     more,
     cursor: more && tail ? cursor.encode({ id: tail.id, time: tail.time_created }) : undefined,
   }
-}
+})
 
 export function* stream(sessionID: SessionID) {
   const size = 50
   let before: string | undefined
   while (true) {
-    const next = page({ sessionID, limit: size, before })
+    const next = Effect.runSync(
+      page({ sessionID, limit: size, before }).pipe(
+        Effect.catchIf(NotFoundError.isInstance, () =>
+          Effect.succeed({ items: [] as WithParts[], more: false, cursor: undefined }),
+        ),
+      ),
+    )
     if (next.items.length === 0) break
     for (let i = next.items.length - 1; i >= 0; i--) {
       yield next.items[i]
@@ -985,7 +996,7 @@ export function parts(message_id: MessageID) {
   )
 }
 
-export function get(input: { sessionID: SessionID; messageID: MessageID }): WithParts {
+export const get = Effect.fn("MessageV2.get")(function* (input: { sessionID: SessionID; messageID: MessageID }) {
   const row = Database.use((db) =>
     db
       .select()
@@ -993,12 +1004,12 @@ export function get(input: { sessionID: SessionID; messageID: MessageID }): With
       .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
       .get(),
   )
-  if (!row) throw new NotFoundError({ message: `Message not found: ${input.messageID}` })
+  if (!row) return yield* new NotFoundError({ message: `Message not found: ${input.messageID}` })
   return {
     info: info(row),
     parts: parts(input.messageID),
   }
-}
+})
 
 export function filterCompacted(msgs: Iterable<WithParts>) {
   const result = [] as WithParts[]
@@ -1056,6 +1067,31 @@ export function filterCompacted(msgs: Iterable<WithParts>) {
 export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: SessionID) {
   return filterCompacted(stream(sessionID))
 })
+
+// filterCompacted reorders messages for model consumption
+// ([compaction-user, summary, ...retained tail..., continue-user]), so array
+// position is not chronological. Derive each binding by max id (MessageID
+// is monotonic via MessageID.ascending) so a pre-compaction overflowing tail
+// assistant doesn't get mistaken for the most recent turn. tasks are
+// compaction/subtask parts attached to user messages newer than the latest
+// finished assistant — i.e. unprocessed work.
+export function latest(msgs: WithParts[]) {
+  let user: User | undefined
+  let assistant: Assistant | undefined
+  let finished: Assistant | undefined
+  for (const msg of msgs) {
+    const info = msg.info
+    if (info.role === "user" && (!user || info.id > user.id)) user = info
+    if (info.role === "assistant" && (!assistant || info.id > assistant.id)) assistant = info
+    if (info.role === "assistant" && info.finish && (!finished || info.id > finished.id)) finished = info
+  }
+  const tasks = msgs.flatMap((m) =>
+    finished && m.info.id <= finished.id
+      ? []
+      : m.parts.filter((p): p is CompactionPart | SubtaskPart => p.type === "compaction" || p.type === "subtask"),
+  )
+  return { user, assistant, finished, tasks }
+}
 
 export function fromError(
   e: unknown,

@@ -1,16 +1,15 @@
-import { WorkerEntrypoint } from "cloudflare:workers"
 import { and, Database, inArray } from "@opencode-ai/console-core/drizzle/index.js"
 import { ModelTpsRateLimitTable } from "@opencode-ai/console-core/schema/ip.sql.js"
 
-type Result = Record<string, { qualify: number; unqualify: number }>
+type Result = Record<string, { interval: number; qualify: number; unqualify: number }[]>
 
-export default class Stat extends WorkerEntrypoint {
-  async fetch() {
-    return new Response("Not Found", { status: 404 })
-  }
+export default {
+  async fetch(request: Request) {
+    if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 })
 
-  async getStats(ids: string[]): Promise<Result> {
-    if (ids.length === 0) return {}
+    const body = (await request.json()) as { ids: string[] }
+    const ids = body.ids
+    if (ids.length === 0) return Response.json({} satisfies Result)
 
     const toInterval = (date: Date) =>
       parseInt(
@@ -20,7 +19,7 @@ export default class Stat extends WorkerEntrypoint {
           .substring(0, 12),
       )
     const now = Date.now()
-    const intervals = Array.from({ length: 5 }, (_, i) => toInterval(new Date(now - i * 60 * 1000)))
+    const intervals = Array.from({ length: 30 }, (_, i) => toInterval(new Date(now - i * 60 * 1000)))
 
     const rows = await Database.use((tx) =>
       tx
@@ -29,11 +28,16 @@ export default class Stat extends WorkerEntrypoint {
         .where(and(inArray(ModelTpsRateLimitTable.id, ids), inArray(ModelTpsRateLimitTable.interval, intervals))),
     )
 
-    const result: Result = Object.fromEntries(ids.map((id) => [id, { qualify: 0, unqualify: 0 }]))
-    for (const row of rows) {
-      result[row.id].qualify += row.qualify
-      result[row.id].unqualify += row.unqualify
-    }
-    return result
-  }
+    const rowsByKey = new Map(rows.map((row) => [`${row.id}:${row.interval}`, row]))
+    const result: Result = Object.fromEntries(
+      ids.map((id) => [
+        id,
+        intervals.map((interval) => {
+          const row = rowsByKey.get(`${id}:${interval}`)
+          return { interval, qualify: row?.qualify ?? 0, unqualify: row?.unqualify ?? 0 }
+        }),
+      ]),
+    )
+    return Response.json(result)
+  },
 }

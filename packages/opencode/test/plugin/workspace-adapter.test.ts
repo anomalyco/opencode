@@ -1,9 +1,9 @@
-import { afterAll, afterEach, describe, expect } from "bun:test"
+import { afterEach, describe, expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Account } from "../../src/account/account"
@@ -15,8 +15,13 @@ import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Workspace } from "../../src/control-plane/workspace"
 import { Plugin } from "../../src/plugin/index"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
-import { Instance } from "../../src/project/instance"
 import { InstanceStore } from "../../src/project/instance-store"
+import { Project } from "../../src/project/project"
+import { Vcs } from "../../src/project/vcs"
+import { InstanceState } from "../../src/effect/instance-state"
+import { Session } from "../../src/session/session"
+import { SessionPrompt } from "../../src/session/prompt"
+import { SyncEvent } from "../../src/sync"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { NpmTest } from "../fake/npm"
@@ -42,21 +47,22 @@ const pluginLayer = Plugin.layer.pipe(
   Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })),
 )
 const noopBootstrapLayer = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
-const workspaceLayer = Workspace.defaultLayer.pipe(
+const workspaceLayer = Workspace.layer.pipe(
+  Layer.provide(Auth.defaultLayer),
+  Layer.provide(Session.defaultLayer),
+  Layer.provide(SyncEvent.defaultLayer),
+  Layer.provide(SessionPrompt.defaultLayer),
+  Layer.provide(Project.defaultLayer),
+  Layer.provide(Vcs.defaultLayer),
+  Layer.provide(FetchHttpClient.layer),
+  Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrapLayer))),
+  Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: true })),
 )
 const it = testEffect(Layer.mergeAll(pluginLayer, workspaceLayer, CrossSpawnSpawner.defaultLayer))
 
-const experimental = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
-
-Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
-
 afterEach(async () => {
   await disposeAllInstances()
-})
-
-afterAll(() => {
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = experimental
 })
 
 describe("plugin.workspace", () => {
@@ -110,11 +116,12 @@ describe("plugin.workspace", () => {
         const plugin = yield* Plugin.Service
         yield* plugin.init()
         const workspace = yield* Workspace.Service
+        const ctx = yield* InstanceState.context
         const info = yield* workspace.create({
           type,
           branch: null,
           extra: { key: "value" },
-          projectID: Instance.project.id,
+          projectID: ctx.project.id,
         })
 
         expect(info.type).toBe(type)

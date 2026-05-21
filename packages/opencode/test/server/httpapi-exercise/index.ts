@@ -593,6 +593,12 @@ const scenarios: Scenario[] = [
         check(auth.test === undefined, "auth remove should delete provider from isolated auth file")
       }),
     ),
+  http.protected.get("/api/model", "v2.model.list").json(200, array),
+  http.protected.get("/api/provider", "v2.provider.list").json(200, array),
+  http.protected
+    .get("/api/provider/{providerID}", "v2.provider.get")
+    .at((ctx) => ({ path: route("/api/provider/{providerID}", { providerID: "missing" }), headers: ctx.headers() }))
+    .json(404, object, "status"),
   http.protected
     .get("/api/session", "v2.session.list")
     .at((ctx) => ({ path: "/api/session?roots=true", headers: ctx.headers() }))
@@ -669,22 +675,14 @@ const scenarios: Scenario[] = [
       path: route("/api/session/{sessionID}/context", { sessionID: "ses_httpapi_missing" }),
       headers: ctx.headers(),
     }))
-    .json(200, array, "none"),
+    .json(404, object, "status"),
   http.protected
     .get("/api/session/{sessionID}/message", "v2.session.messages")
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" }),
       headers: ctx.headers(),
     }))
-    .json(
-      200,
-      (body) => {
-        object(body)
-        array(body.items)
-        object(body.cursor)
-      },
-      "none",
-    ),
+    .json(404, object, "status"),
   http.protected
     .get("/api/session/{sessionID}/message", "v2.session.messages.params")
     .at((ctx) => ({
@@ -694,15 +692,7 @@ const scenarios: Scenario[] = [
       })}`,
       headers: ctx.headers(),
     }))
-    .json(
-      200,
-      (body) => {
-        object(body)
-        array(body.items)
-        object(body.cursor)
-      },
-      "none",
-    ),
+    .json(404, object, "status"),
   http.protected
     .get("/api/session/{sessionID}/message", "v2.session.messages.cursor")
     .at((ctx) => ({
@@ -713,15 +703,7 @@ const scenarios: Scenario[] = [
       })}`,
       headers: ctx.headers(),
     }))
-    .json(
-      200,
-      (body) => {
-        object(body)
-        array(body.items)
-        object(body.cursor)
-      },
-      "none",
-    ),
+    .json(404, object, "status"),
   http.protected
     .get("/api/session/{sessionID}/message", "v2.session.messages.cursor.invalid")
     .at((ctx) => ({
@@ -746,14 +728,14 @@ const scenarios: Scenario[] = [
       path: route("/api/session/{sessionID}/compact", { sessionID: "ses_httpapi_missing" }),
       headers: ctx.headers(),
     }))
-    .status(204, undefined, "none"),
+    .status(404, undefined, "status"),
   http.protected
     .post("/api/session/{sessionID}/wait", "v2.session.wait")
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/wait", { sessionID: "ses_httpapi_missing" }),
       headers: ctx.headers(),
     }))
-    .status(204, undefined, "none"),
+    .status(404, undefined, "status"),
   http.protected
     .get("/session", "session.list")
     .seeded((ctx) => ctx.session({ title: "List me" }))

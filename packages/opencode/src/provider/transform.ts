@@ -2,9 +2,8 @@ import type { ModelMessage, ToolResultPart } from "ai"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type * as Provider from "./provider"
-import type * as ModelsDev from "./models"
+import type * as ModelsDev from "@opencode-ai/core/models-dev"
 import { iife } from "@/util/iife"
-import { Flag } from "@opencode-ai/core/flag/flag"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -16,7 +15,7 @@ function mimeToModality(mime: string): Modality | undefined {
   return undefined
 }
 
-export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+export const OUTPUT_TOKEN_MAX = 32_000
 
 export function sanitizeSurrogates(content: string) {
   return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
@@ -617,14 +616,6 @@ function googleThinkingBudgetMax(apiId: string) {
   return 24_576
 }
 
-function googleSmallThinkingConfig(apiId: string) {
-  const levels = googleThinkingLevelEfforts(apiId)
-  if (apiId.toLowerCase().includes("gemini-3")) {
-    return { thinkingLevel: levels.includes("minimal") ? "minimal" : levels.includes("low") ? "low" : "high" }
-  }
-  return { thinkingBudget: googleThinkingBudgetMax(apiId) === 32_768 ? 128 : 0 }
-}
-
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
 
@@ -1134,19 +1125,15 @@ export function options(input: {
     result["enable_thinking"] = true
   }
 
+  if (input.model.api.npm === "@ai-sdk/azure" && input.model.api.id.includes("gpt-5.5")) {
+    result["reasoningSummary"] = "auto"
+    return result
+  }
+
   if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
     if (!input.model.api.id.includes("gpt-5-pro")) {
       result["reasoningEffort"] = "medium"
-      // Only inject reasoningSummary for providers that support it natively.
-      // @ai-sdk/openai-compatible proxies (e.g. LiteLLM) do not understand this
-      // parameter and return "Unknown parameter: 'reasoningSummary'".
-      if (
-        input.model.api.npm === "@ai-sdk/openai" ||
-        input.model.api.npm === "@ai-sdk/azure" ||
-        input.model.api.npm === "@ai-sdk/github-copilot"
-      ) {
-        result["reasoningSummary"] = "auto"
-      }
+      result["reasoningSummary"] = "auto"
     }
 
     // Only set textVerbosity for non-chat gpt-5.x models
@@ -1184,40 +1171,27 @@ export function options(input: {
 }
 
 export function smallOptions(model: Provider.Model) {
+  const small = Object.values(model.variants ?? {})[0] ?? {}
   if (
     model.providerID === "openai" ||
     model.api.npm === "@ai-sdk/openai" ||
     model.api.npm === "@ai-sdk/github-copilot"
   ) {
-    if (model.api.id.includes("gpt-5")) {
-      if (model.api.id.includes("-chat")) {
-        if (gpt5Version(model.api.id) === undefined) return { store: false }
-        return { store: false, reasoningEffort: "medium" }
-      }
-      if (model.api.id.includes("search-api")) return { store: false }
-      if (model.api.id.includes("5.") || model.api.id.includes("5-mini")) {
-        return { store: false, reasoningEffort: "low" }
-      }
-      return { store: false, reasoningEffort: "minimal" }
-    }
-    return { store: false }
-  }
-  if (model.providerID === "google") {
-    // gemini-3 uses thinkingLevel, gemini-2.5 uses thinkingBudget
-    return { thinkingConfig: googleSmallThinkingConfig(model.api.id) }
+    const base = { store: false }
+    return mergeDeep(base, small)
   }
   if (model.providerID === "openrouter" || model.providerID === "llmgateway") {
-    if (model.api.id.includes("google")) {
+    if (Object.keys(small).length === 0 && model.api.id.includes("google")) {
       return { reasoning: { enabled: false } }
     }
-    return { reasoningEffort: "minimal" }
   }
 
   if (model.providerID === "venice") {
+    if (Object.keys(small).length > 0) return small
     return { veniceParameters: { disableThinking: true } }
   }
 
-  return {}
+  return small
 }
 
 // Maps model ID prefix to provider slug used in providerOptions.
@@ -1276,8 +1250,8 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
   return { [key]: options }
 }
 
-export function maxOutputTokens(model: Provider.Model): number {
-  return Math.min(model.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
+export function maxOutputTokens(model: Provider.Model, outputTokenMax = OUTPUT_TOKEN_MAX): number {
+  return Math.min(model.limit.output, outputTokenMax) || outputTokenMax
 }
 
 export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 {

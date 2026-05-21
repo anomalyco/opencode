@@ -133,7 +133,7 @@ describe("Format", () => {
           const file = `${dir}/test.txt`
           yield* Effect.promise(() => Bun.write(file, "x"))
 
-          const formatted = yield* Format.Service.use((fmt) => fmt.file(file))
+          const formatted = yield* Format.use.file(file)
           expect(formatted).toBe(false)
         }),
       {
@@ -146,10 +146,10 @@ describe("Format", () => {
 
   it.live("status() initializes formatter state per directory", () =>
     Effect.gen(function* () {
-      const a = yield* provideTmpdirInstance(() => Format.Service.use((fmt) => fmt.status()), {
+      const a = yield* provideTmpdirInstance(() => Format.use.status(), {
         config: { formatter: false },
       })
-      const b = yield* provideTmpdirInstance(() => Format.Service.use((fmt) => fmt.status()), {
+      const b = yield* provideTmpdirInstance(() => Format.use.status(), {
         config: {
           formatter: true,
         },
@@ -186,14 +186,14 @@ describe("Format", () => {
               Formatter.gofmt.enabled = async () => {
                 active++
                 max = Math.max(max, active)
-                await Bun.sleep(20)
+                await Promise.resolve()
                 active--
                 return ["sh", "-c", "true"]
               }
               Formatter.mix.enabled = async () => {
                 active++
                 max = Math.max(max, active)
-                await Bun.sleep(20)
+                await Promise.resolve()
                 active--
                 return ["sh", "-c", "true"]
               }
