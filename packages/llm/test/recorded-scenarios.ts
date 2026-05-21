@@ -197,7 +197,7 @@ const assistant = {
   ): ConversationStep => ({ type: "assistant", toolCall: { name, input }, finish: "tool-calls", ...options }),
   expectEncryptedReasoningText: (
     text: AssistantTextExpectation,
-    options?: Omit<AssistantStep, "type" | "text" | "reasoning" | "toolCall">,
+    options?: Omit<AssistantStep, "type" | "text" | "reasoning" | "toolCall" | "providerOptions">,
   ): ConversationStep => ({
     type: "assistant",
     text,
@@ -221,6 +221,9 @@ const assertAssistantToolCall = (response: LLMResponse, expected: NonNullable<As
   ])
 }
 
+// The generated golden scenarios only model one assistant shape at a time:
+// encrypted reasoning + text, text, or tool call. Keep mixed interleavings in
+// focused protocol tests where event order can be asserted directly.
 const assistantMessageFromResponse = (response: LLMResponse, step: AssistantStep) => {
   const content: ContentPart[] = []
   if (step.reasoning === "openai-encrypted") {
