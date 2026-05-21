@@ -24,6 +24,16 @@ export const ActorID = Schema.String.pipe(
 )
 export type ActorID = Schema.Schema.Type<typeof ActorID>
 
+export const AssetID = Schema.String.pipe(
+  Schema.brand("AssetID"),
+  withStatics((s) => ({
+    make: (id: string) => s.makeUnsafe(id),
+    ascending: (id?: string) => s.makeUnsafe(Identifier.ascending("asset", id)),
+    zod: z.string().min(1).pipe(z.custom<Schema.Schema.Type<typeof s>>()),
+  })),
+)
+export type AssetID = Schema.Schema.Type<typeof AssetID>
+
 export const SessionIDParam = z.object({
   sessionID: SessionID.zod,
 })

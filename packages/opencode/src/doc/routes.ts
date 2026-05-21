@@ -1,12 +1,15 @@
 import { Hono } from "hono"
+import { HTTPException } from "hono/http-exception"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import { upgradeWebSocket } from "hono/bun"
 import z from "zod"
 import { Doc } from "./index"
-import { DocID } from "./schema"
+import { AssetID, DocID } from "./schema"
 import { errors } from "../server/error"
 import { lazy } from "../util/lazy"
 import * as Room from "./room"
+
+const MAX = 10 * 1024 * 1024
 
 function b64(input: Uint8Array) {
   return Buffer.from(input).toString("base64")
@@ -97,6 +100,69 @@ export const DocRoutes = lazy(() =>
           data: fromB64(body.data),
         })
         return c.body(null, 204)
+      },
+    )
+    .post(
+      "/:docID/asset",
+      describeRoute({
+        summary: "Upload doc asset",
+        description: "Store an image asset for a collaborative doc.",
+        operationId: "doc.asset.create",
+        responses: {
+          200: {
+            description: "Stored asset",
+            content: {
+              "application/json": {
+                schema: resolver(Doc.AssetInfo),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ docID: DocID.zod })),
+      validator(
+        "json",
+        z.object({
+          id: AssetID.zod.optional(),
+          mime: z.string().startsWith("image/"),
+          data: z.string().min(1),
+        }),
+      ),
+      async (c) => {
+        const docID = c.req.valid("param").docID
+        const body = c.req.valid("json")
+        const data = new Uint8Array(Buffer.from(body.data, "base64"))
+        if (data.byteLength > MAX) throw new HTTPException(400, { message: "Doc asset is too large" })
+        return c.json(Doc.assetCreate({ docID, assetID: body.id, mime: body.mime, data }))
+      },
+    )
+    .get(
+      "/:docID/asset/:assetID",
+      describeRoute({
+        summary: "Get doc asset",
+        description: "Return a stored image asset for a collaborative doc.",
+        operationId: "doc.asset.get",
+        responses: {
+          200: {
+            description: "Asset data",
+            content: {
+              "application/octet-stream": {
+                schema: resolver(z.string()),
+              },
+            },
+          },
+          ...errors(404),
+        },
+      }),
+      validator("param", z.object({ docID: DocID.zod, assetID: AssetID.zod })),
+      async (c) => {
+        const param = c.req.valid("param")
+        const asset = Doc.assetGet({ docID: param.docID, assetID: param.assetID })
+        c.header("Content-Type", asset.mime)
+        c.header("Content-Length", asset.size.toString())
+        c.header("Cache-Control", "public, max-age=31536000, immutable")
+        return c.body(asset.data)
       },
     )
     .get(

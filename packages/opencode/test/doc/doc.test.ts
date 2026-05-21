@@ -5,8 +5,9 @@ import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { Session } from "../../src/session"
 import { Doc } from "../../src/doc"
 import * as Room from "../../src/doc/room"
-import { DocID } from "../../src/doc/schema"
+import { AssetID, DocID } from "../../src/doc/schema"
 import { Project } from "../../src/project/project"
+import { Server } from "../../src/server/server"
 import { tmpdir } from "../fixture/fixture"
 
 describe("doc", () => {
@@ -108,6 +109,65 @@ describe("doc", () => {
         const next = new Y.Doc({ guid: "page" })
         Y.applyUpdate(next, pulled!.data)
         expect(next.getText("t").toString()).toBe("hi")
+      },
+    })
+  })
+
+  test("doc asset stores image data for other clients", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const data = new Uint8Array([1, 2, 3])
+
+        const asset = Doc.assetCreate({ docID, mime: "image/png", data })
+        expect(asset.url).toBe(`/doc/${docID}/asset/${asset.assetID}`)
+
+        const next = Doc.assetGet({ docID, assetID: asset.assetID })
+        expect(next.mime).toBe("image/png")
+        expect(next.size).toBe(3)
+        expect(Array.from(next.data)).toEqual([1, 2, 3])
+
+        const keyed = Doc.assetCreate({ docID, assetID: AssetID.make("hash"), mime: "image/png", data })
+        expect(keyed.assetID).toBe(AssetID.make("hash"))
+        expect(Doc.assetGet({ docID, assetID: AssetID.make("hash") }).size).toBe(3)
+      },
+    })
+  })
+
+  test("doc asset route returns uploaded image data", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const app = Server.Default()
+
+        const upload = await app.request(`/doc/${docID}/asset`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "hash",
+            mime: "image/png",
+            data: Buffer.from([4, 5, 6]).toString("base64"),
+          }),
+        })
+        expect(upload.status).toBe(200)
+
+        const info = (await upload.json()) as Doc.AssetInfo
+        expect(info.assetID).toBe(AssetID.make("hash"))
+        expect(Doc.assetGet({ docID, assetID: info.assetID }).size).toBe(3)
+        const image = await app.request(`/doc/${docID}/asset/${info.assetID}?directory=${encodeURIComponent(tmp.path)}`)
+        expect(image.status).toBe(200)
+        expect(image.headers.get("content-type")).toBe("image/png")
+        expect(Array.from(new Uint8Array(await image.arrayBuffer()))).toEqual([4, 5, 6])
       },
     })
   })

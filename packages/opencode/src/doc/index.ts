@@ -9,8 +9,8 @@ import { Database, NotFoundError } from "@/storage/db"
 import { fn } from "@/util/fn"
 import * as Room from "./room"
 import { MSG_DOC, pack, unpack } from "./wire"
-import { DocTable, DocUpdateTable, SessionActorTable, SessionPromptDocTable } from "./doc.sql"
-import { ActorID, DocID } from "./schema"
+import { DocAssetTable, DocTable, DocUpdateTable, SessionActorTable, SessionPromptDocTable } from "./doc.sql"
+import { ActorID, AssetID, DocID } from "./schema"
 
 export namespace Doc {
   const COLORS = [
@@ -52,6 +52,17 @@ export namespace Doc {
     })
     .meta({ ref: "SessionPromptDoc" })
   export type PromptDocInfo = z.infer<typeof PromptDocInfo>
+
+  export const AssetInfo = z
+    .object({
+      assetID: AssetID.zod,
+      docID: DocID.zod,
+      mime: z.string(),
+      size: z.number(),
+      url: z.string(),
+    })
+    .meta({ ref: "DocAsset" })
+  export type AssetInfo = z.infer<typeof AssetInfo>
 
   export const PromptDocRotated = BusEvent.define(
     "doc.prompt.rotated",
@@ -185,6 +196,72 @@ export namespace Doc {
           })
           .run(),
       )
+    },
+  )
+
+  export const assetCreate = fn(
+    z.object({
+      docID: DocID.zod,
+      assetID: AssetID.zod.optional(),
+      mime: z.string(),
+      data: z.instanceof(Uint8Array),
+    }),
+    (input) => {
+      get(input.docID)
+      const assetID = input.assetID ?? AssetID.ascending()
+      Database.use((db) =>
+        db
+          .insert(DocAssetTable)
+          .values({
+            id: assetID,
+            doc_id: input.docID,
+            mime: input.mime,
+            data: input.data,
+            size: input.data.byteLength,
+          })
+          .onConflictDoUpdate({
+            target: [DocAssetTable.doc_id, DocAssetTable.id],
+            set: {
+              mime: input.mime,
+              data: input.data,
+              size: input.data.byteLength,
+            },
+          })
+          .run(),
+      )
+      return {
+        assetID,
+        docID: input.docID,
+        mime: input.mime,
+        size: input.data.byteLength,
+        url: `/doc/${input.docID}/asset/${assetID}`,
+      }
+    },
+  )
+
+  export const assetGet = fn(
+    z.object({
+      docID: DocID.zod,
+      assetID: AssetID.zod,
+    }),
+    (input) => {
+      get(input.docID)
+      const row = Database.use((db) =>
+        db
+          .select()
+          .from(DocAssetTable)
+          .where(and(eq(DocAssetTable.doc_id, input.docID), eq(DocAssetTable.id, input.assetID)))
+          .get(),
+      )
+      if (!row) throw new NotFoundError({ message: "Doc asset not found" })
+      const raw = row.data
+      return {
+        assetID: row.id,
+        docID: row.doc_id,
+        mime: row.mime,
+        data: raw instanceof Uint8Array ? new Uint8Array(raw) : new Uint8Array(Buffer.from(raw as Buffer)),
+        size: row.size,
+      }
     },
   )
 

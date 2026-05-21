@@ -1,4 +1,4 @@
-import type { AwarenessSource, DocSource } from "@blocksuite/sync"
+import type { AwarenessSource, BlobSource, DocSource } from "@blocksuite/sync"
 import { MSG_AWARENESS, MSG_DOC, pack, unpack } from "./doc-sync-protocol"
 
 export type DocSyncOpts = {
@@ -28,6 +28,10 @@ function url(opts: DocSyncOpts, path: string) {
   const next = new URL(path, opts.baseUrl)
   next.searchParams.set("directory", opts.directory)
   return next
+}
+
+async function blobB64(blob: Blob) {
+  return b64(new Uint8Array(await blob.arrayBuffer()))
 }
 
 export class OpencodeDocSource implements DocSource {
@@ -173,6 +177,42 @@ export class OpencodeDocSource implements DocSource {
     this.unsub?.()
     this.unsub = undefined
     this.ws = undefined
+  }
+}
+
+export class OpencodeBlobSource implements BlobSource {
+  name = "opencode-blob"
+  readonly = false
+
+  constructor(private opts: DocSyncOpts) {}
+
+  async get(key: string) {
+    const res = await this.opts.fetch(url(this.opts, `/doc/${this.opts.docID}/asset/${encodeURIComponent(key)}`), {
+      cache: "no-store",
+    })
+    if (res.status === 404) return null
+    if (!res.ok) throw new Error("doc asset fetch failed")
+    return res.blob()
+  }
+
+  async set(key: string, value: Blob) {
+    const res = await this.opts.fetch(url(this.opts, `/doc/${this.opts.docID}/asset`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: key,
+        mime: value.type || "image/png",
+        data: await blobB64(value),
+      }),
+    })
+    if (!res.ok) throw new Error("doc asset upload failed")
+    return key
+  }
+
+  async delete(_key: string) {}
+
+  async list() {
+    return []
   }
 }
 

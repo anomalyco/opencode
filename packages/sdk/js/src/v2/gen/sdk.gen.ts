@@ -19,6 +19,16 @@ import type {
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
+  DocAssetCreateErrors,
+  DocAssetCreateResponses,
+  DocAssetGetErrors,
+  DocAssetGetResponses,
+  DocConnectErrors,
+  DocConnectResponses,
+  DocSyncPullErrors,
+  DocSyncPullResponses,
+  DocSyncPushErrors,
+  DocSyncPushResponses,
   EnvGetResponses,
   EventSubscribeResponses,
   EventTuiCommandExecute,
@@ -83,6 +93,8 @@ import type {
   ProjectCurrentResponses,
   ProjectInitGitResponses,
   ProjectListResponses,
+  ProjectSummaryGenerateErrors,
+  ProjectSummaryGenerateResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
   ProviderAuthResponses,
@@ -110,6 +122,10 @@ import type {
   QuestionReplyResponses,
   SessionAbortErrors,
   SessionAbortResponses,
+  SessionActorListErrors,
+  SessionActorListResponses,
+  SessionActorUpsertErrors,
+  SessionActorUpsertResponses,
   SessionChildrenErrors,
   SessionChildrenResponses,
   SessionCommandErrors,
@@ -133,6 +149,12 @@ import type {
   SessionMessagesResponses,
   SessionPromptAsyncErrors,
   SessionPromptAsyncResponses,
+  SessionPromptDocAdvanceErrors,
+  SessionPromptDocAdvanceResponses,
+  SessionPromptDocErrors,
+  SessionPromptDocReadyErrors,
+  SessionPromptDocReadyResponses,
+  SessionPromptDocResponses,
   SessionPromptErrors,
   SessionPromptResponses,
   SessionRevertErrors,
@@ -1430,6 +1452,204 @@ export class Worktree extends HeyApiClient {
   }
 }
 
+export class ProjectSummary extends HeyApiClient {
+  /**
+   * Generate project summary
+   *
+   * Summarize the given session into a public-gallery project summary (title, description, usage). Runs in the background and is not appended to the session message stream.
+   */
+  public generate<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      sessionID?: string
+      providerID?: string
+      modelID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "providerID" },
+            { in: "body", key: "modelID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ProjectSummaryGenerateResponses,
+      ProjectSummaryGenerateErrors,
+      ThrowOnError
+    >({
+      url: "/project-summary/generate",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class PromptDoc extends HeyApiClient {
+  /**
+   * Advance session prompt doc
+   *
+   * Create a new collaborative prompt doc for the session.
+   */
+  public advance<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionPromptDocAdvanceResponses,
+      SessionPromptDocAdvanceErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/prompt-doc/advance",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Activate session prompt doc
+   *
+   * Mark a collaborative prompt doc as ready for the session and notify connected clients to switch.
+   */
+  public ready<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionPromptDocReadyResponses,
+      SessionPromptDocReadyErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/prompt-doc/ready",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Actor extends HeyApiClient {
+  /**
+   * List session actors
+   *
+   * List collaborative actors registered for a session.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionActorListResponses, SessionActorListErrors, ThrowOnError>({
+      url: "/session/{sessionID}/actor",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Register session actor
+   *
+   * Register or refresh a collaborative actor for a session.
+   */
+  public upsert<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      actorID?: string
+      userID?: string
+      name?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "actorID" },
+            { in: "body", key: "userID" },
+            { in: "body", key: "name" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionActorUpsertResponses, SessionActorUpsertErrors, ThrowOnError>({
+      url: "/session/{sessionID}/actor",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Session2 extends HeyApiClient {
   /**
    * List sessions
@@ -2372,6 +2592,48 @@ export class Session2 extends HeyApiClient {
       ...params,
     })
   }
+
+  /**
+   * Get session prompt doc
+   *
+   * Get or create the collaborative prompt doc for a session.
+   */
+  public promptDoc<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionPromptDocResponses, SessionPromptDocErrors, ThrowOnError>({
+      url: "/session/{sessionID}/prompt-doc",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _promptDoc?: PromptDoc
+  get promptDoc2(): PromptDoc {
+    return (this._promptDoc ??= new PromptDoc({ client: this.client }))
+  }
+
+  private _actor?: Actor
+  get actor(): Actor {
+    return (this._actor ??= new Actor({ client: this.client }))
+  }
 }
 
 export class Part extends HeyApiClient {
@@ -2564,6 +2826,208 @@ export class Permission extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+}
+
+export class Sync extends HeyApiClient {
+  /**
+   * Pull doc sync state
+   *
+   * Return Yjs sync update for a collaborative doc.
+   */
+  public pull<ThrowOnError extends boolean = false>(
+    parameters: {
+      docID: string
+      directory?: string
+      workspace?: string
+      state?: string
+      guid?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "docID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "state" },
+            { in: "query", key: "guid" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<DocSyncPullResponses, DocSyncPullErrors, ThrowOnError>({
+      url: "/doc/{docID}/sync",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Push doc sync update
+   *
+   * Apply a Yjs update to a collaborative doc.
+   */
+  public push<ThrowOnError extends boolean = false>(
+    parameters: {
+      docID: string
+      directory?: string
+      workspace?: string
+      data?: string
+      guid?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "docID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "data" },
+            { in: "body", key: "guid" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<DocSyncPushResponses, DocSyncPushErrors, ThrowOnError>({
+      url: "/doc/{docID}/sync",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Asset extends HeyApiClient {
+  /**
+   * Upload doc asset
+   *
+   * Store an image asset for a collaborative doc.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters: {
+      docID: string
+      directory?: string
+      workspace?: string
+      id?: string
+      mime?: string
+      data?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "docID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "id" },
+            { in: "body", key: "mime" },
+            { in: "body", key: "data" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<DocAssetCreateResponses, DocAssetCreateErrors, ThrowOnError>({
+      url: "/doc/{docID}/asset",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get doc asset
+   *
+   * Return a stored image asset for a collaborative doc.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      docID: string
+      assetID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "docID" },
+            { in: "path", key: "assetID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<DocAssetGetResponses, DocAssetGetErrors, ThrowOnError>({
+      url: "/doc/{docID}/asset/{assetID}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Doc extends HeyApiClient {
+  /**
+   * Connect to collaborative doc
+   *
+   * WebSocket connection for real-time doc and awareness sync.
+   */
+  public connect<ThrowOnError extends boolean = false>(
+    parameters: {
+      docID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "docID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<DocConnectResponses, DocConnectErrors, ThrowOnError>({
+      url: "/doc/{docID}/connect",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _sync?: Sync
+  get sync(): Sync {
+    return (this._sync ??= new Sync({ client: this.client }))
+  }
+
+  private _asset?: Asset
+  get asset(): Asset {
+    return (this._asset ??= new Asset({ client: this.client }))
   }
 }
 
@@ -4035,6 +4499,11 @@ export class OpencodeClient extends HeyApiClient {
     return (this._worktree ??= new Worktree({ client: this.client }))
   }
 
+  private _projectSummary?: ProjectSummary
+  get projectSummary(): ProjectSummary {
+    return (this._projectSummary ??= new ProjectSummary({ client: this.client }))
+  }
+
   private _session?: Session2
   get session(): Session2 {
     return (this._session ??= new Session2({ client: this.client }))
@@ -4048,6 +4517,11 @@ export class OpencodeClient extends HeyApiClient {
   private _permission?: Permission
   get permission(): Permission {
     return (this._permission ??= new Permission({ client: this.client }))
+  }
+
+  private _doc?: Doc
+  get doc(): Doc {
+    return (this._doc ??= new Doc({ client: this.client }))
   }
 
   private _question?: Question

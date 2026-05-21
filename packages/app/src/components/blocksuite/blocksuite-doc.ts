@@ -9,7 +9,12 @@ import { link, load, remote } from "./doc-remote"
 import { ensureEffects } from "./effects"
 import { frame, settled } from "./frame"
 import { inlineReady } from "./inline-editor"
-import { OpencodeAwarenessSource, OpencodeDocSource, type DocSyncOpts } from "./opencode-doc-source"
+import {
+  OpencodeAwarenessSource,
+  OpencodeBlobSource,
+  OpencodeDocSource,
+  type DocSyncOpts,
+} from "./opencode-doc-source"
 import { scheme } from "./theme"
 
 export type DocMountInput = {
@@ -40,6 +45,7 @@ export async function createPage(input: DocMountInput) {
     collection = new DocCollection({
       schema,
       id: input.sync.docID,
+      blobSources: { main: new OpencodeBlobSource(input.sync) },
       awarenessSources: [awareness],
     })
     collection.meta.initialize()

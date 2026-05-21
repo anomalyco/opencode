@@ -15,6 +15,7 @@ export namespace Identifier {
     workspace: "wrk",
     doc: "doc",
     actor: "act",
+    asset: "ast",
   } as const
 
   export function schema(prefix: keyof typeof prefixes) {
