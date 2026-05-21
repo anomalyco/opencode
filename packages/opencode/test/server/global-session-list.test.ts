@@ -13,7 +13,7 @@ const it = testEffect(Layer.mergeAll(SessionNs.defaultLayer, Project.defaultLaye
 
 const withSession = (input?: Parameters<SessionNs.Interface["create"]>[0]) =>
   Effect.acquireRelease(
-    SessionNs.Service.use((session) => session.create(input)),
+    SessionNs.use.create(input),
     (created) => SessionNs.Service.use((session) => session.remove(created.id).pipe(Effect.ignore)),
   )
 
@@ -34,8 +34,8 @@ describe("session.listGlobal", () => {
         expect(ids).toContain(firstSession.id)
         expect(ids).toContain(secondSession.id)
 
-        const firstProject = yield* Project.Service.use((project) => project.get(firstSession.projectID))
-        const secondProject = yield* Project.Service.use((project) => project.get(secondSession.projectID))
+        const firstProject = yield* Project.use.get(firstSession.projectID)
+        const secondProject = yield* Project.use.get(secondSession.projectID)
 
         const firstItem = sessions.find((session) => session.id === firstSession.id)
         const secondItem = sessions.find((session) => session.id === secondSession.id)

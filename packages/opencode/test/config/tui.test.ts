@@ -93,7 +93,7 @@ it.instance("keeps server and tui plugin merge semantics aligned", () =>
         plugin: [["shared-plugin@2.0.0", { source: "local" }], "local-only@1.0.0"],
       })
 
-      const server = yield* Config.Service.use((svc) => svc.get())
+      const server = yield* Config.use.get()
       const tui = yield* getTuiConfig(test.directory)
       const serverPlugins = (server.plugin ?? []).map((item) => ConfigPlugin.pluginSpecifier(item))
       const tuiPlugins = (tui.plugin ?? []).map((item) => ConfigPlugin.pluginSpecifier(item))

@@ -5,31 +5,31 @@ import Http from "node:http"
 import path from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
 import { NodeHttpServer } from "@effect/platform-node"
-import { Effect, Exit, Fiber, Layer, Schema } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { FetchHttpClient, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { eq } from "drizzle-orm"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import * as Log from "@opencode-ai/core/util/log"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Database } from "@/storage/db"
 import { ProjectID } from "@/project/schema"
 import { ProjectTable } from "@/project/project.sql"
+import { context, type InstanceContext } from "@/project/instance-context"
 import { InstanceRef } from "@/effect/instance-ref"
-import { InstanceState } from "@/effect/instance-state"
 import { Session as SessionNs } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { SessionTable } from "@/session/session.sql"
 import { SyncEvent } from "@/sync"
 import { EventSequenceTable } from "@/sync/event.sql"
 import { resetDatabase } from "../fixture/db"
-import { disposeAllInstances, provideTmpdirInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideTmpdirInstance, TestInstance, tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import { WorkspaceID } from "../../src/control-plane/schema"
 import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
 import type { Target, WorkspaceAdapter, WorkspaceInfo } from "../../src/control-plane/types"
 import * as Workspace from "../../src/control-plane/workspace"
+import { AppRuntime } from "@/effect/app-runtime"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { Auth } from "@/auth"
@@ -66,8 +66,6 @@ const testServerLayer = Layer.mergeAll(
   NodeHttpServer.layer(Http.createServer, { host: "127.0.0.1", port: 0 }),
   workspaceLayer(true),
   SessionNs.defaultLayer,
-  InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer)),
-  CrossSpawnSpawner.defaultLayer,
 )
 const it = testEffect(testServerLayer)
 
@@ -123,6 +121,12 @@ afterEach(async () => {
   await resetDatabase()
 })
 
+async function withInstance<T>(fn: (ctx: InstanceContext) => T | Promise<T>) {
+  await using tmp = await tmpdir({ git: true })
+  const ctx = await AppRuntime.runPromise(InstanceStore.use.load({ directory: tmp.path }))
+  return await context.provide(ctx, () => fn(ctx))
+}
+
 async function initGitRepo(dir: string) {
   await fs.mkdir(dir, { recursive: true })
   await $`git init`.cwd(dir).quiet()
@@ -134,6 +138,47 @@ async function initGitRepo(dir: string) {
   await $`git add tracked.txt`.cwd(dir).quiet()
   await $`git commit -m "base"`.cwd(dir).quiet()
 }
+
+function currentInstance() {
+  try {
+    return context.use()
+  } catch {
+    return undefined
+  }
+}
+
+const runWorkspace = <A, E>(effect: Effect.Effect<A, E, Workspace.Service>) => {
+  const ctx = currentInstance()
+  return AppRuntime.runPromise(ctx ? effect.pipe(Effect.provideService(InstanceRef, ctx)) : effect)
+}
+const createWorkspace = (input: Workspace.CreateInput) =>
+  runWorkspace(Workspace.use.create(input))
+const warpWorkspaceSession = (input: Workspace.SessionWarpInput) =>
+  runWorkspace(Workspace.use.sessionWarp(input))
+const listWorkspaces = (project: Parameters<Workspace.Interface["list"]>[0]) =>
+  runWorkspace(Workspace.use.list(project))
+const syncListWorkspaces = (project: Parameters<Workspace.Interface["syncList"]>[0]) =>
+  runWorkspace(Workspace.use.syncList(project))
+const getWorkspace = (id: WorkspaceID) => runWorkspace(Workspace.use.get(id))
+const removeWorkspace = (id: WorkspaceID) => runWorkspace(Workspace.use.remove(id))
+const workspaceStatus = () => runWorkspace(Workspace.use.status())
+const isWorkspaceSyncing = (id: WorkspaceID) =>
+  runWorkspace(Workspace.use.isSyncing(id))
+const startWorkspaceSyncing = (projectID: ProjectID) => {
+  void runWorkspace(Workspace.use.startWorkspaceSyncing(projectID))
+}
+const startWorkspaceSyncingWithFlag = (projectID: ProjectID, experimentalWorkspaces: boolean) =>
+  Effect.runPromise(
+    Workspace.use.startWorkspaceSyncing(projectID).pipe(
+      Effect.provide(workspaceLayer(experimentalWorkspaces)),
+    ),
+  )
+const waitForWorkspaceSync = (
+  workspaceID: WorkspaceID,
+  state: Record<string, number>,
+  signal?: AbortSignal,
+  timeout?: number,
+) => runWorkspace(Workspace.use.waitForSync(workspaceID, state, signal, timeout))
 
 function captureGlobalEvents() {
   const events: GlobalEvent[] = []
@@ -376,326 +421,289 @@ describe("workspace schemas and exports", () => {
 })
 
 describe("workspace CRUD", () => {
-  it.instance(
-    "get returns undefined for a missing workspace",
-    () =>
-      Effect.gen(function* () {
-        expect(yield* Workspace.use.get(WorkspaceID.ascending("wrk_missing_get"))).toBeUndefined()
-      }),
-    { git: true },
-  )
+  test("get returns undefined for a missing workspace", async () => {
+    await withInstance(async () => {
+      expect(await getWorkspace(WorkspaceID.ascending("wrk_missing_get"))).toBeUndefined()
+    })
+  })
 
-  it.instance(
-    "list maps database rows, filters by project, and sorts by id",
-    () =>
-      Effect.gen(function* () {
-        const instance = yield* InstanceState.context
-        const otherProjectID = ProjectID.make("project-other")
-        insertProject(otherProjectID, "/tmp/other")
-        const a = workspaceInfo(instance.project.id, "manual", {
-          id: WorkspaceID.ascending("wrk_a_list"),
-          branch: "a",
-          directory: "/a",
-          extra: { a: true },
-        })
-        const b = workspaceInfo(instance.project.id, "manual", {
-          id: WorkspaceID.ascending("wrk_b_list"),
-          branch: "b",
-          directory: "/b",
-          extra: ["b"],
-        })
-        const other = workspaceInfo(otherProjectID, "manual", { id: WorkspaceID.ascending("wrk_c_list") })
-        insertWorkspace(b)
-        insertWorkspace(other)
-        insertWorkspace(a)
+  test("list maps database rows, filters by project, and sorts by id", async () => {
+    await withInstance(async (instance) => {
+      const otherProjectID = ProjectID.make("project-other")
+      insertProject(otherProjectID, "/tmp/other")
+      const a = workspaceInfo(instance.project.id, "manual", {
+        id: WorkspaceID.ascending("wrk_a_list"),
+        branch: "a",
+        directory: "/a",
+        extra: { a: true },
+      })
+      const b = workspaceInfo(instance.project.id, "manual", {
+        id: WorkspaceID.ascending("wrk_b_list"),
+        branch: "b",
+        directory: "/b",
+        extra: ["b"],
+      })
+      const other = workspaceInfo(otherProjectID, "manual", { id: WorkspaceID.ascending("wrk_c_list") })
+      insertWorkspace(b)
+      insertWorkspace(other)
+      insertWorkspace(a)
 
-        expect(yield* Workspace.use.list(instance.project)).toEqual([a, b])
-      }),
-    { git: true },
-  )
+      expect(await listWorkspaces(instance.project)).toEqual([a, b])
+    })
+  })
 
-  it.instance(
-    "create configures, persists, creates, starts local sync, and passes environment",
-    () =>
-      Effect.gen(function* () {
-        const instance = yield* InstanceState.context
-        process.env.OPENCODE_AUTH_CONTENT = JSON.stringify({ test: { type: "api", key: "secret" } })
-        process.env.OTEL_EXPORTER_OTLP_HEADERS = "authorization=otel"
-        process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "https://otel.test"
-        process.env.OTEL_RESOURCE_ATTRIBUTES = "service.name=opencode-test"
+  test("create configures, persists, creates, starts local sync, and passes environment", async () => {
+    await withInstance(async (instance) => {
+      process.env.OPENCODE_AUTH_CONTENT = JSON.stringify({ test: { type: "api", key: "secret" } })
+      process.env.OTEL_EXPORTER_OTLP_HEADERS = "authorization=otel"
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "https://otel.test"
+      process.env.OTEL_RESOURCE_ATTRIBUTES = "service.name=opencode-test"
 
-        const workspaceID = WorkspaceID.ascending("wrk_create_local")
-        const type = unique("create-local")
-        const targetDir = path.join(instance.directory, "created-local")
-        const recorded = recordedAdapter({
-          configure(info) {
-            return {
-              ...info,
-              branch: "configured-branch",
-              name: "Configured Name",
-              directory: targetDir,
-              extra: { configured: true },
-            }
-          },
-          async create() {
-            await fs.mkdir(targetDir, { recursive: true })
-          },
-          target() {
-            return { type: "local", directory: targetDir }
-          },
-        })
-        registerAdapter(instance.project.id, type, recorded.adapter)
+      const workspaceID = WorkspaceID.ascending("wrk_create_local")
+      const type = unique("create-local")
+      const targetDir = path.join(instance.directory, "created-local")
+      const recorded = recordedAdapter({
+        configure(info) {
+          return {
+            ...info,
+            branch: "configured-branch",
+            name: "Configured Name",
+            directory: targetDir,
+            extra: { configured: true },
+          }
+        },
+        async create() {
+          await fs.mkdir(targetDir, { recursive: true })
+        },
+        target() {
+          return { type: "local", directory: targetDir }
+        },
+      })
+      registerAdapter(instance.project.id, type, recorded.adapter)
 
-        const info = yield* Workspace.use.create({
-          id: workspaceID,
-          type,
-          branch: null,
-          projectID: instance.project.id,
-          extra: null,
-        })
+      const info = await createWorkspace({
+        id: workspaceID,
+        type,
+        branch: null,
+        projectID: instance.project.id,
+        extra: null,
+      })
 
-        expect(info).toEqual({
-          id: workspaceID,
-          type,
-          branch: "configured-branch",
-          name: "Configured Name",
-          directory: targetDir,
-          extra: { configured: true },
-          projectID: instance.project.id,
-          timeUsed: info.timeUsed,
-        })
-        expect(yield* Workspace.use.get(workspaceID)).toEqual(info)
-        expect(yield* Workspace.use.list(instance.project)).toEqual([info])
-        expect(recorded.calls.configure).toHaveLength(1)
-        expect(recorded.calls.configure[0]).toMatchObject({ id: workspaceID, type, directory: null })
-        expect(recorded.calls.create).toHaveLength(1)
-        expect(recorded.calls.create[0].info).toEqual({
-          id: workspaceID,
-          type,
-          branch: "configured-branch",
-          name: "Configured Name",
-          directory: targetDir,
-          extra: { configured: true },
-          projectID: instance.project.id,
-        })
-        expect(JSON.parse(recorded.calls.create[0].env.OPENCODE_AUTH_CONTENT ?? "{}")).toEqual({
-          test: { type: "api", key: "secret" },
-        })
-        expect(recorded.calls.create[0].env.OPENCODE_WORKSPACE_ID).toBe(workspaceID)
-        expect(recorded.calls.create[0].env.OPENCODE_EXPERIMENTAL_WORKSPACES).toBe("true")
-        expect(recorded.calls.create[0].env.OTEL_EXPORTER_OTLP_HEADERS).toBe("authorization=otel")
-        expect(recorded.calls.create[0].env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe("https://otel.test")
-        expect(recorded.calls.create[0].env.OTEL_RESOURCE_ATTRIBUTES).toBe("service.name=opencode-test")
-        expect((yield* Workspace.use.status()).find((item) => item.workspaceID === workspaceID)?.status).toBe(
-          "connected",
-        )
+      expect(info).toEqual({
+        id: workspaceID,
+        type,
+        branch: "configured-branch",
+        name: "Configured Name",
+        directory: targetDir,
+        extra: { configured: true },
+        projectID: instance.project.id,
+        timeUsed: info.timeUsed,
+      })
+      expect(await getWorkspace(workspaceID)).toEqual(info)
+      expect(await listWorkspaces(instance.project)).toEqual([info])
+      expect(recorded.calls.configure).toHaveLength(1)
+      expect(recorded.calls.configure[0]).toMatchObject({ id: workspaceID, type, directory: null })
+      expect(recorded.calls.create).toHaveLength(1)
+      expect(recorded.calls.create[0].info).toEqual({
+        id: workspaceID,
+        type,
+        branch: "configured-branch",
+        name: "Configured Name",
+        directory: targetDir,
+        extra: { configured: true },
+        projectID: instance.project.id,
+      })
+      expect(JSON.parse(recorded.calls.create[0].env.OPENCODE_AUTH_CONTENT ?? "{}")).toEqual({
+        test: { type: "api", key: "secret" },
+      })
+      expect(recorded.calls.create[0].env.OPENCODE_WORKSPACE_ID).toBe(workspaceID)
+      expect(recorded.calls.create[0].env.OPENCODE_EXPERIMENTAL_WORKSPACES).toBe("true")
+      expect(recorded.calls.create[0].env.OTEL_EXPORTER_OTLP_HEADERS).toBe("authorization=otel")
+      expect(recorded.calls.create[0].env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe("https://otel.test")
+      expect(recorded.calls.create[0].env.OTEL_RESOURCE_ATTRIBUTES).toBe("service.name=opencode-test")
+      expect((await workspaceStatus()).find((item) => item.workspaceID === workspaceID)?.status).toBe("connected")
 
-        yield* Workspace.use.remove(workspaceID)
-        expect((yield* Workspace.use.status()).find((item) => item.workspaceID === workspaceID)?.status).toBeUndefined()
-      }),
-    { git: true },
-  )
+      await removeWorkspace(workspaceID)
+      expect((await workspaceStatus()).find((item) => item.workspaceID === workspaceID)?.status).toBeUndefined()
+    })
+  })
 
-  it.instance(
-    "create propagates configure failures and does not insert a workspace",
-    () =>
-      Effect.gen(function* () {
-        const instance = yield* InstanceState.context
-        const type = unique("configure-failure")
-        registerAdapter(
-          instance.project.id,
-          type,
-          recordedAdapter({
-            configure() {
-              throw new Error("configure exploded")
-            },
-            target() {
-              return { type: "local", directory: "/unused" }
-            },
-          }).adapter,
-        )
-
-        const exit = yield* Workspace.use
-          .create({ type, branch: null, projectID: instance.project.id, extra: null })
-          .pipe(Effect.exit)
-        expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit)) expect(String(exit.cause)).toContain("configure exploded")
-        expect(yield* Workspace.use.list(instance.project)).toEqual([])
-      }),
-    { git: true },
-  )
-
-  it.instance(
-    "create leaves the inserted row when adapter create fails",
-    () =>
-      Effect.gen(function* () {
-        const instance = yield* InstanceState.context
-        const type = unique("create-failure")
-        const recorded = recordedAdapter({
-          async create() {
-            throw new Error("create exploded")
+  test("create propagates configure failures and does not insert a workspace", async () => {
+    await withInstance(async (instance) => {
+      const type = unique("configure-failure")
+      registerAdapter(
+        instance.project.id,
+        type,
+        recordedAdapter({
+          configure() {
+            throw new Error("configure exploded")
           },
           target() {
             return { type: "local", directory: "/unused" }
           },
-        })
-        registerAdapter(instance.project.id, type, recorded.adapter)
+        }).adapter,
+      )
 
-        const exit = yield* Workspace.use
-          .create({ type, branch: "branch", projectID: instance.project.id, extra: { x: 1 } })
-          .pipe(Effect.exit)
-        expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit)) expect(String(exit.cause)).toContain("create exploded")
+      await expect(
+        createWorkspace({ type, branch: null, projectID: instance.project.id, extra: null }),
+      ).rejects.toThrow("configure exploded")
+      expect(await listWorkspaces(instance.project)).toEqual([])
+    })
+  })
 
-        const rows = yield* Workspace.use.list(instance.project)
-        expect(rows).toHaveLength(1)
-        expect(rows[0]).toMatchObject({ type, branch: "branch", extra: { x: 1 } })
-        expect(recorded.calls.target).toHaveLength(0)
-        yield* Workspace.use.remove(rows[0].id)
-      }),
-    { git: true },
-  )
+  test("create leaves the inserted row when adapter create fails", async () => {
+    await withInstance(async (instance) => {
+      const type = unique("create-failure")
+      const recorded = recordedAdapter({
+        async create() {
+          throw new Error("create exploded")
+        },
+        target() {
+          return { type: "local", directory: "/unused" }
+        },
+      })
+      registerAdapter(instance.project.id, type, recorded.adapter)
 
-  it.instance(
-    "create returns after a local workspace reports error",
-    () =>
-      Effect.gen(function* () {
-        const instance = yield* InstanceState.context
-        const type = unique("local-error")
-        const missing = path.join(instance.directory, "missing-local-target")
-        const recorded = localAdapter(missing, { createDir: false })
-        registerAdapter(instance.project.id, type, recorded.adapter)
+      await expect(
+        createWorkspace({ type, branch: "branch", projectID: instance.project.id, extra: { x: 1 } }),
+      ).rejects.toThrow("create exploded")
 
-        const info = yield* Workspace.use.create({ type, branch: null, projectID: instance.project.id, extra: null })
+      const rows = await listWorkspaces(instance.project)
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({ type, branch: "branch", extra: { x: 1 } })
+      expect(recorded.calls.target).toHaveLength(0)
+      await removeWorkspace(rows[0].id)
+    })
+  })
 
-        expect(info.directory).toBe(missing)
-        expect((yield* Workspace.use.status()).find((item) => item.workspaceID === info.id)?.status).toBe("error")
-        yield* Workspace.use.remove(info.id)
-      }),
-    { git: true },
-  )
+  test("create returns after a local workspace reports error", async () => {
+    await withInstance(async (instance) => {
+      const type = unique("local-error")
+      const missing = path.join(instance.directory, "missing-local-target")
+      const recorded = localAdapter(missing, { createDir: false })
+      registerAdapter(instance.project.id, type, recorded.adapter)
 
-  it.instance(
-    "syncList registers adapter-listed workspaces that are missing by name",
-    () =>
-      Effect.gen(function* () {
-        const instance = yield* InstanceState.context
-        const type = unique("list-sync")
-        const existing = workspaceInfo(instance.project.id, type, {
-          id: WorkspaceID.ascending("wrk_list_sync_existing"),
-          name: "existing",
-          directory: path.join(instance.directory, "existing"),
-        })
-        insertWorkspace(existing)
+      const info = await createWorkspace({ type, branch: null, projectID: instance.project.id, extra: null })
 
-        const discovered = {
-          type,
-          name: "discovered",
-          branch: "feature/discovered",
-          directory: path.join(instance.directory, "discovered"),
-          extra: { source: "adapter" },
-          projectID: instance.project.id,
-        }
-        const recorded = recordedAdapter({
-          list() {
-            return [
-              {
-                type,
-                name: existing.name,
-                branch: "ignored",
-                directory: path.join(instance.directory, "ignored"),
-                extra: null,
-                projectID: instance.project.id,
-              },
-              discovered,
-            ]
-          },
-          target(info) {
-            return { type: "local", directory: info.directory ?? instance.directory }
-          },
-        })
-        registerAdapter(instance.project.id, type, recorded.adapter)
+      expect(info.directory).toBe(missing)
+      expect((await workspaceStatus()).find((item) => item.workspaceID === info.id)?.status).toBe("error")
+      await removeWorkspace(info.id)
+    })
+  })
 
-        yield* Workspace.use.syncList(instance.project)
-        const synced = (yield* Workspace.use.list(instance.project)).filter((item) => item.name === discovered.name)
+  test("syncList registers adapter-listed workspaces that are missing by name", async () => {
+    await withInstance(async (instance) => {
+      const type = unique("list-sync")
+      const existing = workspaceInfo(instance.project.id, type, {
+        id: WorkspaceID.ascending("wrk_list_sync_existing"),
+        name: "existing",
+        directory: path.join(instance.directory, "existing"),
+      })
+      insertWorkspace(existing)
 
-        expect(synced).toHaveLength(1)
-        expect(synced[0]).toMatchObject(discovered)
-        expect(synced[0]?.id).toStartWith("wrk_")
-        expect(yield* Workspace.use.list(instance.project)).toEqual(expect.arrayContaining([existing, synced[0]]))
-        expect(recorded.calls.list).toBe(1)
-        expect(recorded.calls.configure).toHaveLength(0)
-        expect(recorded.calls.create).toHaveLength(0)
-        expect(recorded.calls.target).toHaveLength(1)
-      }),
-    { git: true },
-  )
+      const discovered = {
+        type,
+        name: "discovered",
+        branch: "feature/discovered",
+        directory: path.join(instance.directory, "discovered"),
+        extra: { source: "adapter" },
+        projectID: instance.project.id,
+      }
+      const recorded = recordedAdapter({
+        list() {
+          return [
+            {
+              type,
+              name: existing.name,
+              branch: "ignored",
+              directory: path.join(instance.directory, "ignored"),
+              extra: null,
+              projectID: instance.project.id,
+            },
+            discovered,
+          ]
+        },
+        target(info) {
+          return { type: "local", directory: info.directory ?? instance.directory }
+        },
+      })
+      registerAdapter(instance.project.id, type, recorded.adapter)
 
-  it.instance(
-    "syncList calls every registered adapter with a list method",
-    () =>
-      Effect.gen(function* () {
-        const instance = yield* InstanceState.context
-        const typeA = unique("list-sync-a")
-        const typeB = unique("list-sync-b")
-        const adapterA = recordedAdapter({
-          list() {
-            return [
-              {
-                type: typeA,
-                name: "adapter-a",
-                branch: null,
-                directory: path.join(instance.directory, "adapter-a"),
-                extra: null,
-                projectID: instance.project.id,
-              },
-            ]
-          },
-          target(info) {
-            return { type: "local", directory: info.directory ?? instance.directory }
-          },
-        })
-        const adapterB = recordedAdapter({
-          list() {
-            return [
-              {
-                type: typeB,
-                name: "adapter-b",
-                branch: null,
-                directory: path.join(instance.directory, "adapter-b"),
-                extra: null,
-                projectID: instance.project.id,
-              },
-            ]
-          },
-          target(info) {
-            return { type: "local", directory: info.directory ?? instance.directory }
-          },
-        })
-        const noList = recordedAdapter({
-          target() {
-            return { type: "local", directory: instance.directory }
-          },
-        })
-        registerAdapter(instance.project.id, typeA, adapterA.adapter)
-        registerAdapter(instance.project.id, typeB, adapterB.adapter)
-        registerAdapter(instance.project.id, unique("list-sync-none"), noList.adapter)
+      await syncListWorkspaces(instance.project)
+      const synced = (await listWorkspaces(instance.project)).filter((item) => item.name === discovered.name)
 
-        yield* Workspace.use.syncList(instance.project)
-        const synced = yield* Workspace.use.list(instance.project)
+      expect(synced).toHaveLength(1)
+      expect(synced[0]).toMatchObject(discovered)
+      expect(synced[0]?.id).toStartWith("wrk_")
+      expect(await listWorkspaces(instance.project)).toEqual(expect.arrayContaining([existing, synced[0]]))
+      expect(recorded.calls.list).toBe(1)
+      expect(recorded.calls.configure).toHaveLength(0)
+      expect(recorded.calls.create).toHaveLength(0)
+      expect(recorded.calls.target).toHaveLength(1)
+    })
+  })
 
-        expect(
-          synced
-            .filter((item) => item.type === typeA || item.type === typeB)
-            .map((item) => item.name)
-            .toSorted(),
-        ).toEqual(["adapter-a", "adapter-b"])
-        expect(adapterA.calls.list).toBe(1)
-        expect(adapterB.calls.list).toBe(1)
-        expect(noList.calls.list).toBe(0)
-      }),
-    { git: true },
-  )
+  test("syncList calls every registered adapter with a list method", async () => {
+    await withInstance(async (instance) => {
+      const typeA = unique("list-sync-a")
+      const typeB = unique("list-sync-b")
+      const adapterA = recordedAdapter({
+        list() {
+          return [
+            {
+              type: typeA,
+              name: "adapter-a",
+              branch: null,
+              directory: path.join(instance.directory, "adapter-a"),
+              extra: null,
+              projectID: instance.project.id,
+            },
+          ]
+        },
+        target(info) {
+          return { type: "local", directory: info.directory ?? instance.directory }
+        },
+      })
+      const adapterB = recordedAdapter({
+        list() {
+          return [
+            {
+              type: typeB,
+              name: "adapter-b",
+              branch: null,
+              directory: path.join(instance.directory, "adapter-b"),
+              extra: null,
+              projectID: instance.project.id,
+            },
+          ]
+        },
+        target(info) {
+          return { type: "local", directory: info.directory ?? instance.directory }
+        },
+      })
+      const noList = recordedAdapter({
+        target() {
+          return { type: "local", directory: instance.directory }
+        },
+      })
+      registerAdapter(instance.project.id, typeA, adapterA.adapter)
+      registerAdapter(instance.project.id, typeB, adapterB.adapter)
+      registerAdapter(instance.project.id, unique("list-sync-none"), noList.adapter)
+
+      await syncListWorkspaces(instance.project)
+      const synced = await listWorkspaces(instance.project)
+
+      expect(
+        synced
+          .filter((item) => item.type === typeA || item.type === typeB)
+          .map((item) => item.name)
+          .toSorted(),
+      ).toEqual(["adapter-a", "adapter-b"])
+      expect(adapterA.calls.list).toBe(1)
+      expect(adapterB.calls.list).toBe(1)
+      expect(noList.calls.list).toBe(0)
+    })
+  })
 
   it.live("remote create connects to routed event and history endpoints", () => {
     const calls: FetchCall[] = []
@@ -747,14 +755,11 @@ describe("workspace CRUD", () => {
     })
   })
 
-  it.instance(
-    "remove returns undefined for a missing workspace",
-    () =>
-      Effect.gen(function* () {
-        expect(yield* Workspace.use.remove(WorkspaceID.ascending("wrk_missing_remove"))).toBeUndefined()
-      }),
-    { git: true },
-  )
+  test("remove returns undefined for a missing workspace", async () => {
+    await withInstance(async () => {
+      expect(await removeWorkspace(WorkspaceID.ascending("wrk_missing_remove"))).toBeUndefined()
+    })
+  })
 
   it.instance(
     "remove deletes the workspace, associated sessions, adapter resources, and status",
@@ -790,32 +795,28 @@ describe("workspace CRUD", () => {
     { git: true },
   )
 
-  it.instance(
-    "remove still deletes the row when the adapter cannot remove resources",
-    () =>
-      Effect.gen(function* () {
-        const instance = yield* InstanceState.context
-        const type = unique("remove-throws")
-        const info = workspaceInfo(instance.project.id, type, { id: WorkspaceID.ascending("wrk_remove_throws") })
-        registerAdapter(
-          instance.project.id,
-          type,
-          recordedAdapter({
-            async remove() {
-              throw new Error("remove exploded")
-            },
-            target() {
-              return { type: "local", directory: "/unused" }
-            },
-          }).adapter,
-        )
-        insertWorkspace(info)
+  test("remove still deletes the row when the adapter cannot remove resources", async () => {
+    await withInstance(async (instance) => {
+      const type = unique("remove-throws")
+      const info = workspaceInfo(instance.project.id, type, { id: WorkspaceID.ascending("wrk_remove_throws") })
+      registerAdapter(
+        instance.project.id,
+        type,
+        recordedAdapter({
+          async remove() {
+            throw new Error("remove exploded")
+          },
+          target() {
+            return { type: "local", directory: "/unused" }
+          },
+        }).adapter,
+      )
+      insertWorkspace(info)
 
-        expect(yield* Workspace.use.remove(info.id)).toEqual(info)
-        expect(yield* Workspace.use.get(info.id)).toBeUndefined()
-      }),
-    { git: true },
-  )
+      expect(await removeWorkspace(info.id)).toEqual(info)
+      expect(await getWorkspace(info.id)).toBeUndefined()
+    })
+  })
 
   it.instance(
     "sessionWarp moves a session into a local workspace and claims ownership",
@@ -923,40 +924,42 @@ describe("workspace CRUD", () => {
     { git: true },
   )
 
-  it.instance(
-    "sessionWarp detaches to the source project when invoked from a workspace instance",
-    () =>
-      Effect.gen(function* () {
-        const instance = yield* InstanceState.context
-        const projectID = instance.project.id
-        const workspaceDir = yield* tmpdirScoped({ git: true })
-        const previousType = unique("warp-detach-workspace-instance")
-        const previous = workspaceInfo(projectID, previousType)
-        insertWorkspace(previous)
-        registerAdapter(projectID, previousType, localAdapter(workspaceDir, { createDir: false }).adapter)
-        const session = yield* SessionNs.use.create({})
-        attachSessionToWorkspace(session.id, previous.id)
+  test("sessionWarp detaches to the source project when invoked from a workspace instance", async () => {
+    await withInstance(async (instance) => {
+      const projectID = instance.project.id
+      await using workspaceTmp = await tmpdir({ git: true })
+      const previousType = unique("warp-detach-workspace-instance")
+      const previous = workspaceInfo(projectID, previousType)
+      insertWorkspace(previous)
+      registerAdapter(projectID, previousType, localAdapter(workspaceTmp.path, { createDir: false }).adapter)
+      const session = await AppRuntime.runPromise(
+        SessionNs.use.create({}).pipe(Effect.provideService(InstanceRef, instance)),
+      )
+      attachSessionToWorkspace(session.id, previous.id)
 
-        const workspaceCtx = yield* InstanceStore.Service.use((store) => store.load({ directory: workspaceDir }))
-        expect(workspaceCtx.project.id).not.toBe(projectID)
-        yield* Workspace.use
-          .sessionWarp({ workspaceID: null, sessionID: session.id })
-          .pipe(Effect.provideService(InstanceRef, workspaceCtx))
+      const workspaceCtx = await AppRuntime.runPromise(
+        InstanceStore.use.load({ directory: workspaceTmp.path }),
+      )
+      const workspaceProjectID = await context.provide(workspaceCtx, async () => {
+        const id = workspaceCtx.project.id
+        expect(id).not.toBe(projectID)
+        await warpWorkspaceSession({ workspaceID: null, sessionID: session.id })
+        return id
+      })
 
-        expect(
-          Database.use((db) =>
-            db
-              .select({ workspaceID: SessionTable.workspace_id })
-              .from(SessionTable)
-              .where(eq(SessionTable.id, session.id))
-              .get(),
-          )?.workspaceID,
-        ).toBeNull()
-        expect(sessionSequenceOwner(session.id)).toBe(projectID)
-        expect(sessionSequenceOwner(session.id)).not.toBe(workspaceCtx.project.id)
-      }),
-    { git: true },
-  )
+      expect(
+        Database.use((db) =>
+          db
+            .select({ workspaceID: SessionTable.workspace_id })
+            .from(SessionTable)
+            .where(eq(SessionTable.id, session.id))
+            .get(),
+        )?.workspaceID,
+      ).toBeNull()
+      expect(sessionSequenceOwner(session.id)).toBe(projectID)
+      expect(sessionSequenceOwner(session.id)).not.toBe(workspaceProjectID)
+    })
+  })
 
   it.live("sessionWarp syncs previous remote history, replays it, steals, and claims the sequence", () => {
     const calls: FetchCall[] = []
@@ -1069,12 +1072,7 @@ describe("workspace sync state", () => {
         insertWorkspace(info)
         registerAdapter(instance.project.id, type, localAdapter(path.join(dir, "flag-disabled")).adapter)
 
-        // Isolated runtime with experimentalWorkspaces=false so we can verify the flag gates sync.
-        yield* Effect.promise(() =>
-          Effect.runPromise(
-            Workspace.use.startWorkspaceSyncing(instance.project.id).pipe(Effect.provide(workspaceLayer(false))),
-          ),
-        )
+        yield* Effect.promise(() => startWorkspaceSyncingWithFlag(instance.project.id, false))
         yield* Effect.sleep("25 millis")
 
         expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBeUndefined()
@@ -1565,111 +1563,89 @@ describe("workspace sync state", () => {
 })
 
 describe("workspace waitForSync", () => {
-  it.instance(
-    "returns immediately for an empty fence",
-    () =>
-      Effect.gen(function* () {
-        expect(yield* Workspace.use.waitForSync(WorkspaceID.ascending("wrk_wait_empty"), {})).toBeUndefined()
-      }),
-    { git: true },
-  )
+  test("returns immediately for an empty fence", async () => {
+    await withInstance(async () => {
+      await expect(waitForWorkspaceSync(WorkspaceID.ascending("wrk_wait_empty"), {})).resolves.toBeUndefined()
+    })
+  })
 
-  it.instance(
-    "returns immediately when the stored sequence already satisfies the fence",
-    () =>
-      Effect.gen(function* () {
-        const sessionID = SessionID.descending("ses_wait_done")
-        Database.use((db) => db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 4 }).run())
+  test("returns immediately when the stored sequence already satisfies the fence", async () => {
+    await withInstance(async () => {
+      const sessionID = SessionID.descending("ses_wait_done")
+      Database.use((db) => db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 4 }).run())
 
-        expect(
-          yield* Workspace.use.waitForSync(WorkspaceID.ascending("wrk_wait_done"), { [sessionID]: 4 }),
-        ).toBeUndefined()
-        expect(
-          yield* Workspace.use.waitForSync(WorkspaceID.ascending("wrk_wait_done_2"), { [sessionID]: 3 }),
-        ).toBeUndefined()
-      }),
-    { git: true },
-  )
+      await expect(
+        waitForWorkspaceSync(WorkspaceID.ascending("wrk_wait_done"), { [sessionID]: 4 }),
+      ).resolves.toBeUndefined()
+      await expect(
+        waitForWorkspaceSync(WorkspaceID.ascending("wrk_wait_done_2"), { [sessionID]: 3 }),
+      ).resolves.toBeUndefined()
+    })
+  })
 
-  it.instance(
-    "waits until the database reaches the requested sequence and a workspace event arrives",
-    () =>
-      Effect.gen(function* () {
-        const workspaceID = WorkspaceID.ascending("wrk_wait_event")
-        const sessionID = SessionID.descending("ses_wait_event")
-        Database.use((db) => db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 1 }).run())
+  test("waits until the database reaches the requested sequence and a workspace event arrives", async () => {
+    await withInstance(async () => {
+      const workspaceID = WorkspaceID.ascending("wrk_wait_event")
+      const sessionID = SessionID.descending("ses_wait_event")
+      Database.use((db) => db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 1 }).run())
 
-        const waited = yield* Workspace.use.waitForSync(workspaceID, { [sessionID]: 2 }).pipe(Effect.forkScoped)
-        yield* Effect.sleep("10 millis")
-        Database.use((db) =>
-          db.update(EventSequenceTable).set({ seq: 2 }).where(eq(EventSequenceTable.aggregate_id, sessionID)).run(),
-        )
-        GlobalBus.emit("event", { workspace: workspaceID, payload: { type: "anything" } })
+      const waited = waitForWorkspaceSync(workspaceID, { [sessionID]: 2 })
+      await delay(10)
+      Database.use((db) =>
+        db.update(EventSequenceTable).set({ seq: 2 }).where(eq(EventSequenceTable.aggregate_id, sessionID)).run(),
+      )
+      GlobalBus.emit("event", { workspace: workspaceID, payload: { type: "anything" } })
 
-        expect(yield* Fiber.join(waited)).toBeUndefined()
-      }),
-    { git: true },
-  )
+      await expect(waited).resolves.toBeUndefined()
+    })
+  })
 
-  it.instance(
-    "a sync event for a different workspace can also release the fence",
-    () =>
-      Effect.gen(function* () {
-        const workspaceID = WorkspaceID.ascending("wrk_wait_sync_any")
-        const sessionID = SessionID.descending("ses_wait_sync_any")
-        Database.use((db) => db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 0 }).run())
+  test("a sync event for a different workspace can also release the fence", async () => {
+    await withInstance(async () => {
+      const workspaceID = WorkspaceID.ascending("wrk_wait_sync_any")
+      const sessionID = SessionID.descending("ses_wait_sync_any")
+      Database.use((db) => db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 0 }).run())
 
-        const waited = yield* Workspace.use.waitForSync(workspaceID, { [sessionID]: 1 }).pipe(Effect.forkScoped)
-        yield* Effect.sleep("10 millis")
-        Database.use((db) =>
-          db.update(EventSequenceTable).set({ seq: 1 }).where(eq(EventSequenceTable.aggregate_id, sessionID)).run(),
-        )
-        GlobalBus.emit("event", {
-          workspace: WorkspaceID.ascending("wrk_other_workspace"),
-          payload: { type: "sync" },
-        })
+      const waited = waitForWorkspaceSync(workspaceID, { [sessionID]: 1 })
+      await delay(10)
+      Database.use((db) =>
+        db.update(EventSequenceTable).set({ seq: 1 }).where(eq(EventSequenceTable.aggregate_id, sessionID)).run(),
+      )
+      GlobalBus.emit("event", {
+        workspace: WorkspaceID.ascending("wrk_other_workspace"),
+        payload: { type: "sync" },
+      })
 
-        expect(yield* Fiber.join(waited)).toBeUndefined()
-      }),
-    { git: true },
-  )
+      await expect(waited).resolves.toBeUndefined()
+    })
+  })
 
-  it.instance(
-    "rejects with the abort reason when aborted",
-    () =>
-      Effect.gen(function* () {
-        const abort = new AbortController()
-        const reason = new Error("caller aborted")
-        const waited = yield* Workspace.use
-          .waitForSync(
-            WorkspaceID.ascending("wrk_wait_abort"),
-            { [SessionID.descending("ses_wait_abort")]: 1 },
-            abort.signal,
-          )
-          .pipe(Effect.flip, Effect.forkScoped)
-        abort.abort(reason)
-        const error = yield* Fiber.join(waited)
-        expect(error).toMatchObject({
-          _tag: "WorkspaceSyncAbortedError",
-          message: reason.message,
-          cause: reason,
-        })
-      }),
-    { git: true },
-  )
+  test("rejects with the abort reason when aborted", async () => {
+    await withInstance(async () => {
+      const abort = new AbortController()
+      const reason = new Error("caller aborted")
+      const waited = waitForWorkspaceSync(
+        WorkspaceID.ascending("wrk_wait_abort"),
+        { [SessionID.descending("ses_wait_abort")]: 1 },
+        abort.signal,
+      )
+      abort.abort(reason)
 
-  it.instance(
-    "times out with the requested fence in the error message",
-    () =>
-      Effect.gen(function* () {
-        const sessionID = SessionID.descending("ses_wait_timeout")
+      await expect(waited).rejects.toMatchObject({
+        _tag: "WorkspaceSyncAbortedError",
+        message: reason.message,
+        cause: reason,
+      })
+    })
+  })
 
-        const failure = yield* Workspace.use
-          .waitForSync(WorkspaceID.ascending("wrk_wait_timeout"), { [sessionID]: 1 }, undefined, 25)
-          .pipe(Effect.flip)
-        expect(String(failure)).toContain(`Timed out waiting for sync fence: {"${sessionID}":1}`)
-      }),
-    { git: true, config: undefined },
-    7000,
-  )
+  test("times out with the requested fence in the error message", async () => {
+    await withInstance(async () => {
+      const sessionID = SessionID.descending("ses_wait_timeout")
+
+      await expect(
+        waitForWorkspaceSync(WorkspaceID.ascending("wrk_wait_timeout"), { [sessionID]: 1 }, undefined, 25),
+      ).rejects.toThrow(`Timed out waiting for sync fence: {"${sessionID}":1}`)
+    })
+  }, 7000)
 })

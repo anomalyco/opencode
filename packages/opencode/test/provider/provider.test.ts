@@ -35,14 +35,14 @@ const set = (k: string, v: string) =>
   Effect.gen(function* () {
     rememberEnv(k)
     process.env[k] = v
-    yield* Env.Service.use((svc) => svc.set(k, v))
+    yield* Env.use.set(k, v)
   })
 
 const remove = (k: string) =>
   Effect.gen(function* () {
     rememberEnv(k)
     delete process.env[k]
-    yield* Env.Service.use((svc) => svc.remove(k))
+    yield* Env.use.remove(k)
   })
 
 afterEach(async () => {
@@ -332,7 +332,7 @@ test("parseModel handles model IDs with slashes", () => {
 it.instance("defaultModel returns first available model when no config set", () =>
   Effect.gen(function* () {
     yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
-    const model = yield* Provider.Service.use((provider) => provider.defaultModel())
+    const model = yield* Provider.use.defaultModel()
     expect(model.providerID).toBeDefined()
     expect(model.modelID).toBeDefined()
   }),
@@ -342,7 +342,7 @@ it.instance(
   "defaultModel respects config model setting",
   Effect.gen(function* () {
     yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
-    const model = yield* Provider.Service.use((provider) => provider.defaultModel())
+    const model = yield* Provider.use.defaultModel()
     expect(String(model.providerID)).toBe("anthropic")
     expect(String(model.modelID)).toBe("claude-sonnet-4-20250514")
   }),
@@ -1032,7 +1032,7 @@ it.instance("getProvider returns undefined for nonexistent provider", () =>
 it.instance("getProvider returns provider info", () =>
   Effect.gen(function* () {
     yield* set("ANTHROPIC_API_KEY", "test-api-key")
-    const provider = yield* Provider.Service.use((svc) => svc.getProvider(ProviderID.anthropic))
+    const provider = yield* Provider.use.getProvider(ProviderID.anthropic)
     expect(provider).toBeDefined()
     expect(String(provider?.id)).toBe("anthropic")
   }),
@@ -1680,7 +1680,7 @@ it.effect("opencode loader keeps paid models when config apiKey is present", () 
     })
 
     const listIn = (directory: string) =>
-      Provider.Service.use((svc) => svc.list())
+      Provider.use.list()
         .pipe(provideInstanceEffect(directory))
         .pipe(Effect.provide(InstanceLayer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer))
 
@@ -1698,7 +1698,7 @@ it.effect("opencode loader keeps paid models when auth exists", () =>
     const keyedDir = yield* tmpdirScoped()
 
     const listIn = (directory: string) =>
-      Provider.Service.use((svc) => svc.list())
+      Provider.use.list()
         .pipe(provideInstanceEffect(directory))
         .pipe(Effect.provide(InstanceLayer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer))
 
