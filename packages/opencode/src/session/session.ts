@@ -256,6 +256,7 @@ export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInpu
 export const ForkInput = Schema.Struct({
   sessionID: SessionID,
   messageID: Schema.optional(MessageID),
+  inclusive: Schema.optional(Schema.Boolean),
 })
 export const GetInput = SessionID
 export const ChildrenInput = SessionID
@@ -677,7 +678,11 @@ export const layer: Layer.Layer<
       })
     })
 
-    const fork = Effect.fn("Session.fork")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
+    const fork = Effect.fn("Session.fork")(function* (input: {
+      sessionID: SessionID
+      messageID?: MessageID
+      inclusive?: boolean
+    }) {
       const ctx = yield* InstanceState.context
       const original = yield* get(input.sessionID)
       const title = getForkedTitle(original.title)
@@ -691,7 +696,7 @@ export const layer: Layer.Layer<
       const idMap = new Map<string, MessageID>()
 
       for (const msg of msgs) {
-        if (input.messageID && msg.info.id >= input.messageID) break
+        if (input.messageID && (input.inclusive ? msg.info.id > input.messageID : msg.info.id >= input.messageID)) break
         const newID = MessageID.ascending()
         idMap.set(msg.info.id, newID)
 

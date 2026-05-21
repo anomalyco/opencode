@@ -77,23 +77,30 @@ export function DialogMessage(props: {
           value: "session.fork",
           description: "create a new session",
           onSelect: async (dialog) => {
+            const msg = message()
+            const isAssistant = msg?.role === "assistant"
+            // For assistant messages, use the next message's id as the exclusive cutoff
+            // so the assistant message itself is included in the fork.
+            const messages = sync.data.message[props.sessionID] ?? []
+            const idx = messages.findIndex((m) => m.id === props.messageID)
+            const cutoffID = isAssistant ? messages[idx + 1]?.id : props.messageID
             const result = await sdk.client.session.fork({
               sessionID: props.sessionID,
-              messageID: props.messageID,
+              messageID: cutoffID,
             })
-            const msg = message()
-            const prompt = msg
-              ? sync.data.part[msg.id].reduce(
-                  (agg, part) => {
-                    if (part.type === "text") {
-                      if (!part.synthetic) agg.input += part.text
-                    }
-                    if (part.type === "file") agg.parts.push(part)
-                    return agg
-                  },
-                  { input: "", parts: [] as PromptInfo["parts"] },
-                )
-              : undefined
+            const prompt =
+              !isAssistant && msg
+                ? sync.data.part[msg.id].reduce(
+                    (agg, part) => {
+                      if (part.type === "text") {
+                        if (!part.synthetic) agg.input += part.text
+                      }
+                      if (part.type === "file") agg.parts.push(part)
+                      return agg
+                    },
+                    { input: "", parts: [] as PromptInfo["parts"] },
+                  )
+                : undefined
             route.navigate({
               sessionID: result.data!.id,
               type: "session",

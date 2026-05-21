@@ -34,40 +34,66 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
       },
     } satisfies DialogSelectOption<string | undefined>
     const result = [] as DialogSelectOption<string | undefined>[]
-    for (const message of messages) {
-      if (message.role !== "user") continue
-      const part = (sync.data.part[message.id] ?? []).find(
-        (x) => x.type === "text" && !x.synthetic && !x.ignored,
-      ) as TextPart
-      if (!part) continue
-      result.push({
-        title: part.text.replace(/\n/g, " "),
-        value: message.id,
-        footer: Locale.time(message.time.created),
-        onSelect: async (dialog) => {
-          const forked = await sdk.client.session.fork({
-            sessionID: props.sessionID,
-            messageID: message.id,
-          })
-          const parts = sync.data.part[message.id] ?? []
-          const prompt = parts.reduce(
-            (agg, part) => {
-              if (part.type === "text") {
-                if (!part.synthetic) agg.input += part.text
-              }
-              if (part.type === "file") agg.parts.push(strip(part))
-              return agg
-            },
-            { input: "", parts: [] as PromptInfo["parts"] },
-          )
-          route.navigate({
-            sessionID: forked.data!.id,
-            type: "session",
-            prompt,
-          })
-          dialog.clear()
-        },
-      })
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i]
+      if (message.role === "user") {
+        const part = (sync.data.part[message.id] ?? []).find(
+          (x) => x.type === "text" && !x.synthetic && !x.ignored,
+        ) as TextPart
+        if (!part) continue
+        result.push({
+          title: part.text.replace(/\n/g, " "),
+          value: message.id,
+          footer: Locale.time(message.time.created),
+          onSelect: async (dialog) => {
+            const forked = await sdk.client.session.fork({
+              sessionID: props.sessionID,
+              messageID: message.id,
+            })
+            const parts = sync.data.part[message.id] ?? []
+            const prompt = parts.reduce(
+              (agg, part) => {
+                if (part.type === "text") {
+                  if (!part.synthetic) agg.input += part.text
+                }
+                if (part.type === "file") agg.parts.push(strip(part))
+                return agg
+              },
+              { input: "", parts: [] as PromptInfo["parts"] },
+            )
+            route.navigate({
+              sessionID: forked.data!.id,
+              type: "session",
+              prompt,
+            })
+            dialog.clear()
+          },
+        })
+      } else if (message.role === "assistant") {
+        const part = (sync.data.part[message.id] ?? []).find(
+          (x) => x.type === "text" && !x.synthetic && !x.ignored,
+        ) as TextPart
+        if (!part) continue
+        // Use the next message's id as exclusive cutoff so this assistant message is included.
+        // If there's no next message, cutoffID is undefined → fork entire session.
+        const cutoffID = messages[i + 1]?.id
+        result.push({
+          title: `[assistant] ${part.text.replace(/\n/g, " ")}`,
+          value: message.id,
+          footer: Locale.time(message.time.created),
+          onSelect: async (dialog) => {
+            const forked = await sdk.client.session.fork({
+              sessionID: props.sessionID,
+              messageID: cutoffID,
+            })
+            route.navigate({
+              sessionID: forked.data!.id,
+              type: "session",
+            })
+            dialog.clear()
+          },
+        })
+      }
     }
     return [fullSession, ...result.reverse()]
   })
