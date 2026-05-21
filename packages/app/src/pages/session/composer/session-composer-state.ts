@@ -1,3 +1,4 @@
+import { createMediaQuery } from "@solid-primitives/media"
 import { createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { PermissionRequest, QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
@@ -30,6 +31,7 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
   const globalSync = useGlobalSync()
   const language = useLanguage()
   const permission = usePermission()
+  const isDesktop = createMediaQuery("(min-width: 768px)")
 
   const questionRequest = createMemo((): QuestionRequest | undefined => {
     return sessionQuestionRequest(sync.data.session, sync.data.question, params.id)
@@ -117,8 +119,8 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
 
   createEffect(
     on(
-      () => [todos().length, done(), live()] as const,
-      ([count, complete, active]) => {
+      () => [todos().length, done(), live(), isDesktop()] as const,
+      ([count, complete, active, desktop]) => {
         if (raf) cancelAnimationFrame(raf)
         raf = undefined
 
@@ -138,7 +140,8 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
         if (next === "clear") {
           if (timer) window.clearTimeout(timer)
           timer = undefined
-          clear()
+          // Desktop plan panel keeps todos until the user dismisses it.
+          if (!desktop) clear()
           return
         }
 

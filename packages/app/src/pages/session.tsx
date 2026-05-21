@@ -51,6 +51,7 @@ import {
   shouldFocusTerminalOnKeyDown,
 } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
+import { SessionPlanPanel } from "@/pages/session/session-plan-panel"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
@@ -264,6 +265,19 @@ export default function Page() {
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
+  const planPanelHidden = createMemo(
+    () => !isDesktop() || desktopSidePanelOpen() || view().planPanelDismissed.get(),
+  )
+
+  createEffect(
+    on(
+      () => composer.todos().length,
+      (count, prev) => {
+        if (count > 0 && (prev === undefined || prev === 0)) view().planPanelDismissed.set(false)
+      },
+    ),
+  )
+
   const sessionPanelWidth = createMemo(() => {
     if (!desktopSidePanelOpen()) return "100%"
     if (desktopReviewOpen()) return `${layout.session.width()}px`
@@ -1689,7 +1703,7 @@ export default function Page() {
             width: sessionPanelWidth(),
           }}
         >
-          <div class="flex-1 min-h-0 overflow-hidden">
+          <div class="relative flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id && mobileChanges()}>
                 <div class="relative h-full overflow-hidden">
@@ -1707,6 +1721,11 @@ export default function Page() {
               </Match>
               <Match when={params.id}>
                 <Show when={messagesReady()}>
+                  <SessionPlanPanel
+                    todos={composer.todos()}
+                    hidden={planPanelHidden()}
+                    onDismiss={() => view().planPanelDismissed.set(true)}
+                  />
                   <MessageTimeline
                     actions={actions}
                     scroll={ui.scroll}

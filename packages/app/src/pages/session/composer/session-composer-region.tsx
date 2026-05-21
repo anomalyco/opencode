@@ -1,5 +1,6 @@
 import { Show, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
+import { createMediaQuery } from "@solid-primitives/media"
 import { useNavigate } from "@solidjs/router"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { useLayout } from "@/context/layout"
@@ -53,6 +54,7 @@ export function SessionComposerRegion(props: {
   const route = useSessionKey()
   const sync = useSync()
   const view = layout.view(route.sessionKey)
+  const isDesktop = createMediaQuery("(min-width: 768px)")
 
   const handoffPrompt = createMemo(() => getSessionHandoff(route.sessionKey())?.prompt)
   const info = createMemo(() => (route.params.id ? sync.session.get(route.params.id) : undefined))
@@ -119,9 +121,13 @@ export function SessionComposerRegion(props: {
   const open = createMemo(() => store.ready && props.state.dock() && !props.state.closing())
   const progress = useSpring(() => (open() ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
   const value = createMemo(() => Math.max(0, Math.min(1, progress())))
-  const dock = createMemo(() => (store.ready && props.state.dock()) || value() > 0.001)
   const rolled = createMemo(() => (props.revert?.items.length ? props.revert : undefined))
-  const lift = createMemo(() => (rolled() ? 18 : 36 * value()))
+  const dock = createMemo(() => (store.ready && props.state.dock()) || value() > 0.001)
+  const composerTodoDock = createMemo(() => dock() && !isDesktop())
+  const lift = createMemo(() => {
+    if (isDesktop()) return rolled() ? 18 : 0
+    return rolled() ? 18 : 36 * value()
+  })
   const full = createMemo(() => Math.max(78, store.height))
 
   const openParent = () => {
@@ -196,7 +202,7 @@ export function SessionComposerRegion(props: {
               </>
             }
           >
-            <Show when={dock()}>
+            <Show when={composerTodoDock()}>
               <div
                 classList={{
                   "overflow-hidden": true,

@@ -559,6 +559,8 @@ export const dict = {
 
   "session.context.addToContext": "Add {{selection}} to context",
   "session.todo.title": "Todos",
+  "session.plan.title": "Progress",
+  "session.plan.hide": "Hide progress",
   "session.todo.collapse": "Collapse",
   "session.todo.expand": "Expand",
   "session.todo.progress": "{{done}} of {{total}} todos completed",
