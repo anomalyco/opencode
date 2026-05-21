@@ -52,7 +52,7 @@ function pathFor(path: string, params: Record<string, string>) {
 }
 
 function createSession(input?: Session.CreateInput) {
-  return Session.Service.use((svc) => svc.create(input))
+  return Session.use.create(input)
 }
 
 function createTextMessage(sessionID: SessionIDType, text: string) {
@@ -101,7 +101,7 @@ const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: stri
         }),
       )
     }),
-    (info) => Workspace.Service.use((svc) => svc.remove(info.id)).pipe(Effect.ignore),
+    (info) => Workspace.use.remove(info.id).pipe(Effect.ignore),
   )
 
 const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>
@@ -398,6 +398,46 @@ describe("session HttpApi", () => {
           _tag: "InvalidCursorError",
           message: "Invalid cursor",
         })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "returns v2 public not found errors for missing sessions",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const missing = SessionID.descending()
+        const expected = {
+          _tag: "SessionNotFoundError",
+          sessionID: missing,
+          message: `Session not found: ${missing}`,
+        }
+
+        const messages = yield* request(`/api/session/${missing}/message`, { headers })
+        expect(messages.status).toBe(404)
+        expect(yield* responseJson(messages)).toEqual(expected)
+
+        const context = yield* request(`/api/session/${missing}/context`, { headers })
+        expect(context.status).toBe(404)
+        expect(yield* responseJson(context)).toEqual(expected)
+
+        const compact = yield* request(`/api/session/${missing}/compact`, { method: "POST", headers })
+        expect(compact.status).toBe(404)
+        expect(yield* responseJson(compact)).toEqual(expected)
+
+        const wait = yield* request(`/api/session/${missing}/wait`, { method: "POST", headers })
+        expect(wait.status).toBe(404)
+        expect(yield* responseJson(wait)).toEqual(expected)
+
+        const prompt = yield* request(`/api/session/${missing}/prompt`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ prompt: { text: "hello" } }),
+        })
+        expect(prompt.status).toBe(404)
+        expect(yield* responseJson(prompt)).toEqual(expected)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

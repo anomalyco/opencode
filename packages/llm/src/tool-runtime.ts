@@ -11,7 +11,8 @@ import {
   ToolCallPart,
   ToolFailure,
   ToolResultPart,
-  type ToolResultValue,
+  ToolResultValue,
+  type ToolResultValue as ToolResultValueType,
   Usage,
 } from "./schema"
 import { type AnyTool, type ExecutableTools, type Tools, toDefinitions } from "./tool"
@@ -276,7 +277,10 @@ const appendStreamingText = (
   state.assistantContent.push({ type, text, providerMetadata })
 }
 
-const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<{ result: ToolResultValue; error?: unknown }> => {
+const dispatch = (
+  tools: Tools,
+  call: ToolCallPart,
+): Effect.Effect<{ result: ToolResultValueType; error?: unknown }> => {
   const tool = tools[call.name]
   if (!tool) return Effect.succeed({ result: { type: "error" as const, value: `Unknown tool: ${call.name}` } })
   if (!tool.execute)
@@ -285,7 +289,7 @@ const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<{ result: Too
   return decodeAndExecute(tool, call).pipe(
     Effect.catchTag("LLM.ToolFailure", (failure) =>
       Effect.succeed({
-        result: { type: "error" as const, value: failure.message } satisfies ToolResultValue,
+        result: { type: "error" as const, value: failure.message } satisfies ToolResultValueType,
         error: failure.error,
       }),
     ),
@@ -293,7 +297,7 @@ const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<{ result: Too
   )
 }
 
-const decodeAndExecute = (tool: AnyTool, call: ToolCallPart): Effect.Effect<ToolResultValue, ToolFailure> =>
+const decodeAndExecute = (tool: AnyTool, call: ToolCallPart): Effect.Effect<ToolResultValueType, ToolFailure> =>
   tool._decode(call.input).pipe(
     Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
     Effect.flatMap((decoded) => tool.execute!(decoded, { id: call.id, name: call.name })),
@@ -307,10 +311,12 @@ const decodeAndExecute = (tool: AnyTool, call: ToolCallPart): Effect.Effect<Tool
         ),
       ),
     ),
-    Effect.map((encoded): ToolResultValue => ({ type: "json", value: encoded })),
+    Effect.map(
+      (encoded): ToolResultValueType => (ToolResultValue.is(encoded) ? encoded : { type: "json", value: encoded }),
+    ),
   )
 
-const emitEvents = (call: ToolCallPart, result: ToolResultValue, error: unknown): ReadonlyArray<LLMEvent> =>
+const emitEvents = (call: ToolCallPart, result: ToolResultValueType, error: unknown): ReadonlyArray<LLMEvent> =>
   result.type === "error"
     ? [
         LLMEvent.toolError({ id: call.id, name: call.name, message: String(result.value), error }),
@@ -321,7 +327,7 @@ const emitEvents = (call: ToolCallPart, result: ToolResultValue, error: unknown)
 const followUpRequest = (
   request: LLMRequest,
   state: StepState,
-  dispatched: ReadonlyArray<readonly [ToolCallPart, ToolResultValue]>,
+  dispatched: ReadonlyArray<readonly [ToolCallPart, ToolResultValueType]>,
 ) =>
   LLMRequest.update(request, {
     messages: [
