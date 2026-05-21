@@ -1,4 +1,4 @@
-[data-component="avatar"] {
+[data-component="avatar-v2"] {
   --avatar-bg: var(--v2-background-bg-layer-02);
   --avatar-fg: var(--v2-text-text-muted);
   --avatar-radius: 9999px;
@@ -26,7 +26,7 @@
   -webkit-user-select: none;
 }
 
-[data-component="avatar"]::before {
+[data-component="avatar-v2"]::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -34,30 +34,30 @@
   pointer-events: none;
 }
 
-[data-component="avatar"][data-has-image]::before {
+[data-component="avatar-v2"][data-has-image]::before {
   display: none;
 }
 
-[data-component="avatar"][data-kind="org"] {
+[data-component="avatar-v2"][data-kind="org"] {
   --avatar-radius: 6px;
 }
 
-[data-component="avatar"][data-kind="org"][data-size="normal"],
-[data-component="avatar"][data-kind="org"][data-size="small"] {
+[data-component="avatar-v2"][data-kind="org"][data-size="normal"],
+[data-component="avatar-v2"][data-kind="org"][data-size="small"] {
   --avatar-radius: 4px;
 }
 
-[data-component="avatar"][data-size="normal"] {
+[data-component="avatar-v2"][data-size="normal"] {
   width: 20px;
   height: 20px;
 }
 
-[data-component="avatar"][data-size="small"] {
+[data-component="avatar-v2"][data-size="small"] {
   width: 16px;
   height: 16px;
 }
 
-[data-component="avatar"] [data-slot="avatar-image"] {
+[data-component="avatar-v2"] [data-slot="avatar-image"] {
   position: relative;
   z-index: 1;
   width: 100%;

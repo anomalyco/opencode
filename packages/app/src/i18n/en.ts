@@ -784,6 +784,8 @@ export const dict = {
   "settings.general.row.showSessionProgressBar.title": "Show session progress bar",
   "settings.general.row.showSessionProgressBar.description":
     "Display the animated progress bar at the top of the session when the agent is working",
+  "settings.general.row.pinchZoom.title": "Pinch to zoom",
+  "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
 
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",

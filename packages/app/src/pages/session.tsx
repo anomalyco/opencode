@@ -1703,15 +1703,8 @@ export default function Page() {
     />
   )
 
-  const USE_NEW_LAYOUT = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
-
   return (
-    <div
-      class="relative bg-background-base size-full overflow-hidden flex flex-col"
-      classList={{
-        "p-2 pt-0 bg-v2-background-bg-deep": USE_NEW_LAYOUT,
-      }}
-    >
+    <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       {sessionSync() ?? ""}
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
@@ -1746,7 +1739,6 @@ export default function Page() {
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger flex-1 md:flex-none": true,
             "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
               !size.active() && !ui.reviewSnap,
-            "rounded-[10px] shadow-[var(--v2-elevation-raised)] overflow-hidden": USE_NEW_LAYOUT && !!params.id,
           }}
           style={{
             width: sessionPanelWidth(),

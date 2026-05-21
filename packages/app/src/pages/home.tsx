@@ -174,25 +174,28 @@ function HomeDesign() {
   }
 
   return (
-    <div class="size-full overflow-y-auto bg-background-base rounded-[10px] shadow-[var(--v2-elevation-raised)] overflow-hidden">
-      <div class="mx-auto grid w-full max-w-[1080px] gap-8 px-6 pb-16 pt-12 lg:grid-cols-[280px_minmax(0,720px)]">
-        <HomeProjectColumn
-          projects={projects()}
-          selected={selectedProject()?.worktree}
-          selectProject={selectProject}
-          chooseProject={() => void chooseProject()}
-          openSettings={openSettings}
-          openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-          language={language}
-        />
+    <div class="mx-auto grid w-full h-full max-w-[1080px] gap-8 px-6 pb-16 lg:grid-cols-[280px_minmax(0,720px)]">
+      <HomeProjectColumn
+        projects={projects()}
+        selected={selectedProject()?.worktree}
+        selectProject={selectProject}
+        chooseProject={() => void chooseProject()}
+        openSettings={openSettings}
+        openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+        language={language}
+      />
 
-        <section class="min-w-0" aria-label={language.t("sidebar.project.recentSessions")}>
-          <HomeSessionSearch
-            value={state.search}
-            placeholder={language.t("home.sessions.search.placeholder")}
-            onInput={(value) => setState("search", value)}
-          />
-          <div class="mt-6 flex flex-col gap-6">
+      <section
+        class="min-w-0 flex-1 flex flex-col overflow-y-hidden pt-12"
+        aria-label={language.t("sidebar.project.recentSessions")}
+      >
+        <HomeSessionSearch
+          value={state.search}
+          placeholder={language.t("home.sessions.search.placeholder")}
+          onInput={(value) => setState("search", value)}
+        />
+        <div class="mt-3 overflow-auto flex-1">
+          <div class="pt-3 flex flex-col gap-6">
             <Show when={!sessionLoad.isLoading} fallback={<HomeSessionSkeleton label={language.t("common.loading")} />}>
               <Show
                 when={groups().length > 0}
@@ -220,8 +223,8 @@ function HomeDesign() {
               </Show>
             </Show>
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
     </div>
   )
 }
@@ -319,7 +322,7 @@ function HomeProjectAvatar(props: { project: LocalProject }) {
 
 function HomeSessionSearch(props: { value: string; placeholder: string; onInput: (value: string) => void }) {
   return (
-    <label class="ml-4 flex h-9 w-[calc(100%_-_48px)] items-center gap-2 rounded-[6px] bg-v2-background-bg-deep px-3 py-1 text-v2-icon-icon-muted transition-[background-color,box-shadow] duration-[120ms] ease-in-out focus-within:bg-v2-background-bg-base focus-within:shadow-[0_0_0_0.5px_var(--v2-border-border-focus),var(--v2-elevation-raised)]">
+    <label class="ml-4 flex h-9 w-[calc(100%_-_48px)] sticky top-0 inset-x-0 items-center gap-2 rounded-[6px] bg-v2-background-bg-deep px-3 py-1 text-v2-icon-icon-muted transition-[background-color,box-shadow] duration-[120ms] ease-in-out focus-within:bg-v2-background-bg-base focus-within:shadow-[0_0_0_0.5px_var(--v2-border-border-focus),var(--v2-elevation-raised)]">
       <IconV2 name="magnifying-glass" size="small" />
       <input
         class="min-w-0 flex-1 border-0 bg-transparent text-v2-text-text-base outline-0 [font-weight:440] placeholder:text-v2-text-text-faint"

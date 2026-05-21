@@ -139,6 +139,24 @@ const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>
     )
   })
 
+const insertCorruptV2Message = (sessionID: SessionIDType, time = 1) =>
+  Effect.sync(() =>
+    Database.use((db) =>
+      db
+        .insert(SessionMessageTable)
+        .values([
+          {
+            id: SessionMessage.ID.create(),
+            session_id: sessionID,
+            type: "assistant",
+            time_created: time,
+            data: {} as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
+          },
+        ])
+        .run(),
+    ),
+  )
+
 const setLegacySummaryDiff = (sessionID: SessionIDType) =>
   Effect.sync(() =>
     Database.use((db) =>
@@ -398,6 +416,120 @@ describe("session HttpApi", () => {
           _tag: "InvalidCursorError",
           message: "Invalid cursor",
         })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "returns v2 public not found errors for missing sessions",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const missing = SessionID.descending()
+        const expected = {
+          _tag: "SessionNotFoundError",
+          sessionID: missing,
+          message: `Session not found: ${missing}`,
+        }
+
+        const messages = yield* request(`/api/session/${missing}/message`, { headers })
+        expect(messages.status).toBe(404)
+        expect(yield* responseJson(messages)).toEqual(expected)
+
+        const context = yield* request(`/api/session/${missing}/context`, { headers })
+        expect(context.status).toBe(404)
+        expect(yield* responseJson(context)).toEqual(expected)
+
+        const compact = yield* request(`/api/session/${missing}/compact`, { method: "POST", headers })
+        expect(compact.status).toBe(404)
+        expect(yield* responseJson(compact)).toEqual(expected)
+
+        const wait = yield* request(`/api/session/${missing}/wait`, { method: "POST", headers })
+        expect(wait.status).toBe(404)
+        expect(yield* responseJson(wait)).toEqual(expected)
+
+        const prompt = yield* request(`/api/session/${missing}/prompt`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ prompt: { text: "hello" } }),
+        })
+        expect(prompt.status).toBe(404)
+        expect(yield* responseJson(prompt)).toEqual(expected)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "returns v2 public unavailable errors for unfinished session mutations",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory }
+        const session = yield* createSession({ title: "v2 unavailable" })
+
+        const prompt = yield* request(`/api/session/${session.id}/prompt`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ prompt: { text: "hello" } }),
+        })
+        expect(prompt.status).toBe(503)
+        expect(yield* responseJson(prompt)).toEqual({
+          _tag: "ServiceUnavailableError",
+          message: "V2 session prompt is not available yet",
+          service: "v2.session.prompt",
+        })
+
+        const compact = yield* request(`/api/session/${session.id}/compact`, { method: "POST", headers })
+        expect(compact.status).toBe(503)
+        expect(yield* responseJson(compact)).toEqual({
+          _tag: "ServiceUnavailableError",
+          message: "V2 session compact is not available yet",
+          service: "v2.session.compact",
+        })
+
+        const wait = yield* request(`/api/session/${session.id}/wait`, { method: "POST", headers })
+        expect(wait.status).toBe(503)
+        expect(yield* responseJson(wait)).toEqual({
+          _tag: "ServiceUnavailableError",
+          message: "V2 session wait is not available yet",
+          service: "v2.session.wait",
+        })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "returns safe v2 unknown errors for corrupt projected messages",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* createSession({ title: "v2 corrupt message" })
+        yield* insertCorruptV2Message(session.id)
+
+        const messages = yield* request(`/api/session/${session.id}/message`, {
+          headers: { "x-opencode-directory": test.directory },
+        })
+        const messagesBody = yield* responseJson(messages)
+        expect(messages.status).toBe(500)
+        expect(messagesBody).toMatchObject({
+          _tag: "UnknownError",
+          message: "Unexpected server error. Check server logs for details.",
+        })
+        expect((messagesBody as { ref?: unknown }).ref).toMatch(/^err_[0-9a-f-]{8}$/)
+        expect(JSON.stringify(messagesBody)).not.toContain("assistant")
+
+        const context = yield* request(`/api/session/${session.id}/context`, {
+          headers: { "x-opencode-directory": test.directory },
+        })
+        const contextBody = yield* responseJson(context)
+        expect(context.status).toBe(500)
+        expect(contextBody).toMatchObject({
+          _tag: "UnknownError",
+          message: "Unexpected server error. Check server logs for details.",
+        })
+        expect((contextBody as { ref?: unknown }).ref).toMatch(/^err_[0-9a-f-]{8}$/)
+        expect(JSON.stringify(contextBody)).not.toContain("assistant")
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

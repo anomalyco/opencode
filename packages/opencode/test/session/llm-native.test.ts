@@ -219,6 +219,42 @@ describe("session.llm-native.request", () => {
     ])
   })
 
+  test("maps stored provider metadata to native content metadata", () => {
+    const reasoning = Object.assign(
+      { type: "reasoning" as const, text: "thinking" },
+      {
+        providerMetadata: {
+          openai: {
+            itemId: "rs_1",
+            reasoningEncryptedContent: "encrypted-state",
+          },
+        },
+      },
+    )
+    const request = LLMNative.request({
+      model: baseModel,
+      messages: [
+        {
+          role: "assistant",
+          content: [reasoning],
+        },
+      ],
+    })
+
+    expect(request.messages).toMatchObject([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "thinking",
+            providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+          },
+        ],
+      },
+    ])
+  })
+
   test("selects native request routes for provider packages", () => {
     const openai = LLMNative.model({
       model: { ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/openai" } },
