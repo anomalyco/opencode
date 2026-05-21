@@ -9,7 +9,7 @@
    - 将 your-model-name 替换为实际模型名称
    - 设置接口密钥: export ENTERPRISE_API_KEY=sk-your-key-here（lingxicode.sh和lingxicode-harness.sh里修改后去掉注释或修改opencode.json文件）
 2. 首次使用需要添加执行权限:
-   chmod +x lingxicode.sh lingxicode-harness.sh bin/opencode
+   chmod +x lingxicode.sh lingxicode-harness.sh scripts/deploy-plugins.sh bin/opencode
 3. 在命令控制台输入 ./lingxicode.sh（基础功能） 或 lingxicode-harness.sh（加载Harness功能） 启动
 
 环境变量说明

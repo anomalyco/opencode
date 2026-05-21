@@ -1,0 +1,23 @@
+{
+  "name": "exif-parser",
+  "version": "0.1.12",
+  "description": "A javascript library to extract Exif metadata from images, in node and in the browser.",
+  "author": "Bruno Windels <bruno.windels@gmail.com>",
+  "keywords": [
+    "exif",
+    "image",
+    "jpeg",
+    "jpg",
+    "tiff",
+    "gps"
+  ],
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/bwindels/exif-parser.git"
+  },
+  "devDependencies": {
+    "browserify": "^7.0.0",
+    "uglify-js": "^2.4.15"
+  }
+}
