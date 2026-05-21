@@ -1,13 +1,10 @@
 ```
 # Dependencies
 node_modules/
-.jspm/
 
-# Build outputs
+# Build artifacts
 dist/
 build/
-coverage/
-htmlcov/
 target/
 
 # Python
@@ -15,37 +12,41 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.py.class
 .Python
 env/
 venv/
 .venv/
 .ENV
-.pip/
+.env
+.env.*
+.env.local
+.env.production
+.env.development
 .mypy_cache/
 .pytest_cache/
-.tox/
+.coverage
+coverage/
+htmlcov/
 
 # Logs
 *.log
 
-# Environment variables
-.env
-.env.local
-.env.*
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# IDE
+# Editor files
 .vscode/
 .idea/
 *.swp
 *.swo
 *.tmp
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Testing
-.coverage
 
 # Compressed files
 *.zip
