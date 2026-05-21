@@ -66,7 +66,7 @@ nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev
 
 ### Desktop App (BETA)
 
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
+OpenCode is also available as a desktop application with advanced features like **Custom Personalities**, **Auto-Learning Agents**, and **Multi-Project Workspaces**. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
 
 | Platform              | Download                           |
 | --------------------- | ---------------------------------- |
@@ -81,6 +81,13 @@ brew install --cask opencode-desktop
 # Windows (Scoop)
 scoop bucket add extras; scoop install extras/opencode-desktop
 ```
+
+#### Key Desktop Features 🆕
+
+- **Personality Management**: Create, edit, and delete custom agent personalities from Settings
+- **Auto-Learning**: Each personality has a `learnings.md` file that evolves with every interaction
+- **Multi-Project Workspaces**: Link multiple projects together for contextual understanding
+- **Quick Switching**: Select active personality and workspace directly from the message input
 
 #### Installation Directory
 
@@ -97,20 +104,41 @@ OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bas
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
-### Agents
+### Agents & Personalities
 
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
+OpenCode features an advanced agent system with customizable personalities and auto-learning capabilities:
 
+#### Built-in Agents
+Switch between built-in agents using the `Tab` key:
 - **build** - Default, full-access agent for development work
 - **plan** - Read-only agent for analysis and code exploration
   - Denies file edits by default
   - Asks permission before running bash commands
   - Ideal for exploring unfamiliar codebases or planning changes
+- **general** - Subagent for complex searches and multistep tasks (`@general`)
 
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
+#### Custom Personalities 🆕
+Create custom agent personalities with unique traits and self-learning files:
+- **Create Personality**: Define agent traits, system prompt, and creativity level (temperature)
+- **Auto-Learning**: Each personality has a `learnings.md` file that evolves automatically with every interaction
+- **Settings Management**: Create, edit, and delete personalities from the desktop app Settings
+- **Quick Selection**: Choose active personality directly from the message input field
 
-Learn more about [agents](https://opencode.ai/docs/agents).
+```bash
+# Use specific personality in CLI
+opencode --personality "Mohammed" "Write a React app"
+
+# Or within chat
+@Mohammed help me improve this code
+```
+
+#### Multi-Project Workspaces 🆕
+Enable a single agent to work on multiple related projects simultaneously:
+- **Link Projects**: Connect multiple project folders into a single workspace
+- **Shared Context**: Agent understands relationships and dependencies between linked projects
+- **Centralized Management**: Manage all projects from a unified interface in the desktop app
+
+Learn more about [agents](https://opencode.ai/docs/agents) and [personalities](packages/opencode/src/personality/README.ar.md).
 
 ### Documentation
 

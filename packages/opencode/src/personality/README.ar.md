@@ -72,6 +72,34 @@ learning_file: learnings.md
 1. **عند حدوث خطأ**: يتم تسجيل الدرس المستفاد تلقائيًا
 2. **قراءة التعلم السابق**: قبل كل مهمة، تقرأ الشخصية ما تعلمته سابقًا
 3. **التحديث المستمر**: يزداد ملف التعلم مع كل تجربة جديدة
+4. **التعديل الذاتي**: الوكيل يمكنه تعديل ملف التعلم وشخصيته ذاتيًا باستخدام الأدوات المدمجة
+
+#### أدوات الوكيل للتعلم الذاتي:
+
+الوكيل يمتلك ثلاث أدوات رئيسية للتعلم والتطور:
+
+**أ. `update_learning`** - إضافة دروس جديدة لملف `learnings.md`
+```typescript
+await tools.update_learning({
+  lesson: "- تعلمت كيفية التعامل مع الملفات الكبيرة",
+  date: "2024-01-15"
+})
+```
+
+**ب. `update_personality_profile`** - تعديل سمات ووصف الشخصية
+```typescript
+await tools.update_personality_profile({
+  traits: ["دقيق", "منظم", "صبور", "سريع التعلم"],
+  description: "مساعد ذكي متخصص في البرمجة وتطوير التطبيقات"
+})
+```
+
+**ج. `read_personality_context`** - قراءة ملف التعريف والتعلم الحاليين
+```typescript
+const context = await tools.read_personality_context()
+console.log(context.profile) // ملف التعريف
+console.log(context.learnings) // جميع الدروس المستفادة
+```
 
 #### مثال على درس مُضاف:
 
@@ -186,3 +214,51 @@ await Personality.appendLearning({
 // قراءة جميع التعلميات
 const learnings = await Personality.readLearnings("محمد")
 ```
+
+## مساحات العمل المتعددة (Multi-Project Workspaces) 🆕
+
+يمكن للوكيل العمل على عدة مشاريع مترابطة في نفس الوقت باستخدام نظام مساحات العمل:
+
+### ربط المشاريع
+
+```bash
+# إنشاء مساحة عمل جديدة تربط بين مشاريع متعددة
+opencode workspace:create "fullstack-app" --projects ./frontend ./backend ./shared
+```
+
+### أدوات الوكيل لمساحات العمل:
+
+**أ. `link_projects`** - ربط مشاريع متعددة في مساحة عمل واحدة
+```typescript
+await tools.link_projects({
+  name: "fullstack-app",
+  projects: ["./frontend", "./backend", "./shared"]
+})
+```
+
+**ب. `get_workspace_context`** - الحصول على سياق مشترك لجميع المشاريع المرتبطة
+```typescript
+const context = await tools.get_workspace_context()
+console.log(context.projects) // قائمة المشاريع المرتبطة
+console.log(context.sharedFiles) // الملفات المشتركة
+```
+
+### ميزات مساحات العمل:
+
+- **سياق مشترك**: الوكيل يفهم العلاقات والتبعيات بين المشاريع المرتبطة
+- **إدارة مركزية**: إدارة جميع المشاريع من واجهة موحدة في تطبيق سطح المكتب
+- **تعلم عبر المشاريع**: ملفات `learnings.md` يمكنها تخزين دروس مشتركة بين المشاريع
+- **تبديل سريع**: اختر مساحة العمل النشطة مباشرة من حقل كتابة الرسالة
+
+### مثال على استخدام مساحة عمل:
+
+```markdown
+---
+workspace: fullstack-app
+personality: محمد
+---
+
+@محمد قم بإضافة endpoint جديد في الـ backend وتحديث الـ frontend لاستخدامه
+```
+
+الوكيل سيفهم تلقائيًا هيكلية المشاريع الثلاثة وسيعرف أين يضيف الكود المناسب.
