@@ -72,8 +72,8 @@ git diff --name-only HEAD...upstream/dev | grep -v "^docs/\|^packages/branding/\
 
 ```bash
 git fetch upstream
-git checkout dev
-git rebase upstream/dev
+git checkout main
+git rebase upstream/dev    # 注:本仓主分支是 main,上游 sst/opencode 主分支仍是 dev
 
 # 冲突时:
 #   优先级:① 上游新增的 → 接收 ② fork 改动(带 FORK marker)→ 保留 ③ 都改了同一行 → 手解
@@ -85,8 +85,8 @@ git rebase upstream/dev
 
 ```bash
 git fetch upstream
-git checkout dev
-git merge upstream/dev --no-ff
+git checkout main
+git merge upstream/dev --no-ff    # 注:本仓主分支是 main,上游主分支是 dev
 # 冲突解法同上,但是一次性面对所有冲突
 git commit
 ```
@@ -209,7 +209,7 @@ rm bun.lock && bun install      # 仅在 A/B 都炸时退而求其次
 
 ## 5. Merge 后 — checklist
 
-> **同样适用于 `git merge --abort` 之后**:任何动过 catalog 依赖版本的 sync 操作,abort 回 dev 时**必跑** 5.0,否则 node_modules 跟 lock 不对齐导致 typecheck 假错(详见 §7 第 3 行)。
+> **同样适用于 `git merge --abort` 之后**:任何动过 catalog 依赖版本的 sync 操作,abort 回 main 时**必跑** 5.0,否则 node_modules 跟 lock 不对齐导致 typecheck 假错(详见 §7 第 3 行)。
 
 ```bash
 # 5.0 reconcile node_modules 跟 lock(merge 完成 OR abort 后都要)
@@ -239,7 +239,7 @@ git push origin --tags
 **全过 → push**:
 
 ```bash
-git push origin dev
+git push origin main
 ```
 
 **有问题** → reset 到 pre-rebase tag,排查后重来:
@@ -270,7 +270,7 @@ git reset --hard pre-rebase-<日期>
 | **`OPENCODE_SDK_OPENAPI=httpapi`(默认)生成的 SDK 缺 fork 的 Hono routes** | **上游 `--httpapi` 走 Effect HttpApi 的 PublicApi,fork 用 Hono 加的 routes(/file/office-pdf 等)不在 PublicApi 里 → SDK 缺这些 method** | **要么把 fork routes 迁到 PublicApi(参 features/office-routes-effect-httpapi/),要么 fork build 改用 `OPENCODE_SDK_OPENAPI=hono`(但会丢上游 Effect-only 的新 type 如 SessionMessageData) → 双轨互斥,只能选一边** |
 | installer build 失败 | 上游改了 tauri 配置 / 依赖,品牌注入路径漂了 | 看 packages/branding/scripts/build-deskfox.ps1 + tauri-overrides;必要时同步更新 override |
 | 桌面快捷方式 icon 还是老的 | Windows iconcache 卡 | 见 features/installer-打包/3-changelog.md 弯路 5(也存为 memory) |
-| dev 分支 push 拒收(non-fast-forward)| 双端 origin 一端有 force push 历史不一致 | `git push origin dev --force-with-lease`(谨慎);先 ls-remote 对比两端 HEAD |
+| main 分支 push 拒收(non-fast-forward)| 双端 origin 一端有 force push 历史不一致 | `git push origin main --force-with-lease`(谨慎);先 ls-remote 对比两端 HEAD |
 
 ## 8. 何时 NOT 合并上游
 

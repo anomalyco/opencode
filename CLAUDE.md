@@ -119,7 +119,7 @@ grep `[feat: <id>]` 能反查到对应文档。
 | **上游 merge SOP**(本次新增) | `docs/governance/UPSTREAM-MERGE-GUIDE.md` | 与 sst/opencode 合并的完整 checklist + 自动化辅助 |
 | DeskFox 品牌替换 | `docs/governance/DeskFox-品牌替换.md` | 已落地 |
 | 应用身份命名规则 | `docs/governance/应用身份-命名规则.md` | 两端规则统一:Mac Bundle ID 三档(已落地,与 `deskfox.ai` 域名对齐)+ Win AppId 三档(已落地 2026-04-30,commit `21c3f80f9`),merge upstream 维护规则 |
-| **双端协作 SOP** | `docs/governance/双端协作-SOP.md` | feat 分支生命周期(短命,合 dev 即销毁,新项目新名字)+ Win/Mac 同时开发流程(rebase / merge / 删分支)+ 协作约定 |
+| **双端协作 SOP** | `docs/governance/双端协作-SOP.md` | feat 分支生命周期(短命,合 main 即销毁,新项目新名字)+ Win/Mac 同时开发流程(rebase / merge / 删分支)+ 协作约定 |
 | 跨平台协作 | `docs/governance/跨平台协作.md` | 三端环境(目前已收口 Win) |
 | 数字签名问题 | `docs/governance/数字签名问题.md` | installer 不签名决策 |
 | 改动索引 | `本仓 改动日志.md` | feature 索引(规范 v2 起,详细在 docs/features/) |
@@ -128,21 +128,24 @@ grep `[feat: <id>]` 能反查到对应文档。
 | 早期调研 | `docs/history/规划-archive/01..11-*.md` | Phase 0-2 用过现已超越,锁死保留 |
 | 沟通历史 | `docs/history/沟通记录.md` | 关键决策时刻对话日志 |
 
-## 默认仓库约定(分支策略 v2,2026-04-30 起)
+## 默认仓库约定(分支策略 v2,2026-04-30 起;主分支 dev → main,2026-05-21 起)
 
-### 🚨 三条铁律(2026-05-08 立,绝对约束)
+> **分支名 ≠ env 代号**:主分支叫 `main`(代码集成),installer channel 仍叫 `prod/beta/dev`(发布渠道)。两个维度名字不撞,见下文。
+> 历史 commit / 改动日志 / docs/history 里仍出现 "dev 分支"是 2026-05-21 前的称呼,语义指向当前 `main`,**不要回填改名**。
 
-1. **永不直接在 dev 上开发** — 任何代码改动必须先开 feat 分支(`feat/<name>` kebab-case),build script / 配置 / 一行 fix 都不例外
-2. **所有合并到 dev 必须 user 同意** — agent 不得自动 `git merge` / `git rebase` 影响 dev 内容,先请示再执行
-3. **所有 dev → 远端 push 必须 user 同意** — agent 不得自动 `git push origin dev` / `git push origin --tags`,先请示再执行
+### 🚨 三条铁律(2026-05-08 立,绝对约束;2026-05-21 dev → main)
 
-每层把关给 user 一次刹车机会。例外:开 feat 分支 / feat 分支内 commit / feat 分支 push origin(私有 work,不影响 dev)agent 可自主。
+1. **永不直接在 main 上开发** — 任何代码改动必须先开 feat 分支(`feat/<name>` kebab-case),build script / 配置 / 一行 fix 都不例外
+2. **所有合并到 main 必须 user 同意** — agent 不得自动 `git merge` / `git rebase` 影响 main 内容,先请示再执行
+3. **所有 main → 远端 push 必须 user 同意** — agent 不得自动 `git push origin main` / `git push origin --tags`,先请示再执行
 
-- **默认分支**:`dev` — **单一稳定主干**,不自动跟随 `upstream/dev`,合上游是主动决策(不是被动跟随)
-- **功能分支**:`feat/<name>` — **一次性容器**,合 dev = 销毁,**新项目用新名字,绝不复用**。`<name>` **全小写 + kebab-case**(中划线分词,行业常规),中英混合 OK 但英文部分必须小写。详见 [`docs/governance/双端协作-SOP.md`](docs/governance/双端协作-SOP.md)(feat 生命周期 + 命名规范 + Win/Mac 双端协作流程)
-- **🌿 开任何新分支前必先拉最新 dev**(硬规则,无例外):`git checkout -b feat/<name>` / `chore/<name>` / `sync/<日期>` 之前,**必须**先 `git checkout dev && git pull --rebase`。理由:Win/Mac 双端协作 + 远端持续推进,基于 stale dev 起 feat = 注定 rebase / 大概率冲突。实施超 30 min 时,合 dev 前再 `git fetch && git log dev..origin/dev` 确认远端没新动。
+每层把关给 user 一次刹车机会。例外:开 feat 分支 / feat 分支内 commit / feat 分支 push origin(私有 work,不影响 main)agent 可自主。
+
+- **默认分支**:`main` — **单一稳定主干**,不自动跟随 `upstream/dev`(上游主分支还叫 dev,这是 sst/opencode 命名,跟我们解耦),合上游是主动决策(不是被动跟随)
+- **功能分支**:`feat/<name>` — **一次性容器**,合 main = 销毁,**新项目用新名字,绝不复用**。`<name>` **全小写 + kebab-case**(中划线分词,行业常规),中英混合 OK 但英文部分必须小写。详见 [`docs/governance/双端协作-SOP.md`](docs/governance/双端协作-SOP.md)(feat 生命周期 + 命名规范 + Win/Mac 双端协作流程)
+- **🌿 开任何新分支前必先拉最新 main**(硬规则,无例外):`git checkout -b feat/<name>` / `chore/<name>` / `sync/<日期>` 之前,**必须**先 `git checkout main && git pull --rebase`。理由:Win/Mac 双端协作 + 远端持续推进,基于 stale main 起 feat = 注定 rebase / 大概率冲突。实施超 30 min 时,合 main 前再 `git fetch && git log main..origin/main` 确认远端没新动。
 - **上游同步**:临时分支 `sync/upstream-<日期>`,merge 完即删
-- **三档环境**(dev/beta/prod):靠 **build 参数**切换(`pack-installer.* -Env <env>`),**不靠分支** — 同一 commit 可出三档产物
+- **三档 installer channel**(prod / beta / dev):靠 **build 参数**切换(`pack-installer.* -Env <env>`),**不靠分支** — 同一 commit 可出三档产物。**"dev" 在 channel 维度 = 预览版**(开发包,可对外发,稳定性低于 prod),跟分支名 `main` 完全独立的命名空间
 - **tag 命名**:
   - `upstream-baseline`(同步起点)/ `pre-rebase-<日期>`(rebase 前)/ `pre-strategy-v2-<日期>`(关键切换兜底)
   - `ship-<env>-<版本>`,例 `ship-prod-2026.4.29.2`
@@ -167,9 +170,9 @@ grep `[feat: <id>]` 能反查到对应文档。
   D:\project\opencode-fork\packages\branding\scripts\build-deskfox.ps1 -Env dev -NoBundle
   ```
   - 产物路径:`packages/desktop/src-tauri/target/release/DeskFox.exe`
-  - `-Env dev|beta|prod` 三档(平时用 dev);`-NoBundle` 跳过 NSIS bundler(SignTool 没装时用,不影响 exe)
+  - `-Env dev|beta|prod` 三档 installer channel(平时验证用 `dev` 这档,跟分支名 `main` 无关);`-NoBundle` 跳过 NSIS bundler(SignTool 没装时用,不影响 exe)
   - **禁止**直接跑 `bun run --cwd packages/desktop tauri build`,那会出 `OpenCode.exe`,违反品牌规范
-- **改完不起 dev,直接 build release exe 验证**(WebView2 + Tauri 在 dev 模式下行为可能与 release 不一致)
+- **改完不起 tauri dev mode(`bun dev`),直接 build release exe 验证**(WebView2 + Tauri 在 dev mode 下行为可能与 release 不一致)
 - **build 前必须先杀进程**:tauri build 会被运行中的 `DeskFox.exe` / `opencode-cli.exe` 锁文件导致 PermissionDenied。任何 release build 前**无条件**先执行,不询问 user:
   ```powershell
   Get-Process -Name DeskFox,OpenCode,opencode-cli -ErrorAction SilentlyContinue | Stop-Process -Force
@@ -181,7 +184,7 @@ grep `[feat: <id>]` 能反查到对应文档。
 | 指标 | 目标 |
 |---|---|
 | **上游侵入率** = 修改上游文件数 / 总文件数 | < 5% |
-| **漂移 commit 数** = `dev..upstream/dev` | ≤ 100 |
+| **漂移 commit 数** = `main..upstream/dev`(我们主分支 main / 上游 sst/opencode 主分支仍叫 dev)| ≤ 100 |
 | **override 累计笔数**(按 commit 算) | 每季 ≤ 2 笔 |
 
 > 上游侵入率:纯新增 fork-only 文件不算侵入(P1 鼓励),只算改上游文件占比。新文件多反而稀释比例,是健康信号。
