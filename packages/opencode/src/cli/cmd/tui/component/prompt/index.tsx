@@ -64,7 +64,6 @@ import { useTuiConfig } from "../../context/tui-config"
 
 export type PromptProps = {
   sessionID?: string
-  workspaceID?: string
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
@@ -201,7 +200,6 @@ export function Prompt(props: PromptProps) {
   const [cursorVersion, setCursorVersion] = createSignal(0)
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
-  const defaultWorkspaceID = createMemo(() => props.workspaceID ?? project.workspace.current())
 
   function selectWorkspace(selection: WorkspaceSelection | undefined) {
     setWorkspaceSelection(selection)
@@ -1061,7 +1059,7 @@ export function Prompt(props: PromptProps) {
     if (sessionID == null) {
       const workspace = workspaceSelection()
       const workspaceID = iife(() => {
-        if (!workspace) return defaultWorkspaceID()
+        if (!workspace) return undefined
         if (workspace.type === "none") return undefined
         if (workspace.type === "existing") return workspace.workspaceID
         return undefined
@@ -1422,17 +1420,7 @@ export function Prompt(props: PromptProps) {
     | undefined
   >(() => {
     const selected = workspaceSelection()
-    if (!selected) {
-      const workspaceID = defaultWorkspaceID()
-      if (props.sessionID || !workspaceID) return
-      const workspace = project.workspace.get(workspaceID)
-      return {
-        type: "existing",
-        workspaceType: workspace?.type ?? "unknown",
-        workspaceName: workspace?.name ?? workspaceID,
-        status: project.workspace.status(workspaceID) ?? "error",
-      }
-    }
+    if (!selected) return
     if (selected.type === "none") return
     if (props.sessionID && !workspaceCreating()) return
     if (selected.type === "new") {

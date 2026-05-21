@@ -58,7 +58,7 @@ describe("installation", () => {
       "reads release version from GitHub releases",
       () =>
         Effect.gen(function* () {
-          const result = yield* Installation.Service.use((svc) => svc.latest("unknown"))
+          const result = yield* Installation.use.latest("unknown")
           expect(result).toBe("1.2.3")
         }),
     )
@@ -67,7 +67,7 @@ describe("installation", () => {
       "strips v prefix from GitHub release tag",
       () =>
         Effect.gen(function* () {
-          const result = yield* Installation.Service.use((svc) => svc.latest("curl"))
+          const result = yield* Installation.use.latest("curl")
           expect(result).toBe("4.0.0-beta.1")
         }),
     )
@@ -80,7 +80,7 @@ describe("installation", () => {
       }),
     ).effect("reads npm versions via registry", () =>
       Effect.gen(function* () {
-        const result = yield* Installation.Service.use((svc) => svc.latest("npm"))
+        const result = yield* Installation.use.latest("npm")
         expect(result).toBe("1.5.0")
         expect(npmCalls).toContain(`https://registry.npmjs.org/opencode-ai/${InstallationChannel}`)
       }),
@@ -94,7 +94,7 @@ describe("installation", () => {
       }),
     ).effect("reads bun versions via registry", () =>
       Effect.gen(function* () {
-        const result = yield* Installation.Service.use((svc) => svc.latest("bun"))
+        const result = yield* Installation.use.latest("bun")
         expect(result).toBe("1.6.0")
         expect(bunCalls).toContain(`https://registry.npmjs.org/opencode-ai/${InstallationChannel}`)
       }),
@@ -108,7 +108,7 @@ describe("installation", () => {
       }),
     ).effect("reads pnpm versions via registry", () =>
       Effect.gen(function* () {
-        const result = yield* Installation.Service.use((svc) => svc.latest("pnpm"))
+        const result = yield* Installation.use.latest("pnpm")
         expect(result).toBe("1.7.0")
         expect(pnpmCalls).toContain(`https://registry.npmjs.org/opencode-ai/${InstallationChannel}`)
       }),
@@ -116,7 +116,7 @@ describe("installation", () => {
 
     testEffect(testLayer(() => jsonResponse({ version: "2.3.4" }))).effect("reads scoop manifest versions", () =>
       Effect.gen(function* () {
-        const result = yield* Installation.Service.use((svc) => svc.latest("scoop"))
+        const result = yield* Installation.use.latest("scoop")
         expect(result).toBe("2.3.4")
       }),
     )
@@ -125,7 +125,7 @@ describe("installation", () => {
       "reads chocolatey feed versions",
       () =>
         Effect.gen(function* () {
-          const result = yield* Installation.Service.use((svc) => svc.latest("choco"))
+          const result = yield* Installation.use.latest("choco")
           expect(result).toBe("3.4.5")
         }),
     )
@@ -142,7 +142,7 @@ describe("installation", () => {
       ),
     ).effect("reads brew formulae API versions", () =>
       Effect.gen(function* () {
-        const result = yield* Installation.Service.use((svc) => svc.latest("brew"))
+        const result = yield* Installation.use.latest("brew")
         expect(result).toBe("2.0.0")
       }),
     )
@@ -161,7 +161,7 @@ describe("installation", () => {
       ),
     ).effect("reads brew tap info JSON via CLI", () =>
       Effect.gen(function* () {
-        const result = yield* Installation.Service.use((svc) => svc.latest("brew"))
+        const result = yield* Installation.use.latest("brew")
         expect(result).toBe("2.1.0")
       }),
     )
