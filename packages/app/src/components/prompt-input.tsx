@@ -358,10 +358,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (props.clientID === doc.clientID) return
       void doc.pivot(props.sessionID, props.docID, { init: false }).then(() => {
         if (store.mode === "doc") return
-        showToast({
-          title: language.t("prompt.toast.docRotated.title"),
-          description: language.t("prompt.toast.docRotated.description", { docID: props.docID }),
-        })
         setStore("mode", "doc")
       })
     })
