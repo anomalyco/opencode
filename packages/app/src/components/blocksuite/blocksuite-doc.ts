@@ -205,6 +205,7 @@ export async function createPage(input: DocMountInput) {
   let direct: OpencodeDocSource | undefined
   let unlink: (() => void) | undefined
   let awareness: OpencodeAwarenessSource | undefined
+  let aware = false
 
   if (input.sync) {
     direct = new OpencodeDocSource(input.sync)
@@ -225,7 +226,6 @@ export async function createPage(input: DocMountInput) {
       if (!doc.root) initDoc(doc)
       baseline(doc)
     }
-    collection.awarenessSync.connect()
     if (input.init === false) {
       while (!doc) {
         doc = await remote(direct, collection, input.sync.docID, page)
@@ -300,6 +300,10 @@ export async function createPage(input: DocMountInput) {
       resize = new ResizeObserver(() => fit(el))
       resize.observe(el)
       if (!attached) await focus(ready)
+      if (input.sync && !aware) {
+        collection.awarenessSync.connect()
+        aware = true
+      }
       await frame()
     } finally {
       el.style.pointerEvents = events
@@ -375,7 +379,7 @@ export async function createPage(input: DocMountInput) {
       if (input.sync) {
         unlink?.()
         direct?.close()
-        awareness?.disconnect()
+        if (aware) collection.awarenessSync.disconnect()
         collection.dispose()
       }
       doc.dispose()

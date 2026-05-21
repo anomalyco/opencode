@@ -56,7 +56,6 @@ export function createPromptDoc(input: PromptDocInput) {
   let mounted: HTMLElement | undefined
   let session: string | undefined
   let live: string | undefined
-  let timer: ReturnType<typeof setInterval> | undefined
   let seq = 0
   let pending: { id: string; init: boolean; task: Promise<void> } | undefined
 
@@ -184,19 +183,9 @@ export function createPromptDoc(input: PromptDocInput) {
     return doc.docID
   }
 
-  const watch = () => {
-    if (timer) clearInterval(timer)
-    timer = setInterval(() => {
-      const id = input.sessionID()
-      if (!id) return
-      void refresh(id, { init: false })
-    }, 2000)
-  }
-
   const mount = async (opts: { el: HTMLElement; theme: () => "light" | "dark" }) => {
     mounted = opts.el
     theme = opts.theme
-    watch()
 
     const sessionID = input.sessionID()
     if (!sessionID) return
@@ -217,8 +206,6 @@ export function createPromptDoc(input: PromptDocInput) {
   }
 
   const detach = () => {
-    if (timer) clearInterval(timer)
-    timer = undefined
     void drop()
     mounted = undefined
     theme = undefined

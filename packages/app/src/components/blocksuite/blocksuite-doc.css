@@ -40,6 +40,7 @@
   width: 100%;
   max-width: none;
   margin: 0;
+  padding-top: 12px;
   min-height: 100%;
   box-sizing: border-box;
 }

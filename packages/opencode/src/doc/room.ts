@@ -1,4 +1,5 @@
 import * as Y from "yjs"
+import { modifyAwarenessUpdate } from "y-protocols/awareness"
 import type { DocID } from "./schema"
 import { MSG_AWARENESS, MSG_DOC, pack, unpack, unpackLegacy } from "./wire"
 
@@ -76,6 +77,14 @@ export function awareness(id: DocID, data: Uint8Array, from?: Peer) {
   }
 }
 
+function remove(data: Uint8Array) {
+  try {
+    return modifyAwarenessUpdate(data, () => null)
+  } catch {
+    return
+  }
+}
+
 export function connect(id: DocID, peer: Peer) {
   const r = room(id)
   r.peers.add(peer)
@@ -89,6 +98,13 @@ export function connect(id: DocID, peer: Peer) {
   }
   return () => {
     r.peers.delete(peer)
+    const left = peer.awareness ? remove(peer.awareness) : undefined
+    if (left) {
+      const payload = pack(MSG_AWARENESS, "", left)
+      for (const next of r.peers) {
+        next.send(payload)
+      }
+    }
     if (r.peers.size === 0) {
       r.doc.destroy()
       rooms.delete(id)
