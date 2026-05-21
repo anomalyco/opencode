@@ -127,6 +127,7 @@ const listDirs = (ctx: InstanceContext) =>
   )
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
+const originalTestToken = process.env.TEST_TOKEN
 
 beforeEach(async () => {
   await clear(true)
@@ -134,6 +135,8 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await fs.rm(managedConfigDir, { force: true, recursive: true }).catch(() => {})
+  if (originalTestToken === undefined) delete process.env.TEST_TOKEN
+  else process.env.TEST_TOKEN = originalTestToken
   await clear(true)
 })
 

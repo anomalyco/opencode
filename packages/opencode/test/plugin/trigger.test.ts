@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
@@ -24,6 +25,7 @@ const configLayer = Config.layer.pipe(
   Layer.provide(AuthTest.empty),
   Layer.provide(AccountTest.empty),
   Layer.provide(NpmTest.noop),
+  Layer.provide(FetchHttpClient.layer),
 )
 const it = testEffect(
   Layer.mergeAll(

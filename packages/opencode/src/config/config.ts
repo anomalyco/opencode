@@ -376,6 +376,7 @@ export const layer = Layer.effect(
     const accountSvc = yield* Account.Service
     const env = yield* Env.Service
     const npmSvc = yield* Npm.Service
+    const http = yield* HttpClient.HttpClient
 
     const readConfigFile = (filepath: string) => fs.readFileStringSafe(filepath).pipe(Effect.orDie)
 
@@ -384,8 +385,6 @@ export const layer = Layer.effect(
       headers: Record<string, string> | undefined,
       schema: S,
     ) {
-      const http = Option.getOrUndefined(yield* Effect.serviceOption(HttpClient.HttpClient))
-      if (!http) return yield* Effect.die(new Error(`HttpClient required to fetch remote config from ${url}`))
       const response = yield* HttpClient.filterStatusOk(withTransientReadRetry(http))
         .execute(
           HttpClientRequest.get(url).pipe(HttpClientRequest.acceptJson, HttpClientRequest.setHeaders(headers ?? {})),

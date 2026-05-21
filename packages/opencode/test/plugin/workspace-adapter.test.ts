@@ -34,6 +34,7 @@ const configLayer = Config.layer.pipe(
   Layer.provide(AuthTest.empty),
   Layer.provide(AccountTest.empty),
   Layer.provide(NpmTest.noop),
+  Layer.provide(FetchHttpClient.layer),
 )
 const pluginLayer = Plugin.layer.pipe(
   Layer.provide(Bus.layer),
