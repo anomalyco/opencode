@@ -1,4 +1,5 @@
 import { Slug } from "@opencode-ai/core/util/slug"
+import { serviceUse } from "@/effect/service-use"
 import path from "path"
 import { BackgroundJob } from "@/background/job"
 import { BusEvent } from "@/bus/bus-event"
@@ -499,6 +500,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
+
+export const use = serviceUse(Service)
 
 export type Patch = Types.DeepMutable<SyncEvent.Event<typeof Event.Updated>["data"]["info"]>
 
