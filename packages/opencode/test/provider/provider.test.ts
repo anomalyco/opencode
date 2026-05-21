@@ -1725,252 +1725,174 @@ it.effect("opencode loader keeps paid models when auth exists", () =>
   }).pipe(provideMultiInstance),
 )
 
-test("Google Vertex Anthropic: honours project/location from config options", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            "google-vertex-anthropic": {
-              options: { project: "config-project", location: "europe-west1" },
-            },
+it.instance(
+  "Google Vertex Anthropic: honours project/location from config options",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const va = providers[ProviderID.make("google-vertex-anthropic")]
+    expect(va).toBeDefined()
+    expect(va.options.project).toBe("config-project")
+    expect(va.options.location).toBe("europe-west1")
+  }),
+  {
+    config: {
+      provider: {
+        "google-vertex-anthropic": {
+          options: { project: "config-project", location: "europe-west1" },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "Bedrock: aliased entry receives cross-region small-model selection",
+  Effect.gen(function* () {
+    yield* set("AWS_ACCESS_KEY_ID", "test")
+    yield* set("AWS_SECRET_ACCESS_KEY", "test")
+    const small = yield* Provider.use.getSmallModel(ProviderID.make("bedrock-eu"))
+    expect(small).toBeDefined()
+    expect(small!.id.startsWith("eu.")).toBe(true)
+  }),
+  {
+    config: {
+      provider: {
+        "bedrock-eu": {
+          name: "Bedrock EU",
+          npm: "@ai-sdk/amazon-bedrock",
+          models: {
+            "us.anthropic.claude-haiku-4-5-20251022-v1:0": { name: "Claude Haiku 4.5 (US)" },
+            "eu.anthropic.claude-haiku-4-5-20251022-v1:0": { name: "Claude Haiku 4.5 (EU)" },
           },
-        }),
-      )
+          options: { region: "eu-west-1" },
+        },
+      },
     },
-  })
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const providers = await list(ctx)
-      const va = providers[ProviderID.make("google-vertex-anthropic")]
-      expect(va).toBeDefined()
-      expect(va.options.project).toBe("config-project")
-      expect(va.options.location).toBe("europe-west1")
-    },
-  })
-})
+  },
+)
 
-test("Bedrock: aliased entry receives cross-region small-model selection", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            "bedrock-eu": {
-              name: "Bedrock EU",
-              npm: "@ai-sdk/amazon-bedrock",
-              models: {
-                "us.anthropic.claude-haiku-4-5-20251022-v1:0": {
-                  name: "Claude Haiku 4.5 (US)",
-                },
-                "eu.anthropic.claude-haiku-4-5-20251022-v1:0": {
-                  name: "Claude Haiku 4.5 (EU)",
-                },
-              },
-              options: { region: "eu-west-1" },
-            },
-          },
-        }),
-      )
+it.instance(
+  "ambiguous npm: openai-compatible alias does not inherit canonical loader behaviour",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const proxy = providers[ProviderID.make("my-llm-proxy")]
+    expect(proxy).toBeDefined()
+    // No canonical loader fires for the ambiguous-npm alias, so the user's
+    // own options are the only ones present (`apiKey` here). Specifically not
+    // the `apiKey: "public"` the opencode loader would inject.
+    expect(proxy.options.apiKey).toBe("proxy-key")
+    expect(proxy.options.apiKey).not.toBe("public")
+    expect(proxy.options.fetch).toBeUndefined()
+  }),
+  {
+    config: {
+      provider: {
+        "my-llm-proxy": {
+          name: "Generic Proxy",
+          npm: "@ai-sdk/openai-compatible",
+          api: "https://example.com/v1",
+          models: { small: { name: "Small" } },
+          options: { apiKey: "proxy-key" },
+        },
+      },
     },
-  })
+  },
+)
 
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      await set(ctx, "AWS_ACCESS_KEY_ID", "test")
-      await set(ctx, "AWS_SECRET_ACCESS_KEY", "test")
-      const small = await getSmallModel(ProviderID.make("bedrock-eu"), ctx)
-      expect(small).toBeDefined()
-      expect(small!.id.startsWith("eu.")).toBe(true)
+it.instance(
+  "ambiguous npm: azure-style alias does not inherit azure loader behaviour",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const fork = providers[ProviderID.make("my-azure-fork")]
+    expect(fork).toBeDefined()
+    // `@ai-sdk/azure` matches both `azure` and `azure-cognitive-services`,
+    // so the resolver finds no unique base and falls through. The user's
+    // resourceName survives but the azure-cognitive-services baseURL does not.
+    expect(fork.options.apiKey).toBe("azure-key")
+    expect(fork.options.resourceName).toBe("custom-resource")
+    expect(fork.options.baseURL).toBeUndefined()
+  }),
+  {
+    config: {
+      provider: {
+        "my-azure-fork": {
+          name: "Custom Azure Fork",
+          npm: "@ai-sdk/azure",
+          api: "https://example.openai.azure.com/openai",
+          models: { "gpt-4o": { name: "GPT-4o" } },
+          options: { apiKey: "azure-key", resourceName: "custom-resource" },
+        },
+      },
     },
-  })
-})
+  },
+)
 
-test("ambiguous npm: openai-compatible alias does not inherit canonical loader behaviour", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            "my-llm-proxy": {
-              name: "Generic Proxy",
-              npm: "@ai-sdk/openai-compatible",
-              api: "https://example.com/v1",
-              models: {
-                small: { name: "Small" },
-              },
-              options: { apiKey: "proxy-key" },
-            },
-          },
-        }),
-      )
-    },
-  })
+it.instance("Google Vertex: canonical entry loaded from env still receives ADC fetch", () =>
+  Effect.gen(function* () {
+    yield* setProcessEnv("GOOGLE_CLOUD_PROJECT", "env-project")
+    yield* setProcessEnv("GOOGLE_VERTEX_LOCATION", "us-central1")
+    const providers = yield* list
+    const vertex = providers[ProviderID.make("google-vertex")]
+    expect(vertex).toBeDefined()
+    expect(vertex.options.project).toBe("env-project")
+    expect(vertex.options.location).toBe("us-central1")
+    expect(typeof vertex.options.fetch).toBe("function")
+  }),
+)
 
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const providers = await list(ctx)
-      const proxy = providers[ProviderID.make("my-llm-proxy")]
-      expect(proxy).toBeDefined()
-      // No canonical loader fires for the ambiguous-npm alias. So no extras
-      // appear on options (apiKey is the only value the user supplied).
-      expect(proxy.options.apiKey).toBe("proxy-key")
-      // Specific tells from canonical openai-compat loaders that share this npm
-      // (opencode injects apiKey:"public", github-copilot/nvidia/etc. would
-      // inject their own options).
-      expect(proxy.options.apiKey).not.toBe("public")
-      expect(proxy.options.fetch).toBeUndefined()
+it.instance(
+  "Google Vertex: canonical and aliased entries coexist with distinct options",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const canonical = providers[ProviderID.make("google-vertex")]
+    const alias = providers[ProviderID.make("google-vertex-eu")]
+    expect(canonical).toBeDefined()
+    expect(alias).toBeDefined()
+    expect(canonical.options.location).toBe("europe-west4")
+    expect(alias.options.location).toBe("eu")
+    expect(canonical.options.project).toBe("test-canonical")
+    expect(alias.options.project).toBe("test-alias")
+    expect(typeof canonical.options.fetch).toBe("function")
+    expect(typeof alias.options.fetch).toBe("function")
+    expect(canonical.options.fetch).not.toBe(alias.options.fetch)
+  }),
+  {
+    config: {
+      provider: {
+        "google-vertex": {
+          options: { project: "test-canonical", location: "europe-west4" },
+        },
+        "google-vertex-eu": {
+          name: "Vertex EU",
+          npm: "@ai-sdk/google-vertex",
+          models: { "gemini-2.5-pro": { name: "Gemini 2.5 Pro", tool_call: true } },
+          options: { project: "test-alias", location: "eu" },
+        },
+      },
     },
-  })
-})
+  },
+)
 
-test("ambiguous npm: azure-style alias does not inherit azure loader behaviour", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            "my-azure-fork": {
-              name: "Custom Azure Fork",
-              npm: "@ai-sdk/azure",
-              api: "https://example.openai.azure.com/openai",
-              models: {
-                "gpt-4o": { name: "GPT-4o" },
-              },
-              options: { apiKey: "azure-key", resourceName: "custom-resource" },
-            },
-          },
-        }),
-      )
+it.instance(
+  "Google Vertex: aliased entry inherits ADC fetch from canonical loader",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const alias = providers[ProviderID.make("google-vertex-eu")]
+    expect(alias).toBeDefined()
+    expect(alias.options.project).toBe("test-project-eu")
+    expect(alias.options.location).toBe("eu")
+    expect(typeof alias.options.fetch).toBe("function")
+  }),
+  {
+    config: {
+      provider: {
+        "google-vertex-eu": {
+          name: "Vertex EU",
+          npm: "@ai-sdk/google-vertex",
+          models: { "gemini-2.5-pro": { name: "Gemini 2.5 Pro", tool_call: true } },
+          options: { project: "test-project-eu", location: "eu" },
+        },
+      },
     },
-  })
-
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const providers = await list(ctx)
-      const fork = providers[ProviderID.make("my-azure-fork")]
-      expect(fork).toBeDefined()
-      // Both `azure` and `azure-cognitive-services` canonical loaders match
-      // @ai-sdk/azure, so the resolver finds no unique base and falls through.
-      // The user-supplied resourceName is preserved but no loader-injected
-      // baseURL appears (azure-cognitive-services would set one).
-      expect(fork.options.apiKey).toBe("azure-key")
-      expect(fork.options.resourceName).toBe("custom-resource")
-      expect(fork.options.baseURL).toBeUndefined()
-    },
-  })
-})
-
-test("Google Vertex: canonical entry loaded from env still receives ADC fetch", async () => {
-  await using tmp = await tmpdir({})
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      await set(ctx, "GOOGLE_CLOUD_PROJECT", "env-project")
-      await set(ctx, "GOOGLE_VERTEX_LOCATION", "us-central1")
-      const providers = await list(ctx)
-      const vertex = providers[ProviderID.make("google-vertex")]
-      expect(vertex).toBeDefined()
-      expect(vertex.options.project).toBe("env-project")
-      expect(vertex.options.location).toBe("us-central1")
-      expect(typeof vertex.options.fetch).toBe("function")
-    },
-  })
-})
-
-test("Google Vertex: canonical and aliased entries coexist with distinct options", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            "google-vertex": {
-              options: { project: "test-canonical", location: "europe-west4" },
-            },
-            "google-vertex-eu": {
-              name: "Vertex EU",
-              npm: "@ai-sdk/google-vertex",
-              models: {
-                "gemini-2.5-pro": { name: "Gemini 2.5 Pro", tool_call: true },
-              },
-              options: { project: "test-alias", location: "eu" },
-            },
-          },
-        }),
-      )
-    },
-  })
-
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const providers = await list(ctx)
-      const canonical = providers[ProviderID.make("google-vertex")]
-      const alias = providers[ProviderID.make("google-vertex-eu")]
-      expect(canonical).toBeDefined()
-      expect(alias).toBeDefined()
-      expect(canonical.options.location).toBe("europe-west4")
-      expect(alias.options.location).toBe("eu")
-      expect(canonical.options.project).toBe("test-canonical")
-      expect(alias.options.project).toBe("test-alias")
-      expect(typeof canonical.options.fetch).toBe("function")
-      expect(typeof alias.options.fetch).toBe("function")
-      expect(canonical.options.fetch).not.toBe(alias.options.fetch)
-    },
-  })
-})
-
-test("Google Vertex: aliased entry inherits ADC fetch from canonical loader", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          provider: {
-            "google-vertex-eu": {
-              name: "Vertex EU",
-              npm: "@ai-sdk/google-vertex",
-              models: {
-                "gemini-2.5-pro": {
-                  name: "Gemini 2.5 Pro",
-                  tool_call: true,
-                },
-              },
-              options: {
-                project: "test-project-eu",
-                location: "eu",
-              },
-            },
-          },
-        }),
-      )
-    },
-  })
-
-  await withTestInstance({
-    directory: tmp.path,
-    fn: async (ctx) => {
-      const providers = await list(ctx)
-      const alias = providers[ProviderID.make("google-vertex-eu")]
-      expect(alias).toBeDefined()
-      expect(alias.options.project).toBe("test-project-eu")
-      expect(alias.options.location).toBe("eu")
-      expect(typeof alias.options.fetch).toBe("function")
-    },
-  })
-})
+  },
+)
