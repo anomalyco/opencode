@@ -20,8 +20,8 @@ export const RevertInput = Schema.Struct({
 export type RevertInput = Schema.Schema.Type<typeof RevertInput>
 
 export interface Interface {
-  readonly revert: (input: RevertInput) => Effect.Effect<Session.Info>
-  readonly unrevert: (input: { sessionID: SessionID }) => Effect.Effect<Session.Info>
+  readonly revert: (input: RevertInput) => Effect.Effect<Session.Info, Session.BusyError>
+  readonly unrevert: (input: { sessionID: SessionID }) => Effect.Effect<Session.Info, Session.BusyError>
   readonly cleanup: (session: Session.Info) => Effect.Effect<void>
 }
 

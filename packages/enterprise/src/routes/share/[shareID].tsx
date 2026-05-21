@@ -323,6 +323,12 @@ export default function () {
                                       current={activeMessage()}
                                       size="compact"
                                       onMessageSelect={setActiveMessage}
+                                      getLabel={(message) =>
+                                        data()
+                                          .part[message.id]?.find((part) => part.type === "text")
+                                          ?.text.trim()
+                                          .split("\n")[0]
+                                      }
                                     />
                                   </Show>
                                   <SessionTurn

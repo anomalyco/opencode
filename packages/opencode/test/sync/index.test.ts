@@ -1,19 +1,23 @@
 import { describe, expect, beforeEach, afterAll } from "bun:test"
 import { provideTmpdirInstance } from "../fixture/fixture"
-import { Effect, Layer, Schema } from "effect"
+import { Deferred, Effect, Layer, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Bus } from "../../src/bus"
+import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { SyncEvent } from "../../src/sync"
 import { Database, eq } from "@/storage/db"
 import { EventSequenceTable, EventTable } from "../../src/sync/event.sql"
 import { MessageID } from "../../src/session/schema"
 import { initProjectors } from "../../src/server/projectors"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const it = testEffect(
   Layer.mergeAll(
-    SyncEvent.layer.pipe(Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: true }))),
+    SyncEvent.layer.pipe(
+      Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: true })),
+      Layer.provideMerge(Bus.layer),
+    ),
     CrossSpawnSpawner.defaultLayer,
   ),
 )
@@ -114,7 +118,8 @@ describe("SyncEvent", () => {
           const received = new Promise<void>((done) => {
             resolve = done
           })
-          const dispose = Bus.subscribeAll((event) => {
+          const bus = yield* Bus.Service
+          const dispose = yield* bus.subscribeAllCallback((event) => {
             events.push(event)
             resolve()
           })
@@ -131,6 +136,43 @@ describe("SyncEvent", () => {
             })
           } finally {
             dispose()
+          }
+        }),
+      ),
+    )
+
+    // Regression for the EffectBridge migration. GlobalBus.emit used to fire
+    // synchronously inside the Database.effect post-commit callback. After the
+    // migration it fires inside the forked publish Effect, AFTER bus.publish
+    // completes. Consumers don't care about microsecond-level ordering, but
+    // we still need to prove the emit actually fires.
+    it.live(
+      "emits sync events to GlobalBus after publishing to ProjectBus",
+      provideTmpdirInstance(() =>
+        Effect.gen(function* () {
+          const { Created } = setup()
+          // Filter for OUR specific event in the handler so we ignore any
+          // stray sync events from other tests' lingering forks.
+          const received = yield* Deferred.make<GlobalEvent>()
+          const handler = (evt: GlobalEvent) => {
+            if (evt.payload?.type === "sync" && evt.payload?.syncEvent?.type === "item.created.1") {
+              Deferred.doneUnsafe(received, Effect.succeed(evt))
+            }
+          }
+          GlobalBus.on("event", handler)
+          try {
+            yield* SyncEvent.use.run(Created, { id: "evt_global_1", name: "global" })
+            const event = yield* awaitWithTimeout(
+              Deferred.await(received),
+              "timed out waiting for sync event on GlobalBus",
+              "2 seconds",
+            )
+            expect(event.payload).toMatchObject({
+              type: "sync",
+              syncEvent: { type: "item.created.1", data: { id: "evt_global_1", name: "global" } },
+            })
+          } finally {
+            GlobalBus.off("event", handler)
           }
         }),
       ),

@@ -91,7 +91,6 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "GatewayKv": import("@cloudflare/workers-types").KVNamespace
     "HONEYCOMB_API_KEY": {
       "type": "sst.sst.Secret"
       "value": string

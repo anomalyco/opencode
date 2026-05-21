@@ -93,7 +93,7 @@ it.instance("keeps server and tui plugin merge semantics aligned", () =>
         plugin: [["shared-plugin@2.0.0", { source: "local" }], "local-only@1.0.0"],
       })
 
-      const server = yield* Config.Service.use((svc) => svc.get())
+      const server = yield* Config.use.get()
       const tui = yield* getTuiConfig(test.directory)
       const serverPlugins = (server.plugin ?? []).map((item) => ConfigPlugin.pluginSpecifier(item))
       const tuiPlugins = (tui.plugin ?? []).map((item) => ConfigPlugin.pluginSpecifier(item))
@@ -439,6 +439,25 @@ it.instance("merges keybind overrides across precedence layers", () =>
   ),
 )
 
+it.instance("ignores unknown keybind names without dropping valid overrides from the same file", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const test = yield* TestInstance
+      yield* fs.writeJson(path.join(Global.Path.config, "tui.json"), {
+        keybinds: {
+          session_delete: "ctrl+d",
+          not_a_real_keybind: "ctrl+q",
+        },
+      })
+
+      const config = yield* getTuiConfig(test.directory)
+      expect(config.keybinds.get("session.delete")?.[0]?.key).toBe("ctrl+d")
+      expect(config.keybinds.get("not_a_real_keybind")).toEqual([])
+    }),
+  ),
+)
+
 it.instance("resolves keybind lookup from canonical keybinds", () =>
   withCleanState(
     Effect.gen(function* () {
@@ -451,6 +470,7 @@ it.instance("resolves keybind lookup from canonical keybinds", () =>
           which_key_toggle: "alt+k",
           editor_open: "ctrl+e",
           "prompt.autocomplete.next": "ctrl+j",
+          "dialog.prompt.submit": "ctrl+s",
           "dialog.mcp.toggle": "ctrl+t",
           model_favorite_toggle: "ctrl+f",
           "dialog.plugins.install": "shift+i",
@@ -472,6 +492,7 @@ it.instance("resolves keybind lookup from canonical keybinds", () =>
       )
       expect(config.keybinds.get("prompt.editor")?.[0]?.key).toBe("ctrl+e")
       expect(config.keybinds.get("prompt.autocomplete.next")?.[0]?.key).toBe("ctrl+j")
+      expect(config.keybinds.get("dialog.prompt.submit")?.[0]?.key).toBe("ctrl+s")
       expect(config.keybinds.get("dialog.mcp.toggle")?.[0]?.key).toBe("ctrl+t")
       expect(config.keybinds.get("model.dialog.favorite")?.[0]?.key).toBe("ctrl+f")
       expect(config.keybinds.get("dialog.plugins.install")?.[0]?.key).toBe("shift+i")

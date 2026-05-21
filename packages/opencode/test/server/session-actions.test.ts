@@ -21,9 +21,8 @@ describe("session action routes", () => {
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        const session = yield* Effect.acquireRelease(
-          SessionNs.Service.use((svc) => svc.create({})),
-          (created) => SessionNs.Service.use((svc) => svc.remove(created.id)).pipe(Effect.ignore),
+        const session = yield* Effect.acquireRelease(SessionNs.use.create({}), (created) =>
+          SessionNs.use.remove(created.id).pipe(Effect.ignore),
         )
 
         const res = yield* Effect.promise(() =>

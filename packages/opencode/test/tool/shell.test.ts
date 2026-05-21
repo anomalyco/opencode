@@ -17,6 +17,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Plugin } from "../../src/plugin"
 import { testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const shellLayer = Layer.mergeAll(
   CrossSpawnSpawner.defaultLayer,
@@ -25,6 +26,7 @@ const shellLayer = Layer.mergeAll(
   Truncate.defaultLayer,
   Config.defaultLayer,
   Agent.defaultLayer,
+  RuntimeFlags.defaultLayer,
 )
 const it = testEffect(shellLayer)
 type ShellTestServices =
@@ -1077,6 +1079,23 @@ describe("tool.shell abort", () => {
     15_000,
   )
 
+  it.live(
+    "uses RuntimeFlags bashDefaultTimeoutMs when timeout is omitted",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const result = yield* run({
+            command: `echo started && sleep 60`,
+            description: "Default timeout test",
+          })
+          expect(result.output).toContain("started")
+          expect(result.output).toContain("exceeding timeout 500 ms")
+        }),
+      ).pipe(Effect.provide(RuntimeFlags.layer({ bashDefaultTimeoutMs: 500 }))),
+    15_000,
+  )
+
   if (process.platform !== "win32") {
     it.live("captures stderr in output", () =>
       runIn(
@@ -1195,7 +1214,7 @@ describe("tool.shell truncation", () => {
         const filepath = (result.metadata as { outputPath?: string }).outputPath
         expect(filepath).toBeTruthy()
 
-        const saved = yield* Effect.promise(() => Filesystem.readText(filepath!))
+        const saved = yield* (yield* AppFileSystem.Service).readFileString(filepath!)
         const lines = saved.trim().split(/\r?\n/)
         expect(lines.length).toBe(lineCount)
         expect(lines[0]).toBe("1")

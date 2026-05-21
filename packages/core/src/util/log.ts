@@ -20,6 +20,7 @@ const levelPriority: Record<Level, number> = {
   ERROR: 3,
 }
 const keep = 10
+const initializedRunID = "OPENCODE_LOG_INITIALIZED_RUN_ID"
 
 let level: Level = "INFO"
 
@@ -70,7 +71,10 @@ export async function init(options: Options) {
     Global.Path.log,
     options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
   )
-  await fs.truncate(logpath).catch(() => {})
+  const runID = process.env.OPENCODE_RUN_ID
+  const shouldTruncate = !options.dev || !runID || process.env[initializedRunID] !== runID
+  if (shouldTruncate) await fs.truncate(logpath).catch(() => {})
+  if (options.dev && runID) process.env[initializedRunID] = runID
   const stream = createWriteStream(logpath, { flags: "a" })
   write = async (msg: any) => {
     return new Promise((resolve, reject) => {

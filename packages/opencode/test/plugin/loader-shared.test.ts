@@ -4,9 +4,9 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { Filesystem } from "@/util/filesystem"
 
 const { Plugin } = await import("../../src/plugin/index")
 const { PluginLoader } = await import("../../src/plugin/loader")
@@ -20,7 +20,7 @@ afterEach(async () => {
   await disposeAllInstances()
 })
 
-const it = testEffect(CrossSpawnSpawner.defaultLayer)
+const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, AppFileSystem.defaultLayer))
 
 function withTmp<T, A, E, R>(
   init: (dir: string) => Promise<T>,
@@ -837,7 +837,7 @@ describe("plugin.loader.shared", () => {
         Effect.gen(function* () {
           yield* load(tmp.path)
           expect(
-            yield* Effect.promise(() => Filesystem.readJson<{ source: string; enabled: boolean }>(tmp.extra.mark)),
+            (yield* (yield* AppFileSystem.Service).readJson(tmp.extra.mark)) as { source: string; enabled: boolean },
           ).toEqual({
             source: "tuple",
             enabled: true,
@@ -960,7 +960,8 @@ export default {
       (tmp) =>
         Effect.gen(function* () {
           const file = path.join(tmp.extra.mod, "package.json")
-          const json = yield* Effect.promise(() => Filesystem.readJson<Record<string, unknown>>(file))
+          const fsys = yield* AppFileSystem.Service
+          const json = (yield* fsys.readJson(file)) as Record<string, unknown>
           const list = readPackageThemes("acme-plugin", {
             dir: tmp.extra.mod,
             pkg: file,
@@ -968,8 +969,8 @@ export default {
           })
 
           expect(list).toEqual([
-            Filesystem.resolve(path.join(tmp.extra.mod, "themes", "one.json")),
-            Filesystem.resolve(path.join(tmp.extra.mod, "themes", "two.json")),
+            AppFileSystem.resolve(path.join(tmp.extra.mod, "themes", "one.json")),
+            AppFileSystem.resolve(path.join(tmp.extra.mod, "themes", "two.json")),
           ])
         }),
     ),
@@ -1033,7 +1034,7 @@ export default {
               {
                 spec: "acme-plugin@1.0.0",
                 target: tmp.extra.mod,
-                themes: [Filesystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
+                themes: [AppFileSystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
               },
             ])
             expect(missing).toHaveLength(0)
@@ -1096,7 +1097,7 @@ export default {
             expect(loaded).toEqual([
               {
                 spec: "acme-plugin@1.0.0",
-                themes: [Filesystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
+                themes: [AppFileSystem.resolve(path.join(tmp.extra.mod, "themes", "night.json"))],
               },
             ])
           } finally {
@@ -1117,7 +1118,8 @@ export default {
       },
       (tmp) =>
         Effect.gen(function* () {
-          const json = yield* Effect.promise(() => Filesystem.readJson<Record<string, unknown>>(tmp.extra.file))
+          const fsys = yield* AppFileSystem.Service
+          const json = (yield* fsys.readJson(tmp.extra.file)) as Record<string, unknown>
           expect(() =>
             readPackageThemes("acme", {
               dir: tmp.extra.mod,
@@ -1178,7 +1180,52 @@ export default {
     ),
   )
 
-  it.live("retries file plugins when finish returns undefined", () =>
+  it.live("does not retry permanent file plugin entry errors", () =>
+    withTmp(
+      async (dir) => {
+        const mod = path.join(dir, "bad-entry")
+        const spec = pathToFileURL(mod).href
+        await fs.mkdir(mod, { recursive: true })
+        await Bun.write(
+          path.join(mod, "package.json"),
+          JSON.stringify({ exports: { "./tui": "../outside.js" } }, null, 2),
+        )
+        return { spec }
+      },
+      (tmp) =>
+        Effect.gen(function* () {
+          let wait = 0
+          const errors: Array<[string, boolean]> = []
+
+          const loaded = yield* Effect.promise(() =>
+            PluginLoader.loadExternal({
+              items: [
+                {
+                  spec: tmp.extra.spec,
+                  scope: "local" as const,
+                  source: tmp.path,
+                },
+              ],
+              kind: "tui",
+              wait: async () => {
+                wait += 1
+              },
+              report: {
+                error(_candidate, retry, stage) {
+                  errors.push([stage, retry])
+                },
+              },
+            }),
+          )
+
+          expect(loaded).toEqual([])
+          expect(wait).toBe(0)
+          expect(errors).toEqual([["entry", false]])
+        }),
+    ),
+  )
+
+  it.live("does not retry file plugins when finish returns undefined", () =>
     withTmp(
       async (dir) => {
         const file = path.join(dir, "plugin.ts")
@@ -1204,20 +1251,15 @@ export default {
               wait: async () => {
                 wait += 1
               },
-              finish: async (load, _item, retry) => {
+              finish: async () => {
                 count += 1
-                if (!retry) return
-                return {
-                  retry,
-                  spec: load.spec,
-                }
               },
             }),
           )
 
-          expect(wait).toBe(1)
-          expect(count).toBe(2)
-          expect(loaded).toEqual([{ retry: true, spec: tmp.extra.spec }])
+          expect(wait).toBe(0)
+          expect(count).toBe(1)
+          expect(loaded).toEqual([])
         }),
     ),
   )
