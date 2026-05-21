@@ -308,7 +308,7 @@ export const layer = Layer.effect(
 export const defaultLayer = layer.pipe(
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Global.defaultLayer),
-  Layer.provideMerge(EventV2.defaultLayer),
+  Layer.provide(EventV2.defaultLayer),
 )
 
 export * as AccountV2 from "./account"

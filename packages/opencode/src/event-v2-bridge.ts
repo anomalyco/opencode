@@ -81,7 +81,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provideMerge(EventV2.defaultLayer),
+  Layer.provide(EventV2.defaultLayer),
   Layer.provide(SyncEvent.defaultLayer),
   Layer.provide(ProjectBus.defaultLayer),
 )

@@ -228,6 +228,7 @@ export const layer = Layer.effect(
 export const defaultLayer = layer.pipe(
   Layer.provide(FetchHttpClient.layer),
   Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(EventV2.defaultLayer),
 )
 
 export * as ModelsDev from "./models-dev"

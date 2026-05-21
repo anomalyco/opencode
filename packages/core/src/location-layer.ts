@@ -6,7 +6,8 @@ import { PluginBoot } from "./plugin/boot"
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
     const location = Layer.succeed(Location.Service, Location.Service.of(ref))
-    return Layer.mergeAll(Catalog.defaultLayer, PluginBoot.defaultLayer).pipe(Layer.provide(location))
+    const result = Layer.mergeAll(Catalog.defaultLayer, PluginBoot.defaultLayer).pipe(Layer.provideMerge(location))
+    return result
   },
   idleTimeToLive: "5 minutes",
 }) {}

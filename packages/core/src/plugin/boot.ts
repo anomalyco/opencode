@@ -23,56 +23,55 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/PluginBoot") {}
 
-export const layer =
-  Layer.effect(
-    Service,
-    Effect.gen(function* () {
-      const agent = yield* AgentV2.Service
-      const catalog = yield* Catalog.Service
-      const plugin = yield* PluginV2.Service
-      const accounts = yield* AccountV2.Service
-      const npm = yield* Npm.Service
-      const events = yield* EventV2.Service
-      const done = yield* Deferred.make<void>()
+export const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const agent = yield* AgentV2.Service
+    const catalog = yield* Catalog.Service
+    const plugin = yield* PluginV2.Service
+    const accounts = yield* AccountV2.Service
+    const npm = yield* Npm.Service
+    const events = yield* EventV2.Service
+    const done = yield* Deferred.make<void>()
 
-      const add = Effect.fn("PluginBoot.add")(function* (input: Plugin) {
-        yield* plugin.add({
-          id: input.id,
-          effect: input.effect.pipe(
-            Effect.provideService(Catalog.Service, catalog),
-            Effect.provideService(AgentV2.Service, agent),
-            Effect.provideService(AccountV2.Service, accounts),
-            Effect.provideService(Npm.Service, npm),
-            Effect.provideService(EventV2.Service, events),
-          ),
-        })
+    const add = Effect.fn("PluginBoot.add")(function* (input: Plugin) {
+      yield* plugin.add({
+        id: input.id,
+        effect: input.effect.pipe(
+          Effect.provideService(Catalog.Service, catalog),
+          Effect.provideService(AgentV2.Service, agent),
+          Effect.provideService(AccountV2.Service, accounts),
+          Effect.provideService(Npm.Service, npm),
+          Effect.provideService(EventV2.Service, events),
+        ),
       })
+    })
 
-      const boot = Effect.gen(function* () {
-        yield* add(EnvPlugin)
-        yield* add(AccountPlugin)
-        for (const item of ProviderPlugins) {
-          yield* add(item)
-        }
-        yield* add(ModelsDevPlugin)
-      }).pipe(Effect.withSpan("PluginBoot.boot"))
+    const boot = Effect.gen(function* () {
+      yield* add(EnvPlugin)
+      yield* add(AccountPlugin)
+      for (const item of ProviderPlugins) {
+        yield* add(item)
+      }
+      yield* add(ModelsDevPlugin)
+    }).pipe(Effect.withSpan("PluginBoot.boot"))
 
-      yield* boot.pipe(
-        Effect.exit,
-        Effect.flatMap((exit) => Deferred.done(done, exit)),
-        Effect.forkScoped,
-      )
+    yield* boot.pipe(
+      Effect.exit,
+      Effect.flatMap((exit) => Deferred.done(done, exit)),
+      Effect.forkScoped,
+    )
 
-      return Service.of({
-        wait: () => Deferred.await(done),
-      })
-    }),
-  )
+    return Service.of({
+      wait: () => Deferred.await(done),
+    })
+  }),
+)
 
 export const defaultLayer = layer.pipe(
   Layer.provide(AgentV2.defaultLayer),
   Layer.provide(Catalog.defaultLayer),
-  Layer.provideMerge(EventV2.defaultLayer),
+  Layer.provide(EventV2.defaultLayer),
   Layer.provide(PluginV2.defaultLayer),
   Layer.provide(Layer.orDie(AccountV2.defaultLayer)),
   Layer.provide(Npm.defaultLayer),
