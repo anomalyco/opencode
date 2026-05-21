@@ -1622,6 +1622,47 @@ test("wellknown URL with trailing slash is normalized", async () => {
   )
 })
 
+test("default layer provides HTTP client for remote well-known config", async () => {
+  const originalAuth = process.env.OPENCODE_AUTH_CONTENT
+  let fetchedUrl: string | undefined
+  const server = Bun.serve({
+    port: 0,
+    fetch: (request) => {
+      fetchedUrl = request.url
+      return new Response(
+        JSON.stringify({
+          config: {
+            mcp: { jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: true } },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    },
+  })
+
+  process.env.OPENCODE_AUTH_CONTENT = JSON.stringify({
+    [server.url.origin]: { type: "wellknown", key: "TEST_TOKEN", token: "test-token" },
+  })
+
+  try {
+    await provideTmpdirInstance(
+      () =>
+        Config.Service.use((svc) =>
+          Effect.gen(function* () {
+            const config = yield* svc.get()
+            expect(fetchedUrl).toBe(`${server.url.origin}/.well-known/opencode`)
+            expect(config.mcp?.jira?.enabled).toBe(true)
+          }),
+        ),
+      { git: true },
+    ).pipe(Effect.scoped, Effect.provide(Config.defaultLayer), Effect.provide(infra), Effect.runPromise)
+  } finally {
+    await server.stop(true)
+    if (originalAuth === undefined) delete process.env.OPENCODE_AUTH_CONTENT
+    else process.env.OPENCODE_AUTH_CONTENT = originalAuth
+  }
+})
+
 test("wellknown remote_config supports templated env vars in headers", async () => {
   const originalToken = process.env.TEST_TOKEN
   const seen: { wellKnown?: string; remote?: string; authorization?: string } = {}
@@ -1662,6 +1703,30 @@ test("wellknown remote_config supports templated env vars in headers", async () 
     if (originalToken === undefined) delete process.env.TEST_TOKEN
     else process.env.TEST_TOKEN = originalToken
   }
+})
+
+test("wellknown remote_config rejects non-object config responses", async () => {
+  const seen: { wellKnown?: string; remote?: string; authorization?: string } = {}
+  const client = remoteConfigClient({
+    seen,
+    wellKnown: {
+      remote_config: {
+        url: "https://config.example.com/opencode.json",
+      },
+    },
+    remote: "not an object",
+  })
+
+  const exit = await provideTmpdirInstance(() => Config.Service.use((svc) => svc.get()).pipe(Effect.exit), {
+    git: true,
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(configLayer({ auth: wellKnownAuth("https://example.com"), client })),
+    Effect.runPromise,
+  )
+
+  expect(seen.remote).toBe("https://config.example.com/opencode.json")
+  expect(Exit.isFailure(exit)).toBe(true)
 })
 
 describe("resolvePluginSpec", () => {

@@ -18,7 +18,7 @@ import type { ConsoleState } from "./console-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath, type InstanceContext } from "../project/instance-context"
 import { NonNegativeInt, PositiveInt, type DeepMutable } from "@opencode-ai/core/schema"
@@ -555,7 +555,10 @@ export const layer = Layer.effect(
                   log.debug("fetching remote config", { url: remote.url })
                   const data = yield* fetchRemoteJson(remote.url, remote.headers, Schema.Json)
                   if (isRecord(data) && isRecord(data.config)) return data.config
-                  return isRecord(data) ? data : {}
+                  if (isRecord(data)) return data
+                  return yield* Effect.die(
+                    new Error(`failed to decode remote config from ${remote.url}: expected object`),
+                  )
                 })
               : {}
             const remoteConfig = mergeConfig(wellknown.config ?? {}, fetchedConfig)
@@ -850,6 +853,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Auth.defaultLayer),
   Layer.provide(Account.defaultLayer),
   Layer.provide(Npm.defaultLayer),
+  Layer.provide(FetchHttpClient.layer),
 )
 
 export * as Config from "./config"
