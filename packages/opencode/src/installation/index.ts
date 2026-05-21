@@ -1,4 +1,5 @@
 import { Effect, Layer, Schema, Context, Stream } from "effect"
+import { serviceUse } from "@/effect/service-use"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { errorMessage } from "@/util/error"
@@ -88,6 +89,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Installation") {}
+
+export const use = serviceUse(Service)
 
 export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Service> = Layer.effect(
   Service,

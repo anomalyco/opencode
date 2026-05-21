@@ -195,6 +195,10 @@ export function resolveZedDbPath() {
   return candidates.find((item) => isFile(item))
 }
 
+export function isZedTerminal() {
+  return process.env.ZED_TERM === "true" || process.env.TERM_PROGRAM?.toLowerCase() === "zed"
+}
+
 function isFile(item: string) {
   try {
     return Filesystem.stat(item)?.isFile() === true

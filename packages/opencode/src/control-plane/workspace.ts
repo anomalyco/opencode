@@ -1,4 +1,5 @@
 import { Context, Effect, FiberMap, Iterable, Layer, Schema, Stream } from "effect"
+import { serviceUse } from "@/effect/service-use"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import { Database } from "@/storage/db"
 import { asc } from "drizzle-orm"
@@ -166,6 +167,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Workspace") {}
+
+export const use = serviceUse(Service)
 
 export const layer = Layer.effect(
   Service,
