@@ -27,6 +27,6 @@ export function isOverflow(input: {
   if (input.model.limit.context === 0) return false
 
   const count =
-    input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
+    input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.reasoning + input.tokens.cache.read + input.tokens.cache.write
   return count >= usable(input)
 }
