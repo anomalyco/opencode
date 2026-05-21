@@ -1,0 +1,165 @@
+@import "tailwindcss";
+
+/* ========================================================================
+ * Acompany Secure Code — design tokens
+ *
+ * Palette は本体 (packages/ui/src/styles/colors.css) の "gray" / "ember" /
+ * "cobalt" / "apple" / "amber" を縮約。本体は Radix スケール 1-12 を採用するが、
+ * デモでは 1, 3, 6, 9, 11, 12 のみ抜粋して構成する。
+ * ====================================================================== */
+
+@theme {
+  --color-sc-bg: #131010;
+  --color-sc-bg-soft: #1b1818;
+  --color-sc-bg-elev: #252121;
+  --color-sc-border: #3e3939;
+  --color-sc-border-strong: #4b4646;
+  --color-sc-text-dim: #716c6b;
+  --color-sc-text-mid: #b7b1b1;
+  --color-sc-text: #f1ecec;
+
+  --color-sc-ember: #fc533a;
+  --color-sc-ember-soft: #ee462d;
+  --color-sc-ember-deep: #530e05;
+
+  --color-sc-cobalt: #034cff;
+  --color-sc-cobalt-mid: #2558d0;
+  --color-sc-cobalt-deep: #0c2255;
+
+  --color-sc-mint: #c8ffc4;
+  --color-sc-mint-mid: #3d7b3b;
+
+  --color-sc-amber: #ffb224;
+  --color-sc-amber-mid: #824e00;
+
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular,
+    Menlo, Consolas, "Liberation Mono", monospace;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Hiragino Kaku Gothic ProN", "ヒラギノ角ゴ ProN W3", "Noto Sans JP",
+    Meiryo, sans-serif;
+}
+
+html,
+body {
+  background-color: var(--color-sc-bg);
+  color: var(--color-sc-text);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle grid backdrop, suggestive of confidential-computing rack layouts */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 56px 56px;
+  pointer-events: none;
+  z-index: 0;
+  mask-image: radial-gradient(circle at 50% 30%, black 0%, transparent 70%);
+}
+
+/* Reusable utility classes */
+@utility terminal-window {
+  background: var(--color-sc-bg-soft);
+  border: 1px solid var(--color-sc-border);
+  border-radius: 10px;
+  box-shadow:
+    0 30px 60px -20px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+}
+
+@utility terminal-titlebar {
+  background: linear-gradient(180deg, #2a2525 0%, #1f1c1c 100%);
+  border-bottom: 1px solid var(--color-sc-border);
+  border-radius: 10px 10px 0 0;
+}
+
+@utility scanlines {
+  background-image: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0) 50%,
+    rgba(255, 255, 255, 0.02) 50%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  background-size: 100% 4px;
+}
+
+@utility text-accent {
+  color: var(--color-sc-ember);
+}
+
+@utility text-stamp {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-sc-text-dim);
+}
+
+@keyframes sc-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.cursor-blink {
+  animation: sc-blink 1s steps(2, end) infinite;
+}
+
+@keyframes sc-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+.sc-pulse {
+  animation: sc-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes sc-shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: 200px 0;
+  }
+}
+
+.sc-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(252, 83, 58, 0.18) 50%,
+    transparent 100%
+  );
+  background-size: 200px 100%;
+  background-repeat: no-repeat;
+  animation: sc-shimmer 2s linear infinite;
+}
+
+::selection {
+  background: rgba(252, 83, 58, 0.35);
+  color: #fff;
+}
+
+/* Smooth scroll for whole site (we still control timing via framer-motion) */
+html {
+  scroll-behavior: smooth;
+}

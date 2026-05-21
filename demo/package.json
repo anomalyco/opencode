@@ -1,0 +1,27 @@
+{
+  "name": "@securecode/demo",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Acompany Secure Code のチュートリアル兼デモサイト（スクロールテリング）",
+  "scripts": {
+    "dev": "next dev --port 4321",
+    "build": "next build",
+    "preview": "bun x serve out --listen 4321",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "framer-motion": "^11.18.2",
+    "next": "15.1.6",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.6",
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.6",
+    "@types/react-dom": "^19.0.3",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^4.0.6",
+    "typescript": "^5.7.3"
+  }
+}
