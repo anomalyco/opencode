@@ -2,11 +2,11 @@ import { Effect, Schema } from "effect"
 import { Route } from "../route/client"
 import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
-import { Framing } from "../route/framing"
 import { HttpTransport, WebSocketTransport } from "../route/transport"
 import { Protocol } from "../route/protocol"
 import {
   LLMEvent,
+  type MediaPart,
   Usage,
   type FinishReason,
   type LLMRequest,
@@ -31,6 +31,12 @@ const OpenAIResponsesInputText = Schema.Struct({
   type: Schema.tag("input_text"),
   text: Schema.String,
 })
+const OpenAIResponsesInputImage = Schema.Struct({
+  type: Schema.tag("input_image"),
+  image_url: Schema.String,
+})
+const OpenAIResponsesInputContent = Schema.Union([OpenAIResponsesInputText, OpenAIResponsesInputImage])
+type OpenAIResponsesInputContent = Schema.Schema.Type<typeof OpenAIResponsesInputContent>
 
 const OpenAIResponsesOutputText = Schema.Struct({
   type: Schema.tag("output_text"),
@@ -39,7 +45,7 @@ const OpenAIResponsesOutputText = Schema.Struct({
 
 const OpenAIResponsesInputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
-  Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenAIResponsesInputText) }),
+  Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenAIResponsesInputContent) }),
   Schema.Struct({ role: Schema.tag("assistant"), content: Schema.Array(OpenAIResponsesOutputText) }),
   Schema.Struct({
     type: Schema.tag("function_call"),
@@ -76,6 +82,7 @@ const OpenAIResponsesToolChoice = Schema.Union([
 const OpenAIResponsesCoreFields = {
   model: Schema.String,
   input: Schema.Array(OpenAIResponsesInputItem),
+  instructions: Schema.optional(Schema.String),
   tools: optionalArray(OpenAIResponsesTool),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   store: Schema.optional(Schema.Boolean),
@@ -151,12 +158,15 @@ const OpenAIResponsesEvent = Schema.Struct({
   item_id: Schema.optional(Schema.String),
   item: Schema.optional(OpenAIResponsesStreamItem),
   response: Schema.optional(
-    Schema.Struct({
-      id: Schema.optional(Schema.String),
-      service_tier: Schema.optional(Schema.String),
-      incomplete_details: optionalNull(Schema.Struct({ reason: Schema.String })),
-      usage: optionalNull(OpenAIResponsesUsage),
-    }),
+    Schema.StructWithRest(
+      Schema.Struct({
+        id: Schema.optional(Schema.String),
+        service_tier: optionalNull(Schema.String),
+        incomplete_details: optionalNull(Schema.Struct({ reason: Schema.String })),
+        usage: optionalNull(OpenAIResponsesUsage),
+      }),
+      [Schema.Record(Schema.String, Schema.Unknown)],
+    ),
   ),
   code: Schema.optional(Schema.String),
   message: Schema.optional(Schema.String),
@@ -196,6 +206,22 @@ const lowerToolCall = (part: ToolCallPart): OpenAIResponsesInputItem => ({
   arguments: ProviderShared.encodeJson(part.input),
 })
 
+const imageUrl = (part: MediaPart) =>
+  typeof part.data === "string" && part.data.startsWith("data:")
+    ? part.data
+    : `data:${part.mediaType};base64,${ProviderShared.mediaBytes(part)}`
+
+const lowerUserContent = Effect.fn("OpenAIResponses.lowerUserContent")(function* (
+  part: LLMRequest["messages"][number]["content"][number],
+) {
+  if (part.type === "text") return { type: "input_text" as const, text: part.text }
+  if (part.type === "media" && part.mediaType.startsWith("image/")) {
+    return { type: "input_image" as const, image_url: imageUrl(part) }
+  }
+  if (part.type === "media") return yield* invalid("OpenAI Responses user media content only supports images")
+  return yield* ProviderShared.unsupportedContent("OpenAI Responses", "user", ["text", "media"])
+})
+
 const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIResponsesInputItem[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
@@ -203,13 +229,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
 
   for (const message of request.messages) {
     if (message.role === "user") {
-      const content: TextPart[] = []
-      for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text"]))
-          return yield* ProviderShared.unsupportedContent("OpenAI Responses", "user", ["text"])
-        content.push(part)
-      }
-      input.push({ role: "user", content: content.map((part) => ({ type: "input_text", text: part.text })) })
+      input.push({ role: "user", content: yield* Effect.forEach(message.content, lowerUserContent) })
       continue
     }
 
@@ -251,7 +271,9 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
   const summary = OpenAIOptions.reasoningSummary(request)
   const encryptedState = OpenAIOptions.encryptedReasoning(request)
   const verbosity = OpenAIOptions.textVerbosity(request)
+  const instructions = OpenAIOptions.instructions(request)
   return {
+    ...(instructions ? { instructions } : {}),
     ...(store !== undefined ? { store } : {}),
     ...(promptCacheKey ? { prompt_cache_key: promptCacheKey } : {}),
     ...(encryptedState ? { include: ["reasoning.encrypted_content"] as const } : {}),
@@ -394,6 +416,29 @@ const onOutputTextDelta = (state: ParserState, event: OpenAIResponsesEvent): Ste
   ]
 }
 
+const onReasoningDelta = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
+  if (!event.delta) return [state, NO_EVENTS]
+  const events: LLMEvent[] = []
+  return [
+    {
+      ...state,
+      lifecycle: Lifecycle.reasoningDelta(state.lifecycle, events, event.item_id ?? "reasoning-0", event.delta),
+    },
+    events,
+  ]
+}
+
+const onReasoningDone = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
+  const events: LLMEvent[] = []
+  return [
+    {
+      ...state,
+      lifecycle: Lifecycle.reasoningEnd(state.lifecycle, events, event.item_id ?? "reasoning-0"),
+    },
+    events,
+  ]
+}
+
 const onOutputItemAdded = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
   const item = event.item
   if (item?.type !== "function_call" || !item.id) return [state, NO_EVENTS]
@@ -504,6 +549,18 @@ const onError = (state: ParserState, event: OpenAIResponsesEvent): StepResult =>
 
 const step = (state: ParserState, event: OpenAIResponsesEvent) => {
   if (event.type === "response.output_text.delta") return Effect.succeed(onOutputTextDelta(state, event))
+  if (
+    event.type === "response.reasoning_text.delta" ||
+    event.type === "response.reasoning_summary.delta" ||
+    event.type === "response.reasoning_summary_text.delta"
+  )
+    return Effect.succeed(onReasoningDelta(state, event))
+  if (
+    event.type === "response.reasoning_text.done" ||
+    event.type === "response.reasoning_summary.done" ||
+    event.type === "response.reasoning_summary_text.done"
+  )
+    return Effect.succeed(onReasoningDone(state, event))
   if (event.type === "response.output_item.added") return Effect.succeed(onOutputItemAdded(state, event))
   if (event.type === "response.function_call_arguments.delta") return onFunctionCallArgumentsDelta(state, event)
   if (event.type === "response.output_item.done") return onOutputItemDone(state, event)
@@ -536,27 +593,18 @@ export const protocol = Protocol.make({
   },
 })
 
-const encodeBody = Schema.encodeSync(Schema.fromJsonString(OpenAIResponsesBody))
-const transportBase = {
-  endpoint: Endpoint.path<OpenAIResponsesBody>(PATH),
-  auth: Auth.bearer(),
-  encodeBody,
-}
-const routeDefaults = {
-  baseURL: DEFAULT_BASE_URL,
-}
+const endpoint = Endpoint.path<OpenAIResponsesBody>(PATH, { baseURL: DEFAULT_BASE_URL })
+const auth = Auth.none
 
-export const httpTransport = HttpTransport.httpJson({
-  ...transportBase,
-  framing: Framing.sse,
-})
+export const httpTransport = HttpTransport.sseJson.with<OpenAIResponsesBody>()
 
 export const route = Route.make({
   id: ADAPTER,
   provider: "openai",
   protocol,
+  endpoint,
+  auth,
   transport: httpTransport,
-  defaults: routeDefaults,
 })
 
 const decodeWebSocketMessage = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIResponsesWebSocketMessage))
@@ -569,8 +617,10 @@ const webSocketMessage = (body: OpenAIResponsesBody | Record<string, unknown>) =
     return yield* decodeWebSocketMessage({ ...message, type: "response.create" })
   })
 
-export const webSocketTransport = WebSocketTransport.json({
-  ...transportBase,
+export const webSocketTransport = WebSocketTransport.jsonTransport.with<
+  OpenAIResponsesBody,
+  OpenAIResponsesWebSocketMessage
+>({
   toMessage: webSocketMessage,
   encodeMessage: encodeWebSocketMessage,
 })
@@ -579,15 +629,9 @@ export const webSocketRoute = Route.make({
   id: `${ADAPTER}-websocket`,
   provider: "openai",
   protocol,
+  endpoint,
+  auth,
   transport: webSocketTransport,
-  defaults: routeDefaults,
 })
-
-// =============================================================================
-// Model Helper
-// =============================================================================
-export const model = route.model
-
-export const webSocketModel = webSocketRoute.model
 
 export * as OpenAIResponses from "./openai-responses"
