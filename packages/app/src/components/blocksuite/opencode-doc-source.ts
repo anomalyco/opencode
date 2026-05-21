@@ -78,15 +78,9 @@ export class OpencodeDocSource implements DocSource {
     let done = false
     let closed = false
     let timer: ReturnType<typeof setTimeout> | undefined
-    let poll: ReturnType<typeof setInterval> | undefined
-    let pulling = false
     let ready: ((stop: () => void) => void) | undefined
-    let synced: (() => void) | undefined
     let ws: WebSocket | undefined
-    const docs = new Set([this.opts.docID])
-    this.ready = new Promise<void>((resolve) => {
-      synced = resolve
-    })
+    this.ready = Promise.resolve()
 
     const onMsg = (event: MessageEvent) => {
       const raw =
@@ -98,7 +92,6 @@ export class OpencodeDocSource implements DocSource {
       if (!raw || raw.length === 0) return
       const msg = unpack(raw)
       if (msg?.type === MSG_DOC) {
-        docs.add(msg.guid)
         cb(msg.guid, msg.data)
         return
       }
@@ -108,7 +101,6 @@ export class OpencodeDocSource implements DocSource {
     const stop = () => {
       closed = true
       if (timer) clearTimeout(timer)
-      if (poll) clearInterval(poll)
       ws?.removeEventListener("message", onMsg)
       if (ws && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) ws.close(1000)
       if (done) return
@@ -147,28 +139,7 @@ export class OpencodeDocSource implements DocSource {
       })
     }
 
-    const pull = () => {
-      if (closed || pulling) return
-      pulling = true
-      const ids = Array.from(docs).filter((id) => id !== this.opts.docID)
-      void Promise.all([this.pull(this.opts.docID, new Uint8Array()), ...ids.map((id) => this.pull(id, new Uint8Array()))])
-        .then(([root, ...rest]) => {
-          if (closed) return
-          if (root?.data.length) cb(this.opts.docID, root.data)
-          rest.forEach((doc, i) => {
-            if (doc?.data.length) cb(ids[i]!, doc.data)
-          })
-        })
-        .finally(() => {
-          synced?.()
-          synced = undefined
-          pulling = false
-        })
-    }
-
     connect()
-    pull()
-    poll = setInterval(pull, 750)
 
     return new Promise<() => void>((resolve) => {
       if (done) {

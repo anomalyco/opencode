@@ -19,6 +19,12 @@ function fromB64(value: string) {
   return new Uint8Array(Buffer.from(value, "base64"))
 }
 
+async function href(input: string) {
+  const server = await import("../server/server").then((mod) => mod.Server)
+  if (server.basePath === "/") return input
+  return `${server.basePath}${input}`
+}
+
 export const DocRoutes = lazy(() =>
   new Hono()
     .get(
@@ -134,7 +140,14 @@ export const DocRoutes = lazy(() =>
         const body = c.req.valid("json")
         const data = new Uint8Array(Buffer.from(body.data, "base64"))
         if (data.byteLength > MAX) throw new HTTPException(400, { message: "Doc asset is too large" })
-        return c.json(Doc.assetCreate({ docID, assetID: body.id, mime: body.mime, data }))
+        const asset = Doc.assetCreate({ docID, assetID: body.id, mime: body.mime, data })
+        const next = new URL(await href(asset.url), "http://opencode.internal")
+        const query = ["directory", "workspace"] as const
+        query.forEach((key) => {
+          const val = c.req.query(key)
+          if (val) next.searchParams.set(key, val)
+        })
+        return c.json({ ...asset, url: next.pathname + next.search })
       },
     )
     .get(

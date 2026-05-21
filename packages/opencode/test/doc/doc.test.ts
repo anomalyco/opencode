@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import * as Y from "yjs"
 import { Instance } from "../../src/project/instance"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
@@ -11,6 +11,10 @@ import { Server } from "../../src/server/server"
 import { tmpdir } from "../fixture/fixture"
 
 describe("doc", () => {
+  afterEach(() => {
+    Server.basePath = "/"
+  })
+
   test("prompt doc and session actor are session-scoped", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
@@ -150,7 +154,8 @@ describe("doc", () => {
         const { docID } = Doc.prompt(session.id)
         const app = Server.Default()
 
-        const upload = await app.request(`/doc/${docID}/asset`, {
+        const dir = encodeURIComponent(tmp.path)
+        const upload = await app.request(`/doc/${docID}/asset?directory=${dir}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -163,11 +168,26 @@ describe("doc", () => {
 
         const info = (await upload.json()) as Doc.AssetInfo
         expect(info.assetID).toBe(AssetID.make("hash"))
+        expect(info.url).toBe(`/doc/${docID}/asset/${info.assetID}?directory=${dir}`)
         expect(Doc.assetGet({ docID, assetID: info.assetID }).size).toBe(3)
-        const image = await app.request(`/doc/${docID}/asset/${info.assetID}?directory=${encodeURIComponent(tmp.path)}`)
+        const image = await app.request(info.url)
         expect(image.status).toBe(200)
         expect(image.headers.get("content-type")).toBe("image/png")
         expect(Array.from(new Uint8Array(await image.arrayBuffer()))).toEqual([4, 5, 6])
+
+        Server.basePath = "/user/alice"
+        const res = await app.request(`/doc/${docID}/asset?directory=${dir}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "hash2",
+            mime: "image/png",
+            data: Buffer.from([7, 8, 9]).toString("base64"),
+          }),
+        })
+        expect(res.status).toBe(200)
+        const pref = (await res.json()) as Doc.AssetInfo
+        expect(pref.url).toBe(`/user/alice/doc/${docID}/asset/${pref.assetID}?directory=${dir}`)
       },
     })
   })

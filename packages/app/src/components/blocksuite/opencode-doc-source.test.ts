@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
-import { OpencodeBlobSource, type DocSyncOpts } from "./opencode-doc-source"
+import { MSG_DOC, pack } from "./doc-sync-protocol"
+import { OpencodeBlobSource, OpencodeDocSource, type DocSyncOpts } from "./opencode-doc-source"
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -78,5 +79,68 @@ describe("OpencodeBlobSource", () => {
     )
 
     await expect(source.get("hash")).resolves.toBeInstanceOf(Blob)
+  })
+})
+
+describe("OpencodeDocSource", () => {
+  test("subscribes over websocket without polling sync", async () => {
+    const prev = globalThis.WebSocket
+    const reqs: Array<RequestInfo | URL> = []
+    const seen: Array<{ id: string; data: number[] }> = []
+
+    class Sock extends EventTarget {
+      static CONNECTING = 0
+      static OPEN = 1
+      static CLOSING = 2
+      static CLOSED = 3
+      static all: Sock[] = []
+      binaryType: BinaryType = "blob"
+      readyState = Sock.CONNECTING
+      url: string
+
+      constructor(url: string | URL) {
+        super()
+        this.url = String(url)
+        Sock.all.push(this)
+      }
+
+      send(_data: string | ArrayBufferLike | Blob | ArrayBufferView) {}
+
+      close() {
+        this.readyState = Sock.CLOSED
+        this.dispatchEvent(new CloseEvent("close"))
+      }
+
+      open() {
+        this.readyState = Sock.OPEN
+        this.dispatchEvent(new Event("open"))
+      }
+
+      message(data: Uint8Array) {
+        this.dispatchEvent(new MessageEvent("message", { data: data.buffer.slice(0) }))
+      }
+    }
+
+    globalThis.WebSocket = Sock as unknown as typeof WebSocket
+
+    const source = new OpencodeDocSource(
+      opts(async (input) => {
+        reqs.push(input)
+        return new Response(JSON.stringify(null), { status: 200 })
+      }),
+    )
+
+    const stop = source.subscribe((id, data) => seen.push({ id, data: [...data] }), () => undefined)
+    const sock = Sock.all[0]!
+    expect(sock.url).toBe("ws://localhost:4096/doc/doc_1/connect?directory=%2Ftmp%2Fproject&kind=doc")
+    sock.open()
+    const dispose = await stop
+
+    sock.message(pack(MSG_DOC, "page", new Uint8Array([1, 2, 3])))
+    expect(seen).toEqual([{ id: "page", data: [1, 2, 3] }])
+    expect(reqs).toHaveLength(0)
+
+    dispose()
+    globalThis.WebSocket = prev
   })
 })

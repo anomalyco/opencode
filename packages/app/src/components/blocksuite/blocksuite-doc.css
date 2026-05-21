@@ -54,8 +54,9 @@
   display: block;
   width: 100%;
   max-width: 100%;
-  height: min(52vh, 520px);
-  min-height: 180px;
+  height: auto;
+  min-height: 50px;
+  max-height: 650px;
   overflow: hidden;
   white-space: normal;
   --affine-editor-width: 100%;

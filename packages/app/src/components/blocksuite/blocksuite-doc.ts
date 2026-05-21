@@ -99,13 +99,45 @@ export async function createPage(input: DocMountInput) {
   }
 
   let resize: ResizeObserver | undefined
+  let mutate: MutationObserver | undefined
+  let unload: (() => void) | undefined
   let cursors: (() => void) | undefined
 
+  const clamp = (height: number) => Math.min(650, Math.max(50, Math.ceil(height)))
+
+  const content = (host: HTMLElement, root?: HTMLElement, preview?: HTMLElement) => {
+    const base = host.getBoundingClientRect().top
+    const boxes = Array.from(
+      editor.querySelectorAll(
+        [
+          "img",
+          "svg",
+          "canvas",
+          "video",
+          "affine-image",
+          "affine-image-block",
+          "affine-attachment",
+          "affine-embed",
+          "[data-block-id]",
+        ].join(","),
+      ),
+    )
+      .filter((node): node is HTMLElement | SVGElement => node instanceof HTMLElement || node instanceof SVGElement)
+      .map((node) => node.getBoundingClientRect().bottom - base)
+    return Math.max(root?.scrollHeight ?? 0, preview?.scrollHeight ?? 0, ...boxes)
+  }
+
   const fit = (host: HTMLElement) => {
-    const height = host.clientHeight
     const width = host.clientWidth
-    const tall = input.readonly ? Math.max(height || 180, 96) : height
+    const root = editor.querySelector(".affine-page-root-block-container")
+    const preview = editor.querySelector("affine-preview-root")
+    const height =
+      input.readonly && root instanceof HTMLElement
+        ? content(host, root, preview instanceof HTMLElement ? preview : undefined)
+        : host.clientHeight
+    const tall = input.readonly ? clamp(height) : height
     if (tall <= 0) return
+    if (input.readonly) host.style.height = `${tall}px`
     editor.style.display = "block"
     editor.style.height = `${tall}px`
     editor.style.width = width > 0 ? `${width}px` : "100%"
@@ -116,14 +148,12 @@ export async function createPage(input: DocMountInput) {
       viewport.style.minHeight = input.readonly ? "0" : `${tall}px`
       viewport.style.overflowY = input.readonly ? "auto" : ""
     }
-    const root = editor.querySelector(".affine-page-root-block-container")
     if (root instanceof HTMLElement) {
       root.style.maxWidth = "none"
       root.style.margin = "0"
       if (width > 0) root.style.width = `${width}px`
       if (input.readonly) root.style.minHeight = "0"
     }
-    const preview = editor.querySelector("affine-preview-root")
     if (preview instanceof HTMLElement) {
       preview.style.display = "block"
       preview.style.width = width > 0 ? `${width}px` : "100%"
@@ -147,6 +177,18 @@ export async function createPage(input: DocMountInput) {
       resize?.disconnect()
       resize = new ResizeObserver(() => fit(el))
       resize.observe(el)
+      resize.observe(editor)
+      const root = editor.querySelector(".affine-page-root-block-container")
+      if (root instanceof HTMLElement) resize.observe(root)
+      const preview = editor.querySelector("affine-preview-root")
+      if (preview instanceof HTMLElement) resize.observe(preview)
+      mutate?.disconnect()
+      mutate = input.readonly ? new MutationObserver(() => fit(el)) : undefined
+      mutate?.observe(editor, { childList: true, characterData: true, subtree: true })
+      unload?.()
+      const loaded = () => fit(el)
+      editor.addEventListener("load", loaded, true)
+      unload = () => editor.removeEventListener("load", loaded, true)
       cursors?.()
       cursors = input.readonly ? undefined : watchCursorLabels(editor, el)
       if (!attached && ready) await focus(ready)
@@ -155,6 +197,7 @@ export async function createPage(input: DocMountInput) {
         aware = true
       }
       await frame()
+      fit(el)
     } finally {
       el.style.pointerEvents = events
       el.removeAttribute("aria-busy")
@@ -166,6 +209,10 @@ export async function createPage(input: DocMountInput) {
     cursors = undefined
     resize?.disconnect()
     resize = undefined
+    mutate?.disconnect()
+    mutate = undefined
+    unload?.()
+    unload = undefined
     editor.remove()
   }
 
@@ -237,6 +284,10 @@ export async function createPage(input: DocMountInput) {
       cursors = undefined
       resize?.disconnect()
       resize = undefined
+      mutate?.disconnect()
+      mutate = undefined
+      unload?.()
+      unload = undefined
       detach()
       if (input.sync) {
         unlink?.()
