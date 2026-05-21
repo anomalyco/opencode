@@ -53,7 +53,7 @@ describe("HttpApi error middleware", () => {
     }),
   )
 
-  it.live("preserves config defects as client-visible bad requests", () =>
+  it.live("does not expose config defects from generic middleware", () =>
     Effect.gen(function* () {
       const configError = new ConfigError.InvalidError({
         path: "/tmp/opencode.json",
@@ -68,9 +68,13 @@ describe("HttpApi error middleware", () => {
 
       const response = yield* HttpClientRequest.get("/config-error").pipe(HttpClient.execute)
       const body = yield* response.json
+      const serialized = JSON.stringify(body)
 
-      expect(response.status).toBe(400)
-      expect(JSON.stringify(body)).toBe(JSON.stringify(configError.toObject()))
+      expect(response.status).toBe(500)
+      expectUnknownErrorBody(body)
+      expect(serialized).not.toContain("/tmp/opencode.json")
+      expect(serialized).not.toContain("provider")
+      expect(serialized).not.toContain("anthropic")
     }),
   )
 
