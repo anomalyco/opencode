@@ -57,7 +57,9 @@ if ($SkipBump) {
     }
 } else {
     # 本地默认走 bump
-    $bumpOut = & (Join-Path $here "bump-installer-version.ps1") -Platform "Windows"
+    # FORK: 透传 Env 给 bump 脚本 — dev/beta 出带 suffix 版本号(例 2026.5.21.1-dev)
+    # [feat: installer-version-env-suffix] 2026-05-21
+    $bumpOut = & (Join-Path $here "bump-installer-version.ps1") -Platform "Windows" -Env $Env
     $bumpOut | Write-Output
     $versionLine = $bumpOut | Where-Object { $_ -match '^VERSION=' } | Select-Object -First 1
     if (-not $versionLine) { throw "bump script did not produce VERSION= line" }

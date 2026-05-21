@@ -44,7 +44,9 @@ REPO_ROOT="$(cd "$BRANDING_ROOT/../.." && pwd)"
 NEW_VERSION=""
 if [[ "$NO_BUMP" -eq 0 ]]; then
     echo "=== Step 1: bump version ==="
-    BUMP_OUT=$("$SCRIPT_DIR/bump-installer-version.sh" -Platform macOS)
+    # FORK: 透传 env 给 bump 脚本 — dev/beta 出带 suffix 版本号(例 2026.5.21.1-dev)
+    # [feat: installer-version-env-suffix] 2026-05-21
+    BUMP_OUT=$("$SCRIPT_DIR/bump-installer-version.sh" -Platform macOS --env "$ENV")
     echo "$BUMP_OUT"
     VERSION_LINE=$(echo "$BUMP_OUT" | grep '^VERSION=' | head -1)
     if [[ -z "$VERSION_LINE" ]]; then
