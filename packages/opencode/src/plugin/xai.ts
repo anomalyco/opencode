@@ -603,11 +603,12 @@ export async function XaiAuthPlugin(input: PluginInput, options: XaiAuthPluginOp
               accessTokenIsExpiring(currentAuth.access)
             if (expiresSoon) {
               if (!refreshPromise) {
+                const refreshToken = currentAuth.refresh
                 log.info("refreshing xai access token")
-                refreshPromise = refreshAccessToken(currentAuth.refresh, options)
+                refreshPromise = refreshAccessToken(refreshToken, options)
                   .then(async (tokens) => {
                     const refreshedExpires = Date.now() + (tokens.expires_in ?? 3600) * 1000
-                    const refreshedRefresh = tokens.refresh_token || currentAuth.refresh
+                    const refreshedRefresh = tokens.refresh_token || refreshToken
                     // Persist the rotated pair as best-effort. xAI has already consumed the
                     // old refresh_token by the time we get here; an auth.set failure leaves
                     // the on-disk state stale but the in-memory result is still valid for
