@@ -183,20 +183,21 @@ function formatOptions(config: TuiConfig.Resolved) {
 }
 
 export function formatKeySequence(parts: Parameters<typeof formatKeySequenceExtra>[0], config: TuiConfig.Resolved) {
+  const options = formatOptions(config)
   if (parts && parts.length > 1 && parts[0]?.tokenName === LEADER_TOKEN) {
     return parts
-      .map((part) => formatKeySequenceExtra([part], formatOptions(config)))
+      .map((part) => formatKeySequenceExtra([part], options))
       .filter(Boolean)
       .join(" then ")
   }
-  return formatKeySequenceExtra(parts, formatOptions(config))
+  return formatKeySequenceExtra(parts, options)
 }
 
 export function formatKeyBindings(
   bindings: Parameters<typeof formatCommandBindingsExtra>[0],
   config: TuiConfig.Resolved,
 ) {
-  if (!bindings?.length) return
+  if (!bindings?.length) return ""
   const seen = new Set<string>()
   let formatted = ""
   let itemCount = 0
