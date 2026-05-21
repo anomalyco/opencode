@@ -1565,7 +1565,7 @@ function CollapsedReasoningText(props: { title: string | null; duration: number 
   return (
     <text fg={theme.warning} wrapMode="none">
       <span style={{ fg: theme.warning, italic: true }}>
-        {props.title ? "+ Thought · " + props.title + " · " + duration() : "+ Thought · " + duration()}
+        {props.title ? "+ Thought: " + props.title + " · " + duration() : "+ Thought: " + duration()}
       </span>
     </text>
   )
