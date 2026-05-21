@@ -272,7 +272,6 @@ new sst.cloudflare.x.SolidStart("Console", {
           new sst.Secret("CLOUDFLARE_API_TOKEN", process.env.CLOUDFLARE_API_TOKEN!),
         ]
       : []),
-    new sst.Secret("PLACEHOLDER"),
   ],
   environment: {
     //VITE_DOCS_URL: web.url.apply((url) => url!),
