@@ -20,6 +20,13 @@ export type FileViewState = {
   selectedLines?: SelectedLineRange | null
 }
 
+// FORK: 大文件预览统一防护 — L1 入口闸门标记;UI 渲染前判断 tooLarge 走 FileTooLarge 组件 [feat: large-file-preview-guard] 2026-05-21
+export type FileTooLargeMark = {
+  size: number
+  category: string
+  limit: number
+}
+
 export type FileState = {
   path: string
   name: string
@@ -27,6 +34,8 @@ export type FileState = {
   loading?: boolean
   error?: string
   content?: FileContent
+  // FORK: 大文件预览统一防护 [feat: large-file-preview-guard] 2026-05-21
+  tooLarge?: FileTooLargeMark
 }
 
 export function selectionFromLines(range: SelectedLineRange): FileSelection {
