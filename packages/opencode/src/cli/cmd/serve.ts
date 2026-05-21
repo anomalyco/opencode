@@ -4,6 +4,7 @@ import { effectCmd } from "../effect-cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { autoresume } from "./serve-autoresume"
+import { reconciler } from "./serve-reconciler"
 import { Scheduler } from "@/scheduler"
 
 export const ServeCommand = effectCmd({
@@ -33,6 +34,11 @@ export const ServeCommand = effectCmd({
         )
         yield* autoresume().pipe(
           Effect.catchCause((cause) => Effect.logWarning("auto resume process failed", { cause })),
+          Effect.forkScoped,
+          Effect.asVoid,
+        )
+        yield* reconciler().pipe(
+          Effect.catchCause((cause) => Effect.logWarning("status reconciler failed", { cause })),
           Effect.forkScoped,
           Effect.asVoid,
         )

@@ -20,6 +20,7 @@ export interface Interface {
     work: Effect.Effect<MessageV2.WithParts>,
     ready?: Latch.Latch,
   ) => Effect.Effect<MessageV2.WithParts>
+  readonly reconcile: () => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRunState") {}
@@ -101,7 +102,23 @@ export const layer = Layer.effect(
       return yield* (yield* runner(sessionID, onInterrupt)).startShell(work, ready)
     })
 
-    return Service.of({ assertNotBusy, cancel, ensureRunning, startShell })
+    // Reset statuses to idle for any session marked busy/retry without an actively-running
+    // runner. Guards against onIdle finalizers failing to fire (interrupted scope, etc.)
+    // and leaving clients seeing a session stuck as "working" indefinitely.
+    const reconcile = Effect.fn("SessionRunState.reconcile")(function* () {
+      const data = yield* InstanceState.get(state)
+      const statuses = yield* status.list()
+      for (const [sessionID, info] of statuses) {
+        if (info.type === "idle") continue
+        const existing = data.runners.get(sessionID)
+        if (existing?.busy) continue
+        yield* Effect.logInfo("reconciling stale session status", { sessionID, status: info.type })
+        if (existing) data.runners.delete(sessionID)
+        yield* status.set(sessionID, { type: "idle" })
+      }
+    })
+
+    return Service.of({ assertNotBusy, cancel, ensureRunning, startShell, reconcile })
   }),
 )
 
