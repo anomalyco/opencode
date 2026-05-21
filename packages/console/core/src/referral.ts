@@ -13,6 +13,7 @@ import { Billing } from "./billing"
 import { LiteData } from "./lite"
 import { Subscription } from "./subscription"
 import { ulid } from "ulid"
+import { AWS } from "./aws"
 
 export namespace Referral {
   export const REWARD_AMOUNT = centsToMicroCents(500)
@@ -289,7 +290,7 @@ export namespace Referral {
     const referralCode = normalizeCode(input.referralCode)
     if (!referralCode) return
 
-    return Database.transaction(async (tx) => {
+    const inviterEmail = await Database.transaction(async (tx) => {
       const code = await tx
         .select({ workspaceID: ReferralCodeTable.workspaceID })
         .from(ReferralCodeTable)
@@ -332,7 +333,25 @@ export namespace Referral {
         .then((rows) => rows[0])
       if (!referral) throw new Error("Referral not created")
       if (referral.id !== referralID) throw new Error("Referral already redeemed")
+
+      return tx
+        .select({ email: AuthTable.subject })
+        .from(UserTable)
+        .innerJoin(AuthTable, and(eq(AuthTable.accountID, UserTable.accountID), eq(AuthTable.provider, "email")))
+        .where(
+          and(eq(UserTable.workspaceID, code.workspaceID), eq(UserTable.role, "admin"), isNull(UserTable.timeDeleted)),
+        )
+        .orderBy(asc(UserTable.timeCreated))
+        .then((rows) => rows[0]?.email)
     })
+
+    if (!inviterEmail) return
+
+    await AWS.sendEmail({
+      to: inviterEmail,
+      subject: "Someone used your OpenCode referral code",
+      body: "A friend signed up with your OpenCode referral code. You'll earn $5 in credits when they subscribe.",
+    }).catch(console.error)
   }
 
   export async function completeFromLiteSubscription(input: { workspaceID: string; userID: string }) {
