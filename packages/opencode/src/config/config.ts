@@ -102,8 +102,8 @@ async function substituteWellKnownRemoteConfig(input: { value: unknown; dir: str
 }
 
 const WellKnownConfig = Schema.Struct({
-  config: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  remote_config: Schema.optional(Schema.Unknown),
+  config: Schema.optional(Schema.Record(Schema.String, Schema.Json)),
+  remote_config: Schema.optional(Schema.Json),
 })
 
 async function resolveLoadedPlugins<T extends { plugin?: ConfigPlugin.Spec[] }>(config: T, filepath: string) {
@@ -389,7 +389,7 @@ export const layer = Layer.effect(
         .pipe(
           Effect.catch((error) => Effect.die(new Error(`failed to fetch remote config from ${url}: ${String(error)}`))),
         )
-      return yield* HttpClientResponse.schemaBodyJson(Schema.Unknown)(response).pipe(
+      return yield* HttpClientResponse.schemaBodyJson(Schema.Json)(response).pipe(
         Effect.catch((error) => Effect.die(new Error(`failed to decode remote config from ${url}: ${String(error)}`))),
       )
     })
