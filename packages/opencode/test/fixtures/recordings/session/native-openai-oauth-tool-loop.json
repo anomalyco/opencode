@@ -6,12 +6,7 @@
     "provider": "openai",
     "protocol": "openai-responses",
     "route": "openai-responses",
-    "tags": [
-      "opencode",
-      "native",
-      "oauth",
-      "tool-loop"
-    ]
+    "tags": ["opencode", "native", "oauth", "tool-loop"]
   },
   "interactions": [
     {

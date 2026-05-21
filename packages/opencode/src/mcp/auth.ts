@@ -1,4 +1,5 @@
 import path from "path"
+import { serviceUse } from "@/effect/service-use"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Context, Option, Schema } from "effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -50,6 +51,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/McpAuth") {}
+
+export const use = serviceUse(Service)
 
 export const layer = Layer.effect(
   Service,

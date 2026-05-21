@@ -18,7 +18,7 @@ const set = (k: string, v: string) =>
   Effect.gen(function* () {
     if (!originalEnv.has(k)) originalEnv.set(k, process.env[k])
     process.env[k] = v
-    yield* Env.Service.use((svc) => svc.set(k, v))
+    yield* Env.use.set(k, v)
   })
 
 afterEach(async () => {
@@ -30,7 +30,7 @@ afterEach(async () => {
   await disposeAllInstances()
 })
 
-const list = Provider.Service.use((svc) => svc.list())
+const list = Provider.use.list()
 
 const withAuthJson = (contents: string) =>
   Effect.acquireRelease(

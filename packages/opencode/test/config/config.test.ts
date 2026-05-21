@@ -70,14 +70,14 @@ const load = (ctx: InstanceContext) =>
   )
 const saveGlobal = (config: Config.Info) =>
   Effect.runPromise(
-    Config.Service.use((svc) => svc.updateGlobal(config)).pipe(
+    Config.use.updateGlobal(config).pipe(
       Effect.map((result) => result.info),
       Effect.scoped,
       Effect.provide(layer),
     ),
   )
 const clear = async (wait = false) => {
-  await Effect.runPromise(Config.Service.use((svc) => svc.invalidate()).pipe(Effect.scoped, Effect.provide(layer)))
+  await Effect.runPromise(Config.use.invalidate().pipe(Effect.scoped, Effect.provide(layer)))
   if (wait) await InstanceRuntime.disposeAllInstances()
 }
 const listDirs = (ctx: InstanceContext) =>
@@ -162,7 +162,7 @@ async function check(map: (dir: string) => string) {
 
 it.instance("loads config with defaults when no files exist", () =>
   Effect.gen(function* () {
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.username).toBeDefined()
   }),
 )
@@ -218,7 +218,7 @@ test("does not create global config when OPENCODE_CONFIG_DIR is set", async () =
 it.instance(
   "loads JSON config file",
   Effect.gen(function* () {
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.model).toBe("test/model")
     expect(config.username).toBe("testuser")
   }),
@@ -228,7 +228,7 @@ it.instance(
 it.instance(
   "loads shell config field",
   Effect.gen(function* () {
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.shell).toBe("bash")
   }),
   { config: { shell: "bash" } },
@@ -313,7 +313,7 @@ test("updates global config and omits empty shell key in jsonc", async () => {
 it.instance(
   "loads formatter boolean config",
   Effect.gen(function* () {
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.formatter).toBe(true)
   }),
   { config: { formatter: true } },
@@ -322,7 +322,7 @@ it.instance(
 it.instance(
   "loads lsp boolean config",
   Effect.gen(function* () {
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.lsp).toBe(true)
   }),
   { config: { lsp: true } },
@@ -355,7 +355,7 @@ it.instance("ignores legacy tui keys in opencode config", () =>
       tui: { scroll_speed: 4 },
     })
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.model).toBe("test/model")
     expect((config as Record<string, unknown>).theme).toBeUndefined()
     expect((config as Record<string, unknown>).tui).toBeUndefined()
@@ -376,7 +376,7 @@ it.instance("loads JSONC config file", () =>
       }`,
       ),
     )
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.model).toBe("test/model")
     expect(config.username).toBe("testuser")
   }),
@@ -398,7 +398,7 @@ it.instance("jsonc overrides json in the same directory", () =>
       $schema: "https://opencode.ai/config.json",
       model: "override",
     })
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.model).toBe("base")
     expect(config.username).toBe("base")
   }),
@@ -414,7 +414,7 @@ it.instance("handles environment variable substitution", () =>
         $schema: "https://opencode.ai/config.json",
         username: "{env:TEST_VAR}",
       })
-      const config = yield* Config.Service.use((svc) => svc.get())
+      const config = yield* Config.use.get()
       expect(config.username).toBe("test-user")
     }),
   ),
@@ -435,7 +435,7 @@ it.instance("preserves env variables when adding $schema to config", () =>
           }),
         ),
       )
-      const config = yield* Config.Service.use((svc) => svc.get())
+      const config = yield* Config.use.get()
       expect(config.username).toBe("secret_value")
 
       // Read the file to verify the env variable was preserved
@@ -455,7 +455,7 @@ it.instance("handles file inclusion substitution", () =>
       $schema: "https://opencode.ai/config.json",
       username: "{file:included.txt}",
     })
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.username).toBe("test-user")
   }),
 )
@@ -470,7 +470,7 @@ it.instance("handles file inclusion with replacement tokens", () =>
       $schema: "https://opencode.ai/config.json",
       username: "{file:included.md}",
     })
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.username).toBe("const out = await Bun.$`echo hi`")
   }),
 )
@@ -547,7 +547,7 @@ it.instance("validates config schema and throws on invalid fields", () =>
       $schema: "https://opencode.ai/config.json",
       invalid_field: "should cause error",
     })
-    const exit = yield* Config.Service.use((svc) => svc.get()).pipe(Effect.exit)
+    const exit = yield* Config.use.get().pipe(Effect.exit)
     expect(Exit.isFailure(exit)).toBe(true)
   }),
 )
@@ -556,7 +556,7 @@ it.instance("throws error for invalid JSON", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
     yield* Effect.promise(() => Filesystem.write(path.join(test.directory, "opencode.json"), "{ invalid json }"))
-    const exit = yield* Config.Service.use((svc) => svc.get()).pipe(Effect.exit)
+    const exit = yield* Config.use.get().pipe(Effect.exit)
     expect(Exit.isFailure(exit)).toBe(true)
   }),
 )
@@ -574,7 +574,7 @@ it.instance("handles agent configuration", () =>
         },
       },
     })
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.agent?.["test_agent"]).toEqual(
       expect.objectContaining({
         model: "test/model",
@@ -598,7 +598,7 @@ it.instance("treats agent variant as model-scoped setting (not provider option)"
         },
       },
     })
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     const agent = config.agent?.["test_agent"]
 
     expect(agent?.variant).toBe("xhigh")
@@ -622,7 +622,7 @@ it.instance("handles command configuration", () =>
         },
       },
     })
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.command?.["test_command"]).toEqual({
       template: "test template",
       description: "test command",
@@ -638,7 +638,7 @@ it.instance("migrates autoshare to share field", () =>
       $schema: "https://opencode.ai/config.json",
       autoshare: true,
     })
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.share).toBe("auto")
     expect(config.autoshare).toBe(true)
   }),
@@ -656,7 +656,7 @@ it.instance("migrates mode field to agent field", () =>
         },
       },
     })
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.agent?.["test_mode"]).toEqual({
       model: "test/model",
       temperature: 0.5,
@@ -679,7 +679,7 @@ model: test/model
 Test agent prompt`,
     )
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.agent?.["test"]).toEqual(
       expect.objectContaining({
         name: "test",
@@ -705,7 +705,7 @@ permission:
 Ordered permissions`,
     )
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(Object.keys(config.agent?.ordered?.permission ?? {})).toEqual(["bash", "*", "edit"])
   }),
 )
@@ -732,7 +732,7 @@ mode: subagent
 Nested agent prompt`,
     )
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
 
     expect(config.agent?.["helper"]).toMatchObject({
       name: "helper",
@@ -770,7 +770,7 @@ description: Nested command
 Nested command template`,
     )
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
 
     expect(config.command?.["hello"]).toEqual({
       description: "Test command",
@@ -804,7 +804,7 @@ description: Nested command
 Nested command template`,
     )
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
 
     expect(config.command?.["hello"]).toEqual({
       description: "Test command",
@@ -834,7 +834,7 @@ it.instance("updates config and writes to file", () =>
 
 it.instance("gets config directories", () =>
   Effect.gen(function* () {
-    const dirs = yield* Config.Service.use((svc) => svc.directories())
+    const dirs = yield* Config.use.directories()
     expect(dirs.length).toBeGreaterThanOrEqual(1)
   }),
 )
@@ -950,7 +950,7 @@ it.instance("resolves scoped npm plugins in config", () =>
     yield* writeTextEffect(path.join(pluginDir, "index.js"), "export default {}\n")
     yield* writeConfigEffect(test.directory, { plugin: ["@scope/plugin"] })
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.plugin ?? []).toContain("@scope/plugin")
   }),
 )
@@ -1014,7 +1014,7 @@ mode: subagent
 Helper subagent prompt`,
     )
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.agent?.["helper"]).toMatchObject({
       name: "helper",
       model: "test/model",
@@ -1212,7 +1212,7 @@ it.instance("migrates legacy tools config to permissions - allow", () =>
       agent: { test: { tools: { bash: true, read: true } } },
     })
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.agent?.["test"]?.permission).toEqual({
       bash: "allow",
       read: "allow",
@@ -1228,7 +1228,7 @@ it.instance("migrates legacy tools config to permissions - deny", () =>
       agent: { test: { tools: { bash: false, webfetch: false } } },
     })
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.agent?.["test"]?.permission).toEqual({
       bash: "deny",
       webfetch: "deny",
@@ -1244,7 +1244,7 @@ it.instance("migrates legacy write tool to edit permission", () =>
       agent: { test: { tools: { write: true } } },
     })
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.agent?.["test"]?.permission).toEqual({ edit: "allow" })
   }),
 )
@@ -1261,7 +1261,7 @@ it.instance(
       share: "disabled",
     })
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.model).toBe("managed/model")
     expect(config.share).toBe("disabled")
     expect(config.username).toBe("testuser")
@@ -1278,7 +1278,7 @@ it.instance(
       disabled_providers: ["openai"],
     })
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.autoupdate).toBe(false)
     expect(config.disabled_providers).toEqual(["openai"])
   }),
@@ -1288,7 +1288,7 @@ it.instance(
 it.instance(
   "missing managed settings file is not an error",
   Effect.gen(function* () {
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.model).toBe("user/model")
   }),
   { config: { model: "user/model" } },
@@ -1302,7 +1302,7 @@ it.instance("migrates legacy edit tool to edit permission", () =>
       agent: { test: { tools: { edit: false } } },
     })
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.agent?.["test"]?.permission).toEqual({ edit: "deny" })
   }),
 )
@@ -1315,7 +1315,7 @@ it.instance("migrates legacy patch tool to edit permission", () =>
       agent: { test: { tools: { patch: true } } },
     })
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.agent?.["test"]?.permission).toEqual({ edit: "allow" })
   }),
 )
@@ -1328,7 +1328,7 @@ it.instance("migrates mixed legacy tools config", () =>
       agent: { test: { tools: { bash: true, write: true, read: false, webfetch: true } } },
     })
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.agent?.["test"]?.permission).toEqual({
       bash: "allow",
       edit: "allow",
@@ -1346,7 +1346,7 @@ it.instance("merges legacy tools with existing permission config", () =>
       agent: { test: { permission: { glob: "allow" }, tools: { bash: true } } },
     })
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.agent?.["test"]?.permission).toEqual({
       glob: "allow",
       bash: "allow",
@@ -1375,7 +1375,7 @@ it.instance("permission config preserves user key order", () =>
       },
     })
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(Object.keys(config.permission!)).toEqual([
       "*",
       "edit",
@@ -1451,7 +1451,7 @@ it.instance("project config can override MCP server enabled status", () =>
       "opencode.jsonc",
     )
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.mcp?.jira).toEqual({
       type: "remote",
       url: "https://jira.example.com/mcp",
@@ -1496,7 +1496,7 @@ it.instance("MCP config deep merges preserving base config properties", () =>
       "opencode.jsonc",
     )
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.mcp?.myserver).toEqual({
       type: "remote",
       url: "https://myserver.example.com/mcp",
@@ -1537,7 +1537,7 @@ it.instance("local .opencode config can override MCP from project config", () =>
       "opencode.json",
     )
 
-    const config = yield* Config.Service.use((svc) => svc.get())
+    const config = yield* Config.use.get()
     expect(config.mcp?.docs?.enabled).toBe(true)
   }),
 )

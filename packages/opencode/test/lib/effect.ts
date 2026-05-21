@@ -8,7 +8,7 @@ import type { Config } from "@/config/config"
 import { TestInstance, withTmpdirInstance } from "../fixture/fixture"
 
 type Body<A, E, R> = Effect.Effect<A, E, R> | (() => Effect.Effect<A, E, R>)
-type InstanceOptions = { git?: boolean; config?: Partial<Config.Info> }
+type InstanceOptions = { git?: boolean; config?: Partial<Config.Info> | (() => Partial<Config.Info>) }
 
 function isInstanceOptions(options: InstanceOptions | number | TestOptions | undefined): options is InstanceOptions {
   return !!options && typeof options === "object" && ("git" in options || "config" in options)
