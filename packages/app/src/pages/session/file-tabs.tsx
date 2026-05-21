@@ -37,6 +37,8 @@ import { isBinary, isOfficeDocument, tooLarge } from "@/utils/file-limits"
 import { localAssetUrl, resolveAbsolute, rewriteAssetSrc } from "@/utils/local-asset"
 // FORK: .md frontmatter 隐藏(Obsidian 风)2026-05-05
 import { stripFrontmatter } from "@/utils/markdown-frontmatter"
+// FORK: 聊天输入框焦点跟随 [feat: chat-input-focus-follow] 2026-05-21
+import { focusChatInput } from "@/utils/chat-input-focus"
 
 // FORK: macOS 平台检测,用于右键菜单输入框 Option+Enter 提交支持 2026-04-30
 const IS_MAC = typeof navigator !== "undefined" && /mac/i.test(navigator.platform)
@@ -1077,6 +1079,9 @@ export function FileTabContent(props: {
       commentOrigin: "file",
     })
     showToast({ variant: "success", title: comment ? "已加入聊天上下文(含问题)" : "已加入聊天上下文" })
+    // FORK: 加 attachment 后把焦点 + 光标交还 chat input,user 可立刻继续打字 [feat: chat-input-focus-follow] 2026-05-21
+    // rAF 跟 chat-selection-menu / applyHistoryPrompt 同套路,等 attachment 卡片插入触发的 layout 完再 focus
+    requestAnimationFrame(focusChatInput)
     // 注:closeMdMenu 已统一处理 removeAllRanges + 清 Pierre 行选区
   }
 

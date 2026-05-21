@@ -14,6 +14,8 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { usePrompt } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
 import { composeQuotedMarkdown, insertTextIntoPrompt } from "./chat-selection-quote"
+import { focusChatInput } from "@/utils/chat-input-focus"
+import { promptLength } from "@/components/prompt-input/history"
 
 const IS_MAC = typeof navigator !== "undefined" && /mac/i.test(navigator.platform)
 
@@ -149,7 +151,10 @@ export function ChatSelectionMenu() {
     if (!composed) return
     const current = prompt.current()
     const next = insertTextIntoPrompt(current, composed)
-    prompt.set(next, prompt.cursor())
+    // FORK: 光标到末尾 + focus chat input,user 可立刻继续打字 [feat: chat-input-focus-follow] 2026-05-21
+    // 用 rAF 跟 prompt-input.tsx `applyHistoryPrompt` 同套路 — 等 store update 触发的 editor re-render 完再 focus
+    prompt.set(next, promptLength(next))
+    requestAnimationFrame(focusChatInput)
     showToast({
       variant: "success",
       title: c.trim() ? "已加入聊天输入框(含问题)" : "已加入聊天输入框",
