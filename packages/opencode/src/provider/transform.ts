@@ -54,6 +54,10 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
+function isNearAI(model: Provider.Model) {
+  return model.providerID === "nearai"
+}
+
 // TODO: fix this stupid inefficient dogshit function
 function normalizeMessages(
   msgs: ModelMessage[],
@@ -618,6 +622,9 @@ function googleThinkingBudgetMax(apiId: string) {
 
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
+  // NEAR AI Cloud exposes OpenAI-compatible chat completions, but its gateway
+  // does not accept OpenAI-specific reasoning_effort controls.
+  if (isNearAI(model)) return {}
 
   const id = model.id.toLowerCase()
   const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
@@ -1130,7 +1137,7 @@ export function options(input: {
     return result
   }
 
-  if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
+  if (!isNearAI(input.model) && input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
     if (!input.model.api.id.includes("gpt-5-pro")) {
       result["reasoningEffort"] = "medium"
       result["reasoningSummary"] = "auto"

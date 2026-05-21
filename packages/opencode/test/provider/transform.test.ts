@@ -377,6 +377,27 @@ describe("ProviderTransform.options - gpt-5 reasoningEffort", () => {
 
     expect(result.reasoningEffort).toBeUndefined()
   })
+
+  test("nearai gpt-5 models do not set OpenAI-only reasoning controls", () => {
+    const result = ProviderTransform.options({
+      model: {
+        ...createModel("openai/gpt-5.4"),
+        id: "openai/gpt-5.4",
+        providerID: "nearai",
+        api: {
+          id: "openai/gpt-5.4",
+          url: "https://cloud-api.near.ai/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      },
+      sessionID,
+      providerOptions: {},
+    })
+
+    expect(result.reasoningEffort).toBeUndefined()
+    expect(result.reasoningSummary).toBeUndefined()
+    expect(result.textVerbosity).toBeUndefined()
+  })
 })
 
 describe("ProviderTransform.options - gateway", () => {
@@ -2403,6 +2424,20 @@ describe("ProviderTransform.variants", () => {
       api: {
         id: "deepseek-chat",
         url: "https://api.deepseek.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({})
+  })
+
+  test("nearai returns no OpenAI-only reasoning variants", () => {
+    const model = createMockModel({
+      id: "nearai/openai/gpt-5.4",
+      providerID: "nearai",
+      api: {
+        id: "openai/gpt-5.4",
+        url: "https://cloud-api.near.ai/v1",
         npm: "@ai-sdk/openai-compatible",
       },
     })
