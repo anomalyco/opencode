@@ -59,7 +59,11 @@ AppPublisher={#AppPublisher}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
-OutputBaseFilename={#OutputBase}-{#AppVersion}-setup
+; FORK: 文件名用 NumericAppVersion(strip env suffix),避免 dev/beta 双重后缀冗余
+; (例:OutputBase=DeskFox-Dev + AppVersion=2026.5.21.1-dev 旧模板出 "DeskFox-Dev-2026.5.21.1-dev-setup.exe" 双重 -dev;
+;  现模板出 "DeskFox-Dev-2026.5.21.1-setup.exe")。Tier 1 prod 不变(prod 本就无后缀)。
+; 详 docs/governance/版本号与发布渠道规范.md §四 [feat: installer-naming-cleanup] 2026-05-21
+OutputBaseFilename={#OutputBase}-{#NumericAppVersion}-setup
 OutputDir=Output
 SetupIconFile={#IconFile}
 UninstallDisplayIcon={app}\{#AppExeName}
