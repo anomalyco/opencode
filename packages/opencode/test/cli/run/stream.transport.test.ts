@@ -171,7 +171,7 @@ function globalSse(stream: GlobalEventStream) {
 function wrapGlobalStream(stream: EventStream): GlobalEventStream {
   return (async function* (): GlobalEventStream {
     for await (const event of stream) {
-      yield globalEvent(event as GlobalEvent["payload"])
+      yield globalEvent(event)
     }
     return StreamClosed
   })()
@@ -339,11 +339,11 @@ function child(id: string): SessionChild {
   }
 }
 
-function globalEvent(payload: SdkEvent | GlobalEvent["payload"]): GlobalEvent {
+function globalEvent(payload: GlobalEvent["payload"]): GlobalEvent {
   return {
     directory: "/tmp",
     project: "project-1",
-    payload: payload as GlobalEvent["payload"],
+    payload,
   }
 }
 
