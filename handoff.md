@@ -11,6 +11,19 @@
   - `rebase-session` — done
   - `rebase-infra` — done
   - `rebase-verify` — in progress
+- Open PRs (post-rebase polish, awaiting CI / merge):
+  - **#219** `fix(tool): orDie session tool execute` — unblocks `bun typecheck` on `dev`. Closes #218.
+  - **#221** `fix(session): add periodic status reconciler` — Effect-native port of PR #208 (auto-closed by template bot, not on merit). Closes #220.
+  - Merge order: #219 first (clears pre-push typecheck hook), then #221.
+
+## Latest Update (2026-05-21)
+- Audited remaining fork branches against `origin/dev`; deleted superseded ones (`backup/dev-before-timeout-history-rewrite-20260430`, `feat/android-backbone-10288`, `opencode/opencode-2026-04-29-22-50`, `rewrite/dev-no-timeout`, `fix/computediff-and-serve-smoke`, `pr10624-local`, `fix/session-status-reconciliation`).
+- Ported the stale-busy-session reconciler (originally PR #208's `f62969219`) to the post-rebase Effect architecture:
+  - `SessionRunState.reconcile()` resets non-idle statuses without an active runner to idle.
+  - `cli/cmd/serve-reconciler.ts` forks a 30s scoped fiber, iterates known directories via `Session.listGlobal` + `InstanceStore.provide`. Env-tunable: `OPENCODE_SERVE_RECONCILE_INTERVAL_S`, `OPENCODE_SERVE_RECONCILE_SCAN_LIMIT`.
+  - Tests: `test/session/reconcile.test.ts` — 3 pass.
+- Found and fixed a pre-existing typecheck regression in `src/tool/session.ts` (`session.get` returns `Effect<Info, NotFound>` but `Tool.Def.execute` requires `Effect<ExecuteResult, never, never>`). Pattern-matched the codebase-wide fix used by every other tool: `.pipe(Effect.orDie)`.
+- Both PRs healthy: `MERGEABLE`, all bot template checks green (`check-standards`, `check-compliance`, `add-contributor-label`). CI workflows (`typecheck`, `unit`, `e2e`, `nix-eval`) are queued — self-hosted runner queue appears stuck.
 
 ## Latest Update (2026-05-09)
 - Rebased branch onto latest `upstream/dev` and resumed full verification.
