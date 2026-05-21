@@ -110,6 +110,42 @@ describe("Gemini route", () => {
       })
     }),
   )
+  it.effect("pads completely empty messages with an empty string text part", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_empty_parts",
+          model,
+          messages: [
+            // Simulates a message that was completely truncated by compaction
+            Message.user([]),
+            Message.assistant([]),
+            Message.tool({ id: "call_1", name: "lookup", result: "" }),
+          ],
+        }),
+      )
+
+      expect(prepared.body).toEqual({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: "" }],
+          },
+          {
+            role: "model",
+            parts: [{ text: "" }],
+          },
+          {
+            role: "user",
+            parts: [
+              { functionResponse: { name: "lookup", response: { name: "lookup", content: '""' } } },
+            ],
+          },
+        ],
+      })
+    }),
+  )
+
 
   it.effect("sanitizes integer enums, dangling required, untyped arrays, and scalar object keys", () =>
     Effect.gen(function* () {

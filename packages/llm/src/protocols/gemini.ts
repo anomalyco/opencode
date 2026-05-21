@@ -196,6 +196,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
           return yield* ProviderShared.unsupportedContent("Gemini", "user", ["text", "media"])
         parts.push(lowerUserPart(part))
       }
+      if (parts.length === 0) parts.push({ text: "" })
       contents.push({ role: "user", parts })
       continue
     }
@@ -218,6 +219,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
           continue
         }
       }
+      if (parts.length === 0) parts.push({ text: "" })
       contents.push({ role: "model", parts })
       continue
     }
@@ -236,6 +238,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
         },
       })
     }
+    if (parts.length === 0) parts.push({ text: "" })
     contents.push({ role: "user", parts })
   }
 
