@@ -102,22 +102,32 @@ echo -e "${GREEN}[OK] Gitee token 有效,user=$gitee_user${RESET}"
 # ─── 2. 自动定位 asset 文件 ─────────────────────────────────────────
 if [[ -z "$ASSET" ]]; then
   # 从 tag 推 platform / env / version
-  # ship-mac-prod-2026.5.4.1   → mac  prod  2026.5.4.1
-  # ship-mac-beta-2026.5.10.1  → mac  beta  2026.5.10.1
-  if [[ "$TAG" =~ ^ship-mac-(prod|beta)-(.+)$ ]]; then
+  # FORK: 加 dev tag 识别(Tier 2 预览版),strip env suffix 得 NumericVer 对齐新 .iss/.sh 命名规则
+  # [feat: ship-scripts-naming-fix] 2026-05-21
+  # ship-mac-prod-2026.5.4.1        → mac  prod  2026.5.4.1            (Tier 1)
+  # ship-mac-beta-2026.5.10.1-beta  → mac  beta  2026.5.10.1-beta      (beta 储备)
+  # ship-mac-dev-2026.5.21.1-dev    → mac  dev   2026.5.21.1-dev       (Tier 2 预览版)
+  if [[ "$TAG" =~ ^ship-mac-(prod|beta|dev)-(.+)$ ]]; then
     PLATFORM="mac"
     ENV_NAME="${BASH_REMATCH[1]}"
     VERSION="${BASH_REMATCH[2]}"
-  elif [[ "$TAG" =~ ^ship-(prod|beta)-(.+)$ ]]; then
-    echo -e "${RED}[ERROR] tag '$TAG' 是 Win release(ship-prod-* 没有 mac 前缀),Mac 脚本不处理。Win 端用 mirror-asset-to-gitee.ps1${RESET}" >&2
+  elif [[ "$TAG" =~ ^ship-(prod|beta|dev)-(.+)$ ]]; then
+    echo -e "${RED}[ERROR] tag '$TAG' 是 Win release(没有 mac 前缀),Mac 脚本不处理。Win 端用 mirror-asset-to-gitee.ps1${RESET}" >&2
     exit 1
   else
     echo -e "${RED}[ERROR] 无法从 tag '$TAG' 推 platform/env/version,请用 --asset 手动指定${RESET}" >&2
     exit 1
   fi
 
-  # Mac .dmg 默认路径(对齐 release-mac-deskfox.yml 的 build 产物路径 + 命名规则)
-  CANDIDATE="packages/desktop/src-tauri/target/release/bundle/dmg/DeskFox-${VERSION}_aarch64.dmg"
+  # NumericVer = strip env suffix(对齐 pack-installer.sh .dmg rename 用 NumericVersion)
+  NUMERIC_VERSION=$(echo "$VERSION" | sed -E 's/-(dev|beta)$//')
+
+  # Mac .dmg 默认路径(对齐 pack-installer.sh rename 后的命名:productName 空格转横杠 + NumericVer)
+  # 例:env=dev → "DeskFox-Dev-2026.5.21.1_aarch64.dmg"
+  PRODUCT_PREFIX="DeskFox"
+  [[ "$ENV_NAME" == "beta" ]] && PRODUCT_PREFIX="DeskFox-Beta"
+  [[ "$ENV_NAME" == "dev" ]] && PRODUCT_PREFIX="DeskFox-Dev"
+  CANDIDATE="packages/desktop/src-tauri/target/release/bundle/dmg/${PRODUCT_PREFIX}-${NUMERIC_VERSION}_aarch64.dmg"
 
   if [[ ! -f "$CANDIDATE" ]]; then
     # 退路:从 GitHub Release 下载到 /tmp
