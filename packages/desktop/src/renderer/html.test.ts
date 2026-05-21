@@ -1,12 +1,12 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import { join, dirname, resolve } from "node:path"
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 
 const dir = dirname(fileURLToPath(import.meta.url))
 const root = resolve(dir, "../..")
 
-const html = async (name: string) => Bun.file(join(dir, name)).text()
+const html = async (name: string) => readFileSync(join(dir, name), "utf-8")
 
 /**
  * Packaged Electron windows load renderer HTML via the privileged `oc://`
@@ -50,7 +50,7 @@ describe("electron renderer html", () => {
  */
 describe("electron vite publicDir", () => {
   test("configured publicDir resolves to a directory with oc-theme-preload.js", async () => {
-    const config = await Bun.file(join(root, "electron.vite.config.ts")).text()
+    const config = readFileSync(join(root, "electron.vite.config.ts"), "utf-8")
     const pub = config.match(/publicDir:\s*["']([^"']+)["']/)
     const rendererRoot = config.match(/root:\s*["']([^"']+)["']/)
     expect(pub).not.toBeNull()

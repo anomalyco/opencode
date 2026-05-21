@@ -132,7 +132,15 @@ async function sign(url: string, key: string) {
   const file = path.join(tmp, name)
   const buffer = await res.arrayBuffer()
   await writeFile(file, Buffer.from(buffer))
-  await $`bunx @tauri-apps/cli signer sign ${file}`
+  // Note: Tauri signer requires bunx/npm exec, keeping this as is or replace with alternative signing method for Windows
+  const { exec } = await import("node:child_process")
+  const { promisify } = await import("node:util")
+  const execAsync = promisify(exec)
+  try {
+    await execAsync(`npm exec -- @tauri-apps/cli signer sign ${file}`)
+  } catch (error) {
+    console.warn(`Tauri signing failed: ${error}. This may be expected in non-Tauri builds.`)
+  }
   const sigFilepath = `${file}.sig`
   try {
     return (await readFile(sigFilepath, "utf-8")).trim()

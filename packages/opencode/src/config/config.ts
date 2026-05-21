@@ -34,6 +34,7 @@ import { ConfigModelID } from "./model-id"
 import { ConfigParse } from "./parse"
 import { ConfigPaths } from "./paths"
 import { ConfigPermission } from "./permission"
+import { ConfigPersonality } from "./personality"
 import { ConfigPlugin } from "./plugin"
 import { ConfigProvider } from "./provider"
 import { ConfigReference } from "./reference"
@@ -203,6 +204,12 @@ export const Info = Schema.Struct({
       [Schema.Record(Schema.String, ConfigAgent.Info)],
     ),
   ).annotate({ description: "Agent configuration, see https://opencode.ai/docs/agents" }),
+  personality: Schema.optional(
+    Schema.StructWithRest(
+      Schema.Struct({}),
+      [Schema.Record(Schema.String, ConfigPersonality.Info)],
+    ),
+  ).annotate({ description: "Personality configurations with custom traits and learning capabilities" }),
   provider: Schema.optional(Schema.Record(Schema.String, ConfigProvider.Info)).annotate({
     description: "Custom provider configurations and model overrides",
   }),
@@ -621,6 +628,10 @@ export const layer = Layer.effect(
           result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => ConfigCommand.load(dir)))
           result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.load(dir)))
           result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.loadMode(dir)))
+          result.personality = mergeDeep(
+            result.personality ?? {},
+            yield* Effect.promise(() => ConfigPersonality.load(dir)),
+          )
           // Auto-discovered plugins under `.opencode/plugin(s)` are already local files, so ConfigPlugin.load
           // returns normalized Specs and we only need to attach origin metadata here.
           const list = yield* Effect.promise(() => ConfigPlugin.load(dir))
