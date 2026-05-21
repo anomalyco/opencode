@@ -355,7 +355,7 @@ export namespace Referral {
         .from(ReferralTable)
         .where(and(eq(ReferralTable.inviteeAccountID, invitee.accountID), isNull(ReferralTable.timeDeleted)))
         .then((rows) => rows[0])
-      if (!referral) throw new Error("Referral not found")
+      if (!referral) return
 
       const result = await tx
         .insert(ReferralRewardTable)
