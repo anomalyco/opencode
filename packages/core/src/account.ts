@@ -169,7 +169,9 @@ export const layer = Layer.effect(
         .writeJson(file, data, 0o600)
         .pipe(Effect.mapError((cause) => new FileWriteError({ operation: "write", cause })))
 
-    const state = SynchronizedRef.makeUnsafe(yield* load())
+    const state = SynchronizedRef.makeUnsafe(
+      yield* load().pipe(Effect.orElseSucceed((): Writable => ({ version: 2, accounts: {}, active: {} }))),
+    )
 
     const activate = Effect.fn("AccountV2.activate")(function* (id: ID) {
       const data = yield* SynchronizedRef.get(state)
@@ -228,7 +230,10 @@ export const layer = Layer.effect(
 
             yield* write(next)
             return [
-              { account, switched: { serviceID: account.serviceID, from: data.active[account.serviceID], to: account.id } },
+              {
+                account,
+                switched: { serviceID: account.serviceID, from: data.active[account.serviceID], to: account.id },
+              },
               next,
             ] as const
           }),
