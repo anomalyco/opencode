@@ -121,7 +121,7 @@
 - 🎨 **界面精简** — 去掉编程专属 UI,重新组织对话流和文件操作
 - 🦊 **品牌重塑** — DeskFox 视觉系统(Bundle ID / 图标 / 文案),与上游 0 命名空间共享
 - 📄 **文档预览能力** — Word / Excel / PDF / Markdown 直接看,可一键加进聊天上下文
-- 📦 **打包发布工程化** — Windows + macOS 三档(prod / beta / dev)build,GitHub Actions 自动 release,Gitee 镜像同步
+- 📦 **打包发布工程化** — Windows + macOS 三档(`prod` 稳定版 / `beta` RC 储备 / `dev` 预览版)build,GitHub Actions 自动 release,Gitee 镜像同步。完整规则详见 [版本号与发布渠道规范](docs/governance/版本号与发布渠道规范.md)。
 
 完整改动索引见 [`改动日志.md`](改动日志.md);治理规范见 [`docs/governance/`](docs/governance/);跟随上游升级 SOP 见 [`docs/governance/UPSTREAM-MERGE-GUIDE.md`](docs/governance/UPSTREAM-MERGE-GUIDE.md)。
 

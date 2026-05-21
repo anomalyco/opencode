@@ -119,7 +119,7 @@ Right-click any `.md` file tab → **"Export to Word"** converts your Markdown n
 - 🎨 **UI simplification** — removed coding-specific surfaces, reorganized chat and file operations
 - 🦊 **Brand rebuild** — DeskFox visual identity (Bundle ID / icons / copy), zero namespace overlap with upstream
 - 📄 **Document preview** — Word / Excel / PDF / Markdown previewable in-app, one-click "add to chat" for context
-- 📦 **Engineered packaging** — Windows + macOS triple-env (prod / beta / dev) builds, GitHub Actions automated release, Gitee mirror sync
+- 📦 **Engineered packaging** — Windows + macOS triple-env (`prod` stable / `beta` reserved / `dev` preview) builds, GitHub Actions automated release, Gitee mirror sync. See [release channel & versioning rules](docs/governance/版本号与发布渠道规范.md).
 
 Full change index: [`改动日志.md`](改动日志.md) · Governance: [`docs/governance/`](docs/governance/) · Upstream-merge SOP: [`docs/governance/UPSTREAM-MERGE-GUIDE.md`](docs/governance/UPSTREAM-MERGE-GUIDE.md)
 

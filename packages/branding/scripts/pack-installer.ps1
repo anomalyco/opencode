@@ -1,5 +1,10 @@
 # [fork-only] DeskFox one-shot installer pipeline
 #
+# 发布渠道与版本号规则完整 doc:docs/governance/版本号与发布渠道规范.md
+#   - Tier 1 稳定版(prod 无后缀,GitHub Release latest)
+#   - Tier 2 预览版(dev `-dev` 后缀,GitHub Release prerelease)
+#   - Tier 3 本地测试版(`build-deskfox.ps1 -Env dev -NoBundle` 出 raw exe,不 ship,不走本脚本)
+#
 # Workflow:
 #   1. bump-installer-version.ps1    -> bump version (writes new .iss + 版本日志.md placeholder)
 #                                       — 可用 -SkipBump 跳过(CI 场景:user 本地已 bump 并 commit)

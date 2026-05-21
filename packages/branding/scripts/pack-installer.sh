@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # [fork-only] DeskFox one-shot installer pipeline (macOS)
 #
+# 发布渠道与版本号规则完整 doc:docs/governance/版本号与发布渠道规范.md
+#   - Tier 1 稳定版(prod 无后缀,GitHub Release latest)
+#   - Tier 2 预览版(dev `-dev` 后缀,GitHub Release prerelease)
+#   - Tier 3 本地测试版(`build-deskfox.sh -Env dev --no-bundle` 出 raw .app,不 ship,不走本脚本)
+#
 # Workflow:
 #   1. bump-installer-version.sh  -> bump version + write placeholder to docs/installer-versions.md
 #   2. build-deskfox.sh -Env prod -> build .app + .dmg via tauri
