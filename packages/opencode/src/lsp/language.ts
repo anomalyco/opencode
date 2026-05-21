@@ -1,4 +1,5 @@
 export const LANGUAGE_EXTENSIONS: Record<string, string> = {
+  ".v": "coq",
   ".abap": "abap",
   ".bat": "bat",
   ".bib": "bibtex",
