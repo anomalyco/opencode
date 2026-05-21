@@ -5,6 +5,7 @@
 
 | feat-id | 状态 | 简介 |
 |---|---|---|
+| [large-file-preview-guard](./large-file-preview-guard/) | done | 大文件预览统一防护(REQ-025)— 4 层防御:L1 入口闸门(`get_file_size` 新 Tauri 命令 + load() pre-check)+ L2 媒体改 localasset 不进 JS 内存(顺手修原图片"不可预览"bug)+ L3 阈值兜底(text/markdown/html 10MB / office 200MB / media+binary ∞ / default 100MB)+ L4 UX 兜底组件(用本机软件打开 / 打开所在文件夹);office 50MB→200MB 决议(常见 PPT 含图含视频);canEdit() 加 tooLarge 守卫防数据丢失;19 单测 |
 | [chat-drop-overlay-stuck-fix](./chat-drop-overlay-stuck-fix/) | done | 拖拽接收浮层卡死修复 — file-tree 行 onDrop 调 stopPropagation 杀掉 document bubble drop 致浮层 setDraggingType(null) 不执行;window 级 capture-phase drop + dragend 双兜底,ONLY 清状态不参与 drop 处理;R5 bug-repro 测试先行(DOM 事件流前置假设)|
 | [chat-input-focus-follow](./chat-input-focus-follow/) | done | 聊天输入框焦点跟随 — 聊天对话区右键 + MD/HTML viewer 选区"加入聊天"后光标到末尾 + 输入框 focus,user 可立刻继续打字(模块级 singleton ref + rAF;Tiny+ 4 文件 53 行) |
 | [chat-selection-menu](./chat-selection-menu/) | done | 聊天对话区右键选区菜单 — 替换 WebView2 原生为 DeskFox 自家两项(添加到聊天 / 复制),输入面板跟文件查看器一致 + 红色 overlay 选区高亮;helper extract 模式 + 12 单测 |
