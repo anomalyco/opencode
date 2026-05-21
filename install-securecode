@@ -261,6 +261,10 @@ resolve_version() {
 
 extract_archive() {
   local file="$1" dest="$2"
+  # `unzip -d` auto-creates the destination, but `tar -C` requires it to
+  # exist beforehand. Create unconditionally so both code paths behave the
+  # same and Linux (.tar.gz) does not regress (refs #173).
+  mkdir -p "$dest"
   case "$file" in
     *.zip)
       require_tool unzip
