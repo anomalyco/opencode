@@ -9,6 +9,7 @@ import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { formatResetTime, liteResetTimeKeys } from "~/lib/format-reset-time"
 import { queryLiteSubscription } from "~/routes/workspace/[id]/go/lite-section"
+import { rewardActionKey as referralRewardActionKey } from "~/component/go-referral.reward-action"
 import "./go-referral.css"
 
 type GoReferralSummary = Awaited<ReturnType<typeof Referral.summary>>
@@ -64,9 +65,7 @@ function rewardDescriptionKey(source: GoReferralReward["source"]) {
 }
 
 function rewardActionKey(reward: GoReferralReward, hasActiveGo: boolean) {
-  if (reward.status === "applied") return "workspace.referral.reward.action.applied" as const
-  if (reward.status === "pending" || !hasActiveGo) return "workspace.referral.reward.action.subscribeUnlock" as const
-  return "workspace.referral.reward.action.view" as const
+  return referralRewardActionKey(reward, hasActiveGo)
 }
 
 function CopyInviteLink(props: { summary: GoReferralSummary }) {

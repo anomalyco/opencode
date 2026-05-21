@@ -679,6 +679,7 @@ export const dict = {
   "workspace.referral.reward.description.inviter": "Invited {{email}}",
   "workspace.referral.reward.description.invitee": "Invited by {{email}}",
   "workspace.referral.reward.action.subscribeUnlock": "Subscribe to unlock",
+  "workspace.referral.reward.action.pendingFriendSubscription": "Waiting for referral to subscribe",
   "workspace.referral.reward.action.view": "View Reward",
   "workspace.referral.reward.action.applied": "Reward Applied",
   "workspace.referral.reward.source.pendingInviter": "Waiting for them to subscribe",
