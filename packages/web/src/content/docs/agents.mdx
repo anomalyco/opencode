@@ -631,6 +631,34 @@ Users can always invoke any subagent directly via the `@` autocomplete menu, eve
 
 ---
 
+### Category
+
+Group agents together in the UI with the `category` option. This affects how agents are organized, such as in the command palette.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "code-reviewer": {
+      "description": "Reviews code for best practices",
+      "category": "review"
+    }
+  }
+}
+```
+
+Categories are free-form strings. Built-in agents use categories like `build`, `plan`, `general`, and `explore`.
+
+You can also set it in Markdown agents:
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review agent
+category: review
+---
+```
+
+---
+
 ### Color
 
 Customize the agent's visual appearance in the UI with the `color` option. This affects how the agent appears in the interface.
