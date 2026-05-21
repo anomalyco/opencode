@@ -36,8 +36,8 @@
    - "切 tab 丢内容" → 加 dirty 拦截对话框(挂账项)
    - "想要 installer" → 补装 Windows SDK Signing Tools,打 NSIS
 3. **rebase upstream**(每 2-4 周)
-   - `cd D:\project\opencode-fork && git fetch upstream && git tag pre-rebase-$(date +%Y-%m-%d) dev && git checkout dev && git rebase upstream/dev && git push origin dev --force-with-lease`
-   - 再把 `feat/editable-file-viewer` rebase 到新 dev
+   - `cd D:\project\opencode-fork && git fetch upstream && git tag pre-rebase-$(date +%Y-%m-%d) main && git checkout main && git rebase upstream/dev && git push origin main --force-with-lease`(2026-05-21 起主分支 dev → main,上游主分支仍是 dev)
+   - 再把 `feat/editable-file-viewer` rebase 到新 main
 
 详细阶段清单与进度追踪见 [STATUS.md](./STATUS.md)。
 

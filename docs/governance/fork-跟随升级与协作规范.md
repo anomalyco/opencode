@@ -105,7 +105,9 @@
 
 ### R5. 分支生命周期与双端协作
 
-`feat/<name>` 是**一次性容器**:从最新 dev 切出来,做完合 dev 后**立刻销毁**(本地 + 远端),**新项目用新名字,绝不复用**。Win / Mac 双端同时开发的具体步骤(谁先合 / 谁后 rebase / 命令清单 / 常见坑)详见 [`双端协作-SOP.md`](./双端协作-SOP.md)。
+`feat/<name>` 是**一次性容器**:从最新 main 切出来,做完合 main 后**立刻销毁**(本地 + 远端),**新项目用新名字,绝不复用**。Win / Mac 双端同时开发的具体步骤(谁先合 / 谁后 rebase / 命令清单 / 常见坑)详见 [`双端协作-SOP.md`](./双端协作-SOP.md)。
+
+> **主分支名注**:2026-05-21 起本仓主分支 `dev` → `main`(对齐 GitHub 默认 + 跟 installer channel `dev` 解耦)。上游 sst/opencode 主分支仍是 `dev`,所以 `upstream/dev` 字面量在 SOP 命令里保留。
 
 > R5 是 v2 分支模型的操作落地,与 R1-R4 正交(R1-R4 讲"哪些文件能改",R5 讲"分支怎么走")。
 
@@ -116,7 +118,7 @@
 | 指标 | 目标 | 超阈值动作 |
 |---|---|---|
 | **上游侵入率** = 修改上游文件数 / 总文件数 | < 5% | 评估能否退化部分改动到 wrapper |
-| **漂移 commit 数** = `dev..upstream/dev` | ≤ 100 | 触发 ad-hoc 中期 sync |
+| **漂移 commit 数** = `main..upstream/dev`(本仓 main / 上游 sst/opencode 仍是 dev) | ≤ 100 | 触发 ad-hoc 中期 sync |
 | **override 累计笔数** | 每季 ≤ 2 笔 | 红色警报,追溯 R4 是否走过 |
 
 > **关于"上游侵入率"**:测的是"我们对上游做了多少侵入式改动"。**纯新增 fork-only 文件不算侵入**(P1 隔离原则鼓励的就是这种),只算"改上游文件占比"。新文件多反而稀释这个比例,是健康信号(代码总量大 ≠ 偏离上游)。
@@ -136,30 +138,30 @@ cd D:/project/opencode-fork
 
 # 1. 漂移评估
 git fetch upstream
-git log --oneline dev..upstream/dev | wc -l                      # 上游新增数
+git log --oneline main..upstream/dev | wc -l                     # 上游新增数(main=本仓主分支 / upstream/dev=上游主分支)
 for f in packages/app/src/pages/session/file-tabs.tsx \
          packages/ui/src/components/file-media.tsx \
          packages/opencode/src/file/index.ts; do
-  echo "$f: $(git log --oneline dev..upstream/dev -- $f | wc -l) commits"
+  echo "$f: $(git log --oneline main..upstream/dev -- $f | wc -l) commits"
 done
 
 # 2. 打 baseline tag(回退锚点)
-git tag pre-rebase-$(date +%Y-%m-%d) dev
+git tag pre-rebase-$(date +%Y-%m-%d) main
 
 # 3. rebase
-git checkout dev && git rebase upstream/dev
-git checkout feat/editable-file-viewer && git rebase dev
+git checkout main && git rebase upstream/dev
+git checkout feat/editable-file-viewer && git rebase main
 
 # 4. 静态验证 + release build + 抽样冒烟(改动日志的 R 矩阵抽几条)
 bun run typecheck
 bun run --cwd packages/desktop tauri build
 
 # 5. 推送(rebase 改写历史,需 force-with-lease)
-git push origin dev --force-with-lease
+git push origin main --force-with-lease
 git push origin feat/editable-file-viewer --force-with-lease
 
 # 6. 更新 baseline tag(下次同步起点)
-git tag -f upstream-baseline dev
+git tag -f upstream-baseline main
 git push origin upstream-baseline --force
 ```
 

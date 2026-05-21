@@ -66,7 +66,7 @@ jobs:
       GITEE_OWNER: zoulukuang
       GITEE_REPO: deskfox
       GITEE_API: https://gitee.com/api/v5
-      TARGET_BRANCH: dev
+      TARGET_BRANCH: main
       # tag 来源:release 事件用 release.tag_name;dispatch 用 inputs.tag
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
 

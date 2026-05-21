@@ -2,6 +2,21 @@
 
 > 规范 v2(2026-04-27)起,每个 feature 一个目录,含 1-spec / 2-plan / 3-changelog 三文档。
 > 详情见 [`CLAUDE.md`](../../CLAUDE.md) 的"完整文档链路"段。
+>
+> **分支名注**:2026-05-21 起本仓主分支 `dev` → `main`(详 `rename-dev-to-main` feat)。以下 feat 描述中"dev 分支"字眼(historical entries)指向当前 `main`,描述作为历史快照不回填。
+
+## 主分支命名空间(2026-05-21 起)
+
+| 命名空间 | token | 含义 |
+|---|---|---|
+| Git 分支 | `main` | 本仓主分支(原 `dev`,2026-05-21 重命名)|
+| Git 分支 | `feat/<name>` | feat 分支,合 main 即销毁 |
+| Git 分支 | `upstream/dev` | 上游 sst/opencode 主分支(他们仍叫 `dev`)|
+| Installer channel | `prod` | 稳定版(发布物,无版本号后缀)|
+| Installer channel | `beta` | 测试版(预发,保留 AppId 备用,日常不主动 ship)|
+| Installer channel | `dev` | 预览版(可对外发,版本号 `-dev` 后缀)|
+
+**两个命名空间不撞**:`main` 是分支维度,`dev`(channel)是 installer 维度。同一个 `main` 分支可以 build 出 prod / beta / dev 三种 installer。
 
 | feat-id | 状态 | 简介 |
 |---|---|---|
