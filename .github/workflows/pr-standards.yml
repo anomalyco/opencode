@@ -4,6 +4,26 @@ on:
   pull_request_target:
     types: [opened, edited, synchronize]
 
+env:
+  TEAM_MEMBERS: |
+    adamdotdevin
+    Brendonovich
+    fwang
+    Hona
+    iamdavidhill
+    jayair
+    jlongster
+    kitlangton
+    kommander
+    MrMushrooooom
+    nexxeln
+    R44VC0RP
+    rekram1-node
+    thdxr
+    simonklee
+    vimtor
+    starptech
+
 jobs:
   check-standards:
     runs-on: ubuntu-latest
@@ -11,10 +31,6 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: dev
-
       - name: Check PR standards
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
@@ -32,8 +48,7 @@ jobs:
 
             // Check if author is a team member or bot
             if (login === 'opencode-agent[bot]') return;
-            const members = require('fs')
-              .readFileSync('.github/TEAM_MEMBERS', 'utf8')
+            const members = process.env.TEAM_MEMBERS
               .split('\n')
               .map(l => l.trim().toLowerCase())
               .filter(Boolean);
@@ -160,10 +175,6 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          ref: dev
-
       - name: Check PR template compliance
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
@@ -181,8 +192,7 @@ jobs:
 
             // Check if author is a team member or bot
             if (login === 'opencode-agent[bot]') return;
-            const members = require('fs')
-              .readFileSync('.github/TEAM_MEMBERS', 'utf8')
+            const members = process.env.TEAM_MEMBERS
               .split('\n')
               .map(l => l.trim().toLowerCase())
               .filter(Boolean);
