@@ -36,7 +36,7 @@ type StreamInput = {
 }
 
 export function status(input: Pick<StreamInput, "model" | "provider" | "auth">): RuntimeStatus {
-  return statusWithFetch(input, providerFetch(input.provider))
+  return statusWithFetch(input, providerFetch(input))
 }
 
 function statusWithFetch(
@@ -64,7 +64,7 @@ function statusWithFetch(
 }
 
 export function stream(input: StreamInput): StreamResult {
-  const fetch = providerFetch(input.provider)
+  const fetch = providerFetch(input)
   const current = statusWithFetch(input, fetch)
   if (current.type === "unsupported") return current
 
@@ -93,8 +93,9 @@ export function stream(input: StreamInput): StreamResult {
   }
 }
 
-function providerFetch(provider: Provider.Info): typeof globalThis.fetch | undefined {
-  const value: unknown = provider.options.fetch
+function providerFetch(input: Pick<StreamInput, "provider" | "auth">): typeof globalThis.fetch | undefined {
+  if (input.provider.id !== "openai" || input.auth?.type !== "oauth") return undefined
+  const value: unknown = input.provider.options.fetch
   if (typeof value !== "function") return undefined
   return value as typeof globalThis.fetch
 }

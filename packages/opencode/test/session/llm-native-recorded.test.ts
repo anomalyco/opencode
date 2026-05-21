@@ -55,8 +55,10 @@ type RecordedScenario = {
 const cloneModel = (model: ModelsDev.Provider["models"][string]) => {
   const cloned = structuredClone(model)
   const { experimental, ...rest } = cloned
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- The config schema accepts the same model shape except object-valued experimental metadata.
   if (typeof experimental === "boolean")
     return cloned as NonNullable<NonNullable<Config.Info["provider"]>[string]["models"]>[string]
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Dropping non-boolean experimental metadata makes the fixture model match config input.
   return rest as NonNullable<NonNullable<Config.Info["provider"]>[string]["models"]>[string]
 }
 
@@ -212,12 +214,23 @@ const selectedScenarios = new Set(
 function isSelected(scenario: RecordedScenario) {
   if (selectedScenarios.size === 0) return true
   return [scenario.id, scenario.name, scenario.providerID, scenario.cassette, ...scenario.tags]
-    .map((item) => String(item).toLowerCase())
+    .map((item) => item.toLowerCase())
     .some((item) => selectedScenarios.has(item))
 }
 
 const canRun = (scenario: RecordedScenario) =>
   shouldRecord ? scenario.canRecord() : HttpRecorder.hasCassetteSync(scenario.cassette, { directory: FIXTURES_DIR })
+
+const recordError = (scenario: RecordedScenario) =>
+  scenario.id === "openai-oauth"
+    ? "Set OPENCODE_RECORD_OPENAI_AUTH to an OAuth auth JSON object in the recording environment."
+    : `Missing recording credentials for ${scenario.name}.`
+
+const redactRecordedBody = (body: string) =>
+  body
+    .replace(/wrk_[A-Z0-9]+/g, "wrk_redacted")
+    .replace(/"safety_identifier"\s*:\s*"user-[^"]+"/g, '"safety_identifier":"user_redacted"')
+    .replace(/"(access|access_token|refresh|refresh_token|accountId|account_id)"\s*:\s*"[^"]+"/g, '"$1":"redacted"')
 
 const recordingRedactor = Redactor.compose(
   Redactor.defaults({
@@ -226,12 +239,8 @@ const recordingRedactor = Redactor.compose(
     },
   }),
   {
-    response: (snapshot) => ({
-      ...snapshot,
-      body: snapshot.body
-        .replace(/wrk_[A-Z0-9]+/g, "wrk_redacted")
-        .replace(/"safety_identifier":"user-[^"]+"/g, '"safety_identifier":"user_redacted"'),
-    }),
+    request: (snapshot) => ({ ...snapshot, body: redactRecordedBody(snapshot.body) }),
+    response: (snapshot) => ({ ...snapshot, body: redactRecordedBody(snapshot.body) }),
   },
 )
 
@@ -397,6 +406,12 @@ const driveToolLoop = (scenario: RecordedScenario) =>
 describe("session.llm native recorded", () => {
   for (const scenario of RECORDED_SCENARIOS.filter(isSelected)) {
     if (!canRun(scenario)) {
+      if (shouldRecord && scenario.recordAuth && selectedScenarios.size > 0) {
+        test(`${scenario.name}: drives a tool loop to a final text answer`, () => {
+          throw new Error(recordError(scenario))
+        })
+        continue
+      }
       test.skip(`${scenario.name}: drives a tool loop to a final text answer`, () => {})
       continue
     }
