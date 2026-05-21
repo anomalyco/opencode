@@ -91,6 +91,17 @@ const SUBCOMMANDS = [
 const SNAPSHOT_ENV = { COLUMNS: "120" }
 
 describe("opencode CLI help-text snapshots", () => {
+  cliIt.live(
+    "top-level help ends with a newline",
+    ({ opencode }) =>
+      Effect.gen(function* () {
+        const result = yield* opencode.spawn(["--help"], { env: SNAPSHOT_ENV })
+        expect(result.exitCode).toBe(0)
+        expect(normalize(result.stderr).endsWith("\n")).toBe(true)
+      }),
+    60_000,
+  )
+
   // Single test, parallel spawns. Each command's help fires under
   // `concurrency: 8` — wall-clock stays under ~10s even for ~35 commands,
   // versus ~1 minute if we serialized.
@@ -121,7 +132,9 @@ describe("opencode CLI help-text snapshots", () => {
           // yargs writes --help to stderr, not stdout. Snapshotting stderr
           // means our test catches the help body; stdout for these commands
           // is expected to be empty.
-          expect(normalize(result.stderr)).toMatchSnapshot(`opencode ${argv.join(" ")} --help`)
+          const stderr = normalize(result.stderr)
+          expect(stderr.endsWith("\n")).toBe(true)
+          expect(stderr.slice(0, -1)).toMatchSnapshot(`opencode ${argv.join(" ")} --help`)
         }
         if (failures.length > 0) {
           throw new Error(`Help text failed for:\n  ${failures.join("\n  ")}`)
