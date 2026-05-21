@@ -278,6 +278,7 @@ export const layer: Layer.Layer<
 
       const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
         const all = Date.now()
+        log.warn("[tcc-diagnostic] project.fromDirectory start", { directory })
         log.info("project.discover", { directory, phase: "start" })
 
         // Phase 1: discover git info
@@ -426,6 +427,12 @@ export const layer: Layer.Layer<
               time: { created: Date.now(), updated: Date.now() },
             }
 
+        log.warn("[tcc-diagnostic] project.fromDirectory before icon discovery", {
+          directory,
+          projectID: data.id,
+          vcs: data.vcs,
+          worktree: data.worktree,
+        })
         if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY)
           yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
 
@@ -495,6 +502,13 @@ export const layer: Layer.Layer<
         })
 
         yield* emitUpdated(result)
+        log.warn("[tcc-diagnostic] project.fromDirectory done", {
+          directory,
+          projectID: result.id,
+          vcs: result.vcs,
+          worktree: result.worktree,
+          sandbox: data.sandbox,
+        })
         log.info("project.discover", {
           directory,
           phase: "total",
@@ -505,66 +519,52 @@ export const layer: Layer.Layer<
         return { project: result, sandbox: data.sandbox }
       })
 
-      const matches = yield* fs
-        .glob("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {
-          cwd: input.worktree,
-          absolute: true,
-          include: "file",
+      const discover = Effect.fn("Project.discover")(function* (input: Info) {
+        if (input.vcs !== "git") {
+          log.warn("[tcc-diagnostic] icon discover skip: not git", { vcs: input.vcs, projectID: input.id })
+          return
+        }
+        if (input.icon?.override) {
+          log.warn("[tcc-diagnostic] icon discover skip: has override", { projectID: input.id })
+          return
+        }
+        if (input.icon?.url) {
+          log.warn("[tcc-diagnostic] icon discover skip: has url", { projectID: input.id })
+          return
+        }
+
+        log.warn("[tcc-diagnostic] icon discover favicon glob start", {
+          projectID: input.id,
+          worktree: input.worktree,
         })
-        .pipe(Effect.orDie)
-      const shortest = matches.sort((a, b) => a.length - b.length)[0]
-      if (!shortest) return
-
-      const buffer = yield* fs.readFile(shortest).pipe(Effect.orDie)
-      const base64 = Buffer.from(buffer).toString("base64")
-      const mime = AppFileSystem.mimeType(shortest)
-      const url = `data:${mime};base64,${base64}`
-      yield* update({ projectID: input.id, icon: { url } }).pipe(
-        Effect.catchTag("Project.NotFoundError", () => Effect.void),
-      )
-    })
-
-    const list = Effect.fn("Project.list")(function* () {
-      return yield* db((d) => d.select().from(ProjectTable).all().map(fromRow))
-    })
-
-    const get = Effect.fn("Project.get")(function* (id: ProjectID) {
-      const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
-      return row ? fromRow(row) : undefined
-    })
-
-    const update = Effect.fn("Project.update")(function* (input: UpdateInput) {
-      const result = yield* db((d) =>
-        d
-          .update(ProjectTable)
-          .set({
-            name: input.name,
-            icon_url: input.icon?.url,
-            icon_url_override: input.icon?.override,
-            icon_color: input.icon?.color,
-            commands: input.commands,
-            time_updated: Date.now(),
+        const matches = yield* fsys
+          .glob("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {
+            cwd: input.worktree,
+            absolute: true,
+            include: "file",
           })
-          .where(eq(ProjectTable.id, input.projectID))
-          .returning()
-          .get(),
-      )
-      if (!result) return yield* new NotFoundError({ projectID: input.projectID })
-      const data = fromRow(result)
-      yield* emitUpdated(data)
-      return data
-    })
+          .pipe(Effect.orDie)
+        log.warn("[tcc-diagnostic] icon discover favicon glob done", {
+          projectID: input.id,
+          matchCount: matches.length,
+        })
+        const shortest = matches.sort((a, b) => a.length - b.length)[0]
+        if (!shortest) {
+          log.warn("[tcc-diagnostic] icon discover no favicon found", { projectID: input.id })
+          return
+        }
+        log.warn("[tcc-diagnostic] icon discover selected favicon", {
+          projectID: input.id,
+          path: shortest,
+        })
 
-    const initGit = Effect.fn("Project.initGit")(function* (input: { directory: string; project: Info }) {
-      if (input.project.vcs === "git") return input.project
-      if (!(yield* Effect.sync(() => which("git")))) throw new Error("Git is not installed")
-      const result = yield* git(["init", "--quiet"], { cwd: input.directory })
-      if (result.code !== 0) {
-        throw new Error(result.stderr.trim() || result.text.trim() || "Failed to initialize git repository")
-      }
-      const { project } = yield* fromDirectory(input.directory)
-      return project
-    })
+        const buffer = yield* fsys.readFile(shortest).pipe(Effect.orDie)
+        const base64 = Buffer.from(buffer).toString("base64")
+        const mime = AppFileSystem.mimeType(shortest)
+        const url = `data:${mime};base64,${base64}`
+        yield* update({ projectID: input.id, icon: { url } })
+        log.warn("[tcc-diagnostic] icon discover update done", { projectID: input.id })
+      })
 
     const setInitialized = Effect.fn("Project.setInitialized")(function* (id: ProjectID) {
       yield* db((d) =>

@@ -361,6 +361,9 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Search folders",
   "dialog.directory.empty": "No folders found",
+  "dialog.directory.showHidden": "Show hidden items",
+  "dialog.directory.footer.navigate": "Navigate",
+  "dialog.directory.footer.select": "Select",
 
   "app.server.unreachable": "Could not reach {{server}}",
   "app.server.retrying": "Retrying automatically...",
@@ -675,6 +678,9 @@ export const dict = {
   "session.new.hermes.showingToolsets": "Showing {{shown}} of {{total}} toolsets",
   "session.new.hermes.trimmed": "{{rows}} more toolsets and {{tools}} more tools are hidden for this window",
   "session.new.genericagent.title": "Your AI agent assistant",
+  "session.new.genericagent.cwd.label": "Based in directory",
+  "session.new.genericagent.cwd.default": "GenericAgent default directory",
+  "session.new.genericagent.cwd.choose": "Choose directory",
   "session.new.meta.project": "Project",
   "session.new.meta.branch": "Branch",
   "session.new.meta.workspace": "Workspace",

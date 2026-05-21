@@ -1428,6 +1428,19 @@ export const layer = Layer.effect(
         parsed.models[modelID] = parsedModel
       }
       database[providerID] = parsed
+
+      if (providerID === "openai") {
+        const configured = parsed.models["gpt-5.5"]
+        log.warn("[DEBUG] provider config merged openai/gpt-5.5", {
+          providerID,
+          hasBaseProvider: !!base,
+          modelCount: Object.keys(parsed.models).length,
+          hasGpt55: !!configured,
+          gpt55ApiNpm: configured?.api.npm,
+          gpt55ReleaseDate: configured?.release_date,
+          source: parsed.source,
+        })
+      }
     }
 
     // load env
@@ -1524,6 +1537,20 @@ export const layer = Layer.effect(
       if (provider.name) partial.name = provider.name
       if (provider.options) partial.options = provider.options
       mergeProvider(providerID, partial)
+
+      if (providerID === "openai") {
+        const connected = providers[providerID]
+        const configured = connected?.models["gpt-5.5"]
+        log.warn("[DEBUG] provider config connected openai/gpt-5.5", {
+          providerID,
+          hasProvider: !!connected,
+          source: connected?.source,
+          modelCount: connected ? Object.keys(connected.models).length : 0,
+          hasGpt55: !!configured,
+          gpt55ApiNpm: configured?.api.npm,
+          gpt55ReleaseDate: configured?.release_date,
+        })
+      }
     }
 
     for (const providerID of Object.keys(database)) {
@@ -1575,6 +1602,24 @@ export const layer = Layer.effect(
       log.info("found", { providerID })
     }
 
+    // [DEBUG] Temporary visibility probe for native openai config in the desktop model picker path.
+    {
+      const openaiProvider = providers["openai"]
+      if (openaiProvider) {
+        const configured = openaiProvider.models["gpt-5.5"]
+        log.warn("[DEBUG] provider state final openai/gpt-5.5", {
+          providerID: "openai",
+          source: openaiProvider.source,
+          modelCount: Object.keys(openaiProvider.models).length,
+          hasGpt55: !!configured,
+          gpt55ApiNpm: configured?.api.npm,
+          gpt55ReleaseDate: configured?.release_date,
+        })
+      } else {
+        log.warn("[DEBUG] provider state final openai missing")
+      }
+    }
+
     return {
       models: languages,
       providers,
@@ -1584,7 +1629,20 @@ export const layer = Layer.effect(
   })
 
   export async function list() {
-    return state().then((state) => state.providers)
+    const providers = await state().then((state) => state.providers)
+    // [DEBUG] Temporary visibility probe at the Provider.list() boundary.
+    const openaiProvider = providers["openai"]
+    if (openaiProvider) {
+      const configured = openaiProvider.models["gpt-5.5"]
+      log.warn("[DEBUG] Provider.list openai/gpt-5.5", {
+        modelCount: Object.keys(openaiProvider.models).length,
+        hasGpt55: !!configured,
+        gpt55ReleaseDate: configured?.release_date,
+      })
+    } else {
+      log.warn("[DEBUG] Provider.list openai missing")
+    }
+    return providers
   }
 
   async function getSDK(model: Model) {

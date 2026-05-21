@@ -78,6 +78,13 @@ const draftText = (prompt: Prompt) => prompt.map((part) => ("content" in part ? 
 
 const draftImages = (prompt: Prompt) => prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
 
+const submitMeasureSummary = () =>
+  performance
+    .getEntriesByType("measure")
+    .filter((e) => e.name.startsWith("submit:"))
+    .map((e) => `${e.name.replace("submit:", "")}=${Math.round(e.duration)}ms`)
+    .join(" ")
+
 export async function sendFollowupDraft(input: FollowupSendInput) {
   const text = draftText(input.draft.prompt)
   const images = draftImages(input.draft.prompt)
@@ -196,11 +203,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     performance.mark("submit:http-send:end")
     performance.measure("submit:http-send", "submit:http-send:start", "submit:http-send:end")
     performance.measure("submit:total", "submit:start", "submit:http-send:end")
-    console.debug("[perf:submit] breakdown", Object.fromEntries(
-      performance.getEntriesByType("measure")
-        .filter((e) => e.name.startsWith("submit:"))
-        .map((e) => [e.name, `${Math.round(e.duration)}ms`])
-    ))
+    console.debug(`[perf:submit] breakdown ${submitMeasureSummary()}`)
     return true
   } catch (err) {
     if (await delivered(input.client, input.draft.sessionID, messageID)) return true
@@ -270,7 +273,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     if (!sessionID) return Promise.resolve()
 
     const t0 = performance.now()
-    console.debug("[abort] start", { sessionID, directory: sdk.directory, t: t0 })
+    console.debug(`[abort] start sessionID=${sessionID} directory=${sdk.directory} t=${t0}`)
 
     globalSync.todo.set(sessionID, [])
     const [, setStore] = globalSync.child(sdk.directory)
@@ -288,31 +291,27 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       next[lastIdx] = { ...last, time: { ...last.time, completed: Date.now() } }
       return next
     })
-    console.debug("[abort] optimistic local state", {
-      sessionID,
-      msgCompleted: optimisticTarget,
-      dt: performance.now() - t0,
-    })
+    console.debug(`[abort] optimistic local state sessionID=${sessionID} msgCompleted=${optimisticTarget ?? "none"} dt=${performance.now() - t0}`)
 
     input.onAbort?.()
 
     const queued = pending.get(sessionID)
     if (queued) {
-      console.debug("[abort] cancel local pending", { sessionID, directory: sdk.directory })
+      console.debug(`[abort] cancel local pending sessionID=${sessionID} directory=${sdk.directory}`)
       queued.abort.abort()
       queued.cleanup()
       pending.delete(sessionID)
     }
-    console.debug("[abort] POST /session/:id/abort", { sessionID, directory: sdk.directory, queued: !!queued })
+    console.debug(`[abort] POST /session/:id/abort sessionID=${sessionID} directory=${sdk.directory} queued=${!!queued}`)
     return sdk.client.session
       .abort({
         sessionID,
       })
       .then(() => {
-        console.debug("[abort] POST done", { sessionID, totalMs: performance.now() - t0 })
+        console.debug(`[abort] POST done sessionID=${sessionID} totalMs=${performance.now() - t0}`)
       })
       .catch((err) => {
-        console.debug("[abort] POST failed", { sessionID, err: String(err) })
+        console.debug(`[abort] POST failed sessionID=${sessionID} err=${String(err)}`)
       })
   }
 
@@ -396,6 +395,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     const openclaw = server.current?.integration === "openclaw"
+    const genericagent = server.current?.integration === "genericagent"
     const currentModel =
       local.model.current() ??
       (openclaw
@@ -424,72 +424,76 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const worktreeSelection = input.newSessionWorktree?.trim() || "main"
 
     let sessionDirectory = currentDirectory
+    let sessionCwd: string | undefined
     let client = sdk.client
 
     if (isNewSession) {
-      if (worktreeSelection === "main") {
-        sessionDirectory = rootDirectory
-      }
+      if (genericagent) {
+        if (worktreeSelection !== "main" && worktreeSelection !== "create") {
+          sessionCwd = worktreeSelection
+        }
+        sessionDirectory = currentDirectory
+        client = sdk.client
+      } else {
+        if (worktreeSelection === "main") {
+          sessionDirectory = rootDirectory
+        }
 
-      if (worktreeSelection === "create") {
-        const rootClient =
-          rootDirectory === currentDirectory
-            ? sdk.client
-            : sdk.createClient({
-                directory: rootDirectory,
-                throwOnError: true,
+        if (worktreeSelection === "create") {
+          const rootClient =
+            rootDirectory === currentDirectory
+              ? sdk.client
+              : sdk.createClient({
+                  directory: rootDirectory,
+                  throwOnError: true,
+                })
+          const createdWorktree = await rootClient.worktree
+            .create({ directory: rootDirectory })
+            .then((x) => x.data)
+            .catch((err) => {
+              showToast({
+                title: language.t("prompt.toast.worktreeCreateFailed.title"),
+                description: errorMessage(err),
               })
-        const createdWorktree = await rootClient.worktree
-          .create({ directory: rootDirectory })
-          .then((x) => x.data)
-          .catch((err) => {
+              return undefined
+            })
+
+          if (!createdWorktree?.directory) {
             showToast({
               title: language.t("prompt.toast.worktreeCreateFailed.title"),
-              description: errorMessage(err),
+              description: language.t("common.requestFailed"),
             })
-            return undefined
-          })
-
-        if (!createdWorktree?.directory) {
-          showToast({
-            title: language.t("prompt.toast.worktreeCreateFailed.title"),
-            description: language.t("common.requestFailed"),
-          })
-          return
+            return
+          }
+          WorktreeState.pending(createdWorktree.directory)
+          sessionDirectory = createdWorktree.directory
         }
-        WorktreeState.pending(createdWorktree.directory)
-        sessionDirectory = createdWorktree.directory
-      }
 
-      if (worktreeSelection !== "main" && worktreeSelection !== "create") {
-        sessionDirectory = worktreeSelection
-      }
-
-      if (sessionDirectory !== currentDirectory) {
-        // Guard: 确保 sessionDirectory 不为空（worktree 场景）
-        if (!sessionDirectory || sessionDirectory.trim() === "") {
-          console.error("[BUG] sessionDirectory is empty in worktree path", {
-            sessionDirectory,
-            currentDirectory,
-            rootDirectory,
-            worktreeSelection,
-          })
-          showToast({
-            variant: "error",
-            title: language.t("prompt.toast.sessionCreateFailed.title"),
-            description: "工作树目录配置错误，请重试",
-          })
-          return
+        if (worktreeSelection !== "main" && worktreeSelection !== "create") {
+          sessionDirectory = worktreeSelection
         }
-        client = createOpencodeClient({
-          baseUrl: sdk.url,
-          fetch: platform.fetch,
-          directory: sessionDirectory,
-          throwOnError: true,
-        })
-        globalSync.child(sessionDirectory)
-      } else {
-        client = sdk.client
+
+        if (sessionDirectory !== currentDirectory) {
+          // Guard: 确保 sessionDirectory 不为空（worktree 场景）
+          if (!sessionDirectory || sessionDirectory.trim() === "") {
+            console.error(
+              `[BUG] sessionDirectory is empty in worktree path sessionDirectory=${sessionDirectory || ""} currentDirectory=${currentDirectory} rootDirectory=${rootDirectory} worktreeSelection=${worktreeSelection}`,
+            )
+            showToast({
+              variant: "error",
+              title: language.t("prompt.toast.sessionCreateFailed.title"),
+              description: "工作树目录配置错误，请重试",
+            })
+            return
+          }
+          client = sdk.createClient({
+            directory: sessionDirectory,
+            throwOnError: true,
+          })
+          globalSync.child(sessionDirectory)
+        } else {
+          client = sdk.client
+        }
       }
 
       input.onNewSessionWorktreeReset?.()
@@ -498,8 +502,18 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     let session = input.info()
     if (!session && isNewSession) {
       performance.mark("submit:session-create:start")
-      const created = await client.session
-        .create()
+      const createSession = client.session.create.bind(client.session) as (
+        parameters?: undefined,
+        options?: { body?: { cwd?: string } },
+      ) => Promise<{ data?: Session }>
+      const created = await createSession(
+        undefined,
+        genericagent && sessionCwd
+          ? ({
+              body: { cwd: sessionCwd },
+            } as Parameters<typeof createSession>[1])
+          : undefined,
+      )
         .then((x) => x.data ?? undefined)
         .catch((err) => {
           showToast({
@@ -652,10 +666,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     requestAnimationFrame(() => {
       performance.mark("submit:first-raf")
       performance.measure("submit:to-first-raf", "submit:start", "submit:first-raf")
-      const entries = performance.getEntriesByType("measure")
-        .filter((e) => e.name.startsWith("submit:"))
-        .map((e) => [e.name.replace("submit:", ""), `${Math.round(e.duration)}ms`])
-      console.debug("[perf:submit] first-raf breakdown", Object.fromEntries(entries))
+      console.debug(`[perf:submit] first-raf breakdown ${submitMeasureSummary()}`)
       input.onSubmitted?.()
     })
 

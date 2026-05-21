@@ -1860,11 +1860,6 @@ export default function ConfigPage() {
     if (!layout.sidebar.opened()) return
     layout.sidebar.close()
   })
-  onMount(() => {
-    const currentServer = server.current
-    const serverKey = currentServer ? ServerConnection.key(currentServer) : "none"
-    console.debug(`[startup-profiler] phase=config.mount server.key=${serverKey} server.url=${currentServer?.http.url ?? "none"} server.integration=${currentServer?.integration ?? "none"} domain=${server.domain} section=${query.section ?? "none"} pick=${query.pick ?? "none"}`)
-  })
   const cache = new Map<string, string>()
   const pending = new Map<string, Promise<string>>()
   const trees = new Map<string, TreeNode[]>()

@@ -381,6 +381,9 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "搜索文件夹",
   "dialog.directory.empty": "未找到文件夹",
+  "dialog.directory.showHidden": "显示隐藏项",
+  "dialog.directory.footer.navigate": "导航",
+  "dialog.directory.footer.select": "选择",
 
   "dialog.server.title": "服务器",
   "dialog.server.description": "切换此应用连接的 OpenCode 服务器。",
@@ -640,6 +643,9 @@ export const dict = {
   "session.new.hermes.showingToolsets": "当前展示 {{shown}} / {{total}} 个工具组",
   "session.new.hermes.trimmed": "当前窗口下还省略了 {{rows}} 个工具组、{{tools}} 个工具",
   "session.new.genericagent.title": "我是你的 AI 智能体助手",
+  "session.new.genericagent.cwd.label": "基于目录",
+  "session.new.genericagent.cwd.default": "GenericAgent 默认目录",
+  "session.new.genericagent.cwd.choose": "选择目录",
   "session.new.meta.project": "项目",
   "session.new.meta.branch": "分支",
   "session.new.meta.workspace": "工作区",

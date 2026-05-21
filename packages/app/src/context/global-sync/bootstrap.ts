@@ -110,11 +110,6 @@ export async function bootstrapGlobal(input: {
     <K extends keyof GlobalStoreMinimal>(key: K, value: GlobalStoreMinimal[K]): void
   }
 }) {
-  const _globalStart = typeof performance === "object" ? performance.now() : Date.now()
-  const _globalElapsed = () => Math.round((typeof performance === "object" ? performance.now() : Date.now()) - _globalStart)
-
-  console.debug(`[startup-profiler] phase=globalSync.bootstrap.start elapsedMs=0`)
-
   const fast = [
     () =>
       retry(() =>
@@ -142,7 +137,23 @@ export async function bootstrapGlobal(input: {
     () =>
       retry(() =>
         input.globalSDK.provider.list().then((x) => {
-          input.setGlobalStore("provider", normalizeProviderList(x.data!))
+          const data = normalizeProviderList(x.data!)
+          // [DEBUG] Temporary visibility probe for native openai in the global provider response.
+          const openaiProvider = data.all.find((p) => p.id === "openai")
+          const configured = openaiProvider?.models["gpt-5.5"]
+          if (openaiProvider) {
+            console.debug("[DEBUG] globalSync bootstrap provider openai/gpt-5.5", {
+              modelCount: Object.keys(openaiProvider.models).length,
+              hasGpt55: !!configured,
+              gpt55ReleaseDate: configured?.release_date ?? null,
+              isOpenaiConnected: data.connected.includes("openai"),
+            })
+          } else {
+            console.debug("[DEBUG] globalSync bootstrap provider openai missing", {
+              isOpenaiConnected: data.connected.includes("openai"),
+            })
+          }
+          input.setGlobalStore("provider", data)
         }),
       ),
   ]
@@ -150,7 +161,6 @@ export async function bootstrapGlobal(input: {
   const slow: Array<() => Promise<unknown>> = []
 
   const _fastErrs = errors(await runAll(fast))
-  console.debug(`[startup-profiler] phase=globalSync.bootstrap.fastDone errors=${_fastErrs.length} elapsedMs=${_globalElapsed()}`)
   showErrors({
     errors: _fastErrs,
     title: input.requestFailedTitle,
@@ -159,7 +169,6 @@ export async function bootstrapGlobal(input: {
   })
   await waitForPaint()
   const _slowErrs = errors(await runAll(slow))
-  console.debug(`[startup-profiler] phase=globalSync.bootstrap.slowDone errors=${_slowErrs.length} elapsedMs=${_globalElapsed()}`)
   showErrors({
     errors: _slowErrs,
     title: input.requestFailedTitle,
@@ -167,7 +176,6 @@ export async function bootstrapGlobal(input: {
     formatMoreCount: input.formatMoreCount,
   })
   input.setGlobalStore("ready", true)
-  console.debug(`[startup-profiler] phase=globalSync.bootstrap.ready elapsedMs=${_globalElapsed()}`)
 }
 
 function groupBySession<T extends { id: string; sessionID: string }>(input: T[]) {
@@ -205,9 +213,6 @@ export async function bootstrapDirectory(input: {
   }
   queryClient: QueryClient
 }) {
-  const _dirStart = typeof performance === "object" ? performance.now() : Date.now()
-  const _dirElapsed = () => Math.round((typeof performance === "object" ? performance.now() : Date.now()) - _dirStart)
-
   const loading = input.store.status !== "complete"
   let projects = input.global.project
   const seededProject = projectID(input.directory, projects)
@@ -217,7 +222,6 @@ export async function bootstrapDirectory(input: {
     input.setStore("config", reconcile(input.global.config, { merge: false }))
   }
   if (loading) input.setStore("status", "partial")
-  console.debug(`[startup-profiler] phase=bootstrap.directory.start directory=${input.directory} status=${input.store.status} pathDirectory=${input.store.path.directory} seededProjectId=${seededProject ?? ""} elapsedMs=0`)
 
   const fast = [
     () =>
@@ -226,7 +230,6 @@ export async function bootstrapDirectory(input: {
         projects = upsertProject(projects, project)
         input.setProject?.(projects)
         const id = projectID(input.directory, projects) ?? project.id
-        console.debug(`[startup-profiler] phase=bootstrap.directory.projectSeeded directory=${input.directory} project=${project.id} vcs=${project.vcs ?? "null"} worktree=${project.worktree} elapsedMs=${_dirElapsed()}`)
         input.setStore("project", id)
       }),
     () => retry(() => input.sdk.config.get().then((x) => input.setStore("config", x.data!))),
@@ -234,7 +237,6 @@ export async function bootstrapDirectory(input: {
       retry(() =>
         input.sdk.path.get().then((x) => {
           input.setStore("path", x.data!)
-          console.debug(`[startup-profiler] phase=bootstrap.directory.pathReady directory=${input.directory} pathDirectory=${x.data?.directory ?? ""} projectId=${projectID(x.data?.directory ?? input.directory, projects) ?? ""} elapsedMs=${_dirElapsed()}`)
           const next = projectID(x.data?.directory ?? input.directory, projects)
           if (next) input.setStore("project", next)
         }),
@@ -302,7 +304,25 @@ export async function bootstrapDirectory(input: {
     () =>
       retry(() =>
         input.sdk.provider.list().then((x) => {
-          input.setStore("provider", normalizeProviderList(x.data!))
+          const data = normalizeProviderList(x.data!)
+          // [DEBUG] Temporary visibility probe for native openai in the directory provider response.
+          const openaiProvider = data.all.find((p) => p.id === "openai")
+          const configured = openaiProvider?.models["gpt-5.5"]
+          if (openaiProvider) {
+            console.debug("[DEBUG] dirSync bootstrap provider openai/gpt-5.5", {
+              dir: input.directory,
+              modelCount: Object.keys(openaiProvider.models).length,
+              hasGpt55: !!configured,
+              gpt55ReleaseDate: configured?.release_date ?? null,
+              isOpenaiConnected: data.connected.includes("openai"),
+            })
+          } else {
+            console.debug("[DEBUG] dirSync bootstrap provider openai missing", {
+              dir: input.directory,
+              isOpenaiConnected: data.connected.includes("openai"),
+            })
+          }
+          input.setStore("provider", data)
         }),
       ),
     () => retry(() => input.sdk.mcp.status().then((x) => input.setStore("mcp", x.data!))),
@@ -310,7 +330,6 @@ export async function bootstrapDirectory(input: {
   ]
 
   const errs = errors(await runAll(fast))
-  console.debug(`[startup-profiler] phase=bootstrap.directory.fastDone directory=${input.directory} status=${input.store.status} pathDirectory=${input.store.path.directory} errors=${errs.length} elapsedMs=${_dirElapsed()}`)
   if (errs.length > 0) {
     console.error("Failed to bootstrap instance", errs[0])
     const project = getFilename(input.directory)
@@ -323,7 +342,6 @@ export async function bootstrapDirectory(input: {
 
   await waitForPaint()
   const slowErrs = errors(await runAll(slow))
-  console.debug(`[startup-profiler] phase=bootstrap.directory.slowDone directory=${input.directory} status=${input.store.status} pathDirectory=${input.store.path.directory} errors=${slowErrs.length} elapsedMs=${_dirElapsed()}`)
   if (slowErrs.length > 0) {
     console.error("Failed to finish bootstrap instance", slowErrs[0])
     const project = getFilename(input.directory)
@@ -335,5 +353,4 @@ export async function bootstrapDirectory(input: {
   }
 
   if (loading && errs.length === 0 && slowErrs.length === 0) input.setStore("status", "complete")
-  console.debug(`[startup-profiler] phase=bootstrap.directory.final directory=${input.directory} status=${input.store.status} pathDirectory=${input.store.path.directory} projectId=${input.store.project} totalErrors=${errs.length + slowErrs.length} elapsedMs=${_dirElapsed()}`)
 }

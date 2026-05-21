@@ -338,6 +338,27 @@ export function GenericTool(props: {
 }) {
   const hook = customTool(props.tool)
 
+  const inputJson = () => {
+    const v = props.input
+    if (!v || typeof v !== "object") return ""
+    const keys = Object.keys(v)
+    if (keys.length === 0) return ""
+    // single "input" raw fallback (set by parseGenericAgentCompactArgs when args
+    // couldn't be parsed as JSON) – show the raw string directly, not as JSON
+    if (keys.length === 1 && keys[0] === "input" && typeof (v as any).input === "string") {
+      return (v as any).input as string
+    }
+    try {
+      return JSON.stringify(v, null, 2)
+    } catch {
+      return String(v)
+    }
+  }
+
+  const hasInput = () => inputJson().length > 0
+  const hasOutput = () => typeof props.output === "string" && props.output.length > 0
+  const hasBody = () => hasInput() || hasOutput()
+
   return (
     <BasicTool
       icon={glyph(props.tool)}
@@ -349,16 +370,21 @@ export function GenericTool(props: {
         subtitle: label(props.input),
         args: args(props.input),
       }}
-      hideDetails={props.hideDetails}
+      hideDetails={props.hideDetails || !hasBody()}
     >
-      <Show when={props.output}>
-        {(output) => (
-          <div data-component="tool-output" data-scrollable>
-            <pre>
-              <code>{output()}</code>
-            </pre>
-          </div>
-        )}
+      <Show when={hasInput()}>
+        <div data-component="tool-input" data-scrollable>
+          <pre>
+            <code>{inputJson()}</code>
+          </pre>
+        </div>
+      </Show>
+      <Show when={hasOutput()}>
+        <div data-component="tool-output" data-scrollable>
+          <pre>
+            <code>{props.output}</code>
+          </pre>
+        </div>
       </Show>
     </BasicTool>
   )

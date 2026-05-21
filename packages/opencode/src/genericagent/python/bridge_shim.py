@@ -35,6 +35,7 @@ import sys
 import threading
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Optional
 
 
 def _eprint(msg: str) -> None:
@@ -70,13 +71,32 @@ def _validate_ga_dir(ga_dir: str) -> None:
         )
 
 
+def _normalize_cwd(cwd: Optional[str]) -> Optional[str]:
+    if not cwd:
+        return None
+    value = str(cwd).strip()
+    if not value:
+        return None
+    value = os.path.abspath(os.path.expanduser(value))
+    if not os.path.isdir(value):
+        raise RuntimeError(f"cwd does not exist or is not a directory: {value}")
+    return value
+
+
 def _boot_agent(ga_dir: str):
     """Load the GeneraticAgent class and start its worker thread."""
     sys.path.insert(0, ga_dir)
     os.chdir(ga_dir)
-    from agentmain import GeneraticAgent  # type: ignore[import-not-found]
+    import agentmain  # type: ignore[import-not-found]
 
-    agent = GeneraticAgent()
+    original_handler = agentmain.GenericAgentHandler
+
+    class BridgeGenericAgentHandler(original_handler):
+        def __init__(self, parent, last_history=None, cwd="./temp"):
+            super().__init__(parent, last_history, _current_task_cwd() or cwd)
+
+    agentmain.GenericAgentHandler = BridgeGenericAgentHandler
+    agent = agentmain.GeneraticAgent()
     if not agent.llmclients:
         raise RuntimeError(
             "GeneraticAgent loaded but has zero LLM clients configured. "
@@ -92,9 +112,23 @@ def _boot_agent(ga_dir: str):
 
 _AGENT_LOCK = threading.Lock()
 _AGENT = None  # type: ignore[var-annotated]
+_TASK_LOCK = threading.Lock()
+_TASK_CWD_LOCK = threading.Lock()
+_TASK_CWD = None  # type: ignore[var-annotated]
 
 _ACTIVE_DQ_LOCK = threading.Lock()
 _ACTIVE_DQ = None  # type: ignore[var-annotated]
+
+
+def _set_task_cwd(cwd: Optional[str]) -> None:
+    global _TASK_CWD
+    with _TASK_CWD_LOCK:
+        _TASK_CWD = cwd
+
+
+def _current_task_cwd() -> Optional[str]:
+    with _TASK_CWD_LOCK:
+        return _TASK_CWD
 
 
 def _set_active_dq(dq) -> None:
@@ -121,6 +155,17 @@ def _notify_active_dq_abort() -> None:
         _eprint("[bridge_shim] /abort: sentinel put to active dq")
     except Exception as e:
         _eprint(f"[bridge_shim] /abort: failed to put sentinel: {e}")
+
+
+def _apply_agent_cwd(agent, cwd: Optional[str]) -> None:
+    if not cwd:
+        return
+    try:
+        handler = getattr(agent, "handler", None)
+        if handler is not None:
+            setattr(handler, "cwd", cwd)
+    except Exception as e:
+        _eprint(f"[bridge_shim] failed to set handler cwd: {e}")
 
 
 def _agent():
@@ -380,6 +425,11 @@ class Handler(BaseHTTPRequestHandler):
         if agent is None:
             self._write_json(503, {"ok": False, "error": "agent_not_loaded"})
             return
+        try:
+            cwd = _normalize_cwd(body.get("cwd") if isinstance(body, dict) else None)
+        except Exception as e:
+            self._write_json(400, {"ok": False, "error": str(e)})
+            return
 
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -390,8 +440,15 @@ class Handler(BaseHTTPRequestHandler):
 
         full_text = ""
         dq = None
+        old_cwd = os.getcwd()
+        _TASK_LOCK.acquire()
         try:
-            dq = agent.put_task(query, source="bridge")
+            _set_task_cwd(cwd)
+            if cwd:
+                os.chdir(cwd)
+                _apply_agent_cwd(agent, cwd)
+            effective_query = query if not cwd else f"[SYSTEM] Current working directory: {cwd}\n\n{query}"
+            dq = agent.put_task(effective_query, source="bridge")
             _set_active_dq(dq)
             while True:
                 try:
@@ -426,8 +483,15 @@ class Handler(BaseHTTPRequestHandler):
                 }
             )
         finally:
+            _set_task_cwd(None)
+            if cwd:
+                try:
+                    os.chdir(old_cwd)
+                except Exception as e:
+                    _eprint(f"[bridge_shim] failed to restore cwd: {e}")
             if dq is not None:
                 _clear_active_dq(dq)
+            _TASK_LOCK.release()
 
 
 def _find_port(host: str, preferred: int) -> int:

@@ -137,9 +137,6 @@ export function GlobalSDKProvider(props: ParentProps) {
       const url = conn.http.url
       const existing = streams.get(domain)
       if (existing?.url === url) continue
-      console.debug(
-        `[startup-profiler] phase=global-sdk.runtime action=${existing ? "replace" : "create"} domain=${domain} url=${url} integration=${conn.integration ?? "none"} fetch=${eventFetchMode(url, platform.fetch)} version=${(state()[domain]?.version ?? 0) + 1}`,
-      )
       existing?.stop()
 
       const abort = new AbortController()
@@ -272,10 +269,6 @@ export function GlobalSDKProvider(props: ParentProps) {
               onSseError: (error) => {
                 if (aborted(error) || streamErrorLogged) return
                 streamErrorLogged = true
-                if (!everConnected && failedAttempts < LOG_ERROR_AFTER_FAILED_ATTEMPTS) return
-                console.error(
-                  `[startup-profiler] phase=global-sdk.stream-error domain=${domain} url=${url} integration=${conn.integration ?? "none"} fetch=${eventFetch ? "platform" : "webview"} attempts=${failedAttempts} everConnected=${everConnected ? "true" : "false"} error=${error instanceof Error ? `${error.name}:${error.message}` : String(error)}`,
-                )
               },
             })
             let yielded = Date.now()
@@ -313,9 +306,6 @@ export function GlobalSDKProvider(props: ParentProps) {
               (everConnected || failedAttempts >= LOG_ERROR_AFTER_FAILED_ATTEMPTS)
             ) {
               streamErrorLogged = true
-              console.error(
-                `[startup-profiler] phase=global-sdk.stream-error domain=${domain} url=${url} integration=${conn.integration ?? "none"} fetch=${eventFetch ? "platform" : "webview"} attempts=${failedAttempts} everConnected=${everConnected ? "true" : "false"} error=${error instanceof Error ? `${error.name}:${error.message}` : String(error)}`,
-              )
             }
           } finally {
             abort.signal.removeEventListener("abort", onAbort)

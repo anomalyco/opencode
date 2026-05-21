@@ -296,6 +296,9 @@ export type Platform = {
 
   /** List config directory tree (desktop only) */
   listConfigDirectory?(path: string): Promise<ConfigTreeItem[]>
+
+  /** List a local directory without bootstrapping an opencode workspace (desktop only) */
+  listLocalDirectory?(path: string): Promise<ConfigTreeItem[]>
 }
 
 export type DisplayBackend = "auto" | "wayland"

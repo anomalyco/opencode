@@ -51,7 +51,6 @@ export function createRefreshQueue(input: QueueInput) {
     refreshTimer = setTimeout(() => {
       refreshTimer = undefined
       root = true
-      console.debug(`[startup-profiler] phase=queue.refresh root=${root} queued=${queued.size}`)
       if (input.paused()) return
       schedule()
     }, REFRESH_DEBOUNCE_MS)

@@ -503,21 +503,63 @@ function parseGenericAgentToolInput(input: string): Record<string, unknown> {
   return { input }
 }
 
+// Matches both GenericAgent tool-call serialisations emitted by agent_loop.py:
+//   verbose=True  →  "🛠️ Tool: `name`  📥 args:\n````text\n{json}\n````\n`````\n{output}\n`````"
+//   verbose=False →  "🛠️ name(compact_args)" on a single line (default in the
+//                    opencode bridge_shim, which forces agent.verbose=False)
+// The compact form has no trailing output block (the underlying tool's yields
+// are exhausted by agent_loop without being forwarded to the UI).
+const GENERIC_AGENT_TOOL_PATTERN =
+  /🛠️\s+(?:Tool:\s*`([^`]+)`\s*📥\s*args:[ \t]*\n`{4}text\n([\s\S]*?)\n`{4}[ \t]*(?:\n`{5}\n([\s\S]*?)\n`{5})?|([\w]+)\(([^\n]*)\)[ \t]*$)/gm
+
+function parseGenericAgentCompactArgs(name: string, raw: string): Record<string, unknown> {
+  const trimmed = (raw ?? "").trim()
+  if (!trimmed) return {}
+  // _compact_tool_args truncates long payloads with a literal "..." suffix and
+  // emits bare strings (not JSON) for a couple of special tools. Try JSON first
+  // then fall back to a synthesised shape so the tool card still renders.
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>
+      }
+    } catch {
+      // fall through to heuristics below
+    }
+  }
+  if (name === "update_working_checkpoint") return { key_info: trimmed }
+  if (name === "ask_user") return { question: trimmed }
+  return { input: trimmed }
+}
+
 function parseGenericAgentToolText(text: string): GenericAgentTextSegment[] {
-  const pattern = /🛠️\s+Tool:\s*`([^`]+)`\s*📥\s*args:[ \t]*\n`{4}text\n([\s\S]*?)\n`{4}[ \t]*(?:\n`{5}\n([\s\S]*?)\n`{5})?/g
   const segments: GenericAgentTextSegment[] = []
   let cursor = 0
 
-  for (const match of text.matchAll(pattern)) {
+  for (const match of text.matchAll(GENERIC_AGENT_TOOL_PATTERN)) {
     const start = match.index ?? 0
     const before = text.slice(cursor, start).replace(/\n{3,}/g, "\n\n").trim()
     if (before) segments.push({ type: "text", text: before })
-    segments.push({
-      type: "tool",
-      tool: match[1] || "tool",
-      input: parseGenericAgentToolInput(match[2] || "{}"),
-      output: match[3] || "",
-    })
+
+    if (match[1] !== undefined) {
+      // verbose form
+      segments.push({
+        type: "tool",
+        tool: match[1] || "tool",
+        input: parseGenericAgentToolInput(match[2] || "{}"),
+        output: match[3] || "",
+      })
+    } else {
+      // compact form
+      const tool = match[4] || "tool"
+      segments.push({
+        type: "tool",
+        tool,
+        input: parseGenericAgentCompactArgs(tool, match[5] || ""),
+        output: "",
+      })
+    }
     cursor = start + match[0].length
   }
 

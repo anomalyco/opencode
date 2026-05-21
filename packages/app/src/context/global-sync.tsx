@@ -164,13 +164,6 @@ function createGlobalSync() {
   // domain has no registered server to talk to. Visible-domain no longer gates hidden
   // domains; each domain runs in parallel so long as it has an active server.
   const isolated = (directory: string) => !server.currentFor(domainFromDirectory(directory))
-  const trace = (event: string, extra?: Record<string, unknown>) => {
-    if (!event.startsWith("loadSessions.") && !event.startsWith("bootstrap.")) return
-    const detail = Object.entries(extra ?? {})
-      .map(([key, value]) => `${key}=${String(value)}`)
-      .join(" ")
-    console.debug(`[startup-profiler] phase=global-sync.${event}${detail ? ` ${detail}` : ""}`)
-  }
 
   onCleanup(() => {
     active = false
@@ -418,26 +411,10 @@ function createGlobalSync() {
     const started = typeof performance === "object" ? performance.now() : Date.now()
     const elapsed = () => Math.round((typeof performance === "object" ? performance.now() : Date.now()) - started)
     if (isolated(directory)) {
-      trace("loadSessions.skip", {
-        directory,
-        why: "no-server-for-domain",
-        silent: !!opts?.silent,
-        force: !!opts?.force,
-        seq: _seq,
-        elapsedMs: elapsed(),
-      })
       return
     }
     const pending = sessionLoads.get(directory)
     if (pending) {
-      trace("loadSessions.skip", {
-        directory,
-        why: "pending",
-        silent: !!opts?.silent,
-        force: !!opts?.force,
-        seq: _seq,
-        elapsedMs: elapsed(),
-      })
       return pending
     }
 
@@ -450,18 +427,6 @@ function createGlobalSync() {
       if (rev(directory) !== mark || managerOf(directory).children[directory] !== child) return input[0]
       return raw(...input)
     }) as typeof child[1]
-    trace("loadSessions.start", {
-      directory,
-      silent: !!opts?.silent,
-      force: !!opts?.force,
-      seq: _seq,
-      status: store.status,
-      sessions: store.sessions,
-      count: store.session.length,
-      path: store.path.directory,
-      limit: store.limit,
-      elapsedMs: elapsed(),
-    })
     setStore("sessions", "loading")
     setStore("session_error", undefined)
     const meta = sessionMeta.get(directory)
@@ -476,18 +441,6 @@ function createGlobalSync() {
       }
       setStore("sessions", "ready")
       setStore("session_error", undefined)
-      trace("loadSessions.skip", {
-        directory,
-        why: "cached",
-        silent: !!opts?.silent,
-        force: !!opts?.force,
-        seq: _seq,
-        limit: meta.limit,
-        storeLimit: store.limit,
-        count: store.session.length,
-        status: store.status,
-        elapsedMs: elapsed(),
-      })
       children.unpin(directory)
       return
     }
@@ -523,34 +476,12 @@ function createGlobalSync() {
         setStore("sessions", "ready")
         setStore("session_error", undefined)
         setLoaded("dir", directory, true)
-        trace("loadSessions.done", {
-          directory,
-          silent: !!opts?.silent,
-          force: !!opts?.force,
-          seq: _seq,
-          status: store.status,
-          limit,
-          fetched: nonArchived.length,
-          count: sessions.length,
-          elapsedMs: elapsed(),
-        })
       })
       .catch((err) => {
         console.error("Failed to load sessions", err)
         setStore("sessions", "idle")
         const note = permissionNotice(err, language.t, "session")
         setStore("session_error", note)
-        trace("loadSessions.error", {
-          directory,
-          silent: !!opts?.silent,
-          force: !!opts?.force,
-          seq: _seq,
-          status: store.status,
-          limit: store.limit,
-          note,
-          error: err instanceof Error ? err.message : String(err),
-          elapsedMs: elapsed(),
-        })
         if (opts?.silent || note) return
         const project = getFilename(directory)
         const agent = extraAgentByIntegration(server.current?.integration)
@@ -580,16 +511,10 @@ function createGlobalSync() {
     }
     const pending = booting.get(directory)
     if (pending) {
-      trace("bootstrap.skip", {
-        directory,
-        why: "pending",
-      })
       return pending
     }
 
     children.pin(directory)
-    const _biStart = typeof performance === "object" ? performance.now() : Date.now()
-    const _biElapsed = () => Math.round((typeof performance === "object" ? performance.now() : Date.now()) - _biStart)
     const promise = (async () => {
       const child = children.ensureChild(directory)
       const mark = rev(directory)
@@ -600,14 +525,6 @@ function createGlobalSync() {
       }) as typeof child[1]
       const cache = children.vcsCache.get(directory)
       if (!cache) return
-      trace("bootstrap.start", {
-        directory,
-        status: child[0].status,
-        sessions: child[0].sessions,
-        path: child[0].path.directory,
-        elapsedMs: _biElapsed(),
-      })
-      console.debug(`[startup-profiler] phase=bootstrap.instance.start directory=${directory} status=${child[0].status} sessions=${child[0].sessions} pathDirectory=${child[0].path.directory} elapsedMs=${_biElapsed()}`)
       const sdk = sdkFor(directory)
       await bootstrapDirectory({
         directory,
@@ -625,15 +542,6 @@ function createGlobalSync() {
         queryClient,
       })
       setLoaded("dir", directory, true)
-      trace("bootstrap.done", {
-        directory,
-        status: child[0].status,
-        sessions: child[0].sessions,
-        path: child[0].path.directory,
-        project: child[0].project,
-        elapsedMs: _biElapsed(),
-      })
-      console.debug(`[startup-profiler] phase=bootstrap.instance.done directory=${directory} status=${child[0].status} sessions=${child[0].sessions} pathDirectory=${child[0].path.directory} projectId=${child[0].project} elapsedMs=${_biElapsed()}`)
     })()
 
     booting.set(key, promise)
@@ -663,10 +571,8 @@ function createGlobalSync() {
           // Extra-agent server.connected should not trigger a full main-domain bootstrap.
           // Only the main domain's own events should refresh the main domain.
           if (emittingDomain !== mainDomain) {
-            console.debug(`[startup-profiler] phase=queue.refresh.skip-reason=extra-agent-domain emittingDomain=${emittingDomain} event=${event.type}`)
             return
           }
-          console.debug(`[startup-profiler] phase=queue.refresh.trigger event=${event.type} emittingDomain=${emittingDomain}`)
           queueFor(emittingDomain).refresh()
         },
         setGlobalProject: (next) => setProjectsFor(emittingDomain, next),
@@ -778,13 +684,6 @@ function createGlobalSync() {
         const serverChanged = prevServer !== nextServer
         prevServer = nextServer
         const dirs = directoriesInDomain(nextDomain)
-        console.debug(`[startup-profiler] phase=version.watcher version=${globalSDK.version} prevServer=${prevServer ?? "none"} nextServer=${nextServer ?? "none"} prevDomain=${prevDomain} nextDomain=${nextDomain} domainSwitch=${String(domainSwitch)} serverChanged=${String(serverChanged)} dirs=${dirs.length} willReset=${!domainSwitch && serverChanged} willBootstrap=${!domainSwitch && serverChanged}`)
-        trace("server.switch.reset", {
-          domainSwitch,
-          prevDomain,
-          nextDomain,
-          dirs,
-        })
         if (!domainSwitch && serverChanged) {
           for (const dir of dirs) {
             booting.delete(dir)
@@ -802,15 +701,8 @@ function createGlobalSync() {
             children.resetDirectory(directory)
           }
         }
-        if (!domainSwitch && serverChanged && dirs.length > 0) {
-          const dirInfo = dirs.length <= 5 ? dirs.join(",") : `${dirs.length}dirs`
-          console.debug(`[startup-profiler] phase=version.watcher.reset dirs=${dirInfo}`)
-        }
         setGlobalStore("reload", undefined)
         setVersion((x) => x + 1)
-        if (!domainSwitch && serverChanged) {
-          console.debug(`[startup-profiler] phase=version.watcher.bootstrap domain=${nextDomain} dirs=${dirs.length}`)
-        }
         if (!domainSwitch && serverChanged) void bootstrap(nextDomain)
       },
     ),
@@ -844,7 +736,6 @@ function createGlobalSync() {
       .client.global.config.update({ config })
       .then(() => bootstrap())
       .then(() => {
-        console.debug(`[startup-profiler] phase=queue.refresh.trigger source=configUpdate`)
         queueFor().refresh()
         setGlobalStore("reload", undefined)
         queueFor().refresh()

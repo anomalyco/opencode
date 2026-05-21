@@ -1,27 +1,29 @@
+import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { List } from "@opencode-ai/ui/list"
-import type { ListRef } from "@opencode-ai/ui/list"
-import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
-import fuzzysort from "fuzzysort"
-import { createMemo, createResource, createSignal } from "solid-js"
-import { useGlobalSDK } from "@/context/global-sdk"
-import { useGlobalSync } from "@/context/global-sync"
-import { useLayout } from "@/context/layout"
+import { Icon } from "@opencode-ai/ui/icon"
+import { getFilename } from "@opencode-ai/util/path"
+import { createEffect, createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
+import type { DomainId } from "@/pages/layout/extra-agents"
 
 interface DialogSelectDirectoryProps {
   title?: string
   multiple?: boolean
+  domain?: DomainId
   onSelect: (result: string | string[] | null) => void
 }
 
-type Row = {
-  absolute: string
-  search: string
-  group: "recent" | "folders"
+type BrowseEntry = {
+  name: string
+  path: string
 }
+
+type BrowseRow =
+  | { type: "up"; key: string; name: string; path: string | null }
+  | { type: "directory"; key: string; name: string; path: string }
 
 function cleanInput(value: string) {
   const first = (value ?? "").split(/\r?\n/)[0] ?? ""
@@ -48,13 +50,8 @@ function trimTrailing(input: string) {
   return v.replace(/\/+$/, "")
 }
 
-function joinPath(base: string | undefined, rel: string) {
-  const b = trimTrailing(base ?? "")
-  const r = trimTrailing(rel).replace(/^\/+/, "")
-  if (!b) return r
-  if (!r) return b
-  if (b.endsWith("/")) return b + r
-  return b + "/" + r
+function hasTrailingSeparator(value: string) {
+  return value.endsWith("/")
 }
 
 function rootOf(input: string) {
@@ -77,12 +74,14 @@ function parentOf(input: string) {
   return v.slice(0, i)
 }
 
-function modeOf(input: string) {
-  const raw = normalizeDriveRoot(input.trim())
-  if (!raw) return "relative" as const
-  if (raw.startsWith("~")) return "tilde" as const
-  if (rootOf(raw)) return "absolute" as const
-  return "relative" as const
+function childOf(base: string, child: string) {
+  const b = trimTrailing(base)
+  const c = child.replace(/^\/+|\/+$/g, "")
+  if (!b) return c
+  if (!c) return b
+  if (b === "//") return "//" + c
+  if (b.endsWith("/")) return b + c
+  return b + "/" + c
 }
 
 function tildeOf(absolute: string, home: string) {
@@ -97,296 +96,329 @@ function tildeOf(absolute: string, home: string) {
   return ""
 }
 
-function displayPath(path: string, input: string, home: string) {
+function withTrailing(value: string) {
+  if (!value) return value
+  if (value.endsWith("/")) return value
+  return value + "/"
+}
+
+function browseDirectoryPath(value: string) {
+  const input = normalizeDriveRoot(value)
+  if (!input || hasTrailingSeparator(input)) return input
+  const i = input.lastIndexOf("/")
+  if (i < 0) return ""
+  return input.slice(0, i + 1)
+}
+
+function browseLeaf(value: string) {
+  const input = normalizeDriveRoot(value)
+  if (!input || hasTrailingSeparator(input)) return ""
+  const i = input.lastIndexOf("/")
+  if (i < 0) return input
+  return input.slice(i + 1)
+}
+
+function browseParentPath(value: string) {
+  const trimmed = trimTrailing(cleanInput(value))
+  if (!trimmed || trimmed === "~" || trimmed === "~/" || trimmed === "/") return null
+  const i = trimmed.lastIndexOf("/")
+  if (i < 0) return null
+  if (trimmed.startsWith("~/") && i <= 1) return "~/"
+  if (i === 0) return "/"
+  return withTrailing(trimmed.slice(0, i))
+}
+
+function resolveBrowsePath(base: string, relative: string) {
+  let current = trimTrailing(base)
+  const parts = relative.split("/").filter((x) => x && x !== ".")
+  for (const part of parts) {
+    current = part === ".." ? parentOf(current) : childOf(current, part)
+  }
+  return current
+}
+
+function displayToAbsolute(value: string, home: string, base: string) {
+  const input = cleanInput(value)
+  if (!input || input === "~") return trimTrailing(home || base)
+  if (input.startsWith("~/")) return trimTrailing(childOf(home || base, input.slice(2)))
+  if (rootOf(input)) return trimTrailing(input)
+  return trimTrailing(resolveBrowsePath(base || home, input))
+}
+
+function absoluteToDisplay(path: string, home: string) {
   const full = trimTrailing(path)
-  if (modeOf(input) === "absolute") return full
   return tildeOf(full, home) || full
 }
 
-function toRow(absolute: string, home: string, group: Row["group"]): Row {
-  const full = trimTrailing(absolute)
-  const tilde = tildeOf(full, home)
-  const withSlash = (value: string) => {
-    if (!value) return ""
-    if (value.endsWith("/")) return value
-    return value + "/"
-  }
-
-  const search = Array.from(
-    new Set([full, withSlash(full), tilde, withSlash(tilde), getFilename(full)].filter(Boolean)),
-  ).join("\n")
-  return { absolute: full, search, group }
-}
-
-function uniqueRows(rows: Row[]) {
-  const seen = new Set<string>()
-  return rows.filter((row) => {
-    if (seen.has(row.absolute)) return false
-    seen.add(row.absolute)
-    return true
-  })
-}
-
-function useDirectorySearch(args: {
-  sdk: ReturnType<typeof useGlobalSDK>
-  start: () => string | undefined
-  home: () => string
-}) {
-  const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
-  let current = 0
-
-  const scoped = (value: string) => {
-    const base = args.start()
-    if (!base) return
-
-    const raw = normalizeDriveRoot(value)
-    if (!raw) return { directory: trimTrailing(base), path: "" }
-
-    const h = args.home()
-    if (raw === "~") return { directory: trimTrailing(h || base), path: "" }
-    if (raw.startsWith("~/")) return { directory: trimTrailing(h || base), path: raw.slice(2) }
-
-    const root = rootOf(raw)
-    if (root) return { directory: trimTrailing(root), path: raw.slice(root.length) }
-    return { directory: trimTrailing(base), path: raw }
-  }
-
-  const dirs = async (dir: string) => {
-    const key = trimTrailing(dir)
-    const existing = cache.get(key)
-    if (existing) return existing
-
-    const request = args.sdk.client.file
-      .list({ directory: key, path: "" })
-      .then((x) => x.data ?? [])
-      .catch(() => [])
-      .then((nodes) =>
-        nodes
-          .filter((n) => n.type === "directory")
-          .map((n) => ({
-            name: n.name,
-            absolute: trimTrailing(normalizeDriveRoot(n.absolute)),
-          })),
-      )
-
-    cache.set(key, request)
-    return request
-  }
-
-  const match = async (dir: string, query: string, limit: number) => {
-    const items = await dirs(dir)
-    if (!query) return items.slice(0, limit).map((x) => x.absolute)
-    return fuzzysort.go(query, items, { key: "name", limit }).map((x) => x.obj.absolute)
-  }
-
-  return async (filter: string) => {
-    const token = ++current
-    const active = () => token === current
-
-    const value = cleanInput(filter)
-    const scopedInput = scoped(value)
-    if (!scopedInput) return [] as string[]
-
-    const raw = normalizeDriveRoot(value)
-    const isPath = raw.startsWith("~") || !!rootOf(raw) || raw.includes("/")
-    const query = normalizeDriveRoot(scopedInput.path)
-
-    const find = () =>
-      args.sdk.client.find
-        .files({ directory: scopedInput.directory, query, type: "directory", limit: 50 })
-        .then((x) => x.data ?? [])
-        .catch(() => [])
-
-    if (!isPath) {
-      const results = await find()
-      if (!active()) return []
-      return results.map((rel) => joinPath(scopedInput.directory, rel)).slice(0, 50)
-    }
-
-    const segments = query.replace(/^\/+/, "").split("/")
-    const head = segments.slice(0, segments.length - 1).filter((x) => x && x !== ".")
-    const tail = segments[segments.length - 1] ?? ""
-
-    const cap = 12
-    const branch = 4
-    let paths = [scopedInput.directory]
-    for (const part of head) {
-      if (!active()) return []
-      if (part === "..") {
-        paths = paths.map(parentOf)
-        continue
-      }
-
-      const next = (await Promise.all(paths.map((p) => match(p, part, branch)))).flat()
-      if (!active()) return []
-      paths = Array.from(new Set(next)).slice(0, cap)
-      if (paths.length === 0) return [] as string[]
-    }
-
-    const out = (await Promise.all(paths.map((p) => match(p, tail, 50)))).flat()
-    if (!active()) return []
-    const deduped = Array.from(new Set(out))
-    const base = raw.startsWith("~") ? trimTrailing(scopedInput.directory) : ""
-    const expand = !raw.endsWith("/")
-    if (!expand || !tail) {
-      const items = base ? Array.from(new Set([base, ...deduped])) : deduped
-      return items.slice(0, 50)
-    }
-
-    const needle = tail.toLowerCase()
-    const exact = deduped.filter((p) => getFilename(p).toLowerCase() === needle)
-    const target = exact[0]
-    if (!target) return deduped.slice(0, 50)
-
-    const children = await match(target, "", 30)
-    if (!active()) return []
-    const items = Array.from(new Set([...deduped, ...children]))
-    return (base ? Array.from(new Set([base, ...items])) : items).slice(0, 50)
-  }
+function isPrimaryModifier(event: KeyboardEvent) {
+  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
+  return isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
 }
 
 export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
-  const sync = useGlobalSync()
-  const sdk = useGlobalSDK()
-  const layout = useLayout()
+  props.domain
+  const platform = usePlatform()
   const dialog = useDialog()
   const language = useLanguage()
 
-  const [filter, setFilter] = createSignal("")
-  let list: ListRef | undefined
+  let inputRef: HTMLInputElement | undefined
+  const rowRefs = new Map<string, HTMLButtonElement>()
+  const [showHidden, setShowHidden] = createSignal(true)
+  const [highlightedIndex, setHighlightedIndex] = createSignal(0)
+  const [error, setError] = createSignal("")
+  const [selecting, setSelecting] = createSignal(false)
+  const [resolvedHome, setResolvedHome] = createSignal("")
+  const home = createMemo(() => resolvedHome())
+  const [query, setQuery] = createSignal("~/")
 
-  const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
-  const [fallbackPath] = createResource(
-    () => (missingBase() ? true : undefined),
-    async () => {
-      return sdk.client.path
-        .get()
-        .then((x) => x.data)
-        .catch(() => undefined)
-    },
-    { initialValue: undefined },
-  )
-
-  const home = createMemo(() => sync.data.path.home || fallbackPath()?.home || "")
-  const start = createMemo(
-    () => sync.data.path.home || sync.data.path.directory || fallbackPath()?.home || fallbackPath()?.directory,
-  )
-
-  const directories = useDirectorySearch({
-    sdk,
-    home,
-    start,
+  createEffect(() => {
+    query()
+    const input = inputRef
+    if (!input) return
+    queueMicrotask(() => {
+      input.scrollLeft = input.scrollWidth
+    })
   })
 
-  const recentProjects = createMemo(() => {
-    const projects = layout.projects.list()
-    const byProject = new Map<string, number>()
+  const browseDisplayPath = createMemo(() => browseDirectoryPath(query()))
+  const browseFilter = createMemo(() => browseLeaf(query()))
+  const localPath = (value: string) => {
+    const h = home()
+    const input = cleanInput(value)
+    if (!h && (input === "~" || input.startsWith("~/"))) return input
+    return displayToAbsolute(input, h, h)
+  }
+  const browseAbsolutePath = createMemo(() => localPath(browseDisplayPath()))
+  const targetPath = createMemo(() => localPath(query()))
 
-    for (const project of projects) {
-      let at = 0
-      const dirs = [project.worktree, ...(project.sandboxes ?? [])]
-      for (const directory of dirs) {
-        const sessions = sync.child(directory, { bootstrap: false })[0].session
-        for (const session of sessions) {
-          if (session.time.archived) continue
-          const updated = session.time.updated ?? session.time.created
-          if (updated > at) at = updated
-        }
-      }
-      byProject.set(project.worktree, at)
+  const [entries] = createResource(browseAbsolutePath, async (directory) => {
+    if (!directory || !platform.listLocalDirectory) return [] as BrowseEntry[]
+    const list = await platform.listLocalDirectory(directory).catch(() => [])
+    const directories = list
+      .filter((item) => item.kind === "directory")
+      .map((item) => ({
+        name: getFilename(item.path),
+        path: trimTrailing(normalizeDriveRoot(item.path)),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+    if (!resolvedHome() && browseDisplayPath().startsWith("~/") && directories[0]) {
+      setResolvedHome(parentOf(directories[0].path))
     }
-
-    return projects
-      .map((project, index) => ({ project, at: byProject.get(project.worktree) ?? 0, index }))
-      .sort((a, b) => b.at - a.at || a.index - b.index)
-      .slice(0, 5)
-      .map(({ project }) => {
-        const row = toRow(project.worktree, home(), "recent")
-        const name = project.name || getFilename(project.worktree)
-        return {
-          ...row,
-          search: `${row.search}\n${name}`,
-        }
-      })
+    return directories
   })
 
-  const items = async (value: string) => {
-    const results = await directories(value)
-    const directoryRows = results.map((absolute) => toRow(absolute, home(), "folders"))
-    return uniqueRows([...recentProjects(), ...directoryRows])
+  const filteredEntries = createMemo(() => {
+    const needle = browseFilter().toLowerCase()
+    const includeHidden = showHidden() || needle.startsWith(".")
+    return (entries() ?? []).filter((entry) => {
+      if (!includeHidden && entry.name.startsWith(".")) return false
+      return entry.name.toLowerCase().startsWith(needle)
+    })
+  })
+
+  const rows = createMemo<BrowseRow[]>(() => {
+    const next: BrowseRow[] = []
+    const parent = browseParentPath(query())
+    if (parent) next.push({ type: "up", key: "up", name: "..", path: parent })
+    for (const entry of filteredEntries()) {
+      next.push({ type: "directory", key: entry.path, name: entry.name, path: entry.path })
+    }
+    return next
+  })
+
+  createEffect(() => {
+    query()
+    rows().length
+    setHighlightedIndex(0)
+    setError("")
+  })
+
+  createEffect(() => {
+    const row = rows()[highlightedIndex()]
+    if (!row) return
+    rowRefs.get(row.key)?.scrollIntoView({ block: "nearest" })
+  })
+
+  function browseToDisplayPath(path: string) {
+    setQuery(withTrailing(path))
+    inputRef?.focus()
   }
 
-  function resolve(absolute: string) {
-    props.onSelect(props.multiple ? [absolute] : absolute)
-    dialog.close()
+  function browseToEntry(entry: BrowseEntry) {
+    setQuery(withTrailing(`${browseDisplayPath()}${entry.name}`))
+    inputRef?.focus()
   }
+
+  function executeRow(row: BrowseRow | undefined) {
+    if (!row) return
+    if (row.type === "up") {
+      if (row.path) browseToDisplayPath(row.path)
+      return
+    }
+    browseToEntry(row)
+  }
+
+  async function resolve(absolute: string) {
+    if (!absolute || selecting()) return
+    setSelecting(true)
+    setError("")
+    try {
+      if (platform.filterDirectories) {
+        const [valid] = await platform.filterDirectories([absolute])
+        if (!valid) {
+          setError(language.t("dialog.directory.empty"))
+          return
+        }
+        props.onSelect(props.multiple ? [valid] : valid)
+        dialog.close()
+        return
+      }
+      props.onSelect(props.multiple ? [absolute] : absolute)
+      dialog.close()
+    } finally {
+      setSelecting(false)
+    }
+  }
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault()
+      setHighlightedIndex((index) => Math.min(rows().length - 1, index + 1))
+      return
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault()
+      setHighlightedIndex((index) => Math.max(0, index - 1))
+      return
+    }
+    if (event.key === "Enter" && !event.isComposing) {
+      event.preventDefault()
+      if (isPrimaryModifier(event)) {
+        void resolve(targetPath())
+        return
+      }
+      executeRow(rows()[highlightedIndex()])
+      return
+    }
+    if (event.key === "Backspace" && query() === "") {
+      event.preventDefault()
+      dialog.close()
+    }
+  }
+
+  const selectedLabel = createMemo(() => absoluteToDisplay(targetPath(), home()))
+  const submitModifier = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl"
 
   return (
-    <Dialog title={props.title ?? language.t("command.project.open")}>
-      <List
-        search={{ placeholder: language.t("dialog.directory.search.placeholder"), autofocus: true }}
-        emptyMessage={language.t("dialog.directory.empty")}
-        loadingMessage={language.t("common.loading")}
-        items={items}
-        key={(x) => x.absolute}
-        filterKeys={["search"]}
-        groupBy={(item) => item.group}
-        sortGroupsBy={(a, b) => {
-          if (a.category === b.category) return 0
-          return a.category === "recent" ? -1 : 1
-        }}
-        groupHeader={(group) =>
-          group.category === "recent" ? language.t("home.recentProjects") : language.t("command.project.open")
-        }
-        ref={(r) => (list = r)}
-        onFilter={(value) => setFilter(cleanInput(value))}
-        onKeyEvent={(e, item) => {
-          if (e.key !== "Tab") return
-          if (e.shiftKey) return
-          if (!item) return
+    <Dialog
+      title={props.title ?? language.t("command.project.open")}
+      description={language.t("dialog.directory.search.placeholder")}
+      class="w-full max-w-[720px]"
+    >
+      <div class="flex min-h-[520px] flex-col gap-3">
+        <div class="flex items-center justify-between gap-4">
+          <label class="flex items-center gap-2 text-12-regular text-text-weak">
+            <input
+              type="checkbox"
+              checked={showHidden()}
+              onChange={(event) => setShowHidden(event.currentTarget.checked)}
+            />
+            <span>{language.t("dialog.directory.showHidden")}</span>
+          </label>
+        </div>
 
-          e.preventDefault()
-          e.stopPropagation()
+        <div class="relative">
+          <div class="pointer-events-none absolute left-3 top-1/2 flex size-4 -translate-y-1/2 items-center justify-center text-icon-weak">
+            <Icon name="folder-add-left" size="small" />
+          </div>
+          <input
+            ref={(node) => {
+              inputRef = node
+            }}
+            autofocus
+            value={query()}
+            onInput={(event) => setQuery(normalizePath(event.currentTarget.value))}
+            onKeyDown={handleKeyDown}
+            spellcheck={false}
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            class="h-10 w-full rounded-lg border border-border-weak-base bg-transparent pl-10 pr-36 font-mono text-14-regular text-text-strong outline-none focus:border-border-base"
+          />
+          <Button
+            size="small"
+            variant="secondary"
+            class="absolute right-1.5 top-1/2 h-7 -translate-y-1/2"
+            disabled={selecting() || !targetPath()}
+            onMouseDown={(event: MouseEvent) => event.preventDefault()}
+            onClick={() => void resolve(targetPath())}
+          >
+            {language.t("session.new.genericagent.cwd.choose")}
+          </Button>
+        </div>
 
-          const value = displayPath(item.absolute, filter(), home())
-          list?.setFilter(value.endsWith("/") ? value : value + "/")
-        }}
-        onSelect={(path) => {
-          if (!path) return
-          resolve(path.absolute)
-        }}
-      >
-        {(item) => {
-          const path = displayPath(item.absolute, filter(), home())
-          if (path === "~") {
-            return (
-              <div class="w-full flex items-center justify-between rounded-md">
-                <div class="flex items-center gap-x-3 grow min-w-0">
-                  <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
-                  <div class="flex items-center text-14-regular min-w-0">
-                    <span class="text-text-strong whitespace-nowrap">~</span>
-                    <span class="text-text-weak whitespace-nowrap">/</span>
-                  </div>
+        <div class="min-h-0 flex-1 overflow-hidden rounded-xl border border-border-weak-base bg-surface-raised-base">
+          <div class="border-b border-border-weak-base px-4 py-2 text-11-regular uppercase tracking-wide text-text-weak">
+            {language.t("session.new.meta.directory")}
+          </div>
+          <div class="max-h-[420px] overflow-y-auto p-2">
+            <Show
+              when={!entries.loading}
+              fallback={<div class="py-10 text-center text-13-regular text-text-weak">{language.t("common.loading")}</div>}
+            >
+              <Show
+                when={rows().length > 0}
+                fallback={<div class="py-10 text-center text-13-regular text-text-weak">{language.t("dialog.directory.empty")}</div>}
+              >
+                <div class="space-y-0.5">
+                  <For each={rows()}>
+                    {(row, index) => (
+                      <button
+                        ref={(node) => {
+                          if (node) rowRefs.set(row.key, node)
+                          else rowRefs.delete(row.key)
+                        }}
+                        type="button"
+                        onMouseEnter={() => setHighlightedIndex(index())}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => executeRow(row)}
+                        class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-14-regular transition-colors focus:outline-none"
+                        classList={{
+                          "bg-surface-active-base text-text-strong": highlightedIndex() === index(),
+                          "text-text-base hover:bg-surface-hover-base": highlightedIndex() !== index(),
+                        }}
+                      >
+                        <Show
+                          when={row.type === "directory"}
+                          fallback={<Icon name="chevron-left" size="small" class="shrink-0 text-icon-weak" />}
+                        >
+                          <FileIcon node={{ path: row.path ?? "", type: "directory" }} class="shrink-0 size-4" />
+                        </Show>
+                        <span class="min-w-0 flex-1 truncate">{row.name}</span>
+                      </button>
+                    )}
+                  </For>
                 </div>
-              </div>
-            )
-          }
-          return (
-            <div class="w-full flex items-center justify-between rounded-md">
-              <div class="flex items-center gap-x-3 grow min-w-0">
-                <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
-                <div class="flex items-center text-14-regular min-w-0">
-                  <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                    {getDirectory(path)}
-                  </span>
-                  <span class="text-text-strong whitespace-nowrap">{getFilename(path)}</span>
-                  <span class="text-text-weak whitespace-nowrap">/</span>
-                </div>
-              </div>
-            </div>
-          )
-        }}
-      </List>
+              </Show>
+            </Show>
+          </div>
+        </div>
+
+        <Show when={error()}>
+          <div class="text-12-regular text-danger-base">{error()}</div>
+        </Show>
+
+        <div class="flex items-center justify-between gap-3 text-12-regular text-text-weak">
+          <div class="flex min-w-0 items-center gap-2">
+            <span>{selectedLabel()}</span>
+          </div>
+          <div class="flex shrink-0 items-center gap-4">
+            <span>↑↓ {language.t("dialog.directory.footer.navigate")}</span>
+            <span>Enter {language.t("common.open")}</span>
+            <span>{submitModifier}+Enter {language.t("dialog.directory.footer.select")}</span>
+          </div>
+        </div>
+      </div>
     </Dialog>
   )
 }
