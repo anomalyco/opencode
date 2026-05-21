@@ -1,11 +1,13 @@
 import type { AwarenessSource, BlobSource, DocSource } from "@blocksuite/sync"
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { MSG_AWARENESS, MSG_DOC, pack, unpack } from "./doc-sync-protocol"
+import { apiUrl } from "@/utils/api-url"
 
 export type DocSyncOpts = {
   docID: string
   baseUrl: string
   directory: string
-  fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+  client: OpencodeClient
   actorID: string
   name: string
   color: string
@@ -25,7 +27,7 @@ function fromB64(value: string) {
 }
 
 function url(opts: DocSyncOpts, path: string) {
-  const next = new URL(path, opts.baseUrl)
+  const next = apiUrl(opts.baseUrl, path)
   next.searchParams.set("directory", opts.directory)
   return next
 }
@@ -43,12 +45,16 @@ export class OpencodeDocSource implements DocSource {
   constructor(private opts: DocSyncOpts) {}
 
   async pull(docId: string, state: Uint8Array) {
-    const next = url(this.opts, `/doc/${this.opts.docID}/sync`)
-    next.searchParams.set("guid", docId)
-    if (state.length > 0) next.searchParams.set("state", b64(state))
-    const res = await this.opts.fetch(next, { cache: "no-store" })
-    if (!res.ok) return null
-    const json = (await res.json()) as { data: string; state?: string } | null
+    const res = await this.opts.client.doc.sync.pull(
+      {
+        docID: this.opts.docID,
+        directory: this.opts.directory,
+        guid: docId,
+        ...(state.length > 0 ? { state: b64(state) } : {}),
+      },
+      { cache: "no-store" },
+    )
+    const json = res.data
     if (!json) return null
     return {
       data: fromB64(json.data),
@@ -57,12 +63,12 @@ export class OpencodeDocSource implements DocSource {
   }
 
   async push(docId: string, data: Uint8Array) {
-    const res = await this.opts.fetch(url(this.opts, `/doc/${this.opts.docID}/sync`), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: b64(data), guid: docId }),
+    await this.opts.client.doc.sync.push({
+      docID: this.opts.docID,
+      directory: this.opts.directory,
+      data: b64(data),
+      guid: docId,
     })
-    if (!res.ok) throw new Error("doc sync push failed")
   }
 
   subscribe(cb: (docId: string, data: Uint8Array) => void, _disconnect: (reason: string) => void) {
@@ -186,26 +192,30 @@ export class OpencodeBlobSource implements BlobSource {
 
   constructor(private opts: DocSyncOpts) {}
 
-  async get(key: string) {
-    const res = await this.opts.fetch(url(this.opts, `/doc/${this.opts.docID}/asset/${encodeURIComponent(key)}`), {
-      cache: "no-store",
-    })
-    if (res.status === 404) return null
-    if (!res.ok) throw new Error("doc asset fetch failed")
-    return res.blob()
+  async get(key: string): Promise<Blob | null> {
+    const res = await this.opts.client.doc.asset.get(
+      {
+        docID: this.opts.docID,
+        assetID: key,
+        directory: this.opts.directory,
+      },
+      { cache: "no-store", parseAs: "blob", throwOnError: false },
+    )
+    if (res.error) {
+      if (res.response.status === 404) return null
+      throw new Error("doc asset fetch failed")
+    }
+    return (res.data as Blob | undefined) ?? null
   }
 
   async set(key: string, value: Blob) {
-    const res = await this.opts.fetch(url(this.opts, `/doc/${this.opts.docID}/asset`), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: key,
-        mime: value.type || "image/png",
-        data: await blobB64(value),
-      }),
+    await this.opts.client.doc.asset.create({
+      docID: this.opts.docID,
+      directory: this.opts.directory,
+      id: key,
+      mime: value.type || "image/png",
+      data: await blobB64(value),
     })
-    if (!res.ok) throw new Error("doc asset upload failed")
     return key
   }
 

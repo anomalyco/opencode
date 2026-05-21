@@ -1510,6 +1510,7 @@ export class PromptDoc extends HeyApiClient {
       sessionID: string
       directory?: string
       workspace?: string
+      clientID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1521,6 +1522,7 @@ export class PromptDoc extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "clientID" },
           ],
         },
       ],
@@ -1533,6 +1535,11 @@ export class PromptDoc extends HeyApiClient {
       url: "/session/{sessionID}/prompt-doc/advance",
       ...options,
       ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
@@ -1546,6 +1553,8 @@ export class PromptDoc extends HeyApiClient {
       sessionID: string
       directory?: string
       workspace?: string
+      docID?: string
+      clientID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1557,6 +1566,8 @@ export class PromptDoc extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "docID" },
+            { in: "body", key: "clientID" },
           ],
         },
       ],
@@ -1569,6 +1580,11 @@ export class PromptDoc extends HeyApiClient {
       url: "/session/{sessionID}/prompt-doc/ready",
       ...options,
       ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }

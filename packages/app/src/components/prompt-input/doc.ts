@@ -1,49 +1,36 @@
 import { createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
+import type { OpencodeClient, SessionActor } from "@opencode-ai/sdk/v2/client"
 import { createPage, type DocMountInput } from "@/components/blocksuite/blocksuite-doc"
 import type { DocSyncOpts } from "@/components/blocksuite/opencode-doc-source"
 import { clearActor, loadActor, saveActor } from "./doc-actor"
 
 type DocHandle = Awaited<ReturnType<typeof createPage>>
 
-type ActorInfo = {
-  actorID: string
-  name: string
-  color: string
-}
-
-type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
-
 type PromptDocInput = {
   sessionID: () => string | undefined
   url: () => string
   directory: () => string
-  fetch: Fetch
-}
-
-function api(input: PromptDocInput, path: string) {
-  const next = new URL(path, input.url())
-  next.searchParams.set("directory", input.directory())
-  return next
+  client: OpencodeClient
 }
 
 async function register(input: PromptDocInput, sessionID: string) {
   const stored = loadActor(sessionID)
-  const res = await input.fetch(api(input, `/session/${sessionID}/actor`), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(stored ? { actorID: stored } : {}),
+  const res = await input.client.session.actor.upsert({
+    sessionID,
+    directory: input.directory(),
+    ...(stored ? { actorID: stored } : {}),
   })
-  if (!res.ok) throw new Error("actor registration failed")
-  const actor = (await res.json()) as ActorInfo
+  const actor = res.data as SessionActor | undefined
+  if (!actor) throw new Error("actor registration failed")
   saveActor(sessionID, actor.actorID)
   return actor
 }
 
 async function promptDoc(input: PromptDocInput, sessionID: string) {
-  const res = await input.fetch(api(input, `/session/${sessionID}/prompt-doc`), { cache: "no-store" })
-  if (!res.ok) throw new Error("prompt doc lookup failed")
-  return (await res.json()) as { docID: string }
+  const res = await input.client.session.promptDoc({ sessionID, directory: input.directory() })
+  if (!res.data?.docID) throw new Error("prompt doc lookup failed")
+  return res.data
 }
 
 export function createPromptDoc(input: PromptDocInput) {
@@ -96,7 +83,7 @@ export function createPromptDoc(input: PromptDocInput) {
       docID: doc.docID,
       baseUrl: input.url(),
       directory: input.directory(),
-      fetch: input.fetch,
+      client: input.client,
       actorID: actor.actorID,
       name: actor.name,
       color: actor.color,
@@ -243,23 +230,21 @@ export function createPromptDoc(input: PromptDocInput) {
   const advance = async () => {
     const sessionID = input.sessionID()
     if (!sessionID) return
-    const res = await input.fetch(api(input, `/session/${sessionID}/prompt-doc/advance`), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clientID }),
+    const res = await input.client.session.promptDoc2.advance({
+      sessionID,
+      directory: input.directory(),
+      clientID,
     })
-    const type = res.headers.get("content-type") ?? ""
-    if (!res.ok || !type.includes("application/json")) throw new Error("prompt doc advance failed")
-    const next = (await res.json()) as { docID: string }
-    if (!next.docID) throw new Error("prompt doc advance failed")
+    const next = res.data
+    if (!next?.docID) throw new Error("prompt doc advance failed")
     await pivot(sessionID, next.docID, { init: true })
-    const ready = await input.fetch(api(input, `/session/${sessionID}/prompt-doc/ready`), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ docID: next.docID, clientID }),
+    const ready = await input.client.session.promptDoc2.ready({
+      sessionID,
+      directory: input.directory(),
+      docID: next.docID,
+      clientID,
     })
-    const readyType = ready.headers.get("content-type") ?? ""
-    if (!ready.ok || !readyType.includes("application/json")) throw new Error("prompt doc ready failed")
+    if (!ready.data?.docID) throw new Error("prompt doc ready failed")
     return next.docID
   }
 

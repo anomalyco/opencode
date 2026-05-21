@@ -219,9 +219,8 @@ export async function createPage(input: DocMountInput) {
       input.sync
         ? docMarkdown(doc, {
             docID: input.sync.docID,
-            baseUrl: input.sync.baseUrl,
             directory: input.sync.directory,
-            fetch: input.sync.fetch,
+            client: input.sync.client,
           })
         : Promise.resolve({ text: docPlain(doc), assets: [] }),
     plain: () => docPlain(doc),

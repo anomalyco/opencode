@@ -1,10 +1,12 @@
 import { AffineSchemas } from "@blocksuite/blocks/schemas"
 import { DocCollection, Schema, Text, type Doc } from "@blocksuite/store"
 import { afterEach, describe, expect, test } from "bun:test"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { docMarkdown, docPlain } from "./doc-content"
 import { initDoc } from "./doc-init"
 
 type Opts = Parameters<typeof docMarkdown>[1]
+type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
 const cols: DocCollection[] = []
 
@@ -20,12 +22,16 @@ function page() {
   return { doc, note: note.id }
 }
 
-function opts(fetch: Opts["fetch"]): Opts {
+function opts(fetch: Fetch): Opts {
   return {
     docID: "doc_1",
-    baseUrl: "http://localhost:4096",
     directory: "/tmp/project",
-    fetch,
+    client: createOpencodeClient({
+      baseUrl: "http://localhost:4096",
+      directory: "/tmp/project",
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      throwOnError: true,
+    }),
   }
 }
 

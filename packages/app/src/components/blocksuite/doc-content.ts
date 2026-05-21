@@ -1,4 +1,5 @@
 import type { BlockModel, Doc } from "@blocksuite/store"
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 
 export type DocExportAsset = {
   id: string
@@ -20,18 +21,10 @@ type Inline = {
   code?: boolean
 }
 
-type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
-
 type ExportOpts = {
   docID: string
-  baseUrl: string
   directory: string
-  fetch: Fetch
-}
-
-type TextOp = {
-  insert?: unknown
-  attributes?: Record<string, unknown>
+  client: OpencodeClient
 }
 
 type TextLike = {
@@ -52,10 +45,9 @@ const noise = new Set([
   "style",
 ])
 
-function api(opts: ExportOpts, path: string) {
-  const next = new URL(path, opts.baseUrl)
-  next.searchParams.set("directory", opts.directory)
-  return next
+type TextOp = {
+  insert?: unknown
+  attributes?: Record<string, unknown>
 }
 
 function esc(value: string) {
@@ -176,14 +168,18 @@ function fence(type: string, value: string) {
 }
 
 async function dataUrl(opts: ExportOpts, id: string) {
-  const res = await opts.fetch(api(opts, `/doc/${opts.docID}/asset/${encodeURIComponent(id)}`), { cache: "no-store" })
-  if (!res.ok) return
-  const blob = await res.blob()
+  const res = await opts.client.doc.asset.get(
+    { docID: opts.docID, assetID: id, directory: opts.directory },
+    { cache: "no-store", parseAs: "blob", throwOnError: false },
+  )
+  if (res.error || !res.data) return
+  const blob = res.data as Blob
   const buf = await blob.arrayBuffer()
   const bin = Array.from(new Uint8Array(buf), (byte) => String.fromCharCode(byte)).join("")
+  const mime = blob.type || res.response.headers.get("content-type") || "application/octet-stream"
   return {
-    mime: blob.type || res.headers.get("content-type") || "application/octet-stream",
-    dataUrl: `data:${blob.type || res.headers.get("content-type") || "application/octet-stream"};base64,${btoa(bin)}`,
+    mime,
+    dataUrl: `data:${mime};base64,${btoa(bin)}`,
   }
 }
 

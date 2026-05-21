@@ -17,7 +17,6 @@ import {
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useGlobalSDK } from "@/context/global-sdk"
-import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
@@ -120,7 +119,6 @@ const DOC_RATIO = 0.8
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
   const globalSDK = useGlobalSDK()
-  const server = useServer()
   const sync = useSync()
   const local = useLocal()
   const files = useFile()
@@ -367,15 +365,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     sessionID: () => params.id,
     url: () => sdk.url,
     directory: () => sdk.directory,
-    fetch: (input, init) => {
-      const http = server.current?.http
-      if (!http) return globalThis.fetch(input, init)
-      const headers = new Headers(init?.headers)
-      if (http.password) {
-        headers.set("Authorization", `Basic ${btoa(`${http.username ?? "opencode"}:${http.password}`)}`)
-      }
-      return globalThis.fetch(input, { ...init, headers })
-    },
+    client: sdk.client,
   })
 
   createEffect((prev) => {

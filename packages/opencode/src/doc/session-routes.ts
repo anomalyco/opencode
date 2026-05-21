@@ -51,9 +51,9 @@ export const SessionDocRoutes = () =>
         },
       }),
       validator("param", z.object({ sessionID: SessionID.zod })),
+      validator("json", z.object({ clientID: z.string().optional() }).optional()),
       async (c) => {
-        const body = await c.req.json().catch(() => undefined)
-        const json = z.object({ clientID: z.string().optional() }).optional().parse(body)
+        const json = c.req.valid("json")
         return c.json(
           Doc.promptAdvance({
             sessionID: c.req.valid("param").sessionID,
@@ -82,9 +82,9 @@ export const SessionDocRoutes = () =>
         },
       }),
       validator("param", z.object({ sessionID: SessionID.zod })),
+      validator("json", z.object({ docID: DocID.zod, clientID: z.string().optional() })),
       async (c) => {
-        const body = await c.req.json()
-        const json = z.object({ docID: DocID.zod, clientID: z.string().optional() }).parse(body)
+        const json = c.req.valid("json")
         return c.json(
           Doc.promptReady({
             sessionID: c.req.valid("param").sessionID,

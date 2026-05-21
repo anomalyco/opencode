@@ -4089,7 +4089,9 @@ export type SessionPromptDocResponses = {
 export type SessionPromptDocResponse = SessionPromptDocResponses[keyof SessionPromptDocResponses]
 
 export type SessionPromptDocAdvanceData = {
-  body?: never
+  body?: {
+    clientID?: string
+  }
   path: {
     sessionID: string
   }
@@ -4119,7 +4121,10 @@ export type SessionPromptDocAdvanceResponses = {
 export type SessionPromptDocAdvanceResponse = SessionPromptDocAdvanceResponses[keyof SessionPromptDocAdvanceResponses]
 
 export type SessionPromptDocReadyData = {
-  body?: never
+  body?: {
+    docID: string
+    clientID?: string
+  }
   path: {
     sessionID: string
   }
