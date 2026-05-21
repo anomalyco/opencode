@@ -14,6 +14,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Glob } from "@opencode-ai/core/util/glob"
 import * as Log from "@opencode-ai/core/util/log"
 import { Discovery } from "./discovery"
+import { Plugin } from "@/plugin"
 import CUSTOMIZE_OPENCODE_SKILL_BODY from "./prompt/customize-opencode.md" with { type: "text" }
 import { isRecord } from "@/util/record"
 
@@ -242,8 +243,12 @@ export const layer = Layer.effect(
     const fsys = yield* AppFileSystem.Service
     const global = yield* Global.Service
     const flags = yield* RuntimeFlags.Service
+    const plugin = yield* Plugin.Service
     const discovered = yield* InstanceState.make(
       Effect.fn("Skill.discovery")(function* (ctx) {
+        // Plugin config() hooks may mutate config.skills.paths (e.g. superpowers).
+        // Initialize plugins first so those mutations are visible during discovery.
+        yield* plugin.init()
         return yield* discoverSkills(
           config,
           discovery,
@@ -304,6 +309,10 @@ export const defaultLayer = layer.pipe(
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Global.layer),
   Layer.provide(RuntimeFlags.defaultLayer),
+  // Plugin must initialize before skill discovery so plugin config() hooks
+  // that mutate config.skills.paths (e.g. superpowers) are visible when
+  // discoverSkills() reads the config at startup.
+  Layer.provide(Plugin.defaultLayer),
 )
 
 export function fmt(list: Info[], opts: { verbose: boolean }) {
