@@ -2,7 +2,7 @@ import { SessionID } from "@/session/schema"
 import { SessionMessage } from "@opencode-ai/core/session-message"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { InvalidCursorError } from "../../errors"
+import { InvalidCursorError, SessionNotFoundError } from "../../errors"
 import { V2Authorization } from "../../middleware/authorization"
 import { WorkspaceRoutingQueryFields } from "../../middleware/workspace-routing"
 
@@ -36,7 +36,7 @@ export const MessageGroup = HttpApiGroup.make("v2.message")
           next: Schema.String.pipe(Schema.optional),
         }),
       }).annotate({ identifier: "V2SessionMessagesResponse" }),
-      error: InvalidCursorError,
+      error: [InvalidCursorError, SessionNotFoundError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.messages",

@@ -216,6 +216,10 @@ const createPlatform = (): Platform => {
       await window.api.installUpdate()
     },
 
+    exportDebugLogs: () => window.api.exportDebugLogs(),
+
+    recordFatalRendererError: (error) => window.api.recordFatalRendererError(error),
+
     restart: async () => {
       await window.api.killSidecar().catch(() => undefined)
       window.api.relaunch()

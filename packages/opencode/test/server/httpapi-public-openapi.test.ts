@@ -99,4 +99,20 @@ describe("PublicApi OpenAPI v2 errors", () => {
       "ServiceUnavailableError",
     )
   })
+
+  test("documents v2 session not-found errors", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const route of [
+      ["post", "/api/session/{sessionID}/prompt"],
+      ["post", "/api/session/{sessionID}/compact"],
+      ["post", "/api/session/{sessionID}/wait"],
+      ["get", "/api/session/{sessionID}/context"],
+      ["get", "/api/session/{sessionID}/message"],
+    ] as const) {
+      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["404"]) ?? "")).toBe(
+        "SessionNotFoundError",
+      )
+    }
+  })
 })
