@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { describe, expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
-import type { Event, GlobalEvent } from "@opencode-ai/sdk/v2"
+import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import { onMount } from "solid-js"
 import { ProjectProvider, useProject } from "../../../src/cli/cmd/tui/context/project"
 import { SDKProvider } from "../../../src/cli/cmd/tui/context/sdk"
@@ -17,7 +17,10 @@ async function wait(fn: () => boolean, timeout = 2000) {
   }
 }
 
-function event(payload: Event, input: { directory: string; project?: string; workspace?: string }): GlobalEvent {
+function event(
+  payload: GlobalEvent["payload"],
+  input: { directory: string; project?: string; workspace?: string },
+): GlobalEvent {
   return {
     directory: input.directory,
     project: input.project,
@@ -26,7 +29,7 @@ function event(payload: Event, input: { directory: string; project?: string; wor
   }
 }
 
-function vcs(branch: string): Event {
+function vcs(branch: string): GlobalEvent["payload"] {
   return {
     id: `evt_vcs_${branch}`,
     type: "vcs.branch.updated",
@@ -36,7 +39,7 @@ function vcs(branch: string): Event {
   }
 }
 
-function update(version: string): Event {
+function update(version: string): GlobalEvent["payload"] {
   return {
     id: `evt_update_${version}`,
     type: "installation.update-available",
@@ -67,7 +70,7 @@ function createSource() {
 
 async function mount() {
   const source = createSource()
-  const seen: Event[] = []
+  const seen: GlobalEvent["payload"][] = []
   const workspaces: Array<string | undefined> = []
   const fetch = (async (input: RequestInfo | URL) => {
     const url = new URL(input instanceof Request ? input.url : String(input))
@@ -102,7 +105,7 @@ async function mount() {
 }
 
 function Probe(props: {
-  seen: Event[]
+  seen: GlobalEvent["payload"][]
   workspaces: Array<string | undefined>
   onReady: (ctx: { project: ReturnType<typeof useProject> }) => void
 }) {
@@ -111,7 +114,7 @@ function Probe(props: {
 
   onMount(() => {
     event.subscribe((evt, { workspace }) => {
-      props.seen.push(evt)
+      props.seen.push(evt as GlobalEvent["payload"])
       props.workspaces.push(workspace)
     })
     props.onReady({ project })
