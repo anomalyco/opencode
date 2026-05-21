@@ -379,7 +379,11 @@ export const layer = Layer.effect(
 
     const readConfigFile = (filepath: string) => fs.readFileStringSafe(filepath).pipe(Effect.orDie)
 
-    const fetchRemoteJson = Effect.fnUntraced(function* (url: string, headers?: Record<string, string>) {
+    const fetchRemoteJson = Effect.fnUntraced(function* <S extends Schema.Top>(
+      url: string,
+      headers: Record<string, string> | undefined,
+      schema: S,
+    ) {
       const http = Option.getOrUndefined(yield* Effect.serviceOption(HttpClient.HttpClient))
       if (!http) return yield* Effect.die(new Error(`HttpClient required to fetch remote config from ${url}`))
       const response = yield* HttpClient.filterStatusOk(withTransientReadRetry(http))
@@ -389,15 +393,9 @@ export const layer = Layer.effect(
         .pipe(
           Effect.catch((error) => Effect.die(new Error(`failed to fetch remote config from ${url}: ${String(error)}`))),
         )
-      return yield* HttpClientResponse.schemaBodyJson(Schema.Json)(response).pipe(
+      return yield* HttpClientResponse.schemaBodyJson(schema)(response).pipe(
         Effect.catch((error) => Effect.die(new Error(`failed to decode remote config from ${url}: ${String(error)}`))),
       )
-    })
-
-    const fetchWellKnownConfig = Effect.fnUntraced(function* (url: string) {
-      const parsed = Option.getOrUndefined(Schema.decodeUnknownOption(WellKnownConfig)(yield* fetchRemoteJson(url)))
-      if (!parsed) return yield* Effect.die(new Error(`failed to decode remote config from ${url}`))
-      return parsed
     })
 
     const loadConfig = Effect.fnUntraced(function* (
@@ -544,7 +542,7 @@ export const layer = Layer.effect(
             process.env[value.key] = value.token
             const wellknownURL = `${url}/.well-known/opencode`
             log.debug("fetching remote config", { url: wellknownURL })
-            const wellknown = yield* fetchWellKnownConfig(wellknownURL)
+            const wellknown = yield* fetchRemoteJson(wellknownURL, undefined, WellKnownConfig)
             const remote = yield* Effect.promise(() =>
               substituteWellKnownRemoteConfig({
                 value: wellknown.remote_config,
@@ -555,7 +553,7 @@ export const layer = Layer.effect(
             const fetchedConfig = remote
               ? yield* Effect.gen(function* () {
                   log.debug("fetching remote config", { url: remote.url })
-                  const data = yield* fetchRemoteJson(remote.url, remote.headers)
+                  const data = yield* fetchRemoteJson(remote.url, remote.headers, Schema.Json)
                   if (isRecord(data) && isRecord(data.config)) return data.config
                   return isRecord(data) ? data : {}
                 })
