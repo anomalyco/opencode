@@ -9,6 +9,14 @@ import { SplitBorder } from "../../component/border"
 import { useTuiConfig } from "../../context/tui-config"
 import { OPENCODE_BASE_MODE, useBindings } from "../../keymap"
 
+export function questionPromptTabState(input: { current: number; next: number; editing: boolean }) {
+  return {
+    tab: input.next,
+    selected: 0,
+    editing: input.next === input.current ? input.editing : false,
+  }
+}
+
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
   const { theme } = useTheme()
@@ -92,8 +100,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   }
 
   function selectTab(index: number) {
-    setStore("tab", index)
-    setStore("selected", 0)
+    setStore(questionPromptTabState({ current: store.tab, next: index, editing: store.editing }))
   }
 
   function selectOption() {
