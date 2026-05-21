@@ -17,6 +17,9 @@ export interface MockServerConfig {
   directory: string
   project: unknown
   sessions: ({ id: string } & Record<string, unknown>)[]
+  permissions?: ({ id: string; sessionID: string } & Record<string, unknown>)[]
+  onPermissionReply?: (input: { requestID: string; body: unknown }) => void
+  onDeprecatedPermissionRespond?: (input: { sessionID: string; permissionID: string; body: unknown }) => void
   pageMessages: (sessionId: string, limit: number, before?: string) => { items: unknown[]; cursor?: string }
 }
 
@@ -39,14 +42,32 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
 
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
-    const targetPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
-    if (url.port !== targetPort) return route.fallback()
+    if (!isMockApiPath(url.pathname)) {
+      return route.fallback()
+    }
 
     const path = url.pathname
     if (path === "/global/event" || path === "/event") return sse(route)
+    if (path === "/permission") return json(route, config.permissions ?? [])
     if (emptyObject.has(path)) return json(route, {})
     if (emptyList.has(path)) return json(route, [])
     if (path in staticRoutes) return json(route, staticRoutes[path])
+
+    const permissionReplyMatch = path.match(/^\/permission\/([^/]+)\/reply$/)
+    if (permissionReplyMatch) {
+      config.onPermissionReply?.({ requestID: permissionReplyMatch[1], body: postBody(route) })
+      return json(route, true)
+    }
+
+    const deprecatedPermissionMatch = path.match(/^\/session\/([^/]+)\/permissions\/([^/]+)$/)
+    if (deprecatedPermissionMatch) {
+      config.onDeprecatedPermissionRespond?.({
+        sessionID: deprecatedPermissionMatch[1],
+        permissionID: deprecatedPermissionMatch[2],
+        body: postBody(route),
+      })
+      return json(route, true)
+    }
 
     const sessionMatch = path.match(/^\/session\/([^/]+)$/)
     if (sessionMatch) {
@@ -68,6 +89,35 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   })
 }
 
+function isMockApiPath(path: string) {
+  return (
+    path === "/global/event" ||
+    path === "/event" ||
+    path === "/global/config" ||
+    path === "/config" ||
+    path === "/provider/auth" ||
+    path === "/mcp" ||
+    path === "/session/status" ||
+    path === "/permission" ||
+    path === "/question" ||
+    path === "/provider" ||
+    path === "/path" ||
+    path === "/project" ||
+    path === "/project/current" ||
+    path === "/agent" ||
+    path === "/vcs" ||
+    path === "/vcs/status" ||
+    path === "/vcs/diff" ||
+    path === "/skill" ||
+    path === "/command" ||
+    path === "/lsp" ||
+    path === "/formatter" ||
+    path === "/session" ||
+    path.startsWith("/session/") ||
+    path.startsWith("/permission/")
+  )
+}
+
 function json(route: Route, body: unknown, headers?: Record<string, string>) {
   return route.fulfill({
     status: 200,
@@ -79,6 +129,12 @@ function json(route: Route, body: unknown, headers?: Record<string, string>) {
     },
     body: JSON.stringify(body ?? null),
   })
+}
+
+function postBody(route: Route) {
+  const text = route.request().postData()
+  if (!text) return undefined
+  return JSON.parse(text) as unknown
 }
 
 function sse(route: Route) {
