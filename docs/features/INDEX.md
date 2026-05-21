@@ -5,6 +5,7 @@
 
 | feat-id | 状态 | 简介 |
 |---|---|---|
+| [chat-drop-overlay-stuck-fix](./chat-drop-overlay-stuck-fix/) | done | 拖拽接收浮层卡死修复 — file-tree 行 onDrop 调 stopPropagation 杀掉 document bubble drop 致浮层 setDraggingType(null) 不执行;window 级 capture-phase drop + dragend 双兜底,ONLY 清状态不参与 drop 处理;R5 bug-repro 测试先行(DOM 事件流前置假设)|
 | [chat-input-focus-follow](./chat-input-focus-follow/) | done | 聊天输入框焦点跟随 — 聊天对话区右键 + MD/HTML viewer 选区"加入聊天"后光标到末尾 + 输入框 focus,user 可立刻继续打字(模块级 singleton ref + rAF;Tiny+ 4 文件 53 行) |
 | [chat-selection-menu](./chat-selection-menu/) | done | 聊天对话区右键选区菜单 — 替换 WebView2 原生为 DeskFox 自家两项(添加到聊天 / 复制),输入面板跟文件查看器一致 + 红色 overlay 选区高亮;helper extract 模式 + 12 单测 |
 | [file-tree-multi-drag-to-chat](./file-tree-multi-drag-to-chat/) | done | 文件树多选(Shift/Ctrl)拖到聊天窗口接通 — attachments 加 `application/x-deskfox-paths` MIME 消费,abs→rel 转换走 helper extract 模式 + 10 单测;0 R4 |
