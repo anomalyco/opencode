@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 # Acompany SecureCode one-shot installer.
 #
+# The script downloads platform archives from the public-facing distribution
+# repo `acompany-develop/securecode-release`. Releases are dual-published from
+# `acompany-develop/securecode` so both repos always carry the same assets.
+#
 # Three invocation modes:
 #
-# 1. Engineers with `gh auth login` set up (private staging):
-#      gh release download -R acompany-develop/securecode --pattern install -O - | bash
+# 1. Public curl (works once securecode-release is flipped public; recommended
+#    long-term entry point — no GitHub auth required):
+#      curl -fsSL https://github.com/acompany-develop/securecode-release/releases/latest/download/install | bash
 #
-# 2. Once the distribution repo is flipped public:
-#      curl -fsSL https://github.com/acompany-develop/securecode/releases/latest/download/install | bash
+# 2. Engineers with `gh auth login` set up (works while securecode-release is
+#    still private — gh CLI transparently handles auth + asset download):
+#      gh release download -R acompany-develop/securecode-release --pattern install -O - | bash
 #
 # 3. Offline / non-engineer flow (e.g. archive distributed via Notion):
 #    Drop `install` and the platform archive (e.g. `securecode-darwin-arm64.zip`)
@@ -27,7 +33,7 @@ set -euo pipefail
 
 APP=securecode
 ARCHIVE_PREFIX=securecode
-GH_REPO=acompany-develop/securecode
+GH_REPO=acompany-develop/securecode-release
 
 # Resolve the directory containing this script when invoked via a file (e.g.
 # `bash install`, `./install`). When piped from curl, BASH_SOURCE[0] is not a
@@ -67,12 +73,12 @@ Options:
       --no-config         Skip running the bundled setup/install.sh (plugin/config seed).
 
 Examples:
-  # Private repo (internal use, requires gh auth login)
+  # Public curl (once securecode-release is flipped public; preferred long-term)
+  curl -fsSL https://github.com/${GH_REPO}/releases/latest/download/install | bash
+
+  # gh CLI (engineers; works while securecode-release is still private)
   gh release download -R ${GH_REPO} --pattern install -O - | bash
   gh release download -R ${GH_REPO} --pattern install -O - | bash -s -- --version 0.1.0
-
-  # Public repo (when applicable)
-  curl -fsSL https://github.com/${GH_REPO}/releases/latest/download/install | bash
 
   # Offline / Notion flow: drop \`install\` and \`securecode-<target>.{zip,tar.gz}\`
   # in the same directory and run:
