@@ -1,10 +1,10 @@
 import { Schema } from "effect"
-import { Prompt } from "./session-prompt"
-import { SessionEvent } from "./session-event"
-import { EventV2 } from "./event"
-import { ToolOutput } from "./tool-output"
-import { V2Schema } from "./v2-schema"
-import { ModelV2 } from "./model"
+import { EventV2 } from "../event"
+import { ModelV2 } from "../model"
+import { ToolOutput } from "../tool-output"
+import { V2Schema } from "../v2-schema"
+import { SessionEvent } from "./event"
+import { Prompt } from "./prompt"
 
 export const ID = EventV2.ID
 export type ID = Schema.Schema.Type<typeof ID>
@@ -170,4 +170,4 @@ export type Message = Schema.Schema.Type<typeof Message>
 
 export type Type = Message["type"]
 
-export * as SessionMessage from "./session-message"
+export * as SessionMessage from "./message"

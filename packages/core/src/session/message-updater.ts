@@ -1,6 +1,6 @@
 import { produce, type WritableDraft } from "immer"
-import { SessionEvent } from "./session-event"
-import { SessionMessage } from "./session-message"
+import { SessionEvent } from "./event"
+import { SessionMessage } from "./message"
 
 export type MemoryState = {
   messages: SessionMessage.Message[]
@@ -414,4 +414,4 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
   return adapter.finish()
 }
 
-export * as SessionMessageUpdater from "./session-message-updater"
+export * as SessionMessageUpdater from "./message-updater"

@@ -9,7 +9,7 @@ import { SyncEvent } from "@/sync"
 import { EventV2 } from "@opencode-ai/core/event"
 import "@opencode-ai/core/account"
 import "@opencode-ai/core/catalog"
-import "@opencode-ai/core/session-event"
+import "@opencode-ai/core/session/event"
 import { Context, Effect, Layer, Option } from "effect"
 
 export function toSyncDefinition<D extends EventV2.Definition>(definition: D) {

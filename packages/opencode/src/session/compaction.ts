@@ -19,7 +19,7 @@ import { isOverflow as overflow, usable } from "./overflow"
 import { serviceUse } from "@/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { SessionEvent } from "@opencode-ai/core/session-event"
+import { SessionEvent } from "@opencode-ai/core/session/event"
 
 const log = Log.create({ service: "session.compaction" })
 

@@ -1,8 +1,8 @@
-export * as Session from "./session"
+export * as Session from "."
 
 import { Schema } from "effect"
-import { withStatics } from "./schema"
-import { Identifier } from "./util/identifier"
+import { withStatics } from "../schema"
+import { Identifier } from "../util/identifier"
 
 export const ID = Schema.String.check(Schema.isStartsWith("ses")).pipe(
   Schema.brand("SessionID"),

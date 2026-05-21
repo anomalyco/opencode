@@ -1,11 +1,11 @@
 import { Schema } from "effect"
-import { EventV2 } from "./event"
-import { ModelV2 } from "./model"
-import { NonNegativeInt } from "./schema"
-import { Session } from "./session"
-import { FileAttachment, Prompt } from "./session-prompt"
-import { ToolOutput } from "./tool-output"
-import { V2Schema } from "./v2-schema"
+import { EventV2 } from "../event"
+import { ModelV2 } from "../model"
+import { NonNegativeInt } from "../schema"
+import { ToolOutput } from "../tool-output"
+import { V2Schema } from "../v2-schema"
+import { Session } from "./index"
+import { FileAttachment, Prompt } from "./prompt"
 
 export { FileAttachment }
 
@@ -399,4 +399,4 @@ export const All = Schema.Union(
 export type Event = typeof All.Type
 export type Type = Event["type"]
 
-export * as SessionEvent from "./session-event"
+export * as SessionEvent from "./event"
