@@ -361,28 +361,57 @@ How is auth handled in @packages/functions/src/api/index.ts?
 {
   "$schema": "https://opencode.ai/tui.json",
   "theme": "opencode",
+  "leader_timeout": 2000,
   "keybinds": {
-    "leader": "ctrl+x"
+    "leader": "ctrl+x",
+    "command_list": "ctrl+p"
   },
   "scroll_speed": 3,
   "scroll_acceleration": {
-    "enabled": true
+    "enabled": false
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "mouse": true,
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "error": "./sounds/error.mp3"
+    }
+  }
 }
 ```
 
 สิ่งนี้แยกจาก `opencode.json` ซึ่งกำหนดค่าพฤติกรรมเซิร์ฟเวอร์/รันไทม์
 
+`keybinds` จะถูกรวมกับค่าเริ่มต้นในตัว ดังนั้นคุณต้องกำหนดค่าเฉพาะ shortcut ที่ต้องการเปลี่ยนเท่านั้น
+
 ### ตัวเลือก
 
 - `theme` - ตั้งค่าธีม UI ของคุณ [เรียนรู้เพิ่มเติม](/docs/themes)
 - `keybinds` - ปรับแต่งแป้นพิมพ์ลัด [เรียนรู้เพิ่มเติม](/docs/keybinds)
+- `leader_timeout` - ควบคุมระยะเวลาที่ OpenCode จะรอหลังจากกด leader key ค่าเริ่มต้นคือ `2000`
 - `scroll_acceleration.enabled` - ​​เปิดใช้งานการเร่งความเร็วการเลื่อนแบบ macOS เพื่อการเลื่อนที่ราบรื่นและเป็นธรรมชาติ เมื่อเปิดใช้งาน ความเร็วในการเลื่อนจะเพิ่มขึ้นตามท่าทางการเลื่อนอย่างรวดเร็ว และคงความแม่นยำไว้สำหรับการเคลื่อนไหวที่ช้าลง **การตั้งค่านี้มีความสำคัญมากกว่า `scroll_speed` และแทนที่เมื่อเปิดใช้งาน**
 - `scroll_speed` - ​​ควบคุมความเร็วของการเลื่อน TUI เมื่อใช้คำสั่งการเลื่อน (ขั้นต่ำ: `0.001` รองรับค่าทศนิยม) ค่าเริ่มต้นเป็น `3` **หมายเหตุ: สิ่งนี้จะถูกละเว้นหากตั้งค่า `scroll_acceleration.enabled` เป็น `true`.**
 - `diff_style` - ควบคุมการเรนเดอร์ diff `"auto"` ปรับให้เข้ากับความกว้างของ terminal `"stacked"` จะแสดงคอลัมน์เดียวเสมอ
+- `mouse` - เปิดหรือปิดการจับเมาส์ใน TUI (ค่าเริ่มต้น: `true`) เมื่อปิดใช้งาน terminal จะยังคงใช้พฤติกรรมการเลือกข้อความและเลื่อนด้วยเมาส์แบบเดิม
+- `attention` - กำหนดค่า desktop notifications และ sounds ของ TUI ปิดใช้งานตามค่าเริ่มต้น
 
 ใช้ `OPENCODE_TUI_CONFIG` เพื่อโหลดเส้นทางการกำหนดค่า TUI แบบกำหนดเอง
+
+### Attention
+
+Attention ช่วยให้ TUI แจ้งเตือนคุณเมื่อ OpenCode กำลังรอคำตอบ ต้องการการอนุมัติ permission พบ session error หรือ session เสร็จสิ้นแล้ว เปิดใช้งานด้วย `attention.enabled`; เหตุการณ์ในตัวจะเล่นเสียงเมื่อเกิดขึ้น Desktop notifications จะส่งเฉพาะเมื่อหน้าต่าง terminal ไม่ได้อยู่ในโฟกัส และจะไม่ใช้กับ subagent events
+
+- `enabled` - เปิดใช้งาน notifications และ sounds ทั้งหมดของ Attention ค่าเริ่มต้นคือ `false`
+- `notifications` - เมื่อเปิด Attention แล้ว อนุญาตให้ TUI ส่ง desktop notifications ผ่าน terminal ค่าเริ่มต้นคือ `true`
+- `sound` - เมื่อเปิด Attention แล้ว อนุญาตให้เล่นเสียงแจ้งเตือน ค่าเริ่มต้นคือ `true`
+- `volume` - ระดับเสียงแจ้งเตือนเริ่มต้นตั้งแต่ `0` ถึง `1` ค่าเริ่มต้นคือ `0.4`
+- `sound_pack` - sound pack ID ที่จะใช้ ค่าเริ่มต้นคือ `opencode.default`
+- `sounds` - กำหนด sound files แบบกำหนดเองสำหรับ `default`, `question`, `permission`, `error`, `done` หรือ `subagent_done` Paths สามารถเป็น absolute, `file://` URLs หรือ relative กับ `tui.json`
 
 ---
 

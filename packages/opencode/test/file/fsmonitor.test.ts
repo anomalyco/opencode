@@ -36,7 +36,7 @@ describe("file fsmonitor", () => {
         const before = yield* Effect.promise(() => $`git fsmonitor--daemon status`.cwd(directory).quiet().nothrow())
         expect(before.exitCode).not.toBe(0)
 
-        yield* File.Service.use((svc) => svc.status())
+        yield* File.use.status()
 
         const after = yield* Effect.promise(() => $`git fsmonitor--daemon status`.cwd(directory).quiet().nothrow())
         expect(after.exitCode).not.toBe(0)
@@ -63,7 +63,7 @@ describe("file fsmonitor", () => {
         const before = yield* Effect.promise(() => $`git fsmonitor--daemon status`.cwd(directory).quiet().nothrow())
         expect(before.exitCode).not.toBe(0)
 
-        yield* File.Service.use((svc) => svc.read("tracked.txt"))
+        yield* File.use.read("tracked.txt")
 
         const after = yield* Effect.promise(() => $`git fsmonitor--daemon status`.cwd(directory).quiet().nothrow())
         expect(after.exitCode).not.toBe(0)

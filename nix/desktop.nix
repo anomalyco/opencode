@@ -1,100 +1,101 @@
 {
   lib,
   stdenv,
-  rustPlatform,
-  pkg-config,
-  cargo-tauri,
   bun,
   nodejs,
-  cargo,
-  rustc,
-  jq,
-  wrapGAppsHook4,
+  electron_41,
   makeWrapper,
-  dbus,
-  glib,
-  gtk4,
-  libsoup_3,
-  librsvg,
-  libappindicator,
-  glib-networking,
-  openssl,
-  webkitgtk_4_1,
-  gst_all_1,
+  writableTmpDirAsHomeHook,
+  autoPatchelfHook,
   opencode,
 }:
-rustPlatform.buildRustPackage (finalAttrs: {
+let
+  electron = electron_41;
+in
+stdenv.mkDerivation (finalAttrs: {
   pname = "opencode-desktop";
-  inherit (opencode)
-    version
-    src
-    node_modules
-    patches
-    ;
-
-  cargoRoot = "packages/desktop/src-tauri";
-  cargoLock.lockFile = ../packages/desktop/src-tauri/Cargo.lock;
-  buildAndTestSubdir = finalAttrs.cargoRoot;
+  inherit (opencode) version src node_modules;
 
   nativeBuildInputs = [
-    pkg-config
-    cargo-tauri.hook
     bun
-    nodejs # for patchShebangs node_modules
-    cargo
-    rustc
-    jq
+    nodejs
     makeWrapper
-  ] ++ lib.optionals stdenv.hostPlatform.isLinux [ wrapGAppsHook4 ];
-
-  buildInputs = lib.optionals stdenv.isLinux [
-    dbus
-    glib
-    gtk4
-    libsoup_3
-    librsvg
-    libappindicator
-    glib-networking
-    openssl
-    webkitgtk_4_1
-    gst_all_1.gstreamer
-    gst_all_1.gst-plugins-base
-    gst_all_1.gst-plugins-good
-    gst_all_1.gst-plugins-bad
+    writableTmpDirAsHomeHook
+  ] ++ lib.optionals stdenv.hostPlatform.isLinux [
+    autoPatchelfHook
   ];
 
-  strictDeps = true;
+  buildInputs = lib.optionals stdenv.hostPlatform.isLinux [
+    (lib.getLib stdenv.cc.cc)
+  ];
+
+  env = opencode.env // {
+    ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
+  };
+
+  # https://github.com/electron/electron/issues/31121
+  # mac builds use a .app bundle which doesnt have this issue
+  postPatch = lib.optionalString stdenv.isLinux ''
+    BASE_PATH=packages/desktop
+    FILES=(src/main/windows.ts)
+    for file in "''${FILES[@]}"; do
+      substituteInPlace $BASE_PATH/$file \
+        --replace-fail "process.resourcesPath" "'$out/opt/opencode-desktop/resources'"
+    done
+  '';
 
   preBuild = ''
-    cp -a ${finalAttrs.node_modules}/{node_modules,packages} .
-    chmod -R u+w node_modules packages
+    cp -r "${electron.dist}" $HOME/.electron-dist
+    chmod -R u+w $HOME/.electron-dist
+
+    cp -R ${finalAttrs.node_modules}/. .
     patchShebangs node_modules
-    patchShebangs packages/desktop/node_modules
-
-    mkdir -p packages/desktop/src-tauri/sidecars
-    cp ${opencode}/bin/opencode packages/desktop/src-tauri/sidecars/opencode-cli-${stdenv.hostPlatform.rust.rustcTarget}
+    patchShebangs packages/*/node_modules
   '';
 
-  # see publish-tauri job in .github/workflows/publish.yml
-  tauriBuildFlags = [
-    "--config"
-    "tauri.prod.conf.json"
-    "--no-sign" # no code signing or auto updates
+  buildPhase = ''
+    runHook preBuild
+
+    cd packages/desktop
+
+    bun run build
+    npx electron-builder --dir \
+      --config electron-builder.config.ts \
+      --config.mac.identity=null \
+      --config.electronDist="$HOME/.electron-dist"
+
+    runHook postBuild
+  '';
+
+  installPhase =
+    ''
+      runHook preInstall
+    ''
+    + lib.optionalString stdenv.hostPlatform.isDarwin ''
+      mkdir -p $out/Applications
+      mv dist/mac*/*.app $out/Applications
+      makeWrapper "$out/Applications/OpenCode.app/Contents/MacOS/OpenCode" $out/bin/opencode-desktop
+    ''
+    + lib.optionalString stdenv.hostPlatform.isLinux ''
+      mkdir -p $out/opt/opencode-desktop
+      cp -r dist/linux*-unpacked/{resources,LICENSE*} $out/opt/opencode-desktop
+      makeWrapper ${lib.getExe electron} $out/bin/opencode-desktop \
+        --inherit-argv0 \
+        --set ELECTRON_FORCE_IS_PACKAGED 1 \
+        --add-flags $out/opt/opencode-desktop/resources/app.asar \
+        --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true}}"
+    ''
+    + ''
+      runHook postInstall
+    '';
+
+  autoPatchelfIgnoreMissingDeps = [
+    "libc.musl-x86_64.so.1"
   ];
-
-  # FIXME: workaround for concerns about case insensitive filesystems
-  # should be removed once binary is renamed or decided otherwise
-  # darwin output is a .app bundle so no conflict
-  postFixup = lib.optionalString stdenv.hostPlatform.isLinux ''
-    mv $out/bin/OpenCode $out/bin/opencode-desktop
-    sed -i 's|^Exec=OpenCode$|Exec=opencode-desktop|' $out/share/applications/OpenCode.desktop
-  '';
 
   meta = {
     description = "OpenCode Desktop App";
-    homepage = "https://opencode.ai";
-    license = lib.licenses.mit;
     mainProgram = "opencode-desktop";
-    inherit (opencode.meta) platforms;
+    inherit (opencode.meta) homepage license platforms;
   };
 })

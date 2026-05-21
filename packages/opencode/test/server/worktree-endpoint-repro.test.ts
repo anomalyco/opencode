@@ -4,7 +4,7 @@ import { HttpRouter } from "effect/unstable/http"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Worktree } from "@/worktree"
-import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
+import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import { resetDatabase } from "../fixture/db"
@@ -36,15 +36,13 @@ type ScopedWorktree = { directory: string; body: CreatedWorktree; ready: Effect.
 
 function serverScoped() {
   return Effect.acquireRelease(
-    Effect.sync(() => HttpRouter.toWebHandler(ExperimentalHttpApiServer.routes, { disableLogger: true })),
+    Effect.sync(() => HttpRouter.toWebHandler(HttpApiApp.routes, { disableLogger: true })),
     (server) => Effect.promise(() => server.dispose()).pipe(Effect.ignore),
   )
 }
 
 function request(server: TestServer, input: string, init?: RequestInit) {
-  return Effect.promise(() =>
-    server.handler(new Request(new URL(input, "http://localhost"), init), ExperimentalHttpApiServer.context),
-  )
+  return Effect.promise(() => server.handler(new Request(new URL(input, "http://localhost"), init), HttpApiApp.context))
 }
 
 function withRequestTimeout(effect: Effect.Effect<Response>, label: string, ms = 5_000) {

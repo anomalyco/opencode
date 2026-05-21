@@ -1,4 +1,4 @@
-import { WorkspaceRef } from "@/effect/instance-ref"
+import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { InstanceStore } from "@/project/instance-store"
 import { Effect, Layer } from "effect"
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http"
@@ -26,9 +26,10 @@ function provideInstanceContext<E>(
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext> {
   return Effect.gen(function* () {
     const route = yield* WorkspaceRouteContext
-    return yield* store.provide(
-      { directory: decode(route.directory) },
-      effect.pipe(Effect.provideService(WorkspaceRef, route.workspaceID)),
+    const ctx = yield* store.load({ directory: decode(route.directory) })
+    return yield* effect.pipe(
+      Effect.provideService(InstanceRef, ctx),
+      Effect.provideService(WorkspaceRef, route.workspaceID),
     )
   })
 }

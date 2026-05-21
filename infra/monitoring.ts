@@ -2,8 +2,9 @@ import { SECRET } from "./secret"
 import { domain } from "./stage"
 
 const description = "Managed by SST (Don't edit in Honeycomb UI)"
+const alertsDisabled = $app.stage !== "production"
 
-const webhookRecipient = new honeycomb.WebhookRecipient("DiscordAlerts", {
+const webhookRecipient = new honeycombio.WebhookRecipient("DiscordAlerts", {
   name: $app.stage === "production" ? "Discord Alerts" : `Discord Alerts (${$app.stage})`,
   url: `https://${domain}/honeycomb/webhook`,
   secret: SECRET.HoneycombWebhookSecret.result,
@@ -46,13 +47,27 @@ const modelHttpErrorsQuery = (product: "go" | "zen") => {
   ]
   const failedHttpStatus = calculatedField({
     name: "is_failed_http_status",
-    expression:
-      product === "go"
-        ? `IF(AND(GTE($status, "400"), NOT(EQUALS($status, "401")), NOT(EQUALS($status, "429"))), 1, 0)`
-        : `IF(AND(EQUALS($status, "429"), $isFreeTier), 0, AND(GTE($status, "400"), NOT(EQUALS($status, "401"))), 1, 0)`,
+    expression: `
+IF(
+  AND(
+    GTE($status, "400"),
+    NOT(EQUALS($status, "401")),
+    NOT(
+      AND(
+        EQUALS($status, "429"),
+        OR(
+          EQUALS($error.type, "GoUsageLimitError"),
+          EQUALS($error.type, "FreeUsageLimitError")
+        )
+      )
+    )
+  ),
+  1,
+  0
+)`,
   })
 
-  return honeycomb.getQuerySpecificationOutput({
+  return honeycombio.getQuerySpecificationOutput({
     breakdowns: ["model"],
     calculatedFields: [failedHttpStatus],
     calculations: [
@@ -65,16 +80,15 @@ const modelHttpErrorsQuery = (product: "go" | "zen") => {
         filters,
       },
     ],
-    formulas: [{ name: "ERROR", expression: "IF(GTE($TOTAL, 100), DIV($FAILED, $TOTAL), 0)" }],
+    formulas: [{ name: "ERROR", expression: "IF(GTE($TOTAL, 150), DIV($FAILED, $TOTAL), 0)" }],
     timeRange: 900,
   }).json
 }
 
-const providerHttpErrorsQuery = (product: "go" | "zen") => {
+const providerHttpErrorsQuery = () => {
   const filters = [
     { column: "provider", op: "exists" },
     { column: "user_agent", op: "contains", value: "opencode" },
-    { column: "isGoTier", op: "=", value: product === "go" ? "true" : "false" },
   ]
   const successHttpStatus = calculatedField({
     name: "is_success_http_status",
@@ -85,7 +99,7 @@ const providerHttpErrorsQuery = (product: "go" | "zen") => {
     expression: `IF(GT($llm.error.code, "400"), 1, 0)`,
   })
 
-  return honeycomb.getQuerySpecificationOutput({
+  return honeycombio.getQuerySpecificationOutput({
     breakdowns: ["provider"],
     calculatedFields: [successHttpStatus, failedProviderHttpStatus],
     calculations: [
@@ -101,11 +115,15 @@ const providerHttpErrorsQuery = (product: "go" | "zen") => {
         name: "FAILED",
         column: failedProviderHttpStatus.name,
         filterCombination: "AND",
-        filters: [...filters, { column: "event_type", op: "=", value: "llm.error" }],
+        filters: [
+          ...filters,
+          { column: "event_type", op: "=", value: "llm.error" },
+          { column: "llm.error.code", op: "!=", value: "404" },
+        ],
       },
     ],
     formulas: [
-      { name: "ERROR", expression: "IF(GTE(SUM($SUCCESS, $FAILED), 50), DIV($FAILED, SUM($SUCCESS, $FAILED)), 0)" },
+      { name: "ERROR", expression: "IF(GTE(SUM($SUCCESS, $FAILED), 150), DIV($FAILED, SUM($SUCCESS, $FAILED)), 0)" },
     ],
     timeRange: 900,
   }).json
@@ -122,7 +140,7 @@ const modelLowTpsQuery = (product: "go" | "zen") => {
     { column: "tps.output", op: "exists" },
   ]
 
-  return honeycomb.getQuerySpecificationOutput({
+  return honeycombio.getQuerySpecificationOutput({
     breakdowns: ["model"],
     calculations: [
       { op: "COUNT", name: "TOTAL", filterCombination: "AND", filters },
@@ -139,9 +157,10 @@ const modelLowTpsQuery = (product: "go" | "zen") => {
   }).json
 }
 
-new honeycomb.Trigger("IncreasedModelHttpErrorsGo", {
+new honeycombio.Trigger("IncreasedModelHttpErrorsGo", {
   name: "Increased Model HTTP Errors [Go]",
   description,
+  disabled: alertsDisabled,
   queryJson: modelHttpErrorsQuery("go"),
   alertType: "on_change",
   frequency: 300,
@@ -158,9 +177,10 @@ new honeycomb.Trigger("IncreasedModelHttpErrorsGo", {
   ],
 })
 
-new honeycomb.Trigger("IncreasedModelHttpErrorsZen", {
+new honeycombio.Trigger("IncreasedModelHttpErrorsZen", {
   name: "Increased Model HTTP Errors [Zen]",
   description,
+  disabled: alertsDisabled,
   queryJson: modelHttpErrorsQuery("zen"),
   alertType: "on_change",
   frequency: 300,
@@ -177,9 +197,10 @@ new honeycomb.Trigger("IncreasedModelHttpErrorsZen", {
   ],
 })
 
-new honeycomb.Trigger("LowModelTpsGo", {
+new honeycombio.Trigger("LowModelTpsGo", {
   name: "Low Model TPS [Go]",
   description,
+  disabled: alertsDisabled,
   queryJson: modelLowTpsQuery("go"),
   alertType: "on_change",
   frequency: 600,
@@ -196,9 +217,10 @@ new honeycomb.Trigger("LowModelTpsGo", {
   ],
 })
 
-new honeycomb.Trigger("LowModelTpsZen", {
+new honeycombio.Trigger("LowModelTpsZen", {
   name: "Low Model TPS [Zen]",
   description,
+  disabled: alertsDisabled,
   queryJson: modelLowTpsQuery("zen"),
   alertType: "on_change",
   frequency: 600,
@@ -215,10 +237,11 @@ new honeycomb.Trigger("LowModelTpsZen", {
   ],
 })
 
-new honeycomb.Trigger("IncreasedProviderHttpErrorsGo", {
-  name: "Increased Provider HTTP Errors [Go]",
+new honeycombio.Trigger("IncreasedProviderHttpErrors", {
+  name: "Increased Provider HTTP Errors",
   description,
-  queryJson: providerHttpErrorsQuery("go"),
+  disabled: alertsDisabled,
+  queryJson: providerHttpErrorsQuery(),
   alertType: "on_change",
   frequency: 300,
   thresholds: [{ op: ">=", value: 0.7, exceededLimit: 1 }],
@@ -234,29 +257,11 @@ new honeycomb.Trigger("IncreasedProviderHttpErrorsGo", {
   ],
 })
 
-new honeycomb.Trigger("IncreasedProviderHttpErrorsZen", {
-  name: "Increased Provider HTTP Errors [Zen]",
-  description,
-  queryJson: providerHttpErrorsQuery("zen"),
-  alertType: "on_change",
-  frequency: 300,
-  thresholds: [{ op: ">=", value: 0.7, exceededLimit: 1 }],
-  recipients: [
-    {
-      id: webhookRecipient.id,
-      notificationDetails: [
-        {
-          variables: [{ name: "type", value: "provider_http_errors" }],
-        },
-      ],
-    },
-  ],
-})
-
-new honeycomb.Trigger("IncreasedFreeTierRequests", {
+new honeycombio.Trigger("IncreasedFreeTierRequests", {
   name: "Increased Free Tier Requests",
   description,
-  queryJson: honeycomb.getQuerySpecificationOutput({
+  disabled: alertsDisabled,
+  queryJson: honeycombio.getQuerySpecificationOutput({
     calculations: [{ op: "COUNT" }],
     filters: [
       { column: "event_type", op: "=", value: "completions" },

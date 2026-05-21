@@ -51,7 +51,7 @@ it.instance(
   () =>
     Effect.gen(function* () {
       yield* Plugin.Service.use((p) => p.init())
-      const agents = yield* Agent.Service.use((svc) => svc.list())
+      const agents = yield* Agent.use.list()
       const added = agents.find((agent) => agent.name === PLUGIN_AGENT.name)
       expect(added?.description).toBe(PLUGIN_AGENT.description)
       expect(added?.mode).toBe(PLUGIN_AGENT.mode)
