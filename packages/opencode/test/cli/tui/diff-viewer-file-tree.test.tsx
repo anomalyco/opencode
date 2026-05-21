@@ -14,6 +14,7 @@ const theme = {
   backgroundPanel: RGBA.fromHex("#111111"),
   backgroundElement: RGBA.fromHex("#333333"),
   primary: RGBA.fromHex("#00ffff"),
+  secondary: RGBA.fromHex("#0088ff"),
   selectedListItemText: RGBA.fromHex("#ffffff"),
   text: RGBA.fromHex("#ffffff"),
   textMuted: RGBA.fromHex("#888888"),
@@ -25,6 +26,7 @@ describe("DiffViewerFileTree", () => {
     const app = await testRender(
       () => (
         <DiffViewerFileTree
+          width={32}
           files={[
             { file: "z-file.ts" },
             { file: "b/file.ts" },
@@ -45,22 +47,26 @@ describe("DiffViewerFileTree", () => {
       await app.renderOnce()
       const lines = visibleLines(app.captureCharFrame())
 
-      expect(lines).toEqual(["▾ a", "    alpha.ts", "    zeta.ts", "▾ b", "    alpha.ts", "    file.ts", "  z-file.ts"])
+      expect(lines).toEqual([
+        "▾ a",
+        "   alpha.ts",
+        "   zeta.ts",
+        "▾ b",
+        "   alpha.ts",
+        "   file.ts",
+        " z-file.ts",
+      ])
     } finally {
       app.renderer.destroy()
     }
   })
 
   test("keeps loading and error quiet while rendering an empty settled state", async () => {
-    const loading = await renderFrame(() => (
-      <DiffViewerFileTree files={[]} loading={true} error={undefined} theme={theme} />
-    ))
+    const loading = await renderFrame(() => <DiffViewerFileTree width={32} files={[]} loading={true} error={undefined} theme={theme} />)
     const failed = await renderFrame(() => (
-      <DiffViewerFileTree files={[]} loading={false} error={new Error("nope")} theme={theme} />
+      <DiffViewerFileTree width={32} files={[]} loading={false} error={new Error("nope")} theme={theme} />
     ))
-    const empty = await renderFrame(() => (
-      <DiffViewerFileTree files={[]} loading={false} error={undefined} theme={theme} />
-    ))
+    const empty = await renderFrame(() => <DiffViewerFileTree width={32} files={[]} loading={false} error={undefined} theme={theme} />)
 
     expect(loading).not.toContain("Loading diff...")
     expect(loading).not.toContain("No files")
@@ -75,18 +81,11 @@ describe("DiffViewerFileTree", () => {
 
     const focused = visibleLines(
       await renderFrame(() => (
-        <DiffViewerFileTree
-          files={files}
-          loading={false}
-          error={undefined}
-          theme={theme}
-          focused
-          highlightedNode={src.id}
-        />
+        <DiffViewerFileTree width={32} files={files} loading={false} error={undefined} theme={theme} focused highlightedNode={src.id} />
       )),
     )
     const unfocused = visibleLines(
-      await renderFrame(() => <DiffViewerFileTree files={files} loading={false} error={undefined} theme={theme} />),
+      await renderFrame(() => <DiffViewerFileTree width={32} files={files} loading={false} error={undefined} theme={theme} />),
     )
 
     expect(focused).toContain("▾ src/config")
@@ -105,16 +104,17 @@ describe("DiffViewerFileTree", () => {
     expect(
       visibleLines(
         await renderFrame(() => (
-          <DiffViewerFileTree files={files} loading={false} error={undefined} theme={theme} expandedNodes={collapsed} />
+          <DiffViewerFileTree width={32} files={files} loading={false} error={undefined} theme={theme} expandedNodes={collapsed} />
         )),
       ),
-    ).toEqual(["▸ src/config", "  README.md"])
+    ).toEqual(["▸ src/config", " README.md"])
 
     expect(
       visibleLines(
         await renderFrame(() => (
           <DiffViewerFileTree
             files={files}
+            width={32}
             loading={false}
             error={undefined}
             theme={theme}
@@ -122,7 +122,7 @@ describe("DiffViewerFileTree", () => {
           />
         )),
       ),
-    ).toEqual(["▾ src/config", "    tui.ts", "  README.md"])
+    ).toEqual(["▾ src/config", "   tui.ts", " README.md"])
   })
 })
 

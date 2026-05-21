@@ -1,30 +1,36 @@
 /** @jsxImportSource @opentui/solid */
-import type { ColorInput, ScrollBoxRenderable } from "@opentui/core"
+import type { ColorInput, RGBA, ScrollBoxRenderable } from "@opentui/core"
 import { Locale } from "@/util/locale"
+import { tint } from "@tui/context/theme"
 import { createEffect, createMemo, For, Match, Switch } from "solid-js"
-import { buildFileTree, flattenFileTree, type FileTreeItem } from "./diff-viewer-file-tree-utils"
+import { buildFileTree, flattenFileTree, type FileTreeItem, type FileTreeRow } from "./diff-viewer-file-tree-utils"
+import { Panel } from "./diff-viewer-ui"
 
-const FILE_TREE_WIDTH = 32
 const FILE_TREE_HORIZONTAL_PADDING = 2
+const FILE_TREE_STATUS_WIDTH = 2
 
 export type DiffViewerFileTreeTheme = {
-  readonly background: ColorInput
+  readonly background: RGBA
   readonly backgroundPanel: ColorInput
   readonly backgroundElement: ColorInput
   readonly primary: ColorInput
+  readonly secondary: ColorInput
   readonly selectedListItemText: ColorInput
-  readonly text: ColorInput
-  readonly textMuted: ColorInput
+  readonly text: RGBA
+  readonly textMuted: RGBA
   readonly error: ColorInput
 }
 
 export type DiffViewerFileTreeProps = {
+  readonly width: number
   readonly files: readonly FileTreeItem[]
   readonly loading: boolean
   readonly error: unknown
   readonly theme: DiffViewerFileTreeTheme
   readonly focused?: boolean
   readonly highlightedNode?: number
+  readonly selectedFileIndex?: number
+  readonly reviewedFileNames?: ReadonlySet<string>
   readonly expandedNodes?: ReadonlySet<number>
 }
 
@@ -43,21 +49,12 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
     requestAnimationFrame(scrollSelectedIntoView)
   })
 
+  const fadedColor = () => tint(props.theme.text, props.theme.background, 0.75)
+
   return (
-    <box
-      width={FILE_TREE_WIDTH}
-      flexShrink={0}
-      backgroundColor={props.theme.backgroundPanel}
-      paddingLeft={1}
-      paddingRight={1}
-      paddingTop={1}
-      gap={1}
-      minHeight={0}
-    >
+    <Panel border="both" width={props.width}>
       <scrollbox
         ref={(element: ScrollBoxRenderable) => (scroll = element)}
-        flexGrow={1}
-        minHeight={0}
         verticalScrollbarOptions={{ visible: false }}
         horizontalScrollbarOptions={{ visible: false }}
       >
@@ -70,26 +67,24 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
           </Match>
           <Match when={props.files.length > 0}>
             <For each={rows()}>
-              {(row) => {
+              {(row, index) => {
                 const highlighted = () => props.focused && props.highlightedNode === row.id
-                const prefix = () =>
-                  `${"  ".repeat(row.depth)}${row.kind === "directory" ? (props.expandedNodes && !props.expandedNodes.has(row.id) ? "▸ " : "▾ ") : "  "}`
+                const selected = () => row.fileIndex !== undefined && props.selectedFileIndex === row.fileIndex
+                const reviewed = () => {
+                  const file = row.fileIndex === undefined ? undefined : props.files[row.fileIndex]?.file
+                  return file !== undefined && props.reviewedFileNames?.has(file)
+                }
+                const prefix = () => fileTreeRowPrefix(rows(), index(), row, props.expandedNodes)
+                const status = () => fileTreeRowStatus(row, props.files)
                 const name = () =>
                   Locale.truncate(
                     row.name,
-                    Math.max(1, FILE_TREE_WIDTH - FILE_TREE_HORIZONTAL_PADDING - prefix().length),
+                    Math.max(1, props.width - FILE_TREE_HORIZONTAL_PADDING - prefix().length - status().length),
                   )
                 return (
-                  <box flexDirection="row" width="100%">
+                  <box flexDirection="row" width="100%" backgroundColor={highlighted() ? props.theme.primary : undefined}>
                     <text
-                      fg={
-                        highlighted()
-                          ? props.theme.background
-                          : row.kind === "directory"
-                            ? props.theme.textMuted
-                            : props.theme.text
-                      }
-                      bg={highlighted() ? props.theme.primary : undefined}
+                      fg={highlighted() ? props.theme.background : fadedColor()}
                       wrapMode="none"
                       flexShrink={0}
                     >
@@ -100,16 +95,22 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                         fg={
                           highlighted()
                             ? props.theme.background
-                            : row.kind === "directory"
+                            : reviewed()
                               ? props.theme.textMuted
-                              : props.theme.text
+                              : selected()
+                                ? props.theme.primary
+                                : row.kind === "directory"
+                                  ? tint(props.theme.text, props.theme.background, 0.35)
+                                  : props.theme.text
                         }
-                        bg={highlighted() ? props.theme.primary : undefined}
                         wrapMode="none"
                       >
                         {name()}
                       </text>
                     </box>
+                    <text fg={highlighted() ? props.theme.background : props.theme.textMuted} wrapMode="none" flexShrink={0}>
+                      {status()}
+                    </text>
                   </box>
                 )
               }}
@@ -117,7 +118,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
           </Match>
         </Switch>
       </scrollbox>
-    </box>
+    </Panel>
   )
 }
 
@@ -130,4 +131,34 @@ function scrollFileTreeRowIntoView(scroll: ScrollBoxRenderable | undefined, inde
   if (index >= scroll.scrollTop + scroll.viewport.height) {
     scroll.scrollTo(index - scroll.viewport.height + 1)
   }
+}
+
+function fileTreeRowPrefix(
+  rows: readonly FileTreeRow[],
+  index: number,
+  row: FileTreeRow,
+  expandedNodes: ReadonlySet<number> | undefined,
+) {
+  const indentation = Array.from({ length: row.depth }, (_, depth) => {
+    if (depth === 0 && !hasLaterSibling(rows, 0, 0)) return " "
+    return hasLaterSibling(rows, index, depth) ? "│  " : "   "
+  }).join("")
+  const topRoot = index === 0 && row.depth === 0
+  const branch = topRoot ? " " : hasLaterSibling(rows, index, row.depth) ? "├─ " : "└─ "
+  const marker = row.kind === "directory" ? (expandedNodes && !expandedNodes.has(row.id) ? "▸ " : "▾ ") : ""
+
+  return `${indentation}${branch}${marker}`
+}
+
+function hasLaterSibling(rows: readonly FileTreeRow[], index: number, depth: number) {
+  return rows.slice(index + 1).find((row) => row.depth <= depth)?.depth === depth
+}
+
+function fileTreeRowStatus(row: FileTreeRow, files: readonly FileTreeItem[]) {
+  if (row.fileIndex === undefined) return ""
+  const status = files[row.fileIndex]?.status
+  if (status === "modified") return "M".padStart(FILE_TREE_STATUS_WIDTH)
+  if (status === "added") return "A".padStart(FILE_TREE_STATUS_WIDTH)
+  if (status === "deleted") return "D".padStart(FILE_TREE_STATUS_WIDTH)
+  return "?".padStart(FILE_TREE_STATUS_WIDTH)
 }
