@@ -1,0 +1,134 @@
+name: upstream-sync
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # nightly at 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: "Upstream branch or ref to sync from (default: dev)"
+        required: false
+        default: "dev"
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      SYNC_BRANCH: sync/upstream
+      UPSTREAM_REPO: https://github.com/sst/opencode.git
+      UPSTREAM_REF: ${{ inputs.upstream_ref || 'dev' }}
+      TARGET_BRANCH: dev
+    steps:
+      - name: Checkout dev
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          ref: dev
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Setup Git Committer
+        id: setup-git-committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "$UPSTREAM_REPO"
+          git fetch upstream "$UPSTREAM_REF"
+
+      - name: Create sync branch from dev
+        run: git checkout -B "$SYNC_BRANCH"
+
+      - name: Merge upstream into sync branch
+        id: merge
+        run: |
+          if git merge "upstream/$UPSTREAM_REF" --no-edit; then
+            echo "result=success" >> "$GITHUB_OUTPUT"
+          else
+            git merge --abort
+            echo "result=conflict" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Count new commits
+        id: diff
+        if: steps.merge.outputs.result == 'success'
+        run: echo "count=$(git rev-list origin/$TARGET_BRANCH..HEAD --count)" >> "$GITHUB_OUTPUT"
+
+      - name: Push sync branch
+        if: steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0'
+        run: git push origin "$SYNC_BRANCH" --force-with-lease
+
+      - name: Run typecheck
+        id: typecheck
+        if: steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0'
+        run: bun typecheck
+
+      - name: Run tests
+        id: tests
+        if: steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0' && steps.typecheck.outcome == 'success'
+        run: bun turbo test
+
+      - name: Create or update PR
+        if: steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0' && steps.typecheck.outcome == 'success' && steps.tests.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+        run: |
+          date=$(date +%Y-%m-%d)
+          body="Automated upstream sync from \`sst/opencode\` — $date.
+
+          Validation (typecheck + tests) passed ✅. Awaiting team review before merge into \`$TARGET_BRANCH\`."
+          existing=$(gh pr list --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" \
+              --title "chore: nightly upstream sync $date" \
+              --body "$body"
+            echo "Updated existing PR #$existing"
+          else
+            gh pr create \
+              --title "chore: nightly upstream sync $date" \
+              --body "$body" \
+              --head "$SYNC_BRANCH" \
+              --base "$TARGET_BRANCH"
+          fi
+
+      - name: Open issue on merge conflict
+        if: always() && steps.merge.outputs.result == 'conflict'
+        env:
+          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+        run: |
+          gh issue create \
+            --title "⚠️ Upstream sync conflict — $(date +%Y-%m-%d)" \
+            --body "The nightly upstream sync from \`sst/opencode\` detected merge conflicts on $(date +%Y-%m-%d).
+
+          Manual intervention is required to sync the latest upstream changes into \`$TARGET_BRANCH\`. Please resolve conflicts and merge manually." \
+            --label bug
+
+      - name: Fail on merge conflict
+        if: always() && steps.merge.outputs.result == 'conflict'
+        run: exit 1
+
+      - name: Open issue on validation failure
+        if: always() && (steps.typecheck.outcome == 'failure' || steps.tests.outcome == 'failure')
+        env:
+          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+        run: |
+          gh issue create \
+            --title "⚠️ Upstream sync validation failed — $(date +%Y-%m-%d)" \
+            --body "The nightly upstream sync from \`sst/opencode\` merged successfully on $(date +%Y-%m-%d) but failed validation (typecheck or tests).
+
+          The sync branch \`$SYNC_BRANCH\` has been pushed. Manual review is required before merging into \`$TARGET_BRANCH\`." \
+            --label bug
