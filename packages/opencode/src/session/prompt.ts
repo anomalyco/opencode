@@ -1269,7 +1269,7 @@ export const layer = Layer.effect(
             lastAssistant?.finish &&
             !["tool-calls"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
-            lastUser.id < lastAssistant.id
+            lastUser.time.created <= lastAssistant.time.created
           ) {
             yield* slog.info("exiting loop")
             break
