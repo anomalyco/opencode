@@ -33,8 +33,12 @@ function rewrite(request: Request, directory?: string) {
 export function createOpencodeClient(config?: Config & { directory?: string }) {
   if (!config?.fetch) {
     const customFetch: any = (req: any) => {
+      // Use a 5-minute timeout instead of disabling it entirely.
+      // Disabling the timeout causes fetch to hang forever when the backend
+      // becomes unresponsive, leading to unrecoverable "Failed to fetch" errors
+      // in the renderer (see #28702).
       // @ts-ignore
-      req.timeout = false
+      req.timeout = 300_000
       return fetch(req)
     }
     config = {

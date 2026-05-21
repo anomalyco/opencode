@@ -25,7 +25,7 @@ function isTransientError(error: unknown): boolean {
 }
 
 export async function retry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
-  const { attempts = 3, delay = 500, factor = 2, maxDelay = 10000, retryIf = isTransientError } = options
+  const { attempts = 5, delay = 1000, factor = 2, maxDelay = 30000, retryIf = isTransientError } = options
 
   let lastError: unknown
   for (let attempt = 0; attempt < attempts; attempt++) {

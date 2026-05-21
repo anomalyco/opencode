@@ -47,8 +47,12 @@ function rewrite(request: Request, values: { directory?: string; workspace?: str
 export function createOpencodeClient(config?: Config & { directory?: string; experimental_workspaceID?: string }) {
   if (!config?.fetch) {
     const customFetch: any = (req: any) => {
+      // Use a 5-minute timeout instead of disabling it entirely.
+      // Disabling the timeout causes fetch to hang forever when the backend
+      // becomes unresponsive, leading to unrecoverable "Failed to fetch" errors
+      // in the renderer (see #28702).
       // @ts-ignore
-      req.timeout = false
+      req.timeout = 300_000
       return fetch(req)
     }
     config = {
