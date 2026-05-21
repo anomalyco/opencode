@@ -1,53 +1,52 @@
 // Diagnostic suite for /event SSE delivery.
 //
 // Each test isolates ONE variable in the publisher chain while keeping the
-// subscriber path constant (raw `app().request` reading the SSE body — no SDK
-// consumer involvement). The pass/fail pattern across tests tells us where the
-// bug lives:
+// subscriber path constant (in-process HttpApi via Server.Default reading the
+// SSE body). The pass/fail pattern across tests tells us where the bug lives:
 //
-//   D1 (baseline): publish via Bus.Service.use via AppRuntime — mirror of the
-//        existing httpapi-event.test.ts test 3. Confirms /event SSE delivery
-//        works for a SOME publish path.
+//   D1 (baseline): publish via Bus.use.publish — mirror of httpapi-event.test.ts
+//        test 3. Confirms /event SSE delivery works for SOME publish path.
 //
-//   D2: publish N times in quick succession via Bus.Service.use. If the bus
+//   D2: publish N times in quick succession via Bus.use.publish. If the bus
 //        subscription is acquired correctly there should be no message loss.
 //
-//   D3: publish via SyncEvent.use.run via AppRuntime — exercises the same path
-//        the HTTP handlers use (Session.updatePart → sync.run → bus.publish)
-//        without the HTTP roundtrip. Tells us whether the sync path itself can
-//        deliver in-process.
+//   D3: publish via SyncEvent.use.run — exercises the same path the HTTP
+//        handlers use (Session.updatePart → sync.run → bus.publish) without
+//        the HTTP roundtrip. Tells us whether the sync path itself can deliver
+//        in-process.
 //
-//   D4: publish via SyncEvent.use.run from a fresh `Effect.provide` scope
-//        (mimicking what happens if a handler's layer was scoped per-request).
+//   D4: publish via SyncEvent.use.run; subscriber is an in-process Bus
+//        callback. Confirms pub/sub identity end-to-end without /event SSE.
 //
-//   D5: in-process Bus.Service callback subscriber AND raw /event SSE subscriber
+//   D5: in-process Bus callback subscriber AND raw /event SSE subscriber
 //        receive the same publish. If both receive: no bug. If only the
 //        callback receives: the /event handler has an acquisition race.
+//
+//   D6: same as D5 but the callback subscriber is attached AFTER /event SSE
+//        subscription is established. Order-of-setup variable.
 import { afterEach, describe, expect } from "bun:test"
-import { Deferred, Effect, Schema } from "effect"
+import { Deferred, Effect, Layer, Schema } from "effect"
 import * as Log from "@opencode-ai/core/util/log"
 import { Bus } from "../../src/bus"
-import { type AppServices, AppRuntime } from "../../src/effect/app-runtime"
-import { InstanceRef } from "../../src/effect/instance-ref"
-import { Server } from "../../src/server/server"
 import { Event as ServerEvent } from "../../src/server/event"
+import { Server } from "../../src/server/server"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SyncEvent } from "../../src/sync"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
-import { it } from "../lib/effect"
+import { testEffectShared } from "../lib/effect"
 
 void Log.init({ print: false })
 
-const EventData = Schema.Struct({
+const SseEvent = Schema.Struct({
   id: Schema.optional(Schema.String),
   type: Schema.String,
   properties: Schema.Record(Schema.String, Schema.Any),
 })
 
-type SseEvent = Schema.Schema.Type<typeof EventData>
+type SseEvent = Schema.Schema.Type<typeof SseEvent>
 type BusEvent = { type: string; properties: unknown }
 
 afterEach(async () => {
@@ -55,30 +54,21 @@ afterEach(async () => {
   await resetDatabase()
 })
 
-const inApp = <A, E>(eff: Effect.Effect<A, E, AppServices>) =>
-  Effect.gen(function* () {
-    const ctx = yield* InstanceRef
-    if (!ctx) return yield* Effect.die("InstanceRef not provided in test scope")
-    return yield* Effect.promise(() => AppRuntime.runPromise(eff.pipe(Effect.provideService(InstanceRef, ctx))))
-  })
+const it = testEffectShared(Layer.mergeAll(Bus.defaultLayer, SyncEvent.defaultLayer))
 
-const publishConnected = inApp(Bus.Service.use((svc) => svc.publish(ServerEvent.Connected, {})))
+const publishConnected = Bus.use.publish(ServerEvent.Connected, {})
 
 const publishPartUpdated = (partID: ReturnType<typeof PartID.ascending>) => {
   const sessionID = SessionID.make(`ses_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`)
-  return inApp(
-    SyncEvent.use.run(MessageV2.Event.PartUpdated, {
-      sessionID,
-      part: { id: partID, sessionID, messageID: MessageID.ascending(), type: "text", text: "diag" },
-      time: Date.now(),
-    }),
-  )
+  return SyncEvent.use.run(MessageV2.Event.PartUpdated, {
+    sessionID,
+    part: { id: partID, sessionID, messageID: MessageID.ascending(), type: "text", text: "diag" },
+    time: Date.now(),
+  })
 }
 
 const subscribeAllCallback = (handler: (event: BusEvent) => void) =>
-  Effect.acquireRelease(inApp(Bus.Service.use((svc) => svc.subscribeAllCallback(handler))), (dispose) =>
-    Effect.sync(() => dispose()),
-  )
+  Effect.acquireRelease(Bus.use.subscribeAllCallback(handler), (dispose) => Effect.sync(() => dispose()))
 
 const openEventStream = (directory: string) =>
   Effect.gen(function* () {
@@ -99,7 +89,7 @@ function decodeFrame(value: Uint8Array): SseEvent[] {
     .split(/\n\n+/)
     .map((part) => part.trim())
     .filter((part) => part.length > 0)
-    .map((part) => Schema.decodeUnknownSync(EventData)(JSON.parse(part.replace(/^data: /, ""))))
+    .map((part) => Schema.decodeUnknownSync(SseEvent)(JSON.parse(part.replace(/^data: /, ""))))
 }
 
 const readNextEvent = (reader: ReadableStreamDefaultReader<Uint8Array>) =>
@@ -112,7 +102,7 @@ const readNextEvent = (reader: ReadableStreamDefaultReader<Uint8Array>) =>
       if (result.done || !result.value) return Effect.fail(new Error("event stream closed"))
       const frames = decodeFrame(result.value)
       if (frames.length === 0) return Effect.fail(new Error("empty SSE frame"))
-      return Effect.succeed(frames[0])
+      return Effect.succeed(frames[0]!)
     }),
   )
 
@@ -172,7 +162,7 @@ describe("/event SSE delivery diagnostics", () => {
 
   // The critical test. If D1 passes but this fails, the bus-identity fix is
   // incomplete OR the sync.run publish path doesn't reach the same bus
-  // /event subscribes to, even within the same AppRuntime.
+  // /event subscribes to, even when both share the memoMap.
   it.instance(
     "D3: delivers a SyncEvent published via SyncEvent.use.run after server.connected",
     () =>
@@ -198,7 +188,7 @@ describe("/event SSE delivery diagnostics", () => {
   // D4: ensure the publish reaches an in-process Bus subscriber too. Confirms
   // pub/sub identity end-to-end without involving /event SSE.
   it.instance(
-    "D4: SyncEvent.use.run publish reaches an in-process Bus.Service.use callback",
+    "D4: SyncEvent.use.run publish reaches an in-process Bus callback",
     () =>
       Effect.gen(function* () {
         const received = yield* Deferred.make<BusEvent>()
@@ -251,29 +241,6 @@ describe("/event SSE delivery diagnostics", () => {
         // Single assert with the boolean pair so the failure message tells us
         // exactly which side broke.
         expect({ sseSaw, callbackSaw }).toEqual({ sseSaw: true, callbackSaw: true })
-      }),
-    { git: true, config: { formatter: false, lsp: false } },
-  )
-
-  // D7: like D5 but the "second subscriber" is a NO-OP AppRuntime.runPromise
-  // call (no PubSub.subscribe). If D7 passes, the specific subscribeAllCallback
-  // is what breaks SSE — not arbitrary AppRuntime usage. If D7 fails, anything
-  // running through AppRuntime concurrently with /event SSE breaks delivery.
-  it.instance(
-    "D7: SSE receives sync.run publish even with concurrent no-op AppRuntime activity",
-    () =>
-      Effect.gen(function* () {
-        const { directory } = yield* TestInstance
-        yield* inApp(Effect.void)
-
-        const reader = yield* openEventStream(directory)
-        expect((yield* readNextEvent(reader)).type).toBe("server.connected")
-
-        const partID = PartID.ascending()
-        yield* publishPartUpdated(partID)
-
-        const collected = yield* collectUntilEvent(reader, isPartUpdated)
-        expect(collected.find(isPartUpdated)).toBeDefined()
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
