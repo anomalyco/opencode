@@ -1303,6 +1303,37 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return "Ask anything, / for commands, @ for context..."
   }
 
+  const agentControl = () => (
+    <Show when={!agentsLoading()}>
+      <div
+        data-component="prompt-agent-control"
+        style={agentsShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
+      >
+        <TooltipKeybind
+          placement="top"
+          gutter={4}
+          title={language.t("command.agent.cycle")}
+          keybind={command.keybind("agent.cycle")}
+        >
+          <Select
+            size="normal"
+            options={agentNames()}
+            current={local.agent.current()?.name ?? ""}
+            onSelect={(value) => {
+              local.agent.set(value)
+              restoreFocus()
+            }}
+            class="capitalize max-w-[150px] justify-start text-text-base [&_[data-component=icon]]:text-v2-icon-icon-muted"
+            valueClass="truncate text-[13px] font-[440] leading-4 text-v2-text-text-faint"
+            triggerStyle={control()}
+            triggerProps={{ "data-action": "prompt-agent" }}
+            variant="ghost"
+          />
+        </TooltipKeybind>
+      </div>
+    </Show>
+  )
+
   const modelControl = () => (
     <Show when={!providersLoading()}>
       <Show
@@ -1371,6 +1402,38 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </ModelSelectorPopover>
         </TooltipKeybind>
       </Show>
+    </Show>
+  )
+
+  const modelVariantControl = () => (
+    <Show when={!providersLoading() && store.mode !== "shell" && variants().length > 2}>
+      <div
+        data-component="prompt-variant-control"
+        style={providersShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
+      >
+        <TooltipKeybind
+          placement="top"
+          gutter={4}
+          title={language.t("command.model.variant.cycle")}
+          keybind={command.keybind("model.variant.cycle")}
+        >
+          <Select
+            size="normal"
+            options={variants()}
+            current={local.model.variant.current() ?? "default"}
+            label={(x) => (x === "default" ? language.t("common.default") : x)}
+            onSelect={(value) => {
+              local.model.variant.set(value === "default" ? undefined : value)
+              restoreFocus()
+            }}
+            class="capitalize max-w-[150px] justify-start text-text-base [&_[data-component=icon]]:text-v2-icon-icon-muted"
+            valueClass="truncate text-[13px] font-[440] leading-4 text-v2-text-text-faint"
+            triggerStyle={control()}
+            triggerProps={{ "data-action": "prompt-model-variant" }}
+            variant="ghost"
+          />
+        </TooltipKeybind>
+      </div>
     </Show>
   )
 
@@ -1495,7 +1558,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </div>
             </div>
             <div class="flex h-11 items-center px-2">
-              <div class="flex min-w-0 flex-1 items-center gap-0">
+              <div class="flex min-w-0 flex-1 items-center gap-1">
                 {fileAttachmentInput()}
                 <TooltipKeybind
                   placement="top"
@@ -1537,7 +1600,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     />
                   </div>
                 </Show>
-                {modelControl()}
+                {agentControl()}
+                <Show when={store.mode !== "shell"}>
+                  {modelControl()}
+                  {modelVariantControl()}
+                </Show>
               </div>
               <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                 <IconButton

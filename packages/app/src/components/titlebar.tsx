@@ -17,12 +17,15 @@ import { useSettings } from "@/context/settings"
 import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
 import { useGlobalSync } from "@/context/global-sync"
+import { SDKProvider } from "@/context/sdk"
+import { SyncProvider } from "@/context/sync"
 import { decodeDirectory } from "@/pages/directory-layout"
 import { iife } from "@opencode-ai/core/util/iife"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Avatar as AvatarV2 } from "@opencode-ai/ui/v2/components/avatar-v2.jsx"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { StatusPopover } from "./status-popover"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -222,6 +225,18 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const globalSync = useGlobalSync()
             const navigate = useNavigate()
             const homeMatch = useMatch(() => "/")
+            const status = createMemo(
+              () =>
+                !(platform.platform === "desktop" && import.meta.env.VITE_OPENCODE_CHANNEL === "beta") ||
+                settings.general.showStatus(),
+            )
+            const statusDirectory = createMemo(
+              () =>
+                (params.dir ? decodeDirectory(params.dir) : undefined) ||
+                layout.projects.list()[0]?.worktree ||
+                globalSync.data.path.home ||
+                undefined,
+            )
 
             const openNewSession = () => {
               if (params.dir) {
@@ -404,6 +419,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   </Show>
                   <div class="min-w-0 flex-1" />
                 </div>
+                <TitlebarStatusPopover directory={statusDirectory} shown={status} />
                 <TitlebarUpdatePill update={props.update} />
                 <Show when={windows() && !electronWindows()}>
                   <div data-tauri-decorum-tb class="flex flex-row" />
@@ -568,6 +584,24 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
         </Match>
       </Switch>
     </header>
+  )
+}
+
+function TitlebarStatusPopover(props: { directory: () => string | undefined; shown: () => boolean }) {
+  const language = useLanguage()
+
+  return (
+    <Show when={props.shown() && props.directory()} keyed>
+      {(directory) => (
+        <SDKProvider directory={() => directory}>
+          <SyncProvider>
+            <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
+              <StatusPopover />
+            </Tooltip>
+          </SyncProvider>
+        </SDKProvider>
+      )}
+    </Show>
   )
 }
 

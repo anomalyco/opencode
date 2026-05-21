@@ -154,10 +154,11 @@ export function SessionHeader() {
   const hotkey = createMemo(() => command.keybind("file.open"))
   const os = createMemo(() => detectOS(platform))
   const isDesktopBeta = platform.platform === "desktop" && import.meta.env.VITE_OPENCODE_CHANNEL === "beta"
+  const useV2Titlebar = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
   const search = createMemo(() => !isDesktopBeta || settings.general.showSearch())
   const tree = createMemo(() => !isDesktopBeta || settings.general.showFileTree())
   const term = createMemo(() => !isDesktopBeta || settings.general.showTerminal())
-  const status = createMemo(() => !isDesktopBeta || settings.general.showStatus())
+  const status = createMemo(() => !useV2Titlebar && (!isDesktopBeta || settings.general.showStatus()))
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
     finder: true,
