@@ -380,7 +380,13 @@ export const layer = Layer.effect(
         }
       }
 
-      const agent = yield* agents.get("compaction")
+      const agent = {
+        ...(yield* agents.get("compaction")),
+        options: {
+          thinking: { type: "disabled" },
+          thinkingConfig: { includeThoughts: false },
+        },
+      }
       const model = agent.model
         ? yield* provider.getModel(agent.model.providerID, agent.model.modelID).pipe(Effect.orDie)
         : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
