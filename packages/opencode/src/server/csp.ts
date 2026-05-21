@@ -18,7 +18,7 @@ const CONNECT_SRC = origins("'self'", "data:", SERVE_WILDCARD, SENTRY_INGEST)
 const FRAME_ANCESTORS = origins("'self'", SERVE_URL)
 
 const buildCsp = (hash = "") =>
-  `frame-ancestors ${FRAME_ANCESTORS}; default-src 'self'; frame-src ${FRAME_SRC}; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src ${CONNECT_SRC}`
+  `frame-ancestors ${FRAME_ANCESTORS}; default-src 'self'; frame-src ${FRAME_SRC}; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; media-src 'self' data:; connect-src ${CONNECT_SRC}`
 
 export const DEFAULT_CSP = buildCsp()
 export const csp = (hash = "") => buildCsp(hash)
