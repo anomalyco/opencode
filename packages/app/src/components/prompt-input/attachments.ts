@@ -167,6 +167,14 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     }
   }
 
+  // FORK: drop overlay 卡死兜底 — file-tree 行 onDrop 调 stopPropagation 杀掉 document bubble drop,
+  // 浮层 setDraggingType(null) 不执行;dragend(Esc 取消 / 拖到非 drop zone)也不发 drop。
+  // 两个 window-level 兜底事件 ONLY 清状态,不参与 drop 处理逻辑。
+  // [feat: chat-drop-overlay-stuck-fix] [bug-repro: 文件树拖文件到聊天窗口释放后浮层卡死] 2026-05-21
+  const handleDragOverlayReset = () => {
+    input.setDraggingType(null)
+  }
+
   const handleGlobalDrop = async (event: DragEvent) => {
     if (input.isDialogActive()) return
 
@@ -206,6 +214,9 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     makeEventListener(document, "dragover", handleGlobalDragOver)
     makeEventListener(document, "dragleave", handleGlobalDragLeave)
     makeEventListener(document, "drop", handleGlobalDrop)
+    // FORK: 见 handleDragOverlayReset 上方注释 [feat: chat-drop-overlay-stuck-fix] 2026-05-21
+    makeEventListener(window, "drop", handleDragOverlayReset, { capture: true })
+    makeEventListener(window, "dragend", handleDragOverlayReset)
   })
 
   return {
