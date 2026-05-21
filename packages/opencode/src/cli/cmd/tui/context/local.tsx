@@ -84,6 +84,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (next >= agents().length) next = 0
             const value = agents()[next]
             setAgentStore("current", value.name)
+            model.variant.set(value.variant)
           })
         },
         color(name: string) {
@@ -151,7 +152,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         .then((x: any) => {
           if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
-          if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", x.variant)
+
+          const variants = x.variant ?? {}
+          const currentAgent = agent.current()
+          if (currentAgent && currentAgent.model) {
+            const key = `${currentAgent.model.providerID}/${currentAgent.model.modelID}`
+            variants[key] = currentAgent.variant
+          }
+          if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", variants)
         })
         .catch(() => {})
         .finally(() => {
