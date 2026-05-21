@@ -146,12 +146,26 @@ export const layer = Layer.effect(
       log.info("asking", { id, questions: input.questions.length })
 
       const deferred = yield* Deferred.make<ReadonlyArray<Answer>, RejectedError>()
-      const info = Schema.decodeUnknownSync(Request)({
+      // Use the Effect-returning decode so a schema failure surfaces as a
+      // typed error the tool wrap can turn into a "rewrite the input" tool
+      // result. The previous `decodeUnknownSync` would throw uncaught, which
+      // crashed the assistant turn for any payload that slipped past the
+      // wrap-level validation (#28438).
+      const info = yield* Schema.decodeUnknownEffect(Request)({
         id,
         sessionID: input.sessionID,
         questions: input.questions,
         tool: input.tool,
-      })
+      }).pipe(
+        Effect.mapError(
+          (error) =>
+            new Error(
+              `The question tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
+              { cause: error },
+            ),
+        ),
+        Effect.orDie,
+      )
       pending.set(id, { info, deferred })
       yield* bus.publish(Event.Asked, info)
 

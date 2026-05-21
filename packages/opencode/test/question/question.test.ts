@@ -416,6 +416,46 @@ it.live("pending question rejects on instance dispose", () =>
   }),
 )
 
+// Regression for #28438: when an invalid payload reaches `Question.ask`
+// (one that's missing a required field like `question`), the previous
+// `Schema.decodeUnknownSync` would throw uncaught and crash the whole
+// assistant turn. The fix routes the failure through `Effect.orDie` with a
+// "rewrite the input" Error so the surrounding tool wrap can hand it back to
+// the model as a tool-call error rather than killing the session.
+it.instance(
+  "ask - invalid payload surfaces as a friendly defect, not a thrown SchemaError",
+  () =>
+    Effect.gen(function* () {
+      const exit = yield* askEffect({
+        sessionID: SessionID.make("ses_invalid"),
+        // Cast: bypassing the public type to simulate an upstream caller
+        // (or a future schema divergence) that lets a missing required
+        // field reach the decode boundary.
+        questions: [
+          {
+            header: "Pick mode",
+            options: [
+              { label: "A", description: "x" },
+              { label: "B", description: "y" },
+            ],
+          } as unknown as Question.Info,
+        ],
+      }).pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const message = exit.cause.toString()
+        // Friendly preamble the AI SDK feeds back to the model so it can retry.
+        expect(message).toContain("invalid arguments")
+        expect(message).toContain("Please rewrite the input")
+        // The exact JSON path pinpointing the missing field, so the model
+        // knows which question and which field to fix.
+        expect(message).toContain(`["questions"][0]["question"]`)
+      }
+    }),
+  { git: true },
+)
+
 it.live("pending question rejects on instance reload", () =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped({ git: true })
