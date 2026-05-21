@@ -36,6 +36,9 @@ import {
   type FileViewState,
   type SelectedLineRange,
 } from "./file/types"
+// FORK: 大文件预览统一防护 — L1 size pre-check [feat: large-file-preview-guard] 2026-05-21
+import { invoke } from "@tauri-apps/api/core"
+import { categoryOf, SIZE_LIMITS } from "@/utils/file-size-guard"
 
 export type { FileSelection, SelectedLineRange, FileViewState, FileState }
 export { selectionFromLines }
@@ -186,24 +189,58 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       setLoading(file)
 
-      const promise = sdk.client.file
-        .read({ path: file })
-        .then((x) => {
+      // FORK-BEGIN: 大文件预览统一防护 [feat: large-file-preview-guard] 2026-05-21
+      // L2 媒体短路:视频/音频/图片 不读 content 进 JS 内存,renderMedia 直接走 localasset:// 分片读
+      // L1 入口闸门:其他类型 pre-stat 文件 size,超 SIZE_LIMITS 设 tooLarge 标记,UI 渲染 FileTooLarge 组件
+      const promise = (async () => {
+        const cat = categoryOf(file)
+
+        if (cat === "media") {
+          if (scope() !== directory) return
+          // 设 loaded=true + 空 content,renderMedia 用 path()+root 构造 localasset URL
+          setLoaded(file, { type: "text", content: "" })
+          return
+        }
+
+        if (cat !== "binary") {
+          try {
+            const size = await invoke<number>("get_file_size", { root: directory, path: file })
+            const limit = SIZE_LIMITS[cat]
+            if (Number.isFinite(limit) && size > limit) {
+              if (scope() !== directory) return
+              setStore(
+                "file",
+                file,
+                produce((draft) => {
+                  draft.loaded = true
+                  draft.loading = false
+                  draft.tooLarge = { size, category: cat, limit }
+                  draft.content = { type: "text", content: "" }
+                }),
+              )
+              return
+            }
+          } catch {
+            // size pre-check 失败(文件不存在 / 权限等)fallthrough 让 sdk.client.file.read 走原错误路径
+          }
+        }
+
+        try {
+          const x = await sdk.client.file.read({ path: file })
           if (scope() !== directory) return
           const content = x.data
           setLoaded(file, content)
-
           if (!content) return
           touchFileContent(file, approxBytes(content))
           evictContent(new Set([file]))
-        })
-        .catch((e) => {
+        } catch (e) {
           if (scope() !== directory) return
           setLoadError(file, errorMessage(e, language.t("error.chain.unknown")))
-        })
-        .finally(() => {
-          inflight.delete(key)
-        })
+        }
+      })().finally(() => {
+        inflight.delete(key)
+      })
+      // FORK-END
 
       inflight.set(key, promise)
       return promise

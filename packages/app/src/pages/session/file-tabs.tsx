@@ -35,6 +35,8 @@ import { markdownEditorExtensions } from "@/utils/markdown-editor-extensions"
 import { isBinary, isOfficeDocument, tooLarge } from "@/utils/file-limits"
 // FORK: 本地资源 protocol(.md 内 <img>/<video>/<audio> 重写 + HTML 预览 iframe)2026-05-05
 import { localAssetUrl, resolveAbsolute, rewriteAssetSrc } from "@/utils/local-asset"
+// FORK: 大文件预览统一防护 — L4 UX 兜底组件 [feat: large-file-preview-guard] 2026-05-21
+import { FileTooLarge } from "@/components/file-too-large"
 // FORK: .md frontmatter 隐藏(Obsidian 风)2026-05-05
 import { stripFrontmatter } from "@/utils/markdown-frontmatter"
 // FORK: 聊天输入框焦点跟随 [feat: chat-input-focus-follow] 2026-05-21
@@ -110,6 +112,19 @@ const VIDEO_MIME_FALLBACKS: Record<string, string[]> = {
   ".avi": ["video/x-msvideo", "video/avi"],
 }
 
+// FORK: 图片预览 — 走 localasset 不进 JS 内存,同时修原"图片不可预览"缺位
+// [feat: large-file-preview-guard] 2026-05-21
+const IMAGE_MIME_FALLBACKS: Record<string, string[]> = {
+  ".png": ["image/png"],
+  ".jpg": ["image/jpeg"],
+  ".jpeg": ["image/jpeg"],
+  ".gif": ["image/gif"],
+  ".webp": ["image/webp"],
+  ".bmp": ["image/bmp"],
+  ".svg": ["image/svg+xml"],
+  ".ico": ["image/x-icon"],
+}
+
 // WebView2 内置播放器解不出的扩展(实测:audio 元素和 video 元素都失败)。直接走"用系统播放器打开"兜底,跳过 base64 加载。
 const UNSUPPORTED_MEDIA_EXTS = new Set([".m4a"])
 
@@ -122,7 +137,8 @@ function isUnsupportedMedia(p: string | undefined): boolean {
   return false
 }
 
-type MediaKind = "audio" | "video"
+// FORK: image kind 加入,统一走 localasset 渲染 [feat: large-file-preview-guard] 2026-05-21
+type MediaKind = "audio" | "video" | "image"
 
 function mediaKindFromPath(p: string | undefined): { kind: MediaKind; mimes: string[] } | null {
   if (!p) return null
@@ -132,6 +148,9 @@ function mediaKindFromPath(p: string | undefined): { kind: MediaKind; mimes: str
   }
   for (const ext in AUDIO_MIME_FALLBACKS) {
     if (lower.endsWith(ext)) return { kind: "audio", mimes: AUDIO_MIME_FALLBACKS[ext] }
+  }
+  for (const ext in IMAGE_MIME_FALLBACKS) {
+    if (lower.endsWith(ext)) return { kind: "image", mimes: IMAGE_MIME_FALLBACKS[ext] }
   }
   return null
 }
@@ -399,6 +418,9 @@ export function FileTabContent(props: {
     if (!p) return false
     if (isBinary(p)) return false
     if (isOfficeDocument(p)) return false
+    // FORK: 大文件预览统一防护 — tooLarge 文件 contents 已空,必须用 state.tooLarge 短路防止编辑空内容覆盖真实文件
+    // [feat: large-file-preview-guard] 2026-05-21
+    if (state()?.tooLarge) return false
     if (tooLarge(contents())) return false
     return true
   }
@@ -408,6 +430,8 @@ export function FileTabContent(props: {
     if (!p) return undefined
     if (isOfficeDocument(p)) return "Office 文件暂不支持在 OpenCode 内编辑，请用本机软件打开"
     if (isBinary(p)) return "Binary file cannot be edited"
+    // FORK: 大文件预览统一防护 [feat: large-file-preview-guard] 2026-05-21
+    if (state()?.tooLarge) return "文件过大,编辑已禁用"
     if (tooLarge(contents())) return "File >10MB, editing disabled"
     return undefined
   }
@@ -1210,9 +1234,10 @@ export function FileTabContent(props: {
     </div>
   )
 
-  // 媒体文件(audio + video):server 对 binary 扩展返 content="",走 Tauri command 直读本地成 base64
-  // 用 createSignal + createEffect 手动管理(避开 createResource 触发外层 Suspense fallback 导致整屏闪)
-  // 转 Blob URL 而非 dataURL:元素 seek/decode 更稳定,大文件不卡 string 拼接
+  // FORK: 大文件预览统一防护 L2 — 媒体改走 localasset:// 不进 JS 内存,浏览器原生 HTTP Range
+  // 分片读取,1GB+ 视频秒开 + 支持 seek + 内存占用恒定。
+  // 不再走 read_binary_file_base64 → base64ToBlob → URL.createObjectURL 链路(OOM 根源)
+  // [feat: large-file-preview-guard] 2026-05-21
   const mediaInput = createMemo<{ root: string; path: string; mimes: string[]; kind: MediaKind } | null>(() => {
     const p = path()
     if (!p) return null
@@ -1228,36 +1253,18 @@ export function FileTabContent(props: {
     mimes: string[]
     kind: MediaKind | null
     error: string | null
-    loading: boolean
   }
   const [mediaState, setMediaState] = createSignal<MediaState>({
     url: null,
     mimes: [],
     kind: null,
     error: null,
-    loading: false,
   })
-  let currentBlobUrl: string | null = null
-  const releaseMediaBlob = () => {
-    if (currentBlobUrl) {
-      URL.revokeObjectURL(currentBlobUrl)
-      currentBlobUrl = null
-    }
-  }
-
-  const base64ToBlob = (b64: string, mime: string): Blob => {
-    const bin = atob(b64)
-    const len = bin.length
-    const buf = new Uint8Array(len)
-    for (let i = 0; i < len; i++) buf[i] = bin.charCodeAt(i)
-    return new Blob([buf], { type: mime })
-  }
 
   createEffect(() => {
     const input = mediaInput()
-    releaseMediaBlob()
     if (!input) {
-      setMediaState({ url: null, mimes: [], kind: null, error: null, loading: false })
+      setMediaState({ url: null, mimes: [], kind: null, error: null })
       return
     }
     if (isUnsupportedMedia(input.path)) {
@@ -1266,45 +1273,17 @@ export function FileTabContent(props: {
         mimes: input.mimes,
         kind: input.kind,
         error: "此格式 WebView2 内置播放器无法解码,请用下方按钮调系统播放器",
-        loading: false,
       })
       return
     }
-    setMediaState({ url: null, mimes: input.mimes, kind: input.kind, error: null, loading: true })
-    const requestedPath = input.path
-    invoke<string>("read_binary_file_base64", { root: input.root, path: input.path })
-      .then((b64) => {
-        // race 防护:切 tab 太快时,旧请求迟到则丢弃
-        if (mediaInput()?.path !== requestedPath) return
-        try {
-          // Blob.type 用第一个 mime,实际识别交给 <source type=> 列表
-          const blob = base64ToBlob(b64, input.mimes[0])
-          const url = URL.createObjectURL(blob)
-          currentBlobUrl = url
-          setMediaState({ url, mimes: input.mimes, kind: input.kind, error: null, loading: false })
-        } catch (e) {
-          setMediaState({
-            url: null,
-            mimes: input.mimes,
-            kind: input.kind,
-            error: `decode failed: ${String(e)}`,
-            loading: false,
-          })
-        }
-      })
-      .catch((e) => {
-        if (mediaInput()?.path !== requestedPath) return
-        setMediaState({
-          url: null,
-          mimes: input.mimes,
-          kind: input.kind,
-          error: String(e),
-          loading: false,
-        })
-      })
+    const abs = `${input.root}/${input.path}`.replace(/\\/g, "/")
+    setMediaState({
+      url: localAssetUrl(input.root, abs),
+      mimes: input.mimes,
+      kind: input.kind,
+      error: null,
+    })
   })
-
-  onCleanup(() => releaseMediaBlob())
 
   const openMediaInSystemPlayer = async () => {
     const root = sdk.directory
@@ -1318,17 +1297,26 @@ export function FileTabContent(props: {
     }
   }
 
-  const onMediaError = (e: { currentTarget: HTMLMediaElement }) => {
-    const err = e.currentTarget.error
+  // FORK: img 没有 .error 字段(只有 HTMLMediaElement 有);union 类型容错避免 img onError 时崩
+  // [feat: large-file-preview-guard] 2026-05-21
+  const onMediaError = (e: { currentTarget: HTMLMediaElement | HTMLImageElement }) => {
+    const target = e.currentTarget
     const codeMap: Record<number, string> = {
       1: "ABORTED",
       2: "NETWORK",
       3: "DECODE",
       4: "SRC_NOT_SUPPORTED",
     }
-    const detail = err
-      ? `code=${err.code} (${codeMap[err.code] ?? "UNKNOWN"}) msg="${err.message ?? ""}"`
-      : "unknown"
+    let detail = "unknown"
+    if (target instanceof HTMLMediaElement) {
+      const err = target.error
+      detail = err
+        ? `code=${err.code} (${codeMap[err.code] ?? "UNKNOWN"}) msg="${err.message ?? ""}"`
+        : "unknown"
+    } else if (target instanceof HTMLImageElement) {
+      // img 只能从 naturalWidth/Height 和 complete 推断
+      detail = target.complete && target.naturalWidth === 0 ? "无法解码图片" : "加载失败"
+    }
     setMediaState((s) => ({ ...s, url: null, error: `解码失败: ${detail}` }))
   }
 
@@ -1338,11 +1326,7 @@ export function FileTabContent(props: {
         when={mediaState().url}
         fallback={
           <div class="text-text-weak text-sm max-w-xl text-center break-words">
-            {mediaState().error
-              ? `加载失败:${mediaState().error}`
-              : mediaState().loading
-                ? `${mediaState().kind === "video" ? "视频" : "音频"}加载中…`
-                : "无内容"}
+            {mediaState().error ? `加载失败:${mediaState().error}` : "无内容"}
           </div>
         }
       >
@@ -1362,6 +1346,15 @@ export function FileTabContent(props: {
               <For each={mediaState().mimes}>{(t) => <source src={mediaState().url!} type={t} />}</For>
             </audio>
           </Match>
+          {/* FORK: 图片预览 — 走 localasset,跟 video/audio 同套路 [feat: large-file-preview-guard] 2026-05-21 */}
+          <Match when={mediaState().kind === "image"}>
+            <img
+              src={mediaState().url!}
+              class="max-w-full max-h-[80vh] object-contain"
+              alt={path() ?? ""}
+              onError={onMediaError}
+            />
+          </Match>
         </Switch>
       </Show>
       <div class="text-xs text-text-weak truncate max-w-full" title={mediaState().mimes.join(", ")}>
@@ -1371,9 +1364,9 @@ export function FileTabContent(props: {
         type="button"
         onClick={openMediaInSystemPlayer}
         class="text-xs px-3 py-1.5 rounded border border-border-base hover:bg-surface-base-hover"
-        title="若内置播放器解不出(WebView2 codec 受限或文件用了不支持的编码),点这里用系统默认应用打开"
+        title="若内置播放器/解码器不支持(WebView2 codec 受限或编码不兼容),点这里用系统默认应用打开"
       >
-        🔊 用系统播放器打开
+        用本机软件打开
       </button>
     </div>
   )
@@ -1525,6 +1518,20 @@ export function FileTabContent(props: {
 
   const renderFile = (source: string) => {
     const p = path()
+    // FORK: 大文件预览统一防护 — L1 闸门已在 context/file.tsx load() 命中,UI 渲染 FileTooLarge
+    // [feat: large-file-preview-guard] 2026-05-21
+    const tooLarge = state()?.tooLarge
+    if (tooLarge && p) {
+      return (
+        <FileTooLarge
+          path={p}
+          root={sdk.directory ?? ""}
+          size={tooLarge.size}
+          category={tooLarge.category}
+          limit={tooLarge.limit}
+        />
+      )
+    }
     if (isMarkdownPath(p)) return renderMarkdown(source)
     if (mediaKindFromPath(p)) return renderMedia()
     if (isHtmlPath(p)) return renderHtml(source)
