@@ -1,10 +1,14 @@
 import { Database, eq } from "@opencode-ai/console-core/drizzle/index.js"
 import { ModelStickyProviderTable } from "@opencode-ai/console-core/schema/ip.sql.js"
 
-export function createStickyTracker(modelId: string, stickyProvider: "strict" | "prefer" | undefined, session: string) {
+export function createStickyTracker(
+  modelId: string,
+  stickyProvider: "strict" | "prefer" | undefined,
+  stickyId: string,
+) {
   if (!stickyProvider) return
-  if (!session) return
-  const id = `${modelId}/${session}`
+  if (!stickyId) return
+  const id = `${modelId}/${stickyId}`
   let _providerId: string | undefined
 
   return {

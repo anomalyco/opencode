@@ -4,7 +4,13 @@ import { Prompt } from "@opencode-ai/core/session-prompt"
 import { SessionV2 } from "@/v2/session"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { InvalidCursorError, InvalidRequestError } from "../../errors"
+import {
+  InvalidCursorError,
+  InvalidRequestError,
+  ServiceUnavailableError,
+  SessionNotFoundError,
+  UnknownError,
+} from "../../errors"
 import { V2Authorization } from "../../middleware/authorization"
 import { WorkspaceRoutingQuery, WorkspaceRoutingQueryFields } from "../../middleware/workspace-routing"
 import { QueryBoolean } from "../query"
@@ -61,6 +67,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
         delivery: SessionV2.Delivery.pipe(Schema.optional),
       }),
       success: SessionMessage.Message,
+      error: [SessionNotFoundError, ServiceUnavailableError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.prompt",
@@ -74,6 +81,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       params: { sessionID: SessionID },
       query: WorkspaceRoutingQuery,
       success: HttpApiSchema.NoContent,
+      error: [SessionNotFoundError, ServiceUnavailableError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.compact",
@@ -87,6 +95,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       params: { sessionID: SessionID },
       query: WorkspaceRoutingQuery,
       success: HttpApiSchema.NoContent,
+      error: [SessionNotFoundError, ServiceUnavailableError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.wait",
@@ -100,6 +109,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       params: { sessionID: SessionID },
       query: WorkspaceRoutingQuery,
       success: Schema.Array(SessionMessage.Message),
+      error: [SessionNotFoundError, UnknownError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.context",

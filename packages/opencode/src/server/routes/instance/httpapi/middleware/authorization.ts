@@ -52,21 +52,19 @@ function validateCredential<A, E, R>(
 }
 
 function decodeCredential(input: string) {
-  return Encoding.decodeBase64String(input)
-    .asEffect()
-    .pipe(
-      Effect.match({
-        onFailure: emptyCredential,
-        onSuccess: (header) => {
-          const parts = header.split(":")
-          if (parts.length !== 2) return emptyCredential()
-          return {
-            username: parts[0],
-            password: Redacted.make(parts[1]),
-          }
-        },
-      }),
-    )
+  return Effect.fromResult(Encoding.decodeBase64String(input)).pipe(
+    Effect.match({
+      onFailure: emptyCredential,
+      onSuccess: (header) => {
+        const parts = header.split(":")
+        if (parts.length !== 2) return emptyCredential()
+        return {
+          username: parts[0],
+          password: Redacted.make(parts[1]),
+        }
+      },
+    }),
+  )
 }
 
 function credentialFromRequest(request: HttpServerRequest.HttpServerRequest) {
