@@ -83,6 +83,7 @@ describeRecordedGoldenScenarios([
     tags: ["flagship"],
     scenarios: [
       { id: "text", temperature: false },
+      { id: "reasoning", temperature: false },
       { id: "tool-call", temperature: false },
       { id: "tool-loop", temperature: false },
     ],

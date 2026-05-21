@@ -127,6 +127,7 @@ type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta
 
 const OpenAIChatDelta = Schema.Struct({
   content: optionalNull(Schema.String),
+  reasoning_content: optionalNull(Schema.String),
   tool_calls: optionalNull(Schema.Array(OpenAIChatToolCallDelta)),
 })
 
@@ -323,6 +324,9 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     let tools = state.tools
 
     let lifecycle = state.lifecycle
+
+    if (delta?.reasoning_content)
+      lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", delta.reasoning_content)
 
     if (delta?.content) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
 

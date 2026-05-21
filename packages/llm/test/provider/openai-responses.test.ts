@@ -118,6 +118,7 @@ describe("OpenAI Responses route", () => {
   it.effect("fails immediately when WebSocket is already closed", () =>
     Effect.gen(function* () {
       const error = yield* WebSocketExecutor.fromWebSocket(
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- fromWebSocket reads readyState before touching WebSocket methods on this branch.
         { readyState: globalThis.WebSocket.CLOSED } as globalThis.WebSocket,
         { url: "wss://api.openai.test/v1/responses", headers: Headers.empty },
       ).pipe(Effect.flip)
@@ -348,6 +349,33 @@ describe("OpenAI Responses route", () => {
           providerMetadata: { openai: { responseId: "resp_1", serviceTier: "default" } },
           usage,
         },
+      ])
+    }),
+  )
+
+  it.effect("parses reasoning summary stream fixtures", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        { type: "response.reasoning_summary_text.delta", item_id: "rs_1", delta: "thinking" },
+        { type: "response.output_text.delta", item_id: "msg_1", delta: "Hello" },
+        { type: "response.reasoning_summary_text.done", item_id: "rs_1" },
+        { type: "response.completed", response: { id: "resp_1" } },
+      )
+
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.reasoning).toBe("thinking")
+      expect(response.text).toBe("Hello")
+      expect(response.events).toMatchObject([
+        { type: "step-start", index: 0 },
+        { type: "reasoning-start", id: "rs_1" },
+        { type: "reasoning-delta", id: "rs_1", text: "thinking" },
+        { type: "text-start", id: "msg_1" },
+        { type: "text-delta", id: "msg_1", text: "Hello" },
+        { type: "reasoning-end", id: "rs_1" },
+        { type: "text-end", id: "msg_1" },
+        { type: "step-finish", index: 0, reason: "stop" },
+        { type: "finish", reason: "stop" },
       ])
     }),
   )

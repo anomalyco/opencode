@@ -143,6 +143,25 @@ export const imageRequest = (input: {
         : { maxTokens: input.maxTokens ?? 20, temperature: input.temperature ?? 0 },
   })
 
+export const reasoningRequest = (input: {
+  readonly id: string
+  readonly model: Model
+  readonly maxTokens?: number
+  readonly temperature?: number | false
+}) =>
+  LLM.request({
+    id: input.id,
+    model: input.model,
+    system: "Show concise reasoning when the provider supports visible reasoning summaries.",
+    prompt: "Think briefly, then reply exactly with: Hello!",
+    cache: "none",
+    providerOptions: { openai: { reasoningEffort: "low", reasoningSummary: "auto" } },
+    generation:
+      input.temperature === false
+        ? { maxTokens: input.maxTokens ?? 120 }
+        : { maxTokens: input.maxTokens ?? 120, temperature: input.temperature ?? 0 },
+  })
+
 export const runWeatherToolLoop = (request: LLMRequest) =>
   LLMClient.stream({
     request,
@@ -193,7 +212,7 @@ export const expectGoldenWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => 
   expect(LLMResponse.text({ events }).trim()).toMatch(/^Paris is sunny\.?$/)
 }
 
-export type GoldenScenarioID = "text" | "tool-call" | "tool-loop" | "image"
+export type GoldenScenarioID = "text" | "tool-call" | "tool-loop" | "image" | "reasoning"
 
 export interface GoldenScenarioContext {
   readonly id: string
@@ -215,6 +234,7 @@ export const goldenScenarioTags = (id: GoldenScenarioID) => {
   if (id === "text") return ["text", "golden"]
   if (id === "tool-call") return ["tool", "tool-call", "golden"]
   if (id === "image") return ["media", "image", "vision", "golden"]
+  if (id === "reasoning") return ["reasoning", "golden"]
   return ["tool", "tool-loop", "golden"]
 }
 
@@ -264,6 +284,21 @@ export const runGoldenScenario = (id: GoldenScenarioID, context: GoldenScenarioC
       return
     }
 
+    if (id === "reasoning") {
+      const response = yield* generate(
+        reasoningRequest({
+          id: context.id,
+          model: context.model,
+          maxTokens: context.maxTokens ?? 120,
+          temperature: context.temperature,
+        }),
+      )
+      expect(response.text.trim()).toMatch(/^Hello!?$/)
+      expect(response.usage?.reasoningTokens ?? 0).toBeGreaterThan(0)
+      expectFinish(response.events, "stop")
+      return
+    }
+
     expectGoldenWeatherToolLoop(
       yield* runWeatherToolLoop(
         goldenWeatherToolLoopRequest({
@@ -293,7 +328,7 @@ const usageSummary = (usage: LLMResponse["usage"] | undefined) => {
 const pushText = (summary: Array<Record<string, unknown>>, type: "text" | "reasoning", value: string) => {
   const last = summary.at(-1)
   if (last?.type === type) {
-    last.value = `${last.value ?? ""}${value}`
+    last.value = `${typeof last.value === "string" ? last.value : ""}${value}`
     return
   }
   summary.push({ type, value })

@@ -260,6 +260,32 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("parses OpenAI-compatible reasoning content deltas", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        { choices: [{ delta: { reasoning_content: "thinking" } }] },
+        { choices: [{ delta: { content: "Hello" } }] },
+        { choices: [{ delta: {}, finish_reason: "stop" }] },
+      )
+
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.reasoning).toBe("thinking")
+      expect(response.text).toBe("Hello")
+      expect(response.events).toMatchObject([
+        { type: "step-start", index: 0 },
+        { type: "reasoning-start", id: "reasoning-0" },
+        { type: "reasoning-delta", id: "reasoning-0", text: "thinking" },
+        { type: "text-start", id: "text-0" },
+        { type: "text-delta", id: "text-0", text: "Hello" },
+        { type: "reasoning-end", id: "reasoning-0" },
+        { type: "text-end", id: "text-0" },
+        { type: "step-finish", index: 0, reason: "stop" },
+        { type: "finish", reason: "stop" },
+      ])
+    }),
+  )
+
   it.effect("assembles streamed tool call input", () =>
     Effect.gen(function* () {
       const body = sseEvents(

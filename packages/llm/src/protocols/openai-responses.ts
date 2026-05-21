@@ -413,6 +413,29 @@ const onOutputTextDelta = (state: ParserState, event: OpenAIResponsesEvent): Ste
   ]
 }
 
+const onReasoningDelta = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
+  if (!event.delta) return [state, NO_EVENTS]
+  const events: LLMEvent[] = []
+  return [
+    {
+      ...state,
+      lifecycle: Lifecycle.reasoningDelta(state.lifecycle, events, event.item_id ?? "reasoning-0", event.delta),
+    },
+    events,
+  ]
+}
+
+const onReasoningDone = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
+  const events: LLMEvent[] = []
+  return [
+    {
+      ...state,
+      lifecycle: Lifecycle.reasoningEnd(state.lifecycle, events, event.item_id ?? "reasoning-0"),
+    },
+    events,
+  ]
+}
+
 const onOutputItemAdded = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
   const item = event.item
   if (item?.type !== "function_call" || !item.id) return [state, NO_EVENTS]
@@ -523,6 +546,18 @@ const onError = (state: ParserState, event: OpenAIResponsesEvent): StepResult =>
 
 const step = (state: ParserState, event: OpenAIResponsesEvent) => {
   if (event.type === "response.output_text.delta") return Effect.succeed(onOutputTextDelta(state, event))
+  if (
+    event.type === "response.reasoning_text.delta" ||
+    event.type === "response.reasoning_summary.delta" ||
+    event.type === "response.reasoning_summary_text.delta"
+  )
+    return Effect.succeed(onReasoningDelta(state, event))
+  if (
+    event.type === "response.reasoning_text.done" ||
+    event.type === "response.reasoning_summary.done" ||
+    event.type === "response.reasoning_summary_text.done"
+  )
+    return Effect.succeed(onReasoningDone(state, event))
   if (event.type === "response.output_item.added") return Effect.succeed(onOutputItemAdded(state, event))
   if (event.type === "response.function_call_arguments.delta") return onFunctionCallArgumentsDelta(state, event)
   if (event.type === "response.output_item.done") return onOutputItemDone(state, event)
