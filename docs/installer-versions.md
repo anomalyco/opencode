@@ -15,6 +15,41 @@
 
 
 
+
+## [macOS] 2026.5.21.1-dev — 2026-05-21 22:43
+
+**主题**:Mac 端首次 Tier 2 预览版(`-dev` 后缀)— 自 [macOS] `2026.5.12.1`(2026-05-12 prod)以来主线 21 笔 commit 全部治理 / 工具改进,**无新增用户可见功能**。本笔 ship 重点是验证 Tier 2 流程闭环 + 把两笔 ship 翻车 fix 合入产品。
+
+包内容:
+
+- **sdk-falsy-empty-body-fix** ([changelog](features/sdk-falsy-empty-body-fix/3-changelog.md))— 补 2026-05-12 sdk-falsy-error-fallback-fix(surface fix)没盖的路径 ②(fetch.return-with-empty-body-4xx),wrapFetchWithFalsyGuard layer 2 不让 SDK 抛 `{}`。**5.21.1-dev ship 第一次撞**:user 装上启动报"Unknown error / 原因: {}",诊断后写此 fix。
+- **frontend-stale-session-fallback** ([changelog](features/frontend-stale-session-fallback/3-changelog.md))— 接力上一笔到产品级闭环:`directory-layout.tsx` 启动 createResource 识别 stale session error 后 navigate 去掉 stale id 降级到主界面,不撞 ErrorBoundary。**5.21.1-dev ship 第二次撞**:fix 上一笔后错误信息从 `{}` 变成 `Server returned 401 with empty body: ...` 但 ErrorBoundary 仍出,写此 fix。
+- **abandon-cloud-build-workflows** ([changelog](features/abandon-cloud-build-workflows/3-changelog.md))— 治理决策:云端 build workflow 永久废止,所有 ship 走本地。
+- **ship-scripts-naming-fix** ([changelog](features/ship-scripts-naming-fix/3-changelog.md))— ship 脚本 4 个对齐新命名规则(strip env suffix + productName 空格转横杠),Tier 2 tag 识别。本笔实战首验。
+- **installer-naming-cleanup** + **3tier-versioning-governance** + **rename-dev-to-main** + **installer-version-env-suffix** — 4-tier 体系治理(主分支 dev→main / installer 文件名去重 / 版本号 B2 双维独立 N / pack/bump 透传 env)2026-05-21 同期落地。
+- **large-file-preview-guard** + **chat-drop-overlay-stuck-fix** + **chat-input-focus-follow** + **chat-selection-menu** + **file-tree-multi-drag-to-chat** + **file-tree-llm-write-refresh** + **html-viewer-ux-polish** + **html-viewer-allow-scripts** — 文件预览 + 聊天 UX 改进合集。
+
+**Build**:
+
+```
+bash packages/branding/scripts/pack-installer.sh --env dev
+# (5.21.1-dev 首 build → frontend bug,后续含 fix 重 build 走 --no-bump 保版本号)
+```
+
+**Release**:[GitHub Release `ship-mac-dev-2026.5.21.1-dev`](https://github.com/zoulukuang/deskfox/releases/tag/ship-mac-dev-2026.5.21.1-dev)
+- 文件:`DeskFox-Dev-2026.5.21.1_aarch64.dmg`
+- 大小:64.5 MB
+- 架构:Apple Silicon(arm64,`aarch64-apple-darwin`)
+- Bundle ID:`ai.deskfox.app.dev`(Tier 2 独立 AppId,跟 prod 同机共存)
+- Prerelease 标:✅(对外预览版)
+
+**双平台分发**(Mac ship 跟 prod 一致规则):
+- GitHub Release `ship-mac-dev-2026.5.21.1-dev`(主仓 `zoulukuang/deskfox`)
+- Gitee Release(镜像 `zoulukuang/deskfox`)
+
+**验证**:e2e — restore stale state(`~/Library/Application Support/ai.deskfox.app.dev/`)后启动新 .app,frontend 通过 stale-session-fallback 自动 navigate 去掉 stale id,直接进 deskfox-plugins 工作区主界面。
+
+---
 ## [Windows] 2026.5.21.1-dev - 2026-05-21 20:40
 
 (待填: ship 后回填本条 — 包含 commits / 配套 plugin / installer 路径等)
