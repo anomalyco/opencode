@@ -1,5 +1,6 @@
-import { $ } from "bun"
+#!/usr/bin/env node
+import { $ } from "./utils"
 
-await $`bun ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`
+await $`node ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`
 
-await $`cd ../opencode && bun script/build-node.ts`
+await $`cd ../opencode && node script/build-node.ts`

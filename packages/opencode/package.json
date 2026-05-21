@@ -7,33 +7,28 @@
   "private": true,
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "test": "bun test --timeout 30000",
-    "test:ci": "mkdir -p .artifacts/unit && bun test --timeout 30000 --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
-    "test:httpapi": "bun run script/httpapi-exercise.ts --mode coverage --fail-on-missing --fail-on-skip && bun run script/httpapi-exercise.ts --mode auth --fail-on-missing --fail-on-skip && bun run script/httpapi-exercise.ts --mode effect --fail-on-missing --fail-on-skip",
-    "bench:test": "bun run script/bench-test-suite.ts",
-    "profile:test": "bun run script/profile-test-files.ts",
-    "build": "bun run script/build.ts",
-    "fix-node-pty": "bun run script/fix-node-pty.ts",
-    "dev": "bun run --conditions=browser ./src/index.ts",
-    "dev:temporary": "bun run --conditions=browser ./src/temporary.ts",
-    "db": "bun drizzle-kit"
-  },
-  "bin": {
-    "opencode": "./bin/opencode"
+    "test": "node --import tsx --test --test-timeout=30000",
+    "test:ci": "mkdir -p .artifacts/unit && node --import tsx --test --test-timeout=30000 --test-reporter=junit --test-reporter-destination=.artifacts/unit/junit.xml",
+    "test:httpapi": "node --import tsx script/httpapi-exercise.ts --mode coverage --fail-on-missing --fail-on-skip && node --import tsx script/httpapi-exercise.ts --mode auth --fail-on-missing --fail-on-skip && node --import tsx script/httpapi-exercise.ts --mode effect --fail-on-missing --fail-on-skip",
+    "bench:test": "node --import tsx script/bench-test-suite.ts",
+    "profile:test": "node --import tsx script/profile-test-files.ts",
+    "build": "node --import tsx script/build.ts",
+    "fix-node-pty": "node --import tsx script/fix-node-pty.ts",
+    "dev": "node --import tsx --conditions=browser ./src/index.ts",
+    "dev:temporary": "node --import tsx --conditions=browser ./src/temporary.ts",
+    "db": "drizzle-kit"
   },
   "exports": {
     "./*": "./src/*.ts"
   },
   "imports": {
     "#db": {
-      "bun": "./src/storage/db.bun.ts",
       "node": "./src/storage/db.node.ts",
-      "default": "./src/storage/db.bun.ts"
+      "default": "./src/storage/db.node.ts"
     },
     "#pty": {
-      "bun": "./src/pty/pty.bun.ts",
       "node": "./src/pty/pty.node.ts",
-      "default": "./src/pty/pty.bun.ts"
+      "default": "./src/pty/pty.node.ts"
     }
   },
   "devDependencies": {
@@ -51,10 +46,9 @@
     "@parcel/watcher-win32-arm64": "2.5.1",
     "@parcel/watcher-win32-x64": "2.5.1",
     "@standard-schema/spec": "1.0.0",
-    "@tsconfig/bun": "catalog:",
-    "@types/babel__core": "7.20.5",
-    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
     "@types/cross-spawn": "catalog:",
+    "@types/babel__core": "7.20.5",
     "@types/mime-types": "3.0.1",
     "@types/npm-package-arg": "6.1.4",
     "@types/semver": "^7.5.8",
@@ -97,7 +91,6 @@
     "@effect/opentelemetry": "catalog:",
     "@effect/platform-node": "catalog:",
     "@gitlab/opencode-gitlab-auth": "1.3.3",
-    "@lydell/node-pty": "catalog:",
     "@modelcontextprotocol/sdk": "1.27.1",
     "@octokit/graphql": "9.0.2",
     "@octokit/rest": "catalog:",
@@ -126,7 +119,7 @@
     "ai": "catalog:",
     "ai-gateway-provider": "3.1.2",
     "bonjour-service": "1.3.0",
-    "bun-pty": "0.4.8",
+    "@lydell/node-pty": "catalog:",
     "chokidar": "4.0.3",
     "clipboardy": "4.0.0",
     "cross-spawn": "catalog:",

@@ -11,16 +11,16 @@
   },
   "scripts": {
     "typecheck": "tsgo -b",
-    "predev": "bun ./scripts/predev.ts",
+    "predev": "node ./scripts/predev.ts",
     "dev": "electron-vite dev",
-    "prebuild": "bun ./scripts/prebuild.ts",
+    "prebuild": "node ./scripts/prebuild.ts",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "package": "electron-builder --config electron-builder.config.ts",
     "package:mac": "electron-builder --mac --config electron-builder.config.ts",
     "package:win": "electron-builder --win --config electron-builder.config.ts",
     "package:linux": "electron-builder --linux --config electron-builder.config.ts",
-    "native:build": "bun install --cwd native"
+    "native:build": "npm install --prefix native"
   },
   "main": "./out/main/index.js",
   "dependencies": {
@@ -45,7 +45,6 @@
     "@solid-primitives/storage": "catalog:",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "0.15.4",
-    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
     "@valibot/to-json-schema": "1.6.0",

@@ -27,15 +27,15 @@
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "test": "bun test src",
-    "test:ci": "mkdir -p .artifacts/unit && bun test src --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
+    "test": "node --import tsx --test src",
+    "test:ci": "mkdir -p .artifacts/unit && node --import tsx --test src --test-reporter=junit --test-reporter-destination=.artifacts/unit/junit.xml",
     "dev": "vite",
-    "generate:tailwind": "bun run script/tailwind.ts"
+    "generate:tailwind": "node --import tsx script/tailwind.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "catalog:",
     "@tsconfig/node22": "catalog:",
-    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
     "@types/katex": "0.16.7",
     "@types/luxon": "catalog:",
     "@typescript/native-preview": "catalog:",

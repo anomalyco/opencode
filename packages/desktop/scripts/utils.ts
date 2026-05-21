@@ -1,9 +1,25 @@
-import { $ } from "bun"
+import { exec } from "node:child_process"
+import { promisify } from "node:util"
+
+const execAsync = promisify(exec)
+
+export async function $(strings: TemplateStringsArray, ...values: any[]) {
+  const command = strings.reduce((acc, str, i) => acc + str + (values[i] ?? ""), "")
+  try {
+    const { stdout, stderr } = await execAsync(command)
+    if (stdout) process.stdout.write(stdout)
+    if (stderr) process.stderr.write(stderr)
+  } catch (error: any) {
+    console.error(`Command failed: ${command}`)
+    console.error(error.message)
+    throw error
+  }
+}
 
 export type Channel = "dev" | "beta" | "prod"
 
 export function resolveChannel(): Channel {
-  const raw = Bun.env.OPENCODE_CHANNEL
+  const raw = process.env.OPENCODE_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
   return "dev"
 }
@@ -41,7 +57,7 @@ export const SIDECAR_BINARIES: Array<{ rustTarget: string; ocBinary: string; ass
   },
 ]
 
-export const RUST_TARGET = Bun.env.RUST_TARGET
+export const RUST_TARGET = process.env.RUST_TARGET
 
 function nativeTarget() {
   const { platform, arch } = process
