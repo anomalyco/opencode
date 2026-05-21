@@ -75,6 +75,11 @@ export async function handler(
     parseIsStream: (url: string, body: any) => boolean
   },
 ) {
+  // TODO
+  console.log("!@!@#!#!#!@#@!")
+  console.log(Resource.PLACEHOLDER.value)
+  console.log("!@!@#!#!#!@#@!")
+
   type AuthInfo = Awaited<ReturnType<typeof authenticate>>
   type ModelInfo = Awaited<ReturnType<typeof validateModel>>
   type ProviderInfo = Awaited<ReturnType<typeof selectProvider>>

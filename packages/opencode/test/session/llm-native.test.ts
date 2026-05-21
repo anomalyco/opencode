@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { ToolFailure } from "@opencode-ai/llm"
 import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
-import { jsonSchema, tool, type ModelMessage } from "ai"
+import { jsonSchema, tool, type ModelMessage, type Tool } from "ai"
 import { Effect, Layer, Stream } from "effect"
 import { LLMNative } from "@/session/llm/native-request"
 import { LLMNativeRuntime } from "@/session/llm/native-runtime"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { OAUTH_DUMMY_KEY } from "@/auth"
+import { testEffect } from "../lib/effect"
 
 const baseModel: Provider.Model = {
   id: ModelID.make("gpt-5-mini"),
@@ -69,12 +70,82 @@ const providerInfo: Provider.Info = {
   models: {},
 }
 
+const it = testEffect(
+  LLMClient.layer.pipe(Layer.provide(Layer.mergeAll(RequestExecutor.defaultLayer, WebSocketExecutor.layer))),
+)
+
 function responsesStream(chunks: unknown[]) {
   return new Response(chunks.map((chunk) => `data: ${JSON.stringify(chunk)}`).join("\n\n") + "\n\n", {
     status: 200,
     headers: { "Content-Type": "text/event-stream" },
   })
 }
+
+type NativeRequestInput = Parameters<typeof LLMNative.request>[0]
+
+const sessionText = (text: string) => ({ type: "text" as const, text })
+
+const sessionOpenAIReasoning = (
+  text: string,
+  options: {
+    readonly storedAs: "providerMetadata" | "providerOptions"
+    readonly itemId: string
+    readonly encryptedContent: string | null
+  },
+) => {
+  const metadata = {
+    openai: { itemId: options.itemId, reasoningEncryptedContent: options.encryptedContent },
+  }
+  if (options.storedAs === "providerMetadata")
+    return Object.assign({ type: "reasoning" as const, text }, { providerMetadata: metadata })
+  return Object.assign({ type: "reasoning" as const, text }, { providerOptions: metadata })
+}
+
+type SessionAssistantPart = ReturnType<typeof sessionText> | ReturnType<typeof sessionOpenAIReasoning>
+
+const storedSession = {
+  user: (content: string): ModelMessage => ({ role: "user", content }),
+  assistant: (content: SessionAssistantPart[]): ModelMessage => ({ role: "assistant", content }),
+  text: sessionText,
+  openaiReasoning: sessionOpenAIReasoning,
+}
+
+const openAIResponses = {
+  user: (text: string) => ({ role: "user", content: [{ type: "input_text", text }] }),
+  assistant: (text: string) => ({ role: "assistant", content: [{ type: "output_text", text }] }),
+  openaiReasoning: (text: string, options: { readonly itemId: string; readonly encryptedContent: string }) => ({
+    type: "reasoning",
+    id: options.itemId,
+    encrypted_content: options.encryptedContent,
+    summary: [{ type: "summary_text", text }],
+  }),
+}
+
+const prepareNativeRequest = (input: NativeRequestInput) => LLMClient.prepare(LLMNative.request(input))
+
+const expectOpenAIResponsesRequest = (input: {
+  readonly history: NativeRequestInput["messages"]
+  readonly providerOptions?: NativeRequestInput["providerOptions"]
+  readonly maxOutputTokens?: NativeRequestInput["maxOutputTokens"]
+  readonly headers?: NativeRequestInput["headers"]
+  readonly expectedBody: unknown
+}) =>
+  Effect.gen(function* () {
+    expect(
+      yield* prepareNativeRequest({
+        model: baseModel,
+        apiKey: "test-openai-key",
+        messages: input.history,
+        providerOptions: input.providerOptions,
+        maxOutputTokens: input.maxOutputTokens,
+        headers: input.headers,
+      }),
+    ).toMatchObject({
+      route: "openai-responses",
+      protocol: "openai-responses",
+      body: input.expectedBody,
+    })
+  })
 
 describe("session.llm-native.request", () => {
   test("maps normalized stream inputs to a native LLM request", () => {
@@ -426,122 +497,163 @@ describe("session.llm-native.request", () => {
     })
   })
 
-  test("native tool wrapper converts thrown errors into typed ToolFailure", async () => {
-    const wrapped = LLMNativeRuntime.nativeTools(
-      {
-        explode: {
-          description: "always throws",
-          inputSchema: jsonSchema({ type: "object" }),
-          execute: async () => {
-            throw new Error("boom")
-          },
-        } as any,
-      },
-      { messages: [] as ModelMessage[], abort: new AbortController().signal },
-    )
+  it.effect("native tool wrapper converts thrown errors into typed ToolFailure", () =>
+    Effect.gen(function* () {
+      const wrapped = LLMNativeRuntime.nativeTools(
+        {
+          explode: {
+            description: "always throws",
+            inputSchema: jsonSchema({ type: "object" }),
+            execute: async () => {
+              throw new Error("boom")
+            },
+          } satisfies Tool,
+        },
+        { messages: [] as ModelMessage[], abort: new AbortController().signal },
+      )
 
-    const failure = await Effect.runPromise(
-      Effect.flip(wrapped.explode!.execute!({}, { id: "call-1", name: "explode" })),
-    )
-    expect(failure).toBeInstanceOf(ToolFailure)
-    expect((failure as ToolFailure).message).toBe("boom")
-  })
+      const failure = yield* Effect.flip(wrapped.explode.execute({}, { id: "call-1", name: "explode" }))
+      expect(failure).toBeInstanceOf(ToolFailure)
+      expect(failure.message).toBe("boom")
+    }),
+  )
 
-  test("native tool wrapper raises ToolFailure when the source tool has no execute handler", async () => {
-    // The AI SDK Tool shape allows execute to be omitted (e.g., client-side / MCP tools).
-    // The native runtime owns execution, so encountering such a tool here means upstream
-    // wiring is wrong; we want a typed failure, not a silent skip or unhandled exception.
-    const wrapped = LLMNativeRuntime.nativeTools(
-      { incomplete: { description: "no execute", inputSchema: jsonSchema({ type: "object" }) } as any },
-      { messages: [] as ModelMessage[], abort: new AbortController().signal },
-    )
+  it.effect("native tool wrapper raises ToolFailure when the source tool has no execute handler", () =>
+    Effect.gen(function* () {
+      // The AI SDK Tool shape allows execute to be omitted (e.g., client-side / MCP tools).
+      // The native runtime owns execution, so encountering such a tool here means upstream
+      // wiring is wrong; we want a typed failure, not a silent skip or unhandled exception.
+      const wrapped = LLMNativeRuntime.nativeTools(
+        { incomplete: { description: "no execute", inputSchema: jsonSchema({ type: "object" }) } satisfies Tool },
+        { messages: [] as ModelMessage[], abort: new AbortController().signal },
+      )
 
-    const failure = await Effect.runPromise(
-      Effect.flip(wrapped.incomplete!.execute!({}, { id: "call-1", name: "incomplete" })),
-    )
-    expect(failure).toBeInstanceOf(ToolFailure)
-    expect((failure as ToolFailure).message).toContain("incomplete")
-  })
+      const failure = yield* Effect.flip(wrapped.incomplete.execute({}, { id: "call-1", name: "incomplete" }))
+      expect(failure).toBeInstanceOf(ToolFailure)
+      expect(failure.message).toContain("incomplete")
+    }),
+  )
 
-  test("compiles through the native OpenAI Responses route", async () => {
-    const prepared = await Effect.runPromise(
-      LLMClient.prepare(
-        LLMNative.request({
-          model: baseModel,
-          apiKey: "test-openai-key",
-          messages: [{ role: "user", content: "hello" }],
-          providerOptions: { openai: { store: false, instructions: "You are concise." } },
-          maxOutputTokens: 512,
-          headers: { "x-request": "request-header" },
-        }),
-      ).pipe(
-        Effect.provide(LLMClient.layer),
-        Effect.provide(Layer.mergeAll(RequestExecutor.defaultLayer, WebSocketExecutor.layer)),
-      ),
-    )
-
-    expect(prepared).toMatchObject({
-      route: "openai-responses",
-      protocol: "openai-responses",
-      body: {
+  it.effect("compiles through the native OpenAI Responses route", () =>
+    expectOpenAIResponsesRequest({
+      history: [storedSession.user("hello")],
+      providerOptions: { openai: { store: false, instructions: "You are concise." } },
+      maxOutputTokens: 512,
+      headers: { "x-request": "request-header" },
+      expectedBody: {
         model: "gpt-5-mini",
         instructions: "You are concise.",
-        input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
+        input: [openAIResponses.user("hello")],
         max_output_tokens: 512,
         store: false,
         stream: true,
       },
-    })
-  })
+    }),
+  )
 
-  test("uses provider fetch override for native OpenAI OAuth requests", async () => {
-    const captures: Array<{ url: string; body: unknown }> = []
-    const customFetch = (async (input, init) => {
-      const request = input instanceof Request ? input : new Request(input, init)
-      captures.push({ url: request.url, body: await request.clone().json() })
-      return responsesStream([
-        { type: "response.output_text.delta", item_id: "msg_1", delta: "Hello" },
-        { type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } },
-      ])
-    }) as typeof fetch
-
-    const events = await Effect.runPromise(
-      Effect.gen(function* () {
-        const llmClient = yield* LLMClient.Service
-        const native = LLMNativeRuntime.stream({
-          model: baseModel,
-          provider: { ...providerInfo, options: { apiKey: OAUTH_DUMMY_KEY, fetch: customFetch } },
-          auth: { type: "oauth", refresh: "refresh", access: "access", expires: Date.now() + 60_000 },
-          llmClient,
-          messages: [{ role: "user", content: "hello" }],
-          tools: {},
-          providerOptions: { instructions: "You are concise." },
-          headers: {},
-          abort: new AbortController().signal,
-        })
-        expect(native.type).toBe("supported")
-        if (native.type === "unsupported") return []
-        return yield* native.stream.pipe(Stream.runCollect)
-      }).pipe(
-        Effect.provide(LLMClient.layer),
-        Effect.provide(Layer.mergeAll(RequestExecutor.defaultLayer, WebSocketExecutor.layer)),
-      ),
-    )
-
-    expect(captures).toHaveLength(1)
-    expect(captures[0]).toMatchObject({
-      url: "https://api.openai.com/v1/responses",
-      body: {
-        model: "gpt-5-mini",
-        instructions: "You are concise.",
-        input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
+  it.effect("omits non-persisted OpenAI reasoning ids without encrypted state", () =>
+    expectOpenAIResponsesRequest({
+      history: [
+        storedSession.user("What changed?"),
+        storedSession.assistant([
+          storedSession.openaiReasoning("Checked the previous diff.", {
+            storedAs: "providerOptions",
+            itemId: "rs_1",
+            encryptedContent: null,
+          }),
+          storedSession.text("The parser changed."),
+        ]),
+        storedSession.user("Summarize it."),
+      ],
+      providerOptions: { openai: { store: false } },
+      expectedBody: {
+        input: [
+          openAIResponses.user("What changed?"),
+          openAIResponses.assistant("The parser changed."),
+          openAIResponses.user("Summarize it."),
+        ],
+        store: false,
       },
-    })
-    expect(events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: "text-delta", text: "Hello" }),
-        expect.objectContaining({ type: "finish" }),
-      ]),
-    )
-  })
+    }),
+  )
+
+  it.effect("preserves encrypted OpenAI reasoning state through native request lowering", () =>
+    expectOpenAIResponsesRequest({
+      history: [
+        storedSession.user("What changed?"),
+        storedSession.assistant([
+          storedSession.openaiReasoning("Checked the previous diff.", {
+            storedAs: "providerMetadata",
+            itemId: "rs_1",
+            encryptedContent: "encrypted-state",
+          }),
+          storedSession.text("The parser changed."),
+        ]),
+        storedSession.user("Summarize it."),
+      ],
+      providerOptions: { openai: { store: false, includeEncryptedReasoning: true } },
+      expectedBody: {
+        input: [
+          openAIResponses.user("What changed?"),
+          openAIResponses.openaiReasoning("Checked the previous diff.", {
+            itemId: "rs_1",
+            encryptedContent: "encrypted-state",
+          }),
+          openAIResponses.assistant("The parser changed."),
+          openAIResponses.user("Summarize it."),
+        ],
+        include: ["reasoning.encrypted_content"],
+        store: false,
+      },
+    }),
+  )
+
+  it.effect("uses provider fetch override for native OpenAI OAuth requests", () =>
+    Effect.gen(function* () {
+      const captures: Array<{ url: string; body: unknown }> = []
+      const customFetch = Object.assign(
+        async (input: Parameters<typeof fetch>[0], init: Parameters<typeof fetch>[1]) => {
+          const request = input instanceof Request ? input : new Request(input, init)
+          captures.push({ url: request.url, body: await request.clone().json() })
+          return responsesStream([
+            { type: "response.output_text.delta", item_id: "msg_1", delta: "Hello" },
+            { type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } },
+          ])
+        },
+        { preconnect: () => undefined },
+      ) satisfies typeof fetch
+
+      const llmClient = yield* LLMClient.Service
+      const native = LLMNativeRuntime.stream({
+        model: baseModel,
+        provider: { ...providerInfo, options: { apiKey: OAUTH_DUMMY_KEY, fetch: customFetch } },
+        auth: { type: "oauth", refresh: "refresh", access: "access", expires: Date.now() + 60_000 },
+        llmClient,
+        messages: [{ role: "user", content: "hello" }],
+        tools: {},
+        providerOptions: { instructions: "You are concise." },
+        headers: {},
+        abort: new AbortController().signal,
+      })
+      expect(native.type).toBe("supported")
+      if (native.type === "unsupported") throw new Error(native.reason)
+      const events = Array.from(yield* native.stream.pipe(Stream.runCollect))
+
+      expect(captures).toHaveLength(1)
+      expect(captures[0]).toMatchObject({
+        url: "https://api.openai.com/v1/responses",
+        body: {
+          model: "gpt-5-mini",
+          instructions: "You are concise.",
+          input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
+        },
+      })
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: "text-delta", text: "Hello" }),
+          expect.objectContaining({ type: "finish" }),
+        ]),
+      )
+    }),
+  )
 })
