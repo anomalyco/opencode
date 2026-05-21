@@ -7,8 +7,9 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Plugin } from "../plugin"
+import { serviceUse } from "@/effect/service-use"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
-import * as ModelsDev from "@opencode-ai/core/models"
+import * as ModelsDev from "@opencode-ai/core/models-dev"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -1009,6 +1010,8 @@ interface State {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
+
+export const use = serviceUse(Service)
 
 function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   const result: Model["cost"] = {

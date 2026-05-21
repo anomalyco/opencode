@@ -123,7 +123,7 @@ afterEach(async () => {
 
 async function withInstance<T>(fn: (ctx: InstanceContext) => T | Promise<T>) {
   await using tmp = await tmpdir({ git: true })
-  const ctx = await AppRuntime.runPromise(InstanceStore.Service.use((store) => store.load({ directory: tmp.path })))
+  const ctx = await AppRuntime.runPromise(InstanceStore.use.load({ directory: tmp.path }))
   return await context.provide(ctx, () => fn(ctx))
 }
 
@@ -151,30 +151,29 @@ const runWorkspace = <A, E>(effect: Effect.Effect<A, E, Workspace.Service>) => {
   const ctx = currentInstance()
   return AppRuntime.runPromise(ctx ? effect.pipe(Effect.provideService(InstanceRef, ctx)) : effect)
 }
-const createWorkspace = (input: Workspace.CreateInput) =>
-  runWorkspace(Workspace.Service.use((workspace) => workspace.create(input)))
-const warpWorkspaceSession = (input: Workspace.SessionWarpInput) =>
-  runWorkspace(Workspace.Service.use((workspace) => workspace.sessionWarp(input)))
+const createWorkspace = (input: Workspace.CreateInput) => runWorkspace(Workspace.use.create(input))
+const warpWorkspaceSession = (input: Workspace.SessionWarpInput) => runWorkspace(Workspace.use.sessionWarp(input))
 const listWorkspaces = (project: Parameters<Workspace.Interface["list"]>[0]) =>
-  runWorkspace(Workspace.Service.use((workspace) => workspace.list(project)))
+  runWorkspace(Workspace.use.list(project))
 const syncListWorkspaces = (project: Parameters<Workspace.Interface["syncList"]>[0]) =>
-  runWorkspace(Workspace.Service.use((workspace) => workspace.syncList(project)))
-const getWorkspace = (id: WorkspaceID) => runWorkspace(Workspace.Service.use((workspace) => workspace.get(id)))
-const removeWorkspace = (id: WorkspaceID) => runWorkspace(Workspace.Service.use((workspace) => workspace.remove(id)))
-const workspaceStatus = () => runWorkspace(Workspace.Service.use((workspace) => workspace.status()))
-const isWorkspaceSyncing = (id: WorkspaceID) =>
-  runWorkspace(Workspace.Service.use((workspace) => workspace.isSyncing(id)))
+  runWorkspace(Workspace.use.syncList(project))
+const getWorkspace = (id: WorkspaceID) => runWorkspace(Workspace.use.get(id))
+const removeWorkspace = (id: WorkspaceID) => runWorkspace(Workspace.use.remove(id))
+const workspaceStatus = () => runWorkspace(Workspace.use.status())
+const isWorkspaceSyncing = (id: WorkspaceID) => runWorkspace(Workspace.use.isSyncing(id))
 const startWorkspaceSyncing = (projectID: ProjectID) => {
-  void runWorkspace(Workspace.Service.use((workspace) => workspace.startWorkspaceSyncing(projectID)))
+  void runWorkspace(Workspace.use.startWorkspaceSyncing(projectID))
 }
 const startWorkspaceSyncingWithFlag = (projectID: ProjectID, experimentalWorkspaces: boolean) =>
   Effect.runPromise(
-    Workspace.Service.use((workspace) => workspace.startWorkspaceSyncing(projectID)).pipe(
-      Effect.provide(workspaceLayer(experimentalWorkspaces)),
-    ),
+    Workspace.use.startWorkspaceSyncing(projectID).pipe(Effect.provide(workspaceLayer(experimentalWorkspaces))),
   )
-const waitForWorkspaceSync = (workspaceID: WorkspaceID, state: Record<string, number>, signal?: AbortSignal) =>
-  runWorkspace(Workspace.Service.use((workspace) => workspace.waitForSync(workspaceID, state, signal)))
+const waitForWorkspaceSync = (
+  workspaceID: WorkspaceID,
+  state: Record<string, number>,
+  signal?: AbortSignal,
+  timeout?: number,
+) => runWorkspace(Workspace.use.waitForSync(workspaceID, state, signal, timeout))
 
 function captureGlobalEvents() {
   const events: GlobalEvent[] = []
@@ -929,13 +928,11 @@ describe("workspace CRUD", () => {
       insertWorkspace(previous)
       registerAdapter(projectID, previousType, localAdapter(workspaceTmp.path, { createDir: false }).adapter)
       const session = await AppRuntime.runPromise(
-        SessionNs.Service.use((svc) => svc.create({})).pipe(Effect.provideService(InstanceRef, instance)),
+        SessionNs.use.create({}).pipe(Effect.provideService(InstanceRef, instance)),
       )
       attachSessionToWorkspace(session.id, previous.id)
 
-      const workspaceCtx = await AppRuntime.runPromise(
-        InstanceStore.Service.use((store) => store.load({ directory: workspaceTmp.path })),
-      )
+      const workspaceCtx = await AppRuntime.runPromise(InstanceStore.use.load({ directory: workspaceTmp.path }))
       const workspaceProjectID = await context.provide(workspaceCtx, async () => {
         const id = workspaceCtx.project.id
         expect(id).not.toBe(projectID)
@@ -1639,9 +1636,9 @@ describe("workspace waitForSync", () => {
     await withInstance(async () => {
       const sessionID = SessionID.descending("ses_wait_timeout")
 
-      await expect(waitForWorkspaceSync(WorkspaceID.ascending("wrk_wait_timeout"), { [sessionID]: 1 })).rejects.toThrow(
-        `Timed out waiting for sync fence: {"${sessionID}":1}`,
-      )
+      await expect(
+        waitForWorkspaceSync(WorkspaceID.ascending("wrk_wait_timeout"), { [sessionID]: 1 }, undefined, 25),
+      ).rejects.toThrow(`Timed out waiting for sync fence: {"${sessionID}":1}`)
     })
   }, 7000)
 })

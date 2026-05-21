@@ -30,7 +30,7 @@ import { InstanceLayer } from "@/project/instance-layer"
 import { Plugin } from "@/plugin"
 import { Project } from "@/project/project"
 import { ProviderAuth } from "@/provider/auth"
-import { ModelsDev } from "@opencode-ai/core/models"
+import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
 import { Pty } from "@/pty"
 import { PtyTicket } from "@/pty/ticket"
@@ -59,7 +59,7 @@ import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
 import { InstanceHttpApi, RootHttpApi } from "./api"
 import { PublicApi } from "./public"
-import { authorizationLayer, authorizationRouterMiddleware } from "./middleware/authorization"
+import { authorizationLayer, authorizationRouterMiddleware, v2AuthorizationLayer } from "./middleware/authorization"
 import { EventApi } from "./groups/event"
 import { eventHandlers } from "./handlers/event"
 import { configHandlers } from "./handlers/config"
@@ -107,6 +107,7 @@ const cors = (corsOptions?: CorsOptions) =>
 // - uiRoute: raw catch-all fallback; auth is router middleware so public static assets can bypass it.
 const authOnlyRouterLayer = authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
 const httpApiAuthLayer = authorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
+const v2HttpApiAuthLayer = v2AuthorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(
   Layer.provide([controlHandlers, globalHandlers]),
   Layer.provide(schemaErrorLayer),
@@ -144,6 +145,7 @@ const rawInstanceRoutes = Layer.mergeAll(ptyConnectRoute).pipe(Layer.provide(ins
 const instanceRoutes = Layer.mergeAll(rawInstanceRoutes, instanceApiRoutes).pipe(
   Layer.provide([
     httpApiAuthLayer,
+    v2HttpApiAuthLayer,
     workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal)),
     instanceContextLayer,
     schemaErrorLayer,

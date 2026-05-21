@@ -1,7 +1,7 @@
 import type { HttpRecorder } from "@opencode-ai/http-recorder"
-import { describe, type TestOptions } from "bun:test"
+import { describe } from "bun:test"
 import { Effect } from "effect"
-import type { ModelRef } from "../src"
+import type { Model } from "../src"
 import { goldenScenarioTags, runGoldenScenario, type GoldenScenarioID } from "./recorded-scenarios"
 import { recordedTests } from "./recorded-test"
 import { kebab } from "./recorded-utils"
@@ -17,12 +17,12 @@ type ScenarioInput =
       readonly tags?: ReadonlyArray<string>
       readonly maxTokens?: number
       readonly temperature?: number | false
-      readonly timeout?: number | TestOptions
+      readonly timeout?: number
     }
 
 type TargetInput = {
   readonly name: string
-  readonly model: ModelRef
+  readonly model: Model
   readonly protocol?: string
   readonly requires?: ReadonlyArray<string>
   readonly transport?: Transport
@@ -38,19 +38,21 @@ const scenarioInput = (input: ScenarioInput) => (typeof input === "string" ? { i
 const scenarioTitle = (id: GoldenScenarioID) => {
   if (id === "text") return "streams text"
   if (id === "tool-call") return "streams tool call"
+  if (id === "reasoning") return "uses reasoning"
+  if (id === "image") return "reads image text"
   return "drives a tool loop"
 }
 
 const defaultPrefix = (target: TargetInput) => {
   if (target.prefix) return target.prefix
   const transport = target.transport === "websocket" ? "-websocket" : ""
-  return `${target.model.provider}-${target.protocol ?? target.model.route}${transport}`
+  return `${target.model.provider}-${target.protocol ?? target.model.route.id}${transport}`
 }
 
 const metadata = (target: TargetInput) => ({
   provider: target.model.provider,
   protocol: target.protocol,
-  route: target.model.route,
+  route: target.model.route.id,
   transport: target.transport ?? "http",
   model: target.model.id,
   ...target.metadata,

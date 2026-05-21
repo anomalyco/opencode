@@ -1,4 +1,5 @@
 import * as Log from "@opencode-ai/core/util/log"
+import { serviceUse } from "@/effect/service-use"
 import path from "path"
 import { pathToFileURL } from "url"
 import os from "os"
@@ -318,6 +319,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Config") {}
+
+export const use = serviceUse(Service)
 
 function globalConfigFile() {
   const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
@@ -703,7 +706,11 @@ export const layer = Layer.effect(
         }
 
         if (Flag.OPENCODE_PERMISSION) {
-          result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
+          try {
+            result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
+          } catch (err) {
+            log.warn("OPENCODE_PERMISSION contains invalid JSON, skipping", { err })
+          }
         }
 
         if (result.tools) {
