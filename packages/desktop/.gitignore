@@ -27,3 +27,6 @@ out/
 resources/opencode-cli*
 resources/icons
 resources/*.metainfo.xml
+
+src-tauri/gen/
+src-tauri/sidecars/
