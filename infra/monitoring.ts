@@ -258,7 +258,6 @@ new honeycombio.Trigger("IncreasedProviderHttpErrors", {
 })
 
 new honeycombio.Trigger("IncreasedFreeTierRequests", {
-  disabled: true,
   name: "Increased Free Tier Requests",
   description,
   disabled: alertsDisabled,
