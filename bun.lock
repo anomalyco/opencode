@@ -255,6 +255,7 @@
       "name": "@opencode-ai/desktop",
       "version": "1.15.6",
       "dependencies": {
+        "@zip.js/zip.js": "2.7.62",
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
         "electron-context-menu": "4.1.2",

@@ -1,6 +1,6 @@
 [data-component="avatar"] {
-  --avatar-bg: var(--background-bg-layer-02);
-  --avatar-fg: var(--text-text-muted);
+  --avatar-bg: var(--v2-background-bg-layer-02);
+  --avatar-fg: var(--v2-text-text-muted);
   --avatar-radius: 9999px;
   --avatar-font-size: 11px;
   --avatar-tracking: 0.05px;
@@ -13,8 +13,8 @@
   width: 28px;
   height: 28px;
   border-radius: var(--avatar-radius);
-  border: 0.5px solid var(--border-border-base);
-  font-family: var(--font-sans);
+  border: 0.5px solid var(--v2-border-border-base);
+  font-family: var(--font-family-sans);
   font-weight: 530;
   font-size: var(--avatar-font-size);
   line-height: 1;
@@ -30,7 +30,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, var(--alpha-light-16) 0%, var(--alpha-light-0) 100%);
+  background: linear-gradient(180deg, var(--v2-alpha-light-16) 0%, var(--v2-alpha-light-0) 100%);
   pointer-events: none;
 }
 
