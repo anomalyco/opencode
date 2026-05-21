@@ -18,6 +18,7 @@ import type { ConsoleState } from "./console-state"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
+import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath, type InstanceContext } from "../project/instance-context"
 import { NonNegativeInt, PositiveInt, type DeepMutable } from "@opencode-ai/core/schema"
@@ -40,6 +41,7 @@ import { ConfigServer } from "./server"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
+import { withTransientReadRetry } from "@/util/effect-http-client"
 
 const log = Log.create({ service: "config" })
 
@@ -70,7 +72,7 @@ function normalizeLoadedConfig(data: unknown, source: string) {
 }
 
 async function substituteWellKnownRemoteConfig(input: { value: unknown; dir: string; source: string }) {
-  if (!isRecord(input.value) || typeof input.value.url !== "string") return
+  if (!isRecord(input.value) || typeof input.value.url !== "string") return undefined
 
   const url = await ConfigVariable.substitute({
     text: input.value.url,
@@ -98,6 +100,11 @@ async function substituteWellKnownRemoteConfig(input: { value: unknown; dir: str
 
   return { url, headers }
 }
+
+const WellKnownConfig = Schema.Struct({
+  config: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  remote_config: Schema.optional(Schema.Unknown),
+})
 
 async function resolveLoadedPlugins<T extends { plugin?: ConfigPlugin.Spec[] }>(config: T, filepath: string) {
   if (!config.plugin) return config
@@ -302,7 +309,7 @@ export type Info = DeepMutable<Schema.Schema.Type<typeof Info>> & {
 type State = {
   config: Info
   directories: string[]
-  deps: Fiber.Fiber<void, never>[]
+  deps: Fiber.Fiber<void>[]
   consoleState: ConsoleState
 }
 
@@ -371,6 +378,27 @@ export const layer = Layer.effect(
     const npmSvc = yield* Npm.Service
 
     const readConfigFile = (filepath: string) => fs.readFileStringSafe(filepath).pipe(Effect.orDie)
+
+    const fetchRemoteJson = Effect.fnUntraced(function* (url: string, headers?: Record<string, string>) {
+      const http = Option.getOrUndefined(yield* Effect.serviceOption(HttpClient.HttpClient))
+      if (!http) return yield* Effect.die(new Error(`HttpClient required to fetch remote config from ${url}`))
+      const response = yield* HttpClient.filterStatusOk(withTransientReadRetry(http))
+        .execute(
+          HttpClientRequest.get(url).pipe(HttpClientRequest.acceptJson, HttpClientRequest.setHeaders(headers ?? {})),
+        )
+        .pipe(
+          Effect.catch((error) => Effect.die(new Error(`failed to fetch remote config from ${url}: ${String(error)}`))),
+        )
+      return yield* response.json.pipe(
+        Effect.catch((error) => Effect.die(new Error(`failed to decode remote config from ${url}: ${String(error)}`))),
+      )
+    })
+
+    const fetchWellKnownConfig = Effect.fnUntraced(function* (url: string) {
+      const parsed = Option.getOrUndefined(Schema.decodeUnknownOption(WellKnownConfig)(yield* fetchRemoteJson(url)))
+      if (!parsed) return yield* Effect.die(new Error(`failed to decode remote config from ${url}`))
+      return parsed
+    })
 
     const loadConfig = Effect.fnUntraced(function* (
       text: string,
@@ -514,35 +542,27 @@ export const layer = Layer.effect(
           if (value.type === "wellknown") {
             const url = key.replace(/\/+$/, "")
             process.env[value.key] = value.token
-            log.debug("fetching remote config", { url: `${url}/.well-known/opencode` })
-            const response = yield* Effect.promise(() => fetch(`${url}/.well-known/opencode`))
-            if (!response.ok) {
-              throw new Error(`failed to fetch remote config from ${url}: ${response.status}`)
-            }
-            const wellknown = (yield* Effect.promise(() => response.json())) as {
-              config?: Record<string, unknown>
-              remote_config?: unknown
-            }
+            const wellknownURL = `${url}/.well-known/opencode`
+            log.debug("fetching remote config", { url: wellknownURL })
+            const wellknown = yield* fetchWellKnownConfig(wellknownURL)
             const remote = yield* Effect.promise(() =>
               substituteWellKnownRemoteConfig({
                 value: wellknown.remote_config,
                 dir: url,
-                source: `${url}/.well-known/opencode`,
+                source: wellknownURL,
               }),
             )
             const fetchedConfig = remote
-              ? ((yield* Effect.promise(async () => {
+              ? yield* Effect.gen(function* () {
                   log.debug("fetching remote config", { url: remote.url })
-                  const response = await fetch(remote.url, { headers: remote.headers })
-                  if (!response.ok)
-                    throw new Error(`failed to fetch remote config from ${remote.url}: ${response.status}`)
-                  const data = await response.json()
-                  return isRecord(data) && isRecord(data.config) ? data.config : data
-                })) as Record<string, unknown>)
+                  const data = yield* fetchRemoteJson(remote.url, remote.headers)
+                  if (isRecord(data) && isRecord(data.config)) return data.config
+                  return isRecord(data) ? data : {}
+                })
               : {}
-            const remoteConfig = mergeConfig(wellknown.config ?? {}, fetchedConfig as Info)
+            const remoteConfig = mergeConfig(wellknown.config ?? {}, fetchedConfig)
             if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
-            const source = `${url}/.well-known/opencode`
+            const source = wellknownURL
             const next = yield* loadConfig(JSON.stringify(remoteConfig), {
               dir: path.dirname(source),
               source,
@@ -576,7 +596,7 @@ export const layer = Layer.effect(
           log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
         }
 
-        const deps: Fiber.Fiber<void, never>[] = []
+        const deps: Fiber.Fiber<void>[] = []
 
         for (const dir of directories) {
           if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
