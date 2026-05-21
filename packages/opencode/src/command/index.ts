@@ -71,7 +71,6 @@ export const layer = Layer.effect(
 
     const init = Effect.fn("Command.state")(function* (ctx: InstanceContext) {
       const cfg = yield* config.get()
-      const bridge = yield* EffectBridge.make()
       const commands: Record<string, Info> = {}
 
       commands[Default.INIT] = {
@@ -109,8 +108,34 @@ export const layer = Layer.effect(
         }
       }
 
+      for (const item of yield* skill.all()) {
+        if (commands[item.name]) continue
+        commands[item.name] = {
+          name: item.name,
+          description: item.description,
+          source: "skill",
+          get template() {
+            return item.content
+          },
+          hints: [],
+        }
+      }
+
+      return {
+        commands,
+      }
+    })
+
+    const state = yield* InstanceState.make<State>((ctx) => init(ctx))
+
+    // Build MCP prompt commands dynamically from currently-connected servers.
+    // Previously these were baked into the cached InstanceState at init time,
+    // so prompts from servers that connected after Command init never appeared.
+    const mcpCommands = Effect.fn("Command.mcpCommands")(function* () {
+      const bridge = yield* EffectBridge.make()
+      const result: Record<string, Info> = {}
       for (const [name, prompt] of Object.entries(yield* mcp.prompts())) {
-        commands[name] = {
+        result[name] = {
           name,
           source: "mcp",
           description: prompt.description,
@@ -137,35 +162,21 @@ export const layer = Layer.effect(
           hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
         }
       }
-
-      for (const item of yield* skill.all()) {
-        if (commands[item.name]) continue
-        commands[item.name] = {
-          name: item.name,
-          description: item.description,
-          source: "skill",
-          get template() {
-            return item.content
-          },
-          hints: [],
-        }
-      }
-
-      return {
-        commands,
-      }
+      return result
     })
-
-    const state = yield* InstanceState.make<State>((ctx) => init(ctx))
 
     const get = Effect.fn("Command.get")(function* (name: string) {
       const s = yield* InstanceState.get(state)
-      return s.commands[name]
+      if (s.commands[name]) return s.commands[name]
+      const mc = yield* mcpCommands()
+      return mc[name]
     })
 
     const list = Effect.fn("Command.list")(function* () {
       const s = yield* InstanceState.get(state)
-      return Object.values(s.commands)
+      const mc = yield* mcpCommands()
+      // Merge: base commands take precedence over MCP commands with the same name
+      return Object.values({ ...mc, ...s.commands })
     })
 
     return Service.of({ get, list })
