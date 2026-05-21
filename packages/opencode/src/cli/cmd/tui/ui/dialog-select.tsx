@@ -36,6 +36,8 @@ export interface DialogSelectProps<T> {
     title: string
     side?: "left" | "right"
     disabled?: boolean
+    /** When false, the action fires even with no row selected (e.g. an empty list). Defaults to requiring a selection. */
+    requireSelection?: boolean
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
   footerHints?: {
@@ -304,8 +306,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           run() {
             setStore("input", "keyboard")
             const option = selected()
-            if (!option) return
-            item.onTrigger(option)
+            if (item.requireSelection !== false && !option) return
+            item.onTrigger(option as DialogSelectOption<T>)
           },
         })),
       ],

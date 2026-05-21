@@ -7,6 +7,7 @@ import { Locale } from "@/util/locale"
 import { useProject } from "@tui/context/project"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
+import { useKV } from "../context/kv"
 import { useLocal } from "../context/local"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { DialogSessionRename } from "./dialog-session-rename"
@@ -27,7 +28,9 @@ export function DialogSessionList() {
   const { theme } = useTheme()
   const sdk = useSDK()
   const local = useLocal()
+  const kv = useKV()
   const toast = useToast()
+  const filterEnabled = createMemo(() => kv.get("session_directory_filter_enabled", true) as boolean)
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
   const deleteHint = useCommandShortcut("session.delete")
@@ -218,7 +221,7 @@ export function DialogSessionList() {
 
   return (
     <DialogSelect
-      title="Sessions"
+      title={`Sessions · ${filterEnabled() ? "current directory" : "all directories"}`}
       options={options()}
       skipFilter={true}
       current={currentSessionID()}
@@ -294,6 +297,19 @@ export function DialogSessionList() {
           title: "rename",
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)
+          },
+        },
+        {
+          command: "session.list.toggle_filter",
+          // Acts on dialog state, not a row, so it must work even when the
+          // filter has emptied the list (the case this feature exists for).
+          requireSelection: false,
+          get title() {
+            return filterEnabled() ? "show all" : "filter to dir"
+          },
+          onTrigger: async () => {
+            kv.set("session_directory_filter_enabled", !filterEnabled())
+            await sync.session.refresh()
           },
         },
       ]}
