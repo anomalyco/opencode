@@ -3,6 +3,7 @@ import { Effect, Exit, Layer, Option } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "@/config/config"
+import { ConfigEnv } from "@/config/env"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
@@ -56,6 +57,16 @@ const json = (request: Parameters<typeof HttpClientResponse.fromWeb>[0], body: u
     }),
   )
 
+const configEnvLayer = (input: Partial<ConfigEnv.Info> = {}) =>
+  ConfigEnv.layer({
+    config: Option.none(),
+    configDir: Option.none(),
+    inlineConfigContent: Option.none(),
+    disableProjectConfig: false,
+    permission: Option.none(),
+    ...input,
+  })
+
 const wellKnownAuth = (url: string) =>
   Layer.mock(Auth.Service)({
     all: () =>
@@ -88,12 +99,14 @@ const configLayer = (
     auth?: Layer.Layer<Auth.Service>
     account?: Layer.Layer<Account.Service>
     client?: HttpClient.HttpClient
+    configEnv?: Layer.Layer<ConfigEnv.Service>
   } = {},
 ) =>
   Config.layer.pipe(
     Layer.provide(testFlock),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Env.defaultLayer),
+    Layer.provide(options.configEnv ?? ConfigEnv.defaultLayer),
     Layer.provide(options.auth ?? AuthTest.empty),
     Layer.provide(options.account ?? AccountTest.empty),
     Layer.provideMerge(infra),
@@ -108,10 +121,11 @@ const it = testEffect(layer)
 const provideCurrentInstance = <A, E, R>(effect: Effect.Effect<A, E, R>, ctx: InstanceContext) =>
   effect.pipe(Effect.provideService(InstanceRef, ctx))
 
-const load = (ctx: InstanceContext) =>
+const loadWith = (ctx: InstanceContext, nextLayer = layer) =>
   Effect.runPromise(
-    Config.Service.use((svc) => provideCurrentInstance(svc.get(), ctx)).pipe(Effect.scoped, Effect.provide(layer)),
+    Config.Service.use((svc) => provideCurrentInstance(svc.get(), ctx)).pipe(Effect.scoped, Effect.provide(nextLayer)),
   )
+const load = (ctx: InstanceContext) => loadWith(ctx)
 const saveGlobal = (config: Config.Info) =>
   Effect.runPromise(
     Config.use.updateGlobal(config).pipe(
@@ -124,13 +138,6 @@ const clear = async (wait = false) => {
   await Effect.runPromise(Config.use.invalidate().pipe(Effect.scoped, Effect.provide(layer)))
   if (wait) await InstanceRuntime.disposeAllInstances()
 }
-const listDirs = (ctx: InstanceContext) =>
-  Effect.runPromise(
-    Config.Service.use((svc) => provideCurrentInstance(svc.directories(), ctx)).pipe(
-      Effect.scoped,
-      Effect.provide(layer),
-    ),
-  )
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
 const originalTestToken = process.env.TEST_TOKEN
@@ -250,24 +257,20 @@ test("does not create global config when OPENCODE_CONFIG_DIR is set", async () =
   await using tmp = await tmpdir()
   await using custom = await tmpdir()
   const prevConfig = Global.Path.config
-  const prevEnv = process.env.OPENCODE_CONFIG_DIR
   ;(Global.Path as { config: string }).config = tmp.path
-  process.env.OPENCODE_CONFIG_DIR = custom.path
   await clear(true)
 
   try {
     await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
-        await load(ctx)
+        await loadWith(ctx, configLayer({ configEnv: configEnvLayer({ configDir: Option.some(custom.path) }) }))
       },
     })
 
     expect(await Filesystem.exists(path.join(tmp.path, "opencode.jsonc"))).toBe(false)
   } finally {
     ;(Global.Path as { config: string }).config = prevConfig
-    if (prevEnv === undefined) delete process.env.OPENCODE_CONFIG_DIR
-    else process.env.OPENCODE_CONFIG_DIR = prevEnv
     await clear(true)
   }
 })
@@ -577,6 +580,7 @@ test("resolves env templates in account config with account token", async () => 
         Effect.gen(function* () {
           const config = yield* svc.get()
           expect(config.provider?.["opencode"]?.options?.apiKey).toBe("st_test_token")
+          expect(process.env["OPENCODE_CONSOLE_TOKEN"]).toBe(originalControlToken)
         }),
       ),
     ).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
@@ -1676,6 +1680,7 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
           Layer.provide(testFlock),
           Layer.provide(AppFileSystem.defaultLayer),
           Layer.provide(Env.defaultLayer),
+          Layer.provide(ConfigEnv.defaultLayer),
           Layer.provide(wellKnownAuth(server.url.origin)),
           Layer.provide(AccountTest.empty),
           Layer.provideMerge(infra),
@@ -1976,136 +1981,204 @@ describe("deduplicatePluginOrigins", () => {
 })
 
 describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
-  it.instance(
-    "skips project config files when flag is set",
-    () =>
-      withProcessEnv(
-        "OPENCODE_DISABLE_PROJECT_CONFIG",
-        "true",
-        Effect.gen(function* () {
-          const config = yield* Config.use.get()
-          expect(config.model).not.toBe("project/model")
-          expect(config.username).not.toBe("project-user")
-        }),
-      ),
-    { config: { model: "project/model", username: "project-user" } },
-  )
-
-  it.instance("skips project .opencode/ directories when flag is set", () =>
-    withProcessEnv(
-      "OPENCODE_DISABLE_PROJECT_CONFIG",
-      "true",
-      Effect.gen(function* () {
-        const test = yield* TestInstance
-        yield* mkdirEffect(path.join(test.directory, ".opencode", "command"))
-        yield* writeTextEffect(
-          path.join(test.directory, ".opencode", "command", "test-cmd.md"),
-          "# Test Command\nThis is a test command.",
-        )
-        const directories = yield* Config.use.directories()
-        expect(directories.some((d) => d.startsWith(test.directory))).toBe(false)
-      }),
-    ),
-  )
-
-  it.instance("still loads global config when flag is set", () =>
-    withProcessEnv(
-      "OPENCODE_DISABLE_PROJECT_CONFIG",
-      "true",
-      Effect.gen(function* () {
-        const config = yield* Config.use.get()
-        expect(config).toBeDefined()
-        expect(config.username).toBeDefined()
-      }),
-    ),
-  )
-
-  it.instance(
-    "skips relative instructions with warning when flag is set but no config dir",
-    () =>
-      withProcessEnvs(
-        { OPENCODE_CONFIG_DIR: undefined, OPENCODE_DISABLE_PROJECT_CONFIG: "true" },
-        Effect.gen(function* () {
-          const test = yield* TestInstance
-          yield* writeTextEffect(path.join(test.directory, "CUSTOM.md"), "# Custom Instructions")
-          // The relative instruction should be skipped without error
-          const config = yield* Config.use.get()
-          expect(config).toBeDefined()
-        }),
-      ),
-    { config: { instructions: ["./CUSTOM.md"] } },
-  )
-
-  it.instance(
-    "OPENCODE_CONFIG_DIR still works when flag is set",
-    () =>
-      Effect.gen(function* () {
-        const configDir = yield* tmpdirScoped({ config: { model: "configdir/model" } })
-        yield* withProcessEnvs(
-          { OPENCODE_DISABLE_PROJECT_CONFIG: "true", OPENCODE_CONFIG_DIR: configDir },
+  test("skips project config files when flag is set", async () => {
+    await provideTmpdirInstance(
+      () =>
+        Config.Service.use((svc) =>
           Effect.gen(function* () {
-            const config = yield* Config.use.get()
-            expect(config.model).toBe("configdir/model")
+            const config = yield* svc.get()
+            expect(config.model).not.toBe("project/model")
+            expect(config.username).not.toBe("project-user")
           }),
-        )
-      }),
-    { config: { model: "project/model" } },
-  )
+        ),
+      { config: { model: "project/model", username: "project-user" } },
+    ).pipe(
+      Effect.scoped,
+      Effect.provide(configLayer({ configEnv: configEnvLayer({ disableProjectConfig: true }) })),
+      Effect.runPromise,
+    )
+  })
+
+  test("skips project .opencode/ directories when flag is set", async () => {
+    await provideTmpdirInstance((dir) =>
+      Config.Service.use((svc) =>
+        Effect.gen(function* () {
+          yield* mkdirEffect(path.join(dir, ".opencode", "command"))
+          yield* writeTextEffect(
+            path.join(dir, ".opencode", "command", "test-cmd.md"),
+            "# Test Command\nThis is a test command.",
+          )
+          yield* svc.get()
+          const directories = yield* svc.directories()
+          expect(directories.some((item) => item.startsWith(dir))).toBe(false)
+        }),
+      ),
+    ).pipe(
+      Effect.scoped,
+      Effect.provide(configLayer({ configEnv: configEnvLayer({ disableProjectConfig: true }) })),
+      Effect.runPromise,
+    )
+  })
+
+  test("still loads global config when flag is set", async () => {
+    await provideTmpdirInstance(() =>
+      Config.Service.use((svc) =>
+        Effect.gen(function* () {
+          const config = yield* svc.get()
+          expect(config).toBeDefined()
+          expect(config.username).toBeDefined()
+        }),
+      ),
+    ).pipe(
+      Effect.scoped,
+      Effect.provide(configLayer({ configEnv: configEnvLayer({ disableProjectConfig: true }) })),
+      Effect.runPromise,
+    )
+  })
+
+  test("skips relative instructions with warning when flag is set but no config dir", async () => {
+    await provideTmpdirInstance(
+      (dir) =>
+        Config.Service.use((svc) =>
+          Effect.gen(function* () {
+            yield* writeTextEffect(path.join(dir, "CUSTOM.md"), "# Custom Instructions")
+            const config = yield* svc.get()
+            expect(config).toBeDefined()
+          }),
+        ),
+      { config: { instructions: ["./CUSTOM.md"] } },
+    ).pipe(
+      Effect.scoped,
+      Effect.provide(configLayer({ configEnv: configEnvLayer({ disableProjectConfig: true }) })),
+      Effect.runPromise,
+    )
+  })
+
+  test("OPENCODE_CONFIG_DIR still works when flag is set", async () => {
+    await provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const configDir = yield* tmpdirScoped({ config: { model: "configdir/model" } })
+          const config = yield* Config.Service.use((svc) => svc.get()).pipe(
+            Effect.provide(
+              configLayer({
+                configEnv: configEnvLayer({ configDir: Option.some(configDir), disableProjectConfig: true }),
+              }),
+            ),
+          )
+          expect(config).toBeDefined()
+          expect(config.model).toBe("configdir/model")
+        }),
+      { config: { model: "project/model" } },
+    ).pipe(Effect.provide(infra), Effect.scoped, Effect.runPromise)
+  })
 })
 
 // Regression for #28206: malformed OPENCODE_PERMISSION JSON used to crash
 // the app on startup with an unhandled SyntaxError. Loading the config with
 // an invalid JSON value in this env var should not throw.
 describe("OPENCODE_PERMISSION env var", () => {
-  it.instance("does not crash when OPENCODE_PERMISSION contains invalid JSON", () =>
-    withProcessEnv(
-      "OPENCODE_PERMISSION",
-      "{invalid",
-      Effect.gen(function* () {
-        const config = yield* Config.use.get()
-        // Regression: load() used to throw before returning anything.
-        expect(config).toBeDefined()
-      }),
-    ),
-  )
+  test("does not crash when OPENCODE_PERMISSION contains invalid JSON", async () => {
+    await provideTmpdirInstance(() =>
+      Config.Service.use((svc) =>
+        Effect.gen(function* () {
+          const config = yield* svc.get()
+          // Regression: load() used to throw before returning anything.
+          expect(config).toBeDefined()
+        }),
+      ),
+    ).pipe(
+      Effect.scoped,
+      Effect.provide(configLayer({ configEnv: configEnvLayer({ permission: Option.some("{invalid") }) })),
+      Effect.runPromise,
+    )
+  })
 })
 
 describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
-  it.instance("substitutes {env:} tokens in OPENCODE_CONFIG_CONTENT", () =>
-    withProcessEnv(
-      "TEST_CONFIG_VAR",
-      "test_api_key_12345",
-      withProcessEnv(
-        "OPENCODE_CONFIG_CONTENT",
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          username: "{env:TEST_CONFIG_VAR}",
-        }),
+  test("loads inline config from ConfigEnv service", async () => {
+    await provideTmpdirInstance(() =>
+      Config.Service.use((svc) =>
         Effect.gen(function* () {
-          const config = yield* Config.use.get()
-          expect(config.username).toBe("test_api_key_12345")
+          const config = yield* svc.get()
+          expect(config.username).toBe("inline-config-user")
         }),
       ),
-    ),
-  )
-
-  it.instance("substitutes {file:} tokens in OPENCODE_CONFIG_CONTENT", () =>
-    Effect.gen(function* () {
-      const test = yield* TestInstance
-      yield* writeTextEffect(path.join(test.directory, "api_key.txt"), "secret_key_from_file")
-      yield* withProcessEnv(
-        "OPENCODE_CONFIG_CONTENT",
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          username: "{file:./api_key.txt}",
+    ).pipe(
+      Effect.scoped,
+      Effect.provide(
+        configLayer({
+          configEnv: configEnvLayer({
+            inlineConfigContent: Option.some(
+              JSON.stringify({ $schema: "https://opencode.ai/config.json", username: "inline-config-user" }),
+            ),
+          }),
         }),
+      ),
+      Effect.runPromise,
+    )
+  })
+
+  test("substitutes {env:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
+    const originalTestVar = process.env["TEST_CONFIG_VAR"]
+    process.env["TEST_CONFIG_VAR"] = "test_api_key_12345"
+
+    try {
+      await provideTmpdirInstance(() =>
+        Config.Service.use((svc) =>
+          Effect.gen(function* () {
+            const config = yield* svc.get()
+            expect(config.username).toBe("test_api_key_12345")
+          }),
+        ),
+      ).pipe(
+        Effect.scoped,
+        Effect.provide(
+          configLayer({
+            configEnv: configEnvLayer({
+              inlineConfigContent: Option.some(
+                JSON.stringify({
+                  $schema: "https://opencode.ai/config.json",
+                  username: "{env:TEST_CONFIG_VAR}",
+                }),
+              ),
+            }),
+          }),
+        ),
+        Effect.runPromise,
+      )
+    } finally {
+      if (originalTestVar !== undefined) process.env["TEST_CONFIG_VAR"] = originalTestVar
+      else delete process.env["TEST_CONFIG_VAR"]
+    }
+  })
+
+  test("substitutes {file:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
+    await provideTmpdirInstance((dir) =>
+      Config.Service.use((svc) =>
         Effect.gen(function* () {
-          const config = yield* Config.use.get()
+          yield* writeTextEffect(path.join(dir, "api_key.txt"), "secret_key_from_file")
+          const config = yield* svc.get()
           expect(config.username).toBe("secret_key_from_file")
         }),
-      )
-    }),
-  )
+      ),
+    ).pipe(
+      Effect.scoped,
+      Effect.provide(
+        configLayer({
+          configEnv: configEnvLayer({
+            inlineConfigContent: Option.some(
+              JSON.stringify({
+                $schema: "https://opencode.ai/config.json",
+                username: "{file:./api_key.txt}",
+              }),
+            ),
+          }),
+        }),
+      ),
+      Effect.runPromise,
+    )
+  })
 })
 
 // parseManagedPlist unit tests — pure function, no OS interaction

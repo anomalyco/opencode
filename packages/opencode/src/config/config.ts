@@ -26,6 +26,7 @@ import { NonNegativeInt, PositiveInt, type DeepMutable } from "@opencode-ai/core
 import { ConfigAgent } from "./agent"
 import { ConfigAttachment } from "./attachment"
 import { ConfigCommand } from "./command"
+import { ConfigEnv } from "./env"
 import { ConfigFormatter } from "./formatter"
 import { ConfigLayout } from "./layout"
 import { ConfigLSP } from "./lsp"
@@ -385,8 +386,13 @@ export const layer = Layer.effect(
     const authSvc = yield* Auth.Service
     const accountSvc = yield* Account.Service
     const env = yield* Env.Service
+    const configEnv = yield* ConfigEnv.Service
     const npmSvc = yield* Npm.Service
     const http = yield* HttpClient.HttpClient
+    const configPath = Option.getOrUndefined(configEnv.config)
+    const configDir = Option.getOrUndefined(configEnv.configDir)
+    const inlineConfigContent = Option.getOrUndefined(configEnv.inlineConfigContent)
+    const permission = Option.getOrUndefined(configEnv.permission)
 
     const readConfigFile = (filepath: string) => fs.readFileStringSafe(filepath).pipe(Effect.orDie)
 
@@ -444,7 +450,7 @@ export const layer = Layer.effect(
       let result: Info = {}
       // Seed the default global config with the schema for editor completion, but avoid writing when the user
       // explicitly routes config through env-provided paths or content.
-      if (!Flag.OPENCODE_CONFIG && !Flag.OPENCODE_CONFIG_DIR && !Flag.OPENCODE_CONFIG_CONTENT) {
+      if (!configPath && !configDir && !inlineConfigContent) {
         const file = globalConfigFile()
         if (!existsSync(file)) {
           yield* fs
@@ -594,12 +600,12 @@ export const layer = Layer.effect(
         const global = Object.keys(authEnv).length ? yield* loadGlobal(authEnv) : yield* getGlobal()
         yield* merge(Global.Path.config, global, "global")
 
-        if (Flag.OPENCODE_CONFIG) {
-          yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG, authEnv))
-          log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+        if (configPath) {
+          yield* merge(configPath, yield* loadFile(configPath, authEnv))
+          log.debug("loaded custom config", { path: configPath })
         }
 
-        if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+        if (!configEnv.disableProjectConfig) {
           for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
             yield* merge(file, yield* loadFile(file, authEnv), "local")
           }
@@ -609,16 +615,19 @@ export const layer = Layer.effect(
         result.mode = result.mode || {}
         result.plugin = result.plugin || []
 
-        const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree)
+        const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree, {
+          configDir,
+          disableProjectConfig: configEnv.disableProjectConfig,
+        })
 
-        if (Flag.OPENCODE_CONFIG_DIR) {
-          log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
+        if (configDir) {
+          log.debug("loading config from OPENCODE_CONFIG_DIR", { path: configDir })
         }
 
         const deps: Fiber.Fiber<void>[] = []
 
         for (const dir of directories) {
-          if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+          if (dir.endsWith(".opencode") || dir === configDir) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
               log.debug(`loading config from ${source}`)
@@ -663,12 +672,9 @@ export const layer = Layer.effect(
           yield* mergePluginOrigins(dir, list)
         }
 
-        if (process.env.OPENCODE_CONFIG_CONTENT) {
+        if (inlineConfigContent) {
           const source = "OPENCODE_CONFIG_CONTENT"
-          const next = yield* loadConfig(process.env.OPENCODE_CONFIG_CONTENT, {
-            dir: ctx.directory,
-            source,
-          })
+          const next = yield* loadConfig(inlineConfigContent, { dir: ctx.directory, source }, authEnv)
           yield* merge(source, next, "local")
           log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
         }
@@ -685,17 +691,18 @@ export const layer = Layer.effect(
               [accountSvc.config(accountID, orgID), accountSvc.token(accountID)],
               { concurrency: 2 },
             )
-            if (Option.isSome(tokenOpt)) {
-              process.env["OPENCODE_CONSOLE_TOKEN"] = tokenOpt.value
-              yield* env.set("OPENCODE_CONSOLE_TOKEN", tokenOpt.value)
-            }
+            const accountEnv = Option.isSome(tokenOpt)
+              ? { ...authEnv, OPENCODE_CONSOLE_TOKEN: tokenOpt.value }
+              : authEnv
+            if (Option.isSome(tokenOpt)) yield* env.set("OPENCODE_CONSOLE_TOKEN", tokenOpt.value)
 
             if (Option.isSome(configOpt)) {
               const source = `${url}/api/config`
-              const next = yield* loadConfig(JSON.stringify(configOpt.value), {
-                dir: path.dirname(source),
-                source,
-              })
+              const next = yield* loadConfig(
+                JSON.stringify(configOpt.value),
+                { dir: path.dirname(source), source },
+                accountEnv,
+              )
               for (const providerID of Object.keys(next.provider ?? {})) {
                 consoleManagedProviders.add(providerID)
               }
@@ -741,9 +748,9 @@ export const layer = Layer.effect(
           })
         }
 
-        if (Flag.OPENCODE_PERMISSION) {
+        if (permission) {
           try {
-            result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
+            result.permission = mergeDeep(result.permission ?? {}, JSON.parse(permission))
           } catch (err) {
             log.warn("OPENCODE_PERMISSION contains invalid JSON, skipping", { err })
           }
@@ -868,6 +875,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(EffectFlock.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Env.defaultLayer),
+  Layer.provide(ConfigEnv.defaultLayer),
   Layer.provide(Auth.defaultLayer),
   Layer.provide(Account.defaultLayer),
   Layer.provide(Npm.defaultLayer),
