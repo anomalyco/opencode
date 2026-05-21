@@ -20,6 +20,7 @@ const Color = Schema.Union([
 
 const AgentSchema = Schema.StructWithRest(
   Schema.Struct({
+    category: Schema.optional(Schema.String).annotate({ description: "Category for grouping agents together" }),
     model: Schema.optional(ConfigModelID),
     variant: Schema.optional(Schema.String).annotate({
       description: "Default model variant for this agent (applies only when using the agent's configured model).",
@@ -51,6 +52,7 @@ const AgentSchema = Schema.StructWithRest(
 
 const KNOWN_KEYS = new Set([
   "name",
+  "category",
   "model",
   "variant",
   "prompt",

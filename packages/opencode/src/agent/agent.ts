@@ -29,6 +29,7 @@ import { type DeepMutable } from "@opencode-ai/core/schema"
 export const Info = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
+  category: Schema.optional(Schema.String),
   mode: Schema.Literals(["subagent", "primary", "all"]),
   native: Schema.optional(Schema.Boolean),
   hidden: Schema.optional(Schema.Boolean),
@@ -129,6 +130,7 @@ export const layer = Layer.effect(
         const agents: Record<string, Info> = {
           build: {
             name: "build",
+            category: "build",
             description: "The default agent. Executes tools based on configured permissions.",
             options: {},
             permission: Permission.merge(
@@ -144,6 +146,7 @@ export const layer = Layer.effect(
           },
           plan: {
             name: "plan",
+            category: "plan",
             description: "Plan mode. Disallows all edit tools.",
             options: {},
             permission: Permission.merge(
@@ -167,6 +170,7 @@ export const layer = Layer.effect(
           },
           general: {
             name: "general",
+            category: "general",
             description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
             permission: Permission.merge(
               defaults,
@@ -181,6 +185,7 @@ export const layer = Layer.effect(
           },
           explore: {
             name: "explore",
+            category: "explore",
             permission: Permission.merge(
               defaults,
               Permission.fromConfig({
@@ -204,8 +209,9 @@ export const layer = Layer.effect(
           },
           ...(flags.experimentalScout
             ? {
-                scout: {
-                  name: "scout",
+                  scout: {
+                    name: "scout",
+                    category: "explore",
                   permission: Permission.merge(
                     defaults,
                     Permission.fromConfig({
@@ -234,6 +240,7 @@ export const layer = Layer.effect(
             : {}),
           compaction: {
             name: "compaction",
+            category: "general",
             mode: "primary",
             native: true,
             hidden: true,
@@ -249,6 +256,7 @@ export const layer = Layer.effect(
           },
           title: {
             name: "title",
+            category: "general",
             mode: "primary",
             options: {},
             native: true,
@@ -265,6 +273,7 @@ export const layer = Layer.effect(
           },
           summary: {
             name: "summary",
+            category: "explore",
             mode: "primary",
             options: {},
             native: true,
@@ -295,6 +304,7 @@ export const layer = Layer.effect(
               native: false,
             }
           if (value.model) item.model = Provider.parseModel(value.model)
+          item.category = value.category ?? item.category
           item.variant = value.variant ?? item.variant
           item.prompt = value.prompt ?? item.prompt
           item.description = value.description ?? item.description
