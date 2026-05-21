@@ -6,20 +6,16 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "test": "bun test",
-    "test:ci": "mkdir -p .artifacts/unit && bun test --timeout 30000 --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
+    "test": "node --import tsx --test",
+    "test:ci": "mkdir -p .artifacts/unit && node --import tsx --test --test-timeout=30000 --test-reporter=junit --test-reporter-destination=.artifacts/unit/junit.xml",
     "typecheck": "tsgo --noEmit"
-  },
-  "bin": {
-    "opencode": "./bin/opencode"
   },
   "exports": {
     "./*": "./src/*.ts"
   },
   "imports": {},
   "devDependencies": {
-    "@tsconfig/bun": "catalog:",
-    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
     "@types/cross-spawn": "catalog:",
     "@types/npm-package-arg": "6.1.4",
     "@types/npmcli__arborist": "6.3.3",

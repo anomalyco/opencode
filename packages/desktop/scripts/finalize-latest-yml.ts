@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 
-import { $ } from "bun"
-import path from "path"
+import { readFile, writeFile } from "node:fs/promises"
+import { $ } from "./utils"
+import path from "node:path"
 
 const dir = process.env.LATEST_YML_DIR!
 if (!dir) throw new Error("LATEST_YML_DIR is required")
@@ -71,9 +72,13 @@ function serialize(data: LatestYml) {
 }
 
 async function read(subdir: string, filename: string): Promise<LatestYml | undefined> {
-  const file = Bun.file(path.join(dir, subdir, filename))
-  if (!(await file.exists())) return undefined
-  return parse(await file.text())
+  const filepath = path.join(dir, subdir, filename)
+  try {
+    const content = await readFile(filepath, "utf-8")
+    return parse(content)
+  } catch {
+    return undefined
+  }
 }
 
 const output: Record<string, string> = {}
@@ -116,7 +121,7 @@ const tmp = process.env.RUNNER_TEMP ?? "/tmp"
 
 for (const [filename, content] of Object.entries(output)) {
   const filepath = path.join(tmp, filename)
-  await Bun.write(filepath, content)
+  await writeFile(filepath, content)
   await $`gh release upload ${tag} ${filepath} --clobber --repo ${repo}`
   console.log(`uploaded ${filename}`)
 }

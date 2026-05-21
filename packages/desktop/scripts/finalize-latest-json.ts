@@ -1,11 +1,12 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
-import { $ } from "bun"
+import { $ } from "./utils"
 import path from "node:path"
 import { parseArgs } from "node:util"
+import { readFile, writeFile } from "node:fs/promises"
 
 const { values } = parseArgs({
-  args: Bun.argv.slice(2),
+  args: process.argv.slice(2),
   options: {
     "dry-run": { type: "boolean", default: false },
   },
@@ -93,9 +94,13 @@ function parse(text: string): Yml {
 }
 
 async function read(sub: string, file: string) {
-  const item = Bun.file(path.join(root, sub, file))
-  if (!(await item.exists())) return undefined
-  return parse(await item.text())
+  const filepath = path.join(root, sub, file)
+  try {
+    const content = await readFile(filepath, "utf-8")
+    return parse(content)
+  } catch {
+    return undefined
+  }
 }
 
 function pick(list: Item[], exts: string[]) {
@@ -125,11 +130,15 @@ async function sign(url: string, key: string) {
 
   const tmp = process.env.RUNNER_TEMP ?? "/tmp"
   const file = path.join(tmp, name)
-  await Bun.write(file, await res.arrayBuffer())
+  const buffer = await res.arrayBuffer()
+  await writeFile(file, Buffer.from(buffer))
   await $`bunx @tauri-apps/cli signer sign ${file}`
-  const sigFile = Bun.file(`${file}.sig`)
-  if (!(await sigFile.exists())) throw new Error(`Signature file not found for ${name}`)
-  return (await sigFile.text()).trim()
+  const sigFilepath = `${file}.sig`
+  try {
+    return (await readFile(sigFilepath, "utf-8")).trim()
+  } catch {
+    throw new Error(`Signature file not found for ${name}`)
+  }
 }
 
 const add = async (data: Record<string, { url: string; signature: string }>, key: string, raw: string | undefined) => {
@@ -206,7 +215,7 @@ const data = {
 
 const tmp = process.env.RUNNER_TEMP ?? "/tmp"
 const file = path.join(tmp, "latest.json")
-await Bun.write(file, JSON.stringify(data, null, 2))
+await writeFile(file, JSON.stringify(data, null, 2))
 
 const tag = `v${version}`
 

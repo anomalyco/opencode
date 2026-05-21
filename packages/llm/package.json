@@ -6,8 +6,8 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "setup:recording-env": "bun run script/setup-recording-env.ts",
-    "test": "bun test --timeout 30000",
+    "setup:recording-env": "node --import tsx script/setup-recording-env.ts",
+    "test": "node --import tsx --test --test-timeout=30000",
     "typecheck": "tsgo --noEmit"
   },
   "exports": {
@@ -38,8 +38,7 @@
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/platform-node": "catalog:",
     "@opencode-ai/http-recorder": "workspace:*",
-    "@tsconfig/bun": "catalog:",
-    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:"
   },
   "dependencies": {

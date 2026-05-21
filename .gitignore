@@ -1,32 +1,39 @@
-.DS_Store
-node_modules
-.worktrees
-.sst
+```
+# Dependencies
+node_modules/
+.bun/
+bun.lock
+
+# Build outputs
+dist/
+build/
+target/
+
+# Environment
 .env
 .env.local
-.idea
-.vscode
-.codex
-*~
-playground
-tmp
-dist
-ts-dist
-.turbo
-**/.serena
-.serena/
-/result
-refs
-Session.vim
-/opencode.json
-a.out
-target
-.scripts
-.direnv/
+*.env.*
 
-# Local dev files
-opencode-dev
-UPCOMING_CHANGELOG.md
-logs/
-*.bun-build
-tsconfig.tsbuildinfo
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Temp files
+*.tmp
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+.env
+.env.local
+```

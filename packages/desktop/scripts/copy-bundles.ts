@@ -1,4 +1,4 @@
-import { $ } from "bun"
+import { $ } from "./utils"
 import * as path from "node:path"
 
 import { RUST_TARGET } from "./utils"
