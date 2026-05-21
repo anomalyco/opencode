@@ -65,6 +65,13 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ses
   sessionID: SessionID,
 }) {}
 
+export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
+  "Session.OperationUnavailableError",
+  {
+    operation: Schema.Literals(["prompt", "compact", "wait"]),
+  },
+) {}
+
 export interface Interface {
   readonly create: (input?: {
     agent?: string
@@ -104,7 +111,7 @@ export interface Interface {
     sessionID: SessionID
     prompt: Prompt
     delivery?: Delivery
-  }) => Effect.Effect<SessionMessage.User, NotFoundError>
+  }) => Effect.Effect<SessionMessage.User, NotFoundError | OperationUnavailableError>
   readonly shell: (input: { id?: EventV2.ID; sessionID: SessionID; command: string }) => Effect.Effect<void, never>
   readonly skill: (input: { id?: EventV2.ID; sessionID: SessionID; skill: string }) => Effect.Effect<void, never>
   readonly subagent: (input: {
@@ -113,11 +120,11 @@ export interface Interface {
     prompt: Prompt
     agent: string
     model?: ModelV2.Ref
-  }) => Effect.Effect<void, NotFoundError>
+  }) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly switchAgent: (input: { sessionID: SessionID; agent: string }) => Effect.Effect<void, never>
   readonly switchModel: (input: { sessionID: SessionID; model: ModelV2.Ref }) => Effect.Effect<void, never>
-  readonly compact: (sessionID: SessionID) => Effect.Effect<void, NotFoundError>
-  readonly wait: (sessionID: SessionID) => Effect.Effect<void, NotFoundError>
+  readonly compact: (sessionID: SessionID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
+  readonly wait: (sessionID: SessionID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
@@ -292,7 +299,7 @@ export const layer = Layer.effect(
       }),
       prompt: Effect.fn("V2Session.prompt")(function* (input) {
         yield* result.get(input.sessionID)
-        return {} as any
+        return yield* new OperationUnavailableError({ operation: "prompt" })
       }),
       shell: Effect.fn("V2Session.shell")(function* (_input) {}),
       skill: Effect.fn("V2Session.skill")(function* (_input) {}),
@@ -333,9 +340,11 @@ export const layer = Layer.effect(
       }),
       compact: Effect.fn("V2Session.compact")(function* (sessionID) {
         yield* result.get(sessionID)
+        return yield* new OperationUnavailableError({ operation: "compact" })
       }),
       wait: Effect.fn("V2Session.wait")(function* (sessionID) {
         yield* result.get(sessionID)
+        return yield* new OperationUnavailableError({ operation: "wait" })
       }),
     })
 
