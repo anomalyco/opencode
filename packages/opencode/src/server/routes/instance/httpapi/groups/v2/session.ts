@@ -4,7 +4,7 @@ import { Prompt } from "@opencode-ai/core/session-prompt"
 import { SessionV2 } from "@/v2/session"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
-import { InvalidCursorError, InvalidRequestError, ServiceUnavailableError, SessionNotFoundError } from "../../errors"
+import { InvalidCursorError, InvalidRequestError, ServiceUnavailableError, SessionNotFoundError, UnknownError } from "../../errors"
 import { V2Authorization } from "../../middleware/authorization"
 import { WorkspaceRoutingQuery, WorkspaceRoutingQueryFields } from "../../middleware/workspace-routing"
 import { QueryBoolean } from "../query"
@@ -103,7 +103,7 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
       params: { sessionID: SessionID },
       query: WorkspaceRoutingQuery,
       success: Schema.Array(SessionMessage.Message),
-      error: SessionNotFoundError,
+      error: [SessionNotFoundError, UnknownError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.context",

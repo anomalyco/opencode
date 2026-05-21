@@ -3,7 +3,7 @@ import { SessionV2 } from "@/v2/session"
 import { DateTime, Effect, Option, Schema } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
-import { InvalidCursorError, InvalidRequestError, ServiceUnavailableError, SessionNotFoundError } from "../../errors"
+import { InvalidCursorError, InvalidRequestError, ServiceUnavailableError, SessionNotFoundError, UnknownError } from "../../errors"
 
 const DefaultSessionsLimit = 50
 
@@ -219,6 +219,20 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
                 }),
               ),
             ),
+            Effect.catchTag("Session.MessageDecodeError", (error) => {
+              const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+              return Effect.logError("failed to decode v2 session message").pipe(
+                Effect.annotateLogs({ ref, sessionID: error.sessionID, messageID: error.messageID }),
+                Effect.andThen(
+                  Effect.fail(
+                    new UnknownError({
+                      message: "Unexpected server error. Check server logs for details.",
+                      ref,
+                    }),
+                  ),
+                ),
+              )
+            }),
           )
         }),
       )

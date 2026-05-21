@@ -139,6 +139,24 @@ const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>
     )
   })
 
+const insertCorruptV2Message = (sessionID: SessionIDType, time = 1) =>
+  Effect.sync(() =>
+    Database.use((db) =>
+      db
+        .insert(SessionMessageTable)
+        .values([
+          {
+            id: SessionMessage.ID.create(),
+            session_id: sessionID,
+            type: "assistant",
+            time_created: time,
+            data: {} as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
+          },
+        ])
+        .run(),
+    ),
+  )
+
 const setLegacySummaryDiff = (sessionID: SessionIDType) =>
   Effect.sync(() =>
     Database.use((db) =>
@@ -477,6 +495,41 @@ describe("session HttpApi", () => {
           message: "V2 session wait is not available yet",
           service: "v2.session.wait",
         })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "returns safe v2 unknown errors for corrupt projected messages",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* createSession({ title: "v2 corrupt message" })
+        yield* insertCorruptV2Message(session.id)
+
+        const messages = yield* request(`/api/session/${session.id}/message`, {
+          headers: { "x-opencode-directory": test.directory },
+        })
+        const messagesBody = yield* responseJson(messages)
+        expect(messages.status).toBe(500)
+        expect(messagesBody).toMatchObject({
+          _tag: "UnknownError",
+          message: "Unexpected server error. Check server logs for details.",
+        })
+        expect((messagesBody as { ref?: unknown }).ref).toMatch(/^err_[0-9a-f-]{8}$/)
+        expect(JSON.stringify(messagesBody)).not.toContain("assistant")
+
+        const context = yield* request(`/api/session/${session.id}/context`, {
+          headers: { "x-opencode-directory": test.directory },
+        })
+        const contextBody = yield* responseJson(context)
+        expect(context.status).toBe(500)
+        expect(contextBody).toMatchObject({
+          _tag: "UnknownError",
+          message: "Unexpected server error. Check server logs for details.",
+        })
+        expect((contextBody as { ref?: unknown }).ref).toMatch(/^err_[0-9a-f-]{8}$/)
+        expect(JSON.stringify(contextBody)).not.toContain("assistant")
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

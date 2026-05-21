@@ -129,4 +129,17 @@ describe("PublicApi OpenAPI v2 errors", () => {
       )
     }
   })
+
+  test("documents v2 session read data errors", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const route of [
+      ["get", "/api/session/{sessionID}/context"],
+      ["get", "/api/session/{sessionID}/message"],
+    ] as const) {
+      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["500"]) ?? "")).toMatch(
+        /^UnknownError\d*$/,
+      )
+    }
+  })
 })

@@ -72,6 +72,11 @@ export class OperationUnavailableError extends Schema.TaggedErrorClass<Operation
   },
 ) {}
 
+export class MessageDecodeError extends Schema.TaggedErrorClass<MessageDecodeError>()("Session.MessageDecodeError", {
+  sessionID: SessionID,
+  messageID: SessionMessage.ID,
+}) {}
+
 export interface Interface {
   readonly create: (input?: {
     agent?: string
@@ -104,8 +109,8 @@ export interface Interface {
       time: number
       direction: "previous" | "next"
     }
-  }) => Effect.Effect<SessionMessage.Message[], NotFoundError>
-  readonly context: (sessionID: SessionID) => Effect.Effect<SessionMessage.Message[], NotFoundError>
+  }) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
+  readonly context: (sessionID: SessionID) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
   readonly prompt: (input: {
     id?: EventV2.ID
     sessionID: SessionID
@@ -120,7 +125,7 @@ export interface Interface {
     prompt: Prompt
     agent: string
     model?: ModelV2.Ref
-  }) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
+  }) => Effect.Effect<void, NotFoundError | OperationUnavailableError | MessageDecodeError>
   readonly switchAgent: (input: { sessionID: SessionID; agent: string }) => Effect.Effect<void, never>
   readonly switchModel: (input: { sessionID: SessionID; model: ModelV2.Ref }) => Effect.Effect<void, never>
   readonly compact: (sessionID: SessionID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
@@ -133,10 +138,18 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
-    const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
+    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
 
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
-      decodeMessage({ ...row.data, id: row.id, type: row.type })
+      decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
+        Effect.mapError(
+          () =>
+            new MessageDecodeError({
+              sessionID: SessionID.make(row.session_id),
+              messageID: SessionMessage.ID.make(row.id),
+            }),
+        ),
+      )
 
     function fromRow(row: typeof SessionTable.$inferSelect): Info {
       return new Info({
@@ -262,7 +275,7 @@ export const layer = Layer.effect(
           const rows = input.limit === undefined ? query.all() : query.limit(input.limit).all()
           return direction === "previous" ? rows.toReversed() : rows
         })
-        return rows.map((row) => decode(row))
+        return yield* Effect.forEach(rows, (row) => decode(row))
       }),
       context: Effect.fn("V2Session.context")(function* (sessionID) {
         yield* result.get(sessionID)
@@ -295,7 +308,7 @@ export const layer = Layer.effect(
             .orderBy(asc(SessionMessageTable.time_created), asc(SessionMessageTable.id))
             .all()
         })
-        return rows.map((row) => decode(row))
+        return yield* Effect.forEach(rows, (row) => decode(row))
       }),
       prompt: Effect.fn("V2Session.prompt")(function* (input) {
         yield* result.get(input.sessionID)
