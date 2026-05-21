@@ -57,7 +57,9 @@ describe("AzurePlugin", () => {
           })
           catalog.provider.update(ProviderV2.ID.openai, () => {})
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).options.aisdk.provider.resourceName).toBe("from-config")
+        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).options.aisdk.provider.resourceName).toBe(
+          "from-config",
+        )
         expect((yield* catalog.provider.get(ProviderV2.ID.openai)).options.aisdk.provider.resourceName).toBeUndefined()
       }),
     ),
@@ -88,6 +90,7 @@ describe("AzurePlugin", () => {
               Effect.provideService(AccountV2.Service, accounts),
               Effect.provideService(Catalog.Service, catalog),
               Effect.provideService(EventV2.Service, events),
+              Effect.provideService(PluginV2.Service, plugin),
             ),
           })
           yield* plugin.add(AzurePlugin)
@@ -97,7 +100,9 @@ describe("AzurePlugin", () => {
               item.endpoint = { type: "aisdk", package: "@ai-sdk/azure" }
             })
           })
-          expect((yield* catalog.provider.get(ProviderV2.ID.azure)).options.aisdk.provider.resourceName).toBe("from-account")
+          expect((yield* catalog.provider.get(ProviderV2.ID.azure)).options.aisdk.provider.resourceName).toBe(
+            "from-account",
+          )
         }),
     ),
   )

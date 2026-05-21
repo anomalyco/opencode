@@ -81,14 +81,17 @@ export type HookFunctions = {
 export type HookInput<Name extends keyof Hooks> = HookSpec[Name]["input"]
 export type HookOutput<Name extends keyof Hooks> = HookSpec[Name]["output"]
 
-export type Effect<R = never> = Effect.Effect<HookFunctions | void, never, R>
+export type Effect<R = never> = Effect.Effect<HookFunctions | void, never, R | Scope.Scope>
 
 export function define<R>(input: { id: ID; effect: Effect.Effect<HookFunctions | void, never, R> }) {
   return input
 }
 
 export interface Interface {
-  readonly add: <R>(input: { id: ID; effect: Effect<R> }) => Effect.Effect<void, never, R>
+  readonly add: (input: {
+    id: ID
+    effect: Effect.Effect<void | HookFunctions, never, Scope.Scope>
+  }) => Effect.Effect<void, never, never>
   readonly remove: (id: ID) => Effect.Effect<void>
   readonly added: () => Stream.Stream<ID>
   readonly triggerFor: <Name extends keyof Hooks>(
@@ -123,7 +126,7 @@ export const layer = Layer.effect(
         const existing = hooks.find((item) => item.id === input.id)
         if (existing) yield* Scope.close(existing.scope, Exit.void).pipe(Effect.ignore)
         const scope = yield* Scope.make()
-        const result = yield* Scope.provide(scope)(input.effect)
+        const result = yield* input.effect.pipe(Scope.provide(scope))
         hooks = [
           ...hooks.filter((item) => item.id !== input.id),
           {

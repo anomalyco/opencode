@@ -14,7 +14,9 @@ import { ProviderPlugins } from "./provider"
 
 type Plugin = {
   id: PluginV2.ID
-  effect: PluginV2.Effect<unknown>
+  effect: PluginV2.Effect<
+    Catalog.Service | AgentV2.Service | AccountV2.Service | Npm.Service | EventV2.Service | PluginV2.Service
+  >
 }
 
 export interface Interface {
@@ -43,6 +45,7 @@ export const layer = Layer.effect(
           Effect.provideService(AccountV2.Service, accounts),
           Effect.provideService(Npm.Service, npm),
           Effect.provideService(EventV2.Service, events),
+          Effect.provideService(PluginV2.Service, plugin),
         ),
       })
     })
@@ -73,6 +76,6 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Catalog.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
   Layer.provide(PluginV2.defaultLayer),
-  Layer.provide(Layer.orDie(AccountV2.defaultLayer)),
+  Layer.provide(AccountV2.defaultLayer),
   Layer.provide(Npm.defaultLayer),
 )

@@ -175,6 +175,7 @@ describe("GitLabPlugin", () => {
               Effect.provideService(AccountV2.Service, accounts),
               Effect.provideService(Catalog.Service, catalog),
               Effect.provideService(EventV2.Service, events),
+              Effect.provideService(PluginV2.Service, plugin),
             ),
           })
           yield* plugin.add(GitLabPlugin)
@@ -222,6 +223,7 @@ describe("GitLabPlugin", () => {
               Effect.provideService(AccountV2.Service, accounts),
               Effect.provideService(Catalog.Service, catalog),
               Effect.provideService(EventV2.Service, events),
+              Effect.provideService(PluginV2.Service, plugin),
             ),
           })
           yield* plugin.add(GitLabPlugin)

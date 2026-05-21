@@ -56,11 +56,11 @@ afterEach(async () => {
 })
 
 const inApp = <A, E>(eff: Effect.Effect<A, E, AppServices>) =>
-  Effect.flatMap(InstanceRef, (ctx) =>
-    ctx
-      ? Effect.promise(() => AppRuntime.runPromise(eff.pipe(Effect.provideService(InstanceRef, ctx))))
-      : Effect.die("InstanceRef not provided in test scope"),
-  )
+  Effect.gen(function* () {
+    const ctx = yield* InstanceRef
+    if (!ctx) return yield* Effect.die("InstanceRef not provided in test scope")
+    return yield* Effect.promise(() => AppRuntime.runPromise(eff.pipe(Effect.provideService(InstanceRef, ctx))))
+  })
 
 const publishConnected = inApp(Bus.Service.use((svc) => svc.publish(ServerEvent.Connected, {})))
 
@@ -77,7 +77,7 @@ const publishPartUpdated = (partID: ReturnType<typeof PartID.ascending>) => {
 
 const subscribeAllCallback = (handler: (event: BusEvent) => void) =>
   Effect.acquireRelease(inApp(Bus.Service.use((svc) => svc.subscribeAllCallback(handler))), (dispose) =>
-    Effect.sync(dispose),
+    Effect.sync(() => dispose()),
   )
 
 const openEventStream = (directory: string) =>

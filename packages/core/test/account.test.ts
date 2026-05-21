@@ -33,7 +33,10 @@ function context(
         updates.push({
           id: providerID,
           enabled: provider.enabled,
-          apiKey: typeof provider.options.aisdk.provider.apiKey === "string" ? provider.options.aisdk.provider.apiKey : undefined,
+          apiKey:
+            typeof provider.options.aisdk.provider.apiKey === "string"
+              ? provider.options.aisdk.provider.apiKey
+              : undefined,
         })
       },
       remove: (providerID) => {
@@ -181,7 +184,12 @@ describe("AccountV2", () => {
         Effect.gen(function* () {
           const accounts = yield* AccountV2.Service
           const plugin = yield* PluginV2.Service
-          const records = [{ provider: ProviderV2.Info.empty(ProviderV2.ID.make("provider")), models: new Map<ModelV2.ID, ModelV2.Info>() }]
+          const records = [
+            {
+              provider: ProviderV2.Info.empty(ProviderV2.ID.make("provider")),
+              models: new Map<ModelV2.ID, ModelV2.Info>(),
+            },
+          ]
           const updates: Array<{ id: ProviderV2.ID; enabled: ProviderV2.Info["enabled"]; apiKey?: string }> = []
           const catalog = Catalog.Service.of({
             loader: () => Effect.die("unexpected catalog.loader"),
@@ -207,6 +215,7 @@ describe("AccountV2", () => {
               Effect.provideService(AccountV2.Service, accounts),
               Effect.provideService(Catalog.Service, catalog),
               Effect.provideService(EventV2.Service, eventSvc),
+              Effect.provideService(PluginV2.Service, plugin),
             ),
           })
           yield* Effect.yieldNow
