@@ -345,6 +345,134 @@ describe("session.retry.retryable", () => {
       "Usage limit reached. It will reset in 15 minutes. To continue using this model now, enable usage from your available balance",
     )
   })
+
+  test("retries ECONNRESET network errors", () => {
+    const error = wrap("read ECONNRESET")
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "read ECONNRESET" })
+  })
+
+  test("retries ECONNREFUSED network errors", () => {
+    const error = wrap("connect ECONNREFUSED 127.0.0.1:3000")
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "connect ECONNREFUSED 127.0.0.1:3000" })
+  })
+
+  test("retries ETIMEDOUT network errors", () => {
+    const error = wrap("connect ETIMEDOUT 10.0.0.1:443")
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "connect ETIMEDOUT 10.0.0.1:443" })
+  })
+
+  test("retries fetch failed network errors", () => {
+    const error = wrap("fetch failed")
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "fetch failed" })
+  })
+
+  test("retries Failed to fetch network errors", () => {
+    const error = wrap("Failed to fetch")
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Failed to fetch" })
+  })
+
+  test("retries socket hang up network errors", () => {
+    const error = wrap("socket hang up")
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "socket hang up" })
+  })
+
+  test("retries network error messages", () => {
+    const error = wrap("Network Error")
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Network Error" })
+  })
+
+  test("retries connection reset network errors", () => {
+    const error = wrap("connection reset by peer")
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "connection reset by peer" })
+  })
+
+  test("does not retry 4xx errors with timeout in message", () => {
+    const error = Schema.decodeUnknownSync(MessageV2.APIError.Schema)(
+      new MessageV2.APIError({
+        message: "Request timeout waiting for response",
+        isRetryable: false,
+        statusCode: 400,
+      }).toObject(),
+    )
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+  })
+
+  test("retries server_error nested error envelopes", () => {
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        error: { type: "server_error", message: "An error occurred while processing your request." },
+      }),
+    )
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({
+      message: "An error occurred while processing your request.",
+    })
+  })
+
+  test("retries upstream_error nested error envelopes", () => {
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        error: { type: "upstream_error", message: "Upstream service unavailable" },
+      }),
+    )
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({
+      message: "Upstream service unavailable",
+    })
+  })
+
+  test("retries stream_read_error nested error envelopes", () => {
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        error: { type: "stream_read_error", message: "Failed to read stream" },
+      }),
+    )
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({
+      message: "Failed to read stream",
+    })
+  })
+
+  test("converts numeric code to string for pattern matching", () => {
+    const error = wrap(JSON.stringify({ code: 502 }))
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+  })
+
+  it.live("policy stops after RETRY_MAX_ATTEMPTS", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const sessionID = SessionID.make("session-retry-cap-test")
+        const error = apiError({ "retry-after-ms": "0" })
+        const status = yield* SessionStatus.Service
+
+        const step = yield* Schedule.toStepWithMetadata(
+          SessionRetry.policy({
+            provider: "test",
+            parse: Schema.decodeUnknownSync(MessageV2.APIError.Schema),
+            set: (info) =>
+              status.set(sessionID, {
+                type: "retry",
+                attempt: info.attempt,
+                message: info.message,
+                next: info.next,
+              }),
+          }),
+        )
+
+        yield* step(error)
+        yield* step(error)
+        yield* step(error)
+        // attempt 4 should be capped by RETRY_MAX_ATTEMPTS
+        yield* step(error).pipe(Effect.catch(() => Effect.void))
+
+        expect(yield* status.get(sessionID)).toMatchObject({
+          type: "retry",
+          attempt: 3,
+          message: "boom",
+        })
+      }),
+    ),
+  )
 })
 
 describe("session.message-v2.fromError", () => {
