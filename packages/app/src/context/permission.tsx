@@ -118,9 +118,21 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     const respond: PermissionRespondFn = (input) => {
-      globalSDK.client.permission.respond(input).catch(() => {
-        responded.delete(input.permissionID)
-      })
+      globalSDK.client.permission
+        .reply({
+          requestID: input.permissionID,
+          reply: input.response,
+          directory: input.directory,
+        })
+        .then(() => {
+          if (!input.directory) return
+          globalSync.child(input.directory, { bootstrap: false })[1]("permission", input.sessionID, (items) => {
+            return items?.filter((item) => item.id !== input.permissionID)
+          })
+        })
+        .catch(() => {
+          responded.delete(input.permissionID)
+        })
     }
 
     function respondOnce(permission: PermissionRequest, directory?: string) {
