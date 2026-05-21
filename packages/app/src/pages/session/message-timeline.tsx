@@ -1236,7 +1236,6 @@ export function MessageTimeline(props: {
         onClick={props.onAutoScrollInteraction}
         class="relative min-w-0 w-full h-full"
         style={{
-          "--session-title-height": showHeader() ? "40px" : "0px",
           "--sticky-accordion-top": showHeader() ? "48px" : "0px",
         }}
       >
@@ -1256,16 +1255,14 @@ export function MessageTimeline(props: {
             }}
           >
             <Show when={workingStatus() !== "hidden" && settings.general.showSessionProgressBar()}>
-              <div
-                data-component="session-progress"
-                data-state={workingStatus()}
-                aria-hidden="true"
-                style={{
-                  "--session-progress-color": tint() ?? "var(--icon-interactive-base)",
-                  "--session-progress-ms": `${bar.ms}ms`,
-                }}
-              >
-                <div data-component="session-progress-bar" />
+              <div data-component="session-progress" data-state={workingStatus()} aria-hidden="true">
+                <div
+                  data-component="session-progress-bar"
+                  style={{
+                    background: tint() ?? "var(--icon-interactive-base)",
+                    animation: `session-progress-whip ${bar.ms}ms infinite`,
+                  }}
+                />
               </div>
             </Show>
             <div class="h-12 w-full flex items-center justify-between gap-2">

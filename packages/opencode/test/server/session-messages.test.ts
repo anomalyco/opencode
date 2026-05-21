@@ -39,9 +39,8 @@ const withoutWatcher = <A, E, R>(effect: Effect.Effect<A, E, R>) => {
   )
 }
 
-const sessionScoped = Effect.acquireRelease(
-  SessionNs.Service.use((svc) => svc.create({})),
-  (session) => SessionNs.Service.use((svc) => svc.remove(session.id)).pipe(Effect.ignore),
+const sessionScoped = Effect.acquireRelease(SessionNs.use.create({}), (session) =>
+  SessionNs.use.remove(session.id).pipe(Effect.ignore),
 )
 
 const fill = Effect.fn("SessionMessagesTest.fill")(function* (

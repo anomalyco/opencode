@@ -6194,6 +6194,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
+                }
+              }
+            }
           }
         },
         "description": "Permanently delete a specific message and all of its parts from a session without reverting file changes.",
@@ -7123,6 +7133,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
+                }
+              }
+            }
           }
         },
         "description": "Execute a shell command within the session context and return the AI's response.",
@@ -7239,6 +7259,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
+                }
+              }
+            }
           }
         },
         "description": "Revert a specific message in a session, undoing its effects and restoring the previous state.",
@@ -7337,6 +7367,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SessionBusyError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionBusyError"
                 }
               }
             }
@@ -8217,6 +8257,26 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableError"
+                }
+              }
+            }
           }
         },
         "description": "Create a v2 session message and queue it for the agent loop.",
@@ -8303,6 +8363,26 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableError"
+                }
+              }
+            }
           }
         },
         "description": "Compact a v2 session conversation.",
@@ -8367,6 +8447,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableError"
                 }
               }
             }
@@ -8444,6 +8544,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownError1"
                 }
               }
             }
@@ -8551,6 +8671,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "UnknownError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownError1"
                 }
               }
             }
@@ -10567,6 +10707,18 @@
           },
           {
             "$ref": "#/components/schemas/EventSessionNextCompactionEnded"
+          },
+          {
+            "$ref": "#/components/schemas/EventModels-devRefreshed"
+          },
+          {
+            "$ref": "#/components/schemas/EventAccountAdded"
+          },
+          {
+            "$ref": "#/components/schemas/EventAccountRemoved"
+          },
+          {
+            "$ref": "#/components/schemas/EventAccountSwitched"
           }
         ]
       },
@@ -10917,6 +11069,9 @@
             "type": "object",
             "properties": {
               "message": {
+                "type": "string"
+              },
+              "ref": {
                 "type": "string"
               }
             },
@@ -12978,6 +13133,18 @@
               },
               {
                 "$ref": "#/components/schemas/EventSessionNextCompactionEnded"
+              },
+              {
+                "$ref": "#/components/schemas/EventModels-devRefreshed"
+              },
+              {
+                "$ref": "#/components/schemas/EventAccountAdded"
+              },
+              {
+                "$ref": "#/components/schemas/EventAccountRemoved"
+              },
+              {
+                "$ref": "#/components/schemas/EventAccountSwitched"
               },
               {
                 "$ref": "#/components/schemas/SyncEventMessageUpdated"
@@ -15541,6 +15708,23 @@
         "required": ["type", "prompt", "description", "agent"],
         "additionalProperties": false
       },
+      "SessionBusyError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SessionBusyError"]
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "sessionID", "message"],
+        "additionalProperties": false
+      },
       "V2SessionsResponse": {
         "type": "object",
         "properties": {
@@ -15594,6 +15778,57 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
+      "SessionNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SessionNotFoundError"]
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "sessionID", "message"],
+        "additionalProperties": false
+      },
+      "ServiceUnavailableError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ServiceUnavailableError"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "service": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
+      "UnknownError1": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["UnknownError"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
       "V2SessionMessagesResponse": {
         "type": "object",
         "properties": {
@@ -15617,23 +15852,6 @@
           }
         },
         "required": ["items", "cursor"],
-        "additionalProperties": false
-      },
-      "ServiceUnavailableError": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["ServiceUnavailableError"]
-          },
-          "message": {
-            "type": "string"
-          },
-          "service": {
-            "type": "string"
-          }
-        },
-        "required": ["_tag", "message"],
         "additionalProperties": false
       },
       "ProviderNotFoundError": {
@@ -20308,6 +20526,172 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventModels-devRefreshed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["models-dev.refreshed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "AccountV2OAuthCredential": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["oauth"]
+          },
+          "refresh": {
+            "type": "string"
+          },
+          "access": {
+            "type": "string"
+          },
+          "expires": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["type", "refresh", "access", "expires"],
+        "additionalProperties": false
+      },
+      "AccountV2ApiKeyCredential": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["api"]
+          },
+          "key": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["type", "key"],
+        "additionalProperties": false
+      },
+      "AccountV2Credential": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/AccountV2OAuthCredential"
+          },
+          {
+            "$ref": "#/components/schemas/AccountV2ApiKeyCredential"
+          }
+        ]
+      },
+      "AccountV2Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "serviceID": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "credential": {
+            "$ref": "#/components/schemas/AccountV2Credential"
+          }
+        },
+        "required": ["id", "serviceID", "description", "credential"],
+        "additionalProperties": false
+      },
+      "EventAccountAdded": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["account.added"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "account": {
+                "$ref": "#/components/schemas/AccountV2Info"
+              }
+            },
+            "required": ["account"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventAccountRemoved": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["account.removed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "account": {
+                "$ref": "#/components/schemas/AccountV2Info"
+              }
+            },
+            "required": ["account"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventAccountSwitched": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["account.switched"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "serviceID": {
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": ["serviceID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "SessionInfo": {
         "type": "object",
         "properties": {
@@ -21021,7 +21405,7 @@
                 "properties": {
                   "via": {
                     "type": "string",
-                    "enum": ["auth"]
+                    "enum": ["account"]
                   },
                   "service": {
                     "type": "string"
