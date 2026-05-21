@@ -228,6 +228,21 @@ fn config_root() -> Option<PathBuf> {
     dirs::home_dir().map(|dir| dir.join(".config").join("opencode"))
 }
 
+fn expand_user_path(input: &str) -> PathBuf {
+    let trimmed = input.trim();
+    if trimmed == "~" {
+        if let Some(home) = dirs::home_dir() {
+            return home;
+        }
+    }
+    if let Some(rest) = trimmed.strip_prefix("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(rest);
+        }
+    }
+    PathBuf::from(trimmed)
+}
+
 fn startup_mark(
     app: &AppHandle,
     origin: &str,
@@ -361,7 +376,7 @@ fn list_workspace_files(dir: &PathBuf, exts: &[&str], kind: &str) -> Vec<ConfigW
 #[tauri::command]
 #[specta::specta]
 fn list_config_directory(path: String) -> Result<Vec<ConfigTreeItem>, String> {
-    let root = PathBuf::from(path);
+    let root = expand_user_path(&path);
     let Ok(entries) = fs::read_dir(&root) else {
         return Ok(Vec::new());
     };
@@ -937,7 +952,12 @@ async fn sync_openclaw_server(app: AppHandle) -> Result<Option<ServerReadyData>,
         return Ok(current);
     }
 
-    tracing::info!(cfg = ?cfg, "syncing OpenClaw adapter");
+    tracing::info!(
+        enabled = cfg.enabled,
+        has_url = cfg.url.is_some(),
+        has_token = cfg.token.is_some(),
+        "syncing OpenClaw adapter"
+    );
     kill_openclaw(&app);
 
     let url = cfg
@@ -1778,7 +1798,14 @@ fn list_startup_profile(app: AppHandle) -> Result<Vec<StartupSample>, String> {
 fn filter_directories(paths: Vec<String>) -> Vec<String> {
     paths
         .into_iter()
-        .filter(|p| PathBuf::from(p).is_dir())
+        .filter_map(|p| {
+            let expanded = expand_user_path(&p);
+            if expanded.is_dir() {
+                Some(expanded.to_string_lossy().to_string())
+            } else {
+                None
+            }
+        })
         .collect()
 }
 
@@ -2370,7 +2397,7 @@ fn test_export_types() {
 }
 
 async fn initialize(app: AppHandle) {
-    tracing::info!("Initializing app");
+    tracing::info!(pid = %std::process::id(), "[tcc-diagnostic] Initializing app");
     startup_mark(&app, "native", "initialize.start", None, None);
 
     let (init_tx, init_rx) = watch::channel(InitStep::ServerWaiting);
@@ -2398,6 +2425,13 @@ async fn initialize(app: AppHandle) {
         password: Arc::new(Mutex::new(password.clone())),
     });
 
+    tracing::info!(
+        hostname,
+        port,
+        url,
+        pid = %std::process::id(),
+        "[tcc-diagnostic] spawning sidecar"
+    );
     tracing::info!("Spawning sidecar on {url}");
     startup_mark(&app, "native", "sidecar.spawn.start", Some(url.clone()), None);
     let mut fail = None::<String>;
@@ -2405,6 +2439,7 @@ async fn initialize(app: AppHandle) {
         match server::spawn_local_server(app.clone(), hostname.to_string(), port, password.clone())
         {
             Ok((child, health_check)) => {
+                tracing::info!(url, "[tcc-diagnostic] sidecar spawn success");
                 startup_mark(&app, "native", "sidecar.spawned", Some(url.clone()), None);
 
                 if let Some(state) = app.try_state::<ServerState>()
@@ -2424,7 +2459,7 @@ async fn initialize(app: AppHandle) {
                 Some(health_check)
             }
             Err(err) => {
-                tracing::error!("Failed to spawn sidecar: {err}");
+                tracing::error!(url, error = %err, "[tcc-diagnostic] sidecar spawn failed");
                 startup_mark(
                     &app,
                     "native",

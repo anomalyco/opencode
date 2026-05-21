@@ -45,6 +45,7 @@ const fileUnsupported =
 
 const DEFAULT_GA_DIR = "/Users/lelouch/apps/GenericAgent"
 const DEFAULT_PYTHON = "python3"
+const cwdMemory = new Map<string, string>()
 
 let shimScriptCache: Promise<string> | undefined
 async function materializeShimScript(): Promise<string> {
@@ -76,6 +77,7 @@ type SessionInfo = {
   slug: string
   projectID: string
   directory: string
+  cwd?: string
   title: string
   version: string
   time: { created: number; updated: number }
@@ -570,6 +572,7 @@ class ShimClient {
   async prompt(
     sessionID: string,
     query: string,
+    cwd: string | undefined,
     onEvent: (event:
       | { type: "delta"; text: string }
       | { type: "done"; text: string }
@@ -594,7 +597,7 @@ class ShimClient {
       const res = await fetch(`http://127.0.0.1:${port}/prompt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ query, cwd }),
         signal: ctrl.signal,
       })
       if (!res.ok || !res.body) {
@@ -667,6 +670,15 @@ function welcomeSession(): SessionInfo {
   }
 }
 
+function resolveSessionCwd(sessionID: string, explicit?: string) {
+  const normalized = explicit?.trim()
+  if (normalized) {
+    cwdMemory.set(sessionID, normalized)
+    return normalized
+  }
+  return cwdMemory.get(sessionID)
+}
+
 function welcomeMessages(): Message[] {
   const info: MessageInfo = {
     id: Identifier.ascending("message"),
@@ -714,7 +726,20 @@ function extractPromptIds(body: unknown): { messageID?: string; partID?: string 
   }
 }
 
-function userMessage(sessionID: string, text: string, currentModelID: string, ids?: { messageID?: string; partID?: string }): Message {
+function extractCwd(body: unknown): string | undefined {
+  if (!body || typeof body !== "object") return
+  const value = (body as { cwd?: unknown }).cwd
+  if (typeof value !== "string") return
+  const trimmed = value.trim()
+  return trimmed || undefined
+}
+
+function messagePath(cwd: string | undefined) {
+  const value = cwd || directory
+  return { cwd: value, root: value }
+}
+
+function userMessage(sessionID: string, text: string, currentModelID: string, cwd: string | undefined, ids?: { messageID?: string; partID?: string }): Message {
   const messageID = ids?.messageID ?? Identifier.ascending("message")
   const partID = ids?.partID ?? Identifier.ascending("part")
   const info: MessageInfo = {
@@ -726,7 +751,7 @@ function userMessage(sessionID: string, text: string, currentModelID: string, id
     providerID,
     modelID: currentModelID,
     mode: "default",
-    path: { cwd: directory, root: directory },
+    path: messagePath(cwd),
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   }
@@ -740,7 +765,7 @@ function userMessage(sessionID: string, text: string, currentModelID: string, id
   return { info, parts: [part] }
 }
 
-function assistantMessage(sessionID: string, parentID: string, currentModelID: string): Message {
+function assistantMessage(sessionID: string, parentID: string, currentModelID: string, cwd: string | undefined): Message {
   const info: MessageInfo = {
     id: Identifier.ascending("message"),
     sessionID,
@@ -751,7 +776,7 @@ function assistantMessage(sessionID: string, parentID: string, currentModelID: s
     providerID,
     modelID: currentModelID,
     mode: "default",
-    path: { cwd: directory, root: directory },
+    path: messagePath(cwd),
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   }
@@ -764,18 +789,20 @@ function trimSessionTitle(title: string): string {
 
 function historySessionInfo(session: HistorySession): SessionInfo {
   const timestamp = Math.round(session.mtime * 1000)
+  const cwd = cwdMemory.get(session.id)
   return {
     id: session.id,
     slug: session.id,
     projectID,
     directory,
+    cwd,
     title: trimSessionTitle(session.preview),
     version,
     time: { created: timestamp, updated: timestamp },
   }
 }
 
-function historyMessagesToBridge(sessionID: string, timestamp: number, items: HistoryMessage[]): Message[] {
+function historyMessagesToBridge(sessionID: string, timestamp: number, items: HistoryMessage[], cwd?: string): Message[] {
   let lastUserMessageID: string | undefined
   return items.map((item) => {
     const messageID = Identifier.ascending("message")
@@ -792,7 +819,7 @@ function historyMessagesToBridge(sessionID: string, timestamp: number, items: Hi
       providerID,
       modelID,
       mode: "default",
-      path: { cwd: directory, root: directory },
+      path: messagePath(cwd),
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     }
@@ -846,7 +873,7 @@ export namespace GenericAgentBridge {
         if (existing.time.updated !== info.time.updated || existing.title !== info.title) {
           sessions.set(info.id, info)
           const history = emitEvents ? await shim.getHistoryMessages(info.id) : undefined
-          const updatedMessages = history ? historyMessagesToBridge(info.id, info.time.updated, history) : undefined
+          const updatedMessages = history ? historyMessagesToBridge(info.id, info.time.updated, history, info.cwd) : undefined
           if (updatedMessages) messages.set(info.id, updatedMessages)
           if (!updatedMessages) messages.delete(info.id)
           updated++
@@ -1047,13 +1074,15 @@ export namespace GenericAgentBridge {
         return c.json(all)
       })
       .post("/session", async (c) => {
-        const body = (await c.req.json().catch(() => ({}))) as { id?: string; title?: string; parentID?: string }
+        const body = (await c.req.json().catch(() => ({}))) as { id?: string; title?: string; parentID?: string; cwd?: string }
         const id = body.id || Identifier.ascending("session")
+        const cwd = resolveSessionCwd(id, extractCwd(body))
         const info: SessionInfo = {
           id,
           slug: id,
           projectID,
           directory,
+          cwd,
           title: body.title || "New Conversation",
           version,
           time: { created: Date.now(), updated: Date.now() },
@@ -1086,6 +1115,7 @@ export namespace GenericAgentBridge {
           slug: sessionID,
           projectID,
           directory,
+          cwd: resolveSessionCwd(sessionID),
           title: sessionID,
           version,
           time: { created: Date.now(), updated: Date.now() },
@@ -1110,7 +1140,7 @@ export namespace GenericAgentBridge {
             return c.json([])
           }
           const history = await shim.getHistoryMessages(sessionID)
-          allMessages = historyMessagesToBridge(sessionID, session.time.updated, history)
+          allMessages = historyMessagesToBridge(sessionID, session.time.updated, history, session.cwd)
           messages.set(sessionID, allMessages)
         }
 
@@ -1168,6 +1198,7 @@ export namespace GenericAgentBridge {
         if (!query) {
           return c.json(new NamedError.Unknown({ message: "empty prompt" }).toObject(), { status: 400 })
         }
+        const cwd = resolveSessionCwd(sessionID, extractCwd(body))
 
         const requestedModelID = typeof (body as { modelID?: string }).modelID === "string" ? (body as { modelID: string }).modelID : undefined
         const requestedIndex = parseLlmIndex(requestedModelID)
@@ -1188,6 +1219,7 @@ export namespace GenericAgentBridge {
             slug: sessionID,
             projectID,
             directory,
+            cwd,
             title: query.slice(0, 60) || sessionID,
             version,
             time: { created: Date.now(), updated: Date.now() },
@@ -1195,10 +1227,18 @@ export namespace GenericAgentBridge {
           sessions.set(sessionID, info)
           messages.set(sessionID, [])
           emit({ type: "session.created", properties: { info } })
+        } else if (cwd) {
+          const existing = sessions.get(sessionID)
+          if (existing && existing.cwd !== cwd) {
+            const updated = { ...existing, cwd, time: { ...existing.time, updated: Date.now() } }
+            sessions.set(sessionID, updated)
+            emit({ type: "session.updated", properties: { info: updated } })
+          }
         }
 
-        const user = userMessage(sessionID, query, currentModelID_, extractPromptIds(body))
-        const assistant = assistantMessage(sessionID, user.info.id, currentModelID_)
+        const sessionCwd = sessions.get(sessionID)?.cwd
+        const user = userMessage(sessionID, query, currentModelID_, sessionCwd, extractPromptIds(body))
+        const assistant = assistantMessage(sessionID, user.info.id, currentModelID_, sessionCwd)
         const bucket = messages.get(sessionID) ?? []
         bucket.push(user, assistant)
         messages.set(sessionID, bucket)
@@ -1240,7 +1280,7 @@ export namespace GenericAgentBridge {
             return reply
           }
           try {
-            await shim.prompt(sessionID, query, (event) => {
+            await shim.prompt(sessionID, query, sessionCwd, (event) => {
               if (event.type === "tool_use") {
                 log.info("Received tool_use event", { data: event.data })
                 const toolData = event.data

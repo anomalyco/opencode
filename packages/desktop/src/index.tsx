@@ -36,24 +36,6 @@ import { commands, type InitStep } from "./bindings"
 import { createMenu } from "./menu"
 import { pathRoute, routeInitialPath } from "./path-route"
 
-const startupClock = typeof performance === "object" ? performance.now() : Date.now()
-const startupSeen = new Set<string>()
-
-function startupElapsed() {
-  return Math.round((typeof performance === "object" ? performance.now() : Date.now()) - startupClock)
-}
-
-function startupLog(phase: string, detail?: string) {
-  const suffix = detail ? ` ${detail}` : ""
-  console.debug(`[startup-profiler] t=${startupElapsed()}ms phase=${phase}${suffix}`)
-}
-
-function profile(phase: string, detail?: string) {
-  if (startupSeen.has(phase)) return Promise.resolve()
-  startupSeen.add(phase)
-  return commands.recordStartupProfile("frontend", phase, detail ?? null, performance.now() - startupClock).catch(() => {})
-}
-
 function loopback(url: string) {
   try {
     const next = new URL(url)
@@ -70,7 +52,6 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 }
 
 void initI18n()
-void profile("entry.module")
 
 document.documentElement.dataset.platform = "desktop"
 
@@ -139,6 +120,7 @@ type DesktopPlatform = Platform & {
   testGenericagentConfig: (config: GenericagentConfig) => Promise<GenericagentTest>
   abortGenericagentTest: () => Promise<boolean>
   listTrellisTasks: (directory: string) => Promise<DesktopTrellisTaskList>
+  listLocalDirectory: (path: string) => Promise<Array<{ path: string; kind: "file" | "directory" }>>
 }
 
 function startupShell() {
@@ -181,11 +163,7 @@ function startupShell() {
   }
 
   const onReady = () => complete()
-  const onStartup = (event: Event) => {
-    const next = event.type === "opencode:startup-ready" ? "signal.ready" : "signal.interactive"
-    startupLog(next, `event=${event.type}`)
-    void profile(next)
-  }
+  const onStartup = (_event: Event) => {}
   window.addEventListener(startupReadyEvent, onReady, { once: true })
   window.addEventListener("opencode:startup-ready", onStartup)
   window.addEventListener(startupReadyEvent, onStartup)
@@ -477,6 +455,14 @@ const createPlatform = (): DesktopPlatform => {
     },
 
     async listConfigDirectory(path: string) {
+      const list = await commands.listConfigDirectory(path)
+      return list.map((item) => ({
+        path: item.path,
+        kind: item.kind === "directory" ? "directory" : "file",
+      }))
+    },
+
+    async listLocalDirectory(path: string) {
       const list = await commands.listConfigDirectory(path)
       return list.map((item) => ({
         path: item.path,
@@ -942,31 +928,25 @@ render(() => {
   channel.onmessage = (next) => setInit(next)
   const loadLocale = async () => {
     shell?.show("launch")
-    startupLog("locale.load.start")
     const current = await platform.storage?.("opencode.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
     const raw = current ?? legacy
     if (!raw) {
-      startupLog("locale.load.done", "resolved=default")
       return
     }
     const locale = raw.match(/"locale"\s*:\s*"([^"]+)"/)?.[1]
     if (!locale) {
-      startupLog("locale.load.done", "resolved=unparsed")
       return
     }
     const next = normalizeLocale(locale)
     if (next !== "en") await loadLocaleDict(next)
-    startupLog("locale.load.done", `resolved=${next}`)
     return next satisfies Locale
   }
 
   // Fetch sidecar credentials from Rust (available immediately, before health check)
   const [sidecar] = createResource(async () => {
     shell?.show("backend")
-    startupLog("sidecar.await.start")
     return commands.awaitInitialization(channel as any).then((result) => {
-      startupLog("sidecar.await.done", `ready=${!!result}`)
       return result
     })
   })
@@ -976,9 +956,7 @@ render(() => {
 
   const [defaultServer] = createResource(async () => {
     shell?.show("project")
-    startupLog("defaultServer.load.start")
     return platform.getDefaultServer?.().then((url) => {
-      startupLog("defaultServer.load.done", `resolved=${url ? "custom" : "sidecar"}`)
       if (url) return ServerConnection.key({ type: "http", http: { url } })
     })
   })
@@ -1079,8 +1057,6 @@ render(() => {
   }
 
   onMount(() => {
-    void profile("app.mount")
-    startupLog("app.mount")
     document.addEventListener("click", handleClick)
     onCleanup(() => {
       document.removeEventListener("click", handleClick)
@@ -1103,66 +1079,20 @@ render(() => {
   const failed = () => boot() && wantsLocal() && init().phase === "failed"
   const skipHealth = () => wantsLocal()
 
-  let lastShellPhase = ""
-  createEffect(() => {
-    const next = init().phase
-    if (next === lastShellPhase) return
-    lastShellPhase = next
-    startupLog("init.phase", `value=${next}`)
-  })
-
-  let lastBootState = ""
-  createEffect(() => {
-    const detail = [
-      `boot=${boot()}`,
-      `ready=${ready()}`,
-      `wantsLocal=${wantsLocal()}`,
-      `sidecar.loading=${sidecar.loading}`,
-      `sidecar.ready=${!!sidecar()}`,
-      `defaultServer.loading=${defaultServer.loading}`,
-      `defaultServer.ready=${defaultServer.latest ? "custom" : "sidecar"}`,
-      `locale.loading=${locale.loading}`,
-      `locale.ready=${locale.latest ?? "default"}`,
-    ].join(" ")
-    if (detail === lastBootState) return
-    lastBootState = detail
-    startupLog("boot.state", detail)
-  })
-
-  createEffect(() => {
-    if (!ready()) return
-    startupLog("ready.true", `phase=${init().phase}`)
-    void profile("app.ready")
-  })
-
   createEffect(() => {
     if (!shell) return
     if (failed()) {
-      startupLog("shell.phase", `value=failed detail=${detail() ?? "unknown"}`)
-      void profile("phase.failed", detail())
       shell.fail(detail())
       return
     }
     if (wantsLocal() && !sidecar()) {
-      startupLog("shell.phase", "value=backend reason=waiting-sidecar")
-      void profile("phase.backend")
       shell.show("backend")
       return
     }
     if (!boot()) {
-      startupLog(
-        "shell.phase",
-        `value=project reason=boot-blocked defaultServer.loading=${defaultServer.loading} locale.loading=${locale.loading} sidecar.loading=${sidecar.loading}`,
-      )
-      void profile("phase.project")
       shell.show("project")
       return
     }
-    startupLog(
-      "shell.phase",
-      `value=session reason=waiting-app-interactive wantsLocal=${wantsLocal()} init.phase=${init().phase}`,
-    )
-    void profile("phase.session")
     shell.show("session")
   })
 

@@ -72,7 +72,7 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
     <div
       data-loaded={loaded() ? "true" : "false"}
       data-component={loadingSessions() ? "project-icon-loading" : undefined}
-      class={`relative size-8 shrink-0 rounded overflow-hidden ${props.class ?? ""}`}
+      class={`relative size-8 shrink-0 ${props.class ?? ""}`}
     >
       <div data-slot="project-avatar-clip" class="size-full rounded overflow-clip">
         <Avatar

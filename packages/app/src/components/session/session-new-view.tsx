@@ -3,12 +3,15 @@ import { createStore } from "solid-js/store"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Mark } from "@opencode-ai/ui/logo"
 import { Select } from "@opencode-ai/ui/select"
 import { getFilename } from "@opencode-ai/util/path"
+import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { workspaceKey } from "@/pages/layout/helpers"
-import { extraAgentByDirectory } from "@/pages/layout/extra-agents"
+import { extraAgentByDirectory, mainDomain } from "@/pages/layout/extra-agents"
 import { sessionNewMeta, sessionNewPane } from "./session-new-view-layout"
 import { hermesMeta, hermesView } from "./session-new-view-meta"
 
@@ -30,6 +33,7 @@ export function NewSessionView(props: NewSessionViewProps) {
   const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
+  const dialog = useDialog()
   const [view, setView] = createStore({
     width: typeof window === "undefined" ? 1280 : window.innerWidth,
     height: typeof window === "undefined" ? 960 : (window.visualViewport?.height ?? window.innerHeight),
@@ -78,6 +82,11 @@ export function NewSessionView(props: NewSessionViewProps) {
     return current()?.path || root()
   })
   const picked = createMemo(() => current()?.value !== MAIN_WORKTREE)
+  const genericAgentCwd = createMemo(() => {
+    if (extraAgent()?.id !== "genericagent") return
+    if (!props.worktree || props.worktree === MAIN_WORKTREE || props.worktree === "create") return
+    return props.worktree
+  })
   const greet = createMemo(() => {
     const agent = extraAgent()
     if (agent?.emptySessionTitleKey) return language.t(agent.emptySessionTitleKey)
@@ -96,12 +105,9 @@ export function NewSessionView(props: NewSessionViewProps) {
   createEffect(() => {
     const info = meta()
     if (!info) return
-    console.debug("[session-new] hermes startup meta", {
-      version: info.version ?? null,
-      upstream: info.upstream ?? null,
-      total: info.total,
-      rows: info.rows.length,
-    })
+    console.debug(
+      `[session-new] hermes startup meta version=${info.version ?? "none"} upstream=${info.upstream ?? "none"} total=${info.total} rows=${info.rows.length}`,
+    )
   })
 
   createEffect(() => {
@@ -126,25 +132,27 @@ export function NewSessionView(props: NewSessionViewProps) {
   createEffect(() => {
     const info = summary()
     if (!info) return
-    console.debug("[session-new] hermes startup summary", {
-      width: view.width,
-      height: view.height,
-      pane: pane(),
-      cols: info.cols,
-      shown: info.shown,
-      total: info.total,
-      moreRows: info.moreRows,
-      moreTools: info.moreTools,
-    })
+    console.debug(
+      `[session-new] hermes startup summary width=${view.width} height=${view.height} pane=${pane()} cols=${info.cols} shown=${info.shown} total=${info.total} moreRows=${info.moreRows} moreTools=${info.moreTools}`,
+    )
   })
 
   createEffect(() => {
-    console.debug("[session-new] layout", {
-      agent: extraAgent()?.id ?? null,
-      pane: pane(),
-      body: body() || null,
-    })
+    console.debug(`[session-new] layout agent=${extraAgent()?.id ?? "none"} pane=${pane()} body=${body() || "none"}`)
   })
+
+  const chooseGenericAgentCwd = () => {
+    dialog.show(() => (
+      <DialogSelectDirectory
+        title={language.t("session.new.genericagent.cwd.choose")}
+        domain={mainDomain}
+        onSelect={(value) => {
+          if (typeof value !== "string") return
+          props.onWorktreeChange(value)
+        }}
+      />
+    ))
+  }
 
   return (
     <div class={ROOT_CLASS}>
@@ -248,6 +256,24 @@ export function NewSessionView(props: NewSessionViewProps) {
                   </Show>
                 </div>
               )}
+            </Show>
+            <Show when={extraAgent()?.id === "genericagent"}>
+              <div class="mt-5 grid gap-3 text-left">
+                <div class="rounded-xl border border-border-weak-base bg-background-base/45 px-4 py-3 shadow-xs-border-base">
+                  <div class="flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-text-weaker">
+                    <Icon name="folder" size="small" class="shrink-0 text-icon-base" />
+                    <span>{language.t("session.new.genericagent.cwd.label")}</span>
+                  </div>
+                  <div class="mt-2 break-all font-mono text-[13px] leading-6 text-text-strong select-text">
+                    {genericAgentCwd() ?? language.t("session.new.genericagent.cwd.default")}
+                  </div>
+                  <div class="mt-3 flex justify-start">
+                    <Button size="small" variant="secondary" icon="folder-add-left" onClick={chooseGenericAgentCwd}>
+                      {language.t("session.new.genericagent.cwd.choose")}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </Show>
             <Show when={!extraAgent() && git()}>
               <div class="mt-5 grid gap-3 text-left">

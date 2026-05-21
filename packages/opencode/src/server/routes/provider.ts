@@ -55,6 +55,27 @@ export const ProviderRoutes = lazy(() =>
           mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
           connected,
         )
+
+        // [DEBUG] Temporary visibility probe for native openai in the desktop provider response.
+        {
+          const openaiProvider = providers["openai"]
+          if (openaiProvider) {
+            const configured = openaiProvider.models["gpt-5.5"]
+            log.warn("[DEBUG] /provider response openai/gpt-5.5", {
+              providerID: "openai",
+              source: "source" in openaiProvider ? (openaiProvider as { source?: string }).source : undefined,
+              modelCount: Object.keys(openaiProvider.models).length,
+              hasGpt55: !!configured,
+              gpt55ReleaseDate: configured?.release_date,
+              isOpenaiConnected: Object.hasOwn(connected, "openai"),
+            })
+          } else {
+            log.warn("[DEBUG] /provider response openai missing", {
+              isOpenaiConnected: Object.hasOwn(connected, "openai"),
+            })
+          }
+        }
+
         return c.json({
           all: Object.values(providers),
           default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),

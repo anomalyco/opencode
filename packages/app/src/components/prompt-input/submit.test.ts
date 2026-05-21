@@ -7,6 +7,7 @@ const toasts: Array<{ title?: string; description?: string }> = []
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
+const sessionCreateOptions: Array<{ directory: string; body?: { cwd?: string } }> = []
 const enabledAutoAccept: Array<{ sessionID: string; directory: string }> = []
 const optimistic: Array<{
   directory?: string
@@ -31,6 +32,7 @@ let current = "/repo/worktree-a"
 let root = "/repo/main"
 let selected = "/repo/worktree-a"
 let variant: string | undefined
+let integration: string | undefined
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 
@@ -38,8 +40,9 @@ const clientFor = (directory: string, track = true) => {
   if (track) createdClients.push(directory)
   return {
     session: {
-      create: async () => {
+      create: async (_parameters?: unknown, options?: { body?: { cwd?: string } }) => {
         createdSessions.push(directory)
+        sessionCreateOptions.push({ directory, body: options?.body })
         return {
           data: {
             id: `session-${createdSessions.length}`,
@@ -84,6 +87,7 @@ beforeAll(async () => {
 
   mock.module("@opencode-ai/util/encode", () => ({
     base64Encode: (value: string) => value,
+    base64Decode: (value: string) => value,
     checksum: (value: string) => value,
   }))
 
@@ -207,6 +211,7 @@ beforeAll(async () => {
   mock.module("@/context/server", () => ({
     useServer: () => ({
       isLocal: () => true,
+      current: integration ? { integration } : undefined,
     }),
   }))
 
@@ -228,6 +233,7 @@ afterAll(() => {
 beforeEach(() => {
   createdClients.length = 0
   createdSessions.length = 0
+  sessionCreateOptions.length = 0
   enabledAutoAccept.length = 0
   optimistic.length = 0
   optimisticSeeded.length = 0
@@ -242,6 +248,7 @@ beforeEach(() => {
   root = "/repo/main"
   selected = "/repo/worktree-a"
   variant = undefined
+  integration = undefined
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
   for (const key of Object.keys(messagePages)) delete messagePages[key]
 })
@@ -278,6 +285,43 @@ describe("prompt submit worktree selection", () => {
     expect(createdSessions).toEqual(["/repo/main"])
     expect(sentShell).toEqual(["/repo/main"])
     expect(promoted).toEqual([{ directory: "/repo/main", sessionID: "session-1" }])
+  })
+
+  test("keeps GenericAgent sessions on the extra-agent directory and sends selected cwd", async () => {
+    integration = "genericagent"
+    current = "/genericagent"
+    root = "/genericagent"
+    selected = "/repo/worktree-a"
+
+    const submit = createPromptSubmit({
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "shell",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      resetInputUndo: () => undefined,
+      newSessionWorktree: () => selected,
+      onNewSessionWorktreeReset: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+
+    expect(createdClients).toEqual([])
+    expect(createdSessions).toEqual(["/genericagent"])
+    expect(sessionCreateOptions).toEqual([{ directory: "/genericagent", body: { cwd: "/repo/worktree-a" } }])
+    expect(sentShell).toEqual(["/genericagent"])
+    expect(promoted).toEqual([{ directory: "/genericagent", sessionID: "session-1" }])
   })
 
   test("reads the latest worktree accessor value per submit", async () => {

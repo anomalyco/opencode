@@ -165,6 +165,7 @@ export namespace Project {
 
       const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
         const all = Date.now()
+        log.warn("[tcc-diagnostic] project.fromDirectory start", { directory })
         log.info("project.discover", { directory, phase: "start" })
 
         // Phase 1: discover git info
@@ -306,6 +307,12 @@ export namespace Project {
               time: { created: Date.now(), updated: Date.now() },
             }
 
+        log.warn("[tcc-diagnostic] project.fromDirectory before icon discovery", {
+          directory,
+          projectID: data.id,
+          vcs: data.vcs,
+          worktree: data.worktree,
+        })
         if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY)
           yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
 
@@ -378,6 +385,13 @@ export namespace Project {
         })
 
         yield* emitUpdated(result)
+        log.warn("[tcc-diagnostic] project.fromDirectory done", {
+          directory,
+          projectID: result.id,
+          vcs: result.vcs,
+          worktree: result.worktree,
+          sandbox: data.sandbox,
+        })
         log.info("project.discover", {
           directory,
           phase: "total",
@@ -389,10 +403,23 @@ export namespace Project {
       })
 
       const discover = Effect.fn("Project.discover")(function* (input: Info) {
-        if (input.vcs !== "git") return
-        if (input.icon?.override) return
-        if (input.icon?.url) return
+        if (input.vcs !== "git") {
+          log.warn("[tcc-diagnostic] icon discover skip: not git", { vcs: input.vcs, projectID: input.id })
+          return
+        }
+        if (input.icon?.override) {
+          log.warn("[tcc-diagnostic] icon discover skip: has override", { projectID: input.id })
+          return
+        }
+        if (input.icon?.url) {
+          log.warn("[tcc-diagnostic] icon discover skip: has url", { projectID: input.id })
+          return
+        }
 
+        log.warn("[tcc-diagnostic] icon discover favicon glob start", {
+          projectID: input.id,
+          worktree: input.worktree,
+        })
         const matches = yield* fsys
           .glob("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {
             cwd: input.worktree,
@@ -400,14 +427,26 @@ export namespace Project {
             include: "file",
           })
           .pipe(Effect.orDie)
+        log.warn("[tcc-diagnostic] icon discover favicon glob done", {
+          projectID: input.id,
+          matchCount: matches.length,
+        })
         const shortest = matches.sort((a, b) => a.length - b.length)[0]
-        if (!shortest) return
+        if (!shortest) {
+          log.warn("[tcc-diagnostic] icon discover no favicon found", { projectID: input.id })
+          return
+        }
+        log.warn("[tcc-diagnostic] icon discover selected favicon", {
+          projectID: input.id,
+          path: shortest,
+        })
 
         const buffer = yield* fsys.readFile(shortest).pipe(Effect.orDie)
         const base64 = Buffer.from(buffer).toString("base64")
         const mime = AppFileSystem.mimeType(shortest)
         const url = `data:${mime};base64,${base64}`
         yield* update({ projectID: input.id, icon: { url } })
+        log.warn("[tcc-diagnostic] icon discover update done", { projectID: input.id })
       })
 
       const list = Effect.fn("Project.list")(function* () {

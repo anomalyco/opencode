@@ -347,6 +347,7 @@ enum ShellEnvProbe {
 }
 
 fn probe_shell_env(shell: &str, mode: &str) -> ShellEnvProbe {
+    tracing::info!(shell, mode, "[tcc-diagnostic] shell env probe start");
     let mut cmd = std::process::Command::new(shell);
     cmd.args([mode, "-c", "env -0"]);
     cmd.stdin(Stdio::null());
@@ -354,22 +355,34 @@ fn probe_shell_env(shell: &str, mode: &str) -> ShellEnvProbe {
     cmd.stderr(Stdio::null());
     let output = match command_output_with_timeout(cmd, SHELL_ENV_TIMEOUT) {
         Ok(Some(output)) => output,
-        Ok(None) => return ShellEnvProbe::Timeout,
+        Ok(None) => {
+            tracing::info!(shell, mode, "[tcc-diagnostic] shell env probe timeout");
+            return ShellEnvProbe::Timeout;
+        }
         Err(error) => {
-            tracing::debug!(shell, mode, ?error, "Shell env probe failed");
+            tracing::info!(shell, mode, %error, "[tcc-diagnostic] shell env probe error");
             return ShellEnvProbe::Unavailable;
         }
     };
     if !output.status.success() {
-        tracing::debug!(shell, mode, "Shell env probe exited with non-zero status");
+        tracing::info!(
+            shell,
+            mode,
+            "[tcc-diagnostic] shell env probe non-zero status"
+        );
         return ShellEnvProbe::Unavailable;
     }
     let env = parse_shell_env(&output.stdout);
     if env.is_empty() {
-        tracing::debug!(shell, mode, "Shell env probe returned empty env");
+        tracing::info!(shell, mode, "[tcc-diagnostic] shell env probe empty env");
         return ShellEnvProbe::Unavailable;
     }
-
+    tracing::info!(
+        shell,
+        mode,
+        env_count = env.len(),
+        "[tcc-diagnostic] shell env probe loaded"
+    );
     ShellEnvProbe::Loaded(env)
 }
 
@@ -383,7 +396,7 @@ fn is_nushell(shell: &str) -> bool {
 }
 fn load_shell_env(shell: &str) -> Option<HashMap<String, String>> {
     if is_nushell(shell) {
-        tracing::debug!(shell, "Skipping shell env probe for nushell");
+        tracing::info!(shell, "[tcc-diagnostic] load_shell_env skip nushell");
         return None;
     }
 
@@ -392,12 +405,12 @@ fn load_shell_env(shell: &str) -> Option<HashMap<String, String>> {
             tracing::info!(
                 shell,
                 env_count = env.len(),
-                "Loaded shell environment with -il"
+                "[tcc-diagnostic] load_shell_env -il loaded"
             );
             return Some(env);
         }
         ShellEnvProbe::Timeout => {
-            tracing::warn!(shell, "Interactive shell env probe timed out");
+            tracing::warn!(shell, "[tcc-diagnostic] load_shell_env -il timeout");
             return None;
         }
         ShellEnvProbe::Unavailable => {}
@@ -407,11 +420,14 @@ fn load_shell_env(shell: &str) -> Option<HashMap<String, String>> {
         tracing::info!(
             shell,
             env_count = env.len(),
-            "Loaded shell environment with -l"
+            "[tcc-diagnostic] load_shell_env -l loaded"
         );
         return Some(env);
     }
-    tracing::warn!(shell, "Falling back to app environment");
+    tracing::warn!(
+        shell,
+        "[tcc-diagnostic] load_shell_env fallback to app environment"
+    );
     None
 }
 
@@ -460,6 +476,20 @@ pub fn spawn_command(
         extra_env
             .iter()
             .map(|(key, value)| (key.to_string(), value.clone())),
+    );
+
+    tracing::info!(
+        args_len = args.len(),
+        is_serve = args.contains(" serve "),
+        is_openclaw = args.contains(" openclaw-serve "),
+        is_extra_agent = args.contains(" extra-agent-serve "),
+        state_dir = %state_dir.display(),
+        OPENCODE_EXPERIMENTAL_ICON_DISCOVERY = true,
+        OPENCODE_EXPERIMENTAL_FILEWATCHER = true,
+        OPENCODE_CLIENT = "desktop",
+        XDG_STATE_HOME = %state_dir.display(),
+        OPENCODE_DISABLE_CHANNEL_DB = true,
+        "[tcc-diagnostic] spawn_command envs built"
     );
 
     let mut cmd = if cfg!(windows) {
@@ -554,12 +584,18 @@ pub fn spawn_command(
             .arg(UNIX_SUPERVISOR)
             .arg("opencode-supervisor");
         cmd.arg(pid);
-        cmd.arg(sidecar);
+        cmd.arg(&sidecar);
         cmd.args(&argv);
 
         for (key, value) in envs {
             cmd.env(key, value);
         }
+
+        tracing::info!(
+            sidecar = %sidecar.display(),
+            cwd = ?app.path().home_dir().ok().map(|p| p.display().to_string()),
+            "[tcc-diagnostic] unix supervisor configured"
+        );
 
         cmd
     };
@@ -698,7 +734,7 @@ pub fn serve(
 ) -> Result<(CommandChild, oneshot::Receiver<TerminatedPayload>), String> {
     let (exit_tx, exit_rx) = oneshot::channel::<TerminatedPayload>();
 
-    tracing::info!(port, "Spawning sidecar");
+    tracing::info!(hostname, port, "[tcc-diagnostic] serve spawning sidecar");
 
     let envs = [
         ("OPENCODE_SERVER_USERNAME", "opencode".to_string()),
@@ -708,7 +744,8 @@ pub fn serve(
 
     let (events, child) = spawn_command(
         app,
-        format!("--log-level {level} serve --hostname {hostname} --port {port}").as_str(),
+        format!("--log-level {level} serve --hostname {hostname} --port {port} --print-logs")
+            .as_str(),
         &envs,
     )
     .map_err(|e| format!("Failed to spawn opencode: {e}"))?;
@@ -718,8 +755,18 @@ pub fn serve(
         events
             .for_each(move |event| {
                 match event {
-                    CommandEvent::Stdout(_) => {}
-                    CommandEvent::Stderr(_) => {}
+                    CommandEvent::Stdout(text) => {
+                        let trimmed = text.trim_end();
+                        if !trimmed.is_empty() && trimmed.contains("[tcc-diagnostic]") {
+                            tracing::info!("[tcc-diagnostic] {}", trimmed);
+                        }
+                    }
+                    CommandEvent::Stderr(text) => {
+                        let trimmed = text.trim_end();
+                        if !trimmed.is_empty() && trimmed.contains("[tcc-diagnostic]") {
+                            tracing::warn!("[tcc-diagnostic] {}", trimmed);
+                        }
+                    }
                     CommandEvent::Error(err) => {
                         tracing::error!("{err}");
                     }

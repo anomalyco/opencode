@@ -75,6 +75,7 @@ export namespace FileWatcher {
           function* () {
             if (yield* Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER) return
 
+            log.warn("[tcc-diagnostic] watcher init", { directory: Instance.directory, platform: process.platform })
             log.info("init", { directory: Instance.directory })
 
             const backend = getBackend()
@@ -87,6 +88,7 @@ export namespace FileWatcher {
             if (!w) return
 
             log.info("watcher backend", { directory: Instance.directory, platform: process.platform, backend })
+            log.warn("[tcc-diagnostic] watcher backend", { directory: Instance.directory, platform: process.platform, backend })
 
             const subs: ParcelWatcher.AsyncSubscription[] = []
             yield* Effect.addFinalizer(() =>
@@ -103,6 +105,14 @@ export namespace FileWatcher {
             })
 
             const subscribe = (dir: string, ignore: string[]) => {
+              const protectedPaths = protecteds(dir)
+              log.warn("[tcc-diagnostic] watcher subscribe", {
+                dir,
+                backend,
+                ignoreCount: ignore.length,
+                protectedIgnoreCount: protectedPaths.length,
+                protectedIgnorePaths: protectedPaths,
+              })
               const pending = w.subscribe(dir, cb, { ignore, backend })
               return Effect.gen(function* () {
                 const sub = yield* Effect.promise(() => pending)
