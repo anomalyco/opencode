@@ -83,6 +83,12 @@ DMG_DIR="$REPO_ROOT/packages/desktop/src-tauri/target/release/bundle/dmg"
 # 这里把它 mv 成 installer 版本号命名,与 Win 的 DeskFox-YYYY.M.D.N-setup.exe 对齐。
 # 文件内部 CFBundleShortVersionString 仍是上游版本(改它要动 package.json 会跟上游冲突)。
 if [[ -n "$NEW_VERSION" && -d "$DMG_DIR" ]]; then
+    # FORK: 版本号用 NumericVersion(strip env suffix),对齐 Win DeskFox.iss OutputBaseFilename
+    # 用 NumericAppVersion 的设计;productName 空格转横杠跟 Win 命名一致("DeskFox Dev" → "DeskFox-Dev")
+    # 例:beta 产物 "DeskFox Beta_1.14.21_aarch64.dmg" + NEW_VERSION="2026.5.21.1-beta"
+    #     → "DeskFox-Beta-2026.5.21.1_aarch64.dmg"(空格转横杠 + strip -beta 后缀)
+    # [feat: ship-scripts-naming-fix] 2026-05-21
+    NUMERIC_VERSION=$(echo "$NEW_VERSION" | sed -E 's/-(dev|beta)$//')
     for dmg in "$DMG_DIR"/*.dmg; do
         [[ -f "$dmg" ]] || continue
         base=$(basename "$dmg")
@@ -91,8 +97,9 @@ if [[ -n "$NEW_VERSION" && -d "$DMG_DIR" ]]; then
         without_ext="${base%.dmg}"
         arch_part="${without_ext##*_}"           # 取最后 _ 之后(arch,如 aarch64)
         rest="${without_ext%_*}"                  # 去掉 _arch
-        product_part="${rest%_*}"                 # 再去掉 _<oldver>(剩 productName)
-        new_name="${product_part}-${NEW_VERSION}_${arch_part}.dmg"
+        product_part="${rest%_*}"                 # 再去掉 _<oldver>(剩 productName,含空格)
+        product_part_clean="${product_part// /-}" # 空格 → 横杠,跟 Win 命名风格对齐
+        new_name="${product_part_clean}-${NUMERIC_VERSION}_${arch_part}.dmg"
         if [[ "$base" != "$new_name" ]]; then
             mv "$dmg" "$DMG_DIR/$new_name"
             echo "[pack] renamed: $base → $new_name"

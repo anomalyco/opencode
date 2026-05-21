@@ -89,12 +89,16 @@ if ($SkipBuild) {
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit $LASTEXITCODE" }
 
 # 3. report path (OutputBaseFilename 三档不同前缀,见 .iss)
+# FORK: 文件名用 NumericVersion(strip env suffix),对齐 .iss OutputBaseFilename={#OutputBase}-{#NumericAppVersion}-setup
+# 例:$newVersion="2026.5.21.1-dev" → $numericVersion="2026.5.21.1" → DeskFox-Dev-2026.5.21.1-setup.exe
+# [feat: ship-scripts-naming-fix] 2026-05-21
 $envSuffix = switch ($Env) {
     "prod" { "" }
     "beta" { "-Beta" }
     "dev"  { "-Dev" }
 }
-$installerPath = Join-Path $root "installer/Output/DeskFox$envSuffix-$newVersion-setup.exe"
+$numericVersion = $newVersion -replace '-(dev|beta)$', ''
+$installerPath = Join-Path $root "installer/Output/DeskFox$envSuffix-$numericVersion-setup.exe"
 if (-not (Test-Path $installerPath)) {
     throw "expected installer not found: $installerPath"
 }

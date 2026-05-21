@@ -62,23 +62,30 @@ try {
 }
 
 # ─── 2. 自动定位 asset 文件 ─────────────────────────────────────────
+# FORK: 加 dev tag 识别(Tier 2 预览版),strip env suffix 得 NumericVer 对齐新 .iss 命名规则
+# [feat: ship-scripts-naming-fix] 2026-05-21
 if (-not $Asset) {
     # 从 tag 推 platform / env / version
-    # ship-prod-2026.5.3.1       → Win  prod  2026.5.3.1
-    # ship-beta-2026.5.10.1      → Win  beta  2026.5.10.1
-    # ship-mac-prod-2026.5.3.1   → Mac  prod  2026.5.3.1
-    if ($Tag -match '^ship-(prod|beta)-(.+)$') {
-        $platform = "Win"; $envName = $Matches[1]; $version = $Matches[2]
-    } elseif ($Tag -match '^ship-mac-(prod|beta)-(.+)$') {
+    # ship-prod-2026.5.3.1            → Win  prod  2026.5.3.1            (Tier 1)
+    # ship-beta-2026.5.10.1-beta      → Win  beta  2026.5.10.1-beta      (beta 储备)
+    # ship-dev-2026.5.21.1-dev        → Win  dev   2026.5.21.1-dev       (Tier 2 预览版)
+    # ship-mac-prod-2026.5.3.1        → Mac  prod  2026.5.3.1
+    # ship-mac-dev-2026.5.21.1-dev    → Mac  dev   2026.5.21.1-dev
+    if ($Tag -match '^ship-mac-(prod|beta|dev)-(.+)$') {
         $platform = "Mac"; $envName = $Matches[1]; $version = $Matches[2]
+    } elseif ($Tag -match '^ship-(prod|beta|dev)-(.+)$') {
+        $platform = "Win"; $envName = $Matches[1]; $version = $Matches[2]
     } else {
         Write-Host "[ERROR] 无法从 tag '$Tag' 推 platform/env/version,请用 -Asset 手动指定" -ForegroundColor Red
         exit 1
     }
 
+    # NumericVer = strip env suffix(对齐 .iss OutputBaseFilename 用 NumericAppVersion)
+    $numericVersion = $version -replace '-(dev|beta)$', ''
+
     if ($platform -eq "Win") {
         $suffix = switch ($envName) { 'prod' {''}; 'beta' {'-Beta'}; 'dev' {'-Dev'} }
-        $candidate = "packages\branding\installer\Output\DeskFox$suffix-$version-setup.exe"
+        $candidate = "packages\branding\installer\Output\DeskFox$suffix-$numericVersion-setup.exe"
         if (-not (Test-Path $candidate)) {
             # release-deskfox.yml 是在 GitHub runner build 的;本地可能没有
             # 退路:从 GitHub Release 下载到 D:\tmp
