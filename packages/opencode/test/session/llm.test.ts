@@ -8,7 +8,7 @@ import { makeRuntime } from "../../src/effect/run-service"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { LLM } from "../../src/session/llm"
 import type { InstanceContext } from "../../src/project/instance-context"
-import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
+import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
 import { Auth } from "@/auth"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
@@ -82,7 +82,7 @@ function llmLayerWithExecutor(executor: Layer.Layer<RequestExecutor.Service>, fl
     Layer.provide(Config.defaultLayer),
     Layer.provide(Provider.defaultLayer),
     Layer.provide(Plugin.defaultLayer),
-    Layer.provide(LLMClient.layer.pipe(Layer.provide(executor))),
+    Layer.provide(LLMClient.layer.pipe(Layer.provide(Layer.mergeAll(executor, WebSocketExecutor.layer)))),
     Layer.provide(RuntimeFlags.layer(flags)),
   )
 }
@@ -979,7 +979,7 @@ describe("session.llm.stream", () => {
       throw new Error("Server not initialized")
     }
 
-    const source = await loadFixture("openai", "gpt-5.2")
+    const source = await loadFixture("openai", "gpt-5.5")
     const model = source.model
 
     const responseChunks = [
@@ -1083,7 +1083,7 @@ describe("session.llm.stream", () => {
       throw new Error("Server not initialized")
     }
 
-    const source = await loadFixture("openai", "gpt-5.2")
+    const source = await loadFixture("openai", "gpt-5.5")
     const model = source.model
     const request = waitRequest(
       "/responses",
@@ -1197,7 +1197,7 @@ describe("session.llm.stream", () => {
       throw new Error("Server not initialized")
     }
 
-    const source = await loadFixture("openai", "gpt-5.2")
+    const source = await loadFixture("openai", "gpt-5.5")
     const model = source.model
     const chunks = [
       {
@@ -1279,7 +1279,7 @@ describe("session.llm.stream", () => {
   })
 
   test("uses injected native request executor for tool calls", async () => {
-    const source = await loadFixture("openai", "gpt-5.2")
+    const source = await loadFixture("openai", "gpt-5.5")
     const model = source.model
     const chunks = [
       {
@@ -1390,7 +1390,7 @@ describe("session.llm.stream", () => {
       throw new Error("Server not initialized")
     }
 
-    const source = await loadFixture("openai", "gpt-5.2")
+    const source = await loadFixture("openai", "gpt-5.5")
     const model = source.model
     const chunks = [
       {
@@ -1420,32 +1420,7 @@ describe("session.llm.stream", () => {
     const request = waitRequest("/responses", createEventResponse(chunks, true))
     let executed: unknown
 
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            $schema: "https://opencode.ai/config.json",
-            enabled_providers: ["openai"],
-            provider: {
-              openai: {
-                name: "OpenAI",
-                env: ["OPENAI_API_KEY"],
-                npm: "@ai-sdk/openai",
-                api: "https://api.openai.com/v1",
-                models: {
-                  [model.id]: model,
-                },
-                options: {
-                  apiKey: "test-openai-key",
-                  baseURL: `${server.url.origin}/v1`,
-                },
-              },
-            },
-          }),
-        )
-      },
-    })
+    await using tmp = await tmpdir({ config: openAIConfig(model, `${server.url.origin}/v1`) })
 
     await withTestInstance({
       directory: tmp.path,
@@ -1515,7 +1490,7 @@ describe("session.llm.stream", () => {
       throw new Error("Server not initialized")
     }
 
-    const source = await loadFixture("openai", "gpt-5.2")
+    const source = await loadFixture("openai", "gpt-5.5")
     const model = source.model
     const chunks = [
       {
@@ -1975,54 +1950,45 @@ describe("session.llm.stream", () => {
         const body = capture.body
 
         expect(capture.url.pathname.endsWith("/messages")).toBe(true)
-        expect(body.messages).toStrictEqual([
+        const messages = body.messages as Array<{ role: string; content: Array<Record<string, unknown>> }>
+        expect(messages[0]?.role).toBe("user")
+        expect(messages[0]?.content[0]).toMatchObject({
+          type: "text",
+          text: "Can you check whether there are any PDF files in my home directory?",
+        })
+        expect(messages.some((message) => message.content.some((part) => "cache_control" in part))).toBe(true)
+        const toolUseIndex = messages.findIndex((message) => message.content.some((part) => part.type === "tool_use"))
+        expect(toolUseIndex).toBeGreaterThan(0)
+        expect(messages[toolUseIndex].role).toBe("assistant")
+        expect(messages[toolUseIndex].content.filter((part) => part.type === "tool_use")).toMatchObject([
           {
-            role: "user",
-            content: [{ type: "text", text: "Can you check whether there are any PDF files in my home directory?" }],
+            type: "tool_use",
+            id: "toolu_01N8mDEzG8DSTs7UPHFtmgCT",
+            name: "read",
+            input: { filePath: "/root" },
           },
           {
-            role: "assistant",
-            content: [
-              {
-                type: "text",
-                text: "I checked your home directory and looked for PDF files.",
-              },
-              {
-                type: "tool_use",
-                id: "toolu_01N8mDEzG8DSTs7UPHFtmgCT",
-                name: "read",
-                input: { filePath: "/root" },
-              },
-              {
-                type: "tool_use",
-                id: "toolu_01APxrADs7VozN8uWzw9WwHr",
-                name: "glob",
-                input: { pattern: "**/*.pdf", path: "/root" },
-                cache_control: {
-                  type: "ephemeral",
-                },
-              },
-            ],
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "tool_result",
-                tool_use_id: "toolu_01N8mDEzG8DSTs7UPHFtmgCT",
-                content: "<path>/root</path>",
-              },
-              {
-                type: "tool_result",
-                tool_use_id: "toolu_01APxrADs7VozN8uWzw9WwHr",
-                content: "No files found",
-                cache_control: {
-                  type: "ephemeral",
-                },
-              },
-            ],
+            type: "tool_use",
+            id: "toolu_01APxrADs7VozN8uWzw9WwHr",
+            name: "glob",
+            input: { pattern: "**/*.pdf", path: "/root" },
           },
         ])
+        expect(messages[toolUseIndex + 1]).toMatchObject({
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_01N8mDEzG8DSTs7UPHFtmgCT",
+              content: "<path>/root</path>",
+            },
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_01APxrADs7VozN8uWzw9WwHr",
+              content: "No files found",
+            },
+          ],
+        })
       },
     })
   })

@@ -102,7 +102,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
             continue
           }
 
-          if (isNewCommand(prompt.text)) {
+          if (prompt.mode !== "shell" && isNewCommand(prompt.text)) {
             emit(
               {
                 type: "queue",
@@ -167,9 +167,11 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
               break
             }
 
-            const commit = { kind: "user", text: prompt.text, phase: "start", source: "system" } as const
-            input.trace?.write("ui.commit", commit)
-            input.footer.append(commit)
+            if (prompt.mode !== "shell") {
+              const commit = { kind: "user", text: prompt.text, phase: "start", source: "system" } as const
+              input.trace?.write("ui.commit", commit)
+              input.footer.append(commit)
+            }
             input.onSend?.(prompt)
 
             if (state.closed) {
@@ -234,7 +236,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
       return
     }
 
-    if (isExitCommand(prompt.text)) {
+    if (prompt.mode !== "shell" && isExitCommand(prompt.text)) {
       input.footer.close()
       return
     }
@@ -249,7 +251,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
         queue: state.queue.length,
       },
     )
-    if (isNewCommand(prompt.text)) {
+    if (prompt.mode !== "shell" && isNewCommand(prompt.text)) {
       drain()
       return
     }

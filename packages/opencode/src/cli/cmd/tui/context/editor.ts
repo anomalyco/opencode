@@ -6,7 +6,7 @@ import { createStore } from "solid-js/store"
 import { Option, Schema, SchemaGetter } from "effect"
 import { isRecord } from "@/util/record"
 import { createSimpleContext } from "./helper"
-import { resolveZedDbPath, resolveZedSelection } from "./editor-zed"
+import { isZedTerminal, resolveZedDbPath, resolveZedSelection } from "./editor-zed"
 
 const MCP_PROTOCOL_VERSION = "2025-11-25"
 
@@ -173,6 +173,12 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
       const connection = resolveEditorConnection(directory)
       if (!connection) {
+        if (!isZedTerminal()) {
+          setStore("status", "disabled")
+          scheduleReconnect()
+          return
+        }
+
         const dbPath = resolveZedDbPath()
         if (!dbPath) {
           setStore("status", "disabled")
@@ -311,7 +317,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
     return {
       enabled() {
-        return Boolean(resolveEditorConnection(directory) || resolveZedDbPath())
+        return Boolean(resolveEditorConnection(directory) || (isZedTerminal() && resolveZedDbPath()))
       },
       connected() {
         return store.status === "connected"

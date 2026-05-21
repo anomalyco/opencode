@@ -1,10 +1,11 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.15.5",
+  "version": "1.15.6",
   "description": "",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./desktop-menu": "./src/desktop-menu.ts",
     "./vite": "./vite.js",
     "./index.css": "./src/index.css"
   },

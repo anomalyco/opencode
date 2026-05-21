@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { ContentBlockID, FinishReason, ProtocolID, ProviderMetadata, RouteID, ToolCallID } from "./ids"
-import { ModelRef } from "./options"
+import { ModelSchema } from "./options"
 import { ToolResultValue } from "./messages"
 
 /**
@@ -290,7 +290,7 @@ export class PreparedRequest extends Schema.Class<PreparedRequest>("LLM.Prepared
   id: Schema.String,
   route: RouteID,
   protocol: ProtocolID,
-  model: ModelRef,
+  model: ModelSchema,
   body: Schema.Unknown,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
