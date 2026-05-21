@@ -88,3 +88,55 @@ test("match handles case-insensitivity on Windows", () => {
     expect(Wildcard.match("/users/test/file", "/Users/test/*")).toBe(false)
   }
 })
+
+test("* does not match path separator /", () => {
+  expect(Wildcard.match("secrets.env", "*.env")).toBe(true)
+  expect(Wildcard.match(".env", "*.env")).toBe(true)
+  expect(Wildcard.match("src/.env", "*.env")).toBe(false)
+  expect(Wildcard.match("a/b/.env", "*.env")).toBe(false)
+  expect(Wildcard.match("src/config.env", "*.env")).toBe(false)
+})
+
+test("** matches across path separators (globstar)", () => {
+  expect(Wildcard.match(".env", "**/*.env")).toBe(true)
+  expect(Wildcard.match("src/.env", "**/*.env")).toBe(true)
+  expect(Wildcard.match("a/b/c/.env", "**/*.env")).toBe(true)
+  expect(Wildcard.match("src/config/.env", "**/*.env")).toBe(true)
+  expect(Wildcard.match("src/secrets.env", "**/*.env")).toBe(true)
+})
+
+test("** matches zero or more directory segments", () => {
+  expect(Wildcard.match("file.txt", "**/file.txt")).toBe(true)
+  expect(Wildcard.match("src/file.txt", "**/file.txt")).toBe(true)
+  expect(Wildcard.match("src/components/file.txt", "**/file.txt")).toBe(true)
+})
+
+test("src/*.env matches only direct children of src/", () => {
+  expect(Wildcard.match("src/.env", "src/*.env")).toBe(true)
+  expect(Wildcard.match("src/secrets.env", "src/*.env")).toBe(true)
+  expect(Wildcard.match("src/a/.env", "src/*.env")).toBe(false)
+  expect(Wildcard.match("src/a/b/.env", "src/*.env")).toBe(false)
+  expect(Wildcard.match(".env", "src/*.env")).toBe(false)
+})
+
+test("src/**/*.env matches nested files under src/", () => {
+  expect(Wildcard.match("src/.env", "src/**/*.env")).toBe(true)
+  expect(Wildcard.match("src/a/.env", "src/**/*.env")).toBe(true)
+  expect(Wildcard.match("src/a/b/.env", "src/**/*.env")).toBe(true)
+  expect(Wildcard.match("lib/.env", "src/**/*.env")).toBe(false)
+})
+
+test("? does not match path separator", () => {
+  expect(Wildcard.match("a", "?")).toBe(true)
+  expect(Wildcard.match("x", "?")).toBe(true)
+  expect(Wildcard.match("/", "?")).toBe(false)
+  expect(Wildcard.match("ab", "?")).toBe(false)
+})
+
+test("trailing space+wildcard with path-aware * still works for commands", () => {
+  expect(Wildcard.match("ls", "ls *")).toBe(true)
+  expect(Wildcard.match("ls -la", "ls *")).toBe(true)
+  expect(Wildcard.match("git status", "git *")).toBe(true)
+  expect(Wildcard.match("git", "git *")).toBe(true)
+  expect(Wildcard.match("lstmeval", "ls *")).toBe(false)
+})

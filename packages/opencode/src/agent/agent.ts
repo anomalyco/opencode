@@ -95,11 +95,11 @@ export const layer = Layer.effect(
         const skillDirs = yield* skill.dirs()
         const whitelistedDirs = [
           Truncate.GLOB,
-          path.join(Global.Path.tmp, "*"),
-          ...skillDirs.map((dir) => path.join(dir, "*")),
+          path.join(Global.Path.tmp, "**"),
+          ...skillDirs.map((dir) => path.join(dir, "**")),
         ]
         const readonlyExternalDirectory = {
-          "*": "ask",
+          "**": "ask",
           ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
         } satisfies Record<string, "allow" | "ask" | "deny">
 
@@ -107,7 +107,7 @@ export const layer = Layer.effect(
           "*": "allow",
           doom_loop: "ask",
           external_directory: {
-            "*": "ask",
+            "**": "ask",
             ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
           },
           question: "deny",
@@ -117,10 +117,10 @@ export const layer = Layer.effect(
           repo_overview: "deny",
           // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
           read: {
-            "*": "allow",
-            "*.env": "ask",
-            "*.env.*": "ask",
-            "*.env.example": "allow",
+            "**": "allow",
+            "**/*.env": "ask",
+            "**/*.env.*": "ask",
+            "**/*.env.example": "allow",
           },
         })
 

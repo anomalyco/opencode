@@ -1,18 +1,26 @@
 import { sortBy, pipe } from "remeda"
 
+const GS = "__OC_GS__"
+const GSS = "__OC_GSS__"
+const Q = "__OC_Q__"
+const STAR = "__OC_STAR__"
+const GSS_REPL = "(?:" + ".+/)" + "\x3F"
+
 export function match(str: string, pattern: string) {
   if (str) str = str.replaceAll("\\", "/")
   if (pattern) pattern = pattern.replaceAll("\\", "/")
   let escaped = pattern
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&") // escape special regex chars
-    .replace(/\*/g, ".*") // * becomes .*
-    .replace(/\?/g, ".") // ? becomes .
+    .replace(/\*\*\//g, GSS)
+    .replace(/\*\*/g, GS)
+    .replace(/\*/g, STAR)
+    .replace(/\?/g, Q)
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(new RegExp(GSS, "g"), GSS_REPL)
+    .replace(new RegExp(GS, "g"), ".*")
+    .replace(new RegExp(STAR, "g"), "[^/]*")
+    .replace(new RegExp(Q, "g"), "[^/]")
 
-  // If pattern ends with " *" (space + wildcard), make the trailing part optional
-  // This allows "ls *" to match both "ls" and "ls -la"
-  if (escaped.endsWith(" .*")) {
-    escaped = escaped.slice(0, -3) + "( .*)?"
-  }
+  if (escaped.endsWith(" [^/]*")) escaped = escaped.slice(0, -6) + "( [^/]*)?"
 
   const flags = process.platform === "win32" ? "si" : "s"
   return new RegExp("^" + escaped + "$", flags).test(str)

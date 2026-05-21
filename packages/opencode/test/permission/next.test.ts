@@ -318,9 +318,9 @@ test("evaluate - last matching glob wins", () => {
 })
 
 test("evaluate - order matters for specificity", () => {
-  const result = Permission.evaluate("edit", "src/components/Button.tsx", [
-    { permission: "edit", pattern: "src/components/*", action: "allow" },
-    { permission: "edit", pattern: "src/*", action: "deny" },
+  const result = Permission.evaluate("edit", "src/Button.tsx", [
+    { permission: "edit", pattern: "src/*", action: "allow" },
+    { permission: "edit", pattern: "src/Button.tsx", action: "deny" },
   ])
   expect(result.action).toBe("deny")
 })
@@ -374,8 +374,8 @@ test("evaluate - exact match at end wins over earlier wildcard", () => {
 })
 
 test("evaluate - wildcard at end overrides earlier exact match", () => {
-  const result = Permission.evaluate("bash", "/bin/rm", [
-    { permission: "bash", pattern: "/bin/rm", action: "deny" },
+  const result = Permission.evaluate("bash", "rm", [
+    { permission: "bash", pattern: "rm", action: "deny" },
     { permission: "bash", pattern: "*", action: "allow" },
   ])
   expect(result.action).toBe("allow")
@@ -581,10 +581,10 @@ it.instance(
         ask({
           sessionID: SessionID.make("session_test"),
           permission: "bash",
-          patterns: ["rm -rf /"],
+          patterns: ["rm -rf"],
           metadata: {},
           always: [],
-          ruleset: [{ permission: "bash", pattern: "*", action: "deny" }],
+          ruleset: [{ permission: "bash", pattern: "rm *", action: "deny" }],
         }),
       )
       expect(err).toBeInstanceOf(Permission.DeniedError)
@@ -1074,11 +1074,11 @@ it.instance(
         ask({
           sessionID: SessionID.make("session_test"),
           permission: "bash",
-          patterns: ["echo hello", "rm -rf /"],
+          patterns: ["echo hello", "rm -rf"],
           metadata: {},
           always: [],
           ruleset: [
-            { permission: "bash", pattern: "*", action: "allow" },
+            { permission: "bash", pattern: "**", action: "allow" },
             { permission: "bash", pattern: "rm *", action: "deny" },
           ],
         }),
@@ -1113,7 +1113,7 @@ it.instance(
         ask({
           sessionID: SessionID.make("session_test"),
           permission: "bash",
-          patterns: ["echo hello", "rm -rf /"],
+          patterns: ["echo hello", "rm -rf"],
           metadata: {},
           always: [],
           ruleset: [

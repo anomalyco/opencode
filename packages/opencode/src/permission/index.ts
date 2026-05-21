@@ -288,6 +288,10 @@ export function fromConfig(permission: ConfigPermission.Info) {
       ruleset.push({ permission: key, action: value, pattern: "*" })
       continue
     }
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      log.warn("invalid permission config", { key, value })
+      continue
+    }
     ruleset.push(
       ...Object.entries(value).map(([pattern, action]) => ({ permission: key, pattern: expand(pattern), action })),
     )
