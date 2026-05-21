@@ -9,6 +9,7 @@ export default $config({
       home: "cloudflare",
       providers: {
         stripe: {
+          version: "0.0.28",
           apiKey: process.env.STRIPE_SECRET_KEY!,
         },
         random: "4.19.2",
