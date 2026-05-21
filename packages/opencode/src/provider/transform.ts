@@ -937,13 +937,14 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         )
       }
 
-      // GLM models only support a binary thinking toggle (not graduated effort
-      // levels), so we expose a single "enabled" variant that sends
-      // reasoning_config: "high" to Bedrock. Omitting the variant keeps
+      // GLM models only support a binary thinking toggle (not graduated
+      // effort levels), so we expose a single "high" variant — following
+      // the same convention as Anthropic/Nova on Bedrock where selecting
+      // an effort level enables reasoning. Omitting the variant keeps
       // reasoning off.
       if (id.includes("glm") && model.api.npm === "@ai-sdk/amazon-bedrock") {
         return {
-          enabled: { additionalModelRequestFields: { reasoning_config: "high" } },
+          high: { additionalModelRequestFields: { reasoning_config: "high" } },
         }
       }
 
