@@ -207,6 +207,12 @@ export function provideTmpdirInstance<A, E, R>(
 
 export class TestInstance extends Context.Service<TestInstance, { readonly directory: string }>()("@test/Instance") {}
 
+export const requireInstance = Effect.gen(function* () {
+  const instance = yield* InstanceRef
+  if (!instance) return yield* Effect.die(new Error("missing test instance"))
+  return instance
+})
+
 export const withTmpdirInstance =
   (options?: { git?: boolean; config?: Partial<Config.Info> | (() => Partial<Config.Info>) }) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
