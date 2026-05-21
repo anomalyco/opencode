@@ -941,6 +941,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
+  const [mode, setMode] = createSignal<"doc" | "prompt">("doc")
   const [state, setState] = createStore({
     copied: false,
     busy: false,
@@ -997,6 +998,12 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
       <Markdown text={docText()} cacheKey={textPart()?.id} />
     </Show>
   )
+
+  const label = createMemo(() =>
+    mode() === "doc" ? i18n.t("ui.message.viewPromptSnapshot") : i18n.t("ui.message.viewDocument"),
+  )
+
+  const toggle = () => setMode(mode() === "doc" ? "prompt" : "doc")
 
   const model = createMemo(() => {
     const providerID = props.message.model?.providerID
@@ -1088,7 +1095,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
         <>
           <div data-slot="user-message-body" data-doc={doc() ? "true" : undefined}>
             <div data-slot="user-message-text" data-doc={doc() ? "true" : undefined}>
-              <Show when={view()} keyed fallback={content()}>
+              <Show when={mode() === "doc" ? view() : undefined} keyed fallback={content()}>
                 {(next) => <Dynamic component={next.comp} id={next.id} fallback={content()} />}
               </Show>
             </div>
@@ -1112,6 +1119,22 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
                   </span>
                 </Show>
               </span>
+            </Show>
+            <Show when={view()}>
+              <Tooltip value={label()} placement="top" gutter={4}>
+                <IconButton
+                  icon={mode() === "doc" ? "code" : "window-cursor"}
+                  size="normal"
+                  variant="ghost"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    toggle()
+                  }}
+                  aria-label={label()}
+                  aria-pressed={mode() === "prompt"}
+                />
+              </Tooltip>
             </Show>
             <Show when={props.actions?.revert}>
               <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
