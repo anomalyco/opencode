@@ -174,7 +174,7 @@ function HomeDesign() {
   }
 
   return (
-    <div class="mx-auto grid w-full h-full max-w-[1080px] gap-8 px-6 pb-16 pt-12 lg:grid-cols-[280px_minmax(0,720px)]">
+    <div class="mx-auto grid w-full h-full max-w-[1080px] gap-8 px-6 pb-16 lg:grid-cols-[280px_minmax(0,720px)]">
       <HomeProjectColumn
         projects={projects()}
         selected={selectedProject()?.worktree}
@@ -185,39 +185,44 @@ function HomeDesign() {
         language={language}
       />
 
-      <section class="min-w-0 flex-1 overflow-auto" aria-label={language.t("sidebar.project.recentSessions")}>
+      <section
+        class="min-w-0 flex-1 flex flex-col overflow-y-hidden pt-12"
+        aria-label={language.t("sidebar.project.recentSessions")}
+      >
         <HomeSessionSearch
           value={state.search}
           placeholder={language.t("home.sessions.search.placeholder")}
           onInput={(value) => setState("search", value)}
         />
-        <div class="mt-6 flex flex-col gap-6 overflow-auto">
-          <Show when={!sessionLoad.isLoading} fallback={<HomeSessionSkeleton label={language.t("common.loading")} />}>
-            <Show
-              when={groups().length > 0}
-              fallback={
-                <div class="flex min-w-0 flex-col gap-4">
-                  <HomeSessionGroupHeader title={language.t("home.sessions.empty")} onNewSession={openNewSession} />
-                </div>
-              }
-            >
-              <For each={groups()}>
-                {(group, index) => (
+        <div class="mt-3 overflow-auto flex-1">
+          <div class="pt-3 flex flex-col gap-6">
+            <Show when={!sessionLoad.isLoading} fallback={<HomeSessionSkeleton label={language.t("common.loading")} />}>
+              <Show
+                when={groups().length > 0}
+                fallback={
                   <div class="flex min-w-0 flex-col gap-4">
-                    <HomeSessionGroupHeader
-                      title={group.title}
-                      onNewSession={index() === 0 ? openNewSession : undefined}
-                    />
-                    <div class="flex min-w-0 flex-col gap-px">
-                      <For each={group.sessions}>
-                        {(record) => <HomeSessionRow record={record} openSession={openSession} />}
-                      </For>
-                    </div>
+                    <HomeSessionGroupHeader title={language.t("home.sessions.empty")} onNewSession={openNewSession} />
                   </div>
-                )}
-              </For>
+                }
+              >
+                <For each={groups()}>
+                  {(group, index) => (
+                    <div class="flex min-w-0 flex-col gap-4">
+                      <HomeSessionGroupHeader
+                        title={group.title}
+                        onNewSession={index() === 0 ? openNewSession : undefined}
+                      />
+                      <div class="flex min-w-0 flex-col gap-px">
+                        <For each={group.sessions}>
+                          {(record) => <HomeSessionRow record={record} openSession={openSession} />}
+                        </For>
+                      </div>
+                    </div>
+                  )}
+                </For>
+              </Show>
             </Show>
-          </Show>
+          </div>
         </div>
       </section>
     </div>
