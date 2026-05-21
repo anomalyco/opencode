@@ -51,7 +51,7 @@ export const SessionTool = Tool.define<typeof Parameters, Metadata, Session.Serv
             output: `Session renamed to: "${params.title}"`,
             metadata: {},
           }
-        }),
+        }).pipe(Effect.orDie),
     } satisfies Tool.DefWithoutID<typeof Parameters, Metadata>
   }),
 )
