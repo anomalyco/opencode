@@ -15,6 +15,10 @@ jobs:
   close-non-compliant:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: dev
+
       - name: Close non-compliant issues and PRs after 2 hours
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
@@ -34,13 +38,11 @@ jobs:
 
             const now = Date.now();
             const twoHours = 2 * 60 * 60 * 1000;
-            const { data: teamFile } = await github.rest.repos.getContent({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path: '.github/TEAM_MEMBERS',
-              ref: 'dev'
-            });
-            const teamMembers = Buffer.from(teamFile.content, 'base64').toString().split('\n').map(l => l.trim().toLowerCase()).filter(Boolean);
+            const teamMembers = require('fs')
+              .readFileSync('.github/TEAM_MEMBERS', 'utf8')
+              .split('\n')
+              .map(l => l.trim().toLowerCase())
+              .filter(Boolean);
 
             for (const item of items) {
               const isPR = !!item.pull_request;

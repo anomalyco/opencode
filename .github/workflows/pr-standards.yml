@@ -11,6 +11,10 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: dev
+
       - name: Check PR standards
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
@@ -28,13 +32,11 @@ jobs:
 
             // Check if author is a team member or bot
             if (login === 'opencode-agent[bot]') return;
-            const { data: file } = await github.rest.repos.getContent({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path: '.github/TEAM_MEMBERS',
-              ref: 'dev'
-            });
-            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim().toLowerCase()).filter(Boolean);
+            const members = require('fs')
+              .readFileSync('.github/TEAM_MEMBERS', 'utf8')
+              .split('\n')
+              .map(l => l.trim().toLowerCase())
+              .filter(Boolean);
             if (members.includes(login.toLowerCase())) {
               console.log(`Skipping: ${login} is a team member`);
               return;
@@ -158,6 +160,10 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: dev
+
       - name: Check PR template compliance
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
@@ -175,13 +181,11 @@ jobs:
 
             // Check if author is a team member or bot
             if (login === 'opencode-agent[bot]') return;
-            const { data: file } = await github.rest.repos.getContent({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path: '.github/TEAM_MEMBERS',
-              ref: 'dev'
-            });
-            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim().toLowerCase()).filter(Boolean);
+            const members = require('fs')
+              .readFileSync('.github/TEAM_MEMBERS', 'utf8')
+              .split('\n')
+              .map(l => l.trim().toLowerCase())
+              .filter(Boolean);
             if (members.includes(login.toLowerCase())) {
               console.log(`Skipping: ${login} is a team member`);
               return;
