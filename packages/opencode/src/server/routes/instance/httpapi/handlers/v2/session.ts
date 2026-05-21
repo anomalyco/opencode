@@ -3,7 +3,7 @@ import { SessionV2 } from "@/v2/session"
 import { DateTime, Effect, Option, Schema } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
-import { InvalidCursorError, InvalidRequestError, SessionNotFoundError } from "../../errors"
+import { InvalidCursorError, InvalidRequestError, ServiceUnavailableError, SessionNotFoundError } from "../../errors"
 
 const DefaultSessionsLimit = 50
 
@@ -148,6 +148,14 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
                   }),
                 ),
               ),
+              Effect.catchTag("Session.OperationUnavailableError", (error) =>
+                Effect.fail(
+                  new ServiceUnavailableError({
+                    message: `V2 session ${error.operation} is not available yet`,
+                    service: `v2.session.${error.operation}`,
+                  }),
+                ),
+              ),
             )
         }),
       )
@@ -160,6 +168,14 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
                 new SessionNotFoundError({
                   sessionID: error.sessionID,
                   message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+            Effect.catchTag("Session.OperationUnavailableError", (error) =>
+              Effect.fail(
+                new ServiceUnavailableError({
+                  message: `V2 session ${error.operation} is not available yet`,
+                  service: `v2.session.${error.operation}`,
                 }),
               ),
             ),
@@ -176,6 +192,14 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
                 new SessionNotFoundError({
                   sessionID: error.sessionID,
                   message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+            Effect.catchTag("Session.OperationUnavailableError", (error) =>
+              Effect.fail(
+                new ServiceUnavailableError({
+                  message: `V2 session ${error.operation} is not available yet`,
+                  service: `v2.session.${error.operation}`,
                 }),
               ),
             ),
