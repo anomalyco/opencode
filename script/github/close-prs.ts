@@ -69,12 +69,7 @@ const maxClose =
 const sleepMs = requireNonNegativeInteger("sleep-ms", values["sleep-ms"])
 const printLimit = requireNonNegativeInteger("print-limit", values["print-limit"])
 const cutoff = subtractMonths(new Date(), ageMonths)
-const teamMembers = new Set(
-  (await Bun.file(new URL("../../.github/TEAM_MEMBERS", import.meta.url)).text())
-    .split("\n")
-    .map((login) => login.trim().toLowerCase())
-    .filter(Boolean),
-)
+const teamAssociations = new Set(["OWNER", "MEMBER", "COLLABORATOR"])
 
 const headers = {
   Authorization: `Bearer ${token}`,
@@ -88,9 +83,7 @@ type PullRequest = {
   title: string
   url: string
   createdAt: string
-  author: {
-    login: string
-  }
+  authorAssociation: string
   reactionGroups: Array<{
     content: string
     users: {
@@ -220,9 +213,7 @@ async function fetchOpenPullRequests() {
               title
               url
               createdAt
-              author {
-                login
-              }
+              authorAssociation
               reactionGroups {
                 content
                 users {
@@ -354,7 +345,7 @@ function hasPriorCleanup(pr: PullRequest) {
 }
 
 function isTeamMember(pr: PullRequest) {
-  return teamMembers.has(pr.author.login.toLowerCase())
+  return teamAssociations.has(pr.authorAssociation)
 }
 
 function requireRepo(value: string | undefined) {
