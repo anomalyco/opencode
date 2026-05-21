@@ -36,6 +36,8 @@ import { usePlatform } from "@/context/platform"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
+// FORK: 聊天输入框焦点跟随 helper [feat: chat-input-focus-follow] 2026-05-21
+import { registerChatInputRef, unregisterChatInputRef } from "@/utils/chat-input-focus"
 import { createPromptAttachments } from "./prompt-input/attachments"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
 import {
@@ -1339,6 +1341,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               ref={(el) => {
                 editorRef = el
                 props.ref?.(el)
+                // FORK: 注册到全局 chat-input-focus,让外部"加到聊天"入口能 focus 回来 [feat: chat-input-focus-follow] 2026-05-21
+                registerChatInputRef(el)
+                onCleanup(() => unregisterChatInputRef(el))
               }}
               role="textbox"
               aria-multiline="true"
