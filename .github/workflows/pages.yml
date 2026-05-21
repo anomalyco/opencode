@@ -38,14 +38,21 @@ jobs:
       - name: Build (static export)
         run: bun run build
 
-      - name: Disable Jekyll on Pages
-        run: touch out/.nojekyll
+      # basePath /securecode/demo に対応させるため、out/ を _site/demo/ に
+      # ネストしてから upload する。Pages の repo root (/securecode/) に
+      # 配信されるアーティファクトの中で、HTML が /demo/ サブディレクトリに
+      # 来るようにすることで、build 時のリンクと配信パスを一致させる。
+      - name: Stage artifact under /demo subdirectory
+        run: |
+          mkdir -p _site/demo
+          cp -a out/. _site/demo/
+          touch _site/.nojekyll
 
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: demo/out
+          path: demo/_site
 
   deploy:
     needs: build
