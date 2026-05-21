@@ -595,25 +595,6 @@ export function __resetForTests() {
   inflightRefresh = undefined
 }
 
-function copyHeaders(source: HeadersInit | undefined): Headers {
-  const headers = new Headers()
-  if (!source) return headers
-  if (source instanceof Headers) {
-    source.forEach((value, key) => headers.set(key, value))
-    return headers
-  }
-  if (Array.isArray(source)) {
-    for (const [key, value] of source) {
-      if (value !== undefined) headers.set(key, String(value))
-    }
-    return headers
-  }
-  for (const [key, value] of Object.entries(source as Record<string, string | undefined>)) {
-    if (value !== undefined) headers.set(key, String(value))
-  }
-  return headers
-}
-
 export async function XaiAuthPlugin(input: PluginInput): Promise<Hooks> {
   return {
     auth: {
@@ -655,7 +636,18 @@ export async function XaiAuthPlugin(input: PluginInput): Promise<Hooks> {
             // so we never mutate the RequestInit the AI SDK may reuse on retry.
             // Headers.set overwrites case-insensitively, which kills the dummy
             // bearer the AI SDK injected from apiKey in a single line.
-            const headers = copyHeaders(init?.headers)
+            const headers = new Headers(requestInput instanceof Request ? requestInput.headers : undefined)
+            if (init?.headers) {
+              const entries =
+                init.headers instanceof Headers
+                  ? init.headers.entries()
+                  : Array.isArray(init.headers)
+                    ? init.headers
+                    : Object.entries(init.headers as Record<string, string | undefined>)
+              for (const [key, value] of entries) {
+                if (value !== undefined) headers.set(key, String(value))
+              }
+            }
             headers.set("authorization", `Bearer ${currentAuth.access}`)
             headers.set("User-Agent", `opencode/${InstallationVersion}`)
 

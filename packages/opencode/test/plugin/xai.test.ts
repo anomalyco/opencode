@@ -301,6 +301,34 @@ describe("plugin.xai", () => {
       }
     })
 
+    test("preserves headers from Request input and lets init headers override them", async () => {
+      const { input } = makeInput()
+      const hooks = await XaiAuthPlugin(input)
+      const opts = await hooks.auth!.loader!(
+        async () => ({ type: "oauth", access: "tok", refresh: "rt", expires: Date.now() + 3600_000 }),
+        {} as any,
+      )
+
+      const captured: Headers[] = []
+      globalThis.fetch = mock(async (_url: any, init?: RequestInit) => {
+        captured.push(new Headers(init?.headers as HeadersInit))
+        return new Response("{}", { status: 200 })
+      }) as any
+
+      await opts.fetch!(
+        new Request("https://api.x.ai/v1/chat/completions", {
+          headers: { Authorization: `Bearer ${OAUTH_DUMMY_KEY}`, "content-type": "application/json", "x-trace": "request" },
+        }),
+        { headers: { "x-trace": "init", "x-extra": "yes" } },
+      )
+
+      expect(captured).toHaveLength(1)
+      expect(captured[0].get("authorization")).toBe("Bearer tok")
+      expect(captured[0].get("content-type")).toBe("application/json")
+      expect(captured[0].get("x-trace")).toBe("init")
+      expect(captured[0].get("x-extra")).toBe("yes")
+    })
+
     test("falls through to plain fetch with caller headers intact when stored auth flips from oauth to api mid-session", async () => {
       // Regression: an earlier version stripped the Authorization header
       // before checking auth.type, so a user who switched from OAuth back
