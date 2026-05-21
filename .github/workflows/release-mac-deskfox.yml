@@ -22,14 +22,28 @@
 # 签名:**不签**。Gatekeeper "右键打开"惯例,详见 docs/governance/数字签名问题.md。
 # 文件名规则(强制):*-deskfox.yml,跟上游 0 重名,pre-commit hook 自动豁免
 
-# ─── 🚧 2026-05-11 起 DISABLED ────────────────────────────────────────
-# Mac ship 跟 Win 一起停掉 GitHub Actions 自动化,统一改"本地打包 + 手动上传"
-# 模式(等有 Mac 机器或后续治理时复活)。
-# 原因:user 决策 — 不再用 GitHub Actions 出安装包(Win 端 sidecar build 死锁
-# 是直接触发,Mac 端虽然历史成功,但维持一套 CI 注定要持续投精力维护,统一停)。
-# Mac 端历史 ship:2026.5.7.1 / 2026.5.5.1 / 2026.5.4.1 / 2026.4.30.x — 详见
-# docs/installer-versions.md。
-# 复活方式:取消下方 `on:` 块注释 + 删 disabled 段。
+# ─── 🚫 OFFICIALLY ABANDONED 2026-05-21 ─────────────────────────────────
+# 本 workflow 永久废止,不再恢复。详 docs/governance/版本号与发布渠道规范.md。
+#
+# 历史:
+#   2026-05-11 跟 Win 端 release-deskfox.yml 一起 DISABLED(user 决策"不再用
+#     GitHub Actions 出安装包"统一两端策略;Win 端撞 sidecar deadlock 是直接触发,
+#     Mac 端历史成功但维持一套 CI 注定持续投精力维护)。
+#   2026-05-21 user 拍板:本地 pack + 手动上传流程已实战跑顺,放弃云端 build,
+#     本 workflow 永久废止不再复活。
+#
+# Mac 历史 ship(全部已发):2026.5.12.1 / 2026.5.7.1 / 2026.5.5.1 / 2026.5.4.1
+#   / 2026.4.30.x — 详 docs/installer-versions.md
+#
+# 唯一 ship 流程(Tier 1 / 2 通用,Mac 等价 Win):
+#   1. 本地 pack-installer.sh --env <prod|dev>(bump + build + .dmg rename)
+#   2. 本地 git commit bump + tag + push
+#   3. 本地 gh release create [--prerelease] <tag> <.dmg>
+#   4. 本地 mirror-asset-to-gitee.sh <tag> 上传 Gitee
+#   完整 SOP 见 docs/governance/版本号与发布渠道规范.md §五
+#
+# 本 yml 保留作历史快照(macOS runner build 策略 + Rust target 缓存 + Tauri
+# bundle 处理逻辑等知识有参考价值)。`on:` 已剥光,user 在 GH UI 不会误触发。
 # ──────────────────────────────────────────────────────────────────────
 
 name: release-mac-deskfox

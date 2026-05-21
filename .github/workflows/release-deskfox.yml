@@ -20,13 +20,28 @@
 #
 # 文件名规则(强制):*-deskfox.yml,跟上游 0 重名,pre-commit hook 自动豁免
 #
-# ─── 🚧 2026-05-11 起 DISABLED ────────────────────────────────────────
-# Win ship 改为本地打包 + 手动上传 GitHub Release + 跑 mirror-asset-to-gitee.ps1
-# 原因:`bun run build --single` 在 GH Actions windows-latest runner 上撞
-# sidecar build deadlock(line 934 `Resolved, downloaded and extracted [5]` 后
-# stdout 静默挂死,60min job timeout 被 cancel),根因待新会话查。
-# 本地打包 + 手动上传流程在 docs/governance/win-ship-local-pack.md(待补)。
-# 复活方式:取消下方 `on:` 块注释 + 删 disabled 段。
+# ─── 🚫 OFFICIALLY ABANDONED 2026-05-21 ─────────────────────────────────
+# 本 workflow 永久废止,不再恢复。详 docs/governance/版本号与发布渠道规范.md。
+#
+# 历史:
+#   2026-05-11 因 `bun run build --single` 在 GitHub Actions windows-latest
+#     runner 撞 sidecar build deadlock(line 934 `Resolved, downloaded and
+#     extracted [5]` 后 stdout 静默挂死,60min job timeout 被强杀)临时 DISABLED,
+#     挂账"根因待新会话查"。
+#   2026-05-21 user 决议放弃 dig:半个月未 dig 出来,本地 pack + 手动上传流程
+#     已实战跑顺(多次 Tier 1 prod ship + 首次 Tier 2 dev ship 全部本地路径成功),
+#     云端 build 已无业务价值,deadlock 不再 dig,本 workflow 不再复活。
+#
+# 唯一 ship 流程(Tier 1 / 2 通用):
+#   1. 本地 pack-installer.ps1 -Env <prod|dev>(bump + build + ISCC pack)
+#   2. 本地 git commit bump artifacts + tag + push
+#   3. 本地 gh release create [--prerelease] <tag> <installer>
+#   4. 本地 mirror-asset-to-gitee.ps1 上传 Gitee
+#   完整 SOP 见 docs/governance/版本号与发布渠道规范.md §五
+#
+# 本 yml 保留作历史快照(build job 逻辑 + Rust cache 策略 + ISCC 安装步骤等知识
+# 有参考价值)。`on:` 触发已剥光,只留 workflow_dispatch + abandoned-notice 输入,
+# user 在 GH UI 也不会误触发实际 build。
 # ──────────────────────────────────────────────────────────────────────
 
 name: release-deskfox

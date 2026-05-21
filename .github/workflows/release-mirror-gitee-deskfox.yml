@@ -23,17 +23,28 @@
 
 name: release-mirror-gitee-deskfox
 
-# ─── 🚧 2026-05-11 起 DISABLED ────────────────────────────────────────
-# Gitee mirror 改为本地 API 手动建 release + 跑 mirror-asset-to-gitee.ps1 上传 .exe。
-# 原因:(1) 本 workflow 长期 silent fail — 5.5.1 / 5.9.1 GH 显示 success 但 Gitee
-#   实际没建 release(根因待查);(2) Win 端 release-deskfox.yml 已 disabled,
-#   GitHub Release 改本地手动 publish,这条 mirror 也无需自动化。
-# 本地流程:
-#   1. 本地 build .exe(packages/branding/installer/Output/)
-#   2. gh release create ship-prod-<version> ... --draft + publish
-#   3. 用 Gitee API 手动建 release(或后续给 mirror-asset 加 create-if-missing 逻辑)
-#   4. 跑 packages/branding/scripts/mirror-asset-to-gitee.ps1 -Tag ...
-# 复活方式:取消下方 `on:` 块注释 + 删 disabled 段。
+# ─── 🚫 OFFICIALLY ABANDONED 2026-05-21 ─────────────────────────────────
+# 本 workflow 永久废止,不再恢复。详 docs/governance/版本号与发布渠道规范.md。
+#
+# 历史:
+#   2026-05-11 DISABLED,原因双层:
+#     (1) 本 workflow 长期 silent fail — 5.5.1 / 5.9.1 GH 显示 success 但 Gitee
+#         实际没建 release(根因待查)
+#     (2) Win 端 release-deskfox.yml 已 disabled,GitHub Release 改本地手动 publish,
+#         这条 mirror workflow 也无需自动化
+#   2026-05-21 user 拍板:跟 release-deskfox.yml 一并永久废止。本地 ship 流程已实战
+#     跑顺:Gitee release 元数据用 Gitee API 手动建,附件用 mirror-asset-to-gitee.ps1
+#     上传(国内 IP 秒传)。
+#
+# 本地 Gitee mirror 流程(对齐 GitHub Release 后):
+#   1. Invoke-RestMethod POST https://gitee.com/api/v5/repos/<owner>/<repo>/releases
+#      body: tag_name / name / body / prerelease / target_commitish=main
+#   2. .\packages\branding\scripts\mirror-asset-to-gitee.ps1 -Tag <tag>
+#      (本地 IP 秒传,国内网络 ~5s 完成 50MB+ .exe 上传)
+#   完整 SOP 见 docs/governance/版本号与发布渠道规范.md §五
+#
+# 本 yml 保留作历史快照(Gitee API 调用 / curl 上传 / 兼容 release event +
+# workflow_dispatch 双触发等代码片段有参考价值)。`on:` 已剥光不会误触发。
 # ──────────────────────────────────────────────────────────────────────
 
 # on:  # DISABLED 2026-05-11 — 见上方注释
