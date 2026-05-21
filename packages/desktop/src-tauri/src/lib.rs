@@ -564,6 +564,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             copy_path,           // FORK: 文件树复制粘贴 2026-04-27
             text_file::write_text_file,
             text_file::get_file_mtime,
+            text_file::get_file_size, // FORK: 大文件预览统一防护 L1 size pre-check [feat: large-file-preview-guard] 2026-05-21
             text_file::read_binary_file_base64,
             text_file::write_binary_file_absolute_base64, // FORK: 文件树外部 OS 文件拖入 2026-04-28
             text_file::fetch_url_base64, // FORK: MD 导出 Word — 远端图片 fetch 绕 WebView2 CORS 2026-05-08

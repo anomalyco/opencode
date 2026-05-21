@@ -20,6 +20,19 @@ pub fn get_file_mtime(root: String, path: String) -> Result<u64, String> {
     mtime_ms(&resolve(&root, &path))
 }
 
+// FORK: 文件 size 探测 — 大文件预览统一防护入口闸门(L1),pre-read 拦截避免 OOM
+// [feat: large-file-preview-guard] 2026-05-21
+#[tauri::command]
+#[specta::specta]
+pub fn get_file_size(root: String, path: String) -> Result<u64, String> {
+    let p = resolve(&root, &path);
+    let md = std::fs::metadata(&p).map_err(|e| format!("stat failed: {}: {}", p.display(), e))?;
+    if !md.is_file() {
+        return Err(format!("not a file: {}", p.display()));
+    }
+    Ok(md.len())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn write_text_file(
