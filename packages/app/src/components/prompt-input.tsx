@@ -106,6 +106,7 @@ const EXAMPLES = [
 
 const promptTriggersOff = import.meta.env.VITE_DISABLE_PROMPT_TRIGGERS === "true"
 const permissionsOff = import.meta.env.VITE_DISABLE_PROMPT_PERMISSIONS === "true"
+const wysiwygOnly = import.meta.env.VITE_DISABLE_WYSIWYG_ONLY === "true"
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
 
@@ -559,7 +560,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   ] as const
 
   const modeButtons = () => (
-    <>
+    <Show when={!wysiwygOnly}>
       {modes.map((item) => {
         const selected = store.mode === item.mode
         return (
@@ -585,7 +586,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </Tooltip>
         )
       })}
-    </>
+    </Show>
   )
 
   command.register("prompt-input", () => [

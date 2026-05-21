@@ -27,6 +27,11 @@ interface ImportMetaEnv {
    * @example VITE_DISABLE_PROMPT_PERMISSIONS=true
    */
   readonly VITE_DISABLE_PROMPT_PERMISSIONS?: string
+  /**
+   * Hide prompt mode selection controls.
+   * @example VITE_DISABLE_WYSIWYG_ONLY=true
+   */
+  readonly VITE_DISABLE_WYSIWYG_ONLY?: string
 }
 
 interface ImportMeta {
