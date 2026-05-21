@@ -937,14 +937,13 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         )
       }
 
-      // GLM on other paths (Z.ai direct, opencode gateway) it doesn't, so fall through only for Bedrock.
-      // Shape: options() returns options FLAT at the top level (no { bedrock: ... }).
-      // downstream providerOptions() wrapper nests it under { bedrock: ... }.
+      // GLM models only support a binary thinking toggle (not graduated effort
+      // levels), so we expose a single "enabled" variant that sends
+      // reasoning_config: "high" to Bedrock. Omitting the variant keeps
+      // reasoning off.
       if (id.includes("glm") && model.api.npm === "@ai-sdk/amazon-bedrock") {
         return {
-          low:    { additionalModelRequestFields: { reasoning_config: "low"    } },
-          medium: { additionalModelRequestFields: { reasoning_config: "medium" } },
-          high:   { additionalModelRequestFields: { reasoning_config: "high"   } },
+          enabled: { additionalModelRequestFields: { reasoning_config: "high" } },
         }
       }
 
