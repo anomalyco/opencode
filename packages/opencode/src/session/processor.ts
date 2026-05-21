@@ -278,9 +278,11 @@ export const layer = Layer.effect(
         return { call: ctx.toolcalls[input.id], part }
       })
 
-      const isFilePart = Schema.is(MessageV2.FilePart)
+      const isFilePart = (value: unknown): value is MessageV2.FilePart => Schema.is(MessageV2.FilePart)(value)
 
-      const toolResultOutput = (value: Extract<StreamEvent, { type: "tool-result" }>) => {
+      const toolResultOutput = (
+        value: Extract<StreamEvent, { type: "tool-result" }>,
+      ): { title: string; metadata: Record<string, any>; output: string; attachments?: MessageV2.FilePart[] } => {
         if (isRecord(value.result.value) && typeof value.result.value.output === "string") {
           return {
             title: typeof value.result.value.title === "string" ? value.result.value.title : value.name,

@@ -9,13 +9,23 @@ type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
 type OpenFilePickerOptions = { title?: string; multiple?: boolean; accept?: string[]; extensions?: string[] }
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type UpdateInfo = { updateAvailable: boolean; version?: string }
+type PlatformName = "web" | "desktop"
+type DesktopOS = "macos" | "windows" | "linux"
+
+export type FatalRendererErrorLog = {
+  error: string
+  url: string
+  version?: string
+  platform: PlatformName
+  os?: DesktopOS
+}
 
 export type Platform = {
   /** Platform discriminator */
-  platform: "web" | "desktop"
+  platform: PlatformName
 
   /** Desktop OS (Tauri only) */
-  os?: "macos" | "windows" | "linux"
+  os?: DesktopOS
 
   /** App version */
   version?: string
@@ -91,6 +101,12 @@ export type Platform = {
 
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
+
+  /** Export collected diagnostic logs (desktop only) */
+  exportDebugLogs?(): Promise<string>
+
+  /** Record a fatal renderer error in platform logs (desktop only) */
+  recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
 }
 
 export type DisplayBackend = "auto" | "wayland"

@@ -1,8 +1,10 @@
 import windowState from "electron-window-state"
-import { app, BrowserWindow, net, nativeImage, nativeTheme, protocol } from "electron"
+import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
+import { exportDebugLogs, write as writeLog } from "./logging"
+import { createUnresponsiveSampler } from "./unresponsive"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -11,6 +13,8 @@ const rendererHost = "renderer"
 const clipboardWritePermission = "clipboard-sanitized-write"
 const notificationPermission = "notifications"
 const rendererPermissions = new Set([clipboardWritePermission, notificationPermission])
+const documentPolicyHeader = "Document-Policy"
+const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-reports"
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -24,8 +28,16 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 let backgroundColor: string | undefined
+let relaunchHandler = () => {
+  app.relaunch()
+  app.exit(0)
+}
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 const titlebarHeight = 40
+
+export function setRelaunchHandler(handler: () => void) {
+  relaunchHandler = handler
+}
 
 export function setBackgroundColor(color: string) {
   backgroundColor = color
@@ -112,6 +124,7 @@ export function createMainWindow() {
   })
 
   allowRendererPermissions(win)
+  wireWindowRecovery(win, "main")
 
   win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
     const { requestHeaders } = details
@@ -121,8 +134,7 @@ export function createMainWindow() {
 
   win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     const { responseHeaders = {} } = details
-    upsertKeyValue(responseHeaders, "Access-Control-Allow-Origin", ["*"])
-    upsertKeyValue(responseHeaders, "Access-Control-Allow-Headers", ["*"])
+    addRendererHeaders(details.url, responseHeaders)
     callback({ responseHeaders })
   })
 
@@ -165,6 +177,7 @@ export function createLoadingWindow() {
   })
 
   allowRendererPermissions(win)
+  wireWindowRecovery(win, "loading")
 
   loadWindow(win, "loading.html")
 
@@ -174,19 +187,40 @@ export function createLoadingWindow() {
 export function registerRendererProtocol() {
   if (protocol.isProtocolHandled(rendererProtocol)) return
 
-  protocol.handle(rendererProtocol, (request) => {
+  protocol.handle(rendererProtocol, async (request) => {
     const url = new URL(request.url)
     if (url.host !== rendererHost) {
+      writeLog("protocol", "rejected host", { url: request.url }, "warn")
       return new Response("Not found", { status: 404 })
     }
 
     const file = resolve(rendererRoot, `.${decodeURIComponent(url.pathname)}`)
     const rel = relative(rendererRoot, file)
     if (rel.startsWith("..") || isAbsolute(rel)) {
+      writeLog("protocol", "rejected path", { url: request.url, file }, "warn")
       return new Response("Not found", { status: 404 })
     }
 
-    return net.fetch(pathToFileURL(file).toString())
+    try {
+      const response = await net.fetch(pathToFileURL(file).toString())
+      if (response.status >= 400) {
+        writeLog(
+          "protocol",
+          "fetch failed",
+          {
+            url: request.url,
+            file,
+            status: response.status,
+            statusText: response.statusText,
+          },
+          "error",
+        )
+      }
+      return addDocumentPolicy(response, file)
+    } catch (error) {
+      writeLog("protocol", "fetch error", { url: request.url, file, error }, "error")
+      return new Response("Not found", { status: 404 })
+    }
   })
 }
 
@@ -199,6 +233,127 @@ function loadWindow(win: BrowserWindow, html: string) {
   }
 
   void win.loadURL(`${rendererProtocol}://${rendererHost}/${html}`)
+}
+
+function wireWindowRecovery(win: BrowserWindow, name: string) {
+  let showing = false
+  const sampler = createUnresponsiveSampler(win, name)
+
+  const handle = async (button: string | undefined, wait: boolean) => {
+    if (button === "Export Logs") {
+      const sampling = sampler.stopAndFlush()
+      await exportDebugLogs().catch((error) => writeLog("main", "failed to export debug logs", { error }, "error"))
+      if (wait && sampling) sampler.start()
+      return true
+    }
+    if (button === "Relaunch") {
+      sampler.stopAndFlush()
+      relaunchHandler()
+      return false
+    }
+    if (button === "Quit") {
+      sampler.stopAndFlush()
+      app.quit()
+    }
+    return false
+  }
+
+  const show = async (message: string, detail: string, wait: boolean) => {
+    if (showing || win.isDestroyed()) return
+    showing = true
+    try {
+      while (!win.isDestroyed()) {
+        const buttons = wait ? ["Relaunch", "Export Logs", "Keep Waiting"] : ["Relaunch", "Export Logs", "Quit"]
+        const result = await dialog.showMessageBox(win, {
+          type: "warning",
+          buttons,
+          defaultId: 0,
+          cancelId: 2,
+          message,
+          detail,
+        })
+        if (await handle(buttons[result.response], wait)) continue
+        return
+      }
+    } finally {
+      showing = false
+    }
+  }
+
+  const failed = (
+    event: string,
+    errorCode: number,
+    errorDescription: string,
+    validatedURL: string,
+    isMainFrame: boolean,
+  ) => {
+    writeLog(
+      "window",
+      "renderer load failed",
+      {
+        window: name,
+        event,
+        errorCode,
+        errorDescription,
+        validatedURL,
+        currentURL: win.webContents.getURL(),
+        isMainFrame,
+      },
+      "error",
+    )
+
+    if (!isMainFrame || errorCode === -3) return
+    void show(
+      "OpenCode failed to load",
+      [`Window: ${name}`, `URL: ${validatedURL}`, `Error: ${errorCode} ${errorDescription}`].join("\n"),
+      false,
+    )
+  }
+
+  win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    failed("did-fail-load", errorCode, errorDescription, validatedURL, isMainFrame)
+  })
+  win.webContents.on("did-fail-provisional-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    failed("did-fail-provisional-load", errorCode, errorDescription, validatedURL, isMainFrame)
+  })
+  win.webContents.on("render-process-gone", (_event, details) => {
+    sampler.stopAndFlush()
+    writeLog(
+      "window",
+      "renderer process gone",
+      { window: name, currentURL: win.webContents.getURL(), details },
+      "error",
+    )
+    void show(
+      "OpenCode window terminated unexpectedly",
+      [`Window: ${name}`, `Reason: ${details.reason}`, `Code: ${details.exitCode ?? "<unknown>"}`].join("\n"),
+      false,
+    )
+  })
+  win.on("unresponsive", () => {
+    writeLog("window", "renderer unresponsive", { window: name, currentURL: win.webContents.getURL() }, "error")
+    sampler.start()
+    void show("OpenCode is not responding", "You can relaunch the app, open the logs, or keep waiting.", true)
+  })
+  win.on("responsive", () => {
+    writeLog("window", "renderer responsive", { window: name, currentURL: win.webContents.getURL() }, "error")
+    sampler.stopAndFlush()
+  })
+  win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    if (message.toLowerCase().includes("terminal") || sourceId.toLowerCase().includes("terminal")) {
+      writeLog("pty", "console", { window: name, level, message, line, sourceId })
+    }
+  })
+  win.webContents.on("preload-error", (_event, preloadPath, error) => {
+    writeLog("preload", "preload error", { window: name, preloadPath, error }, "error")
+  })
+}
+
+function addDocumentPolicy(response: Response, file: string) {
+  if (!file.toLowerCase().endsWith(".html")) return response
+  const headers = new Headers(response.headers)
+  headers.set(documentPolicyHeader, jsCallStacksDocumentPolicy)
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
 function allowRendererPermissions(win: BrowserWindow) {
@@ -217,8 +372,19 @@ function allowRendererPermissions(win: BrowserWindow) {
 }
 
 function isTrustedRendererUrl(value?: string) {
+  return isRendererUrl(value)
+}
+
+function addRendererHeaders(value: string, headers: Record<string, any>) {
+  upsertKeyValue(headers, "Access-Control-Allow-Origin", ["*"])
+  upsertKeyValue(headers, "Access-Control-Allow-Headers", ["*"])
+  if (isRendererUrl(value, true)) upsertKeyValue(headers, documentPolicyHeader, [jsCallStacksDocumentPolicy])
+}
+
+function isRendererUrl(value?: string, html = false) {
   if (!value || !URL.canParse(value)) return false
   const url = new URL(value)
+  if (html && !url.pathname.endsWith(".html")) return false
   if (url.protocol === `${rendererProtocol}:` && url.host === rendererHost) return true
   const devUrl = process.env.ELECTRON_RENDERER_URL
   if (!devUrl || !URL.canParse(devUrl)) return false

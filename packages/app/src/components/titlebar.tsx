@@ -7,8 +7,9 @@ import { Button } from "@opencode-ai/ui/button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
 
-import { useLayout } from "@/context/layout"
+import { getAvatarColors, useLayout, type LocalProject } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -18,6 +19,9 @@ import { applyPath, backPath, forwardPath } from "./titlebar-history"
 import { useGlobalSync } from "@/context/global-sync"
 import { decodeDirectory } from "@/pages/directory-layout"
 import { iife } from "@opencode-ai/core/util/iife"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import { Avatar as AvatarV2 } from "@opencode-ai/ui/v2/components/avatar-v2.jsx"
+import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -40,13 +44,21 @@ type TauriApi = {
 const tauriApi = () => (window as unknown as { __TAURI__?: TauriApi }).__TAURI__
 const currentDesktopWindow = () => tauriApi()?.window?.getCurrentWindow?.()
 const currentThemeWindow = () => tauriApi()?.webviewWindow?.getCurrentWebviewWindow?.()
-const titlebarHeight = 40
+const legacyTitlebarHeight = 40
+const v2TitlebarHeight = 44
 const minTitlebarZoom = 0.25
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
+const USE_V2_TITLEBAR = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 const makeSessionHref = (b64Dir: string, sessionId: string) => `/${b64Dir}/session/${sessionId}`
 
-export function Titlebar() {
+export type TitlebarUpdate = {
+  version: () => string | undefined
+  installing: () => boolean
+  install: () => void
+}
+
+export function Titlebar(props: { update?: TitlebarUpdate }) {
   const layout = useLayout()
   const platform = usePlatform()
   const command = useCommand()
@@ -59,14 +71,16 @@ export function Titlebar() {
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
+  const electronWindows = createMemo(() => windows() && !tauriApi())
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
   const web = createMemo(() => platform.platform === "web")
   const zoom = () => platform.webviewZoom?.() ?? 1
   const titlebarZoom = () => (windows() ? Math.max(zoom(), minTitlebarZoom) : zoom())
   const counterZoom = () => (windows() && titlebarZoom() < 1 ? 1 / titlebarZoom() : 1)
   const minHeight = () => {
-    if (mac()) return `${titlebarHeight / zoom()}px`
-    if (windows()) return `${titlebarHeight / Math.min(titlebarZoom(), 1)}px`
+    const height = USE_V2_TITLEBAR ? v2TitlebarHeight : legacyTitlebarHeight
+    if (mac()) return `${height / zoom()}px`
+    if (windows()) return `${height / Math.min(titlebarZoom(), 1)}px`
     return undefined
   }
   const windowsControlsWidth = () => `${windowsControlsBaseWidth / Math.max(titlebarZoom(), 1)}px`
@@ -183,19 +197,47 @@ export function Titlebar() {
 
   return (
     <header
-      class="h-10 shrink-0 bg-background-base relative overflow-hidden flex flex-row"
-      style={{ "min-height": minHeight(), "padding-left": mac() ? `${84 / zoom()}px` : 0 }}
+      classList={{
+        "shrink-0 relative overflow-hidden flex flex-row": true,
+        "h-11 bg-v2-background-bg-deep": USE_V2_TITLEBAR,
+        "h-10 bg-background-base": !USE_V2_TITLEBAR,
+      }}
+      style={{
+        "min-height": minHeight(),
+        "padding-left": mac() ? `${84 / zoom()}px` : 0,
+        width: electronWindows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
+        "max-width": electronWindows()
+          ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))`
+          : undefined,
+        "align-self": electronWindows() ? "flex-start" : undefined,
+      }}
       data-tauri-drag-region
       onMouseDown={drag}
       onDblClick={maximize}
     >
       <Switch>
-        <Match when={import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
+        <Match when={USE_V2_TITLEBAR}>
           {(_) => {
             const globalSync = useGlobalSync()
             const navigate = useNavigate()
+            const homeMatch = useMatch(() => "/")
 
-            type Tab = { dir: string; sessionId: string; params: any; href: string }
+            const openNewSession = () => {
+              if (params.dir) {
+                navigate(`/${params.dir}/session`)
+                return
+              }
+
+              const project = layout.projects.list()[0]
+              if (!project) {
+                navigate("/")
+                return
+              }
+
+              navigate(`/${base64Encode(project.worktree)}/session`)
+            }
+
+            type Tab = { dir: string; sessionId: string; href: string }
 
             const [tabsStore, tabsStoreActions] = iife(() => {
               const [store, setStore] = createStore<Tab[]>(
@@ -205,7 +247,6 @@ export function Titlebar() {
                     {
                       dir: decodeDirectory(params.dir) ?? "",
                       sessionId: params.id,
-                      params: { id: params.id, dir: params.dir },
                       href: makeSessionHref(params.dir, params.id),
                     },
                   ]
@@ -248,10 +289,14 @@ export function Titlebar() {
               tabsStoreActions.addTab({
                 dir: decodeDirectory(params.dir) ?? "",
                 sessionId: params.id,
-                params: { id: params.id, dir: params.dir },
                 href: makeSessionHref(params.dir, params.id),
               })
             })
+
+            const projects = createMemo(() => layout.projects.list())
+            const projectByID = createMemo(
+              () => new Map(projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
+            )
 
             const tabsEnriched = iife(() => {
               const base = mapArray(
@@ -267,78 +312,73 @@ export function Titlebar() {
             })
 
             return (
-              <div class="h-full flex-1 flex flex-row items-center gap-1.5 pr-3">
+              <div
+                class="h-full flex-1 flex flex-row items-center gap-1.5 pr-3 py-2"
+                classList={{
+                  "pl-2": mac(),
+                  "pl-4": !mac(),
+                }}
+              >
                 <ChannelIndicator />
                 <Show when={windows() || linux()}>
-                  <WindowsAppMenu command={command} platform={platform} />
+                  <WindowsAppMenu command={command} platform={platform} variant="v2" />
                 </Show>
                 <IconButtonV2
-                  as="a"
-                  href="/"
                   variant="ghost-muted"
                   size="large"
-                  class="!w-8"
-                  state={!!useMatch(() => "/")() ? "pressed" : undefined}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M13.9948 11.668H9.32812M11.6641 9.33203V13.9987M6.66667 9.33203V13.9987H2V9.33203H6.66667ZM6.66667 2V6.66667H2V2H6.66667ZM13.9948 2V6.66667H9.32812V2H13.9948Z"
-                      stroke="currentColor"
-                      stroke-miterlimit="10"
-                      stroke-linecap="square"
-                    />
-                  </svg>
-                </IconButtonV2>
-                <div class="flex flex-row items-center gap-2">
-                  <For each={tabsEnriched()}>
-                    {(tab, i) => (
-                      <>
-                        {i() !== 0 && <div class="w-[1.5px] h-3 rounded-full bg-[var(--v2-background-bg-layer-02)]" />}
-                        <TabNavItem
-                          href={tab.href}
-                          title={tab.info.title}
-                          onClose={() => tabsStoreActions.removeTab(tab.href)}
-                          hideClose={tabsEnriched().length < 2}
-                        />
-                      </>
-                    )}
-                  </For>
-                </div>
-                <button>
-                  <div class="p-1.5">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      class="size-4"
-                    >
-                      <path
-                        d="M7.99978 2.88867V13.1109M2.88867 7.99978H13.1109"
-                        stroke="#808080"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
-                  </div>
-                </button>
+                  as="a"
+                  href="/"
+                  class="!w-9"
+                  icon={<IconV2 name="grid-plus" />}
+                  state={!!homeMatch() ? "pressed" : undefined}
+                />
 
-                <div class="flex-1" />
-                {/*<button class="px-2.5 py-1.5 bg-[rgba(0,0,0,0.08)] rounded-[6px]">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    class="size-4"
+                <div class="flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden">
+                  <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
+                    <For each={tabsEnriched()}>
+                      {(tab, i) => (
+                        <>
+                          {i() !== 0 && (
+                            <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
+                          )}
+                          <TabNavItem
+                            href={tab.href}
+                            title={tab.info.title}
+                            project={projectForSession(tab.info, projects(), projectByID())}
+                            directory={tab.dir}
+                            onClose={() => tabsStoreActions.removeTab(tab.href)}
+                            hideClose={tabsEnriched().length < 2}
+                          />
+                        </>
+                      )}
+                    </For>
+                  </div>
+                  <Show
+                    when={creating() && params.dir}
+                    fallback={
+                      <IconButtonV2
+                        type="button"
+                        variant="ghost-muted"
+                        size="large"
+                        class="shrink-0"
+                        icon={<IconV2 name="plus" />}
+                        onClick={openNewSession}
+                        aria-label={language.t("command.session.new")}
+                      />
+                    }
                   >
-                    <path
-                      d="M10.4443 2.44436V13.5555M1.55546 13.5554H14.4443V2.44434H1.55542L1.55546 13.5554Z"
-                      stroke="#3A3A3A"
+                    <NewSessionTabItem
+                      href={`/${params.dir}/session`}
+                      title={language.t("command.session.new")}
+                      onClose={() => navigate(tabsEnriched().at(-1)?.href ?? "/")}
                     />
-                  </svg>
-                </button>*/}
+                  </Show>
+                  <div class="min-w-0 flex-1" />
+                </div>
+                <TitlebarUpdatePill update={props.update} />
+                <Show when={windows() && !electronWindows()}>
+                  <div data-tauri-decorum-tb class="flex flex-row" />
+                </Show>
               </div>
             )
           }}
@@ -358,7 +398,7 @@ export function Titlebar() {
                 <WindowsAppMenu command={command} platform={platform} />
               </Show>
               <Show when={mac()}>
-                <div class="h-full shrink-0" style={{ width: `${72 / zoom()}px` }} />
+                {/*<div class="h-full shrink-0" style={{ width: `${72 / zoom()}px` }} />*/}
                 <div class="xl:hidden w-10 shrink-0 flex items-center justify-center">
                   <IconButton
                     icon="menu"
@@ -502,19 +542,51 @@ export function Titlebar() {
   )
 }
 
-function TabNavItem(props: { href: string; title: string; hideClose?: boolean; onClose: () => void }) {
+function TitlebarUpdatePill(props: { update?: TitlebarUpdate }) {
+  const language = useLanguage()
+  const version = () => props.update?.version()
+
+  return (
+    <Show when={version() !== undefined}>
+      <button
+        type="button"
+        class="h-5 shrink-0 rounded-[27px] bg-[var(--v2-background-bg-accent)] px-2.5 text-[11px] font-[530] leading-[1.1] tracking-[-0.04px] text-[var(--v2-text-text-contrast)] disabled:opacity-60"
+        onClick={() => props.update?.install()}
+        disabled={props.update?.installing()}
+        aria-label={language.t("toast.update.action.installRestart")}
+        title={version() ? `Update ${version()}` : undefined}
+      >
+        Update
+      </button>
+    </Show>
+  )
+}
+
+function DesktopTitlebarIconButton(props: Parameters<typeof IconButtonV2>[0]) {
+  return
+}
+
+function TabNavItem(props: {
+  href: string
+  title: string
+  project?: LocalProject
+  directory: string
+  hideClose?: boolean
+  onClose: () => void
+}) {
   const match = useMatch(() => props.href)
   const isActive = () => !!match()
   return (
     <div
-      class="group flex flex-row items-center max-w-60 whitespace-nowrap [--tab-bg:var(--v2-background-bg-deep)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] bg-[var(--tab-bg)] h-7 rounded-[6px] relative overflow-hidden"
+      class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] pl-1.5 pr-8 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
       data-active={isActive()}
     >
       <a
         href={props.href}
-        class="w-full h-full pl-1.5 flex-1 max-w-full flex flex-row items-center overflow-hidden font-medium"
+        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-none tracking-[-0.04px] text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
       >
-        {props.title}
+        <ProjectTabAvatar project={props.project} directory={props.directory} />
+        <span class="truncate">{props.title}</span>
       </a>
 
       <div class="absolute right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2">
@@ -530,23 +602,60 @@ function TabNavItem(props: { href: string; title: string; hideClose?: boolean; o
           variant="ghost-muted"
           class="opacity-0 group-hover:opacity-100 group-data-[active='true']:opacity-100"
           onClick={props.onClose}
-          icon={
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              class="size-4"
-            >
-              <path d="M4.25 11.75L11.75 4.25M11.75 11.75L4.25 4.25" stroke="currentColor" />
-            </svg>
-          }
+          icon={<IconV2 name="xmark-small" />}
         />
       </div>
     </div>
   )
 }
+
+function ProjectTabAvatar(props: { project?: LocalProject; directory: string }) {
+  return (
+    <AvatarV2
+      fallback={displayName(props.project ?? { worktree: props.directory })}
+      src={getProjectAvatarSource(props.project?.id, props.project?.icon)}
+      kind="org"
+      size="small"
+      {...getAvatarColors(props.project?.icon?.color)}
+      class="size-4 rounded"
+    />
+  )
+}
+
+function NewSessionTabItem(props: { href: string; title: string; onClose: () => void }) {
+  return (
+    <div class="group relative flex h-7 w-[135px] min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]">
+      <a
+        href={props.href}
+        aria-current="page"
+        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-none text-[var(--v2-text-text-base)]"
+      >
+        <span class="flex size-4 shrink-0 rotate-90 items-center justify-center">
+          <IconV2 name="edit" />
+        </span>
+        <span class="truncate">{props.title}</span>
+      </a>
+      <div class="absolute right-0 inset-y-0 flex w-7 items-center justify-center">
+        <IconButtonV2
+          size="small"
+          variant="ghost-muted"
+          onMouseDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            props.onClose()
+          }}
+          icon={<IconV2 name="xmark-small" />}
+          aria-label="Close tab"
+        />
+      </div>
+    </div>
+  )
+}
+
 function ChannelIndicator() {
   return (
     <>

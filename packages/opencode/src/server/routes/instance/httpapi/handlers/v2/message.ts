@@ -2,8 +2,9 @@ import { SessionMessage } from "@opencode-ai/core/session-message"
 import { SessionV2 } from "@/v2/session"
 import { Effect, Schema } from "effect"
 import * as DateTime from "effect/DateTime"
-import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
+import { InvalidCursorError } from "../../errors"
 
 const DefaultMessagesLimit = 50
 
@@ -34,10 +35,11 @@ export const messageHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.message
     return handlers.handle(
       "messages",
       Effect.fn(function* (ctx) {
-        if (ctx.query.cursor && ctx.query.order !== undefined) return yield* new HttpApiError.BadRequest({})
+        if (ctx.query.cursor && ctx.query.order !== undefined)
+          return yield* new InvalidCursorError({ message: "Cursor cannot be combined with order" })
         const decoded = yield* Effect.try({
           try: () => (ctx.query.cursor ? cursor.decode(ctx.query.cursor) : undefined),
-          catch: () => new HttpApiError.BadRequest({}),
+          catch: () => new InvalidCursorError({ message: "Invalid cursor" }),
         })
         const order = decoded?.order ?? ctx.query.order ?? "desc"
         const messages = yield* session.messages({
