@@ -738,7 +738,6 @@
     "@opentui/core": "catalog:",
     "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
-    "@smithy/core": "3.24.3",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
   },
