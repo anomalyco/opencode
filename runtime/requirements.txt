@@ -1,0 +1,6 @@
+mss>=9.0.2,<10
+Pillow>=11.3.0
+pyautogui>=0.9.54
+pyobjc-core>=11.1
+pyobjc-framework-Cocoa>=11.1
+pyobjc-framework-Quartz>=11.1

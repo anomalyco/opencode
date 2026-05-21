@@ -487,7 +487,9 @@ export const layer = Layer.effect(
       Effect.fn("MCP.state")(function* () {
         const cfg = yield* cfgSvc.get()
         const bridge = yield* EffectBridge.make()
-        const config = cfg.mcp ?? {}
+        // Auto-inject computer-use MCP server if not already configured
+        const { injectComputerUseMcp } = yield* Effect.promise(() => import("@/computer-use/setup"))
+        const config = injectComputerUseMcp(cfg.mcp as Record<string, unknown> | undefined) as Record<string, ConfigMCP.Info | { enabled: boolean }>
         const s: State = {
           status: {},
           clients: {},
