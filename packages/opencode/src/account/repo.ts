@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm"
+import { serviceUse } from "@/effect/service-use"
 import { Effect, Layer, Option, Schema, Context } from "effect"
 
 import { Database } from "@/storage/db"
@@ -37,6 +38,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/AccountRepo") {}
+
+export const use = serviceUse(Service)
 
 export const layer: Layer.Layer<Service> = Layer.effect(
   Service,

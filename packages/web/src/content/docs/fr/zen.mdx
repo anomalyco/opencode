@@ -83,12 +83,12 @@ Vous pouvez également accéder à nos modèles via les points de terminaison AP
 | Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Qwen3.5 Plus           | qwen3.5-plus           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5           | minimax-m2.5           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
-| MiniMax M2.5 Free      | minimax-m2.5-free      | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7           | minimax-m2.7           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | GLM 5.1                | glm-5.1                | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | GLM 5                  | glm-5                  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Kimi K2.5              | kimi-k2.5              | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Kimi K2.6              | kimi-k2.6              | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
+| Grok Build 0.1         | grok-build-0.1         | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Big Pickle             | big-pickle             | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Super Free  | nemotron-3-super-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
@@ -115,7 +115,6 @@ Nous prenons en charge un modèle de paiement à l'utilisation. Vous trouverez c
 | --------------------------------- | ------ | ------- | ----------- | ------------ |
 | Big Pickle                        | Free   | Free    | Free        | -            |
 | DeepSeek V4 Flash Free            | Free   | Free    | Free        | -            |
-| MiniMax M2.5 Free                 | Free   | Free    | Free        | -            |
 | Nemotron 3 Super Free             | Free   | Free    | Free        | -            |
 | MiniMax M2.7                      | $0.30  | $1.20   | $0.06       | $0.375       |
 | MiniMax M2.5                      | $0.30  | $1.20   | $0.06       | $0.375       |
@@ -125,6 +124,7 @@ Nous prenons en charge un modèle de paiement à l'utilisation. Vous trouverez c
 | Kimi K2.6                         | $0.95  | $4.00   | $0.16       | -            |
 | Qwen3.6 Plus                      | $0.50  | $3.00   | $0.05       | $0.625       |
 | Qwen3.5 Plus                      | $0.20  | $1.20   | $0.02       | $0.25        |
+| Grok Build 0.1                    | 1.00   | $2.00   | $0.20       | -            |
 | Claude Opus 4.7                   | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.6                   | $5.00  | $25.00  | $0.50       | $6.25        |
 | Claude Opus 4.5                   | $5.00  | $25.00  | $0.50       | $6.25        |
@@ -168,7 +168,6 @@ Les frais de carte de crédit sont répercutés au prix coûtant (4.4% + $0.30 p
 Les modèles gratuits :
 
 - DeepSeek V4 Flash Free est disponible sur OpenCode pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
-- MiniMax M2.5 Free est disponible sur OpenCode pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
 - Nemotron 3 Super Free est disponible sur OpenCode pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
 - Big Pickle est un modèle stealth gratuit sur OpenCode pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
 
@@ -220,7 +219,6 @@ Tous nos modèles sont hébergés aux US. Nos fournisseurs suivent une politique
 
 - Big Pickle : Pendant sa période gratuite, les données collectées peuvent être utilisées pour améliorer le modèle.
 - DeepSeek V4 Flash Free : Pendant sa période gratuite, les données collectées peuvent être utilisées pour améliorer le modèle.
-- MiniMax M2.5 Free : Pendant sa période gratuite, les données collectées peuvent être utilisées pour améliorer le modèle.
 - Nemotron 3 Super Free (endpoints NVIDIA gratuits) : Fourni dans le cadre des [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Réservé à un usage d'essai, pas à la production ni aux données sensibles. Les prompts et les sorties sont journalisés par NVIDIA pour améliorer ses modèles et services. N'envoyez pas de données personnelles ou confidentielles.
 - OpenAI APIs : Les requêtes sont conservées pendant 30 jours conformément à [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIs : Les requêtes sont conservées pendant 30 jours conformément à [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).

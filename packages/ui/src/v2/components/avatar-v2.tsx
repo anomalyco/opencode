@@ -37,7 +37,7 @@ export function Avatar(props: AvatarProps) {
   return (
     <div
       {...rest}
-      data-component="avatar"
+      data-component="avatar-v2"
       data-size={split.size || "large"}
       data-kind={split.kind || "user"}
       data-has-image={src ? "" : undefined}

@@ -1,17 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { CacheHint, LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
-import { LLMClient } from "../../src/route"
+import { Auth, LLMClient } from "../../src/route"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
 import { it } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
 
-const model = AnthropicMessages.model({
-  id: "claude-sonnet-4-5",
-  baseURL: "https://api.anthropic.test/v1/",
-  headers: { "x-api-key": "test" },
-})
+const model = AnthropicMessages.route
+  .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
+  .model({ id: "claude-sonnet-4-5" })
 
 const request = LLM.request({
   id: "req_1",

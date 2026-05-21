@@ -128,7 +128,7 @@ const createWorkspace = (input: { projectID: Project.Info["id"]; type: string; a
         projectID: input.projectID,
       })
     }),
-    (info) => Workspace.Service.use((workspace) => workspace.remove(info.id)).pipe(Effect.ignore),
+    (info) => Workspace.use.remove(info.id).pipe(Effect.ignore),
   )
 
 const createRemoteWorkspace = (input: {

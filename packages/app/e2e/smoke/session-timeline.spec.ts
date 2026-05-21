@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { fixture, pageMessages } from "./session-timeline.fixture"
 import { trackPageErrors, expectNoSmokeErrors } from "../utils/errors"
 import { mockOpenCodeServer } from "../utils/mock-server"
@@ -37,12 +38,12 @@ test.describe("smoke: session timeline", () => {
       project: fixture.project,
       pageMessages,
     })
-    await configureSmokePage(page)
+    await configureSmokePage(page, fixture.directory)
 
-    await openProject(page, "SmokeProject")
-    await navigateToSession(page, fixture.sourceID, fixture.expected.sourceTitle)
-    await expectSessionReady(page, "smoke-project")
-    await navigateToSession(page, fixture.targetID, fixture.expected.targetTitle)
+    await selectHomeProject(page, fixture.project.name)
+    await navigateToSession(page, fixture.directory, fixture.sourceID, fixture.expected.sourceTitle)
+    await expectSessionReady(page)
+    await navigateToSession(page, fixture.directory, fixture.targetID, fixture.expected.targetTitle)
     const expectedPartIDs = fixture.expected.targetPartIDs
     const expectedMessageIDs = fixture.expected.targetMessageIDs
     await expectSessionTimelineReady(page, expectedPartIDs, expectedMessageIDs, errors)
@@ -50,7 +51,7 @@ test.describe("smoke: session timeline", () => {
   })
 })
 
-async function configureSmokePage(page: Page) {
+async function configureSmokePage(page: Page, directory: string) {
   await page.addInitScript(() => {
     localStorage.setItem(
       "settings.v3",
@@ -63,7 +64,23 @@ async function configureSmokePage(page: Page) {
         },
       }),
     )
+  })
 
+  await page.addInitScript((directory) => {
+    localStorage.setItem(
+      "opencode.global.dat:server",
+      JSON.stringify({
+        projects: {
+          local: [{ worktree: directory, expanded: true }],
+        },
+        lastProject: {
+          local: directory,
+        },
+      }),
+    )
+  }, directory)
+
+  await page.addInitScript(() => {
     const smoke = window as SmokeWindow
     smoke.__timelineSmokeErrorToasts = []
     smoke.__timelineSmokeForbiddenText = []
@@ -392,21 +409,20 @@ function expectCompleteScroll(
   expect(expectedPartIDs.length).toBe(331)
 }
 
-async function openProject(page: Page, projectName: string) {
+async function selectHomeProject(page: Page, projectName: string) {
   await page.goto("/")
-  await page.getByRole("button", { name: new RegExp(projectName, "i") }).click()
+  await page
+    .locator('[data-component="home-project-row"]')
+    .filter({ hasText: new RegExp(projectName, "i") })
+    .click()
+  await expect(page).toHaveURL(/\/$/)
 }
 
-async function navigateToSession(page: Page, sessionId: string, expectedTitle: string) {
-  // Use evaluate to click to avoid strict visibility/animation issues during rapid e2e navigation
-  await page
-    .locator(`a[href*="${sessionId}"]`)
-    .first()
-    .evaluate((el) => (el as HTMLElement).click())
+async function navigateToSession(page: Page, directory: string, sessionId: string, expectedTitle: string) {
+  await page.goto(`/${base64Encode(directory)}/session/${sessionId}`)
   await expect(page.getByRole("heading", { name: expectedTitle })).toBeVisible()
 }
 
-async function expectSessionReady(page: Page, projectName: string) {
-  await expect(page.getByText(projectName).first()).toBeVisible()
-  await expect(page.getByText("Ask anything...")).toBeVisible()
+async function expectSessionReady(page: Page) {
+  await expect(page.getByRole("textbox", { name: /Ask anything/i })).toBeVisible()
 }

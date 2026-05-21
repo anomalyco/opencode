@@ -52,7 +52,7 @@ function pathFor(path: string, params: Record<string, string>) {
 }
 
 function createSession(input?: Session.CreateInput) {
-  return Session.Service.use((svc) => svc.create(input))
+  return Session.use.create(input)
 }
 
 function createTextMessage(sessionID: SessionIDType, text: string) {
@@ -101,7 +101,7 @@ const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: stri
         }),
       )
     }),
-    (info) => Workspace.Service.use((svc) => svc.remove(info.id)).pipe(Effect.ignore),
+    (info) => Workspace.use.remove(info.id).pipe(Effect.ignore),
   )
 
 const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>

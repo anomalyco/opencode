@@ -62,10 +62,7 @@ describe("diff viewer file tree utilities", () => {
 
   test("collapses unary directory chains while flattening", () => {
     const rows = flattenFileTree(
-      buildFileTree([
-        { file: "packages/opencode/src/cli/app.ts" },
-        { file: "packages/opencode/src/server/server.ts" },
-      ]),
+      buildFileTree([{ file: "packages/opencode/src/cli/app.ts" }, { file: "packages/opencode/src/server/server.ts" }]),
     )
 
     expect(rows.map((row) => `${"  ".repeat(row.depth)}${row.kind}:${row.name}`)).toEqual([
@@ -124,12 +121,14 @@ describe("diff viewer file tree utilities", () => {
       buildFileTree([{ file: "src/config/tui.ts" }, { file: "src/config/keybind.ts" }, { file: "README.md" }]),
     )
 
-    expect(rows.map((row) => ({ name: row.name, kind: row.kind, depth: row.depth, fileIndex: row.fileIndex }))).toEqual([
-      { name: "src/config", kind: "directory", depth: 0, fileIndex: undefined },
-      { name: "keybind.ts", kind: "file", depth: 1, fileIndex: 1 },
-      { name: "tui.ts", kind: "file", depth: 1, fileIndex: 0 },
-      { name: "README.md", kind: "file", depth: 0, fileIndex: 2 },
-    ])
+    expect(rows.map((row) => ({ name: row.name, kind: row.kind, depth: row.depth, fileIndex: row.fileIndex }))).toEqual(
+      [
+        { name: "src/config", kind: "directory", depth: 0, fileIndex: undefined },
+        { name: "keybind.ts", kind: "file", depth: 1, fileIndex: 1 },
+        { name: "tui.ts", kind: "file", depth: 1, fileIndex: 0 },
+        { name: "README.md", kind: "file", depth: 0, fileIndex: 2 },
+      ],
+    )
   })
 
   test("collapses expanded unary children under the first visible directory id", () => {

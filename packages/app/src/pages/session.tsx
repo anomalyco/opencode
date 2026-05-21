@@ -30,7 +30,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { useLocation, useSearchParams } from "@solidjs/router"
-import { NewSessionView, SessionHeader } from "@/components/session"
+import { NewSessionDesignView, NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useGlobalSync } from "@/context/global-sync"
@@ -73,6 +73,7 @@ const emptyFollowups: FollowupItem[] = []
 
 type ChangeMode = "git" | "branch" | "turn"
 type VcsMode = "git" | "branch"
+const USE_NEW_SESSION_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
@@ -1648,6 +1649,60 @@ export default function Page() {
 
   useUsageExceededDialogs()
 
+  const composerRegion = (placement: "dock" | "inline") => (
+    <SessionComposerRegion
+      state={composer}
+      ready={!store.deferRender && messagesReady()}
+      centered={placement === "dock" && centered()}
+      placement={placement}
+      inputRef={(el) => {
+        inputRef = el
+      }}
+      newSessionWorktree={newSessionWorktree()}
+      onNewSessionWorktreeChange={(value) => setStore("newSessionWorktree", value)}
+      onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+      onSubmit={() => {
+        comments.clear()
+        resumeScroll()
+      }}
+      onResponseSubmit={resumeScroll}
+      followup={
+        params.id && !isChildSession()
+          ? {
+              queue: queueEnabled,
+              items: followupDock(),
+              sending: sendingFollowup(),
+              edit: editingFollowup(),
+              onQueue: queueFollowup,
+              onAbort: () => {
+                const id = params.id
+                if (!id) return
+                setFollowup("paused", id, true)
+              },
+              onSend: (id) => {
+                void sendFollowup(params.id!, id, { manual: true })
+              },
+              onEdit: editFollowup,
+              onEditLoaded: clearFollowupEdit,
+            }
+          : undefined
+      }
+      revert={
+        rolled().length > 0
+          ? {
+              items: rolled(),
+              restoring: restoring(),
+              disabled: reverting(),
+              onRestore: restore,
+            }
+          : undefined
+      }
+      setPromptDockRef={(el) => {
+        promptDock = el
+      }}
+    />
+  )
+
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       {sessionSync() ?? ""}
@@ -1740,60 +1795,16 @@ export default function Page() {
                 </Show>
               </Match>
               <Match when={true}>
-                <NewSessionView worktree={newSessionWorktree()} />
+                <Show when={USE_NEW_SESSION_DESIGN} fallback={<NewSessionView worktree={newSessionWorktree()} />}>
+                  <NewSessionDesignView worktree={newSessionWorktree()}>
+                    {composerRegion("inline")}
+                  </NewSessionDesignView>
+                </Show>
               </Match>
             </Switch>
           </div>
 
-          <SessionComposerRegion
-            state={composer}
-            ready={!store.deferRender && messagesReady()}
-            centered={centered()}
-            inputRef={(el) => {
-              inputRef = el
-            }}
-            newSessionWorktree={newSessionWorktree()}
-            onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-            onSubmit={() => {
-              comments.clear()
-              resumeScroll()
-            }}
-            onResponseSubmit={resumeScroll}
-            followup={
-              params.id && !isChildSession()
-                ? {
-                    queue: queueEnabled,
-                    items: followupDock(),
-                    sending: sendingFollowup(),
-                    edit: editingFollowup(),
-                    onQueue: queueFollowup,
-                    onAbort: () => {
-                      const id = params.id
-                      if (!id) return
-                      setFollowup("paused", id, true)
-                    },
-                    onSend: (id) => {
-                      void sendFollowup(params.id!, id, { manual: true })
-                    },
-                    onEdit: editFollowup,
-                    onEditLoaded: clearFollowupEdit,
-                  }
-                : undefined
-            }
-            revert={
-              rolled().length > 0
-                ? {
-                    items: rolled(),
-                    restoring: restoring(),
-                    disabled: reverting(),
-                    onRestore: restore,
-                  }
-                : undefined
-            }
-            setPromptDockRef={(el) => {
-              promptDock = el
-            }}
-          />
+          <Show when={params.id || !USE_NEW_SESSION_DESIGN}>{composerRegion("dock")}</Show>
 
           <Show when={desktopReviewOpen()}>
             <div onPointerDown={() => size.start()}>

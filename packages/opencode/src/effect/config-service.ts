@@ -1,4 +1,4 @@
-import { Config, ConfigProvider, Context, Effect, Layer } from "effect"
+import { Config, Context, Effect, Layer } from "effect"
 
 type ConfigMap = Record<string, Config.Config<unknown>>
 
@@ -52,8 +52,7 @@ export const Service =
         return Layer.effect(
           tag,
           Effect.gen(function* () {
-            const provider = yield* ConfigProvider.ConfigProvider
-            const config = yield* Config.all(fields).parse(provider)
+            const config = yield* Config.all(fields)
             // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Config.all preserves the field shape, but its conditional return type also supports iterable inputs.
             return tag.of(config as Shape<Fields>)
           }),
