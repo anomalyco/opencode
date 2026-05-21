@@ -1,13 +1,20 @@
 ﻿# [fork-only] DeskFox installer version bump
 #
-# Rule: YYYY.M.D.N (Year.Month.Day.Nth-of-day, N starts from 1)
-# Per-platform counter: Windows and macOS each maintain their own N sequence,
-# they DO NOT share a counter. Same date Windows and macOS may both have .1.
-# Example:
-#   Day X: Windows packs once -> [Windows] X.1
-#   Day X: macOS packs twice  -> [macOS] X.1, [macOS] X.2
+# Rule: YYYY.M.D.N[-env-suffix] (Year.Month.Day.Nth-of-day-of-env, N starts from 1)
 #
-# Run before iscc / dmg build to auto-increment N for today on this platform.
+# Per-platform + per-env counter(2026-05-21 起,B2 口径):
+#   - Windows / macOS 各自一套 N 序列
+#   - prod / beta / dev 各自一套 N 序列(env-isolated)
+#   - prod 版本号无后缀(发布物):2026.5.21.1
+#   - beta/dev 版本号带后缀(开发包,跟 prod 一眼区分):2026.5.21.1-beta / 2026.5.21.1-dev
+#
+# Example(同 2026-05-21 平台 Windows):
+#   prod packs once -> [Windows] 2026.5.21.1
+#   dev packs once  -> [Windows] 2026.5.21.1-dev    (N 独立计数)
+#   prod packs again-> [Windows] 2026.5.21.2
+#   dev packs again -> [Windows] 2026.5.21.2-dev
+#
+# Run before iscc / dmg build to auto-increment N for today on this platform+env.
 #
 # Side effects:
 #   1. Update packages/branding/installer/DeskFox.iss line `#define AppVersion "..."` (Windows only)
@@ -20,6 +27,9 @@
 param(
     [ValidateSet("Windows", "macOS")]
     [string]$Platform = "Windows",
+    # FORK: Env 参数 — dev/beta 加 suffix,prod 无后缀 [feat: installer-version-env-suffix] 2026-05-21
+    [ValidateSet("dev", "beta", "prod")]
+    [string]$Env = "prod",
     [switch]$DryRun
 )
 
@@ -34,20 +44,24 @@ if (-not (Test-Path $issFile)) { throw "iss not found: $issFile" }
 if (-not (Test-Path $logFile)) { throw "version log not found: $logFile" }
 if (-not (Test-Path $jsonFile)) { throw "installer-versions.json not found: $jsonFile" }
 
-# Compute today's version (per-platform counter)
+# Compute today's version (per-platform + per-env counter)
 $today = Get-Date -Format "yyyy.M.d"
+# FORK: env suffix — prod 空字符串保持原口径,beta/dev 加后缀 [feat: installer-version-env-suffix] 2026-05-21
+$envSuffix = if ($Env -eq "prod") { "" } else { "-$Env" }
 $logContent = Get-Content $logFile -Raw -Encoding UTF8
-# Match only entries for THIS platform: ## [Platform] YYYY.M.D.N - timestamp
-$pattern = "## \[$([regex]::Escape($Platform))\] $([regex]::Escape($today))\.(\d+) "
+# Match only entries for THIS platform+env: ## [Platform] YYYY.M.D.N[-suffix]<space>...
+# 末尾 trailing space anchor — 防 prod 模式 ".1" 误匹配 dev 条目 ".1-dev"(没 space 在 ".1" 后)
+$escSuffix = [regex]::Escape($envSuffix)
+$pattern = "## \[$([regex]::Escape($Platform))\] $([regex]::Escape($today))\.(\d+)$escSuffix "
 $existingNs = [regex]::Matches($logContent, $pattern) |
     ForEach-Object { [int]$_.Groups[1].Value }
 $nextN = if ($existingNs) { ($existingNs | Measure-Object -Maximum).Maximum + 1 } else { 1 }
-$newVersion = "$today.$nextN"
+$newVersion = "$today.$nextN$envSuffix"
 
-Write-Output "[bump] platform=$Platform, today=$today, existing N=$($existingNs -join ','), next=$newVersion"
+Write-Output "[bump] platform=$Platform, env=$Env, today=$today, existing N=$($existingNs -join ','), next=$newVersion"
 
 if ($DryRun) {
-    Write-Output "[bump] DRY RUN, no files changed. Would set AppVersion=$newVersion (platform=$Platform)"
+    Write-Output "[bump] DRY RUN, no files changed. Would set AppVersion=$newVersion (platform=$Platform, env=$Env)"
     exit 0
 }
 

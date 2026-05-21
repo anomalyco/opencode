@@ -5,6 +5,7 @@
 
 | feat-id | 状态 | 简介 |
 |---|---|---|
+| [installer-version-env-suffix](./installer-version-env-suffix/) | done | 安装包版本号按 env 加后缀 + N 序列独立(B2 口径)— bump 脚本加 `-Env dev\|beta\|prod` 参数,prod 无后缀 `2026.5.21.1` / beta `2026.5.21.1-beta` / dev `2026.5.21.1-dev`;N 计数器**平台 × env 双维度独立**;Inno Setup `VersionInfoVersion` 用 ISPP `Copy(...)` strip 后缀给 PE header(N.N.N.N 数字格式);双端 parity(ps1 + sh)|
 | [large-file-preview-guard](./large-file-preview-guard/) | done | 大文件预览统一防护(REQ-025)— 4 层防御:L1 入口闸门(`get_file_size` 新 Tauri 命令 + load() pre-check)+ L2 媒体改 localasset 不进 JS 内存(顺手修原图片"不可预览"bug)+ L3 阈值兜底(text/markdown/html 10MB / office 200MB / media+binary ∞ / default 100MB)+ L4 UX 兜底组件(用本机软件打开 / 打开所在文件夹);office 50MB→200MB 决议(常见 PPT 含图含视频);canEdit() 加 tooLarge 守卫防数据丢失;19 单测 |
 | [chat-drop-overlay-stuck-fix](./chat-drop-overlay-stuck-fix/) | done | 拖拽接收浮层卡死修复 — file-tree 行 onDrop 调 stopPropagation 杀掉 document bubble drop 致浮层 setDraggingType(null) 不执行;window 级 capture-phase drop + dragend 双兜底,ONLY 清状态不参与 drop 处理;R5 bug-repro 测试先行(DOM 事件流前置假设)|
 | [chat-input-focus-follow](./chat-input-focus-follow/) | done | 聊天输入框焦点跟随 — 聊天对话区右键 + MD/HTML viewer 选区"加入聊天"后光标到末尾 + 输入框 focus,user 可立刻继续打字(模块级 singleton ref + rAF;Tiny+ 4 文件 53 行) |

@@ -16,6 +16,15 @@
   #define AppEnv "prod"
 #endif
 
+; FORK: AppVersion 可能含 env suffix(例 "2026.5.21.1-dev")— Inno Setup VersionInfoVersion 必须 N.N.N.N
+; 数字格式,此处剥后缀给 VersionInfoVersion 用,人类可读 AppVersion 保留完整字符串(含后缀)
+; [feat: installer-version-env-suffix] 2026-05-21
+#if Pos("-", AppVersion) > 0
+  #define NumericAppVersion Copy(AppVersion, 1, Pos("-", AppVersion) - 1)
+#else
+  #define NumericAppVersion AppVersion
+#endif
+
 ; 三档身份 — AppId 一旦发布禁止改,改了等于换新 app,装新版不会替换旧版
 #if AppEnv == "prod"
   #define AppId          "{{F9F6F6C5-D865-468C-BCE5-BF0ECA24A763}"
@@ -44,6 +53,8 @@
 AppId={#AppId}
 AppName={#AppName}
 AppVersion={#AppVersion}
+; FORK: 显式 VersionInfoVersion 跳过后缀,N.N.N.N 数字格式 [feat: installer-version-env-suffix] 2026-05-21
+VersionInfoVersion={#NumericAppVersion}
 AppPublisher={#AppPublisher}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}

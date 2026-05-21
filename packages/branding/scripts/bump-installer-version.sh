@@ -1,21 +1,33 @@
 #!/usr/bin/env bash
 # [fork-only] DeskFox installer version bump (macOS/Linux)
 #
-# Rule: YYYY.M.D.N (Year.Month.Day.Nth-of-day, N starts from 1)
-# Per-platform counter: Windows and macOS each maintain their own N sequence.
+# Rule: YYYY.M.D.N[-env-suffix] (Year.Month.Day.Nth-of-day-of-env, N starts from 1)
+#
+# Per-platform + per-env counter(2026-05-21 起,B2 口径):
+#   - Windows / macOS 各自一套 N 序列
+#   - prod / beta / dev 各自一套 N 序列(env-isolated)
+#   - prod 版本号无后缀(发布物):2026.5.21.1
+#   - beta/dev 带后缀(开发包):2026.5.21.1-beta / 2026.5.21.1-dev
 #
 # Usage:
 #   bash packages/branding/scripts/bump-installer-version.sh -Platform macOS
+#   bash packages/branding/scripts/bump-installer-version.sh -Platform macOS --env dev
 #   bash packages/branding/scripts/bump-installer-version.sh -Platform macOS --dry-run
 
 set -e
 
 PLATFORM=""
+ENV="prod"
 DRY_RUN=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -Platform|--platform|-p)
             PLATFORM="$2"
+            shift 2
+            ;;
+        # FORK: env suffix [feat: installer-version-env-suffix] 2026-05-21
+        -Env|--env|-e)
+            ENV="$2"
             shift 2
             ;;
         --dry-run|-DryRun)
@@ -30,7 +42,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$PLATFORM" != "Windows" && "$PLATFORM" != "macOS" ]]; then
-    echo "Usage: $0 -Platform <Windows|macOS> [--dry-run]" >&2
+    echo "Usage: $0 -Platform <Windows|macOS> [--env dev|beta|prod] [--dry-run]" >&2
+    exit 1
+fi
+if [[ "$ENV" != "prod" && "$ENV" != "beta" && "$ENV" != "dev" ]]; then
+    echo "Invalid --env: $ENV (must be prod|beta|dev)" >&2
     exit 1
 fi
 
@@ -50,15 +66,23 @@ if [[ ! -f "$JSON_FILE" ]]; then
     exit 1
 fi
 
-# Compute today's version (per-platform counter)
+# Compute today's version (per-platform + per-env counter)
 # %-m / %-d strips leading zero on GNU date; macOS date also supports it.
 # Fallback: strip via sed if needed.
 TODAY="$(date '+%Y.%-m.%-d' 2>/dev/null || date '+%Y.%m.%d' | sed 's/\.0/./g')"
-# Match entries for THIS platform: ## [Platform] YYYY.M.D.N
-# Use grep + sed (BSD-compatible, no -P flag needed on macOS)
+
+# FORK: env suffix [feat: installer-version-env-suffix] 2026-05-21
+ENV_SUFFIX=""
+if [[ "$ENV" != "prod" ]]; then
+    ENV_SUFFIX="-$ENV"
+fi
+
+# Match entries for THIS platform+env: ## [Platform] YYYY.M.D.N[-suffix]<space>...
+# 末尾 trailing space anchor 防 prod ".1" 误匹配 dev ".1-dev"
 ESCAPED_TODAY="${TODAY//./\\.}"
+# sed BSD-compatible:`-` 在 char class 外是字面量;`\.\([0-9]*\)${ENV_SUFFIX} ` 锚 trailing space
 EXISTING_NS=$(grep "## \[$PLATFORM\] $TODAY\." "$LOG_FILE" 2>/dev/null \
-    | sed -n "s/.*## \[$PLATFORM\] ${TODAY//./\\.}\.\([0-9]*\).*/\1/p" || true)
+    | sed -n "s/.*## \[$PLATFORM\] ${ESCAPED_TODAY}\.\([0-9]*\)${ENV_SUFFIX} .*/\1/p" || true)
 
 if [[ -n "$EXISTING_NS" ]]; then
     MAX_N=$(echo "$EXISTING_NS" | sort -n | tail -1)
@@ -66,12 +90,12 @@ if [[ -n "$EXISTING_NS" ]]; then
 else
     NEXT_N=1
 fi
-NEW_VERSION="$TODAY.$NEXT_N"
+NEW_VERSION="$TODAY.$NEXT_N$ENV_SUFFIX"
 
-echo "[bump] platform=$PLATFORM, today=$TODAY, existing N=${EXISTING_NS:-none}, next=$NEW_VERSION"
+echo "[bump] platform=$PLATFORM, env=$ENV, today=$TODAY, existing N=${EXISTING_NS:-none}, next=$NEW_VERSION"
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo "[bump] DRY RUN, no files changed. Would set version=$NEW_VERSION (platform=$PLATFORM)"
+    echo "[bump] DRY RUN, no files changed. Would set version=$NEW_VERSION (platform=$PLATFORM, env=$ENV)"
     exit 0
 fi
 
