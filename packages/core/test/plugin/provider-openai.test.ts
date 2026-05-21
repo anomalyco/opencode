@@ -1,9 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { OpenAIPlugin } from "@opencode-ai/core/plugin/provider/openai"
-import { fakeSelectorSdk, it, model } from "./provider-helper"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { fakeSelectorSdk, it, model, provider } from "./provider-helper"
 
 describe("OpenAIPlugin", () => {
   it.effect("creates an OpenAI SDK for @ai-sdk/openai using the provider ID as SDK name", () =>
@@ -70,31 +72,39 @@ describe("OpenAIPlugin", () => {
     }),
   )
 
-  it.effect("cancels gpt-5-chat-latest during model updates", () =>
+  it.effect("disables gpt-5-chat-latest during catalog transforms", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const catalog = yield* Catalog.Service
       yield* plugin.add(OpenAIPlugin)
-      const normal = yield* plugin.trigger("model.update", {}, { model: model("openai", "gpt-5"), cancel: false })
-      const filtered = yield* plugin.trigger(
-        "model.update",
-        {},
-        { model: model("openai", "gpt-5-chat-latest"), cancel: false },
-      )
-      expect(normal.cancel).toBe(false)
-      expect(filtered.cancel).toBe(true)
+      const load = yield* catalog.loader()
+      yield* load((catalog) => {
+        const item = provider("openai", { endpoint: { type: "aisdk", package: "@ai-sdk/openai" } })
+        catalog.provider.update(item.id, (draft) => {
+          draft.endpoint = item.endpoint
+        })
+        catalog.model.update(item.id, ModelV2.ID.make("gpt-5"), () => {})
+        catalog.model.update(item.id, ModelV2.ID.make("gpt-5-chat-latest"), () => {})
+      })
+      expect((yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5"))).enabled).toBe(true)
+      expect((yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5-chat-latest"))).enabled).toBe(false)
     }),
   )
 
-  it.effect("does not cancel gpt-5-chat-latest for non-OpenAI providers", () =>
+  it.effect("does not disable gpt-5-chat-latest for non-OpenAI providers", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
+      const catalog = yield* Catalog.Service
       yield* plugin.add(OpenAIPlugin)
-      const result = yield* plugin.trigger(
-        "model.update",
-        {},
-        { model: model("custom-openai", "gpt-5-chat-latest"), cancel: false },
-      )
-      expect(result.cancel).toBe(false)
+      const load = yield* catalog.loader()
+      yield* load((catalog) => {
+        const item = provider("custom-openai")
+        catalog.provider.update(item.id, () => {})
+        catalog.model.update(item.id, ModelV2.ID.make("gpt-5-chat-latest"), () => {})
+      })
+      expect(
+        (yield* catalog.model.get(ProviderV2.ID.make("custom-openai"), ModelV2.ID.make("gpt-5-chat-latest"))).enabled,
+      ).toBe(true)
     }),
   )
 })

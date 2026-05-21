@@ -21,7 +21,7 @@ import { createEffect, createResource, onCleanup, onMount, Show } from "solid-js
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
-import { webviewZoom } from "./webview-zoom"
+import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
 import "./styles.css"
 import { useTheme } from "@opencode-ai/ui/theme"
 
@@ -98,6 +98,22 @@ const createPlatform = (): Platform => {
       return Promise.all(result.map((path) => window.api.wslPath(path, "linux").catch(() => path))) as any
     }
     return window.api.wslPath(result, "linux").catch(() => result) as any
+  }
+
+  const runDesktopMenuAction: Platform["runDesktopMenuAction"] = (action) => {
+    switch (action) {
+      case "view.resetZoom":
+        resetZoom()
+        return
+      case "view.zoomIn":
+        zoomIn()
+        return
+      case "view.zoomOut":
+        zoomOut()
+        return
+    }
+
+    return window.api.runDesktopMenuAction(action)
   }
 
   const storage = (() => {
@@ -200,6 +216,10 @@ const createPlatform = (): Platform => {
       await window.api.installUpdate()
     },
 
+    exportDebugLogs: () => window.api.exportDebugLogs(),
+
+    recordFatalRendererError: (error) => window.api.recordFatalRendererError(error),
+
     restart: async () => {
       await window.api.killSidecar().catch(() => undefined)
       window.api.relaunch()
@@ -253,6 +273,12 @@ const createPlatform = (): Platform => {
     parseMarkdown: (markdown: string) => window.api.parseMarkdownCommand(markdown),
 
     webviewZoom,
+
+    getPinchZoomEnabled: () => window.api.getPinchZoomEnabled(),
+
+    setPinchZoomEnabled,
+
+    runDesktopMenuAction,
 
     checkAppExists: async (appName: string) => {
       return window.api.checkAppExists(appName)

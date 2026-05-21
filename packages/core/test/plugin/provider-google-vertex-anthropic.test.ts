@@ -1,8 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { GoogleVertexAnthropicPlugin } from "@opencode-ai/core/plugin/provider/google-vertex"
-import { fakeSelectorSdk, it, model, provider, withEnv } from "./provider-helper"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { fakeSelectorSdk, it, model, withEnv } from "./provider-helper"
 
 describe("GoogleVertexAnthropicPlugin", () => {
   it.effect("resolves legacy project and location env on provider update", () =>
@@ -18,14 +20,17 @@ describe("GoogleVertexAnthropicPlugin", () => {
       () =>
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
+          const catalog = yield* Catalog.Service
           yield* plugin.add(GoogleVertexAnthropicPlugin)
-          const result = yield* plugin.trigger(
-            "provider.update",
-            {},
-            { provider: provider("google-vertex-anthropic"), cancel: false },
+          const load = yield* catalog.loader()
+          yield* load((catalog) =>
+            catalog.provider.update(ProviderV2.ID.make("google-vertex-anthropic"), (provider) => {
+              provider.endpoint = { type: "aisdk", package: "@ai-sdk/google-vertex/anthropic" }
+            }),
           )
-          expect(result.provider.options.aisdk.provider.project).toBe("cloud-project")
-          expect(result.provider.options.aisdk.provider.location).toBe("cloud-location")
+          const provider = yield* catalog.provider.get(ProviderV2.ID.make("google-vertex-anthropic"))
+          expect(provider.options.aisdk.provider.project).toBe("cloud-project")
+          expect(provider.options.aisdk.provider.location).toBe("cloud-location")
         }),
     ),
   )
@@ -34,23 +39,19 @@ describe("GoogleVertexAnthropicPlugin", () => {
     withEnv({ GOOGLE_CLOUD_PROJECT: "env-project", GOOGLE_CLOUD_LOCATION: "env-location" }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
+        const catalog = yield* Catalog.Service
         yield* plugin.add(GoogleVertexAnthropicPlugin)
-        const result = yield* plugin.trigger(
-          "provider.update",
-          {},
-          {
-            provider: provider("google-vertex-anthropic", {
-              options: {
-                headers: {},
-                body: {},
-                aisdk: { provider: { project: "configured-project", location: "configured-location" }, request: {} },
-              },
-            }),
-            cancel: false,
-          },
+        const load = yield* catalog.loader()
+        yield* load((catalog) =>
+          catalog.provider.update(ProviderV2.ID.make("google-vertex-anthropic"), (provider) => {
+            provider.endpoint = { type: "aisdk", package: "@ai-sdk/google-vertex/anthropic" }
+            provider.options.aisdk.provider.project = "configured-project"
+            provider.options.aisdk.provider.location = "configured-location"
+          }),
         )
-        expect(result.provider.options.aisdk.provider.project).toBe("configured-project")
-        expect(result.provider.options.aisdk.provider.location).toBe("configured-location")
+        const provider = yield* catalog.provider.get(ProviderV2.ID.make("google-vertex-anthropic"))
+        expect(provider.options.aisdk.provider.project).toBe("configured-project")
+        expect(provider.options.aisdk.provider.location).toBe("configured-location")
       }),
     ),
   )

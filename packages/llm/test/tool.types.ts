@@ -1,10 +1,11 @@
 import { Effect, Schema } from "effect"
 import { LLM } from "../src"
 import * as OpenAIChat from "../src/protocols/openai-chat"
+import { Auth } from "../src/route"
 import { tool } from "../src/tool"
 
 const request = LLM.request({
-  model: OpenAIChat.model({ id: "gpt-4o-mini", apiKey: "fixture" }),
+  model: OpenAIChat.route.with({ auth: Auth.bearer("fixture") }).model({ id: "gpt-4o-mini" }),
   prompt: "Use the tool.",
 })
 

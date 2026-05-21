@@ -57,6 +57,7 @@ import { patchFiles } from "./apply-patch-file"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
+import { readPartText } from "./message-part-text"
 
 async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -1497,7 +1498,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const streaming = createMemo(
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
   )
-  const text = () => (data.store.part_text_accum_delta?.[part().id] ?? part().text ?? "").trim()
+  const text = () => readPartText(data.store.part_text_accum_delta, part())
   const isLastTextPart = createMemo(() => {
     const last = (data.store.part?.[props.message.id] ?? [])
       .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
@@ -1563,7 +1564,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const streaming = createMemo(
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
   )
-  const text = () => (data.store.part_text_accum_delta?.[part().id] ?? part().text ?? "").trim()
+  const text = () => readPartText(data.store.part_text_accum_delta, part())
 
   return (
     <Show when={text()}>

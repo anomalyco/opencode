@@ -1531,47 +1531,43 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
       <Switch>
         <Match when={!inMinimal() || expanded()}>
           {/* Full markdown block: `show` mode, or `hide` after the user opens it. */}
-          <box
-            id={"text-" + props.part.id}
-            paddingLeft={2}
-            marginTop={1}
-            flexDirection="column"
-            border={["left"]}
-            customBorderChars={SplitBorder.customBorderChars}
-            borderColor={theme.backgroundElement}
-            onMouseUp={toggle}
-          >
+          <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexDirection="column" onMouseUp={toggle}>
             <code
               filetype="markdown"
               drawUnstyledText={false}
               streaming={true}
               syntaxStyle={subtleSyntax()}
-              content={(inMinimal() ? "▼ " : "") + (isDone() ? "_Thought:_ " : "_Thinking:_ ") + content()}
+              content={(inMinimal() ? "- " : "") + (isDone() ? "_Thought:_ " : "_Thinking:_ ") + content()}
               conceal={ctx.conceal()}
               fg={theme.textMuted}
             />
           </box>
         </Match>
         <Match when={isDone()}>
-          {/* Settled: ▶ at the start as the click-to-expand cue. */}
           <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
-            <text fg={theme.textMuted} wrapMode="none">
-              {"▶ " +
-                (title()
-                  ? "Thought: " + title() + " · " + Locale.duration(duration())
-                  : "Thought for " + Locale.duration(duration()))}
-            </text>
+            <CollapsedReasoningText title={title()} duration={duration()} />
           </box>
         </Match>
         <Match when={true}>
-          {/* Streaming: leading animated spinner, no disclosure arrow yet — it
-              snaps in once reasoning settles, signalling "done, click to expand". */}
           <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} onMouseUp={toggle}>
             <Spinner color={theme.textMuted}>{title() ? "Thinking: " + title() : "Thinking"}</Spinner>
           </box>
         </Match>
       </Switch>
     </Show>
+  )
+}
+
+function CollapsedReasoningText(props: { title: string | null; duration: number }) {
+  const { theme } = useTheme()
+  const duration = () => Locale.duration(props.duration)
+
+  return (
+    <text fg={theme.warning} wrapMode="none">
+      <span style={{ fg: theme.warning, italic: true }}>
+        {props.title ? "+ Thought: " + props.title + " · " + duration() : "+ Thought: " + duration()}
+      </span>
+    </text>
   )
 }
 

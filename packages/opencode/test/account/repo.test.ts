@@ -18,14 +18,14 @@ const it = testEffect(Layer.merge(AccountRepo.layer, truncate))
 
 it.live("list returns empty when no accounts exist", () =>
   Effect.gen(function* () {
-    const accounts = yield* AccountRepo.Service.use((r) => r.list())
+    const accounts = yield* AccountRepo.use.list()
     expect(accounts).toEqual([])
   }),
 )
 
 it.live("active returns none when no accounts exist", () =>
   Effect.gen(function* () {
-    const active = yield* AccountRepo.Service.use((r) => r.active())
+    const active = yield* AccountRepo.use.active()
     expect(Option.isNone(active)).toBe(true)
   }),
 )
@@ -45,13 +45,13 @@ it.live("persistAccount inserts and getRow retrieves", () =>
       }),
     )
 
-    const row = yield* AccountRepo.Service.use((r) => r.getRow(id))
+    const row = yield* AccountRepo.use.getRow(id)
     expect(Option.isSome(row)).toBe(true)
     const value = Option.getOrThrow(row)
     expect(value.id).toBe(AccountID.make("user-1"))
     expect(value.email).toBe("test@example.com")
 
-    const active = yield* AccountRepo.Service.use((r) => r.active())
+    const active = yield* AccountRepo.use.active()
     expect(Option.getOrThrow(active).active_org_id).toBe(OrgID.make("org-1"))
   }),
 )
@@ -72,9 +72,9 @@ it.live("persistAccount normalizes trailing slashes in stored server URLs", () =
       }),
     )
 
-    const row = yield* AccountRepo.Service.use((r) => r.getRow(id))
-    const active = yield* AccountRepo.Service.use((r) => r.active())
-    const list = yield* AccountRepo.Service.use((r) => r.list())
+    const row = yield* AccountRepo.use.getRow(id)
+    const active = yield* AccountRepo.use.active()
+    const list = yield* AccountRepo.use.list()
 
     expect(Option.getOrThrow(row).url).toBe("https://control.example.com")
     expect(Option.getOrThrow(active).url).toBe("https://control.example.com")
@@ -112,7 +112,7 @@ it.live("persistAccount sets the active account and org", () =>
     )
 
     // Last persisted account is active with its org
-    const active = yield* AccountRepo.Service.use((r) => r.active())
+    const active = yield* AccountRepo.use.active()
     expect(Option.isSome(active)).toBe(true)
     expect(Option.getOrThrow(active).id).toBe(AccountID.make("user-2"))
     expect(Option.getOrThrow(active).active_org_id).toBe(OrgID.make("org-2"))
@@ -148,7 +148,7 @@ it.live("list returns all accounts", () =>
       }),
     )
 
-    const accounts = yield* AccountRepo.Service.use((r) => r.list())
+    const accounts = yield* AccountRepo.use.list()
     expect(accounts.length).toBe(2)
     expect(accounts.map((a) => a.email).sort()).toEqual(["a@example.com", "b@example.com"])
   }),
@@ -170,9 +170,9 @@ it.live("remove deletes an account", () =>
       }),
     )
 
-    yield* AccountRepo.Service.use((r) => r.remove(id))
+    yield* AccountRepo.use.remove(id)
 
-    const row = yield* AccountRepo.Service.use((r) => r.getRow(id))
+    const row = yield* AccountRepo.use.getRow(id)
     expect(Option.isNone(row)).toBe(true)
   }),
 )
@@ -207,12 +207,12 @@ it.live("use stores the selected org and marks the account active", () =>
     )
 
     yield* AccountRepo.Service.use((r) => r.use(id1, Option.some(OrgID.make("org-99"))))
-    const active1 = yield* AccountRepo.Service.use((r) => r.active())
+    const active1 = yield* AccountRepo.use.active()
     expect(Option.getOrThrow(active1).id).toBe(id1)
     expect(Option.getOrThrow(active1).active_org_id).toBe(OrgID.make("org-99"))
 
     yield* AccountRepo.Service.use((r) => r.use(id1, Option.none()))
-    const active2 = yield* AccountRepo.Service.use((r) => r.active())
+    const active2 = yield* AccountRepo.use.active()
     expect(Option.getOrThrow(active2).active_org_id).toBeNull()
   }),
 )
@@ -243,7 +243,7 @@ it.live("persistToken updates token fields", () =>
       }),
     )
 
-    const row = yield* AccountRepo.Service.use((r) => r.getRow(id))
+    const row = yield* AccountRepo.use.getRow(id)
     const value = Option.getOrThrow(row)
     expect(value.access_token).toBe(AccessToken.make("new_token"))
     expect(value.refresh_token).toBe(RefreshToken.make("new_refresh"))
@@ -276,7 +276,7 @@ it.live("persistToken with no expiry sets token_expiry to null", () =>
       }),
     )
 
-    const row = yield* AccountRepo.Service.use((r) => r.getRow(id))
+    const row = yield* AccountRepo.use.getRow(id)
     expect(Option.getOrThrow(row).token_expiry).toBeNull()
   }),
 )
@@ -309,14 +309,14 @@ it.live("persistAccount upserts on conflict", () =>
       }),
     )
 
-    const accounts = yield* AccountRepo.Service.use((r) => r.list())
+    const accounts = yield* AccountRepo.use.list()
     expect(accounts.length).toBe(1)
 
-    const row = yield* AccountRepo.Service.use((r) => r.getRow(id))
+    const row = yield* AccountRepo.use.getRow(id)
     const value = Option.getOrThrow(row)
     expect(value.access_token).toBe(AccessToken.make("at_v2"))
 
-    const active = yield* AccountRepo.Service.use((r) => r.active())
+    const active = yield* AccountRepo.use.active()
     expect(Option.getOrThrow(active).active_org_id).toBe(OrgID.make("org-2"))
   }),
 )
@@ -337,9 +337,9 @@ it.live("remove clears active state when deleting the active account", () =>
       }),
     )
 
-    yield* AccountRepo.Service.use((r) => r.remove(id))
+    yield* AccountRepo.use.remove(id)
 
-    const active = yield* AccountRepo.Service.use((r) => r.active())
+    const active = yield* AccountRepo.use.active()
     expect(Option.isNone(active)).toBe(true)
   }),
 )
