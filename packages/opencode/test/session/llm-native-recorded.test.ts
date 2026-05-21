@@ -205,7 +205,7 @@ const RECORDED_SCENARIOS = [
 
 const shouldRecord = process.env.RECORD === "true"
 const selectedScenarios = new Set(
-  (process.env.OPENCODE_RECORDED_SCENARIO ?? process.env.RECORDED_PROVIDER ?? "")
+  (envValue("OPENCODE_RECORDED_SCENARIO", "RECORDED_PROVIDER") ?? "")
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean),
