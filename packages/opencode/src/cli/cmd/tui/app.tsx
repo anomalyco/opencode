@@ -403,8 +403,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     const match = sync.data.session
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .find((x) => x.parentID === undefined)?.id
+    continued = true
     if (match) {
-      continued = true
       if (args.fork) {
         void sdk.client.session.fork({ sessionID: match }).then((result) => {
           if (result.data?.id) {
@@ -416,6 +416,10 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       } else {
         route.navigate({ type: "session", sessionID: match })
       }
+    } else {
+      // No sessions found for directory — navigate away from the initial "dummy" session
+      // route to prevent a crash when the Session component tries to fetch a non-existent session
+      route.navigate({ type: "home" })
     }
   })
 
