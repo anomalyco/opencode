@@ -82,6 +82,7 @@ const OpenAIResponsesToolChoice = Schema.Union([
 const OpenAIResponsesCoreFields = {
   model: Schema.String,
   input: Schema.Array(OpenAIResponsesInputItem),
+  instructions: Schema.optional(Schema.String),
   tools: optionalArray(OpenAIResponsesTool),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   store: Schema.optional(Schema.Boolean),
@@ -270,7 +271,9 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
   const summary = OpenAIOptions.reasoningSummary(request)
   const encryptedState = OpenAIOptions.encryptedReasoning(request)
   const verbosity = OpenAIOptions.textVerbosity(request)
+  const instructions = OpenAIOptions.instructions(request)
   return {
+    ...(instructions ? { instructions } : {}),
     ...(store !== undefined ? { store } : {}),
     ...(promptCacheKey ? { prompt_cache_key: promptCacheKey } : {}),
     ...(encryptedState ? { include: ["reasoning.encrypted_content"] as const } : {}),

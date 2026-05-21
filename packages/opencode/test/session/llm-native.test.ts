@@ -2,11 +2,12 @@ import { describe, expect, test } from "bun:test"
 import { ToolFailure } from "@opencode-ai/llm"
 import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
 import { jsonSchema, tool, type ModelMessage } from "ai"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { LLMNative } from "@/session/llm/native-request"
 import { LLMNativeRuntime } from "@/session/llm/native-runtime"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { OAUTH_DUMMY_KEY } from "@/auth"
 
 const baseModel: Provider.Model = {
   id: ModelID.make("gpt-5-mini"),
@@ -66,6 +67,13 @@ const providerInfo: Provider.Info = {
   env: ["OPENAI_API_KEY"],
   options: { apiKey: "test-openai-key" },
   models: {},
+}
+
+function responsesStream(chunks: unknown[]) {
+  return new Response(chunks.map((chunk) => `data: ${JSON.stringify(chunk)}`).join("\n\n") + "\n\n", {
+    status: 200,
+    headers: { "Content-Type": "text/event-stream" },
+  })
 }
 
 describe("session.llm-native.request", () => {
@@ -308,7 +316,14 @@ describe("session.llm-native.request", () => {
         provider: providerInfo,
         auth: { type: "oauth", refresh: "refresh", access: "access", expires: 1 },
       }),
-    ).toEqual({ type: "unsupported", reason: "OAuth auth is not supported" })
+    ).toEqual({ type: "unsupported", reason: "OAuth auth requires a provider fetch override" })
+    expect(
+      LLMNativeRuntime.status({
+        model: baseModel,
+        provider: { ...providerInfo, options: { apiKey: OAUTH_DUMMY_KEY, fetch: async () => new Response() } },
+        auth: { type: "oauth", refresh: "refresh", access: "access", expires: 1 },
+      }),
+    ).toMatchObject({ type: "supported", apiKey: OAUTH_DUMMY_KEY })
 
     expect(
       LLMNativeRuntime.status({
@@ -419,7 +434,7 @@ describe("session.llm-native.request", () => {
           model: baseModel,
           apiKey: "test-openai-key",
           messages: [{ role: "user", content: "hello" }],
-          providerOptions: { openai: { store: false } },
+          providerOptions: { openai: { store: false, instructions: "You are concise." } },
           maxOutputTokens: 512,
           headers: { "x-request": "request-header" },
         }),
@@ -434,11 +449,63 @@ describe("session.llm-native.request", () => {
       protocol: "openai-responses",
       body: {
         model: "gpt-5-mini",
+        instructions: "You are concise.",
         input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
         max_output_tokens: 512,
         store: false,
         stream: true,
       },
     })
+  })
+
+  test("uses provider fetch override for native OpenAI OAuth requests", async () => {
+    const captures: Array<{ url: string; body: unknown }> = []
+    const customFetch = (async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      captures.push({ url: request.url, body: await request.clone().json() })
+      return responsesStream([
+        { type: "response.output_text.delta", item_id: "msg_1", delta: "Hello" },
+        { type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } },
+      ])
+    }) as typeof fetch
+
+    const events = await Effect.runPromise(
+      Effect.gen(function* () {
+        const llmClient = yield* LLMClient.Service
+        const native = LLMNativeRuntime.stream({
+          model: baseModel,
+          provider: { ...providerInfo, options: { apiKey: OAUTH_DUMMY_KEY, fetch: customFetch } },
+          auth: { type: "oauth", refresh: "refresh", access: "access", expires: Date.now() + 60_000 },
+          llmClient,
+          messages: [{ role: "user", content: "hello" }],
+          tools: {},
+          providerOptions: { instructions: "You are concise." },
+          headers: {},
+          abort: new AbortController().signal,
+        })
+        expect(native.type).toBe("supported")
+        if (native.type === "unsupported") return []
+        return yield* native.stream.pipe(Stream.runCollect)
+      }).pipe(
+        Effect.provide(LLMClient.layer),
+        Effect.provide(Layer.mergeAll(RequestExecutor.defaultLayer, WebSocketExecutor.layer)),
+      ),
+    )
+
+    expect(captures).toHaveLength(1)
+    expect(captures[0]).toMatchObject({
+      url: "https://api.openai.com/v1/responses",
+      body: {
+        model: "gpt-5-mini",
+        instructions: "You are concise.",
+        input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
+      },
+    })
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "text-delta", text: "Hello" }),
+        expect.objectContaining({ type: "finish" }),
+      ]),
+    )
   })
 })

@@ -979,7 +979,7 @@ describe("session.llm.stream", () => {
       throw new Error("Server not initialized")
     }
 
-    const source = await loadFixture("openai", "gpt-5.2")
+    const source = await loadFixture("openai", "gpt-5.5")
     const model = source.model
 
     const responseChunks = [
@@ -1083,7 +1083,7 @@ describe("session.llm.stream", () => {
       throw new Error("Server not initialized")
     }
 
-    const source = await loadFixture("openai", "gpt-5.2")
+    const source = await loadFixture("openai", "gpt-5.5")
     const model = source.model
     const request = waitRequest(
       "/responses",
@@ -1197,7 +1197,7 @@ describe("session.llm.stream", () => {
       throw new Error("Server not initialized")
     }
 
-    const source = await loadFixture("openai", "gpt-5.2")
+    const source = await loadFixture("openai", "gpt-5.5")
     const model = source.model
     const chunks = [
       {
@@ -1279,7 +1279,7 @@ describe("session.llm.stream", () => {
   })
 
   test("uses injected native request executor for tool calls", async () => {
-    const source = await loadFixture("openai", "gpt-5.2")
+    const source = await loadFixture("openai", "gpt-5.5")
     const model = source.model
     const chunks = [
       {
@@ -1390,7 +1390,7 @@ describe("session.llm.stream", () => {
       throw new Error("Server not initialized")
     }
 
-    const source = await loadFixture("openai", "gpt-5.2")
+    const source = await loadFixture("openai", "gpt-5.5")
     const model = source.model
     const chunks = [
       {
@@ -1420,32 +1420,7 @@ describe("session.llm.stream", () => {
     const request = waitRequest("/responses", createEventResponse(chunks, true))
     let executed: unknown
 
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            $schema: "https://opencode.ai/config.json",
-            enabled_providers: ["openai"],
-            provider: {
-              openai: {
-                name: "OpenAI",
-                env: ["OPENAI_API_KEY"],
-                npm: "@ai-sdk/openai",
-                api: "https://api.openai.com/v1",
-                models: {
-                  [model.id]: model,
-                },
-                options: {
-                  apiKey: "test-openai-key",
-                  baseURL: `${server.url.origin}/v1`,
-                },
-              },
-            },
-          }),
-        )
-      },
-    })
+    await using tmp = await tmpdir({ config: openAIConfig(model, `${server.url.origin}/v1`) })
 
     await withTestInstance({
       directory: tmp.path,
@@ -1515,7 +1490,7 @@ describe("session.llm.stream", () => {
       throw new Error("Server not initialized")
     }
 
-    const source = await loadFixture("openai", "gpt-5.2")
+    const source = await loadFixture("openai", "gpt-5.5")
     const model = source.model
     const chunks = [
       {

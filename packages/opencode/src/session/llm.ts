@@ -220,8 +220,6 @@ const live: Layer.Layer<
           provider: item,
           auth: info,
           llmClient,
-          isOpenaiOauth: prepared.isOpenaiOauth,
-          system: prepared.system,
           messages: prepared.messages,
           tools: prepared.tools,
           toolChoice: input.toolChoice,
