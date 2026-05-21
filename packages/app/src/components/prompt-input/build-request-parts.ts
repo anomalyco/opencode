@@ -79,11 +79,21 @@ const toOptimisticPart = (part: PromptRequestPart, sessionID: string, messageID:
 }
 
 export function buildRequestParts(input: BuildRequestPartsInput) {
+  const head = input.prompt.find((part) => part.type === "text")
+  const meta =
+    head?.type === "text"
+      ? {
+          ...(head.format ? { format: head.format } : {}),
+          ...(head.source ? { source: head.source } : {}),
+          ...(head.docID ? { docID: head.docID } : {}),
+        }
+      : undefined
   const requestParts: PromptRequestPart[] = [
     {
       id: Identifier.ascending("part"),
       type: "text",
       text: input.text,
+      metadata: meta && Object.keys(meta).length > 0 ? meta : undefined,
     },
   ]
 

@@ -8,8 +8,8 @@ function subdoc(collection: DocCollection, page: string) {
   return collection.doc.spaces.get(page)
 }
 
-function bind(collection: DocCollection, page: string) {
-  const doc = collection.getDoc(page)
+function bind(collection: DocCollection, page: string, readonly?: boolean) {
+  const doc = collection.getDoc(page, { readonly })
   if (doc) return doc
   if (!subdoc(collection, page)) return null
   if (!collection.meta.getDocMeta(page)) {
@@ -20,7 +20,7 @@ function bind(collection: DocCollection, page: string) {
       tags: [],
     })
   }
-  return collection.getDoc(page)
+  return collection.getDoc(page, { readonly })
 }
 
 export async function load(source: OpencodeDocSource, id: string, doc: YDoc) {
@@ -50,9 +50,15 @@ export async function link(source: OpencodeDocSource, root: YDoc, page: YDoc) {
   }
 }
 
-export async function remote(source: OpencodeDocSource, collection: DocCollection, root: string, page: string) {
+export async function remote(
+  source: OpencodeDocSource,
+  collection: DocCollection,
+  root: string,
+  page: string,
+  readonly?: boolean,
+) {
   await load(source, root, collection.doc)
-  const doc = bind(collection, page)
+  const doc = bind(collection, page, readonly)
   if (!doc) return
   if (!doc.loaded) doc.load()
   await load(source, page, doc.spaceDoc)

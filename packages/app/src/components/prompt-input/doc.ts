@@ -145,7 +145,8 @@ export function createPromptDoc(input: PromptDocInput) {
   }
 
   const pivot = (sessionID: string, next: string, opts?: { init?: boolean; force?: boolean }) => {
-    if (!opts?.force && live === next && handle?.collection.id === next && sync?.docID === next) return Promise.resolve()
+    if (!opts?.force && live === next && handle?.collection.id === next && sync?.docID === next)
+      return Promise.resolve()
     const should = opts?.init ?? true
     if (!opts?.force && pending?.id === next && (pending.init || !should)) return pending.task
     const mark = ++seq
@@ -235,7 +236,7 @@ export function createPromptDoc(input: PromptDocInput) {
     syncHistory()
   }
 
-  const commitText = () => handle?.plain()
+  const commitMarkdown = () => handle?.markdown()
 
   const empty = () => (handle ? handle.empty() : true)
 
@@ -273,7 +274,7 @@ export function createPromptDoc(input: PromptDocInput) {
     pivot,
     clientID,
     guard,
-    commitText,
+    commitMarkdown,
     empty,
     advance,
     undo,

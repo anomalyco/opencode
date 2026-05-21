@@ -211,14 +211,24 @@
     max-width: min(78%, 58ch);
   }
 
+  [data-component="codle-session"] [data-slot="user-message-body"][data-doc="true"] {
+    width: min(82%, 760px);
+    max-width: min(82%, 760px);
+  }
+
   [data-component="codle-session"] [data-slot="user-message-text"] {
     background: var(--app-user-bubble);
     border: 0;
-    border-radius: 999px;
+    border-radius: 20px;
     color: var(--app-user-bubble-text);
     padding: 10px 16px;
     line-height: 1.45;
     box-shadow: 0 1px 0 color-mix(in srgb, white 42%, transparent) inset;
+  }
+
+  [data-component="codle-session"] [data-slot="user-message-text"][data-doc="true"] {
+    display: block;
+    width: 100%;
   }
 
   [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-text"] {
