@@ -76,6 +76,77 @@ function responsesStream(chunks: unknown[]) {
   })
 }
 
+type NativeRequestInput = Parameters<typeof LLMNative.request>[0]
+
+const sessionText = (text: string) => ({ type: "text" as const, text })
+
+const sessionOpenAIReasoning = (
+  text: string,
+  options: {
+    readonly storedAs: "providerMetadata" | "providerOptions"
+    readonly itemId: string
+    readonly encryptedContent: string | null
+  },
+) => {
+  const metadata = {
+    openai: { itemId: options.itemId, reasoningEncryptedContent: options.encryptedContent },
+  }
+  if (options.storedAs === "providerMetadata")
+    return Object.assign({ type: "reasoning" as const, text }, { providerMetadata: metadata })
+  return Object.assign({ type: "reasoning" as const, text }, { providerOptions: metadata })
+}
+
+type SessionAssistantPart = ReturnType<typeof sessionText> | ReturnType<typeof sessionOpenAIReasoning>
+
+const storedSession = {
+  user: (content: string): ModelMessage => ({ role: "user", content }),
+  assistant: (content: SessionAssistantPart[]): ModelMessage => ({ role: "assistant", content }),
+  text: sessionText,
+  openaiReasoning: sessionOpenAIReasoning,
+}
+
+const openAIResponses = {
+  user: (text: string) => ({ role: "user", content: [{ type: "input_text", text }] }),
+  assistant: (text: string) => ({ role: "assistant", content: [{ type: "output_text", text }] }),
+  openaiReasoning: (text: string, options: { readonly itemId: string; readonly encryptedContent: string }) => ({
+    type: "reasoning",
+    id: options.itemId,
+    encrypted_content: options.encryptedContent,
+    summary: [{ type: "summary_text", text }],
+  }),
+}
+
+const prepareNativeRequest = (input: NativeRequestInput) =>
+  Effect.runPromise(
+    LLMClient.prepare(LLMNative.request(input)).pipe(
+      Effect.provide(LLMClient.layer),
+      Effect.provide(Layer.mergeAll(RequestExecutor.defaultLayer, WebSocketExecutor.layer)),
+    ),
+  )
+
+const expectOpenAIResponsesRequest = async (input: {
+  readonly history: NativeRequestInput["messages"]
+  readonly providerOptions?: NativeRequestInput["providerOptions"]
+  readonly maxOutputTokens?: NativeRequestInput["maxOutputTokens"]
+  readonly headers?: NativeRequestInput["headers"]
+  readonly expectedBody: unknown
+}) => {
+  expect(
+    await prepareNativeRequest({
+      model: baseModel,
+      apiKey: "test-openai-key",
+      messages: input.history,
+      providerOptions: input.providerOptions,
+      maxOutputTokens: input.maxOutputTokens,
+      headers: input.headers,
+    }),
+  ).toMatchObject({
+    route: "openai-responses",
+    protocol: "openai-responses",
+    body: input.expectedBody,
+  })
+}
+
 describe("session.llm-native.request", () => {
   test("maps normalized stream inputs to a native LLM request", () => {
     const messages: ModelMessage[] = [
@@ -464,32 +535,75 @@ describe("session.llm-native.request", () => {
   })
 
   test("compiles through the native OpenAI Responses route", async () => {
-    const prepared = await Effect.runPromise(
-      LLMClient.prepare(
-        LLMNative.request({
-          model: baseModel,
-          apiKey: "test-openai-key",
-          messages: [{ role: "user", content: "hello" }],
-          providerOptions: { openai: { store: false, instructions: "You are concise." } },
-          maxOutputTokens: 512,
-          headers: { "x-request": "request-header" },
-        }),
-      ).pipe(
-        Effect.provide(LLMClient.layer),
-        Effect.provide(Layer.mergeAll(RequestExecutor.defaultLayer, WebSocketExecutor.layer)),
-      ),
-    )
-
-    expect(prepared).toMatchObject({
-      route: "openai-responses",
-      protocol: "openai-responses",
-      body: {
+    await expectOpenAIResponsesRequest({
+      history: [storedSession.user("hello")],
+      providerOptions: { openai: { store: false, instructions: "You are concise." } },
+      maxOutputTokens: 512,
+      headers: { "x-request": "request-header" },
+      expectedBody: {
         model: "gpt-5-mini",
         instructions: "You are concise.",
-        input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
+        input: [openAIResponses.user("hello")],
         max_output_tokens: 512,
         store: false,
         stream: true,
+      },
+    })
+  })
+
+  test("omits non-persisted OpenAI reasoning ids without encrypted state", async () => {
+    await expectOpenAIResponsesRequest({
+      history: [
+        storedSession.user("What changed?"),
+        storedSession.assistant([
+          storedSession.openaiReasoning("Checked the previous diff.", {
+            storedAs: "providerOptions",
+            itemId: "rs_1",
+            encryptedContent: null,
+          }),
+          storedSession.text("The parser changed."),
+        ]),
+        storedSession.user("Summarize it."),
+      ],
+      providerOptions: { openai: { store: false } },
+      expectedBody: {
+        input: [
+          openAIResponses.user("What changed?"),
+          openAIResponses.assistant("The parser changed."),
+          openAIResponses.user("Summarize it."),
+        ],
+        store: false,
+      },
+    })
+  })
+
+  test("preserves encrypted OpenAI reasoning state through native request lowering", async () => {
+    await expectOpenAIResponsesRequest({
+      history: [
+        storedSession.user("What changed?"),
+        storedSession.assistant([
+          storedSession.openaiReasoning("Checked the previous diff.", {
+            storedAs: "providerMetadata",
+            itemId: "rs_1",
+            encryptedContent: "encrypted-state",
+          }),
+          storedSession.text("The parser changed."),
+        ]),
+        storedSession.user("Summarize it."),
+      ],
+      providerOptions: { openai: { store: false, includeEncryptedReasoning: true } },
+      expectedBody: {
+        input: [
+          openAIResponses.user("What changed?"),
+          openAIResponses.openaiReasoning("Checked the previous diff.", {
+            itemId: "rs_1",
+            encryptedContent: "encrypted-state",
+          }),
+          openAIResponses.assistant("The parser changed."),
+          openAIResponses.user("Summarize it."),
+        ],
+        include: ["reasoning.encrypted_content"],
+        store: false,
       },
     })
   })
