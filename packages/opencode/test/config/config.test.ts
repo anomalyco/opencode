@@ -1,6 +1,6 @@
 import { test, expect, describe, afterEach, beforeEach } from "bun:test"
 import { Effect, Exit, Layer, Option } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
@@ -1622,8 +1622,7 @@ test("wellknown URL with trailing slash is normalized", async () => {
   )
 })
 
-test("default layer provides HTTP client for remote well-known config", async () => {
-  const originalAuth = process.env.OPENCODE_AUTH_CONTENT
+test("remote well-known config can use FetchHttpClient layer", async () => {
   let fetchedUrl: string | undefined
   const server = Bun.serve({
     port: 0,
@@ -1640,10 +1639,6 @@ test("default layer provides HTTP client for remote well-known config", async ()
     },
   })
 
-  process.env.OPENCODE_AUTH_CONTENT = JSON.stringify({
-    [server.url.origin]: { type: "wellknown", key: "TEST_TOKEN", token: "test-token" },
-  })
-
   try {
     await provideTmpdirInstance(
       () =>
@@ -1655,11 +1650,24 @@ test("default layer provides HTTP client for remote well-known config", async ()
           }),
         ),
       { git: true },
-    ).pipe(Effect.scoped, Effect.provide(Config.defaultLayer), Effect.provide(infra), Effect.runPromise)
+    ).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Config.layer.pipe(
+          Layer.provide(testFlock),
+          Layer.provide(AppFileSystem.defaultLayer),
+          Layer.provide(Env.defaultLayer),
+          Layer.provide(wellKnownAuth(server.url.origin)),
+          Layer.provide(AccountTest.empty),
+          Layer.provideMerge(infra),
+          Layer.provide(NpmTest.noop),
+          Layer.provide(FetchHttpClient.layer),
+        ),
+      ),
+      Effect.runPromise,
+    )
   } finally {
     await server.stop(true)
-    if (originalAuth === undefined) delete process.env.OPENCODE_AUTH_CONTENT
-    else process.env.OPENCODE_AUTH_CONTENT = originalAuth
   }
 })
 
