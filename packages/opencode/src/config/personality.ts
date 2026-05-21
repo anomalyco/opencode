@@ -156,3 +156,21 @@ export function getLearningFilePath(
 ): string {
   return path.join(baseDir, ".opencode", "agents", personalityName, learningFile)
 }
+
+/**
+ * الحصول على مسار ملف تعريف الشخصية
+ */
+export function getPersonalityPath(personalityId: string): string {
+  // نفترض أن الشخصية مخزنة في مجلد personalities ضمن حزمة opencode
+  // في بيئة الإنتاج، قد تحتاج لتعديل هذا المسار
+  const baseDir = process.cwd();
+  return path.join(baseDir, "personalities", `${personalityId}.md`);
+}
+
+/**
+ * الحصول على مسار ملف التعلم (نسخة مبسطة للأدوات)
+ */
+export function getLearningPath(personalityId: string): string {
+  const baseDir = process.cwd();
+  return path.join(baseDir, ".opencode", "agents", personalityId, "learnings.md");
+}

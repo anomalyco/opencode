@@ -268,6 +268,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
+    selectedPersonalityId: string | null
   }>({
     popover: null,
     historyIndex: -1,
@@ -276,6 +277,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
+    selectedPersonalityId: null,
+  })
+
+  // تحميل قائمة الشخصيات
+  const [personalities, setPersonalities] = createSignal<any[]>([])
+  const loadPersonalities = async () => {
+    try {
+      const list = await window.electron.ipcRenderer.invoke("personality:list")
+      setPersonalities(list)
+      const savedId = sessionStorage.getItem("selected-personality-id")
+      if (savedId && list.find((p) => p.id === savedId)) {
+        setStore("selectedPersonalityId", savedId)
+      }
+    } catch (error) {
+      console.error("فشل تحميل الشخصيات:", error)
+    }
+  }
+  
+  onMount(() => {
+    loadPersonalities()
   })
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
@@ -1371,6 +1392,40 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </ModelSelectorPopover>
         </TooltipKeybind>
       </Show>
+    </Show>
+
+    {/* اختيار الشخصية */}
+    <Show when={personalities().length > 0}>
+      <TooltipKeybind
+        placement="top"
+        gutter={4}
+        title="اختر الشخصية"
+      >
+        <Select
+          options={personalities().map((p) => ({
+            label: p.name,
+            value: p.id,
+          }))}
+          value={store.selectedPersonalityId ?? ""}
+          onChange={(value) => {
+            setStore("selectedPersonalityId", value || null)
+            if (value) {
+              sessionStorage.setItem("selected-personality-id", value)
+            } else {
+              sessionStorage.removeItem("selected-personality-id")
+            }
+          }}
+          placeholder="الشخصية"
+          triggerAs={Button}
+          triggerProps={{
+            variant: "ghost",
+            size: "normal",
+            style: control(),
+            class:
+              "min-w-0 max-w-[150px] justify-start text-[13px] font-[440] leading-4 text-v2-text-text-faint group",
+          }}
+        />
+      </TooltipKeybind>
     </Show>
   )
 

@@ -30,6 +30,7 @@ import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 import { SettingsList } from "./settings-list"
+import { SettingsPersonalities } from "./settings-personalities"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
@@ -806,6 +807,11 @@ export const SettingsGeneral: Component = () => {
         <Show when={desktop() && import.meta.env.VITE_OPENCODE_CHANNEL === "beta"}>
           <AdvancedSection />
         </Show>
+
+        <div class="flex flex-col gap-1">
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.personalities") || "الشخصيات"}</h3>
+          <SettingsPersonalities />
+        </div>
       </div>
     </div>
   )

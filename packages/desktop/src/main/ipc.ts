@@ -2,6 +2,8 @@ import { execFile } from "node:child_process"
 import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
+import * as fs from "node:fs"
+import * as path from "node:path"
 
 import type {
   InitStep,
@@ -226,4 +228,155 @@ export function sendMenuCommand(win: BrowserWindow, id: string) {
 
 export function sendDeepLinks(win: BrowserWindow, urls: string[]) {
   win.webContents.send("deep-link", urls)
+}
+
+// Personality Management IPC Handlers
+interface PersonalityData {
+  id: string
+  name: string
+  description: string
+  traits: string
+  systemPrompt: string
+  temperature?: number
+  model?: string
+}
+
+const getPersonalitiesDir = () => {
+  const userDataPath = app.getPath("userData")
+  const personalitiesDir = path.join(userDataPath, "personalities")
+  if (!fs.existsSync(personalitiesDir)) {
+    fs.mkdirSync(personalitiesDir, { recursive: true })
+  }
+  return personalitiesDir
+}
+
+const getPersonalityFilePath = (id: string) => {
+  return path.join(getPersonalitiesDir(), `${id}.json`)
+}
+
+const generateId = (name: string) => {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "")
+}
+
+export function registerPersonalityIpcHandlers() {
+  ipcMain.handle("personality:list", async () => {
+    try {
+      const dir = getPersonalitiesDir()
+      const files = fs.readdirSync(dir).filter(f => f.endsWith(".json"))
+      const personalities: PersonalityData[] = []
+      
+      for (const file of files) {
+        const filePath = path.join(dir, file)
+        const content = fs.readFileSync(filePath, "utf-8")
+        const personality = JSON.parse(content)
+        personalities.push(personality)
+      }
+      
+      return personalities
+    } catch (error) {
+      console.error("Error listing personalities:", error)
+      return []
+    }
+  })
+
+  ipcMain.handle("personality:create", async (_event, data: Omit<PersonalityData, "id">) => {
+    try {
+      const id = generateId(data.name)
+      const filePath = getPersonalityFilePath(id)
+      
+      if (fs.existsSync(filePath)) {
+        throw new Error("شخصية بهذا الاسم موجودة بالفعل")
+      }
+      
+      const personality: PersonalityData = {
+        id,
+        ...data,
+      }
+      
+      fs.writeFileSync(filePath, JSON.stringify(personality, null, 2), "utf-8")
+      
+      // Create learnings file
+      const userDataPath = app.getPath("userData")
+      const agentsDir = path.join(userDataPath, "agents", id)
+      if (!fs.existsSync(agentsDir)) {
+        fs.mkdirSync(agentsDir, { recursive: true })
+      }
+      
+      const learningsFile = path.join(agentsDir, "learnings.md")
+      if (!fs.existsSync(learningsFile)) {
+        fs.writeFileSync(learningsFile, `# دروس ${data.name}\n\n`, "utf-8")
+      }
+      
+      return { success: true, id }
+    } catch (error) {
+      console.error("Error creating personality:", error)
+      throw error
+    }
+  })
+
+  ipcMain.handle("personality:update", async (_event, id: string, data: Partial<Omit<PersonalityData, "id">>) => {
+    try {
+      const filePath = getPersonalityFilePath(id)
+      
+      if (!fs.existsSync(filePath)) {
+        throw new Error("الشخصية غير موجودة")
+      }
+      
+      const content = fs.readFileSync(filePath, "utf-8")
+      const personality = JSON.parse(content)
+      
+      const updated: PersonalityData = {
+        ...personality,
+        ...data,
+        id,
+      }
+      
+      fs.writeFileSync(filePath, JSON.stringify(updated, null, 2), "utf-8")
+      
+      return { success: true }
+    } catch (error) {
+      console.error("Error updating personality:", error)
+      throw error
+    }
+  })
+
+  ipcMain.handle("personality:delete", async (_event, id: string) => {
+    try {
+      const filePath = getPersonalityFilePath(id)
+      
+      if (!fs.existsSync(filePath)) {
+        throw new Error("الشخصية غير موجودة")
+      }
+      
+      fs.unlinkSync(filePath)
+      
+      // Also delete learnings directory
+      const userDataPath = app.getPath("userData")
+      const agentsDir = path.join(userDataPath, "agents", id)
+      if (fs.existsSync(agentsDir)) {
+        fs.rmSync(agentsDir, { recursive: true, force: true })
+      }
+      
+      return { success: true }
+    } catch (error) {
+      console.error("Error deleting personality:", error)
+      throw error
+    }
+  })
+
+  ipcMain.handle("personality:read", async (_event, id: string) => {
+    try {
+      const filePath = getPersonalityFilePath(id)
+      
+      if (!fs.existsSync(filePath)) {
+        throw new Error("الشخصية غير موجودة")
+      }
+      
+      const content = fs.readFileSync(filePath, "utf-8")
+      return JSON.parse(content)
+    } catch (error) {
+      console.error("Error reading personality:", error)
+      throw error
+    }
+  })
 }
