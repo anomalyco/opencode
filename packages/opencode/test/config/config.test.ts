@@ -13,8 +13,14 @@ import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Env } from "../../src/env"
-import { provideTestInstance, provideTmpdirInstance, TestInstance, withTestInstance } from "../fixture/fixture"
-import { tmpdir } from "../fixture/fixture"
+import {
+  provideTestInstance,
+  provideTmpdirInstance,
+  TestInstance,
+  tmpdir,
+  tmpdirScoped,
+  withTestInstance,
+} from "../fixture/fixture"
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
@@ -116,18 +122,31 @@ const writeConfigEffect = (dir: string, config: object, name = "opencode.json") 
 const mkdirEffect = (dir: string) => Effect.promise(() => fs.mkdir(dir, { recursive: true }))
 const writeTextEffect = (file: string, content: string) => Effect.promise(() => Filesystem.write(file, content))
 
-function withProcessEnv<A, E, R>(key: string, value: string, effect: Effect.Effect<A, E, R>) {
+function withProcessEnv<A, E, R>(key: string, value: string | undefined, effect: Effect.Effect<A, E, R>) {
+  return withProcessEnvs({ [key]: value }, effect)
+}
+
+function withProcessEnvs<A, E, R>(
+  entries: Record<string, string | undefined>,
+  effect: Effect.Effect<A, E, R>,
+) {
   return Effect.acquireUseRelease(
     Effect.sync(() => {
-      const original = process.env[key]
-      process.env[key] = value
-      return original
+      const originals: Record<string, string | undefined> = {}
+      for (const [key, value] of Object.entries(entries)) {
+        originals[key] = process.env[key]
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      }
+      return originals
     }),
     () => effect,
-    (original) =>
+    (originals) =>
       Effect.sync(() => {
-        if (original !== undefined) process.env[key] = original
-        else delete process.env[key]
+        for (const [key, original] of Object.entries(originals)) {
+          if (original !== undefined) process.env[key] = original
+          else delete process.env[key]
+        }
       }),
   )
 }
@@ -1881,293 +1900,134 @@ describe("deduplicatePluginOrigins", () => {
 })
 
 describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
-  test("skips project config files when flag is set", async () => {
-    const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
-    process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
-
-    try {
-      await using tmp = await tmpdir({
-        init: async (dir) => {
-          // Create a project config that would normally be loaded
-          await Filesystem.write(
-            path.join(dir, "opencode.json"),
-            JSON.stringify({
-              $schema: "https://opencode.ai/config.json",
-              model: "project/model",
-              username: "project-user",
-            }),
-          )
-        },
-      })
-      await withTestInstance({
-        directory: tmp.path,
-        fn: async (ctx) => {
-          const config = await load(ctx)
-          // Project config should NOT be loaded - model should be default, not "project/model"
+  it.instance(
+    "skips project config files when flag is set",
+    () =>
+      withProcessEnv(
+        "OPENCODE_DISABLE_PROJECT_CONFIG",
+        "true",
+        Effect.gen(function* () {
+          const config = yield* Config.use.get()
           expect(config.model).not.toBe("project/model")
           expect(config.username).not.toBe("project-user")
-        },
-      })
-    } finally {
-      if (originalEnv === undefined) {
-        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
-      } else {
-        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalEnv
-      }
-    }
-  })
+        }),
+      ),
+    { config: { model: "project/model", username: "project-user" } },
+  )
 
-  test("skips project .opencode/ directories when flag is set", async () => {
-    const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
-    process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
+  it.instance("skips project .opencode/ directories when flag is set", () =>
+    withProcessEnv(
+      "OPENCODE_DISABLE_PROJECT_CONFIG",
+      "true",
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* mkdirEffect(path.join(test.directory, ".opencode", "command"))
+        yield* writeTextEffect(
+          path.join(test.directory, ".opencode", "command", "test-cmd.md"),
+          "# Test Command\nThis is a test command.",
+        )
+        const directories = yield* Config.use.directories()
+        expect(directories.some((d) => d.startsWith(test.directory))).toBe(false)
+      }),
+    ),
+  )
 
-    try {
-      await using tmp = await tmpdir({
-        init: async (dir) => {
-          // Create a .opencode directory with a command
-          const opencodeDir = path.join(dir, ".opencode", "command")
-          await fs.mkdir(opencodeDir, { recursive: true })
-          await Filesystem.write(path.join(opencodeDir, "test-cmd.md"), "# Test Command\nThis is a test command.")
-        },
-      })
-      await withTestInstance({
-        directory: tmp.path,
-        fn: async (ctx) => {
-          const directories = await listDirs(ctx)
-          // Project .opencode should NOT be in directories list
-          const hasProjectOpencode = directories.some((d) => d.startsWith(tmp.path))
-          expect(hasProjectOpencode).toBe(false)
-        },
-      })
-    } finally {
-      if (originalEnv === undefined) {
-        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
-      } else {
-        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalEnv
-      }
-    }
-  })
+  it.instance("still loads global config when flag is set", () =>
+    withProcessEnv(
+      "OPENCODE_DISABLE_PROJECT_CONFIG",
+      "true",
+      Effect.gen(function* () {
+        const config = yield* Config.use.get()
+        expect(config).toBeDefined()
+        expect(config.username).toBeDefined()
+      }),
+    ),
+  )
 
-  test("still loads global config when flag is set", async () => {
-    const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
-    process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
-
-    try {
-      await using tmp = await tmpdir()
-      await withTestInstance({
-        directory: tmp.path,
-        fn: async (ctx) => {
-          // Should still get default config (from global or defaults)
-          const config = await load(ctx)
-          expect(config).toBeDefined()
-          expect(config.username).toBeDefined()
-        },
-      })
-    } finally {
-      if (originalEnv === undefined) {
-        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
-      } else {
-        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalEnv
-      }
-    }
-  })
-
-  test("skips relative instructions with warning when flag is set but no config dir", async () => {
-    const originalDisable = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
-    const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
-
-    try {
-      // Ensure no config dir is set
-      delete process.env["OPENCODE_CONFIG_DIR"]
-      process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
-
-      await using tmp = await tmpdir({
-        init: async (dir) => {
-          // Create a config with relative instruction path
-          await Filesystem.write(
-            path.join(dir, "opencode.json"),
-            JSON.stringify({
-              $schema: "https://opencode.ai/config.json",
-              instructions: ["./CUSTOM.md"],
-            }),
-          )
-          // Create the instruction file (should be skipped)
-          await Filesystem.write(path.join(dir, "CUSTOM.md"), "# Custom Instructions")
-        },
-      })
-
-      await withTestInstance({
-        directory: tmp.path,
-        fn: async (ctx) => {
+  it.instance(
+    "skips relative instructions with warning when flag is set but no config dir",
+    () =>
+      withProcessEnvs(
+        { OPENCODE_CONFIG_DIR: undefined, OPENCODE_DISABLE_PROJECT_CONFIG: "true" },
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          yield* writeTextEffect(path.join(test.directory, "CUSTOM.md"), "# Custom Instructions")
           // The relative instruction should be skipped without error
-          // We're mainly verifying this doesn't throw and the config loads
-          const config = await load(ctx)
+          const config = yield* Config.use.get()
           expect(config).toBeDefined()
-          // The instruction should have been skipped (warning logged)
-          // We can't easily test the warning was logged, but we verify
-          // the relative path didn't cause an error
-        },
-      })
-    } finally {
-      if (originalDisable === undefined) {
-        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
-      } else {
-        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalDisable
-      }
-      if (originalConfigDir === undefined) {
-        delete process.env["OPENCODE_CONFIG_DIR"]
-      } else {
-        process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
-      }
-    }
-  })
+        }),
+      ),
+    { config: { instructions: ["./CUSTOM.md"] } },
+  )
 
-  test("OPENCODE_CONFIG_DIR still works when flag is set", async () => {
-    const originalDisable = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
-    const originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
-
-    try {
-      await using configDirTmp = await tmpdir({
-        init: async (dir) => {
-          // Create config in the custom config dir
-          await Filesystem.write(
-            path.join(dir, "opencode.json"),
-            JSON.stringify({
-              $schema: "https://opencode.ai/config.json",
-              model: "configdir/model",
-            }),
-          )
-        },
-      })
-
-      await using projectTmp = await tmpdir({
-        init: async (dir) => {
-          // Create config in project (should be ignored)
-          await Filesystem.write(
-            path.join(dir, "opencode.json"),
-            JSON.stringify({
-              $schema: "https://opencode.ai/config.json",
-              model: "project/model",
-            }),
-          )
-        },
-      })
-
-      process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
-      process.env["OPENCODE_CONFIG_DIR"] = configDirTmp.path
-
-      await withTestInstance({
-        directory: projectTmp.path,
-        fn: async (ctx) => {
-          const config = await load(ctx)
-          // Should load from OPENCODE_CONFIG_DIR, not project
+  it.instance("OPENCODE_CONFIG_DIR still works when flag is set", () =>
+    Effect.gen(function* () {
+      const configDir = yield* tmpdirScoped({ config: { model: "configdir/model" } })
+      yield* withProcessEnvs(
+        { OPENCODE_DISABLE_PROJECT_CONFIG: "true", OPENCODE_CONFIG_DIR: configDir },
+        Effect.gen(function* () {
+          const config = yield* Config.use.get()
           expect(config.model).toBe("configdir/model")
-        },
-      })
-    } finally {
-      if (originalDisable === undefined) {
-        delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
-      } else {
-        process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalDisable
-      }
-      if (originalConfigDir === undefined) {
-        delete process.env["OPENCODE_CONFIG_DIR"]
-      } else {
-        process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
-      }
-    }
-  })
+        }),
+      )
+    }),
+    { config: { model: "project/model" } },
+  )
 })
 
 // Regression for #28206: malformed OPENCODE_PERMISSION JSON used to crash
 // the app on startup with an unhandled SyntaxError. Loading the config with
 // an invalid JSON value in this env var should not throw.
 describe("OPENCODE_PERMISSION env var", () => {
-  test("does not crash when OPENCODE_PERMISSION contains invalid JSON", async () => {
-    const original = process.env["OPENCODE_PERMISSION"]
-    process.env["OPENCODE_PERMISSION"] = "{invalid"
-    try {
-      await using tmp = await tmpdir()
-      await withTestInstance({
-        directory: tmp.path,
-        fn: async (ctx) => {
-          const config = await load(ctx)
-          // We don't assert on permission shape; the regression is that
-          // load() throws before returning anything.
-          expect(config).toBeDefined()
-        },
-      })
-    } finally {
-      if (original !== undefined) {
-        process.env["OPENCODE_PERMISSION"] = original
-      } else {
-        delete process.env["OPENCODE_PERMISSION"]
-      }
-    }
-  })
+  it.instance("does not crash when OPENCODE_PERMISSION contains invalid JSON", () =>
+    withProcessEnv(
+      "OPENCODE_PERMISSION",
+      "{invalid",
+      Effect.gen(function* () {
+        const config = yield* Config.use.get()
+        // Regression: load() used to throw before returning anything.
+        expect(config).toBeDefined()
+      }),
+    ),
+  )
 })
 
 describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
-  test("substitutes {env:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
-    const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
-    const originalTestVar = process.env["TEST_CONFIG_VAR"]
-    process.env["TEST_CONFIG_VAR"] = "test_api_key_12345"
-    process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
-      $schema: "https://opencode.ai/config.json",
-      username: "{env:TEST_CONFIG_VAR}",
-    })
-
-    try {
-      await using tmp = await tmpdir()
-      await withTestInstance({
-        directory: tmp.path,
-        fn: async (ctx) => {
-          const config = await load(ctx)
+  it.instance("substitutes {env:} tokens in OPENCODE_CONFIG_CONTENT", () =>
+    withProcessEnv(
+      "TEST_CONFIG_VAR",
+      "test_api_key_12345",
+      withProcessEnv(
+        "OPENCODE_CONFIG_CONTENT",
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          username: "{env:TEST_CONFIG_VAR}",
+        }),
+        Effect.gen(function* () {
+          const config = yield* Config.use.get()
           expect(config.username).toBe("test_api_key_12345")
-        },
-      })
-    } finally {
-      if (originalEnv !== undefined) {
-        process.env["OPENCODE_CONFIG_CONTENT"] = originalEnv
-      } else {
-        delete process.env["OPENCODE_CONFIG_CONTENT"]
-      }
-      if (originalTestVar !== undefined) {
-        process.env["TEST_CONFIG_VAR"] = originalTestVar
-      } else {
-        delete process.env["TEST_CONFIG_VAR"]
-      }
-    }
-  })
+        }),
+      ),
+    ),
+  )
 
-  test("substitutes {file:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
-    const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
-
-    try {
-      await using tmp = await tmpdir({
-        init: async (dir) => {
-          await Filesystem.write(path.join(dir, "api_key.txt"), "secret_key_from_file")
-          process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
-            $schema: "https://opencode.ai/config.json",
-            username: "{file:./api_key.txt}",
-          })
-        },
-      })
-      await withTestInstance({
-        directory: tmp.path,
-        fn: async (ctx) => {
-          const config = await load(ctx)
+  it.instance("substitutes {file:} tokens in OPENCODE_CONFIG_CONTENT", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* writeTextEffect(path.join(test.directory, "api_key.txt"), "secret_key_from_file")
+      yield* withProcessEnv(
+        "OPENCODE_CONFIG_CONTENT",
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          username: "{file:./api_key.txt}",
+        }),
+        Effect.gen(function* () {
+          const config = yield* Config.use.get()
           expect(config.username).toBe("secret_key_from_file")
-        },
-      })
-    } finally {
-      if (originalEnv !== undefined) {
-        process.env["OPENCODE_CONFIG_CONTENT"] = originalEnv
-      } else {
-        delete process.env["OPENCODE_CONFIG_CONTENT"]
-      }
-    }
-  })
+        }),
+      )
+    }),
+  )
 })
 
 // parseManagedPlist unit tests — pure function, no OS interaction
