@@ -31,6 +31,7 @@ import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 import { SettingsList } from "./settings-list"
 import { SettingsPersonalities } from "./settings-personalities"
+import { WorkspaceManager } from "./workspace/workspace-manager"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
@@ -811,6 +812,11 @@ export const SettingsGeneral: Component = () => {
         <div class="flex flex-col gap-1">
           <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.personalities") || "الشخصيات"}</h3>
           <SettingsPersonalities />
+        </div>
+
+        <div class="flex flex-col gap-1 mt-6">
+          <h3 class="text-14-medium text-text-strong pb-2">مساحات العمل المتعددة</h3>
+          <WorkspaceManager />
         </div>
       </div>
     </div>

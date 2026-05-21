@@ -295,8 +295,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
   
+  // تحميل قائمة مساحات العمل
+  const [workspaces, setWorkspaces] = createSignal<any[]>([])
+  const loadWorkspaces = async () => {
+    try {
+      const result = await window.electron.ipcRenderer.invoke("workspace:list")
+      if (result.success) {
+        setWorkspaces(result.workspaces)
+        const savedWsId = sessionStorage.getItem("selectedWorkspace")
+        if (savedWsId && result.workspaces.find((w: any) => w.id === savedWsId)) {
+          // يمكن إضافة selectedWorkspaceId إلى store إذا لزم الأمر
+        }
+      }
+    } catch (error) {
+      console.error("فشل تحميل مساحات العمل:", error)
+    }
+  }
+  
   onMount(() => {
     loadPersonalities()
+    loadWorkspaces()
   })
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
@@ -1425,6 +1443,36 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               "min-w-0 max-w-[150px] justify-start text-[13px] font-[440] leading-4 text-v2-text-text-faint group",
           }}
         />
+      </TooltipKeybind>
+    </Show>
+
+    {/* مؤشر مساحة العمل النشطة */}
+    <Show when={workspaces().length > 0}>
+      <TooltipKeybind
+        placement="top"
+        gutter={4}
+        title={`مساحة العمل: ${sessionStorage.getItem("selectedWorkspace") ? workspaces().find((w: any) => w.id === sessionStorage.getItem("selectedWorkspace"))?.name : "لم يتم تحديد"}`}
+      >
+        <Button
+          variant="ghost"
+          size="normal"
+          style={control()}
+          class="min-w-0 max-w-[150px] justify-start text-[13px] font-[440] leading-4 text-v2-text-text-faint group"
+          onClick={() => {
+            const savedWsId = sessionStorage.getItem("selectedWorkspace")
+            if (savedWsId) {
+              alert(`مساحة العمل النشطة: ${workspaces().find((w: any) => w.id === savedWsId)?.name || "غير محددة"}`)
+            } else {
+              alert("لم يتم تحديد مساحة عمل. يمكنك إنشاء أو تحديد مساحة عمل من الإعدادات.")
+            }
+          }}
+        >
+          <span class="truncate">
+            {sessionStorage.getItem("selectedWorkspace") 
+              ? `📁 ${workspaces().find((w: any) => w.id === sessionStorage.getItem("selectedWorkspace"))?.name || "مساحة عمل"}`
+              : "📁 مساحة عمل"}
+          </span>
+        </Button>
       </TooltipKeybind>
     </Show>
   )

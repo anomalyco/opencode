@@ -15,6 +15,7 @@ import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } fr
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress, registerPersonalityIpcHandlers } from "./ipc"
+import { registerWorkspaceIpcHandlers } from "./workspace/handlers"
 import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
@@ -262,6 +263,9 @@ const main = Effect.gen(function* () {
 
   // Register personality IPC handlers
   registerPersonalityIpcHandlers()
+
+  // Register workspace IPC handlers for multi-project support
+  registerWorkspaceIpcHandlers()
 
   yield* Effect.promise(() => app.whenReady())
 

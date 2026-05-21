@@ -150,3 +150,8 @@ export const personalityTools = [
   updatePersonalityProfileTool,
   readPersonalityContextTool,
 ];
+
+export const workspaceTools = [
+  linkProjectsTool,
+  getWorkspaceContextTool,
+];
