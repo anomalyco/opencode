@@ -1,4 +1,4 @@
-import { createContext, createSignal, splitProps, useContext } from "solid-js"
+import { createContext, createSignal, onCleanup, splitProps, useContext } from "solid-js"
 import type { JSX } from "solid-js/jsx-runtime"
 import { makeResizeObserver } from "@solid-primitives/resize-observer"
 import { IconCheckCircle, IconHashtag } from "../icons"
@@ -48,6 +48,11 @@ export function AnchorIcon(props: AnchorProps) {
   const [local, rest] = splitProps(props, ["id", "children"])
   const [copied, setCopied] = createSignal(false)
   const messages = useShareMessages()
+  let timerId: ReturnType<typeof setTimeout> | undefined
+
+  onCleanup(() => {
+    if (timerId) clearTimeout(timerId)
+  })
 
   return (
     <div {...rest} data-element-anchor title={messages.link_to_message} data-status={copied() ? "copied" : ""}>
@@ -65,7 +70,8 @@ export function AnchorIcon(props: AnchorProps) {
             .catch((err) => console.error("Copy failed", err))
 
           setCopied(true)
-          setTimeout(() => setCopied(false), 3000)
+          if (timerId) clearTimeout(timerId)
+          timerId = setTimeout(() => setCopied(false), 3000)
         }}
       >
         {local.children}

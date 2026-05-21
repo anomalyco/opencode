@@ -5,7 +5,7 @@
   "tasks": {
     "typecheck": {},
     "build": {
-      "dependsOn": [],
+      "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
     "opencode#test": {

@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js"
+import { createSignal, onCleanup } from "solid-js"
 import { IconClipboard, IconCheckCircle } from "../icons"
 import { useShareMessages } from "./common"
 import styles from "./copy-button.module.css"
@@ -10,13 +10,19 @@ interface CopyButtonProps {
 export function CopyButton(props: CopyButtonProps) {
   const [copied, setCopied] = createSignal(false)
   const messages = useShareMessages()
+  let timerId: ReturnType<typeof setTimeout> | undefined
+
+  onCleanup(() => {
+    if (timerId) clearTimeout(timerId)
+  })
 
   function handleCopyClick() {
     if (props.text) {
       navigator.clipboard.writeText(props.text).catch((err) => console.error("Copy failed", err))
 
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      if (timerId) clearTimeout(timerId)
+      timerId = setTimeout(() => setCopied(false), 2000)
     }
   }
 

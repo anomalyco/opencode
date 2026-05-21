@@ -2,6 +2,7 @@ import style from "./content-bash.module.css"
 import { createResource, createSignal } from "solid-js"
 import { createOverflow, useShareMessages } from "./common"
 import { codeToHtml } from "shiki"
+import { sanitizeHtml } from "./sanitize"
 
 interface Props {
   command: string
@@ -48,8 +49,8 @@ export function ContentBash(props: Props) {
           <span>{props.description}</span>
         </div>
         <div data-slot="content">
-          <div innerHTML={commandHtml()} />
-          <div data-slot="output" ref={overflow.ref} innerHTML={outputHtml()} />
+          <div innerHTML={commandHtml() ? sanitizeHtml(commandHtml()!) : undefined} />
+          <div data-slot="output" ref={overflow.ref} innerHTML={outputHtml() ? sanitizeHtml(outputHtml()!) : undefined} />
         </div>
       </div>
 

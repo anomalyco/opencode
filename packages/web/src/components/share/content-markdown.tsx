@@ -5,6 +5,7 @@ import { createOverflow, useShareMessages } from "./common"
 import { CopyButton } from "./copy-button"
 import { createResource, createSignal } from "solid-js"
 import style from "./content-markdown.module.css"
+import { sanitizeHtml } from "./sanitize"
 
 const markedWithShiki = marked.use(
   {
@@ -50,7 +51,7 @@ export function ContentMarkdown(props: Props) {
       data-highlight={props.highlight === true ? true : undefined}
       data-expanded={expanded() || props.expand === true ? true : undefined}
     >
-      <div data-slot="markdown" ref={overflow.ref} innerHTML={html()} />
+      <div data-slot="markdown" ref={overflow.ref} innerHTML={html() ? sanitizeHtml(html()!) : undefined} />
 
       {!props.expand && overflow.status && (
         <button
