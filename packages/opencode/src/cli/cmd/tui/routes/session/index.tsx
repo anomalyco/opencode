@@ -599,17 +599,18 @@ export function Session() {
         const status = sync.data.session_status?.[route.sessionID]
         if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
         const revert = session()?.revert?.messageID
-        const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
+        const allMessages = await sdk.client.session.messages({ sessionID: route.sessionID }).then((r) => r.data ?? [])
+        const message = allMessages.findLast((x) => (!revert || x.info.id < revert) && x.info.role === "user")
         if (!message) return
         void sdk.client.session
           .revert({
             sessionID: route.sessionID,
-            messageID: message.id,
+            messageID: message.info.id,
           })
           .then(() => {
             toBottom()
           })
-        const parts = sync.data.part[message.id]
+        const parts = sync.data.part[message.info.id] ?? message.parts
         prompt?.set(
           parts.reduce(
             (agg, part) => {
@@ -633,11 +634,12 @@ export function Session() {
       slash: {
         name: "redo",
       },
-      run: () => {
+      run: async () => {
         dialog.clear()
         const messageID = session()?.revert?.messageID
         if (!messageID) return
-        const message = messages().find((x) => x.role === "user" && x.id > messageID)
+        const allMessages = await sdk.client.session.messages({ sessionID: route.sessionID }).then((r) => r.data ?? [])
+        const message = allMessages.find((x) => x.info.role === "user" && x.info.id > messageID)
         if (!message) {
           void sdk.client.session.unrevert({
             sessionID: route.sessionID,
@@ -647,7 +649,7 @@ export function Session() {
         }
         void sdk.client.session.revert({
           sessionID: route.sessionID,
-          messageID: message.id,
+          messageID: message.info.id,
         })
       },
     },
