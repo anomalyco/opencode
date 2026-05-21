@@ -1,36 +1,32 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { CacheHint, LLM, Message } from "../src"
-import { LLMClient } from "../src/route"
+import { Auth, LLMClient } from "../src/route"
+import { AmazonBedrock } from "../src/providers"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
-import * as BedrockConverse from "../src/protocols/bedrock-converse"
 import * as Gemini from "../src/protocols/gemini"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import { applyCachePolicy } from "../src/cache-policy"
 import { it } from "./lib/effect"
 
-const anthropicModel = AnthropicMessages.model({
-  id: "claude-sonnet-4-5",
-  baseURL: "https://api.anthropic.test/v1/",
-  headers: { "x-api-key": "test" },
-})
+const anthropicModel = AnthropicMessages.route
+  .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
+  .model({ id: "claude-sonnet-4-5" })
 
-const bedrockModel = BedrockConverse.model({
-  id: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+const bedrockModel = AmazonBedrock.configure({
   credentials: { region: "us-east-1", accessKeyId: "fixture", secretAccessKey: "fixture" },
-})
+}).model("anthropic.claude-3-5-sonnet-20241022-v2:0")
 
-const openaiModel = OpenAIChat.model({
-  id: "gpt-4o-mini",
-  baseURL: "https://api.openai.test/v1/",
-  headers: { authorization: "Bearer test" },
-})
+const openaiModel = OpenAIChat.route
+  .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+  .model({ id: "gpt-4o-mini" })
 
-const geminiModel = Gemini.model({
-  id: "gemini-2.5-flash",
-  baseURL: "https://generativelanguage.test/v1beta/",
-  headers: { "x-goog-api-key": "test" },
-})
+const geminiModel = Gemini.route
+  .with({
+    endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
+    auth: Auth.header("x-goog-api-key", "test"),
+  })
+  .model({ id: "gemini-2.5-flash" })
 
 describe("applyCachePolicy", () => {
   it.effect("undefined cache resolves to 'auto' (the recommended default)", () =>

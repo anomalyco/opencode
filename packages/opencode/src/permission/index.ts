@@ -8,15 +8,15 @@ import { PermissionTable } from "@/session/session.sql"
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
 import * as Log from "@opencode-ai/core/util/log"
-import { Wildcard } from "@/util/wildcard"
+import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import os from "os"
-import { evaluate as evalRule } from "./evaluate"
+import { PermissionV2 } from "@opencode-ai/core/permission"
 import { PermissionID } from "./schema"
 
 const log = Log.create({ service: "permission" })
 
-export const Action = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionAction" })
+export const Action = PermissionV2.Action.annotate({ identifier: "PermissionAction" })
 export type Action = Schema.Schema.Type<typeof Action>
 
 export const Rule = Schema.Struct({
@@ -26,7 +26,7 @@ export const Rule = Schema.Struct({
 }).annotate({ identifier: "PermissionRule" })
 export type Rule = Schema.Schema.Type<typeof Rule>
 
-export const Ruleset = Schema.mutable(Schema.Array(Rule)).annotate({ identifier: "PermissionRuleset" })
+export const Ruleset = Schema.Array(Rule).annotate({ identifier: "PermissionRuleset" })
 export type Ruleset = Schema.Schema.Type<typeof Ruleset>
 
 export class Request extends Schema.Class<Request>("PermissionRequest")({
@@ -122,11 +122,11 @@ interface PendingEntry {
 
 interface State {
   pending: Map<PermissionID, PendingEntry>
-  approved: Ruleset
+  approved: Rule[]
 }
 
 export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
-  return evalRule(permission, pattern, ...rulesets)
+  return PermissionV2.evaluate(permission, pattern, ...rulesets)
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
@@ -142,7 +142,7 @@ export const layer = Layer.effect(
         )
         const state = {
           pending: new Map<PermissionID, PendingEntry>(),
-          approved: row?.data ?? [],
+          approved: [...(row?.data ?? [])],
         }
 
         yield* Effect.addFinalizer(() =>
@@ -271,7 +271,7 @@ function expand(pattern: string): string {
 }
 
 export function fromConfig(permission: ConfigPermission.Info) {
-  const ruleset: Ruleset = []
+  const ruleset: Rule[] = []
   for (const [key, value] of Object.entries(permission)) {
     if (typeof value === "string") {
       ruleset.push({ permission: key, action: value, pattern: "*" })
@@ -284,21 +284,12 @@ export function fromConfig(permission: ConfigPermission.Info) {
   return ruleset
 }
 
-export function merge(...rulesets: Ruleset[]): Ruleset {
-  return rulesets.flat()
+export function merge(...rulesets: Ruleset[]): Rule[] {
+  return [...PermissionV2.merge(...rulesets)]
 }
 
-const EDIT_TOOLS = ["edit", "write", "apply_patch"]
-
 export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
-  const result = new Set<string>()
-  for (const tool of tools) {
-    const permission = EDIT_TOOLS.includes(tool) ? "edit" : tool
-    const rule = ruleset.findLast((rule) => Wildcard.match(permission, rule.permission))
-    if (!rule) continue
-    if (rule.pattern === "*" && rule.action === "deny") result.add(tool)
-  }
-  return result
+  return PermissionV2.disabled(tools, ruleset)
 }
 
 export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))

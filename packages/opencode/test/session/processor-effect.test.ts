@@ -1,7 +1,9 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect } from "bun:test"
+import { tool } from "ai"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
+import z from "zod"
 import type { Agent } from "../../src/agent/agent"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
@@ -249,7 +251,7 @@ it.live("session.processor effect tests capture llm input cleanly", () =>
         expect(calls).toBe(1)
         expect(parts.some((part) => part.type === "text" && part.text === "hello")).toBe(true)
       }),
-    { git: true, config: (url) => providerCfg(url) },
+    { config: (url) => providerCfg(url) },
   ),
 )
 
@@ -331,7 +333,7 @@ it.live("session.processor effect tests preserve text start time", () =>
         if (!text?.time?.start || !text.time.end) return
         expect(text.time.start).toBeLessThan(text.time.end)
       }),
-    { git: true, config: (url) => providerCfg(url) },
+    { config: (url) => providerCfg(url) },
   ),
 )
 
@@ -377,7 +379,7 @@ it.live("session.processor effect tests stop after token overflow requests compa
         expect(parts.some((part) => part.type === "text" && part.text === "after")).toBe(true)
         expect(parts.some((part) => part.type === "step-finish")).toBe(true)
       }),
-    { git: true, config: (url) => providerCfg(url) },
+    { config: (url) => providerCfg(url) },
   ),
 )
 
@@ -425,7 +427,7 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
         expect(reasoning?.text).toBe("think")
         expect(text?.text).toBe("done")
       }),
-    { git: true, config: (url) => providerCfg(url) },
+    { config: (url) => providerCfg(url) },
   ),
 )
 
@@ -472,7 +474,7 @@ it.live("session.processor effect tests reset reasoning state across retries", (
         expect(reasoning.some((part) => part.text === "two")).toBe(true)
         expect(reasoning.some((part) => part.text === "onetwo")).toBe(false)
       }),
-    { git: true, config: (url) => providerCfg(url) },
+    { config: (url) => providerCfg(url) },
   ),
 )
 
@@ -515,7 +517,7 @@ it.live("session.processor effect tests do not retry unknown json errors", () =>
         expect(yield* llm.calls).toBe(1)
         expect(handle.message.error?.name).toBe("APIError")
       }),
-    { git: true, config: (url) => providerCfg(url) },
+    { config: (url) => providerCfg(url) },
   ),
 )
 
@@ -562,7 +564,7 @@ it.live("session.processor effect tests retry recognized structured json errors"
         expect(parts.some((part) => part.type === "text" && part.text === "after")).toBe(true)
         expect(handle.message.error).toBeUndefined()
       }),
-    { git: true, config: (url) => providerCfg(url) },
+    { config: (url) => providerCfg(url) },
   ),
 )
 
@@ -614,7 +616,7 @@ it.live("session.processor effect tests publish retry status updates", () =>
         expect(yield* llm.calls).toBe(2)
         expect(states).toStrictEqual([1])
       }),
-    { git: true, config: (url) => providerCfg(url) },
+    { config: (url) => providerCfg(url) },
   ),
 )
 
@@ -657,7 +659,72 @@ it.live("session.processor effect tests compact on structured context overflow",
         expect(yield* llm.calls).toBe(1)
         expect(handle.message.error).toBeUndefined()
       }),
-    { git: true, config: (url) => providerCfg(url) },
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests complete AI SDK tool calls when native flag is off", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.tool("lookup", { query: "weather" })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "tool")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "tool" }],
+          tools: {
+            lookup: tool({
+              description: "Look up information",
+              inputSchema: z.object({ query: z.string() }),
+              execute: async (input) => ({
+                title: "Weather lookup",
+                output: `result:${input.query}`,
+                metadata: { source: "test" },
+              }),
+            }),
+          },
+        })
+
+        const parts = MessageV2.parts(msg.id)
+        const call = parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+
+        expect(value).toBe("continue")
+        expect(yield* llm.calls).toBe(1)
+        expect(call?.callID).toBe("call_1")
+        expect(call?.tool).toBe("lookup")
+        expect(call?.state.status).toBe("completed")
+        if (call?.state.status !== "completed") return
+        expect(call.state.input).toEqual({ query: "weather" })
+        expect(call.state.output).toBe("result:weather")
+        expect(call.state.title).toBe("Weather lookup")
+        expect(call.state.metadata).toEqual({ source: "test" })
+        expect(call.state.time.start).toBeDefined()
+        expect(call.state.time.end).toBeDefined()
+      }),
+    { config: (url) => providerCfg(url) },
   ),
 )
 
@@ -721,7 +788,7 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
           expect(call.state.time.end).toBeDefined()
         }
       }),
-    { git: true, config: (url) => providerCfg(url) },
+    { config: (url) => providerCfg(url) },
   ),
 )
 
@@ -793,7 +860,7 @@ it.live("session.processor effect tests record aborted errors and idle state", (
         expect(state).toMatchObject({ type: "idle" })
         expect(errs).toContain("MessageAbortedError")
       }),
-    { git: true, config: (url) => providerCfg(url) },
+    { config: (url) => providerCfg(url) },
   ),
 )
 
@@ -850,6 +917,6 @@ it.live("session.processor effect tests mark interruptions aborted without manua
         }
         expect(state).toMatchObject({ type: "idle" })
       }),
-    { git: true, config: (url) => providerCfg(url) },
+    { config: (url) => providerCfg(url) },
   ),
 )
