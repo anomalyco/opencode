@@ -1716,6 +1716,76 @@ test("wellknown remote_config supports templated env vars in headers", async () 
   }
 })
 
+test("wellknown token env substitution does not mutate process env", async () => {
+  const originalToken = process.env.TEST_TOKEN
+  process.env.TEST_TOKEN = "preexisting-token"
+  const seen: { wellKnown?: string; remote?: string; authorization?: string } = {}
+  const client = remoteConfigClient({
+    seen,
+    wellKnown: {
+      remote_config: {
+        url: "https://config.example.com/opencode.json",
+        headers: {
+          Authorization: "Bearer {env:TEST_TOKEN}",
+        },
+      },
+    },
+    remote: {
+      mcp: { confluence: { type: "remote", url: "https://confluence.example.com/mcp", enabled: true } },
+    },
+  })
+
+  try {
+    const config = await provideTmpdirInstance(() => Config.Service.use((svc) => svc.get()), {
+      git: true,
+      config: { username: "{env:TEST_TOKEN}" },
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(configLayer({ auth: wellKnownAuth("https://example.com"), client })),
+      Effect.runPromise,
+    )
+
+    expect(seen.authorization).toBe("Bearer test-token")
+    expect(config.username).toBe("test-token")
+    expect(process.env.TEST_TOKEN).toBe("preexisting-token")
+  } finally {
+    if (originalToken === undefined) delete process.env.TEST_TOKEN
+    else process.env.TEST_TOKEN = originalToken
+  }
+})
+
+test("wellknown config null is treated as absent", async () => {
+  const seen: { wellKnown?: string; remote?: string; authorization?: string } = {}
+  const client = remoteConfigClient({
+    seen,
+    wellKnown: {
+      config: null,
+      remote_config: {
+        url: "https://config.example.com/opencode.json",
+      },
+    },
+    remote: {
+      mcp: { confluence: { type: "remote", url: "https://confluence.example.com/mcp", enabled: true } },
+    },
+  })
+
+  await provideTmpdirInstance(
+    () =>
+      Config.Service.use((svc) =>
+        Effect.gen(function* () {
+          const config = yield* svc.get()
+          expect(seen.remote).toBe("https://config.example.com/opencode.json")
+          expect(config.mcp?.confluence?.enabled).toBe(true)
+        }),
+      ),
+    { git: true },
+  ).pipe(
+    Effect.scoped,
+    Effect.provide(configLayer({ auth: wellKnownAuth("https://example.com"), client })),
+    Effect.runPromise,
+  )
+})
+
 test("wellknown remote_config rejects non-object config responses", async () => {
   const seen: { wellKnown?: string; remote?: string; authorization?: string } = {}
   const client = remoteConfigClient({

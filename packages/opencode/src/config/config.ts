@@ -71,7 +71,12 @@ function normalizeLoadedConfig(data: unknown, source: string) {
   return copy
 }
 
-async function substituteWellKnownRemoteConfig(input: { value: unknown; dir: string; source: string }) {
+async function substituteWellKnownRemoteConfig(input: {
+  value: unknown
+  dir: string
+  source: string
+  env: Record<string, string>
+}) {
   if (!isRecord(input.value) || typeof input.value.url !== "string") return undefined
 
   const url = await ConfigVariable.substitute({
@@ -79,6 +84,7 @@ async function substituteWellKnownRemoteConfig(input: { value: unknown; dir: str
     type: "virtual",
     dir: input.dir,
     source: input.source,
+    env: input.env,
   })
   const headers = isRecord(input.value.headers)
     ? Object.fromEntries(
@@ -92,6 +98,7 @@ async function substituteWellKnownRemoteConfig(input: { value: unknown; dir: str
                 type: "virtual",
                 dir: input.dir,
                 source: input.source,
+                env: input.env,
               }),
             ]),
         ),
@@ -102,7 +109,7 @@ async function substituteWellKnownRemoteConfig(input: { value: unknown; dir: str
 }
 
 const WellKnownConfig = Schema.Struct({
-  config: Schema.optional(Schema.Record(Schema.String, Schema.Json)),
+  config: Schema.optional(Schema.Json),
   remote_config: Schema.optional(Schema.Json),
 })
 
@@ -400,11 +407,14 @@ export const layer = Layer.effect(
     const loadConfig = Effect.fnUntraced(function* (
       text: string,
       options: { path: string } | { dir: string; source: string },
+      env?: Record<string, string>,
     ) {
       const source = "path" in options ? options.path : options.source
       const expanded = yield* Effect.promise(() =>
         ConfigVariable.substitute(
-          "path" in options ? { text, type: "path", path: options.path } : { text, type: "virtual", ...options },
+          "path" in options
+            ? { text, type: "path", path: options.path, env }
+            : { text, type: "virtual", ...options, env },
         ),
       )
       const parsed = ConfigParse.jsonc(expanded, source)
@@ -420,14 +430,14 @@ export const layer = Layer.effect(
       return data
     })
 
-    const loadFile = Effect.fnUntraced(function* (filepath: string) {
+    const loadFile = Effect.fnUntraced(function* (filepath: string, env?: Record<string, string>) {
       log.info("loading", { path: filepath })
       const text = yield* readConfigFile(filepath)
       if (!text) return {} as Info
-      return yield* loadConfig(text, { path: filepath })
+      return yield* loadConfig(text, { path: filepath }, env)
     })
 
-    const loadGlobal = Effect.fnUntraced(function* () {
+    const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {
       let result: Info = {}
       // Seed the default global config with the schema for editor completion, but avoid writing when the user
       // explicitly routes config through env-provided paths or content.
@@ -439,9 +449,9 @@ export const layer = Layer.effect(
             .pipe(Effect.catch(() => Effect.void))
         }
       }
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "config.json")))
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.json")))
-      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.jsonc")))
+      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "config.json"), env))
+      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.json"), env))
+      result = mergeConfig(result, yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"), env))
 
       const legacy = path.join(Global.Path.config, "config")
       if (existsSync(legacy)) {
@@ -499,6 +509,7 @@ export const layer = Layer.effect(
         const auth = yield* authSvc.all().pipe(Effect.orDie)
 
         let result: Info = {}
+        const authEnv: Record<string, string> = {}
         const consoleManagedProviders = new Set<string>()
         let activeOrgName: string | undefined
 
@@ -538,7 +549,7 @@ export const layer = Layer.effect(
         for (const [key, value] of Object.entries(auth)) {
           if (value.type === "wellknown") {
             const url = key.replace(/\/+$/, "")
-            process.env[value.key] = value.token
+            authEnv[value.key] = value.token
             const wellknownURL = `${url}/.well-known/opencode`
             log.debug("fetching remote config", { url: wellknownURL })
             const wellknown = yield* fetchRemoteJson(wellknownURL, undefined, WellKnownConfig)
@@ -547,6 +558,7 @@ export const layer = Layer.effect(
                 value: wellknown.remote_config,
                 dir: url,
                 source: wellknownURL,
+                env: authEnv,
               }),
             )
             const fetchedConfig = remote
@@ -560,29 +572,33 @@ export const layer = Layer.effect(
                   )
                 })
               : {}
-            const remoteConfig = mergeConfig(wellknown.config ?? {}, fetchedConfig)
+            const remoteConfig = mergeConfig(isRecord(wellknown.config) ? wellknown.config : {}, fetchedConfig)
             if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
             const source = wellknownURL
-            const next = yield* loadConfig(JSON.stringify(remoteConfig), {
-              dir: path.dirname(source),
-              source,
-            })
+            const next = yield* loadConfig(
+              JSON.stringify(remoteConfig),
+              {
+                dir: path.dirname(source),
+                source,
+              },
+              authEnv,
+            )
             yield* merge(source, next, "global")
             log.debug("loaded remote config from well-known", { url })
           }
         }
 
-        const global = yield* getGlobal()
+        const global = Object.keys(authEnv).length ? yield* loadGlobal(authEnv) : yield* getGlobal()
         yield* merge(Global.Path.config, global, "global")
 
         if (Flag.OPENCODE_CONFIG) {
-          yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG))
+          yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG, authEnv))
           log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
         }
 
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
           for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
-            yield* merge(file, yield* loadFile(file), "local")
+            yield* merge(file, yield* loadFile(file, authEnv), "local")
           }
         }
 
@@ -603,7 +619,7 @@ export const layer = Layer.effect(
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
               log.debug(`loading config from ${source}`)
-              yield* merge(source, yield* loadFile(source))
+              yield* merge(source, yield* loadFile(source, authEnv))
               result.agent ??= {}
               result.mode ??= {}
               result.plugin ??= []
