@@ -87,6 +87,12 @@ function isOrphanedInterruptedTool(part: MessageV2.ToolPart) {
   return part.state.status === "error" && part.state.metadata?.interrupted === true
 }
 
+function shellPath(filepath: string, shell: string) {
+  if (Shell.ps(shell)) return `'${filepath.replaceAll("'", "''")}'`
+  if (Shell.name(shell) === "cmd") return `"${filepath.replaceAll('"', '""')}"`
+  return `'${filepath.replaceAll("'", `'\\''`)}'`
+}
+
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts, Image.Error>
@@ -236,6 +242,45 @@ export const layer = Layer.effect(
         { concurrency: "unbounded", discard: true },
       )
       return parts
+    })
+
+    const resolveShellCommand = Effect.fn("SessionPrompt.resolveShellCommand")(function* (
+      command: string,
+      shell: string,
+    ) {
+      const ctx = yield* InstanceState.context
+      const replacements = yield* Effect.forEach(
+        ConfigMarkdown.files(command),
+        Effect.fnUntraced(function* (match) {
+          const name = match[1]
+          if (!name) return
+          const start = match.index ?? 0
+          const slash = name.indexOf("/")
+          const alias = slash === -1 ? name : name.slice(0, slash)
+          const reference = yield* references.get(alias)
+          if (reference) {
+            if (reference.kind === "invalid" || slash === -1) return
+            yield* references.ensure(reference.path)
+            const targetPath = path.resolve(reference.path, name.slice(slash + 1))
+            if (!AppFileSystem.contains(reference.path, targetPath)) return
+            const info = yield* fsys.stat(targetPath).pipe(Effect.option)
+            if (Option.isNone(info)) return
+            return { start, end: start + match[0].length, value: shellPath(targetPath, shell) }
+          }
+
+          const filepath = name.startsWith("~/")
+            ? path.join(os.homedir(), name.slice(2))
+            : path.resolve(ctx.worktree, name)
+          const info = yield* fsys.stat(filepath).pipe(Effect.option)
+          if (Option.isNone(info)) return
+          return { start, end: start + match[0].length, value: shellPath(filepath, shell) }
+        }),
+        { concurrency: "unbounded", discard: false },
+      )
+      return replacements
+        .filter((item): item is { start: number; end: number; value: string } => item !== undefined)
+        .sort((a, b) => b.start - a.start)
+        .reduce((next, item) => next.slice(0, item.start) + item.value + next.slice(item.end), command)
     })
 
     const title = Effect.fn("SessionPrompt.ensureTitle")(function* (input: {
@@ -497,6 +542,9 @@ export const layer = Layer.effect(
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const markReady = ready ? ready.open.pipe(Effect.asVoid) : Effect.void
+          const cfg = yield* config.get()
+          const sh = Shell.preferred(cfg.shell)
+          const command = yield* resolveShellCommand(input.command, sh)
           const { msg, part, cwd } = yield* Effect.gen(function* () {
             const ctx = yield* InstanceState.context
             const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
@@ -557,7 +605,7 @@ export const layer = Layer.effect(
               state: {
                 status: "running",
                 time: { start: started },
-                input: { command: input.command },
+                input: { command },
               },
             }
             yield* sessions.updatePart(part)
@@ -566,15 +614,13 @@ export const layer = Layer.effect(
                 sessionID: input.sessionID,
                 timestamp: DateTime.makeUnsafe(started),
                 callID: part.callID,
-                command: input.command,
+                command,
               })
             }
             return { msg, part, cwd: ctx.directory }
           }).pipe(Effect.ensuring(markReady))
 
-          const cfg = yield* config.get()
-          const sh = Shell.preferred(cfg.shell)
-          const args = Shell.args(sh, input.command, cwd)
+          const args = Shell.args(sh, command, cwd)
           let output = ""
           let aborted = false
 
