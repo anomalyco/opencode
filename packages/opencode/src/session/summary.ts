@@ -1,8 +1,7 @@
-import z from "zod"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Schema } from "effect"
 import { Bus } from "@/bus"
 import { Snapshot } from "@/snapshot"
-import { Storage } from "@/storage"
+import { Storage } from "@/storage/storage"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID } from "./schema"
@@ -103,7 +102,7 @@ export const layer = Layer.effect(
       sessionID: SessionID
       messageID: MessageID
     }) {
-      const all = yield* sessions.messages({ sessionID: input.sessionID })
+      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
       if (!all.length) return
 
       const diffs = yield* computeDiff({ messages: all })
@@ -133,6 +132,7 @@ export const layer = Layer.effect(
         .read<Snapshot.FileDiff[]>(["session_diff", input.sessionID])
         .pipe(Effect.catch(() => Effect.succeed([] as Snapshot.FileDiff[])))
       const next = diffs.map((item) => {
+        if (item.file === undefined) return item
         const file = unquoteGitPath(item.file)
         if (file === item.file) return item
         return { ...item, file }
@@ -155,9 +155,10 @@ export const defaultLayer = Layer.suspend(() =>
   ),
 )
 
-export const DiffInput = z.object({
-  sessionID: SessionID.zod,
-  messageID: MessageID.zod.optional(),
+export const DiffInput = Schema.Struct({
+  sessionID: SessionID,
+  messageID: Schema.optional(MessageID),
 })
+export type DiffInput = Schema.Schema.Type<typeof DiffInput>
 
 export * as SessionSummary from "./summary"

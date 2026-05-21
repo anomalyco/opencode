@@ -1,43 +1,49 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 import { SessionID } from "./schema"
-import { Effect, Layer, Context } from "effect"
-import z from "zod"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
+import { Effect, Layer, Context, Schema } from "effect"
 
-export const Info = z
-  .union([
-    z.object({
-      type: z.literal("idle"),
-    }),
-    z.object({
-      type: z.literal("retry"),
-      attempt: z.number(),
-      message: z.string(),
-      next: z.number(),
-    }),
-    z.object({
-      type: z.literal("busy"),
-    }),
-  ])
-  .meta({
-    ref: "SessionStatus",
-  })
-export type Info = z.infer<typeof Info>
+export const Info = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("idle"),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("retry"),
+    attempt: NonNegativeInt,
+    message: Schema.String,
+    action: Schema.optional(
+      Schema.Struct({
+        reason: Schema.String,
+        provider: Schema.String,
+        title: Schema.String,
+        message: Schema.String,
+        label: Schema.String,
+        link: Schema.optional(Schema.String),
+      }),
+    ),
+    next: NonNegativeInt,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("busy"),
+  }),
+]).annotate({ identifier: "SessionStatus" })
+export type Info = Schema.Schema.Type<typeof Info>
 
 export const Event = {
   Status: BusEvent.define(
     "session.status",
-    z.object({
-      sessionID: SessionID.zod,
+    Schema.Struct({
+      sessionID: SessionID,
       status: Info,
     }),
   ),
   // deprecated
   Idle: BusEvent.define(
     "session.idle",
-    z.object({
-      sessionID: SessionID.zod,
+    Schema.Struct({
+      sessionID: SessionID,
     }),
   ),
 }

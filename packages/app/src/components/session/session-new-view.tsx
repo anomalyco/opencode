@@ -5,7 +5,7 @@ import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Mark } from "@opencode-ai/ui/logo"
-import { getDirectory, getFilename } from "@opencode-ai/shared/util/path"
+import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 
 const MAIN_WORKTREE = "main"
 const CREATE_WORKTREE = "create"

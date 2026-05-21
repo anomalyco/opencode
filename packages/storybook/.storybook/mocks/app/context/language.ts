@@ -5,7 +5,7 @@ const dict: Record<string, string> = {
   "prompt.loading": "Loading prompt...",
   "prompt.placeholder.normal": "Ask anything...",
   "prompt.placeholder.simple": "Ask anything...",
-  "prompt.placeholder.shell": "Run a shell command...",
+  "prompt.placeholder.shell": "Run a shell command... {{example}}",
   "prompt.placeholder.summarizeComment": "Summarize this comment",
   "prompt.placeholder.summarizeComments": "Summarize these comments",
   "prompt.action.attachFile": "Attach files",

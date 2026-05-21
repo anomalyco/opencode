@@ -1,7 +1,7 @@
-import { sqliteTable, text, integer, index, primaryKey } from "drizzle-orm/sqlite-core"
+import { sqliteTable, text, integer, index, primaryKey, real } from "drizzle-orm/sqlite-core"
 import { ProjectTable } from "../project/project.sql"
 import type { MessageV2 } from "./message-v2"
-import type { SessionEntry } from "../v2/session-entry"
+import type { SessionMessage } from "../v2/session-message"
 import type { Snapshot } from "../snapshot"
 import type { Permission } from "../permission"
 import type { ProjectID } from "../project/schema"
@@ -10,7 +10,8 @@ import type { WorkspaceID } from "../control-plane/schema"
 import { Timestamps } from "../storage/schema.sql"
 
 type PartData = Omit<MessageV2.Part, "id" | "sessionID" | "messageID">
-type InfoData = Omit<MessageV2.Info, "id" | "sessionID">
+type InfoData<T extends MessageV2.Info = MessageV2.Info> = T extends unknown ? Omit<T, "id" | "sessionID"> : never
+type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
 
 export const SessionTable = sqliteTable(
   "session",
@@ -24,6 +25,7 @@ export const SessionTable = sqliteTable(
     parent_id: text().$type<SessionID>(),
     slug: text().notNull(),
     directory: text().notNull(),
+    path: text(),
     title: text().notNull(),
     version: text().notNull(),
     share_url: text(),
@@ -31,8 +33,20 @@ export const SessionTable = sqliteTable(
     summary_deletions: integer(),
     summary_files: integer(),
     summary_diffs: text({ mode: "json" }).$type<Snapshot.FileDiff[]>(),
+    cost: real().notNull().default(0),
+    tokens_input: integer().notNull().default(0),
+    tokens_output: integer().notNull().default(0),
+    tokens_reasoning: integer().notNull().default(0),
+    tokens_cache_read: integer().notNull().default(0),
+    tokens_cache_write: integer().notNull().default(0),
     revert: text({ mode: "json" }).$type<{ messageID: MessageID; partID?: PartID; snapshot?: string; diff?: string }>(),
     permission: text({ mode: "json" }).$type<Permission.Ruleset>(),
+    agent: text(),
+    model: text({ mode: "json" }).$type<{
+      id: string
+      providerID: string
+      variant?: string
+    }>(),
     ...Timestamps,
     time_compacting: integer(),
     time_archived: integer(),
@@ -95,22 +109,22 @@ export const TodoTable = sqliteTable(
   ],
 )
 
-export const SessionEntryTable = sqliteTable(
-  "session_entry",
+export const SessionMessageTable = sqliteTable(
+  "session_message",
   {
-    id: text().$type<SessionEntry.ID>().primaryKey(),
+    id: text().$type<SessionMessage.ID>().primaryKey(),
     session_id: text()
       .$type<SessionID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
-    type: text().$type<SessionEntry.Type>().notNull(),
+    type: text().$type<SessionMessage.Type>().notNull(),
     ...Timestamps,
-    data: text({ mode: "json" }).notNull().$type<Omit<SessionEntry.Entry, "type" | "id">>(),
+    data: text({ mode: "json" }).notNull().$type<SessionMessageData>(),
   },
   (table) => [
-    index("session_entry_session_idx").on(table.session_id),
-    index("session_entry_session_type_idx").on(table.session_id, table.type),
-    index("session_entry_time_created_idx").on(table.time_created),
+    index("session_message_session_idx").on(table.session_id),
+    index("session_message_session_type_idx").on(table.session_id, table.type),
+    index("session_message_time_created_idx").on(table.time_created),
   ],
 )
 

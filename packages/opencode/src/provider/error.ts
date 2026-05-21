@@ -125,7 +125,8 @@ export type ParsedStreamError =
     }
 
 export function parseStreamError(input: unknown): ParsedStreamError | undefined {
-  const body = json(input)
+  const raw = json(input)
+  const body = typeof raw?.message === "string" ? (json(raw.message) ?? raw) : raw
   if (!body) return
 
   const responseBody = JSON.stringify(body)
@@ -165,6 +166,14 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
         type: "api_error",
         message: typeof body?.error?.message === "string" ? body?.error?.message : "Invalid prompt.",
         isRetryable: false,
+        responseBody,
+      }
+    case "server_is_overloaded":
+    case "server_error":
+      return {
+        type: "api_error",
+        message: typeof body?.error?.message === "string" ? body?.error?.message : "Server error.",
+        isRetryable: true,
         responseBody,
       }
   }
@@ -208,3 +217,5 @@ export function parseAPICallError(input: { providerID: ProviderID; error: APICal
     metadata,
   }
 }
+
+export * as ProviderError from "./error"

@@ -6,11 +6,12 @@ import z from "zod"
 import { makeRuntime } from "../../src/effect/run-service"
 import { LLM } from "../../src/session/llm"
 import { Instance } from "../../src/project/instance"
-import { Provider } from "../../src/provider"
-import { ProviderTransform } from "../../src/provider"
-import { ModelsDev } from "../../src/provider"
+import { WithInstance } from "../../src/project/with-instance"
+import { Provider } from "@/provider/provider"
+import { ProviderTransform } from "@/provider/transform"
+import { ModelsDev } from "@opencode-ai/core/models"
 import { ProviderID, ModelID } from "../../src/provider/schema"
-import { Filesystem } from "../../src/util"
+import { Filesystem } from "@/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -276,6 +277,25 @@ async function loadFixture(providerID: string, modelID: string) {
   return { provider, model }
 }
 
+function configModel(model: ModelsDev.Model) {
+  return {
+    id: model.id,
+    name: model.name,
+    family: model.family,
+    release_date: model.release_date,
+    attachment: model.attachment,
+    reasoning: model.reasoning,
+    temperature: model.temperature,
+    tool_call: model.tool_call,
+    interleaved: model.interleaved,
+    cost: model.cost ? { ...model.cost, tiers: undefined } : undefined,
+    limit: model.limit,
+    modalities: model.modalities,
+    status: model.status,
+    provider: model.provider,
+  }
+}
+
 function createEventStream(chunks: unknown[], includeDone = false) {
   const lines = chunks.map((chunk) => `data: ${typeof chunk === "string" ? chunk : JSON.stringify(chunk)}`)
   if (includeDone) {
@@ -338,7 +358,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
@@ -353,7 +373,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-1"),
+          id: MessageID.make("msg_user-1"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -425,7 +445,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
@@ -437,7 +457,7 @@ describe("session.llm.stream", () => {
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         } satisfies Agent.Info
         const user = {
-          id: MessageID.make("user-service-abort"),
+          id: MessageID.make("msg_user-service-abort"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -515,7 +535,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
@@ -528,7 +548,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-tools"),
+          id: MessageID.make("msg_user-tools"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -616,7 +636,7 @@ describe("session.llm.stream", () => {
                 npm: "@ai-sdk/openai",
                 api: "https://api.openai.com/v1",
                 models: {
-                  [model.id]: model,
+                  [model.id]: configModel(model),
                 },
                 options: {
                   apiKey: "test-openai-key",
@@ -629,7 +649,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
@@ -643,7 +663,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-2"),
+          id: MessageID.make("msg_user-2"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -732,7 +752,7 @@ describe("session.llm.stream", () => {
                 npm: "@ai-sdk/openai",
                 api: "https://api.openai.com/v1",
                 models: {
-                  [model.id]: model,
+                  [model.id]: configModel(model),
                 },
                 options: {
                   apiKey: "test-openai-key",
@@ -745,7 +765,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.openai, ModelID.make(model.id))
@@ -758,7 +778,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-data-url"),
+          id: MessageID.make("msg_user-data-url"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -864,7 +884,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
@@ -879,7 +899,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-3"),
+          id: MessageID.make("msg_user-3"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -969,7 +989,7 @@ describe("session.llm.stream", () => {
                 npm: "@ai-sdk/anthropic",
                 api: "https://api.anthropic.com/v1",
                 models: {
-                  [model.id]: model,
+                  [model.id]: configModel(model),
                 },
                 options: {
                   apiKey: "test-anthropic-key",
@@ -982,7 +1002,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make("anthropic"), ModelID.make(model.id))
@@ -994,7 +1014,7 @@ describe("session.llm.stream", () => {
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         } satisfies Agent.Info
         const user = {
-          id: MessageID.make("user-anthropic-tools"),
+          id: MessageID.make("msg_user-anthropic-tools"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
@@ -1223,7 +1243,7 @@ describe("session.llm.stream", () => {
       },
     })
 
-    await Instance.provide({
+    await WithInstance.provide({
       directory: tmp.path,
       fn: async () => {
         const resolved = await getModel(ProviderID.make(providerID), ModelID.make(model.id))
@@ -1238,7 +1258,7 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: MessageID.make("user-4"),
+          id: MessageID.make("msg_user-4"),
           sessionID,
           role: "user",
           time: { created: Date.now() },

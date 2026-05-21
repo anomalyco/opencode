@@ -1,122 +1,120 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test"
-import { Effect } from "effect"
+import { afterEach, describe, expect } from "bun:test"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Effect, Layer } from "effect"
 import path from "path"
-import { GlobalBus } from "../../src/bus/global"
+import { InstanceRef } from "../../src/effect/instance-ref"
+import { InstanceBootstrap } from "../../src/project/bootstrap-service"
+import { InstanceStore } from "../../src/project/instance-store"
+import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { Snapshot } from "../../src/snapshot"
-import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
-import { Filesystem } from "../../src/util"
-import { Log } from "../../src/util"
+import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
-import { provideInstance, tmpdir } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 
 afterEach(async () => {
+  await disposeAllInstances()
   await resetDatabase()
 })
 
-describe("project.initGit endpoint", () => {
-  test("initializes git and reloads immediately", async () => {
-    await using tmp = await tmpdir()
-    const app = Server.Default().app
-    const seen: { directory?: string; payload: { type: string } }[] = []
-    const fn = (evt: { directory?: string; payload: { type: string } }) => {
-      seen.push(evt)
-    }
-    const reload = Instance.reload
-    const reloadSpy = spyOn(Instance, "reload").mockImplementation((input) => reload(input))
-    GlobalBus.on("event", fn)
+const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
+const testInstanceStore = InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap))
 
-    try {
-      const init = await app.request("/project/git/init", {
+const it = testEffect(Layer.mergeAll(AppFileSystem.defaultLayer, Snapshot.defaultLayer, testInstanceStore))
+
+function request(directory: string, url: string, init: RequestInit = {}) {
+  return Effect.promise(() => {
+    const headers = new Headers(init.headers)
+    headers.set("x-opencode-directory", directory)
+    return Promise.resolve(Server.Default().app.request(url, { ...init, headers }))
+  })
+}
+
+function json<T>(response: Response) {
+  return Effect.promise(() => response.json() as Promise<T>)
+}
+
+function collectGlobalEvents() {
+  return Effect.acquireRelease(
+    Effect.sync(() => {
+      const seen: GlobalEvent[] = []
+      const on = (event: GlobalEvent) => {
+        seen.push(event)
+      }
+      GlobalBus.on("event", on)
+      return { seen, on }
+    }),
+    ({ on }) => Effect.sync(() => GlobalBus.off("event", on)),
+  )
+}
+
+const disposedEvents = (seen: GlobalEvent[], dir: string) =>
+  seen.filter((evt) => evt.directory === dir && evt.payload.type === "server.instance.disposed").length
+
+describe("project.initGit endpoint", () => {
+  it.instance("initializes git and reloads immediately", () =>
+    Effect.gen(function* () {
+      const tmp = yield* TestInstance
+      const fs = yield* AppFileSystem.Service
+      const events = yield* collectGlobalEvents()
+
+      const init = yield* request(tmp.directory, "/project/git/init", {
         method: "POST",
-        headers: {
-          "x-opencode-directory": tmp.path,
-        },
       })
-      const body = await init.json()
+      const body = yield* json(init)
       expect(init.status).toBe(200)
       expect(body).toMatchObject({
         id: "global",
         vcs: "git",
-        worktree: tmp.path,
+        worktree: tmp.directory,
       })
-      expect(reloadSpy).toHaveBeenCalledTimes(1)
-      expect(seen.some((evt) => evt.directory === tmp.path && evt.payload.type === "server.instance.disposed")).toBe(
-        true,
-      )
-      expect(await Filesystem.exists(path.join(tmp.path, ".git", "opencode"))).toBe(false)
+      // Reload behavior: bus emits exactly one server.instance.disposed for the directory.
+      expect(disposedEvents(events.seen, tmp.directory)).toBe(1)
+      expect(yield* fs.exists(path.join(tmp.directory, ".git", "opencode"))).toBe(false)
 
-      const current = await app.request("/project/current", {
-        headers: {
-          "x-opencode-directory": tmp.path,
-        },
-      })
+      const current = yield* request(tmp.directory, "/project/current")
       expect(current.status).toBe(200)
-      expect(await current.json()).toMatchObject({
+      expect(yield* json(current)).toMatchObject({
         id: "global",
         vcs: "git",
-        worktree: tmp.path,
+        worktree: tmp.directory,
       })
 
-      expect(
-        await Effect.runPromise(
-          Snapshot.Service.use((svc) => svc.track()).pipe(
-            provideInstance(tmp.path),
-            Effect.provide(Snapshot.defaultLayer),
-          ),
-        ),
-      ).toBeTruthy()
-    } finally {
-      await Instance.disposeAll()
-      reloadSpy.mockRestore()
-      GlobalBus.off("event", fn)
-    }
-  })
+      const ctx = yield* InstanceStore.Service.use((store) => store.reload({ directory: tmp.directory }))
+      const tracked = yield* Snapshot.Service.use((snapshot) => snapshot.track()).pipe(
+        Effect.provideService(InstanceRef, ctx),
+      )
+      expect(tracked).toBeTruthy()
+    }),
+  )
 
-  test("does not reload when the project is already git", async () => {
-    await using tmp = await tmpdir({ git: true })
-    const app = Server.Default().app
-    const seen: { directory?: string; payload: { type: string } }[] = []
-    const fn = (evt: { directory?: string; payload: { type: string } }) => {
-      seen.push(evt)
-    }
-    const reload = Instance.reload
-    const reloadSpy = spyOn(Instance, "reload").mockImplementation((input) => reload(input))
-    GlobalBus.on("event", fn)
+  it.instance(
+    "does not reload when the project is already git",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const events = yield* collectGlobalEvents()
 
-    try {
-      const init = await app.request("/project/git/init", {
-        method: "POST",
-        headers: {
-          "x-opencode-directory": tmp.path,
-        },
-      })
-      expect(init.status).toBe(200)
-      expect(await init.json()).toMatchObject({
-        vcs: "git",
-        worktree: tmp.path,
-      })
-      expect(
-        seen.filter((evt) => evt.directory === tmp.path && evt.payload.type === "server.instance.disposed").length,
-      ).toBe(0)
-      expect(reloadSpy).toHaveBeenCalledTimes(0)
+        const init = yield* request(tmp.directory, "/project/git/init", {
+          method: "POST",
+        })
+        expect(init.status).toBe(200)
+        expect(yield* json(init)).toMatchObject({
+          vcs: "git",
+          worktree: tmp.directory,
+        })
+        expect(disposedEvents(events.seen, tmp.directory)).toBe(0)
 
-      const current = await app.request("/project/current", {
-        headers: {
-          "x-opencode-directory": tmp.path,
-        },
-      })
-      expect(current.status).toBe(200)
-      expect(await current.json()).toMatchObject({
-        vcs: "git",
-        worktree: tmp.path,
-      })
-    } finally {
-      await Instance.disposeAll()
-      reloadSpy.mockRestore()
-      GlobalBus.off("event", fn)
-    }
-  })
+        const current = yield* request(tmp.directory, "/project/current")
+        expect(current.status).toBe(200)
+        expect(yield* json(current)).toMatchObject({
+          vcs: "git",
+          worktree: tmp.directory,
+        })
+      }),
+    { git: true },
+  )
 })

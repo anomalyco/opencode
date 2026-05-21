@@ -1,15 +1,14 @@
 import path from "path"
 import { pathToFileURL } from "url"
-import z from "zod"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { Ripgrep } from "../file/ripgrep"
 import { Skill } from "../skill"
 import * as Tool from "./tool"
 import DESCRIPTION from "./skill.txt"
 
-const Parameters = z.object({
-  name: z.string().describe("The name of the skill from available_skills"),
+export const Parameters = Schema.Struct({
+  name: Schema.String.annotate({ description: "The name of the skill from available_skills" }),
 })
 
 export const SkillTool = Tool.define(
@@ -21,7 +20,7 @@ export const SkillTool = Tool.define(
     return {
       description: DESCRIPTION,
       parameters: Parameters,
-      execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
+      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const info = yield* skill.get(params.name)
           if (!info) {

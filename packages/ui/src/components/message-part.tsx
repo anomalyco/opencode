@@ -45,8 +45,8 @@ import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
-import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/shared/util/path"
-import { checksum } from "@opencode-ai/shared/util/encode"
+import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { checksum } from "@opencode-ai/core/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { Spinner } from "./spinner"
@@ -264,6 +264,7 @@ function getDirectory(path: string | undefined) {
 }
 
 import type { IconProps } from "./icon"
+import { normalize } from "./session-diff"
 
 export type ToolInfo = {
   icon: IconProps["name"]
@@ -317,7 +318,17 @@ function taskAgent(
   }
 }
 
-export function getToolInfo(tool: string, input: any = {}): ToolInfo {
+function webSearchProviderLabel(provider: unknown) {
+  if (provider === "parallel") return "Parallel Web Search"
+  if (provider === "exa") return "Exa Web Search"
+  return "Web Search"
+}
+
+export function getToolInfo(
+  tool: string,
+  input: any = {},
+  metadata: Record<string, unknown> | undefined = {},
+): ToolInfo {
   const i18n = useI18n()
   switch (tool) {
     case "read":
@@ -353,13 +364,7 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
     case "websearch":
       return {
         icon: "window-cursor",
-        title: i18n.t("ui.tool.websearch"),
-        subtitle: input.query,
-      }
-    case "codesearch":
-      return {
-        icon: "code",
-        title: i18n.t("ui.tool.codesearch"),
+        title: webSearchProviderLabel(metadata?.provider),
         subtitle: input.query,
       }
     case "task": {
@@ -745,7 +750,11 @@ function isContextGroupTool(part: PartType): part is ToolPart {
 }
 
 function contextToolDetail(part: ToolPart): string | undefined {
-  const info = getToolInfo(part.tool, part.state.input ?? {})
+  const info = getToolInfo(
+    part.tool,
+    part.state.input ?? {},
+    "metadata" in part.state ? part.state.metadata : undefined,
+  )
   if (info.subtitle) return info.subtitle
   if (part.state.status === "error") return part.state.error
   if ((part.state.status === "running" || part.state.status === "completed") && part.state.title)
@@ -797,7 +806,7 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       }
     }
     default: {
-      const info = getToolInfo(part.tool, input)
+      const info = getToolInfo(part.tool, input, "metadata" in part.state ? part.state.metadata : undefined)
       return {
         title: info.title,
         subtitle: info.subtitle || contextToolDetail(part),
@@ -1277,6 +1286,7 @@ export interface ToolProps {
   input: Record<string, any>
   metadata: Record<string, any>
   tool: string
+  sessionID?: string
   output?: string
   status?: string
   hideDetails?: boolean
@@ -1399,6 +1409,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                 <ToolErrorCard
                   tool={part().tool}
                   error={error()}
+                  title={part().tool === "websearch" ? webSearchProviderLabel(partMetadata().provider) : undefined}
                   defaultOpen={props.defaultOpen}
                   subtitle={taskSubtitle()}
                   href={taskHref()}
@@ -1411,6 +1422,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               component={render()}
               input={input()}
               tool={part().tool}
+              sessionID={part().sessionID}
               metadata={partMetadata()}
               // @ts-expect-error
               output={part().state.output}
@@ -1497,7 +1509,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const streaming = createMemo(
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
   )
-  const text = () => (part().text ?? "").trim()
+  const text = () => (data.store.part_text_accum_delta?.[part().id] ?? part().text ?? "").trim()
   const isLastTextPart = createMemo(() => {
     const last = (data.store.part?.[props.message.id] ?? [])
       .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
@@ -1557,11 +1569,12 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 }
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
+  const data = useData()
   const part = () => props.part as ReasoningPart
   const streaming = createMemo(
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
   )
-  const text = () => part().text.trim()
+  const text = () => (data.store.part_text_accum_delta?.[part().id] ?? part().text).trim()
 
   return (
     <Show when={text()}>
@@ -1734,45 +1747,19 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "websearch",
   render(props) {
-    const i18n = useI18n()
     const query = createMemo(() => {
       const value = props.input.query
       if (typeof value !== "string") return ""
       return value
     })
+    const title = createMemo(() => webSearchProviderLabel(props.metadata.provider))
 
     return (
       <BasicTool
         {...props}
         icon="window-cursor"
         trigger={{
-          title: i18n.t("ui.tool.websearch"),
-          subtitle: query(),
-          subtitleClass: "exa-tool-query",
-        }}
-      >
-        <ExaOutput output={props.output} />
-      </BasicTool>
-    )
-  },
-})
-
-ToolRegistry.register({
-  name: "codesearch",
-  render(props) {
-    const i18n = useI18n()
-    const query = createMemo(() => {
-      const value = props.input.query
-      if (typeof value !== "string") return ""
-      return value
-    })
-
-    return (
-      <BasicTool
-        {...props}
-        icon="code"
-        trigger={{
-          title: i18n.t("ui.tool.codesearch"),
+          title: title(),
           subtitle: query(),
           subtitleClass: "exa-tool-query",
         }}
@@ -1872,7 +1859,7 @@ ToolRegistry.register({
     const sawPending = pending()
     const text = createMemo(() => {
       const cmd = props.input.command ?? props.metadata.command ?? ""
-      const out = stripAnsi(props.output || props.metadata.output || "")
+      const out = stripAnsi(props.output || props.metadata.output || "").replace(/\r\n?/g, "\n")
       return `$ ${cmd}${out ? "\n\n" + out : ""}`
     })
     const [copied, setCopied] = createSignal(false)
@@ -1939,6 +1926,31 @@ ToolRegistry.register({
     const path = createMemo(() => props.metadata?.filediff?.file || props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
     const pending = () => props.status === "pending" || props.status === "running"
+
+    const fileCompProps = createMemo(() => {
+      try {
+        if (props.metadata?.filediff) {
+          const diff = normalize({
+            ...props.metadata?.filediff,
+            status: "modified",
+          })
+          const fileDiff = diff.fileDiff
+          if (fileDiff) return { fileDiff, hunkSeparators: fileDiff.isPartial ? "simple" : "line-info-basic" }
+        }
+      } catch {}
+
+      return {
+        before: {
+          name: props.metadata?.filediff?.file || props.input.filePath,
+          contents: props.metadata?.filediff?.before || props.input.oldString || "",
+        },
+        after: {
+          name: props.metadata?.filediff?.file || props.input.filePath,
+          contents: props.metadata?.filediff?.after || props.input.newString || "",
+        },
+      }
+    })
+
     return (
       <div data-component="edit-tool">
         <BasicTool
@@ -1980,18 +1992,7 @@ ToolRegistry.register({
               }
             >
               <div data-component="edit-content">
-                <Dynamic
-                  component={fileComponent}
-                  mode="diff"
-                  before={{
-                    name: props.metadata?.filediff?.file || props.input.filePath,
-                    contents: props.metadata?.filediff?.before || props.input.oldString,
-                  }}
-                  after={{
-                    name: props.metadata?.filediff?.file || props.input.filePath,
-                    contents: props.metadata?.filediff?.after || props.input.newString,
-                  }}
-                />
+                <Dynamic component={fileComponent} mode="diff" {...fileCompProps()} />
               </div>
             </ToolFileAccordion>
           </Show>
@@ -2172,7 +2173,12 @@ ToolRegistry.register({
                           <Accordion.Content>
                             <Show when={visible()}>
                               <div data-component="apply-patch-file-diff">
-                                <Dynamic component={fileComponent} mode="diff" fileDiff={file.view.fileDiff} />
+                                <Dynamic
+                                  component={fileComponent}
+                                  mode="diff"
+                                  fileDiff={file.view.fileDiff}
+                                  hunkSeparators={file.view.fileDiff.isPartial ? "simple" : "line-info-basic"}
+                                />
                               </div>
                             </Show>
                           </Accordion.Content>

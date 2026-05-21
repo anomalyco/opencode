@@ -50,6 +50,10 @@ declare module "sst" {
       "type": "sst.cloudflare.SolidStart"
       "url": string
     }
+    "DISCORD_INCIDENT_WEBHOOK_URL": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "DISCORD_SUPPORT_BOT_TOKEN": {
       "type": "sst.sst.Secret"
       "value": string
@@ -110,6 +114,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "HoneycombWebhookSecret": {
+      "type": "random.index/randomPassword.RandomPassword"
+      "value": string
+    }
     "LogProcessor": {
       "type": "sst.cloudflare.Worker"
     }
@@ -145,6 +153,10 @@ declare module "sst" {
       "type": "sst.sst.Linkable"
       "value": string
     }
+    "Stat": {
+      "type": "sst.cloudflare.Worker"
+      "url": string
+    }
     "Teams": {
       "type": "sst.cloudflare.SolidStart"
       "url": string
@@ -174,6 +186,9 @@ declare module "sst" {
       "price": string
       "priceInr": number
       "product": string
+      "sixMonths100Coupon": string
+      "threeMonths100Coupon": string
+      "twelveMonths100Coupon": string
       "type": "sst.sst.Linkable"
     }
     "ZEN_MODELS1": {

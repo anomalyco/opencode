@@ -1,7 +1,7 @@
 import { PlanExitTool } from "./plan"
-import { Session } from "../session"
+import { Session } from "@/session/session"
 import { QuestionTool } from "./question"
-import { BashTool } from "./bash"
+import { ShellTool } from "./shell"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
@@ -13,40 +13,49 @@ import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import * as Tool from "./tool"
-import { Config } from "../config"
+import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
+import type { JSONSchema7, JSONSchema7Definition } from "@ai-sdk/provider"
+import { Schema } from "effect"
 import z from "zod"
 import { Plugin } from "../plugin"
-import { Provider } from "../provider"
+import { Provider } from "@/provider/provider"
 import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
-import { CodeSearchTool } from "./codesearch"
-import { Flag } from "@/flag/flag"
-import { Log } from "@/util"
+import { RepoCloneTool } from "./repo_clone"
+import { RepoOverviewTool } from "./repo_overview"
+import * as Log from "@opencode-ai/core/util/log"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
-import { Glob } from "@opencode-ai/shared/util/glob"
+import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
-import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "../file/ripgrep"
 import { Format } from "../format"
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 import { Question } from "../question"
 import { Todo } from "../session/todo"
-import { LSP } from "../lsp"
+import { LSP } from "@/lsp/lsp"
 import { Instruction } from "../session/instruction"
-import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Bus } from "../bus"
 import { Agent } from "../agent/agent"
+import { Git } from "@/git"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
+import { Reference } from "@/reference/reference"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "tool.registry" })
+
+export function webSearchEnabled(providerID: ProviderID, flags = { exa: false, parallel: false }) {
+  return providerID === ProviderID.opencode || flags.exa || flags.parallel
+}
 
 type TaskDef = Tool.InferDef<typeof TaskTool>
 type ReadDef = Tool.InferDef<typeof ReadTool>
@@ -78,6 +87,8 @@ export const layer: Layer.Layer<
   | Skill.Service
   | Session.Service
   | Provider.Service
+  | Git.Service
+  | Reference.Service
   | LSP.Service
   | Instruction.Service
   | AppFileSystem.Service
@@ -87,6 +98,7 @@ export const layer: Layer.Layer<
   | Ripgrep.Service
   | Format.Service
   | Truncate.Service
+  | RuntimeFlags.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -95,6 +107,7 @@ export const layer: Layer.Layer<
     const agents = yield* Agent.Service
     const skill = yield* Skill.Service
     const truncate = yield* Truncate.Service
+    const flags = yield* RuntimeFlags.Service
 
     const invalid = yield* InvalidTool
     const task = yield* TaskTool
@@ -105,8 +118,9 @@ export const layer: Layer.Layer<
     const plan = yield* PlanExitTool
     const webfetch = yield* WebFetchTool
     const websearch = yield* WebSearchTool
-    const bash = yield* BashTool
-    const codesearch = yield* CodeSearchTool
+    const repoClone = yield* RepoCloneTool
+    const repoOverview = yield* RepoOverviewTool
+    const shell = yield* ShellTool
     const globtool = yield* GlobTool
     const writetool = yield* WriteTool
     const edit = yield* EditTool
@@ -120,9 +134,19 @@ export const layer: Layer.Layer<
         const custom: Tool.Def[] = []
 
         function fromPlugin(id: string, def: ToolDefinition): Tool.Def {
+          // Plugin tools still expose Zod args publicly; keep that compatibility
+          // boxed at the registry boundary and give the LLM the original JSON Schema.
+          const entries = Object.entries(def.args)
+          const allZod = entries.every((entry) => isZodType(entry[1]))
+          const zodParams = allZod ? z.object(def.args) : undefined
+          const jsonSchema = zodParams ? zodJsonSchema(zodParams) : legacyJsonSchema(entries)
+          const parameters = zodParams
+            ? Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success)
+            : Schema.Unknown
           return {
             id,
-            parameters: z.object(def.args),
+            parameters,
+            jsonSchema,
             description: def.description,
             execute: (args, toolCtx) =>
               Effect.gen(function* () {
@@ -135,18 +159,29 @@ export const layer: Layer.Layer<
                 const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
                 const output = typeof result === "string" ? result : result.output
                 const metadata = typeof result === "string" ? {} : (result.metadata ?? {})
+                const attachments = typeof result === "string" ? undefined : result.attachments
                 const info = yield* agent.get(toolCtx.agent)
                 const out = yield* truncate.output(output, {}, info)
                 return {
-                  title: "",
+                  title: typeof result === "string" ? "" : (result.title ?? ""),
                   output: out.truncated ? out.content : output,
+                  attachments,
                   metadata: {
                     ...metadata,
                     truncated: out.truncated,
                     ...(out.truncated && { outputPath: out.outputPath }),
                   },
                 }
-              }),
+              }).pipe(
+                Effect.withSpan("Tool.execute", {
+                  attributes: {
+                    "tool.name": id,
+                    "session.id": toolCtx.sessionID,
+                    "message.id": toolCtx.messageID,
+                    ...(toolCtx.callID ? { "tool.call_id": toolCtx.callID } : {}),
+                  },
+                }),
+              ),
           }
         }
 
@@ -173,12 +208,11 @@ export const layer: Layer.Layer<
         }
 
         yield* config.get()
-        const questionEnabled =
-          ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
+        const questionEnabled = ["app", "cli", "desktop"].includes(flags.client) || flags.enableQuestionTool
 
         const tool = yield* Effect.all({
           invalid: Tool.init(invalid),
-          bash: Tool.init(bash),
+          shell: Tool.init(shell),
           read: Tool.init(read),
           glob: Tool.init(globtool),
           grep: Tool.init(greptool),
@@ -188,7 +222,8 @@ export const layer: Layer.Layer<
           fetch: Tool.init(webfetch),
           todo: Tool.init(todo),
           search: Tool.init(websearch),
-          code: Tool.init(codesearch),
+          repo_clone: Tool.init(repoClone),
+          repo_overview: Tool.init(repoOverview),
           skill: Tool.init(skilltool),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
@@ -201,7 +236,7 @@ export const layer: Layer.Layer<
           builtin: [
             tool.invalid,
             ...(questionEnabled ? [tool.question] : []),
-            tool.bash,
+            tool.shell,
             tool.read,
             tool.glob,
             tool.grep,
@@ -211,11 +246,11 @@ export const layer: Layer.Layer<
             tool.fetch,
             tool.todo,
             tool.search,
-            tool.code,
+            ...(flags.experimentalScout ? [tool.repo_clone, tool.repo_overview] : []),
             tool.skill,
             tool.patch,
-            ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [tool.lsp] : []),
-            ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [tool.plan] : []),
+            ...(flags.experimentalLspTool ? [tool.lsp] : []),
+            ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
           ],
           task: tool.task,
           read: tool.read,
@@ -268,8 +303,8 @@ export const layer: Layer.Layer<
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
       const filtered = (yield* all()).filter((tool) => {
-        if (tool.id === CodeSearchTool.id || tool.id === WebSearchTool.id) {
-          return input.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
+        if (tool.id === WebSearchTool.id) {
+          return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
         }
 
         const usePatch =
@@ -287,8 +322,13 @@ export const layer: Layer.Layer<
           const output = {
             description: tool.description,
             parameters: tool.parameters,
+            jsonSchema: tool.jsonSchema,
           }
           yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
+          const jsonSchema =
+            output.parameters === tool.parameters || output.jsonSchema !== tool.jsonSchema
+              ? output.jsonSchema
+              : undefined
           return {
             id: tool.id,
             description: [
@@ -299,6 +339,7 @@ export const layer: Layer.Layer<
               .filter(Boolean)
               .join("\n"),
             parameters: output.parameters,
+            jsonSchema,
             execute: tool.execute,
             formatValidationError: tool.formatValidationError,
           }
@@ -326,6 +367,8 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Agent.defaultLayer),
     Layer.provide(Session.defaultLayer),
     Layer.provide(Provider.defaultLayer),
+    Layer.provide(Git.defaultLayer),
+    Layer.provide(Reference.defaultLayer),
     Layer.provide(LSP.defaultLayer),
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
@@ -335,5 +378,54 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Truncate.defaultLayer),
+    Layer.provide(RuntimeFlags.defaultLayer),
   ),
 )
+
+function isZodType(value: unknown): value is z.ZodType {
+  return typeof value === "object" && value !== null && "_zod" in value
+}
+
+function isJsonSchemaDefinition(value: unknown): value is JSONSchema7Definition {
+  return typeof value === "boolean" || (typeof value === "object" && value !== null && !Array.isArray(value))
+}
+
+function legacyJsonSchema(entries: [string, unknown][]): JSONSchema7 {
+  const properties = Object.fromEntries(
+    entries.filter((entry): entry is [string, JSONSchema7Definition] => isJsonSchemaDefinition(entry[1])),
+  )
+  return {
+    type: "object",
+    properties,
+    required: Object.keys(properties),
+  }
+}
+
+function zodJsonSchema(schema: z.ZodType): JSONSchema7 {
+  const result = normalizeZodJsonSchema(z.toJSONSchema(schema, { io: "input" }))
+  if (!isJsonSchemaObject(result)) throw new Error("plugin tool Zod schema produced a non-object JSON Schema")
+  const { $defs, ...rest } = result
+  return (
+    $defs && isJsonSchemaObject($defs) ? { ...rest, definitions: $defs as JSONSchema7["definitions"] } : rest
+  ) as JSONSchema7
+}
+
+function normalizeZodJsonSchema(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => normalizeZodJsonSchema(item))
+  if (typeof value !== "object" || value === null) return value
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter((entry) =>
+        (entry[0] === "exclusiveMaximum" || entry[0] === "exclusiveMinimum") && typeof entry[1] === "boolean"
+          ? false
+          : true,
+      )
+      .map(([key, item]) => [key, normalizeZodJsonSchema(item)]),
+  )
+}
+
+function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+export * as ToolRegistry from "./registry"

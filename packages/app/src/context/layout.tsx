@@ -43,6 +43,7 @@ type SessionView = {
   reviewOpen?: string[]
   pendingMessage?: string
   pendingMessageAt?: number
+  todoCollapsed?: boolean
 }
 
 type TabHandoff = {
@@ -391,7 +392,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         ? globalSync.data.project.find((x) => x.id === projectID)
         : globalSync.data.project.find((x) => x.worktree === project.worktree)
 
-      return { ...metadata, ...project }
+      // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
+      // Without this, different subdirectories of the same git repo would share the same
+      // icon from the database instead of using their individual overrides.
+      const base = { ...metadata, ...project }
+      if (childStore.icon) {
+        return { ...base, icon: { ...base.icon, override: childStore.icon } }
+      }
+      return base
     }
 
     const roots = createMemo(() => {
@@ -751,6 +759,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           setScroll(tab: string, pos: SessionScroll) {
             scroll.setScroll(key(), tab, pos)
+          },
+          todoCollapsed: {
+            get: () => s().todoCollapsed ?? false,
+            set(collapsed: boolean) {
+              const session = key()
+              const current = store.sessionView[session]
+              if (!current) {
+                setStore("sessionView", session, { scroll: {}, todoCollapsed: collapsed })
+              } else {
+                setStore("sessionView", session, "todoCollapsed", collapsed)
+              }
+            },
           },
           terminal: {
             opened: terminalOpened,

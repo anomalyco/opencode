@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm"
 import { Effect, Layer, Option, Schema, Context } from "effect"
 
-import { Database } from "@/storage"
+import { Database } from "@/storage/db"
 import { AccountStateTable, AccountTable } from "./account.sql"
 import { AccessToken, AccountID, AccountRepoError, Info, OrgID, RefreshToken } from "./schema"
 import { normalizeServerUrl } from "./url"

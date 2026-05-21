@@ -40,6 +40,10 @@ function serverKey(value: string) {
   return Uint8Array.from(raw, (char) => char.charCodeAt(0))
 }
 
+function finiteNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
 export const { use: usePush, provider: PushProvider } = createSimpleContext({
   name: "Push",
   init: () => {
@@ -119,11 +123,11 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       deviceLabel?: string
       enabled: boolean
       endpoint: string
-      failureCount: number
+      failureCount: unknown
       id: string
       lastError?: string
-      lastFailureAt?: number | null
-      lastSuccessAt?: number | null
+      lastFailureAt?: unknown
+      lastSuccessAt?: unknown
       notifyOnCompletion: boolean
       notifyOnError: boolean
       serverOrigin: string
@@ -131,11 +135,11 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       deviceLabel: item.deviceLabel,
       enabled: item.enabled,
       endpoint: item.endpoint,
-      failureCount: item.failureCount,
+      failureCount: finiteNumber(item.failureCount) ?? 0,
       id: item.id,
       lastError: item.lastError,
-      lastFailureAt: item.lastFailureAt ?? undefined,
-      lastSuccessAt: item.lastSuccessAt ?? undefined,
+      lastFailureAt: finiteNumber(item.lastFailureAt),
+      lastSuccessAt: finiteNumber(item.lastSuccessAt),
       notifyOnCompletion: item.notifyOnCompletion,
       notifyOnError: item.notifyOnError,
       serverOrigin: item.serverOrigin,
@@ -257,7 +261,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
           const result = await globalSDK.client.global.upsertPushSubscription({
             deviceLabel: store.deviceLabel.trim() || undefined,
             endpoint: json.endpoint,
-            expirationTime: json.expirationTime ?? null,
+            expirationTime: json.expirationTime ?? undefined,
             keys: {
               auth: json.keys.auth,
               p256dh: json.keys.p256dh,
@@ -268,7 +272,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
             serverOrigin: store.serverOrigin,
             userAgent: navigator.userAgent,
           })
-          remember(result.data)
+          remember(result.data ? normalizeDevice(result.data) : undefined)
           await refreshDevices()
           setStore("error", undefined)
         } finally {
@@ -347,7 +351,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
           enabled,
         })
         .catch(() => undefined)
-      remember(result?.data)
+      remember(result?.data ? normalizeDevice(result.data) : undefined)
       await refreshDevices()
       return result?.data
     }
@@ -374,7 +378,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
           deviceLabel: trimmed || undefined,
         })
         .catch(() => undefined)
-      remember(result?.data)
+      remember(result?.data ? normalizeDevice(result.data) : undefined)
       await refreshDevices()
       if (id === store.subscriptionID) {
         setStore("deviceLabel", trimmed || suggestedLabel())

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test"
-import { Database } from "../../src/storage"
+import { Database } from "../../src/storage/db"
 import { Push } from "../../src/push"
 import { PushSubscriptionTable } from "../../src/push/push.sql"
 
