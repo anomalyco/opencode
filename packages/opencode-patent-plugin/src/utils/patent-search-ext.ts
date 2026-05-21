@@ -5,7 +5,10 @@
  * - Semantic Scholar: 学术论文检索
  *
  * 仅使用内置 fetch，无需额外依赖。
+ * 集成速率限制和熔断器，防止高频请求被封禁。
  */
+
+import { googlePatentsLimiter, semanticScholarLimiter, googlePatentsBreaker, semanticScholarBreaker } from "./rate-limiter.js"
 
 // --- 类型 ---
 
@@ -37,48 +40,50 @@ export async function searchGooglePatents(
   query: string,
   limit = 10,
 ): Promise<ExternalPatentResult[]> {
+  if (googlePatentsBreaker.isOpen) return []
+
   try {
-    // Google Patents XHR API（其 UI 自身使用的接口）
-    const url = `https://patents.google.com/xhr/query?url=q%3D${encodeURIComponent(query)}%26num%3D${limit}%26oq%3D${encodeURIComponent(query)}`
+    await googlePatentsLimiter.acquire()
+    return await googlePatentsBreaker.execute(async () => {
+      const url = `https://patents.google.com/xhr/query?url=q%3D${encodeURIComponent(query)}%26num%3D${limit}%26oq%3D${encodeURIComponent(query)}`
 
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 15000)
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 15000)
 
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0 (compatible; YunPat/1.0)",
-      },
-    })
-    clearTimeout(timeout)
-
-    if (!response.ok) return []
-
-    const data = await response.json() as any
-    const results: ExternalPatentResult[] = []
-
-    // 解析 Google Patents 返回结构
-    const hits = data?.results?.channel?.result?.map?.result || []
-    for (const hit of hits.slice(0, limit)) {
-      const patent = hit?.patent
-      if (!patent) continue
-
-      results.push({
-        title: patent.title || "",
-        patentId: patent.publnId || "",
-        abstract: patent.abstract?.value || "",
-        assignee: patent.assigneeHtml || "",
-        filingDate: patent.filingDate?.value || "",
-        publicationDate: patent.publnDate?.value || "",
-        url: `https://patents.google.com/patent/${patent.publnId}`,
-        source: "google_patents",
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          "Accept": "application/json",
+          "User-Agent": "Mozilla/5.0 (compatible; YunPat/1.0)",
+        },
       })
-    }
+      clearTimeout(timeout)
 
-    return results
+      if (!response.ok) return []
+
+      const data = await response.json() as any
+      const results: ExternalPatentResult[] = []
+
+      const hits = data?.results?.channel?.result?.map?.result || []
+      for (const hit of hits.slice(0, limit)) {
+        const patent = hit?.patent
+        if (!patent) continue
+
+        results.push({
+          title: patent.title || "",
+          patentId: patent.publnId || "",
+          abstract: patent.abstract?.value || "",
+          assignee: patent.assigneeHtml || "",
+          filingDate: patent.filingDate?.value || "",
+          publicationDate: patent.publnDate?.value || "",
+          url: `https://patents.google.com/patent/${patent.publnId}`,
+          source: "google_patents",
+        })
+      }
+
+      return results
+    })
   } catch {
-    // API 不可用时返回空，由 Tool 层做降级处理
     return []
   }
 }
@@ -91,44 +96,49 @@ export async function searchSemanticScholar(
 ): Promise<AcademicPaperResult[]> {
   const limit = options?.limit || 10
 
+  if (semanticScholarBreaker.isOpen) return []
+
   try {
-    const params = new URLSearchParams({
-      query,
-      limit: String(limit),
-      fields: "title,abstract,authors,year,citationCount,url,externalIds",
-    })
-
-    if (options?.yearFrom) params.set("year", `${options.yearFrom}-${options.yearTo || new Date().getFullYear()}`)
-
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 15000)
-
-    const response = await fetch(
-      `https://api.semanticscholar.org/graph/v1/paper/search?${params}`,
-      { signal: controller.signal },
-    )
-    clearTimeout(timeout)
-
-    if (response.status === 429) return [] // 速率限制
-    if (!response.ok) return []
-
-    const data = await response.json() as any
-    const results: AcademicPaperResult[] = []
-
-    for (const paper of (data?.data || []).slice(0, limit)) {
-      results.push({
-        paperId: paper.paperId || paper.externalIds?.DOI || "",
-        title: paper.title || "",
-        abstract: paper.abstract || "",
-        authors: (paper.authors || []).map((a: any) => a.name || "").filter(Boolean),
-        year: paper.year || 0,
-        citationCount: paper.citationCount || 0,
-        url: paper.url || `https://www.semanticscholar.org/paper/${paper.paperId}`,
-        source: "semantic_scholar",
+    await semanticScholarLimiter.acquire()
+    return await semanticScholarBreaker.execute(async () => {
+      const params = new URLSearchParams({
+        query,
+        limit: String(limit),
+        fields: "title,abstract,authors,year,citationCount,url,externalIds",
       })
-    }
 
-    return results
+      if (options?.yearFrom) params.set("year", `${options.yearFrom}-${options.yearTo || new Date().getFullYear()}`)
+
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 15000)
+
+      const response = await fetch(
+        `https://api.semanticscholar.org/graph/v1/paper/search?${params}`,
+        { signal: controller.signal },
+      )
+      clearTimeout(timeout)
+
+      if (response.status === 429) return []
+      if (!response.ok) return []
+
+      const data = await response.json() as any
+      const results: AcademicPaperResult[] = []
+
+      for (const paper of (data?.data || []).slice(0, limit)) {
+        results.push({
+          paperId: paper.paperId || paper.externalIds?.DOI || "",
+          title: paper.title || "",
+          abstract: paper.abstract || "",
+          authors: (paper.authors || []).map((a: any) => a.name || "").filter(Boolean),
+          year: paper.year || 0,
+          citationCount: paper.citationCount || 0,
+          url: paper.url || `https://www.semanticscholar.org/paper/${paper.paperId}`,
+          source: "semantic_scholar",
+        })
+      }
+
+      return results
+    })
   } catch {
     return []
   }

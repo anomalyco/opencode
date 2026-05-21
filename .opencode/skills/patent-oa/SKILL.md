@@ -1,6 +1,13 @@
 ---
 name: patent-oa
 description: 审查意见（Office Action）分析与答辩工作流。6 步骤产出完整答辩文件。
+version: "1.1.0"
+plugin_version: ">=0.1.0"
+tools:
+  - oa_response
+  - patent_check
+  - patent_research
+workflow: oa
 ---
 
 # 审查意见答辩工作流

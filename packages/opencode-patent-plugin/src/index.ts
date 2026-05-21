@@ -31,6 +31,8 @@ import { existsSync } from "fs"
 import { checkDBHealth } from "./utils/db.js"
 import { getWorkflowStore } from "./utils/workflow-store.js"
 import { seedTemplates } from "./utils/workflow-seeds.js"
+import { warmUpAvailabilityCache } from "./utils/agent-health.js"
+import { restorePersistedFlows } from "./services/workflow-orchestrator.js"
 
 /**
  * YunPat Patent Plugin 入口
@@ -84,6 +86,10 @@ const PatentPlugin: Plugin = async (input, options) => {
         console.log(`[YunPat] ℹ️ OBSIDIAN_KB_PATH 未设置，知识库查询不可用`)
       }
     }),
+    // Agent 可用性预热
+    warmUpAvailabilityCache(),
+    // 恢复上次未完成的工作流
+    Promise.resolve().then(() => restorePersistedFlows()),
   ]).catch(() => { /* 诊断失败不阻塞启动 */ })
 
   // 初始化工作流模板种子
@@ -103,54 +109,51 @@ const PatentPlugin: Plugin = async (input, options) => {
     options,
   }
 
-  // 注册所有 Patent Tools（每个注册独立 try/catch，单个工具失败不影响其他）
-  const failedRegistrations: string[] = []
+  // 并行注册所有 Patent Tools（每个注册独立 try/catch，单个工具失败不影响其他）
+  const toolRegistrations: Array<{ name: string; fn: () => Promise<Record<string, unknown>> }> = [
+    { name: "research", fn: () => registerResearchTools(context) },
+    { name: "draft", fn: () => registerDraftTools(context) },
+    { name: "oa", fn: () => registerOATools(context) },
+    { name: "search", fn: () => registerSearchTools(context) },
+    { name: "analyze", fn: () => registerAnalyzeTools(context) },
+    { name: "check", fn: () => registerCheckTools(context) },
+    { name: "reexam", fn: () => registerReexamTools(context) },
+    { name: "invalidation", fn: () => registerInvalidationTools(context) },
+    { name: "tm_research", fn: () => registerTrademarkResearchTools(context) },
+    { name: "tm_search", fn: () => registerTrademarkSearchTools(context) },
+    { name: "tm_analyze", fn: () => registerTrademarkAnalyzeTools(context) },
+    { name: "tm_draft", fn: () => registerTrademarkDraftTools(context) },
+    { name: "tm_opposition", fn: () => registerTrademarkOppositionTools(context) },
+    { name: "tm_review", fn: () => registerTrademarkReviewTools(context) },
+    { name: "document", fn: () => registerDocumentReaderTools(context) },
+    { name: "file_writer", fn: () => registerFileWriterTools(context) },
+    { name: "memory", fn: () => registerMemoryTools(context) },
+    { name: "case", fn: () => registerCaseTools(context) },
+  ]
 
-  const researchTools = await registerResearchTools(context).catch(e => { console.error("[YunPat] Research tools failed:", e); failedRegistrations.push("research"); return {} })
-  const draftTools = await registerDraftTools(context).catch(e => { console.error("[YunPat] Draft tools failed:", e); failedRegistrations.push("draft"); return {} })
-  const oaTools = await registerOATools(context).catch(e => { console.error("[YunPat] OA tools failed:", e); failedRegistrations.push("oa"); return {} })
-  const searchTools = await registerSearchTools(context).catch(e => { console.error("[YunPat] Search tools failed:", e); failedRegistrations.push("search"); return {} })
-  const analyzeTools = await registerAnalyzeTools(context).catch(e => { console.error("[YunPat] Analyze tools failed:", e); failedRegistrations.push("analyze"); return {} })
-  const checkTools = await registerCheckTools(context).catch(e => { console.error("[YunPat] Check tools failed:", e); failedRegistrations.push("check"); return {} })
-  const reexamTools = await registerReexamTools(context).catch(e => { console.error("[YunPat] Reexam tools failed:", e); failedRegistrations.push("reexam"); return {} })
-  const invalidationTools = await registerInvalidationTools(context).catch(e => { console.error("[YunPat] Invalidation tools failed:", e); failedRegistrations.push("invalidation"); return {} })
-  const tmResearchTools = await registerTrademarkResearchTools(context).catch(e => { console.error("[YunPat] TM Research tools failed:", e); failedRegistrations.push("tm_research"); return {} })
-  const tmSearchTools = await registerTrademarkSearchTools(context).catch(e => { console.error("[YunPat] TM Search tools failed:", e); failedRegistrations.push("tm_search"); return {} })
-  const tmAnalyzeTools = await registerTrademarkAnalyzeTools(context).catch(e => { console.error("[YunPat] TM Analyze tools failed:", e); failedRegistrations.push("tm_analyze"); return {} })
-  const tmDraftTools = await registerTrademarkDraftTools(context).catch(e => { console.error("[YunPat] TM Draft tools failed:", e); failedRegistrations.push("tm_draft"); return {} })
-  const tmOppositionTools = await registerTrademarkOppositionTools(context).catch(e => { console.error("[YunPat] TM Opposition tools failed:", e); failedRegistrations.push("tm_opposition"); return {} })
-  const tmReviewTools = await registerTrademarkReviewTools(context).catch(e => { console.error("[YunPat] TM Review tools failed:", e); failedRegistrations.push("tm_review"); return {} })
-  const documentTools = await registerDocumentReaderTools(context).catch(e => { console.error("[YunPat] Document Reader tools failed:", e); failedRegistrations.push("document"); return {} })
-  const fileWriterTools = await registerFileWriterTools(context).catch(e => { console.error("[YunPat] File Writer tools failed:", e); failedRegistrations.push("file_writer"); return {} })
-  const memoryTools = await registerMemoryTools(context).catch(e => { console.error("[YunPat] Memory tools failed:", e); failedRegistrations.push("memory"); return {} })
-  const caseTools = await registerCaseTools(context).catch(e => { console.error("[YunPat] Case tools failed:", e); failedRegistrations.push("case"); return {} })
+  const failedRegistrations: string[] = []
+  const registrationResults = await Promise.all(
+    toolRegistrations.map(({ name, fn }) =>
+      fn().catch(e => {
+        console.error(`[YunPat] ${name} tools failed:`, e)
+        failedRegistrations.push(name)
+        return {} as Record<string, any>
+      })
+    ),
+  )
 
   if (failedRegistrations.length > 0) {
     console.warn(`[YunPat] ⚠️ 以下工具注册失败，相关功能不可用: ${failedRegistrations.join(", ")}`)
   }
 
+  // 合并所有工具注册结果
+  const allTools: Record<string, any> = {}
+  for (const result of registrationResults) {
+    Object.assign(allTools, result)
+  }
+
   return {
-    // 注册专利工具集
-    tool: {
-      ...researchTools,
-      ...draftTools,
-      ...oaTools,
-      ...searchTools,
-      ...analyzeTools,
-      ...checkTools,
-      ...reexamTools,
-      ...invalidationTools,
-      ...tmResearchTools,
-      ...tmSearchTools,
-      ...tmAnalyzeTools,
-      ...tmDraftTools,
-      ...tmOppositionTools,
-      ...tmReviewTools,
-      ...documentTools,
-      ...fileWriterTools,
-      ...memoryTools,
-      ...caseTools,
-    },
+    tool: allTools,
 
     // 注入专利领域系统提示词
     "experimental.chat.system.transform": createSystemPromptHandler(),

@@ -8,6 +8,7 @@ import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { loadYunPatModule } from "../utils/yunpat-loader.js"
 import { createSharedAgentContext } from "../utils/agent-factory.js"
+import { isAgentAvailable } from "../utils/agent-health.js"
 import { searchLegalRules } from "../utils/db.js"
 import { queryGuidelinesFromKB } from "../utils/obsidian-kb.js"
 import { qualityLoop, formatQualityReport, type QualityLoopOptions } from "../utils/quality-loop.js"
@@ -87,6 +88,10 @@ async function runQualityCheck(
   docType: string,
   pluginContext: PatentPluginContext,
 ): Promise<string | null> {
+  const available = await isAgentAvailable("agents/quality", "EnhancedQualityCheckerAgent")
+    .then(v => v || isAgentAvailable("agents/quality", "QualityCheckerAgent"))
+  if (!available) return null
+
   const mod = await loadYunPatModule("agents/quality")
   if (!mod?.EnhancedQualityCheckerAgent && !mod?.QualityCheckerAgent) return null
 

@@ -51,71 +51,85 @@ export async function registerResearchTools(pluginContext: PatentPluginContext) 
         let output = `## 专利法规研究：${topic}\n\n`
         let hasRealData = false
 
-        // 1. 查询 legal_world_model 数据库
-        try {
-          if (scope === "法规" || scope === "全部") {
-            const rules = await searchLegalRules(topic, { limit: 10 })
-            if (rules.length > 0) {
-              output += `### 法规条文（数据库）\n\n`
-              rules.forEach((r, i) => {
-                output += `**${i + 1}. ${r.article_number || ""} ${r.title || ""}**\n`
-                output += `${r.content?.slice(0, 500) || ""}${r.content?.length > 500 ? "..." : ""}\n\n`
-                if (r.core_principle) {
-                  output += `> 核心原则：${r.core_principle}\n\n`
-                }
+        // 并行查询所有数据源（DB + KB），大幅减少延迟
+        const [dbRules, dbJudgments, kbLaw, kbGuidelines, kbInvalidation] = await Promise.all([
+          (scope === "法规" || scope === "全部")
+            ? searchLegalRules(topic, { limit: 10 }).catch((e: any) => {
+                console.warn("[LegalDB] Rules query error:", e?.message)
+                return [] as any[]
               })
-              hasRealData = true
-            }
-          }
+            : Promise.resolve([] as any[]),
+          (scope === "案例" || scope === "全部")
+            ? searchPatentJudgments(topic, { limit: 5 }).catch((e: any) => {
+                console.warn("[LegalDB] Judgments query error:", e?.message)
+                return [] as any[]
+              })
+            : Promise.resolve([] as any[]),
+          (scope === "法规" || scope === "全部")
+            ? queryLawFromKB(topic).catch((e: any) => {
+                console.warn("[ObsidianKB] Law query error:", e?.message)
+                return null as string | null
+              })
+            : Promise.resolve(null as string | null),
+          (scope === "法规" || scope === "全部")
+            ? queryGuidelinesFromKB(topic).catch((e: any) => {
+                console.warn("[ObsidianKB] Guidelines query error:", e?.message)
+                return null as string | null
+              })
+            : Promise.resolve(null as string | null),
+          (scope === "案例" || scope === "全部")
+            ? queryInvalidationFromKB(topic).catch((e: any) => {
+                console.warn("[ObsidianKB] Invalidation query error:", e?.message)
+                return null as string | null
+              })
+            : Promise.resolve(null as string | null),
+        ])
 
-          if (scope === "案例" || scope === "全部") {
-            const judgments = await searchPatentJudgments(topic, { limit: 5 })
-            if (judgments.length > 0) {
-              output += `### 相关判决/案例（数据库）\n\n`
-              judgments.forEach((j, i) => {
-                output += `**${i + 1}. ${j.case_number || ""} ${j.case_title || ""}**\n`
-                output += `- 法院：${j.court || "N/A"}\n`
-                output += `- 日期：${j.judgment_date || "N/A"}\n`
-                output += `- 类型：${j.judgment_type || "N/A"}\n`
-                if (j.case_summary) {
-                  output += `- 摘要：${j.case_summary.slice(0, 300)}...\n`
-                }
-                output += `\n`
-              })
-              hasRealData = true
+        // 整合法规条文（DB）
+        if (dbRules.length > 0) {
+          output += `### 法规条文（数据库）\n\n`
+          dbRules.forEach((r: any, i: number) => {
+            output += `**${i + 1}. ${r.article_number || ""} ${r.title || ""}**\n`
+            output += `${r.content?.slice(0, 500) || ""}${r.content?.length > 500 ? "..." : ""}\n\n`
+            if (r.core_principle) {
+              output += `> 核心原则：${r.core_principle}\n\n`
             }
-          }
-        } catch (error: any) {
-          console.warn("[LegalDB] Query error:", error?.message)
-          output += `\n> ⚠️ 法律数据库查询失败（${error?.message}），部分结果可能基于 LLM 推理。\n`
+          })
+          hasRealData = true
         }
 
-        // 2. 查询 Obsidian 知识库
-        try {
-          if (scope === "法规" || scope === "全部") {
-            const kbLaw = await queryLawFromKB(topic)
-            if (kbLaw && !kbLaw.includes("未在知识库中找到")) {
-              output += `### 知识库相关文件\n\n${kbLaw.slice(0, 2000)}${kbLaw.length > 2000 ? "\n\n..." : ""}\n\n`
-              hasRealData = true
+        // 整合判决/案例（DB）
+        if (dbJudgments.length > 0) {
+          output += `### 相关判决/案例（数据库）\n\n`
+          dbJudgments.forEach((j: any, i: number) => {
+            output += `**${i + 1}. ${j.case_number || ""} ${j.case_title || ""}**\n`
+            output += `- 法院：${j.court || "N/A"}\n`
+            output += `- 日期：${j.judgment_date || "N/A"}\n`
+            output += `- 类型：${j.judgment_type || "N/A"}\n`
+            if (j.case_summary) {
+              output += `- 摘要：${j.case_summary.slice(0, 300)}...\n`
             }
+            output += `\n`
+          })
+          hasRealData = true
+        }
 
-            const guidelines = await queryGuidelinesFromKB(topic)
-            if (guidelines && !guidelines.includes("未在审查指南中找到")) {
-              output += `### 审查指南\n\n${guidelines.slice(0, 2000)}${guidelines.length > 2000 ? "\n\n..." : ""}\n\n`
-              hasRealData = true
-            }
-          }
+        // 整合知识库法规
+        if (kbLaw && !kbLaw.includes("未在知识库中找到")) {
+          output += `### 知识库相关文件\n\n${kbLaw.slice(0, 2000)}${kbLaw.length > 2000 ? "\n\n..." : ""}\n\n`
+          hasRealData = true
+        }
 
-          if (scope === "案例" || scope === "全部") {
-            const invalidation = await queryInvalidationFromKB(topic)
-            if (invalidation && !invalidation.includes("未在复审无效决定中找到")) {
-              output += `### 复审无效决定\n\n${invalidation.slice(0, 2000)}${invalidation.length > 2000 ? "\n\n..." : ""}\n\n`
-              hasRealData = true
-            }
-          }
-        } catch (error: any) {
-          console.warn("[ObsidianKB] Query error:", error?.message)
-          output += `\n> ⚠️ 知识库查询失败（${error?.message}），部分结果可能基于 LLM 推理。\n`
+        // 整合审查指南
+        if (kbGuidelines && !kbGuidelines.includes("未在审查指南中找到")) {
+          output += `### 审查指南\n\n${kbGuidelines.slice(0, 2000)}${kbGuidelines.length > 2000 ? "\n\n..." : ""}\n\n`
+          hasRealData = true
+        }
+
+        // 整合复审无效决定
+        if (kbInvalidation && !kbInvalidation.includes("未在复审无效决定中找到")) {
+          output += `### 复审无效决定\n\n${kbInvalidation.slice(0, 2000)}${kbInvalidation.length > 2000 ? "\n\n..." : ""}\n\n`
+          hasRealData = true
         }
 
         // 3. 尝试使用 YunPat ResearcherAgent

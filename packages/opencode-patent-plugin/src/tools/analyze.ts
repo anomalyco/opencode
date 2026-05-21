@@ -8,6 +8,7 @@ import { tool } from "@opencode-ai/plugin/tool"
 import type { PatentPluginContext } from "../types.js"
 import { loadYunPatModule } from "../utils/yunpat-loader.js"
 import { createSharedAgentContext } from "../utils/agent-factory.js"
+import { isAgentAvailable } from "../utils/agent-health.js"
 
 /**
  * 注册专利分析工具集
@@ -26,7 +27,7 @@ export async function registerAnalyzeTools(pluginContext: PatentPluginContext) {
         - creativity: 创造性分析（三步法）
         - compare: 特征对比分析
         - scope: 保护范围分析
-        - drawing: 附图分析
+        - drawing: 附图分析（支持图片描述输入）
         - claim_interpretation: 权利要求解释
         - infringement: 侵权分析
       `,
@@ -43,6 +44,12 @@ export async function registerAnalyzeTools(pluginContext: PatentPluginContext) {
           title: `专利分析: ${action}`,
           metadata: { action },
         })
+
+        // 绘图分析：优先使用 DrawingUnderstandingAgent
+        if (action === "drawing") {
+          const drawingResult = await runDrawingAgent(target, extraContext, pluginContext)
+          if (drawingResult) return drawingResult
+        }
 
         // 尝试使用 YunPat ComparisonAnalyzerAgent（对比分析）
         if (action === "compare" || action === "novelty" || action === "creativity") {
@@ -74,6 +81,9 @@ async function runComparisonAnalyzer(
   extraContext: string,
   pluginContext: PatentPluginContext,
 ): Promise<string | null> {
+  const available = await isAgentAvailable("agents/patent-analyzer", "ComparisonAnalyzerAgent")
+  if (!available) return null
+
   const mod = await loadYunPatModule("agents/patent-analyzer")
   if (!mod?.ComparisonAnalyzerAgent) return null
 
@@ -99,7 +109,55 @@ async function runComparisonAnalyzer(
 
   if (!result.success) return null
 
-  return `## ${action === "compare" ? "特征对比分析" : action === "novelty" ? "新颖性分析" : "创造性分析"} ✅\n\n${result.data?.report || result.data?.content || JSON.stringify(result.data, null, 2)}`
+  const actionLabels: Record<string, string> = {
+    compare: "特征对比分析",
+    novelty: "新颖性分析",
+    creativity: "创造性分析",
+  }
+  const label = actionLabels[action] ?? action
+  return `## ${label} ✅\n\n${result.data?.report || result.data?.content || JSON.stringify(result.data, null, 2)}`
+}
+
+/**
+ * 绘图分析 Agent
+ *
+ * 使用 DrawingUnderstandingAgent 分析附图描述。
+ * 如果 Agent 不可用，降级为 LLM 分析。
+ */
+async function runDrawingAgent(
+  target: string,
+  extraContext: string,
+  pluginContext: PatentPluginContext,
+): Promise<string | null> {
+  const available = await isAgentAvailable("agents/image-understanding", "DrawingUnderstandingAgent")
+  if (!available) return null
+
+  try {
+    const mod = await loadYunPatModule("agents/image-understanding")
+    if (!mod?.DrawingUnderstandingAgent) return null
+
+    const context = await createSharedAgentContext()
+    if (!context) return null
+
+    const agent = new mod.DrawingUnderstandingAgent({
+      llm: pluginContext.llm,
+      eventBus: context.eventBus,
+      memory: context.memory,
+      tools: context.tools,
+    })
+
+    const result = await agent.run(
+      { imageDescription: target, context: extraContext },
+      context,
+    )
+
+    if (!result.success) return null
+
+    return `## 附图分析 ✅（DrawingUnderstandingAgent）\n\n${result.data?.report || result.data?.content || result.data?.description || JSON.stringify(result.data, null, 2)}`
+  } catch (error: any) {
+    console.warn("[YunPat] DrawingUnderstandingAgent error:", error?.message)
+    return null
+  }
 }
 
 function buildAnalyzeSystemPrompt(action: string): string {

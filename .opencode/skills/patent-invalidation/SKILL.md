@@ -1,6 +1,13 @@
 ---
 name: patent-invalidation
 description: 专利无效宣告工作流。支持攻方（提出无效）和守方（答辩无效）双向角色。
+version: "1.1.0"
+plugin_version: ">=0.1.0"
+tools:
+  - invalidation_response
+  - patent_search
+  - patent_check
+workflow: invalidation
 ---
 
 # 专利无效宣告工作流

@@ -73,6 +73,9 @@ export interface QualityLoopOptions {
 const THRESHOLD = 7.5
 const MAX_ITERATIONS = 3
 
+const EVALUATE_MODEL_HINT = "请只返回 JSON，不要输出其他内容"
+const FIX_MAX_TOKENS = 8192
+
 /**
  * 安全解析 JSON：尝试直接解析、从代码块提取、从花括号提取
  */
@@ -184,7 +187,8 @@ ${dimensionList}
       { role: "system", content: "你是专利质量评估专家。严格依据中国专利法和审查指南进行评分。只返回 JSON，不要输出其他内容。" },
       { role: "user", content: prompt },
     ],
-    temperature: 0.2,
+    temperature: 0.1,
+    maxTokens: 2048,
   })
 
   return parseQualityResponse(response.content)

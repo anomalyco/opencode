@@ -116,16 +116,83 @@ export async function registerSearchTools(pluginContext: PatentPluginContext) {
     patent_classify: tool({
       description: `
         IPC/CPC 专利分类查询。根据技术主题查询对应的分类号，或根据分类号查询技术含义。
+
+        数据源：
+        - patent_db 的 IPC 分类字段
+        - LLM 降级补充
       `,
       args: {
         query: tool.schema.string().describe("技术主题或分类号"),
         type: tool.schema.enum(["ipc", "cpc"]).default("ipc").describe("分类体系"),
       },
-      async execute(args, _ctx) {
+      async execute(args, ctx) {
         const { query, type = "ipc" } = args
 
-        // TODO: 接入 YunPat 的 IPC 分类服务（Rust 实现）
-        return `## ${type.toUpperCase()} 分类查询\n\n**查询**：${query}\n\n> 注：完整分类查询需要接入 YunPat patent-core（Rust CLI bridge）的 IPC 分类模块。`
+        ctx.metadata({
+          title: `分类查询: ${query}`,
+          metadata: { type },
+        })
+
+        // 尝试从 patent_db 获取匹配的 IPC 分类
+        try {
+          const isClassificationCode = /^[A-H]\d{2}[A-Z]/i.test(query)
+          if (isClassificationCode) {
+            const results = await searchPatents(query, {
+              limit: 5,
+              fields: ["title", "abstract"],
+            })
+            if (results.length > 0) {
+              const ipcSet = new Set<string>()
+              results.forEach(r => {
+                if (r.ipc_main_class) ipcSet.add(r.ipc_main_class)
+              })
+              return `## ${type.toUpperCase()} 分类号 ${query}\n\n**关联专利数**：${results.length}\n**相关 IPC 分类**：${[...ipcSet].join(", ")}\n\n### 代表性专利\n\n${results.slice(0, 3).map((r, i) => `${i + 1}. **${r.patent_name}** (${r.application_number})\n   IPC: ${r.ipc_main_class}\n   ${r.abstract?.slice(0, 200) || ""}`).join("\n\n")}`
+            }
+          } else {
+            const results = await searchPatents(query, { limit: 20 })
+            if (results.length > 0) {
+              const ipcCount = new Map<string, number>()
+              results.forEach(r => {
+                if (r.ipc_main_class) {
+                  ipcCount.set(r.ipc_main_class, (ipcCount.get(r.ipc_main_class) || 0) + 1)
+                }
+              })
+              const sortedIPC = [...ipcCount.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10)
+
+              if (sortedIPC.length > 0) {
+                let output = `## ${type.toUpperCase()} 分类查询\n\n**查询主题**：${query}\n**分析专利数**：${results.length}\n\n`
+                output += `### 推荐 IPC 分类号\n\n`
+                output += `| IPC 分类号 | 出现次数 | 说明 |\n`
+                output += `|-----------|---------|------|\n`
+                for (const [ipc, count] of sortedIPC) {
+                  const section = ipc.charAt(0)
+                  const sectionNames: Record<string, string> = {
+                    A: "人类生活必需", B: "作业/运输", C: "化学/冶金",
+                    D: "纺织/造纸", E: "固定建筑物", F: "机械工程",
+                    G: "物理", H: "电学",
+                  }
+                  output += `| ${ipc} | ${count} | ${sectionNames[section] || ""} |\n`
+                }
+                return output
+              }
+            }
+          }
+        } catch (error: any) {
+          console.warn("[Classify] Patent DB query error:", error?.message)
+        }
+
+        // LLM 降级
+        const response = await pluginContext.llm.chat({
+          messages: [
+            { role: "system", content: "你是 IPC/CPC 专利分类专家。根据技术主题推荐分类号，或解释分类号的含义。" },
+            { role: "user", content: `请为以下查询提供 ${type.toUpperCase()} 分类建议：\n\n${query}\n\n请列出最相关的 3-5 个分类号及其含义。` },
+          ],
+          temperature: 0.1,
+        })
+
+        return `## ${type.toUpperCase()} 分类查询\n\n**查询**：${query}\n\n${response.content}`
       },
     }),
 

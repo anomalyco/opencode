@@ -1,6 +1,13 @@
 ---
 name: patent-draft
 description: 专利申请文件撰写工作流。从技术交底书出发，5 步骤产出完整申请文件。
+version: "1.1.0"
+plugin_version: ">=0.1.0"
+tools:
+  - patent_draft
+  - patent_search
+  - patent_check
+workflow: draft
 ---
 
 # 专利申请文件撰写工作流

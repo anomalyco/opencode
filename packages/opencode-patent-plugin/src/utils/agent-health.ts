@@ -2,6 +2,7 @@
  * Agent 健康检查工具
  *
  * 诊断所有 YunPat Agent 的加载、实例化和运行状态。
+ * 运行时缓存可用 Agent 列表，跳过不可用 Agent 避免无效 try-catch。
  */
 
 import { loadYunPatModule } from "./yunpat-loader.js"
@@ -31,7 +32,75 @@ const AGENT_REGISTRY = [
   { module: "agents/quality", className: "EnhancedQualityCheckerAgent", testInput: { claims: { independentClaims: ["测试"], dependentClaims: [] }, specification: { technicalField: "测试", backgroundArt: "", summary: "", detailedDescription: "" }, documentType: "claims" } },
   { module: "agents/quality", className: "QualityCheckerAgent", testInput: { claims: { independentClaims: ["测试"], dependentClaims: [] }, specification: { technicalField: "测试", backgroundArt: "", summary: "", detailedDescription: "" }, documentType: "claims" } },
   { module: "agents/writer", className: "WriterAgent", testInput: { content: "测试", type: "specification" } },
+  { module: "agents/analysis", className: "PriorArtAnalyzerAgent", testInput: { targetPatent: "测试", priorArt: ["测试"] } },
+  { module: "agents/analysis", className: "DisclosureRefinerAgent", testInput: { disclosure: "测试" } },
+  { module: "agents/analysis", className: "ComparisonReportGeneratorAgent", testInput: { targetPatent: "测试", referencePatents: ["测试"] } },
+  { module: "agents/subject-matter-checker", className: "SubjectMatterChecker", testInput: { claims: "测试" } },
+  { module: "agents/spec-formality-checker", className: "SpecFormalityChecker", testInput: { specification: "测试" } },
+  { module: "agents/unity-checker", className: "UnityChecker", testInput: { claims: "测试" } },
+  { module: "agents/prior-art-search", className: "PriorArtSearchAgent", testInput: { title: "测试", field: "AI" } },
+  { module: "agents/format-converter", className: "PatentFormatConverterAgent", testInput: { content: "测试", format: "markdown" } },
+  { module: "agents/image-understanding", className: "DrawingUnderstandingAgent", testInput: { imageDescription: "测试" } },
+  { module: "agents/technical-drawing", className: "TechnicalDrawingAgent", testInput: { description: "测试" } },
 ]
+
+/** 运行时 Agent 可用性缓存（className → loadable） */
+const availabilityCache = new Map<string, boolean>()
+let lastCacheTime = 0
+const CACHE_TTL = 60 * 60 * 1000
+
+/**
+ * 检查 Agent 是否可用（带缓存）
+ *
+ * 启动时只做模块加载检查（不做实例化和运行测试，避免慢启动）。
+ * 结果缓存 1 小时。
+ */
+export async function isAgentAvailable(module: string, className: string): Promise<boolean> {
+  const key = `${module}/${className}`
+  const now = Date.now()
+
+  if (now - lastCacheTime < CACHE_TTL) {
+    const cached = availabilityCache.get(key)
+    if (cached !== undefined) return cached
+  }
+
+  try {
+    const mod = await loadYunPatModule(module)
+    const available = !!mod?.[className]
+    availabilityCache.set(key, available)
+    lastCacheTime = now
+    return available
+  } catch {
+    availabilityCache.set(key, false)
+    lastCacheTime = now
+    return false
+  }
+}
+
+/**
+ * 批量预热 Agent 可用性缓存
+ *
+ * 在插件启动时异步执行，不阻塞注册流程。
+ * 并行检查所有 Agent 的模块加载状态。
+ */
+export async function warmUpAvailabilityCache(): Promise<void> {
+  const checks = AGENT_REGISTRY.map(({ module, className }) =>
+    isAgentAvailable(module, className)
+  )
+  const results = await Promise.allSettled(checks)
+
+  const loadable = results.filter(r => r.status === "fulfilled" && r.value).length
+  console.log(`[YunPat] Agent 可用性预热完成: ${loadable}/${AGENT_REGISTRY.length} 个 Agent 可加载`)
+}
+
+/**
+ * 获取所有可用的 Agent 列表
+ */
+export function getAvailableAgents(): Array<{ module: string; className: string }> {
+  return AGENT_REGISTRY
+    .filter(({ module, className }) => availabilityCache.get(`${module}/${className}`) === true)
+    .map(({ module, className }) => ({ module, className }))
+}
 
 /**
  * 检查单个 Agent 的健康状态

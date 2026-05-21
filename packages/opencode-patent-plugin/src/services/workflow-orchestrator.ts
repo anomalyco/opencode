@@ -10,6 +10,8 @@
  * 3. 如果 requiresConfirmation=true，LLM 向用户展示并等待确认
  * 4. 用户确认后再次调用 advance() 推进到下一步
  * 5. 所有步骤完成后状态变为 completed
+ *
+ * 持久化：状态同时保存在内存和 SQLite，支持跨重启恢复。
  */
 
 import { getWorkflowStore } from "../utils/workflow-store.js"
@@ -62,6 +64,25 @@ function cleanupFlows(): void {
   }
 }
 
+/** 持久化工作流状态到 SQLite */
+function persistState(state: OrchestratorState): void {
+  try {
+    const store = getWorkflowStore()
+    store.saveWorkflowState({
+      sessionId: state.sessionId,
+      workflowType: state.workflowType,
+      caseId: state.caseId,
+      currentStep: state.currentStep,
+      totalSteps: state.totalSteps,
+      status: state.status,
+      stepOutputs: state.stepOutputs,
+      startedAt: state.startedAt,
+    })
+  } catch (e: any) {
+    console.warn(`[YunPat] 工作流状态持久化失败 (${state.sessionId}):`, e?.message)
+  }
+}
+
 /**
  * 创建工作流
  */
@@ -101,6 +122,7 @@ export function createFlow(
     // 持久化失败不影响编排
   }
 
+  persistState(state)
   activeFlows.set(sessionId, state)
   return state
 }
@@ -135,6 +157,7 @@ export function advance(
     state.status = nextStep.requiresConfirmation ? "paused" : "running"
   }
 
+  persistState(state)
   activeFlows.set(sessionId, state)
   return state
 }
@@ -167,6 +190,53 @@ export function getFlowSteps(type: WorkflowType): OrchestratorStep[] {
  */
 export function reset(sessionId: string): void {
   activeFlows.delete(sessionId)
+  try {
+    getWorkflowStore().deleteWorkflowState(sessionId)
+  } catch { /* ignore */ }
+}
+
+/**
+ * 从持久化存储恢复工作流状态
+ *
+ * 插件启动时调用，恢复上次未完成的工作流。
+ */
+export function restorePersistedFlows(): number {
+  try {
+    const store = getWorkflowStore()
+    const persisted = store.loadActiveWorkflowStates()
+    let restored = 0
+    for (const state of persisted) {
+      // 跳过已过期的工作流
+      if (Date.now() - state.startedAt > FLOW_TTL) {
+        store.deleteWorkflowState(state.sessionId)
+        continue
+      }
+
+      const steps = WORKFLOW_REGISTRY[state.workflowType as WorkflowType]
+      if (!steps) continue
+
+      const orchestratorState: OrchestratorState = {
+        sessionId: state.sessionId,
+        caseId: state.caseId,
+        workflowType: state.workflowType as WorkflowType,
+        currentStep: state.currentStep,
+        totalSteps: state.totalSteps,
+        status: state.status as OrchestratorState["status"],
+        stepOutputs: state.stepOutputs,
+        startedAt: state.startedAt,
+      }
+
+      activeFlows.set(state.sessionId, orchestratorState)
+      restored++
+    }
+
+    if (restored > 0) {
+      console.log(`[YunPat] 恢复了 ${restored} 个未完成的工作流`)
+    }
+    return restored
+  } catch {
+    return 0
+  }
 }
 
 /**
@@ -181,6 +251,7 @@ export function failFlow(sessionId: string, error: unknown): void {
   state.status = "failed"
   const errorMsg = error instanceof Error ? error.message : String(error)
   state.stepOutputs["_error"] = errorMsg
+  persistState(state)
   activeFlows.set(sessionId, state)
 }
 

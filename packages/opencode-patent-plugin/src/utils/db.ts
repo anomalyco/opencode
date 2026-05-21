@@ -44,7 +44,11 @@ function getPool(config?: Partial<DBConfig>): Pool {
   const key = `${fullConfig.host}:${fullConfig.port}/${fullConfig.database}`
 
   let pool = poolCache.get(key)
-  if (!pool || pool.ended) {
+  if (pool?.ended) {
+    poolCache.delete(key)
+    pool = undefined
+  }
+  if (!pool) {
     pool = new Pool({
       host: fullConfig.host,
       port: fullConfig.port,
@@ -355,30 +359,87 @@ export function closeAllPools(): Promise<void> {
  * patent_db 向量搜索（语义相似度）
  *
  * 使用 pgvector 的 `<=>` 余弦距离运算符。
- * 注意：patent_db 的 embedding 列需要预先生成向量。
- * 当前策略：先用全文搜索缩小范围，再对 Top-K 做向量重排序。
+ * 通过 LLM embed() API 生成查询向量，实现真正的语义搜索。
  */
 const ALLOWED_VECTOR_COLUMNS = ["embedding_title", "embedding_abstract", "embedding_claims", "embedding_combined"] as const
+
+/** 缓存嵌入向量（query text → embedding），避免重复计算 */
+const embeddingCache = new SimpleCache<number[]>({ ttlMs: 300_000, maxSize: 100 })
+
+/**
+ * 获取查询文本的嵌入向量
+ *
+ * 优先使用 LLM embed API，不可用时降级为全文搜索。
+ */
+async function getQueryEmbedding(
+  queryText: string,
+  embedFn?: (texts: string[]) => Promise<number[][]>,
+): Promise<number[] | null> {
+  const cached = embeddingCache.get(queryText)
+  if (cached) return cached
+
+  if (!embedFn) return null
+
+  try {
+    const embeddings = await embedFn([queryText])
+    if (embeddings?.[0]?.length > 0) {
+      embeddingCache.set(queryText, embeddings[0])
+      return embeddings[0]
+    }
+  } catch (error: any) {
+    console.warn("[DB] Embedding generation failed:", error?.message)
+  }
+  return null
+}
 
 export async function searchPatentsSemantic(
   keyword: string,
   options: {
     limit?: number
     vectorColumn?: "embedding_title" | "embedding_abstract" | "embedding_claims" | "embedding_combined"
+    embedFn?: (texts: string[]) => Promise<number[][]>
   } = {},
 ): Promise<Array<PatentRecord & { vector_distance: number }>> {
-  const { limit = 10, vectorColumn = "embedding_combined" } = options
+  const { limit = 10, vectorColumn = "embedding_combined", embedFn } = options
 
-  // 运行时白名单验证（防止 SQL 注入）
   if (!ALLOWED_VECTOR_COLUMNS.includes(vectorColumn)) {
     throw new Error(`Invalid vectorColumn: ${vectorColumn}`)
   }
 
-  // 先用全文搜索获取候选集（避免全表扫描）
+  // 尝试真正的向量搜索
+  const queryEmbedding = await getQueryEmbedding(keyword, embedFn)
+  if (queryEmbedding && queryEmbedding.length > 0) {
+    try {
+      const vectorStr = `[${queryEmbedding.join(",")}]`
+      const sql = `
+        SELECT
+          patent_name,
+          application_number,
+          publication_number,
+          applicant,
+          inventor,
+          ipc_main_class,
+          abstract,
+          claims,
+          application_date,
+          patent_type,
+          ${vectorColumn} <=> $1::vector as vector_distance
+        FROM patents
+        WHERE ${vectorColumn} IS NOT NULL
+        ORDER BY ${vectorColumn} <=> $1::vector
+        LIMIT $2
+      `
+      const results = await queryPatentDB<PatentRecord & { vector_distance: number }>(sql, [vectorStr, limit])
+      if (results.length > 0) return results
+    } catch (error: any) {
+      console.warn("[DB] Vector search failed, falling back to FTS:", error?.message)
+    }
+  }
+
+  // 降级：全文搜索 + 候选集向量重排序
   const candidates = await searchPatents(keyword, { limit: limit * 3 })
   if (candidates.length === 0) return []
 
-  // 获取候选集的向量距离（如果向量存在）
   const appNumbers = candidates.map(p => p.application_number)
   const placeholders = appNumbers.map((_, i) => `$${i + 2}`).join(",")
 
@@ -406,7 +467,6 @@ export async function searchPatentsSemantic(
     LIMIT $${appNumbers.length + 2}
   `
 
-  // 以第一个结果的向量作为查询向量
   const params = [appNumbers[0], ...appNumbers, limit]
   return queryPatentDB(sql, params)
 }

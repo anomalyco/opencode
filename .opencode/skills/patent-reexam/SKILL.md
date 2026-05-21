@@ -1,6 +1,12 @@
 ---
 name: patent-reexam
 description: 复审请求分析与撰写工作流。4 步骤产出完整复审请求文件。
+version: "1.1.0"
+plugin_version: ">=0.1.0"
+tools:
+  - reexam_response
+  - patent_check
+workflow: reexam
 ---
 
 # 复审请求工作流

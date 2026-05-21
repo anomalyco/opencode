@@ -82,8 +82,23 @@ export class WorkflowStore {
       )
     `)
 
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS workflow_states (
+        session_id TEXT PRIMARY KEY,
+        workflow_type TEXT NOT NULL,
+        case_id TEXT,
+        current_step INTEGER NOT NULL,
+        total_steps INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'running',
+        step_outputs_json TEXT NOT NULL DEFAULT '{}',
+        started_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `)
+
     this.db.exec("CREATE INDEX IF NOT EXISTS idx_tmpl_type ON workflow_templates(task_type)")
     this.db.exec("CREATE INDEX IF NOT EXISTS idx_exec_session ON workflow_executions(session_id)")
+    this.db.exec("CREATE INDEX IF NOT EXISTS idx_state_status ON workflow_states(status)")
   }
 
   // ========== 模板管理 ==========
@@ -182,6 +197,92 @@ export class WorkflowStore {
     return this.db.prepare(
       "SELECT * FROM workflow_executions WHERE session_id = ? ORDER BY started_at DESC",
     ).all(sessionId) as WorkflowExecution[]
+  }
+
+  // ========== 工作流状态持久化 ==========
+
+  saveWorkflowState(state: {
+    sessionId: string
+    workflowType: string
+    caseId: string | null
+    currentStep: number
+    totalSteps: number
+    status: string
+    stepOutputs: Record<string, string>
+    startedAt: number
+  }): void {
+    const now = Date.now()
+    this.db.prepare(`
+      INSERT OR REPLACE INTO workflow_states
+        (session_id, workflow_type, case_id, current_step, total_steps, status, step_outputs_json, started_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      state.sessionId,
+      state.workflowType,
+      state.caseId ?? null,
+      state.currentStep,
+      state.totalSteps,
+      state.status,
+      JSON.stringify(state.stepOutputs),
+      state.startedAt,
+      now,
+    )
+  }
+
+  loadWorkflowState(sessionId: string): {
+    sessionId: string
+    workflowType: string
+    caseId: string | null
+    currentStep: number
+    totalSteps: number
+    status: string
+    stepOutputs: Record<string, string>
+    startedAt: number
+  } | null {
+    const row = this.db.prepare(
+      "SELECT * FROM workflow_states WHERE session_id = ?",
+    ).get(sessionId) as any
+    if (!row) return null
+    return {
+      sessionId: row.session_id,
+      workflowType: row.workflow_type,
+      caseId: row.case_id,
+      currentStep: row.current_step,
+      totalSteps: row.total_steps,
+      status: row.status,
+      stepOutputs: JSON.parse(row.step_outputs_json || "{}"),
+      startedAt: row.started_at,
+    }
+  }
+
+  deleteWorkflowState(sessionId: string): void {
+    this.db.prepare("DELETE FROM workflow_states WHERE session_id = ?").run(sessionId)
+  }
+
+  /** 恢复所有未完成的工作流状态 */
+  loadActiveWorkflowStates(): Array<{
+    sessionId: string
+    workflowType: string
+    caseId: string | null
+    currentStep: number
+    totalSteps: number
+    status: string
+    stepOutputs: Record<string, string>
+    startedAt: number
+  }> {
+    const rows = this.db.prepare(
+      "SELECT * FROM workflow_states WHERE status IN ('running', 'paused') ORDER BY updated_at DESC",
+    ).all() as any[]
+    return rows.map(row => ({
+      sessionId: row.session_id,
+      workflowType: row.workflow_type,
+      caseId: row.case_id,
+      currentStep: row.current_step,
+      totalSteps: row.total_steps,
+      status: row.status,
+      stepOutputs: JSON.parse(row.step_outputs_json || "{}"),
+      startedAt: row.started_at,
+    }))
   }
 
   close() {
