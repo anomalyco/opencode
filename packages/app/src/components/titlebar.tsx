@@ -22,6 +22,7 @@ import { iife } from "@opencode-ai/core/util/iife"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Avatar as AvatarV2 } from "@opencode-ai/ui/v2/components/avatar-v2.jsx"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
+import { makeEventListener } from "@solid-primitives/event-listener"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -296,6 +297,34 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const projects = createMemo(() => layout.projects.list())
             const projectByID = createMemo(
               () => new Map(projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
+            )
+
+            const currentSessionTab = () => {
+              if (!params.dir || !params.id) return
+              const href = makeSessionHref(params.dir, params.id)
+              if (!tabsStore.some((tab) => tab.href === href)) return
+              return href
+            }
+
+            const closeCurrentSessionTab = () => {
+              const href = currentSessionTab()
+              if (!href) return false
+              tabsStoreActions.removeTab(href)
+              return true
+            }
+
+            makeEventListener(
+              document,
+              "keydown",
+              (event) => {
+                if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+                if (event.key.toLowerCase() !== "w") return
+                if (!closeCurrentSessionTab()) return
+
+                event.preventDefault()
+                event.stopPropagation()
+              },
+              { capture: true },
             )
 
             const tabsEnriched = iife(() => {
@@ -578,15 +607,15 @@ function TabNavItem(props: {
   const isActive = () => !!match()
   return (
     <div
-      class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] pl-1.5 pr-8 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
+      class="group relative flex h-7 min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] bg-[var(--tab-bg)] pl-1.5 [--tab-bg:var(--v2-background-bg-deep)] hover:[--tab-bg:var(--v2-background-bg-layer-02)] data-[active='true']:[--tab-bg:var(--v2-background-bg-layer-02)]"
       data-active={isActive()}
     >
       <a
         href={props.href}
-        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-none tracking-[-0.04px] text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
+        class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium text-v2-text-text-faint group-data-[active='true']:text-v2-text-text-base"
       >
         <ProjectTabAvatar project={props.project} directory={props.directory} />
-        <span class="truncate">{props.title}</span>
+        <span class="text-clip">{props.title}</span>
       </a>
 
       <div class="absolute right-0 inset-y-0 flex flex-row items-center pr-1 py-1 w-8 pl-2">
@@ -624,7 +653,7 @@ function ProjectTabAvatar(props: { project?: LocalProject; directory: string }) 
 
 function NewSessionTabItem(props: { href: string; title: string; onClose: () => void }) {
   return (
-    <div class="group relative flex h-7 w-[135px] min-w-24 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]">
+    <div class="group relative flex h-7 max-w-60 flex-row items-center gap-1.5 overflow-hidden rounded-[6px] bg-[var(--v2-overlay-simple-overlay-pressed)] pl-1.5 pr-8 whitespace-nowrap focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--v2-border-border-focus)]">
       <a
         href={props.href}
         aria-current="page"
