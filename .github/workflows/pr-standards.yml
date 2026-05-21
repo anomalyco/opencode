@@ -34,8 +34,8 @@ jobs:
               path: '.github/TEAM_MEMBERS',
               ref: 'dev'
             });
-            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim()).filter(Boolean);
-            if (members.includes(login)) {
+            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim().toLowerCase()).filter(Boolean);
+            if (members.includes(login.toLowerCase())) {
               console.log(`Skipping: ${login} is a team member`);
               return;
             }
@@ -181,8 +181,8 @@ jobs:
               path: '.github/TEAM_MEMBERS',
               ref: 'dev'
             });
-            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim()).filter(Boolean);
-            if (members.includes(login)) {
+            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim().toLowerCase()).filter(Boolean);
+            if (members.includes(login.toLowerCase())) {
               console.log(`Skipping: ${login} is a team member`);
               return;
             }

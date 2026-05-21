@@ -17,12 +17,26 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Check team membership
+        id: team-check
+        run: |
+          LOGIN="${{ github.event.issue.user.login }}"
+          if grep -qxiF "$LOGIN" .github/TEAM_MEMBERS; then
+            echo "is_team=true" >> "$GITHUB_OUTPUT"
+            echo "Skipping: $LOGIN is a team member"
+          else
+            echo "is_team=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: ./.github/actions/setup-bun
+        if: steps.team-check.outputs.is_team != 'true'
 
       - name: Install opencode
+        if: steps.team-check.outputs.is_team != 'true'
         run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Check duplicates and compliance
+        if: steps.team-check.outputs.is_team != 'true'
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -129,12 +143,26 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Check team membership
+        id: team-check
+        run: |
+          LOGIN="${{ github.event.issue.user.login }}"
+          if grep -qxiF "$LOGIN" .github/TEAM_MEMBERS; then
+            echo "is_team=true" >> "$GITHUB_OUTPUT"
+            echo "Skipping: $LOGIN is a team member"
+          else
+            echo "is_team=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: ./.github/actions/setup-bun
+        if: steps.team-check.outputs.is_team != 'true'
 
       - name: Install opencode
+        if: steps.team-check.outputs.is_team != 'true'
         run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Recheck compliance
+        if: steps.team-check.outputs.is_team != 'true'
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

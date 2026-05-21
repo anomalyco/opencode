@@ -34,10 +34,30 @@ jobs:
 
             const now = Date.now();
             const twoHours = 2 * 60 * 60 * 1000;
+            const { data: teamFile } = await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: '.github/TEAM_MEMBERS',
+              ref: 'dev'
+            });
+            const teamMembers = Buffer.from(teamFile.content, 'base64').toString().split('\n').map(l => l.trim().toLowerCase()).filter(Boolean);
 
             for (const item of items) {
               const isPR = !!item.pull_request;
               const kind = isPR ? 'PR' : 'issue';
+
+              if (teamMembers.includes(item.user.login.toLowerCase())) {
+                core.info(`Skipping ${kind} #${item.number}: ${item.user.login} is a team member`);
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: item.number,
+                    name: 'needs:compliance',
+                  });
+                } catch (e) {}
+                continue;
+              }
 
               const { data: comments } = await github.rest.issues.listComments({
                 owner: context.repo.owner,

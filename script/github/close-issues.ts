@@ -15,7 +15,17 @@ const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
 type Issue = {
   number: number
   updated_at: string
+  user: {
+    login: string
+  }
 }
+
+const teamMembers = new Set(
+  (await Bun.file(new URL("../../.github/TEAM_MEMBERS", import.meta.url)).text())
+    .split("\n")
+    .map((login) => login.trim().toLowerCase())
+    .filter(Boolean),
+)
 
 const headers = {
   Authorization: `Bearer ${token}`,
@@ -63,6 +73,10 @@ async function main() {
     for (const i of all) {
       const updated = new Date(i.updated_at)
       if (updated < cutoff) {
+        if (teamMembers.has(i.user.login.toLowerCase())) {
+          console.log(`Skipping #${i.number}: ${i.user.login} is a team member`)
+          continue
+        }
         stale.push(i.number)
       } else {
         console.log(`\nFound fresh issue #${i.number}, stopping`)
