@@ -10,6 +10,22 @@ const it = testEffect(Layer.mergeAll(Truncate.defaultLayer, Agent.defaultLayer))
 
 const params = Schema.Struct({ input: Schema.String })
 
+function makeCtx(): Tool.Context {
+  return {
+    sessionID: SessionID.descending(),
+    messageID: MessageID.ascending(),
+    agent: "build",
+    abort: new AbortController().signal,
+    messages: [],
+    metadata() {
+      return Effect.void
+    },
+    ask() {
+      return Effect.void
+    },
+  }
+}
+
 function makeTool(id: string, executeFn?: () => void) {
   return {
     description: "test tool",
@@ -79,19 +95,7 @@ describe("Tool.define", () => {
           },
         }),
       )
-      const ctx: Tool.Context = {
-        sessionID: SessionID.descending(),
-        messageID: MessageID.ascending(),
-        agent: "build",
-        abort: new AbortController().signal,
-        messages: [],
-        metadata() {
-          return Effect.void
-        },
-        ask() {
-          return Effect.void
-        },
-      }
+      const ctx = makeCtx()
       const tool = yield* info.init()
       const execute = tool.execute as unknown as (args: unknown, ctx: Tool.Context) => ReturnType<typeof tool.execute>
 
@@ -127,38 +131,23 @@ describe("Tool.define", () => {
         }),
       )
       const tool = yield* info.init()
-      const ctx: Tool.Context = {
-        sessionID: SessionID.descending(),
-        messageID: MessageID.ascending(),
-        agent: "build",
-        abort: new AbortController().signal,
-        messages: [],
-        metadata() {
-          return Effect.void
-        },
-        ask() {
-          return Effect.void
-        },
-      }
       const execute = tool.execute as unknown as (args: unknown, ctx: Tool.Context) => ReturnType<typeof tool.execute>
 
       // Missing required `question` field on the first questions[] entry.
-      const exit = yield* execute({ questions: [{ options: ["a"] }] }, ctx).pipe(Effect.exit)
+      const exit = yield* execute({ questions: [{ options: ["a"] }] }, makeCtx()).pipe(Effect.exit)
       expect(Exit.isFailure(exit)).toBe(true)
       if (!Exit.isFailure(exit)) return
 
       // The wrap ends with Effect.orDie, so the failure lives in the cause as a
       // defect. Recover the typed instance from there.
       const die = exit.cause.reasons.find(Cause.isDieReason)
-      expect(die).toBeDefined()
       const error = die?.defect
       expect(error).toBeInstanceOf(Tool.InvalidArgumentsError)
-      if (!(error instanceof Tool.InvalidArgumentsError)) return
-
-      expect(error.tool).toBe("qtest")
-      expect(error.message).toContain("qtest tool was called with invalid arguments")
-      expect(error.message).toContain("Please rewrite the input")
-      expect(error.message).toContain(`["questions"][0]["question"]`)
+      const args = error as Tool.InvalidArgumentsError
+      expect(args.tool).toBe("qtest")
+      expect(args.message).toContain("qtest tool was called with invalid arguments")
+      expect(args.message).toContain("Please rewrite the input")
+      expect(args.message).toContain(`["questions"][0]["question"]`)
     }),
   )
 })
