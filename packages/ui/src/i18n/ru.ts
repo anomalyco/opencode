@@ -45,6 +45,15 @@ export const dict = {
   "ui.sessionTurn.error.freeUsageExceeded": "Лимит бесплатного использования превышен",
   "ui.sessionTurn.error.addCredits": "Добавить кредиты",
 
+  "dialog.usageExceeded.freeTier.title": "Достигнут бесплатный лимит",
+  "dialog.usageExceeded.freeTier.description":
+    "Подпишитесь на OpenCode Go для надёжного доступа к лучшим моделям с открытым исходным кодом, от $5/месяц.",
+  "dialog.usageExceeded.freeTier.actionLabel": "Подписаться",
+  "dialog.usageExceeded.accountRateLimit.title": "Достигнут лимит Go",
+  "dialog.usageExceeded.accountRateLimit.description":
+    "Достигнут лимит использования. Чтобы продолжить использовать эту модель сейчас, включите использование из доступного баланса",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "Открыть настройки",
+
   "ui.sessionTurn.status.delegating": "Делегирование работы",
   "ui.sessionTurn.status.planning": "Планирование следующих шагов",
   "ui.sessionTurn.status.gatheringContext": "Исследование",
@@ -59,7 +68,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Рассмотрение следующих шагов",
 
   "ui.messagePart.questions.dismissed": "Вопросы отклонены",
-  "ui.messagePart.compaction": "История сжата",
+  "ui.messagePart.compaction": "Сессия сжата",
   "ui.messagePart.context.read.one": "{{count}} чтение",
   "ui.messagePart.context.read.other": "{{count}} чтений",
   "ui.messagePart.context.search.one": "{{count}} поиск",
@@ -94,7 +103,6 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
   "ui.tool.websearch": "Веб-поиск",
-  "ui.tool.codesearch": "Поиск кода",
   "ui.tool.shell": "Оболочка",
   "ui.tool.patch": "Патч",
   "ui.tool.todos": "Задачи",
@@ -125,6 +133,8 @@ export const dict = {
   "ui.message.collapse": "Свернуть сообщение",
   "ui.message.copy": "Копировать",
   "ui.message.copyMessage": "Копировать сообщение",
+  "ui.message.forkMessage": "Ответвить в новую сессию",
+  "ui.message.revertMessage": "Сбросить до этого момента",
   "ui.message.copyResponse": "Копировать ответ",
   "ui.message.copied": "Скопировано!",
   "ui.message.interrupted": "Прервано",
@@ -142,4 +152,16 @@ export const dict = {
   "ui.question.multiHint": "Выберите все подходящие",
   "ui.question.singleHint": "Выберите один ответ",
   "ui.question.custom.placeholder": "Введите ваш ответ...",
+
+  "ui.fileSearch.placeholder": "Найти",
+  "ui.fileSearch.previousMatch": "Предыдущее",
+  "ui.fileSearch.nextMatch": "Следующее",
+  "ui.fileSearch.close": "Закрыть поиск",
+  "ui.tool.task": "Задача",
+  "ui.tool.skill": "Навык",
+  "ui.basicTool.called": "Вызван `{{tool}}`",
+  "ui.toolErrorCard.failed": "Ошибка",
+  "ui.toolErrorCard.copyError": "Скопировать ошибку",
+  "ui.message.duration.seconds": "{{count}}с",
+  "ui.message.duration.minutesSeconds": "{{minutes}}м {{seconds}}с",
 }

@@ -1,0 +1,16 @@
+diff --git a/packages/opencode/test/session/retry.test.ts b/packages/opencode/test/session/retry.test.ts
+index 621ad99e9..63f599f0f 100644
+--- a/packages/opencode/test/session/retry.test.ts
++++ b/packages/opencode/test/session/retry.test.ts
+@@ -125,6 +125,11 @@ describe("session.retry.retryable", () => {
+ 
+     expect(SessionRetry.retryable(error)).toBeUndefined()
+   })
++
++  test("does not retry QuotaExceededError", () => {
++    const error = { name: "QuotaExceededError", data: { message: "Quota exceeded." } } as ReturnType<NamedError["toObject"]>
++    expect(SessionRetry.retryable(error)).toBeUndefined()
++  })
+ })
+ 
+ describe("session.message-v2.fromError", () => {

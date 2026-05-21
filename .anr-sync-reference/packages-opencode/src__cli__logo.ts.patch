@@ -1,0 +1,38 @@
+diff --git a/packages/opencode/src/cli/logo.ts b/packages/opencode/src/cli/logo.ts
+index 44fb93c15..a09197ef4 100644
+--- a/packages/opencode/src/cli/logo.ts
++++ b/packages/opencode/src/cli/logo.ts
+@@ -1,6 +1,32 @@
+-export const logo = {
++const standardLogo = {
+   left: ["                   ", "█▀▀█ █▀▀█ █▀▀█ █▀▀▄", "█__█ █__█ █^^^ █__█", "▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀"],
+   right: ["             ▄     ", "█▀▀▀ █▀▀█ █▀▀█ █▀▀█", "█___ █__█ █__█ █^^^", "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"],
+ }
+ 
++const anrLogo = {
++  left: [
++    "█████╗ ███╗   ██╗██████╗   ",
++    "██╔══██╗████╗  ██║██╔══██╗  ",
++    "███████║██╔██╗ ██║██████╔╝  ",
++    "██╔══██║██║╚██╗██║██╔══██╗  ",
++    "██║  ██║██║ ╚████║██║  ██║  ",
++    "╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝ ",
++  ],
++  right: [
++    "██████╗ ██████╗ ██████╗ ███████╗",
++    "██╔════╝██╔═══██╗██╔══██╗██╔════╝",
++    "██║     ██║   ██║██║  ██║█████╗  ",
++    "██║     ██║   ██║██║  ██║██╔══╝  ",
++    "╚██████╗╚██████╔╝██████╔╝███████╗",
++    " ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝",
++  ],
++}
++
++const isANR = () => process.env.OPENCODE_FLAVOR === "anr"
++export const logo = new Proxy({} as typeof anrLogo, {
++  get(_, prop) {
++    return isANR() ? (anrLogo as any)[prop] : (standardLogo as any)[prop]
++  },
++})
++
+ export const marks = "_^~"

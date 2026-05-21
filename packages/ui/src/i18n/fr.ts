@@ -46,6 +46,15 @@ export const dict = {
   "ui.sessionTurn.error.freeUsageExceeded": "Limite d'utilisation gratuite dépassée",
   "ui.sessionTurn.error.addCredits": "Ajouter des crédits",
 
+  "dialog.usageExceeded.freeTier.title": "Limite gratuite atteinte",
+  "dialog.usageExceeded.freeTier.description":
+    "Abonnez-vous à OpenCode Go pour un accès fiable aux meilleurs modèles open source, à partir de $5/mois.",
+  "dialog.usageExceeded.freeTier.actionLabel": "S'abonner",
+  "dialog.usageExceeded.accountRateLimit.title": "Limite Go atteinte",
+  "dialog.usageExceeded.accountRateLimit.description":
+    "Limite d'utilisation atteinte. Pour continuer à utiliser ce modèle maintenant, activez l'utilisation depuis votre solde disponible",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "Ouvrir les paramètres",
+
   "ui.sessionTurn.status.delegating": "Délégation du travail",
   "ui.sessionTurn.status.planning": "Planification des prochaines étapes",
   "ui.sessionTurn.status.gatheringContext": "Exploration",
@@ -60,7 +69,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Examen des prochaines étapes",
 
   "ui.messagePart.questions.dismissed": "Questions ignorées",
-  "ui.messagePart.compaction": "Historique compacté",
+  "ui.messagePart.compaction": "Session compactée",
   "ui.messagePart.context.read.one": "{{count}} lecture",
   "ui.messagePart.context.read.other": "{{count}} lectures",
   "ui.messagePart.context.search.one": "{{count}} recherche",
@@ -95,7 +104,6 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
   "ui.tool.websearch": "Recherche Web",
-  "ui.tool.codesearch": "Recherche de code",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Tâches",
@@ -126,6 +134,8 @@ export const dict = {
   "ui.message.collapse": "Réduire le message",
   "ui.message.copy": "Copier",
   "ui.message.copyMessage": "Copier le message",
+  "ui.message.forkMessage": "Bifurquer vers une nouvelle session",
+  "ui.message.revertMessage": "Réinitialiser à ce point",
   "ui.message.copyResponse": "Copier la réponse",
   "ui.message.copied": "Copié !",
   "ui.message.interrupted": "Interrompu",
@@ -143,4 +153,16 @@ export const dict = {
   "ui.question.multiHint": "Sélectionnez tout ce qui s'applique",
   "ui.question.singleHint": "Sélectionnez une réponse",
   "ui.question.custom.placeholder": "Tapez votre réponse...",
+
+  "ui.fileSearch.placeholder": "Rechercher",
+  "ui.fileSearch.previousMatch": "Précédent",
+  "ui.fileSearch.nextMatch": "Suivant",
+  "ui.fileSearch.close": "Fermer la recherche",
+  "ui.tool.task": "Tâche",
+  "ui.tool.skill": "Compétence",
+  "ui.basicTool.called": "Appelé `{{tool}}`",
+  "ui.toolErrorCard.failed": "Échoué",
+  "ui.toolErrorCard.copyError": "Copier l'erreur",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 }

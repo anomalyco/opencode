@@ -50,6 +50,14 @@ export const dict = {
   "ui.sessionTurn.error.freeUsageExceeded": "免費使用額度已用完",
   "ui.sessionTurn.error.addCredits": "新增點數",
 
+  "dialog.usageExceeded.freeTier.title": "已達免費額度上限",
+  "dialog.usageExceeded.freeTier.description": "訂閱 OpenCode Go，可靠地使用最佳開源模型，每月 $5 起。",
+  "dialog.usageExceeded.freeTier.actionLabel": "訂閱",
+  "dialog.usageExceeded.accountRateLimit.title": "已達 Go 額度上限",
+  "dialog.usageExceeded.accountRateLimit.description":
+    "已達使用額度上限。若要現在繼續使用此模型，請從可用餘額中啟用使用",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "開啟設定",
+
   "ui.sessionTurn.status.delegating": "正在委派工作",
   "ui.sessionTurn.status.planning": "正在規劃下一步",
   "ui.sessionTurn.status.gatheringContext": "正在探索",
@@ -64,7 +72,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "正在考慮下一步",
 
   "ui.messagePart.questions.dismissed": "問題已略過",
-  "ui.messagePart.compaction": "歷史已壓縮",
+  "ui.messagePart.compaction": "工作階段已壓縮",
   "ui.messagePart.context.read.one": "{{count}} 次讀取",
   "ui.messagePart.context.read.other": "{{count}} 次讀取",
   "ui.messagePart.context.search.one": "{{count}} 次搜尋",
@@ -99,7 +107,6 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
   "ui.tool.websearch": "網頁搜尋",
-  "ui.tool.codesearch": "程式碼搜尋",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "修補",
   "ui.tool.todos": "待辦",
@@ -130,6 +137,8 @@ export const dict = {
   "ui.message.collapse": "收合訊息",
   "ui.message.copy": "複製",
   "ui.message.copyMessage": "複製訊息",
+  "ui.message.forkMessage": "分支到新工作階段",
+  "ui.message.revertMessage": "重設至此點",
   "ui.message.copyResponse": "複製回覆",
   "ui.message.copied": "已複製！",
   "ui.message.interrupted": "已中斷",
@@ -147,4 +156,16 @@ export const dict = {
   "ui.question.multiHint": "可多選",
   "ui.question.singleHint": "選擇一個答案",
   "ui.question.custom.placeholder": "輸入你的答案...",
+
+  "ui.fileSearch.placeholder": "搜尋",
+  "ui.fileSearch.previousMatch": "上一個",
+  "ui.fileSearch.nextMatch": "下一個",
+  "ui.fileSearch.close": "關閉搜尋",
+  "ui.tool.task": "任務",
+  "ui.tool.skill": "技能",
+  "ui.basicTool.called": "呼叫了 `{{tool}}`",
+  "ui.toolErrorCard.failed": "失敗",
+  "ui.toolErrorCard.copyError": "複製錯誤",
+  "ui.message.duration.seconds": "{{count}}秒",
+  "ui.message.duration.minutesSeconds": "{{minutes}}分 {{seconds}}秒",
 } satisfies Partial<Record<Keys, string>>

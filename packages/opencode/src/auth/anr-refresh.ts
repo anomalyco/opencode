@@ -7,7 +7,7 @@
  * Extracted into its own module to avoid circular imports from index.ts.
  */
 
-import { Log } from "@/util/log"
+import * as Log from "@opencode-ai/core/util/log"
 
 const log = Log.create({ service: "auth.anr-refresh" })
 const BUFFER_MS = 5 * 60 * 1000 // refresh 5 minutes before expiry

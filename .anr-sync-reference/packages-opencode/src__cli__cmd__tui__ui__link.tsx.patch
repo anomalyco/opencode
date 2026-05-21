@@ -1,0 +1,21 @@
+diff --git a/packages/opencode/src/cli/cmd/tui/ui/link.tsx b/packages/opencode/src/cli/cmd/tui/ui/link.tsx
+index 3b328e478..92cd1b0b1 100644
+--- a/packages/opencode/src/cli/cmd/tui/ui/link.tsx
++++ b/packages/opencode/src/cli/cmd/tui/ui/link.tsx
+@@ -1,6 +1,6 @@
+ import type { JSX } from "solid-js"
+ import type { RGBA } from "@opentui/core"
+-import open from "open"
++import { open } from "@/util/open"
+ 
+ export interface LinkProps {
+   href: string
+@@ -19,7 +19,7 @@ export function Link(props: LinkProps) {
+     <text
+       fg={props.fg}
+       onMouseUp={() => {
+-        open(props.href).catch(() => {})
++        open(props.href)
+       }}
+     >
+       {displayText}

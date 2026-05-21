@@ -1,0 +1,27 @@
+diff --git a/.github/workflows/beta.yml b/.github/workflows/beta.yml
+index a7106667b..cc020cd5e 100644
+--- a/.github/workflows/beta.yml
++++ b/.github/workflows/beta.yml
+@@ -1,13 +1,19 @@
+ name: beta
+ 
++# Disabled — uncomment triggers below to re-enable
+ on:
++  # workflow_dispatch:
++  # schedule:
++  #   - cron: "0 * * * *"
+   workflow_dispatch:
+-  schedule:
+-    - cron: "0 * * * *"
++    inputs:
++      _unused:
++        description: "Workflow is disabled"
++        required: true
+ 
+ jobs:
+   sync:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
++    runs-on: ubuntu-latest
+     permissions:
+       contents: write
+       pull-requests: write

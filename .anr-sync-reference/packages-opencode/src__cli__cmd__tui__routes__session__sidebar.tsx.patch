@@ -1,0 +1,131 @@
+diff --git a/packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx b/packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx
+index 42ac5fbe0..ca64b0c6c 100644
+--- a/packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx
++++ b/packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx
+@@ -2,6 +2,8 @@ import { useSync } from "@tui/context/sync"
+ import { createMemo, For, Show, Switch, Match } from "solid-js"
+ import { createStore } from "solid-js/store"
+ import { useTheme } from "../../context/theme"
++import { useQuota } from "../../context/quota"
++import { dailyResetInfo, monthlyResetInfo } from "@opencode-ai/anr-core"
+ import { Locale } from "@/util/locale"
+ import path from "path"
+ import type { AssistantMessage } from "@opencode-ai/sdk/v2"
+@@ -15,6 +17,7 @@ import { TodoItem } from "../../component/todo-item"
+ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
+   const sync = useSync()
+   const { theme } = useTheme()
++  const quota = useQuota()
+   const session = createMemo(() => sync.session.get(props.sessionID)!)
+   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
+   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
+@@ -48,6 +51,13 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
+     }).format(total)
+   })
+ 
++  // Helper to get color for individual quota percentages
++  const getQuotaColor = (percent: number): "green" | "yellow" | "red" => {
++    if (percent >= 90) return "red"
++    if (percent >= 80) return "yellow"
++    return "green"
++  }
++
+   const context = createMemo(() => {
+     const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
+     if (!last) return
+@@ -106,6 +116,95 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
+               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
+               <text fg={theme.textMuted}>{cost()} spent</text>
+             </box>
++            <Show when={quota.dailyLimit > 0 || quota.monthlyLimit > 0}>
++              <box>
++                <text fg={theme.text}>
++                  <b>Quota</b>
++                </text>
++                <Show when={quota.dailyLimit > 0}>
++                  <box gap={0.25}>
++                    <box flexDirection="row" alignItems="center" gap={1}>
++                      <text
++                        fg={
++                          {
++                            green: theme.success,
++                            yellow: theme.warning,
++                            red: theme.error,
++                          }[getQuotaColor(quota.effectiveDailyPercent)]
++                        }
++                      >
++                        Daily: {quota.effectiveDailyPercent}%
++                      </text>
++                      <box width={20} height={1} backgroundColor={theme.backgroundElement}>
++                        <box
++                          width={Math.max(1, Math.round((quota.effectiveDailyPercent / 100) * 20))}
++                          height={1}
++                          backgroundColor={
++                            {
++                              green: theme.success,
++                              yellow: theme.warning,
++                              red: theme.error,
++                            }[getQuotaColor(quota.effectiveDailyPercent)]
++                          }
++                        />
++                      </box>
++                    </box>
++                    <text fg={theme.textMuted}>
++                      {quota.effectiveDailyTokens.toLocaleString()} / {quota.dailyLimit.toLocaleString()} tokens
++                    </text>
++                  </box>
++                </Show>
++                <Show when={quota.monthlyLimit > 0}>
++                  <box gap={0.25} marginTop={0.5}>
++                    <box flexDirection="row" alignItems="center" gap={1}>
++                      <text
++                        fg={
++                          {
++                            green: theme.success,
++                            yellow: theme.warning,
++                            red: theme.error,
++                          }[getQuotaColor(quota.effectiveMonthlyPercent)]
++                        }
++                      >
++                        Monthly: {quota.effectiveMonthlyPercent}%
++                      </text>
++                      <box width={20} height={1} backgroundColor={theme.backgroundElement}>
++                        <box
++                          width={Math.max(1, Math.round((quota.effectiveMonthlyPercent / 100) * 20))}
++                          height={1}
++                          backgroundColor={
++                            {
++                              green: theme.success,
++                              yellow: theme.warning,
++                              red: theme.error,
++                            }[getQuotaColor(quota.effectiveMonthlyPercent)]
++                          }
++                        />
++                      </box>
++                    </box>
++                    <text fg={theme.textMuted}>
++                      {quota.effectiveMonthlyTokens.toLocaleString()} / {quota.monthlyLimit.toLocaleString()} tokens
++                    </text>
++                  </box>
++                </Show>
++                <Show when={quota.effectiveWarningLevel === "warning"}>
++                  <text fg={theme.warning}>⚠️ Approaching quota limit</text>
++                </Show>
++                <Show when={quota.effectiveWarningLevel === "critical" && Math.max(quota.effectiveDailyPercent, quota.effectiveMonthlyPercent) < 100}>
++                  <text fg={theme.error}>⚠️ Nearing quota limit</text>
++                </Show>
++                <Show when={Math.max(quota.effectiveDailyPercent, quota.effectiveMonthlyPercent) >= 100}>
++                  <text fg={theme.error}>🚫 Quota exceeded</text>
++                  <Show when={quota.effectiveDailyPercent >= 100}>
++                    <text fg={theme.textMuted}>   {dailyResetInfo()}</text>
++                  </Show>
++                  <Show when={quota.effectiveMonthlyPercent >= 100}>
++                    <text fg={theme.textMuted}>   {monthlyResetInfo()}</text>
++                  </Show>
++                  <text fg={theme.textMuted}>   Contact your administrator for limit increases.</text>
++                </Show>
++              </box>
++            </Show>
+             <Show when={mcpEntries().length > 0}>
+               <box>
+                 <box

@@ -7,6 +7,7 @@ import { useFile } from "@/context/file"
 import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
+import { useProviders } from "@/hooks/use-providers"
 import { getSessionContextMetrics } from "@/components/session/session-context-metrics"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
@@ -23,7 +24,7 @@ function openSessionContext(args: {
 }) {
   if (!args.view.reviewPanel.opened()) args.view.reviewPanel.open()
   if (args.layout.fileTree.opened() && args.layout.fileTree.tab() !== "all") args.layout.fileTree.setTab("all")
-  args.tabs.open("context")
+  void args.tabs.open("context")
   args.tabs.setActive("context")
 }
 
@@ -32,6 +33,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const file = useFile()
   const layout = useLayout()
   const language = useLanguage()
+  const providers = useProviders()
   const { params, tabs, view } = useSessionLayout()
 
   const variant = createMemo(() => props.variant ?? "button")
@@ -50,7 +52,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       }),
   )
 
-  const metrics = createMemo(() => getSessionContextMetrics(messages(), sync.data.provider.all))
+  const metrics = createMemo(() => getSessionContextMetrics(messages(), providers.all()))
   const context = createMemo(() => metrics().context)
   const cost = createMemo(() => {
     return usd().format(metrics().totalCost)

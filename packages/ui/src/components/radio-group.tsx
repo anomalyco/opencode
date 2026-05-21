@@ -56,7 +56,7 @@ export function RadioGroup<T>(props: RadioGroupProps<T>) {
       data-fill={local.fill ? "" : undefined}
       data-pad={local.pad ?? "normal"}
       classList={{
-        ...(local.classList ?? {}),
+        ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
       value={local.current ? getValue(local.current) : undefined}

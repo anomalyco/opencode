@@ -1,0 +1,34 @@
+diff --git a/packages/opencode/src/cli/cmd/tui/thread.ts b/packages/opencode/src/cli/cmd/tui/thread.ts
+index 6e787c7af..2002ff22c 100644
+--- a/packages/opencode/src/cli/cmd/tui/thread.ts
++++ b/packages/opencode/src/cli/cmd/tui/thread.ts
+@@ -1,5 +1,7 @@
+ import { cmd } from "@/cli/cmd/cmd"
+ import { tui } from "./app"
++import { quotaInfo } from "@/index"
++import { onRefresh as onANRCredentialRefresh } from "@/auth/anr-refresh"
+ import { Rpc } from "@/util/rpc"
+ import { type rpc } from "./worker"
+ import path from "path"
+@@ -152,6 +154,13 @@ export const TuiThreadCommand = cmd({
+       process.on("unhandledRejection", error)
+       process.on("SIGUSR2", reload)
+ 
++      // Propagate credential refreshes to the worker in ANR mode
++      if (process.env.OPENCODE_FLAVOR === "anr") {
++        onANRCredentialRefresh((creds) => {
++          client.call("updateCredentials", creds).catch(() => {})
++        })
++      }
++
+       let stopped = false
+       const stop = async () => {
+         if (stopped) return
+@@ -205,6 +214,7 @@ export const TuiThreadCommand = cmd({
+           directory: cwd,
+           fetch: transport.fetch,
+           events: transport.events,
++          quotaInfo: quotaInfo || undefined,
+           args: {
+             continue: args.continue,
+             sessionID: args.session,

@@ -1,7 +1,6 @@
 import { Schema } from "effect"
-import z from "zod"
 
-import { withStatics } from "@/util/schema"
+import { withStatics } from "@opencode-ai/core/schema"
 
 const providerIdSchema = Schema.String.pipe(Schema.brand("ProviderID"))
 
@@ -9,20 +8,18 @@ export type ProviderID = typeof providerIdSchema.Type
 
 export const ProviderID = providerIdSchema.pipe(
   withStatics((schema: typeof providerIdSchema) => ({
-    make: (id: string) => schema.makeUnsafe(id),
-    zod: z.string().pipe(z.custom<ProviderID>()),
     // Well-known providers
-    opencode: schema.makeUnsafe("opencode"),
-    anthropic: schema.makeUnsafe("anthropic"),
-    openai: schema.makeUnsafe("openai"),
-    google: schema.makeUnsafe("google"),
-    googleVertex: schema.makeUnsafe("google-vertex"),
-    githubCopilot: schema.makeUnsafe("github-copilot"),
-    githubCopilotEnterprise: schema.makeUnsafe("github-copilot-enterprise"),
-    amazonBedrock: schema.makeUnsafe("amazon-bedrock"),
-    azure: schema.makeUnsafe("azure"),
-    openrouter: schema.makeUnsafe("openrouter"),
-    mistral: schema.makeUnsafe("mistral"),
+    opencode: schema.make("opencode"),
+    anthropic: schema.make("anthropic"),
+    openai: schema.make("openai"),
+    google: schema.make("google"),
+    googleVertex: schema.make("google-vertex"),
+    githubCopilot: schema.make("github-copilot"),
+    amazonBedrock: schema.make("amazon-bedrock"),
+    azure: schema.make("azure"),
+    openrouter: schema.make("openrouter"),
+    mistral: schema.make("mistral"),
+    gitlab: schema.make("gitlab"),
   })),
 )
 
@@ -30,9 +27,4 @@ const modelIdSchema = Schema.String.pipe(Schema.brand("ModelID"))
 
 export type ModelID = typeof modelIdSchema.Type
 
-export const ModelID = modelIdSchema.pipe(
-  withStatics((schema: typeof modelIdSchema) => ({
-    make: (id: string) => schema.makeUnsafe(id),
-    zod: z.string().pipe(z.custom<ModelID>()),
-  })),
-)
+export const ModelID = modelIdSchema

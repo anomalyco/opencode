@@ -1,6 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 
 type PersistTestingType = typeof import("./persist").PersistTesting
+type PersistType = typeof import("./persist").Persist
+type RemovePersistedType = typeof import("./persist").removePersisted
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>()
@@ -45,6 +47,8 @@ class MemoryStorage implements Storage {
 const storage = new MemoryStorage()
 
 let persistTesting: PersistTestingType
+let Persist: PersistType
+let removePersisted: RemovePersistedType
 
 beforeAll(async () => {
   mock.module("@/context/platform", () => ({
@@ -53,6 +57,8 @@ beforeAll(async () => {
 
   const mod = await import("./persist")
   persistTesting = mod.PersistTesting
+  Persist = mod.Persist
+  removePersisted = mod.removePersisted
 })
 
 beforeEach(() => {
@@ -111,5 +117,51 @@ describe("persist localStorage resilience", () => {
     expect(result).toStartWith("opencode.workspace.")
     expect(result.endsWith(".dat")).toBeTrue()
     expect(/[:\\/]/.test(result)).toBeFalse()
+  })
+
+  test("workspace target keeps raw path storage as legacy fallback", () => {
+    const target = Persist.workspace("C:\\Users\\foo", "vcs")
+
+    expect(target.storage).toBe(persistTesting.workspaceStorage("C:/Users/foo"))
+    expect(target.legacyStorageNames).toEqual([persistTesting.workspaceStorage("C:\\Users\\foo")])
+  })
+
+  test("workspace target keeps backslash storage as fallback for normalized Windows paths", () => {
+    const target = Persist.workspace("C:/Users/foo", "vcs")
+
+    expect(target.storage).toBe(persistTesting.workspaceStorage("C:/Users/foo"))
+    expect(target.legacyStorageNames).toEqual([persistTesting.workspaceStorage("C:\\Users\\foo")])
+  })
+
+  test("migrates direct legacy keys into scoped storage", () => {
+    storage.setItem("legacy.workspace", '{"value":2}')
+    const target = Persist.workspace("C:/Users/foo", "demo", ["legacy.workspace"])
+    const current = persistTesting.localStorageWithPrefix(target.storage!)
+    const legacyStore = persistTesting.localStorageDirect()
+
+    const result = persistTesting.migrateLegacy({
+      current,
+      legacyStore,
+      stores: [],
+      keys: target.legacy!,
+      key: target.key,
+      defaults: { value: 1 },
+    })
+
+    expect(result).toBe('{"value":2}')
+    expect(storage.getItem(`${target.storage}:${target.key}`)).toBe('{"value":2}')
+    expect(legacyStore.getItem("legacy.workspace")).toBeNull()
+    expect(storage.getItem("legacy.workspace")).toBeNull()
+  })
+
+  test("removes legacy workspace storage when removing persisted target", () => {
+    const target = Persist.workspace("C:\\Users\\foo", "terminal")
+    storage.setItem(`${target.storage}:${target.key}`, '{"value":1}')
+    storage.setItem(`${target.legacyStorageNames![0]}:${target.key}`, '{"value":2}')
+
+    removePersisted(target)
+
+    expect(storage.getItem(`${target.storage}:${target.key}`)).toBeNull()
+    expect(storage.getItem(`${target.legacyStorageNames![0]}:${target.key}`)).toBeNull()
   })
 })

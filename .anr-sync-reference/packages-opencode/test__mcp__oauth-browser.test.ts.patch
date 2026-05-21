@@ -1,0 +1,15 @@
+diff --git a/packages/opencode/test/mcp/oauth-browser.test.ts b/packages/opencode/test/mcp/oauth-browser.test.ts
+index ee4429be7..a2d0fe551 100644
+--- a/packages/opencode/test/mcp/oauth-browser.test.ts
++++ b/packages/opencode/test/mcp/oauth-browser.test.ts
+@@ -5,8 +5,8 @@ import { EventEmitter } from "events"
+ let openShouldFail = false
+ let openCalledWith: string | undefined
+ 
+-mock.module("open", () => ({
+-  default: async (url: string) => {
++mock.module("../../src/util/open", () => ({
++  open: (url: string) => {
+     openCalledWith = url
+ 
+     // Return a mock subprocess that emits an error if openShouldFail is true

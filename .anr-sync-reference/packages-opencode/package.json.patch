@@ -1,0 +1,47 @@
+diff --git a/packages/opencode/package.json b/packages/opencode/package.json
+index e277977f7..afd6e4963 100644
+--- a/packages/opencode/package.json
++++ b/packages/opencode/package.json
+@@ -1,6 +1,6 @@
+ {
+   "$schema": "https://json.schemastore.org/package.json",
+-  "version": "1.2.24",
++  "version": "0.0.2",
+   "name": "opencode",
+   "type": "module",
+   "license": "MIT",
+@@ -16,7 +16,17 @@
+     "format": "echo 'Formatting code...' && bun run --prettier --write src/**/*.ts",
+     "docs": "echo 'Generating documentation...' && find src -name '*.ts' -exec echo 'Processing: {}' \\;",
+     "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'",
+-    "db": "bun drizzle-kit"
++    "db": "bun drizzle-kit",
++    "otel:status": "bun src/index.ts debug otel status",
++    "otel:logs": "bun src/index.ts debug otel logs",
++    "otel:validate": "bun src/index.ts debug otel validate",
++    "otel:preview": "bun src/index.ts debug otel preview",
++    "otel:trace": "bun src/index.ts debug otel trace",
++    "otel:simulate": "bun src/index.ts debug otel simulate",
++    "otel:metrics": "bun src/index.ts debug otel metrics",
++    "otel:reset": "bun src/index.ts debug otel reset-stats",
++    "otel:test-endpoint": "bun src/index.ts debug otel test-endpoint",
++    "otel:test-harness": "bun src/index.ts debug otel test-harness"
+   },
+   "bin": {
+     "opencode": "./bin/opencode"
+@@ -88,6 +98,7 @@
+     "@octokit/graphql": "9.0.2",
+     "@octokit/rest": "catalog:",
+     "@openauthjs/openauth": "catalog:",
++    "@opencode-ai/anr-core": "workspace:*",
+     "@opencode-ai/plugin": "workspace:*",
+     "@opencode-ai/script": "workspace:*",
+     "@opencode-ai/sdk": "workspace:*",
+@@ -121,7 +132,6 @@
+     "jsonc-parser": "3.3.1",
+     "mime-types": "3.0.2",
+     "minimatch": "10.0.3",
+-    "open": "10.1.2",
+     "opentui-spinner": "0.0.6",
+     "partial-json": "0.1.7",
+     "remeda": "catalog:",

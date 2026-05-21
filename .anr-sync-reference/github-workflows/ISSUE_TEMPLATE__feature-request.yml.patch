@@ -1,0 +1,91 @@
+diff --git a/.github/ISSUE_TEMPLATE/feature-request.yml b/.github/ISSUE_TEMPLATE/feature-request.yml
+index 92e6c4757..f3cb9fc61 100644
+--- a/.github/ISSUE_TEMPLATE/feature-request.yml
++++ b/.github/ISSUE_TEMPLATE/feature-request.yml
+@@ -1,20 +1,75 @@
+-name: 🚀 Feature Request
+-description: Suggest an idea, feature, or enhancement
+-labels: [discussion]
+-title: "[FEATURE]:"
++name: Feature request
++title: '[Feature]: '
++labels:
++  - feature
++  - frontend
++  - react
++  - typescript
++assignees: []
++description: Submit an idea for this project
+ 
+ body:
+-  - type: checkboxes
+-    id: verified
++  - type: markdown
+     attributes:
+-      label: Feature hasn't been suggested before.
++      value: |
++        ## Instructions
++
++        Please fill out each section as thoroughly as possible. This template is designed for architectural rigor and clarity.
++
++  - type: dropdown
++    id: priority
++    attributes:
++      label: Priority
++      description: Set priority based on impact—High for user-facing features.
+       options:
+-        - label: I have verified this feature I'm about to request hasn't been suggested before.
+-          required: true
++        - High
++        - Medium
++        - Low
++    validations:
++      required: true
++
++  - type: input
++    id: component
++    attributes:
++      label: Component
++      description: Name and exact path of the affected component (e.g., `[ComponentName.tsx]` in `[path/to/component]`).
++    validations:
++      required: true
+ 
+   - type: textarea
++    id: description
+     attributes:
+-      label: Describe the enhancement you want to request
+-      description: What do you want to change or add? What are the benefits of implementing this? Try to be detailed so we can understand your request better :)
++      label: Feature Description
++      description: Provide a detailed description including purpose, user impact, business or technical requirements, and deliverables.
+     validations:
+       required: true
++
++  - type: textarea
++    id: additional-requirements
++    attributes:
++      label: Additional Requirements
++      description: Any extra specifics for internationalization, browser support, responsive design, and compliance.
++
++  - type: markdown
++    attributes:
++      value: |
++        ## Instructions for Copilot
++
++        - Branch off the relevant base branch (e.g., `main` or `Sprint1`) as `feature/[short-feature-name]`
++        - Use React, TypeScript, and project style guides (see `../copilot-instructions.md`)
++        - Separate UI, logic, hooks; follow code style and conventions
++        - Mock APIs and dependencies for testing (`vi.mock`, `vi.spyOn`)
++        - Integrate with state management/context as needed
++        - Write/update unit tests achieving ≥80% coverage; all tests must pass
++        - Commit in conventional style: `feat(admin): add bedrock agent admin tab UI`
++        - Reference this issue in your PR with UI screenshots/video and test coverage summary
++        - Update relevant docs; capture implementation details in `doco/` folder
++        - Cognitive Complexity <15 for all code
++
++
++
++  - type: textarea
++    id: acceptance-criteria
++    attributes:
++      label: Acceptance Criteria
++      description: List all requirements for implementation, testing, accessibility, code style, coverage, security, docs, and clean integration with existing codebase.

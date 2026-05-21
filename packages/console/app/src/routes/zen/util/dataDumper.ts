@@ -1,6 +1,7 @@
 import { Resource, waitUntil } from "@opencode-ai/console-resource"
 
 export function createDataDumper(sessionId: string, requestId: string, projectId: string) {
+  return
   if (Resource.App.stage !== "production") return
   if (sessionId === "") return
 
@@ -26,14 +27,14 @@ export function createDataDumper(sessionId: string, requestId: string, projectId
       const minute = timestamp.substring(10, 12)
       const second = timestamp.substring(12, 14)
 
-      waitUntil(
+      void waitUntil(
         Resource.ZenDataNew.put(
           `data/${data.modelName}/${year}/${month}/${day}/${hour}/${minute}/${second}/${requestId}.json`,
           JSON.stringify({ timestamp, ...data }),
         ),
       )
 
-      waitUntil(
+      void waitUntil(
         Resource.ZenDataNew.put(
           `meta/${data.modelName}/${sessionId}/${requestId}.json`,
           JSON.stringify({ timestamp, ...metadata }),

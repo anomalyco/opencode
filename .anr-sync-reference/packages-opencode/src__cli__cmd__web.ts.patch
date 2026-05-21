@@ -1,0 +1,27 @@
+diff --git a/packages/opencode/src/cli/cmd/web.ts b/packages/opencode/src/cli/cmd/web.ts
+index 0fe056f21..8d700ca10 100644
+--- a/packages/opencode/src/cli/cmd/web.ts
++++ b/packages/opencode/src/cli/cmd/web.ts
+@@ -3,7 +3,7 @@ import { UI } from "../ui"
+ import { cmd } from "./cmd"
+ import { withNetworkOptions, resolveNetworkOptions } from "../network"
+ import { Flag } from "../../flag/flag"
+-import open from "open"
++import { open } from "../../util/open"
+ import { networkInterfaces } from "os"
+ 
+ function getNetworkIPs() {
+@@ -68,11 +68,11 @@ export const WebCommand = cmd({
+       }
+ 
+       // Open localhost in browser
+-      open(localhostUrl.toString()).catch(() => {})
++      open(localhostUrl.toString())
+     } else {
+       const displayUrl = server.url.toString()
+       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)
+-      open(displayUrl).catch(() => {})
++      open(displayUrl)
+     }
+ 
+     await new Promise(() => {})

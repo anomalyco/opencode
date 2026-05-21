@@ -140,7 +140,7 @@ export async function logAuditEvent(
       new PutCommand({
         TableName: config.auditTableName,
         Item: dbItem,
-      }),
+      }) as any,
     )
 
     // Audit event logged to DynamoDB (silent to avoid TUI pollution)

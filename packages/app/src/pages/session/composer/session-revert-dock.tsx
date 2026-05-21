@@ -1,4 +1,4 @@
-import { For, Show, createMemo } from "solid-js"
+import { For, Show, createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { DockTray } from "@opencode-ai/ui/dock-surface"
@@ -8,11 +8,18 @@ import { useLanguage } from "@/context/language"
 export function SessionRevertDock(props: {
   items: { id: string; text: string }[]
   restoring?: string
+  disabled?: boolean
   onRestore: (id: string) => void
 }) {
   const language = useLanguage()
   const [store, setStore] = createStore({
-    collapsed: false,
+    collapsed: true,
+  })
+
+  createEffect(() => {
+    props.items.length
+    props.items[0]?.id
+    setStore("collapsed", true)
   })
 
   const toggle = () => setStore("collapsed", (value) => !value)
@@ -68,16 +75,16 @@ export function SessionRevertDock(props: {
       </Show>
 
       <Show when={!store.collapsed}>
-        <div class="px-3 pb-11 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar">
+        <div class="px-3 pb-7 flex flex-col gap-1.5 max-h-42 overflow-y-auto no-scrollbar">
           <For each={props.items}>
             {(item) => (
-              <div class="flex items-center gap-2 min-w-0 rounded-[10px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+              <div class="flex items-center gap-2 min-w-0 py-1">
                 <span class="min-w-0 flex-1 truncate text-13-regular text-text-strong">{item.text}</span>
                 <Button
                   size="small"
                   variant="secondary"
                   class="shrink-0"
-                  disabled={!!props.restoring}
+                  disabled={props.disabled || !!props.restoring}
                   onClick={() => props.onRestore(item.id)}
                 >
                   {language.t("session.revertDock.restore")}

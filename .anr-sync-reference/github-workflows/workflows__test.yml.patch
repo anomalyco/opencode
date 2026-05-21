@@ -1,0 +1,40 @@
+diff --git a/.github/workflows/test.yml b/.github/workflows/test.yml
+index d9eded3f1..3d8017ef1 100644
+--- a/.github/workflows/test.yml
++++ b/.github/workflows/test.yml
+@@ -1,10 +1,6 @@
+ name: test
+ 
+ on:
+-  push:
+-    branches:
+-      - dev
+-  pull_request:
+   workflow_dispatch:
+ 
+ concurrency:
+@@ -22,9 +18,9 @@ jobs:
+       matrix:
+         settings:
+           - name: linux
+-            host: blacksmith-4vcpu-ubuntu-2404
++            host: ubuntu-latest
+           - name: windows
+-            host: blacksmith-4vcpu-windows-2025
++            host: windows-latest
+     runs-on: ${{ matrix.settings.host }}
+     defaults:
+       run:
+@@ -54,10 +50,10 @@ jobs:
+       matrix:
+         settings:
+           - name: linux
+-            host: blacksmith-4vcpu-ubuntu-2404
++            host: ubuntu-latest
+             playwright: bunx playwright install --with-deps
+           - name: windows
+-            host: blacksmith-4vcpu-windows-2025
++            host: windows-latest
+             playwright: bunx playwright install
+     runs-on: ${{ matrix.settings.host }}
+     env:

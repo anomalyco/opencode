@@ -114,8 +114,8 @@
       "light": "nightOwlPanel"
     },
     "diffLineNumber": {
-      "dark": "nightOwlMuted",
-      "light": "nightOwlMuted"
+      "dark": "#7791a6",
+      "light": "#7791a6"
     },
     "diffAddedLineNumberBg": {
       "dark": "#0a2e1a",

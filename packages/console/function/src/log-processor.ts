@@ -19,7 +19,7 @@ export default {
         url.pathname !== "/zen/go/v1/responses" &&
         !url.pathname.startsWith("/zen/go/v1/models/")
       )
-        return
+        continue
 
       let data = {
         "cf.continent": event.event.request.cf?.continent,

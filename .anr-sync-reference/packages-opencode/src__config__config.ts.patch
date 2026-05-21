@@ -1,0 +1,90 @@
+diff --git a/packages/opencode/src/config/config.ts b/packages/opencode/src/config/config.ts
+index 2b8aa9e03..cf69f85e0 100644
+--- a/packages/opencode/src/config/config.ts
++++ b/packages/opencode/src/config/config.ts
+@@ -1,18 +1,15 @@
+-import { Log } from "../util/log"
+-import path from "path"
+-import { pathToFileURL, fileURLToPath } from "url"
+-import { createRequire } from "module"
+-import os from "os"
+-import z from "zod"
+-import { ModelsDev } from "../provider/models"
+-import { mergeDeep, pipe, unique } from "remeda"
+-import { Global } from "../global"
+-import fs from "fs/promises"
+-import { lazy } from "../util/lazy"
++import { Account } from "@/account"
++import { BunProc } from "@/bun"
++import { PackageRegistry } from "@/bun/registry"
++import { Bus } from "@/bus"
++import { GlobalBus } from "@/bus/global"
++import { Installation } from "@/installation"
++import { Filesystem } from "@/util/filesystem"
++import { iife } from "@/util/iife"
++import { proxied } from "@/util/proxied"
+ import { NamedError } from "@opencode-ai/util/error"
+-import { Flag } from "../flag/flag"
+-import { Auth } from "../auth"
+-import { Env } from "../env"
++import { constants, existsSync } from "fs"
++import fs from "fs/promises"
+ import {
+   type ParseError as JsoncParseError,
+   applyEdits,
+@@ -20,22 +17,25 @@ import {
+   parse as parseJsonc,
+   printParseErrorCode,
+ } from "jsonc-parser"
+-import { Instance } from "../project/instance"
++import { createRequire } from "module"
++import os from "os"
++import path from "path"
++import { mergeDeep, pipe, unique } from "remeda"
++import { pathToFileURL } from "url"
++import z from "zod"
++import { Auth } from "../auth"
++import { Env } from "../env"
++import { Flag } from "../flag/flag"
++import { Global } from "../global"
+ import { LSPServer } from "../lsp/server"
+-import { BunProc } from "@/bun"
+-import { Installation } from "@/installation"
+-import { ConfigMarkdown } from "./markdown"
+-import { constants, existsSync } from "fs"
+-import { Bus } from "@/bus"
+-import { GlobalBus } from "@/bus/global"
++import { Instance } from "../project/instance"
++import { ModelsDev } from "../provider/models"
+ import { Event } from "../server/event"
+ import { Glob } from "../util/glob"
+-import { PackageRegistry } from "@/bun/registry"
+-import { proxied } from "@/util/proxied"
+-import { iife } from "@/util/iife"
+-import { Account } from "@/account"
++import { lazy } from "../util/lazy"
++import { Log } from "../util/log"
++import { ConfigMarkdown } from "./markdown"
+ import { ConfigPaths } from "./paths"
+-import { Filesystem } from "@/util/filesystem"
+ 
+ export namespace Config {
+   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
+@@ -270,7 +270,7 @@ export namespace Config {
+ 
+   export async function installDependencies(dir: string) {
+     const pkg = path.join(dir, "package.json")
+-    const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
++    const targetVersion = Installation.isLocal() || Installation.VERSION === "local" ? "*" : Installation.VERSION
+ 
+     const json = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => ({
+       dependencies: {},
+@@ -330,7 +330,7 @@ export namespace Config {
+     const depVersion = dependencies["@opencode-ai/plugin"]
+     if (!depVersion) return true
+ 
+-    const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
++    const targetVersion = Installation.isLocal() || Installation.VERSION === "local" ? "latest" : Installation.VERSION
+     if (targetVersion === "latest") {
+       const isOutdated = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
+       if (!isOutdated) return false

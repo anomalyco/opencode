@@ -1,0 +1,16 @@
+diff --git a/packages/opencode/src/session/llm.ts b/packages/opencode/src/session/llm.ts
+index 4e42fb0d2..f3cbfce33 100644
+--- a/packages/opencode/src/session/llm.ts
++++ b/packages/opencode/src/session/llm.ts
+@@ -147,7 +147,10 @@ export namespace LLM {
+     const maxOutputTokens =
+       isCodex || provider.id.includes("github-copilot") ? undefined : ProviderTransform.maxOutputTokens(input.model)
+ 
+-    const tools = await resolveTools(input)
++    const skip =
++      input.model.capabilities.toolcall === false ||
++      (input.model.providerID === "amazon-bedrock" && input.model.api.id.includes("deepseek"))
++    const tools = skip ? {} : await resolveTools(input)
+ 
+     // LiteLLM and some Anthropic proxies require the tools parameter to be present
+     // when message history contains tool calls, even if no tools are being used.

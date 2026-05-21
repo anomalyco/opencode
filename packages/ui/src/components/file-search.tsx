@@ -1,4 +1,5 @@
 import { Portal } from "solid-js/web"
+import { useI18n } from "../context/i18n"
 import { Icon } from "./icon"
 
 export function FileSearchBar(props: {
@@ -13,6 +14,8 @@ export function FileSearchBar(props: {
   onPrev: () => void
   onNext: () => void
 }) {
+  const i18n = useI18n()
+
   return (
     <Portal>
       <div
@@ -26,7 +29,7 @@ export function FileSearchBar(props: {
         <Icon name="magnifying-glass" size="small" class="text-text-weak shrink-0" />
         <input
           ref={props.setInput}
-          placeholder="Find"
+          placeholder={i18n.t("ui.fileSearch.placeholder")}
           value={props.query()}
           class="w-40 bg-transparent outline-none text-14-regular text-text-strong placeholder:text-text-weak"
           onInput={(e) => props.onInput(e.currentTarget.value)}
@@ -40,7 +43,7 @@ export function FileSearchBar(props: {
             type="button"
             class="size-6 grid place-items-center rounded text-text-weak hover:bg-surface-base-hover hover:text-text-strong disabled:opacity-40 disabled:pointer-events-none"
             disabled={props.count() === 0}
-            aria-label="Previous match"
+            aria-label={i18n.t("ui.fileSearch.previousMatch")}
             onClick={props.onPrev}
           >
             <Icon name="chevron-down" size="small" class="rotate-180" />
@@ -49,7 +52,7 @@ export function FileSearchBar(props: {
             type="button"
             class="size-6 grid place-items-center rounded text-text-weak hover:bg-surface-base-hover hover:text-text-strong disabled:opacity-40 disabled:pointer-events-none"
             disabled={props.count() === 0}
-            aria-label="Next match"
+            aria-label={i18n.t("ui.fileSearch.nextMatch")}
             onClick={props.onNext}
           >
             <Icon name="chevron-down" size="small" />
@@ -58,7 +61,7 @@ export function FileSearchBar(props: {
         <button
           type="button"
           class="size-6 grid place-items-center rounded text-text-weak hover:bg-surface-base-hover hover:text-text-strong"
-          aria-label="Close search"
+          aria-label={i18n.t("ui.fileSearch.close")}
           onClick={props.onClose}
         >
           <Icon name="close-small" size="small" />

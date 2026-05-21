@@ -15,15 +15,16 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "bun test test/",
     "test:otel": "bun run --env-file=../../.env.bedrock src/util/otel-e2e-test.ts",
     "verify:cw": "bun run src/util/otel-verify-cloudwatch.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-cognito-identity": "^3.700.0",
-    "@aws-sdk/client-dynamodb": "^3.700.0",
-    "@aws-sdk/client-sts": "^3.700.0",
-    "@aws-sdk/credential-providers": "^3.700.0",
-    "@aws-sdk/lib-dynamodb": "^3.700.0",
+    "@aws-sdk/client-cognito-identity": "3.993.0",
+    "@aws-sdk/client-dynamodb": "3.993.0",
+    "@aws-sdk/client-sts": "3.993.0",
+    "@aws-sdk/credential-providers": "3.993.0",
+    "@aws-sdk/lib-dynamodb": "3.993.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "1.27.0",
     "@opentelemetry/exporter-metrics-otlp-http": "0.54.0",

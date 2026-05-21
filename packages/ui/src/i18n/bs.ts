@@ -50,6 +50,15 @@ export const dict = {
   "ui.sessionTurn.error.freeUsageExceeded": "Besplatna upotreba premašena",
   "ui.sessionTurn.error.addCredits": "Dodaj kredite",
 
+  "dialog.usageExceeded.freeTier.title": "Dostignut besplatan limit",
+  "dialog.usageExceeded.freeTier.description":
+    "Pretplatite se na OpenCode Go za pouzdan pristup najboljim open-source modelima, počevši od $5/mjesec.",
+  "dialog.usageExceeded.freeTier.actionLabel": "Pretplati se",
+  "dialog.usageExceeded.accountRateLimit.title": "Dostignut Go limit",
+  "dialog.usageExceeded.accountRateLimit.description":
+    "Dostignut je limit korištenja. Da nastavite koristiti ovaj model sada, omogućite korištenje iz vašeg dostupnog stanja",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "Otvori postavke",
+
   "ui.sessionTurn.status.delegating": "Delegiranje posla",
   "ui.sessionTurn.status.planning": "Planiranje sljedećih koraka",
   "ui.sessionTurn.status.gatheringContext": "Istraživanje",
@@ -64,7 +73,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Razmatranje sljedećih koraka",
 
   "ui.messagePart.questions.dismissed": "Pitanja odbačena",
-  "ui.messagePart.compaction": "Historija sažeta",
+  "ui.messagePart.compaction": "Sesija sažeta",
   "ui.messagePart.context.read.one": "{{count}} čitanje",
   "ui.messagePart.context.read.other": "{{count}} čitanja",
   "ui.messagePart.context.search.one": "{{count}} pretraga",
@@ -99,7 +108,6 @@ export const dict = {
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Web preuzimanje",
   "ui.tool.websearch": "Pretraga weba",
-  "ui.tool.codesearch": "Pretraga koda",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Lista zadataka",
@@ -130,6 +138,8 @@ export const dict = {
   "ui.message.collapse": "Sažmi poruku",
   "ui.message.copy": "Kopiraj",
   "ui.message.copyMessage": "Kopiraj poruku",
+  "ui.message.forkMessage": "Forkaj u novu sesiju",
+  "ui.message.revertMessage": "Resetuj na ovu tačku",
   "ui.message.copyResponse": "Kopiraj odgovor",
   "ui.message.copied": "Kopirano!",
   "ui.message.interrupted": "Prekinuto",
@@ -147,4 +157,16 @@ export const dict = {
   "ui.question.multiHint": "Odaberi sve što važi",
   "ui.question.singleHint": "Odaberi jedan odgovor",
   "ui.question.custom.placeholder": "Unesi svoj odgovor...",
+
+  "ui.fileSearch.placeholder": "Pronađi",
+  "ui.fileSearch.previousMatch": "Prethodno",
+  "ui.fileSearch.nextMatch": "Sljedeće",
+  "ui.fileSearch.close": "Zatvori pretragu",
+  "ui.tool.task": "Zadatak",
+  "ui.tool.skill": "Vještina",
+  "ui.basicTool.called": "Pozvan `{{tool}}`",
+  "ui.toolErrorCard.failed": "Neuspješno",
+  "ui.toolErrorCard.copyError": "Kopiraj grešku",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 } satisfies Partial<Record<Keys, string>>

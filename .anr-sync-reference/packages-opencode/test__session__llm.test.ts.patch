@@ -1,0 +1,40 @@
+diff --git a/packages/opencode/test/session/llm.test.ts b/packages/opencode/test/session/llm.test.ts
+index 64e73e0de..f471b336b 100644
+--- a/packages/opencode/test/session/llm.test.ts
++++ b/packages/opencode/test/session/llm.test.ts
+@@ -283,7 +283,7 @@ describe("session.llm.stream", () => {
+           role: "user",
+           time: { created: Date.now() },
+           agent: agent.name,
+-          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
++          model: { providerID: ProviderID.make(providerID), modelID: ModelID.make(resolved.id) },
+           variant: "high",
+         } satisfies MessageV2.User
+ 
+@@ -412,7 +412,7 @@ describe("session.llm.stream", () => {
+           role: "user",
+           time: { created: Date.now() },
+           agent: agent.name,
+-          model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
++          model: { providerID: ProviderID.make("openai"), modelID: ModelID.make(resolved.id) },
+           variant: "high",
+         } satisfies MessageV2.User
+ 
+@@ -535,7 +535,7 @@ describe("session.llm.stream", () => {
+           role: "user",
+           time: { created: Date.now() },
+           agent: agent.name,
+-          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
++          model: { providerID: ProviderID.make(providerID), modelID: ModelID.make(resolved.id) },
+         } satisfies MessageV2.User
+ 
+         const stream = await LLM.stream({
+@@ -636,7 +636,7 @@ describe("session.llm.stream", () => {
+           role: "user",
+           time: { created: Date.now() },
+           agent: agent.name,
+-          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
++          model: { providerID: ProviderID.make(providerID), modelID: ModelID.make(resolved.id) },
+         } satisfies MessageV2.User
+ 
+         const stream = await LLM.stream({

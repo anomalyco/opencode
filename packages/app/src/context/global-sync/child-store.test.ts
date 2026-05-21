@@ -21,6 +21,9 @@ describe("createChildStoreManager", () => {
       isLoadingSessions: () => false,
       onBootstrap() {},
       onDispose() {},
+      translate: (key) => key,
+      queryOptions: {} as any,
+      global: { provider: null! },
     })
 
     Array.from({ length: 30 }, (_, index) => `/pinned-${index}`).forEach((directory) => {

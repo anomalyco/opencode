@@ -1,0 +1,15 @@
+diff --git a/packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx b/packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx
+index c85426cc2..8a1722fd4 100644
+--- a/packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx
++++ b/packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx
+@@ -1022,6 +1022,10 @@ export function Prompt(props: PromptProps) {
+                     {local.model.parsed().model}
+                   </text>
+                   <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
++                  <Show when={process.env.DISPLAY_NAME}>
++                    <text fg={theme.textMuted}>·</text>
++                    <text fg={theme.textMuted}>{process.env.DISPLAY_NAME}</text>
++                  </Show>
+                   <Show when={showVariant()}>
+                     <text fg={theme.textMuted}>·</text>
+                     <text>

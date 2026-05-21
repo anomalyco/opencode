@@ -1,11 +1,12 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "0.0.2",
+  "version": "1.15.4",
   "type": "module",
   "license": "MIT",
   "exports": {
     "./package.json": "./package.json",
     "./*": "./src/components/*.tsx",
+    "./session-diff": "./src/components/session-diff.ts",
     "./i18n/*": "./src/i18n/*.ts",
     "./pierre": "./src/pierre/index.ts",
     "./pierre/*": "./src/pierre/*.ts",
@@ -25,6 +26,8 @@
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
+    "test": "bun test src",
+    "test:ci": "mkdir -p .artifacts/unit && bun test src --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
     "dev": "vite",
     "generate:tailwind": "bun run script/tailwind.ts"
   },
@@ -44,14 +47,16 @@
   "dependencies": {
     "@kobalte/core": "catalog:",
     "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/util": "workspace:*",
+    "@opencode-ai/core": "workspace:*",
     "@pierre/diffs": "catalog:",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/bounds": "0.1.3",
+    "@solid-primitives/event-listener": "2.4.5",
     "@solid-primitives/media": "2.3.3",
     "@solid-primitives/resize-observer": "2.1.3",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
+    "diff": "catalog:",
     "dompurify": "3.3.1",
     "fuzzysort": "catalog:",
     "katex": "0.16.27",
@@ -64,6 +69,7 @@
     "motion-dom": "12.34.3",
     "motion-utils": "12.29.2",
     "remeda": "catalog:",
+    "remend": "catalog:",
     "shiki": "catalog:",
     "solid-js": "catalog:",
     "solid-list": "catalog:",

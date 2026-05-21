@@ -4,19 +4,20 @@ import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
-import { Log } from "./util/log"
-import { AuthCommand } from "./cli/cmd/auth"
+import * as Log from "@opencode-ai/core/util/log"
+import { ConsoleCommand } from "./cli/cmd/account"
+import { ProvidersCommand } from "./cli/cmd/providers"
 import { AgentCommand } from "./cli/cmd/agent"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { UninstallCommand } from "./cli/cmd/uninstall"
 import { ModelsCommand } from "./cli/cmd/models"
 import { UI } from "./cli/ui"
 import { Installation } from "./installation"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/core/util/error"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
-import { WorkspaceServeCommand } from "./cli/cmd/workspace-serve"
-import { Filesystem } from "./util/filesystem"
+import { Filesystem } from "@/util/filesystem"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
@@ -32,9 +33,15 @@ import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
 import path from "path"
-import { Global } from "./global"
-import { JsonMigration } from "./storage/json-migration"
-import { Database } from "./storage/db"
+import { Global } from "@opencode-ai/core/global"
+import { JsonMigration } from "@/storage/json-migration"
+import { Database } from "@/storage/db"
+import { errorMessage } from "./util/error"
+import { PluginCommand } from "./cli/cmd/plug"
+import { Heap } from "./cli/heap"
+import { drizzle } from "drizzle-orm/bun-sqlite"
+import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
+import { isRecord } from "@/util/record"
 import {
   getValidatedANRConfig,
   authenticateWithOIDC,
@@ -61,6 +68,8 @@ import {
 import { randomUUID } from "crypto"
 import { platform, arch, release } from "os"
 import { existsSync, readdirSync, readFileSync } from "fs"
+
+const processMetadata = ensureProcessMetadata("main")
 
 // ANR mode state (when running with OPENCODE_FLAVOR=anr)
 let anrContext: {
@@ -446,13 +455,13 @@ async function initializeANR(envFile?: string): Promise<void> {
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
-    e: e instanceof Error ? e.message : e,
+    e: errorMessage(e),
   })
 })
 
 process.on("uncaughtException", (e) => {
   Log.Default.error("exception", {
-    e: e instanceof Error ? e.message : e,
+    e: errorMessage(e),
   })
 })
 
@@ -593,13 +602,25 @@ export async function main(argv?: string[]) {
     await initializeANR(envFile)
   }
 
-  let cli = yargs(argv ?? hideBin(process.argv))
+  const args = argv ?? hideBin(process.argv)
+
+  function show(out: string) {
+    const text = out.trimStart()
+    if (!text.startsWith("opencode ")) {
+      process.stderr.write(UI.logo() + EOL + EOL)
+      process.stderr.write(text)
+      return
+    }
+    process.stderr.write(out)
+  }
+
+  let cli = yargs(args)
     .parserConfiguration({ "populate--": true })
     .scriptName("opencode")
     .wrap(100)
     .help("help", "show help")
     .alias("help", "h")
-    .version("version", "show version number", Installation.VERSION)
+    .version("version", "show version number", InstallationVersion)
     .alias("version", "v")
     .option("print-logs", {
       describe: "print logs to stderr",
@@ -610,11 +631,19 @@ export async function main(argv?: string[]) {
       type: "string",
       choices: ["DEBUG", "INFO", "WARN", "ERROR"],
     })
+    .option("pure", {
+      describe: "run without external plugins",
+      type: "boolean",
+    })
     .option("env-file", {
       describe: "path to ANR .env config file",
       type: "string",
     })
     .middleware(async (opts) => {
+      if (opts.pure) {
+        process.env.OPENCODE_PURE = "1"
+      }
+
       await Log.init({
         print: process.argv.includes("--print-logs"),
         dev: Installation.isLocal(),
@@ -629,9 +658,13 @@ export async function main(argv?: string[]) {
       process.env.OPENCODE = "1"
       process.env.OPENCODE_PID = String(process.pid)
 
+      Heap.start()
+
       Log.Default.info("opencode", {
-        version: Installation.VERSION,
+        version: InstallationVersion,
         args: process.argv.slice(2),
+        process_role: processMetadata.processRole,
+        run_id: processMetadata.runID,
       })
 
       const marker = path.join(Global.Path.data, "opencode.db")
@@ -645,7 +678,7 @@ export async function main(argv?: string[]) {
         let last = -1
         if (tty) process.stderr.write("\x1b[?25l")
         try {
-          await JsonMigration.run(Database.Client().$client, {
+          await JsonMigration.run(drizzle({ client: Database.Client().$client }), {
             progress: (event) => {
               const percent = Math.floor((event.current / event.total) * 100)
               if (percent === last && event.current !== event.total) return
@@ -671,7 +704,7 @@ export async function main(argv?: string[]) {
         process.stderr.write("Database migration complete." + EOL)
       }
     })
-    .usage("\n" + UI.logo())
+    .usage("")
     .completion("completion", "generate shell completion script")
     .command(AcpCommand)
     .command(McpCommand)
@@ -680,7 +713,6 @@ export async function main(argv?: string[]) {
     .command(RunCommand)
     .command(GenerateCommand)
     .command(DebugCommand)
-    .command(AuthCommand)
     .command(AgentCommand)
     .command(UpgradeCommand)
     .command(UninstallCommand)
@@ -693,11 +725,10 @@ export async function main(argv?: string[]) {
     .command(GithubCommand)
     .command(PrCommand)
     .command(SessionCommand)
+    .command(ConsoleCommand)
+    .command(ProvidersCommand)
+    .command(PluginCommand)
     .command(DbCommand)
-
-  if (Installation.isLocal()) {
-    cli = cli.command(WorkspaceServeCommand)
-  }
 
   cli = cli
     .fail((msg, err) => {
@@ -707,7 +738,7 @@ export async function main(argv?: string[]) {
         msg?.startsWith("Invalid values:")
       ) {
         if (err) throw err
-        cli.showHelp("log")
+        cli.showHelp(show)
       }
       if (err) throw err
       process.exit(1)
@@ -715,14 +746,25 @@ export async function main(argv?: string[]) {
     .strict()
 
   try {
-    await cli.parse()
+    if (args.includes("-h") || args.includes("--help")) {
+      await cli.parse(args, (err: Error | undefined, _argv: unknown, out: string) => {
+        if (err) throw err
+        if (!out) return
+        show(out)
+      })
+    } else {
+      await cli.parse()
+    }
   } catch (e) {
     let data: Record<string, any> = {}
     if (e instanceof NamedError) {
       const obj = e.toObject()
-      Object.assign(data, {
-        ...obj.data,
-      })
+      if (isRecord(obj.data)) {
+        for (const [key, value] of Object.entries(obj.data)) {
+          if (key === "name" || key === "stack" || key === "cause") continue
+          data[key] = value
+        }
+      }
     }
 
     if (e instanceof Error) {
@@ -750,7 +792,7 @@ export async function main(argv?: string[]) {
     if (formatted) UI.error(formatted)
     if (formatted === undefined) {
       UI.error("Unexpected error, check log file at " + Log.file() + " for more details" + EOL)
-      process.stderr.write((e instanceof Error ? e.message : String(e)) + EOL)
+      process.stderr.write(errorMessage(e) + EOL)
     }
     process.exitCode = 1
   } finally {
@@ -771,7 +813,6 @@ export async function main(argv?: string[]) {
     // Skip forced exit for long-running server commands (serve, web, workspace-serve).
     // Yargs can resolve cli.parse() before the command handler's promise settles,
     // causing the finally block to run while the server is still active.
-    const args = argv ?? hideBin(process.argv)
     const command = args[args.findIndex((a) => !a.startsWith("-"))]
     if (command === "serve" || command === "web" || command === "workspace-serve") return
     process.exit()
