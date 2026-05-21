@@ -242,6 +242,9 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       current: () => "base",
       push: () => () => {},
     },
+    workspace: {
+      current: () => undefined,
+    },
     route: {
       register: () => {
         if (count) count.route_add += 1

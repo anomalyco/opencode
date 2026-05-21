@@ -8,6 +8,7 @@ import { Dialog as DialogUI, type useDialog } from "@tui/ui/dialog"
 import type { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import type { useOpencodeKeymap } from "../keymap"
 import type { useKV } from "../context/kv"
+import type { useProject } from "../context/project"
 import { DialogAlert } from "../ui/dialog-alert"
 import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
@@ -41,6 +42,7 @@ type Input = {
   toast: ReturnType<typeof useToast>
   renderer: TuiPluginApi["renderer"]
   attention: TuiPluginApi["attention"]
+  project: ReturnType<typeof useProject>
 }
 
 function routeRegister(routes: RouteMap, list: TuiRouteDefinition[], bump: () => void) {
@@ -225,6 +227,11 @@ export function createTuiApi(input: Input): TuiPluginApi {
       },
       push(mode) {
         return Keymap.getOpencodeModeStack(input.keymap).push(mode)
+      },
+    },
+    workspace: {
+      current() {
+        return input.project.workspace.current()
       },
     },
     route: {

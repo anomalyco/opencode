@@ -579,7 +579,6 @@ export type TuiPluginInstallResult =
 
 export type TuiWorkspace = {
   current: () => string | undefined
-  set: (workspaceID?: string) => void
 }
 
 export type TuiPluginApi = {
@@ -595,6 +594,7 @@ export type TuiPluginApi = {
   keys: TuiKeys
   keymap: TuiKeymap
   mode: TuiModeApi
+  workspace: TuiWorkspace
   route: {
     register: (routes: TuiRouteDefinition[]) => () => void
     navigate: (name: string, params?: Record<string, unknown>) => void

@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@opencode-ai/plugin/tui"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
@@ -61,7 +61,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
   const params = () =>
     ("params" in props.api.route.current ? props.api.route.current.params : undefined) as
-      | { mode?: DiffMode; sessionID?: string; messageID?: string }
+      | { mode?: DiffMode; sessionID?: string; messageID?: string; returnTo?: TuiRouteCurrent }
       | undefined
   const mode = () => params()?.mode ?? "git"
   const diffInput = createMemo(() => ({
@@ -80,7 +80,10 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       return normalizeDiffs(result.data ?? [])
     }
 
-    const result = await props.api.client.vcs.diff({ mode: "git" }, { throwOnError: true })
+    const result = await props.api.client.vcs.diff(
+      { mode: "git", workspace: props.api.workspace.current() },
+      { throwOnError: true },
+    )
     return normalizeDiffs(result.data ?? [])
   })
   const files = createMemo(() => diff() ?? [])
@@ -250,7 +253,8 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       title: "Close diff viewer",
       category: "VCS",
       run() {
-        props.api.route.navigate("home")
+        const target = params()?.returnTo ?? ({ name: "home" } satisfies TuiRouteCurrent)
+        props.api.route.navigate(target.name, "params" in target ? target.params : undefined)
       },
     },
     {
@@ -446,6 +450,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
               mode: option.value,
               sessionID: params()?.sessionID,
               messageID: params()?.messageID,
+              returnTo: params()?.returnTo,
             })
           },
         }))}
@@ -672,6 +677,12 @@ const tui: TuiPlugin = async (api) => {
           api.route.navigate(ROUTE, {
             mode: "git",
             sessionID: "params" in api.route.current ? api.route.current.params?.sessionID : undefined,
+            returnTo: {
+              name: api.route.current.name,
+              ...("params" in api.route.current && api.route.current.params
+                ? { params: api.route.current.params }
+                : {}),
+            },
           })
           api.ui.dialog.clear()
         },

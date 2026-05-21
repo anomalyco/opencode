@@ -628,6 +628,7 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
     keys: api.keys,
     keymap,
     mode: createScopedMode(api.mode, scope),
+    workspace: api.workspace,
     route,
     ui: api.ui,
     tuiConfig: api.tuiConfig,
