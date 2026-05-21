@@ -7,6 +7,7 @@ import { Flock } from "./util/flock"
 import { Flag } from "./flag/flag"
 
 const app = "opencode"
+const privateDirMode = 0o700
 const data = path.join(xdgData!, app)
 const cache = path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)
@@ -31,15 +32,15 @@ export const Path = paths
 
 Flock.setGlobal({ state })
 
-await Promise.all([
-  fs.mkdir(Path.data, { recursive: true }),
-  fs.mkdir(Path.config, { recursive: true }),
-  fs.mkdir(Path.state, { recursive: true }),
-  fs.mkdir(Path.tmp, { recursive: true }),
-  fs.mkdir(Path.log, { recursive: true }),
-  fs.mkdir(Path.bin, { recursive: true }),
-  fs.mkdir(Path.repos, { recursive: true }),
-])
+async function ensurePrivateDir(dir: string) {
+  await fs.mkdir(dir, { recursive: true, mode: privateDirMode })
+  // mkdir mode is filtered by umask and does not change existing directories.
+  await fs.chmod(dir, privateDirMode)
+}
+
+await Promise.all(
+  [Path.data, Path.cache, Path.config, Path.state, Path.tmp, Path.log, Path.bin, Path.repos].map(ensurePrivateDir),
+)
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Global") {}
 
