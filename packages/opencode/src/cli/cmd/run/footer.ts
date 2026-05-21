@@ -29,8 +29,8 @@ import { render } from "@opentui/solid"
 import { createComponent, createSignal, type Accessor, type Setter } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { withRunSpan } from "./otel"
-import { RUN_COMMAND_PANEL_ROWS } from "./footer.command"
-import { SUBAGENT_INSPECTOR_ROWS, SUBAGENT_TAB_ROWS } from "./footer.subagent"
+import { RUN_COMMAND_PANEL_ROWS, RUN_SUBAGENT_PANEL_ROWS } from "./footer.command"
+import { SUBAGENT_INSPECTOR_ROWS } from "./footer.subagent"
 import { PROMPT_MAX_ROWS, TEXTAREA_MIN_ROWS } from "./footer.prompt"
 import { printableBinding } from "./prompt.shared"
 import { RunFooterView } from "./footer.view"
@@ -97,6 +97,7 @@ type RunFooterOptions = {
 const PERMISSION_ROWS = 12
 const QUESTION_ROWS = 14
 const COMMAND_ROWS = RUN_COMMAND_PANEL_ROWS
+const SUBAGENT_ROWS = RUN_SUBAGENT_PANEL_ROWS
 const MODEL_ROWS = RUN_COMMAND_PANEL_ROWS
 const VARIANT_ROWS = RUN_COMMAND_PANEL_ROWS
 const AUTOCOMPLETE_COMPACT_ROWS = 2
@@ -190,7 +191,7 @@ export class RunFooter implements FooterApi {
   private subagent: Accessor<FooterSubagentState>
   private setSubagent: (next: FooterSubagentState) => void
   private promptRoute: FooterPromptRoute = { type: "composer" }
-  private tabsVisible = false
+  private subagentMenuRows = SUBAGENT_ROWS
   private autocomplete = false
   private interruptTimeout: NodeJS.Timeout | undefined
   private exitTimeout: NodeJS.Timeout | undefined
@@ -553,23 +554,24 @@ export class RunFooter implements FooterApi {
   // get fixed extra rows; the prompt view scales with textarea line count.
   private applyHeight(): void {
     const type = this.view().type
-    const tabs = this.tabsVisible ? SUBAGENT_TAB_ROWS : 0
     const compact = this.promptRoute.type === "composer" && this.autocomplete ? AUTOCOMPLETE_COMPACT_ROWS : 0
-    const base = this.base + tabs - compact
+    const base = this.base - compact
     const height =
       type === "permission"
         ? this.base + PERMISSION_ROWS
         : type === "question"
           ? this.base + QUESTION_ROWS
           : this.promptRoute.type === "command"
-            ? 1 + tabs + COMMAND_ROWS
+            ? 1 + COMMAND_ROWS
             : this.promptRoute.type === "model"
-              ? 1 + tabs + MODEL_ROWS
+              ? 1 + MODEL_ROWS
               : this.promptRoute.type === "variant"
-                ? 1 + tabs + VARIANT_ROWS
-                : this.promptRoute.type === "subagent"
-                  ? this.base + tabs + SUBAGENT_INSPECTOR_ROWS
-                  : Math.max(base + TEXTAREA_MIN_ROWS, Math.min(base + PROMPT_MAX_ROWS, base + this.rows))
+                ? 1 + VARIANT_ROWS
+                : this.promptRoute.type === "subagent-menu"
+                  ? 1 + this.subagentMenuRows
+                  : this.promptRoute.type === "subagent"
+                    ? this.base + SUBAGENT_INSPECTOR_ROWS
+                    : Math.max(base + TEXTAREA_MIN_ROWS, Math.min(base + PROMPT_MAX_ROWS, base + this.rows))
 
     if (height !== this.renderer.footerHeight) {
       this.renderer.footerHeight = height
@@ -592,10 +594,10 @@ export class RunFooter implements FooterApi {
     }
   }
 
-  private syncLayout = (next: { route: FooterPromptRoute; tabs: boolean; autocomplete: boolean }): void => {
+  private syncLayout = (next: { route: FooterPromptRoute; autocomplete: boolean; subagentRows: number }): void => {
     this.promptRoute = next.route
-    this.tabsVisible = next.tabs
     this.autocomplete = next.autocomplete
+    this.subagentMenuRows = next.subagentRows
     if (this.view().type === "prompt") {
       this.applyHeight()
     }

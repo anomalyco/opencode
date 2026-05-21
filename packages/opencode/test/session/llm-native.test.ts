@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { ToolFailure } from "@opencode-ai/llm"
-import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
+import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
 import { jsonSchema, tool, type ModelMessage } from "ai"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { LLMNative } from "@/session/llm/native-request"
 import { LLMNativeRuntime } from "@/session/llm/native-runtime"
 import type { Provider } from "@/provider/provider"
@@ -138,16 +138,16 @@ describe("session.llm-native.request", () => {
     expect(request.model).toMatchObject({
       id: "gpt-5-mini",
       provider: "openai",
-      route: "openai-responses",
-      baseURL: "https://api.openai.com/v1",
-      headers: {
-        "x-model": "model-header",
-        "x-request": "request-header",
-      },
-      limits: {
-        context: 128_000,
-        output: 32_000,
-      },
+      route: { id: "openai-responses" },
+    })
+    expect(request.model.route.endpoint.baseURL).toBe("https://api.openai.com/v1")
+    expect(request.model.route.defaults.headers).toEqual({
+      "x-model": "model-header",
+      "x-request": "request-header",
+    })
+    expect(request.model.route.defaults.limits).toMatchObject({
+      context: 128_000,
+      output: 32_000,
     })
     expect(request.system).toEqual([
       { type: "text", text: "agent system" },
@@ -211,29 +211,50 @@ describe("session.llm-native.request", () => {
     ])
   })
 
-  test("selects native routes from existing provider packages", () => {
-    expect(
-      LLMNative.model({ ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/anthropic" } }),
-    ).toMatchObject({
-      route: "anthropic-messages",
-      baseURL: "https://api.anthropic.com/v1",
+  test("selects native request routes for provider packages", () => {
+    const openai = LLMNative.model({
+      model: { ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/openai" } },
+      apiKey: "test-key",
+      messages: [],
     })
-    expect(LLMNative.model({ ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/google" } })).toMatchObject({
-      route: "gemini",
-      baseURL: "https://generativelanguage.googleapis.com/v1beta",
+    expect(openai.route.id).toBe("openai-responses")
+    expect(openai.route.endpoint.baseURL).toBe("https://api.openai.com/v1")
+
+    const anthropic = LLMNative.model({
+      model: { ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/anthropic" } },
+      apiKey: "test-key",
+      messages: [],
     })
-    expect(
-      LLMNative.model({ ...baseModel, api: { ...baseModel.api, npm: "@ai-sdk/openai-compatible" } }),
-    ).toMatchObject({
-      route: "openai-compatible-chat",
-      baseURL: "https://api.openai.com/v1",
+    expect(anthropic.route.id).toBe("anthropic-messages")
+    expect(anthropic.route.endpoint.baseURL).toBe("https://api.anthropic.com/v1")
+
+    const google = LLMNative.model({
+      model: { ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/google" } },
+      apiKey: "test-key",
+      messages: [],
     })
-    expect(
-      LLMNative.model({ ...baseModel, api: { ...baseModel.api, url: "", npm: "@openrouter/ai-sdk-provider" } }),
-    ).toMatchObject({
-      route: "openrouter",
-      baseURL: "https://openrouter.ai/api/v1",
+    expect(google.route.id).toBe("gemini")
+    expect(google.route.endpoint.baseURL).toBe("https://generativelanguage.googleapis.com/v1beta")
+
+    const compatible = LLMNative.model({
+      model: {
+        ...baseModel,
+        providerID: ProviderID.make("opencode"),
+        api: { ...baseModel.api, url: "https://ai.example.test/v1", npm: "@ai-sdk/openai-compatible" },
+      },
+      apiKey: "test-key",
+      messages: [],
     })
+    expect(compatible.route.id).toBe("openai-compatible-chat")
+    expect(compatible.route.endpoint.baseURL).toBe("https://ai.example.test/v1")
+
+    const openrouter = LLMNative.model({
+      model: { ...baseModel, api: { ...baseModel.api, url: "", npm: "@openrouter/ai-sdk-provider" } },
+      apiKey: "test-key",
+      messages: [],
+    })
+    expect(openrouter.route.id).toBe("openrouter")
+    expect(openrouter.route.endpoint.baseURL).toBe("https://openrouter.ai/api/v1")
   })
 
   test("fails fast for unsupported provider packages", () => {
@@ -262,6 +283,20 @@ describe("session.llm-native.request", () => {
     })
     expect(
       LLMNativeRuntime.status({
+        model: {
+          ...baseModel,
+          providerID: ProviderID.make("opencode"),
+          api: { ...baseModel.api, npm: "@ai-sdk/openai-compatible" },
+        },
+        provider: { ...providerInfo, id: ProviderID.make("opencode") },
+        auth: undefined,
+      }),
+    ).toMatchObject({
+      type: "supported",
+      apiKey: "test-openai-key",
+    })
+    expect(
+      LLMNativeRuntime.status({
         model: { ...baseModel, providerID: ProviderID.make("google") },
         provider: { ...providerInfo, id: ProviderID.make("google") },
         auth: undefined,
@@ -281,7 +316,7 @@ describe("session.llm-native.request", () => {
         provider: providerInfo,
         auth: undefined,
       }),
-    ).toEqual({ type: "unsupported", reason: "provider package is not OpenAI or Anthropic" })
+    ).toEqual({ type: "unsupported", reason: "provider package is not OpenAI, OpenAI-compatible, or Anthropic" })
 
     expect(
       LLMNativeRuntime.status({
@@ -382,12 +417,16 @@ describe("session.llm-native.request", () => {
       LLMClient.prepare(
         LLMNative.request({
           model: baseModel,
+          apiKey: "test-openai-key",
           messages: [{ role: "user", content: "hello" }],
           providerOptions: { openai: { store: false } },
           maxOutputTokens: 512,
           headers: { "x-request": "request-header" },
         }),
-      ).pipe(Effect.provide(LLMClient.layer), Effect.provide(RequestExecutor.defaultLayer)),
+      ).pipe(
+        Effect.provide(LLMClient.layer),
+        Effect.provide(Layer.mergeAll(RequestExecutor.defaultLayer, WebSocketExecutor.layer)),
+      ),
     )
 
     expect(prepared).toMatchObject({
