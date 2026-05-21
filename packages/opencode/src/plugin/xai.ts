@@ -44,6 +44,12 @@ const REDIRECT_URI = `http://${OAUTH_HOST}:${OAUTH_PORT}${OAUTH_REDIRECT_PATH}`
 // long-running tool call doesn't have to recover from a mid-flight 401.
 const ACCESS_TOKEN_REFRESH_SKEW_MS = 120_000
 
+interface XaiAuthPluginOptions {
+  authorizeUrl?: string
+  tokenUrl?: string
+  deviceAuthorizationUrl?: string
+}
+
 interface PkceCodes {
   verifier: string
   challenge: string
@@ -127,7 +133,12 @@ export function accessTokenIsExpiring(token: string | undefined, skewMs: number 
   }
 }
 
-export function buildAuthorizeUrl(pkce: PkceCodes, state: string, nonce: string): string {
+export function buildAuthorizeUrl(
+  pkce: PkceCodes,
+  state: string,
+  nonce: string,
+  options: XaiAuthPluginOptions = {},
+): string {
   // `plan=generic` opts the consent screen into xAI's generic OAuth plan tier;
   // without it, accounts.x.ai rejects loopback OAuth from non-allowlisted
   // clients. `referrer=opencode` lets xAI attribute opencode-originated
@@ -145,11 +156,15 @@ export function buildAuthorizeUrl(pkce: PkceCodes, state: string, nonce: string)
     plan: "generic",
     referrer: "opencode",
   })
-  return `${AUTHORIZE_URL}?${params.toString()}`
+  return `${options.authorizeUrl ?? AUTHORIZE_URL}?${params.toString()}`
 }
 
-async function exchangeCodeForTokens(code: string, pkce: PkceCodes): Promise<TokenResponse> {
-  const response = await fetch(TOKEN_URL, {
+async function exchangeCodeForTokens(
+  code: string,
+  pkce: PkceCodes,
+  options: XaiAuthPluginOptions = {},
+): Promise<TokenResponse> {
+  const response = await fetch(options.tokenUrl ?? TOKEN_URL, {
     method: "POST",
     headers: authHeaders(),
     body: new URLSearchParams({
@@ -167,8 +182,8 @@ async function exchangeCodeForTokens(code: string, pkce: PkceCodes): Promise<Tok
   return response.json() as Promise<TokenResponse>
 }
 
-async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> {
-  const response = await fetch(TOKEN_URL, {
+async function refreshAccessToken(refreshToken: string, options: XaiAuthPluginOptions = {}): Promise<TokenResponse> {
+  const response = await fetch(options.tokenUrl ?? TOKEN_URL, {
     method: "POST",
     headers: authHeaders(),
     body: new URLSearchParams({
@@ -198,8 +213,8 @@ interface DeviceTokenErrorBody {
   error_description?: string
 }
 
-export async function requestDeviceCode(): Promise<DeviceCodeResponse> {
-  const response = await fetch(DEVICE_AUTHORIZATION_URL, {
+export async function requestDeviceCode(options: XaiAuthPluginOptions = {}): Promise<DeviceCodeResponse> {
+  const response = await fetch(options.deviceAuthorizationUrl ?? DEVICE_AUTHORIZATION_URL, {
     method: "POST",
     headers: authHeaders(),
     body: new URLSearchParams({
@@ -239,7 +254,7 @@ function positiveSecondsToMs(value: unknown, defaultMs: number): number {
 
 export async function pollDeviceCodeToken(
   device: DeviceCodeResponse,
-  options: { sleep?: (ms: number) => Promise<void>; now?: () => number } = {},
+  options: XaiAuthPluginOptions & { sleep?: (ms: number) => Promise<void>; now?: () => number } = {},
 ): Promise<TokenResponse> {
   const sleep = options.sleep ?? defaultSleep
   const now = options.now ?? (() => Date.now())
@@ -251,7 +266,7 @@ export async function pollDeviceCodeToken(
   )
 
   while (now() < deadline) {
-    const response = await fetch(TOKEN_URL, {
+    const response = await fetch(options.tokenUrl ?? TOKEN_URL, {
       method: "POST",
       headers: authHeaders(),
       body: new URLSearchParams({
@@ -550,58 +565,17 @@ interface RefreshResult {
   expires: number
 }
 
-// Single-flight refresh: collapse concurrent loader.fetch refreshes onto one
-// HTTP call so we don't replay the rotating refresh_token. xAI invalidates
-// the old refresh_token on every successful refresh — a second concurrent
-// call carrying the consumed token would 4xx with refresh_token_reused and
-// log the user out.
-let inflightRefresh: Promise<RefreshResult> | undefined
-
-async function refreshAndPersist(input: PluginInput, refreshToken: string): Promise<RefreshResult> {
-  if (inflightRefresh) return inflightRefresh
-  inflightRefresh = (async () => {
-    log.info("refreshing xai access token")
-    const tokens = await refreshAccessToken(refreshToken)
-    const refreshedExpires = Date.now() + (tokens.expires_in ?? 3600) * 1000
-    const refreshedRefresh = tokens.refresh_token || refreshToken
-    // Persist the rotated pair as best-effort. xAI has already consumed the
-    // old refresh_token by the time we get here; an auth.set failure leaves
-    // the on-disk state stale but the in-memory result is still valid for
-    // this turn. The next live refresh against the stale disk state will
-    // 4xx and force re-login — a known cross-process limitation.
-    await input.client.auth
-      .set({
-        path: { id: "xai" },
-        body: {
-          type: "oauth",
-          access: tokens.access_token,
-          refresh: refreshedRefresh,
-          expires: refreshedExpires,
-        },
-      })
-      .catch((err) => log.warn("failed to persist refreshed xai tokens", { error: err }))
-    return { access: tokens.access_token, refresh: refreshedRefresh, expires: refreshedExpires }
-  })()
-  try {
-    return await inflightRefresh
-  } finally {
-    inflightRefresh = undefined
-  }
-}
-
-// Exported for tests; resets the module-level single-flight state to avoid
-// cross-test bleed when a refresh ends in an unexpected state.
-export function __resetForTests() {
-  inflightRefresh = undefined
-}
-
-export async function XaiAuthPlugin(input: PluginInput): Promise<Hooks> {
+export async function XaiAuthPlugin(input: PluginInput, options: XaiAuthPluginOptions = {}): Promise<Hooks> {
   return {
     auth: {
       provider: "xai",
       async loader(getAuth) {
         const auth = await getAuth()
         if (auth.type !== "oauth") return {}
+
+        // Single-flight refresh: collapse concurrent fetches from this loaded
+        // provider onto one HTTP call so we don't replay a rotating refresh_token.
+        let refreshPromise: Promise<RefreshResult> | undefined
 
         return {
           // Dummy bearer keeps the AI SDK from bailing on "missing apiKey"; the
@@ -628,7 +602,35 @@ export async function XaiAuthPlugin(input: PluginInput): Promise<Hooks> {
               currentAuth.expires - Date.now() <= ACCESS_TOKEN_REFRESH_SKEW_MS ||
               accessTokenIsExpiring(currentAuth.access)
             if (expiresSoon) {
-              const refreshed = await refreshAndPersist(input, currentAuth.refresh)
+              if (!refreshPromise) {
+                log.info("refreshing xai access token")
+                refreshPromise = refreshAccessToken(currentAuth.refresh, options)
+                  .then(async (tokens) => {
+                    const refreshedExpires = Date.now() + (tokens.expires_in ?? 3600) * 1000
+                    const refreshedRefresh = tokens.refresh_token || currentAuth.refresh
+                    // Persist the rotated pair as best-effort. xAI has already consumed the
+                    // old refresh_token by the time we get here; an auth.set failure leaves
+                    // the on-disk state stale but the in-memory result is still valid for
+                    // this turn. The next live refresh against the stale disk state will
+                    // 4xx and force re-login — a known cross-process limitation.
+                    await input.client.auth
+                      .set({
+                        path: { id: "xai" },
+                        body: {
+                          type: "oauth",
+                          access: tokens.access_token,
+                          refresh: refreshedRefresh,
+                          expires: refreshedExpires,
+                        },
+                      })
+                      .catch((err) => log.warn("failed to persist refreshed xai tokens", { error: err }))
+                    return { access: tokens.access_token, refresh: refreshedRefresh, expires: refreshedExpires }
+                  })
+                  .finally(() => {
+                    refreshPromise = undefined
+                  })
+              }
+              const refreshed = await refreshPromise
               currentAuth = { ...currentAuth, ...refreshed }
             }
 
@@ -664,7 +666,7 @@ export async function XaiAuthPlugin(input: PluginInput): Promise<Hooks> {
             const pkce = await generatePKCE()
             const state = generateState()
             const nonce = generateState()
-            const authUrl = buildAuthorizeUrl(pkce, state, nonce)
+            const authUrl = buildAuthorizeUrl(pkce, state, nonce, options)
 
             const callbackPromise = waitForOAuthCallback(pkce, state)
 
@@ -703,7 +705,7 @@ export async function XaiAuthPlugin(input: PluginInput): Promise<Hooks> {
           label: "xAI Grok OAuth (Headless / Remote / VPS)",
           type: "oauth",
           authorize: async () => {
-            const device = await requestDeviceCode()
+            const device = await requestDeviceCode(options)
             const browserUrl = device.verification_uri_complete ?? device.verification_uri
             return {
               url: browserUrl,
@@ -711,7 +713,7 @@ export async function XaiAuthPlugin(input: PluginInput): Promise<Hooks> {
               method: "auto" as const,
               callback: async () => {
                 try {
-                  const tokens = await pollDeviceCodeToken(device)
+                  const tokens = await pollDeviceCodeToken(device, options)
                   return {
                     type: "success" as const,
                     refresh: tokens.refresh_token,
