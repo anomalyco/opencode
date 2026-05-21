@@ -1,6 +1,4 @@
-import { Component, Show } from "solid-js"
-import { Button } from "@opencode-ai/ui/button"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Component, JSX, Show } from "solid-js"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useLanguage } from "@/context/language"
@@ -17,13 +15,11 @@ type ShellProps = {
   working: () => boolean
   tip: () => import("solid-js").JSX.Element
   onExit: () => void | Promise<void>
+  modes?: JSX.Element
 }
 
 export const PromptDrawingShell: Component<ShellProps> = (props) => {
   const language = useLanguage()
-  const exitLabel = () =>
-    props.variant === "doc" ? language.t("prompt.action.docToText") : language.t("prompt.action.drawToText")
-
   const history = () => (props.variant === "doc" ? props.doc.history : props.drawing.history)
   const undo = () => (props.variant === "doc" ? props.doc.undo() : props.drawing.undo())
   const redo = () => (props.variant === "doc" ? props.doc.redo() : props.drawing.redo())
@@ -36,8 +32,7 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
       <div
         classList={{
           "min-h-0 w-full": true,
-          "flex-1": props.variant === "doc",
-          "h-[352px] shrink-0": props.variant === "draw",
+          "flex-1": true,
         }}
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -47,21 +42,10 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
       </div>
       <div
         data-component="prompt-draw-actions"
-        class="relative z-20 flex shrink-0 items-center justify-between gap-2 border-t border-border-weaker-base bg-surface-raised-stronger-non-alpha px-2 py-1.5"
+        class="relative z-20 flex h-11 shrink-0 items-center justify-between gap-2 border-t border-border-weaker-base bg-surface-raised-stronger-non-alpha px-2 py-0"
       >
         <div class="flex items-center gap-0.5">
-          <Tooltip placement="top" value={exitLabel()}>
-            <Button
-              data-action={props.variant === "doc" ? "prompt-doc-exit" : "prompt-draw-exit"}
-              type="button"
-              variant="ghost"
-              class="size-7.5 p-0"
-              onClick={() => void props.onExit()}
-              aria-label={exitLabel()}
-            >
-              <Icon name="prompt" class="size-4.5" />
-            </Button>
-          </Tooltip>
+          {props.modes}
           <Tooltip placement="top" value={language.t("prompt.action.drawUndo")}>
             <IconButton
               data-action="prompt-draw-undo"

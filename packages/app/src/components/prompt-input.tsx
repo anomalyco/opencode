@@ -112,6 +112,9 @@ const NON_EMPTY_TEXT = /[^\s\u200B]/
 type PromptMode = "normal" | "shell" | "draw" | "doc"
 
 const canvasMode = (mode: PromptMode) => mode === "draw" || mode === "doc"
+const DOC_MIN = 150
+const DOC_HEIGHT = 300
+const DOC_RATIO = 0.8
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
@@ -294,9 +297,50 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     savedPrompt: null as PromptHistoryEntry | null,
     placeholder: Math.floor(Math.random() * EXAMPLES.length),
     draggingType: null,
-    mode: "normal",
+    mode: "doc",
     applyingHistory: false,
   })
+  const [height, setHeight] = createSignal(DOC_HEIGHT)
+
+  const max = () => Math.max(DOC_MIN, Math.floor(window.innerHeight * DOC_RATIO))
+  const clamp = (value: number) => Math.min(max(), Math.max(DOC_MIN, value))
+  const fit = () => {
+    if (store.mode !== "doc") return
+    setHeight((value) => clamp(value))
+  }
+  const resize = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+
+    const start = height()
+    const y = event.clientY
+    const html = document.documentElement
+    const body = document.body
+    const cursor = html.style.cursor
+    const select = body.style.userSelect
+    html.style.cursor = "ns-resize"
+    body.style.userSelect = "none"
+
+    const move = (event: PointerEvent) => {
+      setHeight(clamp(start + y - event.clientY))
+    }
+    const up = () => {
+      html.style.cursor = cursor
+      body.style.userSelect = select
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", up)
+      window.removeEventListener("pointercancel", up)
+    }
+
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up)
+    window.addEventListener("pointercancel", up)
+  }
+
+  window.addEventListener("resize", fit)
+  onCleanup(() => window.removeEventListener("resize", fit))
+  createEffect(fit)
 
   const buttonsSpring = useSpring(() => (store.mode === "shell" ? 0 : 1), { visualDuration: 0.2, bounce: 0 })
   const motion = (value: number) => ({
@@ -498,6 +542,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const pick = () => fileInputRef?.click()
 
   const setMode = (mode: PromptMode) => {
+    if (store.mode === mode) return
     if (store.mode === "doc" && mode !== "doc") doc.detach()
     if (canvasMode(store.mode) && !canvasMode(mode)) drawing.dispose()
     setStore("mode", mode)
@@ -507,6 +552,41 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const shellModeKey = "mod+shift+x"
   const normalModeKey = "mod+shift+e"
+  const modes = [
+    { mode: "doc", icon: "code-lines", label: "prompt.mode.doc", action: "prompt-doc" },
+    { mode: "draw", icon: "pencil-line", label: "prompt.mode.draw", action: "prompt-draw" },
+    { mode: "normal", icon: "prompt", label: "prompt.mode.normal", action: "prompt-normal" },
+  ] as const
+
+  const modeButtons = () => (
+    <>
+      {modes.map((item) => {
+        const selected = store.mode === item.mode
+        return (
+          <Tooltip placement="top" value={language.t(item.label)}>
+            <Button
+              data-action={item.action}
+              data-selected={selected ? "true" : undefined}
+              type="button"
+              variant="ghost"
+              classList={{
+                "size-7.5 p-0": true,
+                "pointer-events-none bg-surface-base-active text-text-strong [&_[data-slot=icon-svg]]:text-icon-strong": selected,
+              }}
+              style={canvasMode(store.mode) ? undefined : buttons()}
+              aria-disabled={selected}
+              tabIndex={selected ? -1 : undefined}
+              onClick={() => setMode(item.mode)}
+              aria-label={language.t(item.label)}
+              aria-pressed={selected}
+            >
+              <Icon name={item.icon} class="size-4.5" />
+            </Button>
+          </Tooltip>
+        )
+      })}
+    </>
+  )
 
   command.register("prompt-input", () => [
     {
@@ -847,10 +927,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       () => prompt.current(),
       (parts) => {
         if (composing()) return
+        if (canvasMode(store.mode)) return
+        if (!editorRef) return
         reconcile(parts.filter((part) => part.type !== "image"))
       },
     ),
   )
+
+  createEffect(() => {
+    if (canvasMode(store.mode)) return
+    requestAnimationFrame(() => {
+      if (!editorRef) return
+      reconcile(prompt.current().filter((part) => part.type !== "image"))
+    })
+  })
 
   const parseFromDOM = (): Prompt => {
     const parts: Prompt = []
@@ -1416,11 +1506,28 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     <div
       classList={{
         "relative flex w-full flex-col gap-0": true,
-        "h-[512px] max-h-[min(512px,70vh)]": store.mode === "doc",
-        "h-[448px] max-h-[512px]": store.mode === "draw",
+        "h-[300px] max-h-[512px]": store.mode === "draw",
         "size-full max-h-[512px] min-h-0": store.mode !== "doc" && store.mode !== "draw",
       }}
+      style={
+        store.mode === "doc"
+          ? {
+              height: `${height()}px`,
+              "min-height": `${DOC_MIN}px`,
+              "max-height": `${max()}px`,
+            }
+          : undefined
+      }
     >
+      <Show when={store.mode === "doc"}>
+        <div
+          data-component="prompt-doc-resize-handle"
+          class="group absolute -top-2.5 left-8 right-8 z-30 flex h-3 cursor-ns-resize touch-none items-center justify-center"
+          onPointerDown={resize}
+        >
+          <div class="h-0.5 w-18 rounded-full bg-border-base transition-colors group-hover:bg-border-strong-base" />
+        </div>
+      </Show>
       <PromptPopover
         popover={store.popover}
         setSlashPopoverRef={(el) => (slashPopoverRef = el)}
@@ -1484,7 +1591,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             if (!(target instanceof HTMLElement)) return
             if (
               target.closest(
-                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-draw"], [data-action="prompt-doc"], [data-action="prompt-draw-exit"], [data-action="prompt-doc-exit"], [data-action="prompt-permissions"]',
+                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-normal"], [data-action="prompt-draw"], [data-action="prompt-doc"], [data-action="prompt-draw-exit"], [data-action="prompt-doc-exit"], [data-action="prompt-permissions"]',
               )
             ) {
               return
@@ -1550,6 +1657,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   working={working}
                   tip={tip}
                   onExit={exitDoc}
+                  modes={modeButtons()}
                 />
               </Show>
             }
@@ -1561,6 +1669,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               working={working}
               tip={tip}
               onExit={() => setMode("normal")}
+              modes={modeButtons()}
             />
           </Show>
 
@@ -1638,32 +1747,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Icon name="plus" class="size-4.5" />
                   </Button>
                 </TooltipKeybind>
-                <Tooltip placement="top" value={language.t("prompt.action.draw")}>
-                  <Button
-                    data-action="prompt-draw"
-                    type="button"
-                    variant="ghost"
-                    class="size-7.5 p-0"
-                    style={buttons()}
-                    onClick={() => setMode("draw")}
-                    aria-label={language.t("prompt.action.draw")}
-                  >
-                    <Icon name="pencil-line" class="size-4.5" />
-                  </Button>
-                </Tooltip>
-                <Tooltip placement="top" value={language.t("prompt.action.doc")}>
-                  <Button
-                    data-action="prompt-doc"
-                    type="button"
-                    variant="ghost"
-                    class="size-7.5 p-0"
-                    style={buttons()}
-                    onClick={() => setMode("doc")}
-                    aria-label={language.t("prompt.action.doc")}
-                  >
-                    <Icon name="code-lines" class="size-4.5" />
-                  </Button>
-                </Tooltip>
+                {modeButtons()}
               </div>
             </Show>
           </div>
