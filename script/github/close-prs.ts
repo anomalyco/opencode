@@ -69,6 +69,7 @@ const maxClose =
 const sleepMs = requireNonNegativeInteger("sleep-ms", values["sleep-ms"])
 const printLimit = requireNonNegativeInteger("print-limit", values["print-limit"])
 const cutoff = subtractMonths(new Date(), ageMonths)
+const teamAssociations = new Set(["OWNER", "MEMBER", "COLLABORATOR"])
 
 const headers = {
   Authorization: `Bearer ${token}`,
@@ -82,6 +83,7 @@ type PullRequest = {
   title: string
   url: string
   createdAt: string
+  authorAssociation: string
   reactionGroups: Array<{
     content: string
     users: {
@@ -145,19 +147,25 @@ async function main() {
   console.log(`Threshold: fewer than ${threshold} positive reactions`)
 
   const prs = await fetchOpenPullRequests()
-  const recentCount = prs.filter((pr) => new Date(pr.createdAt) >= cutoff).length
-  const matching = prs
-    .map((pr) => ({ ...pr, positiveReactions: positiveReactionCount(pr) }))
-    .filter((pr) => new Date(pr.createdAt) < cutoff && pr.positiveReactions < threshold)
+  const scored = prs.map((pr) => ({ ...pr, positiveReactions: positiveReactionCount(pr) }))
+  const recentCount = scored.filter((pr) => new Date(pr.createdAt) >= cutoff).length
+  const teamCount = scored.filter((pr) => isTeamMember(pr)).length
+  const matching = scored.filter(
+    (pr) => !isTeamMember(pr) && new Date(pr.createdAt) < cutoff && pr.positiveReactions < threshold,
+  )
   const candidates = matching.filter((pr) => !hasPriorCleanup(pr))
   const selected = maxClose === undefined ? candidates : candidates.slice(0, maxClose)
 
   console.log(`Fetched ${prs.length} open PRs`)
   console.log(`Matching cleanup criteria: ${matching.length}`)
   console.log(`Skipped previously cleaned PRs: ${matching.length - candidates.length}`)
+  console.log(`Team member PRs untouched: ${teamCount}`)
   console.log(`Recent PRs untouched: ${recentCount}`)
   console.log(
-    `Older PRs with at least ${threshold} positive reactions untouched: ${prs.length - matching.length - recentCount}`,
+    `Older PRs with at least ${threshold} positive reactions untouched: ${
+      scored.filter((pr) => !isTeamMember(pr) && new Date(pr.createdAt) < cutoff && pr.positiveReactions >= threshold)
+        .length
+    }`,
   )
 
   if (selected.length === 0) return
@@ -205,6 +213,7 @@ async function fetchOpenPullRequests() {
               title
               url
               createdAt
+              authorAssociation
               reactionGroups {
                 content
                 users {
@@ -333,6 +342,10 @@ function positiveReactionCount(pr: PullRequest) {
 
 function hasPriorCleanup(pr: PullRequest) {
   return pr.labels.nodes.some((label) => label.name === cleanupLabel)
+}
+
+function isTeamMember(pr: PullRequest) {
+  return teamAssociations.has(pr.authorAssociation)
 }
 
 function requireRepo(value: string | undefined) {
