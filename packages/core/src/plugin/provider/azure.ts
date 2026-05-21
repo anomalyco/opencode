@@ -14,12 +14,18 @@ export const AzurePlugin = PluginV2.define({
   id: PluginV2.ID.make("azure"),
   effect: Effect.gen(function* () {
     return {
-      "provider.update": Effect.fn(function* (evt) {
-        if (evt.provider.id !== ProviderV2.ID.azure) return
-        const configured = evt.provider.options.aisdk.provider.resourceName
-        const resourceName =
-          typeof configured === "string" && configured.trim() !== "" ? configured : process.env.AZURE_RESOURCE_NAME
-        if (resourceName) evt.provider.options.aisdk.provider.resourceName = resourceName
+      "catalog.transform": Effect.fn(function* (evt) {
+        for (const item of evt.data) {
+          if (item.provider.endpoint.type !== "aisdk") continue
+          if (item.provider.endpoint.package !== "@ai-sdk/azure") continue
+          const configured = item.provider.options.aisdk.provider.resourceName
+          const resourceName =
+            typeof configured === "string" && configured.trim() !== "" ? configured : process.env.AZURE_RESOURCE_NAME
+          if (!resourceName) continue
+          evt.provider.update(item.provider.id, (provider) => {
+            provider.options.aisdk.provider.resourceName = resourceName
+          })
+        }
       }),
       "aisdk.sdk": Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/azure") return
@@ -49,11 +55,17 @@ export const AzureCognitiveServicesPlugin = PluginV2.define({
   id: PluginV2.ID.make("azure-cognitive-services"),
   effect: Effect.gen(function* () {
     return {
-      "provider.update": Effect.fn(function* (evt) {
-        if (evt.provider.id !== ProviderV2.ID.make("azure-cognitive-services")) return
+      "catalog.transform": Effect.fn(function* (evt) {
         const resourceName = process.env.AZURE_COGNITIVE_SERVICES_RESOURCE_NAME
-        if (resourceName)
-          evt.provider.options.aisdk.provider.baseURL = `https://${resourceName}.cognitiveservices.azure.com/openai`
+        if (!resourceName) return
+        for (const item of evt.data) {
+          if (item.provider.endpoint.type !== "aisdk") continue
+          if (item.provider.endpoint.package !== "@ai-sdk/openai-compatible") continue
+          if (!item.provider.id.includes("azure-cognitive-services")) continue
+          evt.provider.update(item.provider.id, (provider) => {
+            provider.options.aisdk.provider.baseURL = `https://${resourceName}.cognitiveservices.azure.com/openai`
+          })
+        }
       }),
       "aisdk.language": Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("azure-cognitive-services")) return

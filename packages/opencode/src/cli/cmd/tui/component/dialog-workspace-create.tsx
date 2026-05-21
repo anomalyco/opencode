@@ -108,7 +108,7 @@ export async function warpWorkspaceSession(input: {
     })
     .catch(() => undefined)
   if (!result?.data) {
-    if (result?.error?.name === "VcsApplyError") {
+    if (result?.error && "name" in result.error && result.error.name === "VcsApplyError") {
       await DialogAlert.show(
         input.dialog,
         "Unable to Warp Session",

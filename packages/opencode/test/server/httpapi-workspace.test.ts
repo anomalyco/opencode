@@ -208,7 +208,7 @@ describe("workspace HttpApi", () => {
       const workspace = (yield* Effect.promise(() => created.json())) as Workspace.Info
       expect(workspace).toMatchObject({ type: "local-test", name: "local-test" })
 
-      const session = yield* Session.Service.use((svc) => svc.create({})).pipe(provideInstance(dir))
+      const session = yield* Session.use.create({}).pipe(provideInstance(dir))
       const warped = yield* request(WorkspacePaths.warp, dir, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -424,10 +424,9 @@ describe("workspace HttpApi", () => {
         body: JSON.stringify({ type: "remote-session-target", branch: null }),
       })
       const workspace = (yield* Effect.promise(() => created.json())) as Workspace.Info
-      const session = yield* Session.Service.use((svc) => svc.create()).pipe(
-        Effect.provideService(WorkspaceRef, workspace.id),
-        provideInstance(dir),
-      )
+      const session = yield* Session.use
+        .create()
+        .pipe(Effect.provideService(WorkspaceRef, workspace.id), provideInstance(dir))
 
       try {
         const response = yield* request(`http://localhost/session/${session.id}/message`, dir, {

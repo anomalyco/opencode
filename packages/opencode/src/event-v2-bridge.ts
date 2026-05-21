@@ -7,6 +7,7 @@ import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { InstanceStore } from "@/project/instance-store"
 import { SyncEvent } from "@/sync"
 import { EventV2 } from "@opencode-ai/core/event"
+import "@opencode-ai/core/account"
 import "@opencode-ai/core/catalog"
 import "@opencode-ai/core/session-event"
 import { Context, Effect, Layer, Option } from "effect"
@@ -81,7 +82,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provideMerge(EventV2.defaultLayer),
+  Layer.provide(EventV2.defaultLayer),
   Layer.provide(SyncEvent.defaultLayer),
   Layer.provide(ProjectBus.defaultLayer),
 )
