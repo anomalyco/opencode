@@ -2,6 +2,7 @@
 - 並列に実行できる調査や検証は、可能な限り並列化すること。
 - この repo のデフォルトブランチは `dev`。
 - PR を触る前に `.opencode/skills/gh-pr-compliance/SKILL.md` を読むこと。
+- **`gh` CLI を実行する際は必ず `-R acompany-develop/securecode` を明示すること**。本リポは upstream remote (`anomalyco/opencode`) も持っているため、リポを明示しないと issue / PR / label 操作が upstream 側に作成される事故が発生する (過去複数回発生)。`gh issue create` / `gh pr create` / `gh pr view` / `gh pr edit` / `gh pr checks` / `gh label list` / `gh api` 等、すべての gh コマンドで例外なく `-R acompany-develop/securecode` を付けること。
 - SecureCode benchmark を扱うときは、まず `benchmarks/securecode/README.md` を読むこと。
 - 最終レポートを書くときは `benchmarks/securecode/REPORT_AUTHORING_TIPS.md` に従うこと。
 - `運用・販売の示唆` は、明示的に求められない限りレポートへ入れない。
