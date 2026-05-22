@@ -1,5 +1,6 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "vite"
+import solidPlugin from "vite-plugin-solid"
 import desktopPlugin from "./vite"
 
 const sentry =
@@ -20,7 +21,11 @@ const sentry =
     : false
 
 export default defineConfig({
-  plugins: [desktopPlugin, sentry] as any,
+  plugins: [solidPlugin(), desktopPlugin, sentry].filter(Boolean),
+  esbuild: {
+    jsx: "automatic",
+    jsxImportSource: "solid-js",
+  },
   server: {
     host: "0.0.0.0",
     allowedHosts: true,
