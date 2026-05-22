@@ -1,6 +1,17 @@
 import { expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMEvent, LLMResponse, Message, ToolChoice, ToolDefinition, type LLMRequest, type Model } from "../src"
+import {
+  LLM,
+  LLMEvent,
+  LLMResponse,
+  Message,
+  ToolChoice,
+  ToolDefinition,
+  type ContentPart,
+  type FinishReason,
+  type LLMRequest,
+  type Model,
+} from "../src"
 import { LLMClient } from "../src/route"
 import { tool } from "../src/tool"
 
@@ -39,47 +50,6 @@ export const weatherRuntimeTool = tool({
     ),
 })
 
-export const textRequest = (input: {
-  readonly id: string
-  readonly model: Model
-  readonly prompt?: string
-  readonly maxTokens?: number
-  readonly temperature?: number | false
-}) =>
-  LLM.request({
-    id: input.id,
-    model: input.model,
-    system: "You are concise.",
-    prompt: input.prompt ?? "Reply with exactly: Hello!",
-    cache: "none",
-    providerOptions:
-      input.model.route.id === "gemini" ? { gemini: { thinkingConfig: { thinkingBudget: 0 } } } : undefined,
-    generation:
-      input.temperature === false
-        ? { maxTokens: input.maxTokens ?? 80 }
-        : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
-  })
-
-export const weatherToolRequest = (input: {
-  readonly id: string
-  readonly model: Model
-  readonly maxTokens?: number
-  readonly temperature?: number | false
-}) =>
-  LLM.request({
-    id: input.id,
-    model: input.model,
-    system: "Call tools exactly as requested.",
-    prompt: "Call get_weather with city exactly Paris.",
-    tools: [weatherTool],
-    toolChoice: ToolChoice.make(weatherTool),
-    cache: "none",
-    generation:
-      input.temperature === false
-        ? { maxTokens: input.maxTokens ?? 80 }
-        : { maxTokens: input.maxTokens ?? 80, temperature: input.temperature ?? 0 },
-  })
-
 export const weatherToolLoopRequest = (input: {
   readonly id: string
   readonly model: Model
@@ -115,52 +85,6 @@ const restroomImage = () =>
   Effect.promise(() => Bun.file(new URL("./fixtures/media/restroom.png", import.meta.url)).bytes()).pipe(
     Effect.map((bytes) => Buffer.from(bytes).toString("base64")),
   )
-
-export const imageRequest = (input: {
-  readonly id: string
-  readonly model: Model
-  readonly image: string
-  readonly maxTokens?: number
-  readonly temperature?: number | false
-}) =>
-  LLM.request({
-    id: input.id,
-    model: input.model,
-    system: "Read images carefully. Reply only with the visible text.",
-    messages: [
-      Message.user([
-        {
-          type: "text",
-          text: "The image contains exactly three lowercase English words. Read them left to right and reply with only those words.",
-        },
-        { type: "media", mediaType: "image/png", data: input.image },
-      ]),
-    ],
-    cache: "none",
-    generation:
-      input.temperature === false
-        ? { maxTokens: input.maxTokens ?? 20 }
-        : { maxTokens: input.maxTokens ?? 20, temperature: input.temperature ?? 0 },
-  })
-
-export const reasoningRequest = (input: {
-  readonly id: string
-  readonly model: Model
-  readonly maxTokens?: number
-  readonly temperature?: number | false
-}) =>
-  LLM.request({
-    id: input.id,
-    model: input.model,
-    system: "Show concise reasoning when the provider supports visible reasoning summaries.",
-    prompt: "Think briefly, then reply exactly with: Hello!",
-    cache: "none",
-    providerOptions: { openai: { reasoningEffort: "low", reasoningSummary: "auto" } },
-    generation:
-      input.temperature === false
-        ? { maxTokens: input.maxTokens ?? 120 }
-        : { maxTokens: input.maxTokens ?? 120, temperature: input.temperature ?? 0 },
-  })
 
 export const runWeatherToolLoop = (request: LLMRequest) =>
   LLMClient.stream({
@@ -212,8 +136,6 @@ export const expectGoldenWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => 
   expect(LLMResponse.text({ events }).trim()).toMatch(/^Paris is sunny\.?$/)
 }
 
-export type GoldenScenarioID = "text" | "tool-call" | "tool-loop" | "image" | "reasoning"
-
 export interface GoldenScenarioContext {
   readonly id: string
   readonly model: Model
@@ -223,6 +145,9 @@ export interface GoldenScenarioContext {
 
 const generate = (request: LLMRequest) => LLMClient.generate(request)
 
+const generation = (context: GoldenScenarioContext, maxTokens: number) =>
+  context.temperature === false ? { maxTokens } : { maxTokens, temperature: context.temperature ?? 0 }
+
 const normalizeImageText = (value: string) =>
   value
     .toLowerCase()
@@ -230,75 +155,193 @@ const normalizeImageText = (value: string) =>
     .replace(/\s+/g, " ")
     .trim()
 
-export const goldenScenarioTags = (id: GoldenScenarioID) => {
-  if (id === "text") return ["text", "golden"]
-  if (id === "tool-call") return ["tool", "tool-call", "golden"]
-  if (id === "image") return ["media", "image", "vision", "golden"]
-  if (id === "reasoning") return ["reasoning", "golden"]
-  return ["tool", "tool-loop", "golden"]
+const encryptedReasoningOptions = {
+  openai: {
+    store: false,
+    includeEncryptedReasoning: true,
+    reasoningEffort: "low",
+    reasoningSummary: "auto",
+  },
+} as const
+
+type AssistantTextExpectation = string | RegExp
+
+type UserStep = { readonly type: "user"; readonly content: Message.ContentInput }
+type AssistantStep = {
+  readonly type: "assistant"
+  readonly text?: AssistantTextExpectation
+  readonly toolCall?: { readonly name: string; readonly input: unknown }
+  readonly reasoning?: "openai-encrypted"
+  readonly id?: string
+  readonly system?: string
+  readonly maxTokens?: number
+  readonly finish?: FinishReason
+  readonly tools?: LLM.RequestInput["tools"]
+  readonly toolChoice?: LLM.RequestInput["toolChoice"]
+  readonly providerOptions?: LLMRequest["providerOptions"]
+  readonly assert?: (response: LLMResponse) => void
+}
+type ConversationStep = UserStep | AssistantStep
+
+const user = (content: Message.ContentInput): ConversationStep => ({ type: "user", content })
+
+const assistant = {
+  expectText: (
+    text: AssistantTextExpectation,
+    options?: Omit<AssistantStep, "type" | "text" | "reasoning" | "toolCall">,
+  ): ConversationStep => ({ type: "assistant", text, ...options }),
+  expectToolCall: (
+    name: string,
+    input: unknown,
+    options?: Omit<AssistantStep, "type" | "text" | "reasoning" | "toolCall" | "finish">,
+  ): ConversationStep => ({ type: "assistant", toolCall: { name, input }, finish: "tool-calls", ...options }),
+  expectEncryptedReasoningText: (
+    text: AssistantTextExpectation,
+    options?: Omit<AssistantStep, "type" | "text" | "reasoning" | "toolCall" | "providerOptions">,
+  ): ConversationStep => ({
+    type: "assistant",
+    text,
+    reasoning: "openai-encrypted",
+    providerOptions: encryptedReasoningOptions,
+    ...options,
+  }),
 }
 
-export const runGoldenScenario = (id: GoldenScenarioID, context: GoldenScenarioContext) =>
+const assertAssistantText = (actual: string, expected: AssistantTextExpectation) => {
+  if (typeof expected === "string") {
+    expect(actual.trim()).toBe(expected)
+    return
+  }
+  expect(actual.trim()).toMatch(expected)
+}
+
+const assertAssistantToolCall = (response: LLMResponse, expected: NonNullable<AssistantStep["toolCall"]>) => {
+  expect(response.toolCalls).toMatchObject([
+    { type: "tool-call", id: expect.any(String), name: expected.name, input: expected.input },
+  ])
+}
+
+// The generated golden scenarios only model one assistant shape at a time:
+// encrypted reasoning + text, text, or tool call. Keep mixed interleavings in
+// focused protocol tests where event order can be asserted directly.
+const assistantMessageFromResponse = (response: LLMResponse, step: AssistantStep) => {
+  const content: ContentPart[] = []
+  if (step.reasoning === "openai-encrypted") {
+    const reasoning = response.events.find(
+      (event): event is Extract<LLMEvent, { readonly type: "reasoning-end" }> =>
+        LLMEvent.is.reasoningEnd(event) && typeof event.providerMetadata?.openai?.itemId === "string",
+    )
+    if (!reasoning) throw new Error("OpenAI Responses did not return reasoning metadata")
+    expect(reasoning.providerMetadata?.openai?.reasoningEncryptedContent).toEqual(expect.any(String))
+    content.push({ type: "reasoning", text: response.reasoning, providerMetadata: reasoning.providerMetadata })
+  }
+
+  if (response.text.length > 0) content.push({ type: "text", text: response.text })
+  content.push(...response.toolCalls)
+  return Message.assistant(content)
+}
+
+const runGeneratedConversation = (context: GoldenScenarioContext, steps: ReadonlyArray<ConversationStep>) =>
   Effect.gen(function* () {
-    if (id === "text") {
+    const messages: Message[] = []
+    let generated = 0
+    for (const step of steps) {
+      if (step.type === "user") {
+        messages.push(Message.user(step.content))
+        continue
+      }
+
+      generated += 1
       const response = yield* generate(
-        textRequest({
-          id: context.id,
+        LLM.request({
+          id: step.id ? `${context.id}_${step.id}` : `${context.id}_${generated}`,
           model: context.model,
-          prompt: "Reply exactly with: Hello!",
-          maxTokens: context.maxTokens ?? 40,
-          temperature: context.temperature,
+          system: step.system,
+          cache: "none",
+          messages,
+          tools: step.tools,
+          toolChoice: step.toolChoice,
+          providerOptions: step.providerOptions,
+          generation: generation(context, step.maxTokens ?? context.maxTokens ?? 80),
         }),
       )
-      expect(response.text.trim()).toMatch(/^Hello!?$/)
-      expectFinish(response.events, "stop")
-      return
+      if (step.text !== undefined) assertAssistantText(response.text, step.text)
+      if (step.toolCall) assertAssistantToolCall(response, step.toolCall)
+      step.assert?.(response)
+      expectFinish(response.events, step.finish ?? "stop")
+      messages.push(assistantMessageFromResponse(response, step))
     }
+  })
 
-    if (id === "tool-call") {
-      const response = yield* generate(
-        weatherToolRequest({
-          id: context.id,
-          model: context.model,
-          maxTokens: context.maxTokens ?? 80,
-          temperature: context.temperature,
-        }),
-      )
-      expectWeatherToolCall(response)
-      expectFinish(response.events, "tool-calls")
-      return
-    }
+const runTextScenario = (context: GoldenScenarioContext) =>
+  runGeneratedConversation(context, [
+    user("Reply exactly with: Hello!"),
+    assistant.expectText(/^Hello!?$/, {
+      system: "You are concise.",
+      maxTokens: context.maxTokens ?? 40,
+      providerOptions:
+        context.model.route.id === "gemini" ? { gemini: { thinkingConfig: { thinkingBudget: 0 } } } : undefined,
+    }),
+  ])
 
-    if (id === "image") {
-      const response = yield* generate(
-        imageRequest({
-          id: context.id,
-          model: context.model,
-          image: yield* restroomImage(),
-          maxTokens: context.maxTokens ?? 20,
-          temperature: context.temperature,
-        }),
-      )
-      expect(normalizeImageText(response.text)).toBe(RESTROOM_IMAGE_TEXT)
-      expectFinish(response.events, "stop")
-      return
-    }
+const runToolCallScenario = (context: GoldenScenarioContext) =>
+  runGeneratedConversation(context, [
+    user("Call get_weather with city exactly Paris."),
+    assistant.expectToolCall(
+      weatherToolName,
+      { city: "Paris" },
+      {
+        system: "Call tools exactly as requested.",
+        tools: [weatherTool],
+        toolChoice: ToolChoice.make(weatherTool),
+        maxTokens: context.maxTokens ?? 80,
+      },
+    ),
+  ])
 
-    if (id === "reasoning") {
-      const response = yield* generate(
-        reasoningRequest({
-          id: context.id,
-          model: context.model,
-          maxTokens: context.maxTokens ?? 120,
-          temperature: context.temperature,
-        }),
-      )
-      expect(response.text.trim()).toMatch(/^Hello!?$/)
-      expect(response.usage?.reasoningTokens ?? 0).toBeGreaterThan(0)
-      expectFinish(response.events, "stop")
-      return
-    }
+const runImageScenario = (context: GoldenScenarioContext) =>
+  Effect.gen(function* () {
+    yield* runGeneratedConversation(context, [
+      user([
+        {
+          type: "text",
+          text: "The image contains exactly three lowercase English words. Read them left to right and reply with only those words.",
+        },
+        { type: "media", mediaType: "image/png", data: yield* restroomImage() },
+      ]),
+      assistant.expectText(/.+/, {
+        system: "Read images carefully. Reply only with the visible text.",
+        maxTokens: context.maxTokens ?? 20,
+        assert: (response) => expect(normalizeImageText(response.text)).toBe(RESTROOM_IMAGE_TEXT),
+      }),
+    ])
+  })
 
+const runReasoningScenario = (context: GoldenScenarioContext) =>
+  runGeneratedConversation(context, [
+    user("Think briefly, then reply exactly with: Hello!"),
+    assistant.expectText(/^Hello!?$/, {
+      system: "Show concise reasoning when the provider supports visible reasoning summaries.",
+      providerOptions: { openai: { reasoningEffort: "low", reasoningSummary: "auto" } },
+      maxTokens: context.maxTokens ?? 120,
+      assert: (response) => expect(response.usage?.reasoningTokens ?? 0).toBeGreaterThan(0),
+    }),
+  ])
+
+const runReasoningContinuationScenario = (context: GoldenScenarioContext) =>
+  runGeneratedConversation(context, [
+    user("Think briefly, then reply exactly with: Hello!"),
+    assistant.expectEncryptedReasoningText(/^Hello!?$/, {
+      id: "first",
+      system: "Show concise reasoning when the provider supports visible reasoning summaries.",
+      maxTokens: context.maxTokens ?? 120,
+    }),
+    user("Now reply exactly with: Done."),
+    assistant.expectText(/^Done\.?$/, { id: "second", maxTokens: 40, providerOptions: encryptedReasoningOptions }),
+  ])
+
+const runToolLoopScenario = (context: GoldenScenarioContext) =>
+  Effect.gen(function* () {
     expectGoldenWeatherToolLoop(
       yield* runWeatherToolLoop(
         goldenWeatherToolLoopRequest({
@@ -310,6 +353,25 @@ export const runGoldenScenario = (id: GoldenScenarioID, context: GoldenScenarioC
       ),
     )
   })
+
+const goldenScenarios = {
+  text: { title: "streams text", tags: ["text", "golden"], run: runTextScenario },
+  "tool-call": { title: "streams tool call", tags: ["tool", "tool-call", "golden"], run: runToolCallScenario },
+  "tool-loop": { title: "drives a tool loop", tags: ["tool", "tool-loop", "golden"], run: runToolLoopScenario },
+  image: { title: "reads image text", tags: ["media", "image", "vision", "golden"], run: runImageScenario },
+  reasoning: { title: "uses reasoning", tags: ["reasoning", "golden"], run: runReasoningScenario },
+  "reasoning-continuation": {
+    title: "continues encrypted reasoning",
+    tags: ["reasoning", "continuation", "encrypted-reasoning", "golden"],
+    run: runReasoningContinuationScenario,
+  },
+} as const
+
+export type GoldenScenarioID = keyof typeof goldenScenarios
+export const goldenScenarioTitle = (id: GoldenScenarioID) => goldenScenarios[id].title
+export const goldenScenarioTags = (id: GoldenScenarioID) => [...goldenScenarios[id].tags]
+export const runGoldenScenario = (id: GoldenScenarioID, context: GoldenScenarioContext) =>
+  goldenScenarios[id].run(context)
 
 const usageSummary = (usage: LLMResponse["usage"] | undefined) => {
   if (!usage) return undefined
