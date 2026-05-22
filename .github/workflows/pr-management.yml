@@ -11,21 +11,24 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          fetch-depth: 1
-
       - name: Check team membership
         id: team-check
         run: |
           LOGIN="${{ github.event.pull_request.user.login }}"
-          if [ "$LOGIN" = "opencode-agent[bot]" ] || grep -qxF "$LOGIN" .github/TEAM_MEMBERS; then
+          ASSOCIATION="${{ github.event.pull_request.author_association }}"
+          if [ "$LOGIN" = "opencode-agent[bot]" ] || [ "$ASSOCIATION" = "OWNER" ] || [ "$ASSOCIATION" = "MEMBER" ] || [ "$ASSOCIATION" = "COLLABORATOR" ]; then
             echo "is_team=true" >> "$GITHUB_OUTPUT"
             echo "Skipping: $LOGIN is a team member or bot"
           else
             echo "is_team=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Checkout repository
+        if: steps.team-check.outputs.is_team != 'true'
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.base.sha }}
 
       - name: Setup Bun
         if: steps.team-check.outputs.is_team != 'true'

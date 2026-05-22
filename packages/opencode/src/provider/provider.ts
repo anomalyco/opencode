@@ -7,6 +7,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Plugin } from "../plugin"
+import { serviceUse } from "@/effect/service-use"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
 import * as ModelsDev from "@opencode-ai/core/models-dev"
 import { Auth } from "../auth"
@@ -82,6 +83,13 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
     status: res.status,
     statusText: res.statusText,
   })
+}
+
+function googleVertexAnthropicBaseURL(project: string | undefined, location: string | undefined) {
+  if (!project) return
+  if (location !== "eu" && location !== "us") return
+  // Continental multi-regions require Regional Endpoint Platform domains.
+  return `https://aiplatform.${location}.rep.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models`
 }
 
 type BundledSDK = {
@@ -506,11 +514,13 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const location = env["GOOGLE_CLOUD_LOCATION"] ?? env["VERTEX_LOCATION"] ?? "global"
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
+      const baseURL = googleVertexAnthropicBaseURL(project, location)
       return {
         autoload: true,
         options: {
           project,
           location,
+          ...(baseURL && { baseURL }),
         },
         async getModel(sdk: any, modelID) {
           const id = String(modelID).trim()
@@ -1009,6 +1019,8 @@ interface State {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
+
+export const use = serviceUse(Service)
 
 function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   const result: Model["cost"] = {
@@ -1512,6 +1524,18 @@ export const layer = Layer.effect(
         })
         const provider = s.providers[model.providerID]
         const options = { ...provider.options }
+
+        if (
+          model.providerID === "google-vertex" &&
+          model.api.npm === "@ai-sdk/google-vertex/anthropic" &&
+          !options.baseURL
+        ) {
+          const baseURL = googleVertexAnthropicBaseURL(
+            typeof options.project === "string" ? options.project : undefined,
+            typeof options.location === "string" ? options.location : undefined,
+          )
+          if (baseURL) options.baseURL = baseURL
+        }
 
         if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
           delete options.fetch

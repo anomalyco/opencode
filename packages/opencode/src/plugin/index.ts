@@ -19,6 +19,7 @@ import { PoeAuthPlugin } from "opencode-poe-auth"
 import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
 import { AzureAuthPlugin } from "./azure"
 import { DigitalOceanAuthPlugin } from "./digitalocean"
+import { XaiAuthPlugin } from "./xai"
 import { Effect, Layer, Context, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
@@ -66,6 +67,7 @@ const INTERNAL_PLUGINS: PluginInstance[] = [
   CloudflareAIGatewayAuthPlugin,
   AzureAuthPlugin,
   DigitalOceanAuthPlugin,
+  XaiAuthPlugin,
 ]
 
 function isServerPlugin(value: unknown): value is PluginInstance {

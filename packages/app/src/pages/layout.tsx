@@ -14,6 +14,7 @@ import {
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
+import { useQuery } from "@tanstack/solid-query"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
@@ -61,7 +62,7 @@ import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DebugBar } from "@/components/debug-bar"
-import { Titlebar } from "@/components/titlebar"
+import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
 import { pathKey } from "@/utils/path-key"
@@ -87,6 +88,8 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+
+const USE_NEW_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -151,7 +154,7 @@ export default function Layout(props: ParentProps) {
   const currentDir = createMemo(() => route().dir)
 
   const [state, setState] = createStore({
-    autoselect: !initialDirectory,
+    autoselect: !initialDirectory && !USE_NEW_DESIGN,
     busyWorkspaces: {} as Record<string, boolean>,
     hoverProject: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
@@ -161,6 +164,35 @@ export default function Layout(props: ParentProps) {
     peek: undefined as string | undefined,
     peeked: false,
   })
+
+  const [update, setUpdate] = createStore({
+    installing: false,
+  })
+  const updateQuery = useQuery(() => ({
+    queryKey: ["desktop", "update"] as const,
+    enabled: () =>
+      !!platform.checkUpdate && !!platform.updateAndRestart && settings.ready() && settings.updates.startup(),
+    queryFn: () => platform.checkUpdate?.() ?? Promise.resolve({ updateAvailable: false, version: undefined }),
+    refetchInterval: (query) => (query.state.data?.updateAvailable ? false : 10 * 60 * 1000),
+  }))
+  const updateVersion = () => {
+    if (!settings.ready()) return
+    if (!settings.updates.startup()) return
+    if (!updateQuery.data?.updateAvailable) return
+    return updateQuery.data.version ?? ""
+  }
+  const installUpdate = () => {
+    if (!platform.updateAndRestart) return
+    setUpdate("installing", true)
+    void platform.updateAndRestart().catch(() => {
+      setUpdate("installing", false)
+    })
+  }
+  const titlebarUpdate: TitlebarUpdate = {
+    version: updateVersion,
+    installing: () => update.installing,
+    install: installUpdate,
+  }
 
   const editor = createInlineEditorController()
   const setBusy = (directory: string, value: boolean) => {
@@ -364,58 +396,6 @@ export default function Layout(props: ParentProps) {
     setLocale(next)
   }
 
-  const useUpdatePolling = () =>
-    onMount(() => {
-      if (!platform.checkUpdate || !platform.updateAndRestart) return
-
-      let toastId: number | undefined
-      let interval: ReturnType<typeof setInterval> | undefined
-
-      const pollUpdate = () =>
-        platform.checkUpdate!().then(({ updateAvailable, version }) => {
-          if (!updateAvailable) return
-          if (toastId !== undefined) return
-          toastId = showToast({
-            persistent: true,
-            icon: "download",
-            title: language.t("toast.update.title"),
-            description: language.t("toast.update.description", { version: version ?? "" }),
-            actions: [
-              {
-                label: language.t("toast.update.action.installRestart"),
-                onClick: async () => {
-                  await platform.updateAndRestart!()
-                },
-              },
-              {
-                label: language.t("toast.update.action.notYet"),
-                onClick: "dismiss",
-              },
-            ],
-          })
-        })
-
-      createEffect(() => {
-        if (!settings.ready()) return
-
-        if (!settings.updates.startup()) {
-          if (interval === undefined) return
-          clearInterval(interval)
-          interval = undefined
-          return
-        }
-
-        if (interval !== undefined) return
-        void pollUpdate()
-        interval = setInterval(pollUpdate, 10 * 60 * 1000)
-      })
-
-      onCleanup(() => {
-        if (interval === undefined) return
-        clearInterval(interval)
-      })
-    })
-
   const useSDKNotificationToasts = () =>
     onMount(() => {
       const toastBySession = new Map<string, number>()
@@ -535,7 +515,6 @@ export default function Layout(props: ParentProps) {
       })
     })
 
-  useUpdatePolling()
   useSDKNotificationToasts()
 
   function scrollToSession(sessionId: string, sessionKey: string) {
@@ -1049,19 +1028,6 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+alt+arrowdown",
         onSelect: () => navigateProjectByOffset(1),
       },
-      ...Array.from({ length: 9 }, (_, i) => {
-        const index = i
-        const number = index + 1
-        return {
-          id: `project.${number}`,
-          category: language.t("command.category.project"),
-          title: `Open Project {number}`,
-          keybind: `mod+${number}`,
-          disabled: layout.projects.list().length <= index,
-          hidden: true,
-          onSelect: () => navigateToProjectIndex(index),
-        }
-      }),
       {
         id: "provider.connect",
         title: language.t("command.provider.connect"),
@@ -1081,6 +1047,18 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+comma",
         onSelect: () => openSettings(),
       },
+      ...(platform.platform === "desktop" && platform.exportDebugLogs
+        ? [
+            {
+              id: "logs.export",
+              title: "Export logs",
+              category: language.t("command.category.settings"),
+              onSelect: () => {
+                void platform.exportDebugLogs?.()
+              },
+            },
+          ]
+        : []),
       {
         id: "session.previous",
         title: language.t("command.session.previous"),
@@ -1163,6 +1141,21 @@ export default function Layout(props: ParentProps) {
         onSelect: () => cycleTheme(1),
       },
     ]
+
+    if (!USE_NEW_DESIGN)
+      Array.from({ length: 9 }, (_, i) => {
+        const index = i
+        const number = index + 1
+        commands.push({
+          id: `project.${number}`,
+          category: language.t("command.category.project"),
+          title: `Open Project {number}`,
+          keybind: `mod+${number}`,
+          disabled: layout.projects.list().length <= index,
+          hidden: true,
+          onSelect: () => navigateToProjectIndex(index),
+        })
+      })
 
     for (const [id] of availableThemeEntries()) {
       commands.push({
@@ -1826,8 +1819,10 @@ export default function Layout(props: ParentProps) {
   )
 
   createEffect(() => {
-    const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 48
-    document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
+    document.documentElement.style.setProperty(
+      "--dialog-left-margin",
+      USE_NEW_DESIGN ? "0px" : `${layout.sidebar.opened() ? layout.sidebar.width() : 48}px`,
+    )
   })
 
   const side = createMemo(() => Math.max(layout.sidebar.width(), 244))
@@ -2310,7 +2305,7 @@ export default function Layout(props: ParentProps) {
         <div
           class="shrink-0 px-3 py-3"
           classList={{
-            hidden: store.gettingStartedDismissed || !(providers.all().length > 0 && providers.paid().length === 0),
+            hidden: store.gettingStartedDismissed || !(providers.all().size > 0 && providers.paid().length === 0),
           }}
         >
           <div class="rounded-xl bg-background-base shadow-xs-border-base" data-component="getting-started">
@@ -2368,10 +2363,34 @@ export default function Layout(props: ParentProps) {
     />
   )
 
+  if (USE_NEW_DESIGN) {
+    return (
+      <div class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+        {autoselecting() ?? ""}
+        <Titlebar update={titlebarUpdate} />
+        <main
+          class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict bg-v2-background-bg-base"
+          classList={{
+            "m-2 mt-0 rounded-[10px] shadow-[var(--v2-elevation-raised)] overflow-hidden": !!params.id || !params.dir,
+          }}
+        >
+          <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
+            {props.children}
+          </Show>
+        </main>
+        {import.meta.env.DEV && <DebugBar />}
+        <Toast.Region />
+      </div>
+    )
+  }
+
   return (
     <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       {autoselecting() ?? ""}
-      <Titlebar />
+      <Titlebar update={titlebarUpdate} />
+      <Show when={updateVersion() !== undefined}>
+        <UpdateAvailableToast version={updateVersion() ?? ""} install={installUpdate} language={language} />
+      </Show>
       <div class="flex-1 min-h-0 min-w-0 flex">
         <div class="flex-1 min-h-0 relative">
           <div class="size-full relative overflow-x-hidden">
@@ -2518,4 +2537,38 @@ export default function Layout(props: ParentProps) {
       <Toast.Region />
     </div>
   )
+}
+
+function UpdateAvailableToast(props: {
+  version: string
+  install: () => void
+  language: ReturnType<typeof useLanguage>
+}) {
+  let toastId: number | undefined
+
+  onMount(() => {
+    toastId = showToast({
+      persistent: true,
+      icon: "download",
+      title: props.language.t("toast.update.title"),
+      description: props.language.t("toast.update.description", { version: props.version }),
+      actions: [
+        {
+          label: props.language.t("toast.update.action.installRestart"),
+          onClick: props.install,
+        },
+        {
+          label: props.language.t("toast.update.action.notYet"),
+          onClick: "dismiss",
+        },
+      ],
+    })
+  })
+
+  onCleanup(() => {
+    if (toastId === undefined) return
+    toaster.dismiss(toastId)
+  })
+
+  return null
 }
