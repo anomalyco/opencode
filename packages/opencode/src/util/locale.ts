@@ -1,16 +1,24 @@
+function systemLocale(): string | undefined {
+  const raw = process.env.LC_ALL || process.env.LC_TIME || process.env.LANG
+  if (!raw) return undefined
+  const base = raw.split(".")[0]
+  if (base === "C" || base === "POSIX") return undefined
+  return base.replace("_", "-")
+}
+
 export function titlecase(str: string) {
   return str.replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 export function time(input: number): string {
   const date = new Date(input)
-  return date.toLocaleTimeString(undefined, { timeStyle: "short" })
+  return date.toLocaleTimeString(systemLocale(), { timeStyle: "short" })
 }
 
 export function datetime(input: number): string {
   const date = new Date(input)
   const localTime = time(input)
-  const localDate = date.toLocaleDateString()
+  const localDate = date.toLocaleDateString(systemLocale())
   return `${localTime} · ${localDate}`
 }
 
