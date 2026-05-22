@@ -206,6 +206,24 @@ describe("doc", () => {
         expect(fetched.status).toBe(200)
         expect(fetched.headers.get("content-type")).toBe("application/pdf")
         expect(Array.from(new Uint8Array(await fetched.arrayBuffer()))).toEqual([10, 11, 12])
+
+        const html = await app.request(`/doc/${docID}/asset?directory=${dir}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "html",
+            mime: "text/html",
+            data: Buffer.from("<script>alert(1)</script>").toString("base64"),
+          }),
+        })
+        expect(html.status).toBe(200)
+        const unsafe = (await html.json()) as Doc.AssetInfo
+        expect(unsafe.mime).toBe("application/octet-stream")
+        const bin = await app.request(unsafe.url)
+        expect(bin.status).toBe(200)
+        expect(bin.headers.get("content-type")).toBe("application/octet-stream")
+        expect(bin.headers.get("content-disposition")).toBe('attachment; filename="html"')
+        expect(bin.headers.get("x-content-type-options")).toBe("nosniff")
       },
     })
   })

@@ -8,7 +8,7 @@ import { initDoc } from "./doc-init"
 import { link, load, remote } from "./doc-remote"
 import { ensureEffects } from "./effects"
 import { frame, settled } from "./frame"
-import { inlineReady, softBreak } from "./inline-editor"
+import { inlineReady } from "./inline-editor"
 import { OpencodeAwarenessSource, OpencodeBlobSource, OpencodeDocSource, type DocSyncOpts } from "./opencode-doc-source"
 import { scheme } from "./theme"
 
@@ -19,11 +19,6 @@ export type DocMountInput = {
   init?: boolean
   readonly?: boolean
   submit?: () => void
-}
-
-const slashOpen = () => {
-  const menu = document.querySelector(".slash-menu")
-  return menu instanceof HTMLElement && menu.getClientRects().length > 0
 }
 
 type SlashCtx = {
@@ -67,8 +62,22 @@ type SlashWidget = HTMLElement & {
   config: SlashConfig
   __opencode?: SlashConfig
 }
+type Para = { type: string }
+type Svc = {
+  placeholderGenerator: (model: Para) => string
+  __opencode?: (model: Para) => string
+}
+type Host = HTMLElement & {
+  std: {
+    getService: (flavour: string) => unknown
+  }
+}
+type Block = HTMLElement & {
+  requestUpdate?: () => unknown
+}
 
 const ko: Record<string, string> = {
+  "Type '/' for commands": "명령어를 보려면 '/'를 입력하세요",
   Basic: "기본",
   Text: "텍스트",
   "Start typing with plain text.": "일반 텍스트로 입력합니다.",
@@ -157,6 +166,22 @@ const tr = (locale: string | undefined, text: string | undefined) => {
   if (!text) return text
   if (locale !== "ko") return text
   return ko[text] ?? text
+}
+
+const service = (value: unknown): value is Svc => {
+  if (!value || typeof value !== "object") return false
+  return typeof (value as { placeholderGenerator?: unknown }).placeholderGenerator === "function"
+}
+
+const hint = (editor: Host, locale: string | undefined) => {
+  const svc = editor.std.getService("affine:paragraph")
+  if (!service(svc)) return
+  const base = svc.__opencode ?? svc.placeholderGenerator
+  svc.__opencode = base
+  svc.placeholderGenerator = locale === "ko" ? (model) => tr(locale, base(model)) ?? "" : base
+  editor.querySelectorAll("affine-paragraph").forEach((node) => {
+    if ("requestUpdate" in node) (node as Block).requestUpdate?.()
+  })
 }
 
 const localize = (locale: string | undefined, entry: SlashStatic): SlashStatic => {
@@ -368,23 +393,19 @@ export async function createPage(input: DocMountInput) {
       const send = input.submit
       if (!input.readonly && send) {
         const onKey = (event: KeyboardEvent) => {
-          if (event.key !== "Enter" || event.isComposing || slashOpen()) return
+          if (event.key !== "Enter" || event.isComposing) return
           if (event.altKey || event.metaKey || event.ctrlKey) return
-          if (event.shiftKey) {
-            if (!softBreak(editor)) return
-            event.preventDefault()
-            event.stopPropagation()
-            return
-          }
-          if (event.repeat) return
+          if (!event.shiftKey) return
           event.preventDefault()
           event.stopPropagation()
+          if (event.repeat) return
           send()
         }
         editor.addEventListener("keydown", onKey, true)
         unkeys = () => editor.removeEventListener("keydown", onKey, true)
       }
       if (!attached && ready) await focus(ready)
+      hint(editor, input.locale?.())
       if (input.sync && awareness && !aware) {
         collection.awarenessSync.connect()
         aware = true
