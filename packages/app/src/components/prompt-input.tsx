@@ -35,7 +35,7 @@ import { dict as enDict } from "@/i18n/en"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { extraAgentCapabilities } from "@/pages/layout/extra-agents"
+import { extraAgentByDirectory, extraAgentCapabilities } from "@/pages/layout/extra-agents"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
@@ -144,6 +144,15 @@ function logPromptHover(name: string, phase: string, event?: { timeStamp?: numbe
 function logPromptOpen(name: string, fields: Record<string, string | number | boolean | undefined>) {
   if (!dbg()) return
   console.debug("[prompt:open]", { name, ...fields })
+}
+
+const isAbsolutePath = (input: string) =>
+  input.startsWith("/") || /^[A-Za-z]:[\\/]/.test(input) || /^[A-Za-z]:$/.test(input) || input.startsWith("\\\\") || input.startsWith("//")
+
+const joinPath = (directory: string, input: string) => {
+  if (!directory || isAbsolutePath(input)) return input
+  const separator = directory.includes("\\") && !directory.includes("/") ? "\\" : "/"
+  return `${directory.replace(/[\\/]+$/, "")}${separator}${input.replace(/^[\\/]+/, "")}`
 }
 
 const GitContext = () => {
@@ -393,7 +402,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const server = useServer()
   const win = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
   const { params, tabs, view } = useSessionLayout()
-  const extraAgentIntegration = createMemo(() => server.current?.integration)
+  const extraAgentIntegration = createMemo(() => extraAgentByDirectory(sdk.directory)?.id ?? server.current?.integration)
   const extraAgentCaps = createMemo(() => extraAgentCapabilities(extraAgentIntegration()))
   const hasAgentChoose = createMemo(() => !!extraAgentCaps()?.agentChoose)
   const hideAgentSelector = createMemo(() => !!extraAgentCaps()?.hideAgent)
@@ -927,13 +936,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name })),
   )
   const agentNames = createMemo(() => local.agent.list().map((agent) => agent.name))
+  const genericAgentAtDirectory = createMemo(() => {
+    if (extraAgentIntegration() !== "genericagent") return
+    const sessionCwd = (info() as { cwd?: string } | undefined)?.cwd?.trim()
+    if (sessionCwd) return sessionCwd
+    if (params.id) return
+    const selected = props.newSessionWorktree?.trim()
+    if (!selected || selected === "main" || selected === "create") return
+    return selected
+  })
 
   const handleAtSelect = (option: AtOption | undefined) => {
     if (!option) return
     if (option.type === "agent") {
       addPart({ type: "agent", name: option.name, content: "@" + option.name, start: 0, end: 0 })
     } else {
-      addPart({ type: "file", path: option.path, content: "@" + option.path, start: 0, end: 0 })
+      addPart({ type: "file", path: option.path, content: option.content ?? "@" + option.path, start: 0, end: 0 })
     }
   }
 
@@ -954,12 +972,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const open = recent()
       const seen = new Set(open)
       const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
-      if (!query.trim()) return [...agents, ...pinned]
-      const paths = await files.searchFilesAndDirectories(query)
-      const fileOptions: AtOption[] = paths
-        .filter((path) => !seen.has(path))
-        .map((path) => ({ type: "file", path, display: path }))
-      return [...agents, ...pinned, ...fileOptions]
+      const atDirectory = genericAgentAtDirectory()
+      const toFileOptions = (paths: string[]): AtOption[] =>
+        paths
+          .filter((path) => !seen.has(path))
+          .map((path) => {
+            if (!atDirectory) return { type: "file", path, display: path }
+            return {
+              type: "file",
+              path: joinPath(atDirectory, path),
+              display: path,
+              content: "@" + path,
+            }
+          })
+      if (!query.trim()) {
+        return [...agents, ...pinned]
+      }
+      const paths = atDirectory
+        ? await sdk
+            .createClient({ directory: atDirectory, throwOnError: true })
+            .find.files({ query, dirs: "true" })
+            .then((x) => x.data ?? [])
+            .catch(() => [])
+        : await files.searchFilesAndDirectories(query)
+      return [...agents, ...pinned, ...toFileOptions(paths)]
     },
     key: atKey,
     filterKeys: ["display"],

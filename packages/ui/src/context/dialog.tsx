@@ -1,4 +1,5 @@
 import {
+  ErrorBoundary,
   Suspense,
   createContext,
   createEffect,
@@ -21,6 +22,9 @@ type DialogElement = () => JSX.Element
 type DialogOptions = {
   modal?: boolean
   preventScroll?: boolean
+  isolate?: boolean
+  suspenseFallback?: JSX.Element
+  errorFallback?: JSX.Element | ((err: any, reset: () => void) => JSX.Element)
 }
 
 type Active = {
@@ -102,6 +106,7 @@ function init() {
         dispose = d
         const [closing, setClosingSignal] = createSignal(false)
         setClosing = setClosingSignal
+        const isolated = opts?.isolate ?? true
         return (
           <Kobalte
             modal={opts?.modal ?? true}
@@ -114,7 +119,13 @@ function init() {
           >
             <Kobalte.Portal>
               <Kobalte.Overlay data-component="dialog-overlay" onClick={close} />
-              <Suspense fallback={null}>{element()}</Suspense>
+              {isolated ? (
+                <ErrorBoundary fallback={opts?.errorFallback ?? null}>
+                  <Suspense fallback={opts?.suspenseFallback ?? null}>{element()}</Suspense>
+                </ErrorBoundary>
+              ) : (
+                <Suspense fallback={opts?.suspenseFallback ?? null}>{element()}</Suspense>
+              )}
             </Kobalte.Portal>
           </Kobalte>
         )
