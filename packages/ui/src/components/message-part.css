@@ -157,6 +157,11 @@
     white-space: normal;
   }
 
+  [data-slot="user-message-text"][data-raw="true"] {
+    white-space: pre-wrap;
+    font-family: var(--font-family-mono);
+  }
+
   [data-slot="user-message-copy-wrapper"] {
     min-height: 24px;
     margin-top: 4px;

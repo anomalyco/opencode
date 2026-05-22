@@ -964,6 +964,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     if (meta?.source !== "doc") return
     return typeof meta.docID === "string" ? meta.docID : undefined
   })
+  const raw = createMemo(() => !!doc() && mode() === "prompt")
 
   const view = createMemo(() => {
     const id = doc()
@@ -994,7 +995,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
 
   const content = () => (
-    <Show when={markdown()} fallback={<HighlightedText text={text()} references={inlineFiles()} agents={agents()} />}>
+    <Show when={markdown() && !raw()} fallback={<HighlightedText text={text()} references={inlineFiles()} agents={agents()} />}>
       <Markdown text={docText()} cacheKey={textPart()?.id} />
     </Show>
   )
@@ -1094,7 +1095,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
       <Show when={text()}>
         <>
           <div data-slot="user-message-body" data-doc={doc() ? "true" : undefined}>
-            <div data-slot="user-message-text" data-doc={doc() ? "true" : undefined}>
+            <div data-slot="user-message-text" data-doc={doc() ? "true" : undefined} data-raw={raw() ? "true" : undefined}>
               <Show when={mode() === "doc" ? view() : undefined} keyed fallback={content()}>
                 {(next) => <Dynamic component={next.comp} id={next.id} fallback={content()} />}
               </Show>

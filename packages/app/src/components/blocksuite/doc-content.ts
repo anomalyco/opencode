@@ -120,13 +120,6 @@ function title(model: BlockModel, name: string) {
   return str(model, "title") ?? (caption(model) || undefined) ?? str(model, "name") ?? name
 }
 
-function link(model: BlockModel, name: string) {
-  const url = str(model, "url")
-  const text = title(model, name)
-  if (!url) return `**${name}: ${text}**`
-  return `[${label(text)}](${url})`
-}
-
 function detail(name: string, value?: string | number | null) {
   if (value === undefined || value === null || value === "") return
   return `- ${name}: ${value}`
@@ -184,19 +177,7 @@ async function dataUrl(opts: ExportOpts, id: string) {
 }
 
 function embed(model: BlockModel, name: string) {
-  return [
-    link(model, name),
-    detail("Caption", caption(model)),
-    detail("Description", str(model, "description")),
-    detail("Creator", str(model, "creator")),
-    detail("Creator URL", str(model, "creatorUrl")),
-    detail("Video ID", str(model, "videoId")),
-    detail("Owner", str(model, "owner")),
-    detail("Repository", str(model, "repo")),
-    detail("GitHub Type", str(model, "githubType")),
-    detail("GitHub ID", str(model, "githubId")),
-    detail("Status", str(model, "status")),
-  ].filter((line): line is string => !!line)
+  return [fence("json", JSON.stringify({ type: name, ...props(model) }, null, 2))]
 }
 
 function unknown(model: BlockModel) {
@@ -301,16 +282,6 @@ async function block(model: BlockModel, opts: ExportOpts, assets: DocExportAsset
     const asset = await dataUrl(opts, id)
     if (asset) assets.push({ id, mime: asset.mime, filename: name, dataUrl: asset.dataUrl })
     return [`[${label(name)}](attachment://${encodeURIComponent(id)})`, ...meta, ...nested]
-  }
-
-  if (model.flavour === "affine:embed-html") {
-    const text = str(model, "html") ?? str(model, "design")
-    const nested = await children()
-    return [
-      caption(model) ? `HTML Embed: ${caption(model)}` : "HTML Embed",
-      text ? fence("html", text) : "",
-      ...nested,
-    ].filter((line): line is string => !!line)
   }
 
   if (model.flavour.startsWith("affine:embed-") || model.flavour === "affine:bookmark") {

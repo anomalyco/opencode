@@ -79,6 +79,7 @@ export function createPromptDoc(input: PromptDocInput) {
   const ensure = async (sessionID: string) => {
     const actor = await register(input, sessionID)
     const doc = await promptDoc(input, sessionID)
+    setDocID(doc.docID)
     sync = {
       docID: doc.docID,
       baseUrl: input.url(),
@@ -134,6 +135,7 @@ export function createPromptDoc(input: PromptDocInput) {
   const pivot = (sessionID: string, next: string, opts?: { init?: boolean; force?: boolean }) => {
     if (!opts?.force && live === next && handle?.collection.id === next && sync?.docID === next)
       return Promise.resolve()
+    setDocID(next)
     const should = opts?.init ?? true
     if (!opts?.force && pending?.id === next && (pending.init || !should)) return pending.task
     const mark = ++seq
@@ -163,6 +165,7 @@ export function createPromptDoc(input: PromptDocInput) {
 
   const refresh = async (sessionID: string, opts?: { init?: boolean }) => {
     const doc = await promptDoc(input, sessionID)
+    setDocID(doc.docID)
     if (live !== doc.docID || handle?.collection.id !== doc.docID || sync?.docID !== doc.docID) {
       await pivot(sessionID, doc.docID, opts)
       return doc.docID
@@ -179,6 +182,7 @@ export function createPromptDoc(input: PromptDocInput) {
     if (!sessionID) return
 
     const remote = await promptDoc(input, sessionID)
+    setDocID(remote.docID)
     if (session !== sessionID || !sync || sync.docID !== remote.docID) {
       await drop()
       await ensure(sessionID)

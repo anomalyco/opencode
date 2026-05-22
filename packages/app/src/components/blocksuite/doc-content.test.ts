@@ -44,7 +44,7 @@ describe("docMarkdown", () => {
     cols.splice(0).forEach((col) => col.dispose())
   })
 
-  test("serializes BlockSuite embeds into markdown details", async () => {
+  test("serializes BlockSuite embeds into json code blocks", async () => {
     const ctx = page()
 
     add(
@@ -67,12 +67,15 @@ describe("docMarkdown", () => {
       opts(async () => new Response(null, { status: 404 })),
     )
 
-    expect(out.text).toContain("[Tropical House](https://www.youtube.com/watch?v=clip)")
-    expect(out.text).toContain("- Caption: Watch this")
-    expect(out.text).toContain("- Description: Album cover reference")
-    expect(out.text).toContain("- Creator: Channel")
-    expect(out.text).toContain("- Creator URL: https://youtube.com/@channel")
-    expect(out.text).toContain("- Video ID: clip")
+    expect(out.text).toContain("```json")
+    expect(out.text).toContain('"type": "youtube"')
+    expect(out.text).toContain('"url": "https://www.youtube.com/watch?v=clip"')
+    expect(out.text).toContain('"title": "Tropical House"')
+    expect(out.text).toContain('"caption": "Watch this"')
+    expect(out.text).toContain('"description": "Album cover reference"')
+    expect(out.text).toContain('"creator": "Channel"')
+    expect(out.text).toContain('"creatorUrl": "https://youtube.com/@channel"')
+    expect(out.text).toContain('"videoId": "clip"')
     expect(docPlain(ctx.doc)).toContain("Tropical House")
   })
 
@@ -130,8 +133,9 @@ describe("docMarkdown", () => {
     expect(out.text).toContain("```ts\nconst value = 1\n```")
     expect(out.text).toContain("$$\nE=mc^2\n$$")
     expect(out.text).toContain("---")
-    expect(out.text).toContain("HTML Embed: Demo")
-    expect(out.text).toContain('```html\n<iframe src="https://example.com"></iframe>\n```')
+    expect(out.text).toContain('"type": "html"')
+    expect(out.text).toContain('"caption": "Demo"')
+    expect(out.text).toContain('"html": "<iframe src=\\"https://example.com\\"></iframe>"')
     expect(docPlain(ctx.doc)).toContain("const value = 1")
     expect(docPlain(ctx.doc)).toContain("E=mc^2")
   })
