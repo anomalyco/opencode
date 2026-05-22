@@ -91,6 +91,70 @@ test("toggles plugin runtime state by exported id", async () => {
   }
 })
 
+test("deactivating plugin pops pushed mode", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const file = path.join(dir, "mode-plugin.ts")
+      const spec = pathToFileURL(file).href
+
+      await Bun.write(
+        file,
+        `export default {
+  id: "demo.mode",
+  tui: async (api) => {
+    api.mode.push("demo.mode")
+  },
+}
+`,
+      )
+
+      return { spec }
+    },
+  })
+
+  const stack: { id: symbol; mode: string }[] = []
+  let popCount = 0
+  const api = createTuiPluginApi({
+    mode: {
+      current: () => stack.at(-1)?.mode ?? "base",
+      push(mode) {
+        const id = Symbol(mode)
+        let active = true
+        stack.push({ id, mode })
+        return () => {
+          if (!active) return
+          active = false
+          popCount += 1
+          const index = stack.findIndex((item) => item.id === id)
+          if (index !== -1) stack.splice(index, 1)
+        }
+      },
+    },
+  })
+  const config = createTuiResolvedConfig({
+    plugin: [tmp.extra.spec],
+    plugin_origins: [{ spec: tmp.extra.spec, scope: "local", source: path.join(tmp.path, "tui.json") }],
+  })
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+  try {
+    await TuiPluginRuntime.init({ api, config })
+
+    expect(api.mode.current()).toBe("demo.mode")
+    expect(popCount).toBe(0)
+
+    await expect(TuiPluginRuntime.deactivatePlugin("demo.mode")).resolves.toBe(true)
+
+    expect(api.mode.current()).toBe("base")
+    expect(popCount).toBe(1)
+  } finally {
+    await TuiPluginRuntime.dispose()
+    cwd.mockRestore()
+    wait.mockRestore()
+  }
+})
+
 test("kv plugin_enabled overrides tui config on startup", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

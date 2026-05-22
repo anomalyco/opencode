@@ -7265,6 +7265,7 @@
             "required": false
           }
         ],
+        "security": [],
         "responses": {
           "200": {
             "description": "V2SessionsResponse",
@@ -7277,14 +7278,17 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "BadRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized"
           }
         },
         "description": "Retrieve sessions in the requested order. Items keep that order across pages; use cursor.next or cursor.previous to move through the ordered list.",
@@ -7328,6 +7332,7 @@
             "required": false
           }
         ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Session.Message",
@@ -7338,6 +7343,9 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized"
           }
         },
         "description": "Create a v2 session message and queue it for the agent loop.",
@@ -7400,9 +7408,13 @@
             "required": false
           }
         ],
+        "security": [],
         "responses": {
           "204": {
             "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthorized"
           }
         },
         "description": "Compact a v2 session conversation.",
@@ -7446,9 +7458,13 @@
             "required": false
           }
         ],
+        "security": [],
         "responses": {
           "204": {
             "description": "<No Content>"
+          },
+          "401": {
+            "description": "Unauthorized"
           }
         },
         "description": "Wait for a v2 session agent loop to become idle.",
@@ -7492,6 +7508,7 @@
             "required": false
           }
         ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Success",
@@ -7505,6 +7522,9 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized"
           }
         },
         "description": "Retrieve the active context messages for a v2 session (all messages after the last compaction).",
@@ -7574,6 +7594,7 @@
             "required": false
           }
         ],
+        "security": [],
         "responses": {
           "200": {
             "description": "V2SessionMessagesResponse",
@@ -7586,14 +7607,17 @@
             }
           },
           "400": {
-            "description": "Bad request",
+            "description": "BadRequest",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
+                  "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized"
           }
         },
         "description": "Retrieve projected v2 messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.",
@@ -7631,6 +7655,7 @@
             "explode": true
           }
         ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Success",
@@ -7644,6 +7669,9 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized"
           }
         },
         "description": "Retrieve available v2 models ordered by release date.",
@@ -7681,6 +7709,7 @@
             "explode": true
           }
         ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Success",
@@ -7694,6 +7723,9 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized"
           }
         },
         "description": "Retrieve active v2 AI providers so clients can show provider availability and configuration.",
@@ -7739,6 +7771,7 @@
             "explode": true
           }
         ],
+        "security": [],
         "responses": {
           "200": {
             "description": "ProviderV2.Info",
@@ -7749,6 +7782,9 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Unauthorized"
           },
           "404": {
             "description": "NotFoundError",
@@ -9418,6 +9454,17 @@
             "$ref": "#/components/schemas/WellKnownAuth"
           }
         ]
+      },
+      "effect_HttpApiError_BadRequest": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["BadRequest"]
+          }
+        },
+        "required": ["_tag"],
+        "additionalProperties": false
       },
       "Event.tui.prompt.append": {
         "type": "object",
