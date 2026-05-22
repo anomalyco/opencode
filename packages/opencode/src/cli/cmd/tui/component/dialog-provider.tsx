@@ -265,7 +265,7 @@ function AutoMethod(props: AutoMethodProps) {
       toast.show({
         variant: "error",
         message:
-          result.error.name === "ProviderAuthOauthCallbackFailed"
+          "name" in result.error && result.error.name === "ProviderAuthOauthCallbackFailed"
             ? "OAuth authorization failed. Try /connect again."
             : JSON.stringify(result.error),
       })
