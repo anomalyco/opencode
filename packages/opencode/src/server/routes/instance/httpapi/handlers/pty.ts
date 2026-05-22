@@ -12,7 +12,7 @@ import {
 } from "@/server/shared/pty-ticket"
 import { Effect } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { InstanceHttpApi } from "../api"
 import * as ApiError from "../errors"
@@ -47,7 +47,11 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
 
     const get = Effect.fn("PtyHttpApi.get")(function* (ctx: { params: { ptyID: PtyID } }) {
       const info = yield* pty.get(ctx.params.ptyID)
-      if (!info) return yield* ApiError.notFound("Session not found")
+      if (!info)
+        return yield* new ApiError.PtyNotFoundError({
+          ptyID: ctx.params.ptyID,
+          message: `PTY session not found: ${ctx.params.ptyID}`,
+        })
       return info
     })
 
@@ -59,11 +63,20 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
         ...ctx.payload,
         size: ctx.payload.size ? { ...ctx.payload.size } : undefined,
       })
-      if (!info) return yield* ApiError.notFound("Session not found")
+      if (!info)
+        return yield* new ApiError.PtyNotFoundError({
+          ptyID: ctx.params.ptyID,
+          message: `PTY session not found: ${ctx.params.ptyID}`,
+        })
       return info
     })
 
     const remove = Effect.fn("PtyHttpApi.remove")(function* (ctx: { params: { ptyID: PtyID } }) {
+      if (!(yield* pty.get(ctx.params.ptyID)))
+        return yield* new ApiError.PtyNotFoundError({
+          ptyID: ctx.params.ptyID,
+          message: `PTY session not found: ${ctx.params.ptyID}`,
+        })
       yield* pty.remove(ctx.params.ptyID)
       return true
     })
@@ -71,8 +84,12 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
     const connectToken = Effect.fn("PtyHttpApi.connectToken")(function* (ctx: { params: { ptyID: PtyID } }) {
       const request = yield* HttpServerRequest.HttpServerRequest
       if (request.headers[PTY_CONNECT_TOKEN_HEADER] !== PTY_CONNECT_TOKEN_HEADER_VALUE || !validOrigin(request, cors))
-        return yield* new HttpApiError.Forbidden({})
-      if (!(yield* pty.get(ctx.params.ptyID))) return yield* ApiError.notFound("Session not found")
+        return yield* new ApiError.PtyForbiddenError({ message: "Invalid PTY connect token request" })
+      if (!(yield* pty.get(ctx.params.ptyID)))
+        return yield* new ApiError.PtyNotFoundError({
+          ptyID: ctx.params.ptyID,
+          message: `PTY session not found: ${ctx.params.ptyID}`,
+        })
       return yield* tickets.issue({ ptyID: ctx.params.ptyID, ...(yield* PtyTicket.scope) })
     })
 
