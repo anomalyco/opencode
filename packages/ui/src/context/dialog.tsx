@@ -1,4 +1,5 @@
 import {
+  Suspense,
   createContext,
   createEffect,
   createRoot,
@@ -112,7 +113,7 @@ function init() {
           >
             <Kobalte.Portal>
               <Kobalte.Overlay data-component="dialog-overlay" onClick={close} />
-              {element()}
+              <Suspense fallback={null}>{element()}</Suspense>
             </Kobalte.Portal>
           </Kobalte>
         )
