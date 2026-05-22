@@ -104,7 +104,6 @@ type AnthropicServerToolResultBlock = Schema.Schema.Type<typeof AnthropicServerT
 // the prompt — which silently inflates context by megabytes and can push the
 // conversation over the model's token limit.
 const AnthropicToolResultContent = Schema.Union([AnthropicTextBlock, AnthropicImageBlock])
-type AnthropicToolResultContent = Schema.Schema.Type<typeof AnthropicToolResultContent>
 
 const AnthropicToolResultBlock = Schema.Struct({
   type: Schema.tag("tool_result"),
@@ -308,11 +307,8 @@ const lowerImage = Effect.fn("AnthropicMessages.lowerImage")(function* (part: Me
   } satisfies AnthropicImageBlock
 })
 
-// Tool results may carry structured content (text + images) so that vision
-// tools — screenshot readers, image search, OCR — can hand the model the
-// bytes the model actually needs. JSON-stringifying media into a single
-// string silently inflates the prompt by megabytes and pushes long
-// conversations over Anthropic's context limit.
+// Tool results may carry structured text/images. Keep media as provider-native
+// content instead of JSON-stringifying base64 into a prompt string.
 const lowerToolResultContentItem = Effect.fn("AnthropicMessages.lowerToolResultContentItem")(function* (
   item: ToolResultContentPart,
 ) {
@@ -323,7 +319,7 @@ const lowerToolResultContentItem = Effect.fn("AnthropicMessages.lowerToolResultC
       source: {
         type: "base64" as const,
         media_type: item.mediaType,
-        data: item.data.startsWith("data:") ? item.data.slice(item.data.indexOf(",") + 1) : item.data,
+        data: ProviderShared.mediaBase64(item),
       },
     } satisfies AnthropicImageBlock
   return yield* invalid(`Anthropic Messages tool-result media content only supports images, got ${item.mediaType}`)

@@ -24,6 +24,19 @@ const request = LLM.request({
   generation: { maxTokens: 20, temperature: 0 },
 })
 
+type AnthropicToolResult = Extract<
+  AnthropicMessages.AnthropicMessagesBody["messages"][number]["content"][number],
+  { readonly type: "tool_result" }
+>
+
+const expectToolResult = (body: AnthropicMessages.AnthropicMessagesBody): AnthropicToolResult => {
+  const result = body.messages
+    .flatMap((message) => (message.role === "user" ? message.content : []))
+    .find((block): block is AnthropicToolResult => block.type === "tool_result")
+  expect(result).toBeDefined()
+  return result!
+}
+
 describe("Anthropic Messages route", () => {
   it.effect("prepares Anthropic Messages target", () =>
     Effect.gen(function* () {
@@ -71,12 +84,8 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  // Regression: when a tool returns structured content with an image (e.g.
-  // a screenshot reader), the protocol must emit Anthropic-native image
-  // blocks inside `tool_result.content`, not JSON-stringify the entire
-  // content array — base64 included — into a single string. The latter
-  // silently inflates the prompt to multiple megabytes and pushes long
-  // conversations over Anthropic's 1M-token limit.
+  // Regression: screenshot/read tool results must stay structured so base64
+  // image data is not JSON-stringified into `tool_result.content`.
   it.effect("lowers image tool-result content as structured image blocks", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
@@ -100,11 +109,7 @@ describe("Anthropic Messages route", () => {
         }),
       )
 
-      const toolResult = prepared.body.messages
-        .flatMap((message) => (message.role === "user" ? message.content : []))
-        .find((block) => block.type === "tool_result")
-      expect(toolResult).toBeDefined()
-      expect(toolResult!.content).toEqual([
+      expect(expectToolResult(prepared.body).content).toEqual([
         { type: "text", text: "Image read successfully" },
         { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
       ])
@@ -130,11 +135,7 @@ describe("Anthropic Messages route", () => {
         }),
       )
 
-      const toolResult = prepared.body.messages
-        .flatMap((message) => (message.role === "user" ? message.content : []))
-        .find((block) => block.type === "tool_result")
-      expect(toolResult).toBeDefined()
-      expect(toolResult!.content).toEqual([
+      expect(expectToolResult(prepared.body).content).toEqual([
         { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "/9j/AA==" } },
       ])
     }),

@@ -317,12 +317,9 @@ const runImageScenario = (context: GoldenScenarioContext) =>
     ])
   })
 
-// Reproduces a production failure where a tool returns image bytes as part of
-// `tool-result` content and the protocol then has to round-trip those bytes
-// back to the model on the next turn. Without protocol-native image lowering,
-// the base64 data URL ends up JSON-stringified into a single string, silently
-// inflating the prompt by megabytes and pushing long conversations over the
-// provider's context limit.
+// Reproduces a tool-result image round trip: a tool returns image bytes, and
+// the next model turn must receive provider-native image content instead of a
+// JSON-stringified base64 blob.
 const screenshotToolName = "read_screenshot"
 const runImageToolResultScenario = (context: GoldenScenarioContext) =>
   Effect.gen(function* () {
