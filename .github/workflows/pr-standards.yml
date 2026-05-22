@@ -28,9 +28,15 @@ jobs:
 
             // Check if author is a team member or bot
             if (login === 'opencode-agent[bot]') return;
-            const teamAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR'];
-            if (teamAssociations.includes(pr.author_association)) {
-              console.log(`Skipping: ${login} has author association ${pr.author_association}`);
+            const { data: file } = await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: '.github/TEAM_MEMBERS',
+              ref: 'dev'
+            });
+            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim()).filter(Boolean);
+            if (members.includes(login)) {
+              console.log(`Skipping: ${login} is a team member`);
               return;
             }
 
@@ -169,9 +175,15 @@ jobs:
 
             // Check if author is a team member or bot
             if (login === 'opencode-agent[bot]') return;
-            const teamAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR'];
-            if (teamAssociations.includes(pr.author_association)) {
-              console.log(`Skipping: ${login} has author association ${pr.author_association}`);
+            const { data: file } = await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path: '.github/TEAM_MEMBERS',
+              ref: 'dev'
+            });
+            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim()).filter(Boolean);
+            if (members.includes(login)) {
+              console.log(`Skipping: ${login} is a team member`);
               return;
             }
 
