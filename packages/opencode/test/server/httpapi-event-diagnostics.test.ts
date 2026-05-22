@@ -40,11 +40,24 @@ import { testEffectShared } from "../lib/effect"
 
 void Log.init({ print: false })
 
-const SseEvent = Schema.Struct({
-  id: Schema.optional(Schema.String),
-  type: Schema.String,
-  properties: Schema.Record(Schema.String, Schema.Any),
-})
+// Per-type wire schema for the events exercised below. The decode succeeds iff
+// the frame matches the Effect Schema that generates `openapi.json` for that
+// type, so any wire-form drift (e.g. issue #28847's ISO-string timestamp
+// regression) shows up as a decode error rather than slipping past loose
+// `Record<string, Any>` assertions. Add a variant when a new event type is
+// published below.
+const SseEvent = Schema.Union([
+  Schema.Struct({
+    id: Schema.optional(Schema.String),
+    type: Schema.Literal(ServerEvent.Connected.type),
+    properties: ServerEvent.Connected.properties,
+  }),
+  Schema.Struct({
+    id: Schema.optional(Schema.String),
+    type: Schema.Literal(MessageV2.Event.PartUpdated.type),
+    properties: MessageV2.Event.PartUpdated.properties,
+  }),
+])
 
 type SseEvent = Schema.Schema.Type<typeof SseEvent>
 type BusEvent = { type: string; properties: unknown }
@@ -121,7 +134,11 @@ const collectUntilEvent = (reader: ReadableStreamDefaultReader<Uint8Array>, pred
     }),
   )
 
-const isPartUpdated = (event: { type: string }) => event.type === MessageV2.Event.PartUpdated.type
+// Generic so the same predicate narrows both SSE frames (`SseEvent` → `PartUpdatedFrame`)
+// and the in-process Bus callback payloads (`BusEvent` → `BusEvent & {type: ...}`).
+const isPartUpdated = <E extends { type: string }>(
+  event: E,
+): event is E & { type: typeof MessageV2.Event.PartUpdated.type } => event.type === MessageV2.Event.PartUpdated.type
 
 describe("/event SSE delivery diagnostics", () => {
   // Sanity: baseline same as httpapi-event.test.ts test 3 (already known to pass)
