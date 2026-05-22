@@ -173,4 +173,21 @@ describe("PublicApi OpenAPI v2 errors", () => {
       )
     }
   })
+
+  test("documents MCP server not-found errors", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const route of [
+      ["post", "/mcp/{name}/auth"],
+      ["post", "/mcp/{name}/auth/authenticate"],
+      ["post", "/mcp/{name}/auth/callback"],
+      ["delete", "/mcp/{name}/auth"],
+      ["post", "/mcp/{name}/connect"],
+      ["post", "/mcp/{name}/disconnect"],
+    ] as const) {
+      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["404"]) ?? "")).toBe(
+        "McpServerNotFoundError",
+      )
+    }
+  })
 })
