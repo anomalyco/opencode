@@ -13763,6 +13763,11 @@
           "scope": {
             "type": "string"
           },
+          "callbackPort": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
           "redirectUri": {
             "type": "string"
           }

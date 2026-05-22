@@ -1136,6 +1136,7 @@ export type McpOAuthConfig = {
   clientId?: string
   clientSecret?: string
   scope?: string
+  callbackPort?: number
   redirectUri?: string
 }
 
