@@ -29,6 +29,7 @@ import { Ripgrep } from "@/file/ripgrep"
 import * as Truncate from "@/tool/truncate"
 import { InstanceState } from "@/effect/instance-state"
 import { Reference } from "@/reference/reference"
+import { RepositoryCache } from "@/reference/repository-cache"
 import { ProviderID, ModelID } from "@/provider/schema"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { MessageID, SessionID } from "@/session/schema"
@@ -39,11 +40,16 @@ const configLayer = TestConfig.layer({
   directories: () => InstanceState.directory.pipe(Effect.map((dir) => [path.join(dir, ".opencode")])),
 })
 
-const registryLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
+type RegistryLayerOptions = {
+  flags?: Partial<RuntimeFlags.Info>
+  plugin?: Layer.Layer<Plugin.Service>
+}
+
+const registryLayer = (opts: RegistryLayerOptions = {}) =>
   ToolRegistry.layer
     .pipe(
       Layer.provide(configLayer),
-      Layer.provide(Plugin.defaultLayer),
+      Layer.provide(opts.plugin ?? Plugin.defaultLayer),
       Layer.provide(Question.defaultLayer),
       Layer.provide(Todo.defaultLayer),
       Layer.provide(Skill.defaultLayer),
@@ -51,7 +57,7 @@ const registryLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       Layer.provide(Session.defaultLayer),
       Layer.provide(Layer.mergeAll(SessionStatus.defaultLayer, BackgroundJob.defaultLayer)),
       Layer.provide(Provider.defaultLayer),
-      Layer.provide(Git.defaultLayer),
+      Layer.provide(Layer.mergeAll(Git.defaultLayer, RepositoryCache.defaultLayer)),
       Layer.provide(Reference.defaultLayer),
       Layer.provide(LSP.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
@@ -63,12 +69,41 @@ const registryLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       Layer.provide(Ripgrep.defaultLayer),
       Layer.provide(Truncate.defaultLayer),
     )
-    .pipe(Layer.provide(RuntimeFlags.layer(flags)))
+    .pipe(Layer.provide(RuntimeFlags.layer(opts.flags ?? {})))
+
+// Fake Plugin.Service that returns a single plugin whose `tool` map contains
+// one definition with `args: undefined`. Used to exercise the plugin entry
+// point of `fromPlugin` for the #27451 / #27630 regression.
+const brokenPluginLayer = Layer.succeed(
+  Plugin.Service,
+  Plugin.Service.of({
+    init: () => Effect.void,
+    trigger: ((_name: unknown, _input: unknown, output: unknown) =>
+      Effect.succeed(output)) as Plugin.Interface["trigger"],
+    list: () =>
+      Effect.succeed([
+        {
+          tool: {
+            broken_plugin_tool: {
+              description: "plugin tool with missing args",
+              args: undefined as unknown as Record<string, never>,
+              execute: async () => "ok",
+            },
+          },
+        },
+      ]),
+  }),
+)
 
 const it = testEffect(Layer.mergeAll(registryLayer(), node, Agent.defaultLayer))
-const scout = testEffect(Layer.mergeAll(registryLayer({ experimentalScout: true }), node, Agent.defaultLayer))
+const scout = testEffect(
+  Layer.mergeAll(registryLayer({ flags: { experimentalScout: true } }), node, Agent.defaultLayer),
+)
 const background = testEffect(
-  Layer.mergeAll(registryLayer({ experimentalBackgroundSubagents: true }), node, Agent.defaultLayer),
+  Layer.mergeAll(registryLayer({ flags: { experimentalBackgroundSubagents: true } }), node, Agent.defaultLayer),
+)
+const withBrokenPlugin = testEffect(
+  Layer.mergeAll(registryLayer({ plugin: brokenPluginLayer }), node, Agent.defaultLayer),
 )
 
 afterEach(async () => {
@@ -182,6 +217,57 @@ describe("tool.registry", () => {
       const ids = yield* registry.ids()
       expect(ids).toContain("mixed")
       expect(ids).not.toContain("mixed_helper")
+    }),
+  )
+
+  // Regression for #27451 / #27630: a custom tool that omits `args` must not
+  // crash registry initialization with
+  // `Object.entries requires that input parameter not be null or undefined`.
+  // Pre-1.14.49 the code path was `z.object(def.args)`, and `z.object(undefined)`
+  // silently produced an empty schema — so the tool registered as no-args.
+  // Preserve that tolerance.
+  it.instance("tolerates a custom tool exporting null/undefined args (no-args fallback)", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tool = path.join(test.directory, ".opencode", "tool")
+      yield* Effect.promise(() => fs.mkdir(tool, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tool, "noargs.ts"),
+          [
+            "export default {",
+            "  description: 'tool with no args',",
+            "  args: undefined,",
+            "  execute: async () => 'ok',",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+      // Built-in tools must still load — a single malformed custom tool must
+      // not poison the whole registry.
+      expect(ids).toContain("read")
+      const loaded = (yield* registry.all()).find((t) => t.id === "noargs")
+      if (!loaded) throw new Error("noargs tool was not loaded")
+      expect(loaded.jsonSchema).toMatchObject({ type: "object", properties: {} })
+    }),
+  )
+
+  // Same regression, plugin entry point. The original reports (#27451, #27630)
+  // came in through `plugin.list()` — `oh-my-opencode` was registering a tool
+  // with `args: undefined` and crashing every message submit. The file-scan
+  // and plugin-list loops both funnel through `fromPlugin`, but covering both
+  // entry points means a future refactor that splits them won't silently lose
+  // protection.
+  withBrokenPlugin.instance("tolerates a plugin tool registered with null/undefined args", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+      expect(ids).toContain("read")
+      expect(ids).toContain("broken_plugin_tool")
     }),
   )
 

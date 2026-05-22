@@ -101,6 +101,10 @@ export const UpdatePayload = Schema.Struct({
 }).annotate({ identifier: "ProjectUpdateInput" })
 export type UpdatePayload = Types.DeepMutable<Schema.Schema.Type<typeof UpdatePayload>>
 
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Project.NotFoundError", {
+  projectID: ProjectID,
+}) {}
+
 // ---------------------------------------------------------------------------
 // Effect service
 // ---------------------------------------------------------------------------
@@ -116,7 +120,7 @@ export interface Interface {
   readonly discover: (input: Info) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Info[]>
   readonly get: (id: ProjectID) => Effect.Effect<Info | undefined>
-  readonly update: (input: UpdateInput) => Effect.Effect<Info>
+  readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   readonly initGit: (input: { directory: string; project: Info }) => Effect.Effect<Info>
   readonly setInitialized: (id: ProjectID) => Effect.Effect<void>
   readonly sandboxes: (id: ProjectID) => Effect.Effect<string[]>
@@ -372,7 +376,9 @@ export const layer: Layer.Layer<
       const base64 = Buffer.from(buffer).toString("base64")
       const mime = AppFileSystem.mimeType(shortest)
       const url = `data:${mime};base64,${base64}`
-      yield* update({ projectID: input.id, icon: { url } })
+      yield* update({ projectID: input.id, icon: { url } }).pipe(
+        Effect.catchTag("Project.NotFoundError", () => Effect.void),
+      )
     })
 
     const list = Effect.fn("Project.list")(function* () {
@@ -400,7 +406,7 @@ export const layer: Layer.Layer<
           .returning()
           .get(),
       )
-      if (!result) throw new Error(`Project not found: ${input.projectID}`)
+      if (!result) return yield* new NotFoundError({ projectID: input.projectID })
       const data = fromRow(result)
       yield* emitUpdated(data)
       return data
@@ -425,7 +431,7 @@ export const layer: Layer.Layer<
 
     const initState = yield* InstanceState.make(
       Effect.fn("Project.initState")(function* (ctx) {
-        yield* bus.subscribe(Command.Event.Executed).pipe(
+        yield* (yield* bus.subscribe(Command.Event.Executed)).pipe(
           Stream.runForEach((payload) =>
             payload.properties.name === Command.Default.INIT ? setInitialized(ctx.project.id) : Effect.void,
           ),

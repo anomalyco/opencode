@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -7,7 +7,6 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { Git } from "@/git"
 import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -19,6 +18,7 @@ import { Filesystem } from "@/util/filesystem"
 import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { Reference } from "@/reference/reference"
+import { RepositoryCache } from "@/reference/repository-cache"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
@@ -40,8 +40,7 @@ const ctx = {
 const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Reference.layer.pipe(
     Layer.provide(Config.defaultLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(Git.defaultLayer),
+    Layer.provide(RepositoryCache.defaultLayer),
     Layer.provide(RuntimeFlags.layer(flags)),
   )
 
@@ -363,6 +362,38 @@ describe("tool.read truncation", () => {
       expect(result.metadata.truncated).toBe(true)
       expect(result.output).toContain("Output capped at")
       expect(result.output).toContain("Use offset=")
+    }),
+  )
+
+  it.instance("stops streaming after the byte cap", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const filepath = path.join(test.directory, "huge.txt")
+      const content = `${"x".repeat(80)}\n`.repeat(50_000)
+      yield* put(filepath, content)
+
+      const fs = yield* AppFileSystem.Service
+      const counter = { bytes: 0 }
+      const result = yield* run({ filePath: filepath }).pipe(
+        Effect.provideService(
+          AppFileSystem.Service,
+          AppFileSystem.Service.of({
+            ...fs,
+            stream: (file, options) =>
+              fs.stream(file, options).pipe(
+                Stream.tap((chunk) =>
+                  Effect.sync(() => {
+                    counter.bytes += chunk.length
+                  }),
+                ),
+              ),
+          }),
+        ),
+      )
+
+      expect(result.metadata.truncated).toBe(true)
+      expect(result.output).toContain("Output capped at")
+      expect(counter.bytes).toBeLessThan(Buffer.byteLength(content, "utf-8") / 2)
     }),
   )
 

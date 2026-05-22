@@ -1,6 +1,5 @@
 import { query, useParams, action, createAsync, redirect, useSubmission } from "@solidjs/router"
-import { For, createEffect } from "solid-js"
-import { createStore } from "solid-js/store"
+import { For, createEffect, createSignal } from "solid-js"
 import { withActor } from "~/context/auth.withActor"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { and, Database, eq, isNull } from "@opencode-ai/console-core/drizzle/index.js"
@@ -51,9 +50,7 @@ export function WorkspacePicker() {
   const i18n = useI18n()
   const workspaces = createAsync(() => getWorkspaces())
   const submission = useSubmission(createWorkspace)
-  const [store, setStore] = createStore({
-    showForm: false,
-  })
+  const [showForm, setShowForm] = createSignal(false)
   let inputRef: HTMLInputElement | undefined
 
   const currentWorkspace = () => {
@@ -61,12 +58,8 @@ export function WorkspacePicker() {
     return ws ? ws.name : i18n.t("workspace.select")
   }
 
-  const handleWorkspaceNew = () => {
-    setStore("showForm", true)
-  }
-
   createEffect(() => {
-    if (store.showForm && inputRef) {
+    if (showForm() && inputRef) {
       setTimeout(() => inputRef?.focus(), 0)
     }
   })
@@ -79,7 +72,7 @@ export function WorkspacePicker() {
   // Reset signals when workspace ID changes
   createEffect(() => {
     params.id
-    setStore("showForm", false)
+    setShowForm(false)
   })
 
   return (
@@ -92,32 +85,34 @@ export function WorkspacePicker() {
             </DropdownItem>
           )}
         </For>
-        <button data-slot="create-item" type="button" onClick={() => handleWorkspaceNew()}>
+        <button data-slot="create-item" type="button" onClick={() => setShowForm(true)}>
           {i18n.t("workspace.createNew")}
         </button>
       </Dropdown>
 
-      <Modal open={store.showForm} onClose={() => setStore("showForm", false)} title={i18n.t("workspace.modal.title")}>
-        <form data-slot="create-form" action={createWorkspace} method="post">
-          <div data-slot="create-input-group">
-            <input
-              ref={inputRef}
-              data-slot="create-input"
-              type="text"
-              name="workspaceName"
-              placeholder={i18n.t("workspace.modal.placeholder")}
-              required
-            />
-            <div data-slot="button-group">
-              <button type="button" data-color="ghost" onClick={() => setStore("showForm", false)}>
-                {i18n.t("common.cancel")}
-              </button>
-              <button type="submit" data-color="primary" disabled={submission.pending}>
-                {submission.pending ? i18n.t("common.creating") : i18n.t("common.create")}
-              </button>
+      <Modal open={showForm()} onClose={() => setShowForm(false)} title={i18n.t("workspace.modal.title")}>
+        <div data-component="workspace-create-modal">
+          <form data-slot="create-form" action={createWorkspace} method="post">
+            <div data-slot="create-input-group">
+              <input
+                ref={inputRef}
+                data-slot="create-input"
+                type="text"
+                name="workspaceName"
+                placeholder={i18n.t("workspace.modal.placeholder")}
+                required
+              />
+              <div data-slot="button-group">
+                <button type="button" data-color="ghost" onClick={() => setShowForm(false)}>
+                  {i18n.t("common.cancel")}
+                </button>
+                <button type="submit" data-color="primary" disabled={submission.pending}>
+                  {submission.pending ? i18n.t("common.creating") : i18n.t("common.create")}
+                </button>
+              </div>
             </div>
-          </div>
-        </form>
+          </form>
+        </div>
       </Modal>
     </div>
   )

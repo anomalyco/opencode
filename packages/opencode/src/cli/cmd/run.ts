@@ -24,6 +24,7 @@ import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@openc
 import { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { InstanceRef } from "@/effect/instance-ref"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
@@ -217,6 +218,15 @@ export const RunCommand = effectCmd({
         type: "boolean",
         describe: "show thinking blocks",
       })
+      .option("replay", {
+        type: "boolean",
+        default: false,
+        describe: "replay visible session history on interactive resume",
+      })
+      .option("replay-limit", {
+        type: "number",
+        describe: "cap visible interactive replay to the newest N messages",
+      })
       .option("interactive", {
         alias: ["i"],
         type: "boolean",
@@ -236,6 +246,7 @@ export const RunCommand = effectCmd({
   handler: Effect.fn("Cli.run")(function* (args) {
     const agentSvc = yield* Agent.Service
     const flags = yield* RuntimeFlags.Service
+    const localInstance = yield* InstanceRef
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
       const thinking = args.interactive ? (args.thinking ?? true) : (args.thinking ?? false)
@@ -267,6 +278,21 @@ export const RunCommand = effectCmd({
         die("--interactive cannot be used with --format json")
       }
 
+      if (args.replay && !args.interactive) {
+        die("--replay requires --interactive")
+      }
+
+      if (args["replay-limit"] !== undefined && !args.interactive) {
+        die("--replay-limit requires --interactive")
+      }
+
+      if (
+        args["replay-limit"] !== undefined &&
+        (!Number.isInteger(args["replay-limit"]) || args["replay-limit"] <= 0)
+      ) {
+        die("--replay-limit must be a positive integer")
+      }
+
       if (args.interactive && !process.stdout.isTTY) {
         die("--interactive requires a TTY stdout")
       }
@@ -278,6 +304,8 @@ export const RunCommand = effectCmd({
           dieInteractive(error)
         }
       }
+
+      const replay = args.replay || args["replay-limit"] !== undefined
 
       const root = Filesystem.resolve(process.env.PWD ?? process.cwd())
       const directory = (() => {
@@ -430,7 +458,7 @@ export const RunCommand = effectCmd({
         const name = title()
         const result = await sdk.session.create({
           title: name,
-          permission: rules,
+          permission: [...rules],
         })
         const id = result.data?.id
         if (!id) {
@@ -473,7 +501,7 @@ export const RunCommand = effectCmd({
                 variant: input.variant,
               }
             : undefined,
-          permission: rules,
+          permission: [...rules],
         })
         const id = result.data?.id
         if (!id) {
@@ -508,7 +536,9 @@ export const RunCommand = effectCmd({
         if (!args.agent) return undefined
         const name = args.agent
 
-        const entry = await Effect.runPromise(agentSvc.get(name))
+        const entry = await Effect.runPromise(
+          agentSvc.get(name).pipe(Effect.provideService(InstanceRef, localInstance)),
+        )
         if (!entry) {
           UI.println(
             UI.Style.TEXT_WARNING_BOLD + "!",
@@ -782,6 +812,8 @@ export const RunCommand = effectCmd({
             sessionID,
             sessionTitle: sess.title,
             resume: Boolean(args.session || args.continue) && !args.fork,
+            replay,
+            replayLimit: args["replay-limit"],
             agent,
             model,
             variant: args.variant,
@@ -817,6 +849,8 @@ export const RunCommand = effectCmd({
             agent: args.agent,
             model,
             variant: args.variant,
+            replay,
+            replayLimit: args["replay-limit"],
             files,
             initialInput,
             thinking,
