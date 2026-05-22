@@ -4,7 +4,6 @@ import { EventSequenceTable } from "@/sync/event.sql"
 import { Workspace } from "@/control-plane/workspace"
 import type { WorkspaceID } from "@/control-plane/schema"
 import * as Log from "@opencode-ai/core/util/log"
-import { AppRuntime } from "@/effect/app-runtime"
 import { Effect } from "effect"
 
 export const HEADER = "x-opencode-sync"
@@ -20,7 +19,7 @@ export function load(ids?: string[]) {
     return db.select().from(EventSequenceTable).where(inArray(EventSequenceTable.aggregate_id, ids)).all()
   })
 
-  return Object.fromEntries(rows.map((row) => [row.aggregate_id, row.seq])) as State
+  return Object.fromEntries(rows.map((row) => [row.aggregate_id, row.seq]))
 }
 
 export function diff(prev: State, next: State) {
@@ -31,15 +30,14 @@ export function diff(prev: State, next: State) {
       .filter(([id, seq]) => {
         return (prev[id] ?? -1) !== seq
       }),
-  ) as State
+  )
 }
 
-export function parse(headers: Headers) {
+export function parse(headers: Headers): State | undefined {
   const raw = headers.get(HEADER)
   if (!raw) return
 
   let data
-
   try {
     data = JSON.parse(raw)
   } catch {
@@ -49,13 +47,13 @@ export function parse(headers: Headers) {
   if (!data || typeof data !== "object") return
 
   return Object.fromEntries(
-    Object.entries(data).filter(([id, seq]) => {
-      return typeof id === "string" && Number.isInteger(seq)
+    Object.entries(data).filter((entry): entry is [string, number] => {
+      return typeof entry[0] === "string" && Number.isInteger(entry[1])
     }),
-  ) as State
+  )
 }
 
-export function waitEffect(workspaceID: WorkspaceID, state: State, signal?: AbortSignal) {
+export function wait(workspaceID: WorkspaceID, state: State, signal?: AbortSignal) {
   return Effect.gen(function* () {
     log.info("waiting for state", {
       workspaceID,
@@ -67,8 +65,4 @@ export function waitEffect(workspaceID: WorkspaceID, state: State, signal?: Abor
       state,
     })
   })
-}
-
-export async function wait(workspaceID: WorkspaceID, state: State, signal?: AbortSignal) {
-  await AppRuntime.runPromise(waitEffect(workspaceID, state, signal))
 }

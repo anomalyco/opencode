@@ -1,0 +1,71 @@
+[data-component="avatar-v2"] {
+  --avatar-bg: var(--v2-background-bg-layer-02);
+  --avatar-fg: var(--v2-text-text-muted);
+  --avatar-radius: 9999px;
+  --avatar-font-size: 11px;
+  --avatar-tracking: 0.05px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--avatar-radius);
+  border: 0.5px solid var(--v2-border-border-base);
+  font-family: var(--font-family-sans);
+  font-weight: 530;
+  font-size: var(--avatar-font-size);
+  line-height: 1;
+  letter-spacing: var(--avatar-tracking);
+  text-transform: uppercase;
+  background-color: var(--avatar-bg);
+  color: var(--avatar-fg);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+[data-component="avatar-v2"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, var(--v2-alpha-light-16) 0%, var(--v2-alpha-light-0) 100%);
+  pointer-events: none;
+}
+
+[data-component="avatar-v2"][data-has-image]::before {
+  display: none;
+}
+
+[data-component="avatar-v2"][data-kind="org"] {
+  --avatar-radius: 6px;
+}
+
+[data-component="avatar-v2"][data-kind="org"][data-size="normal"],
+[data-component="avatar-v2"][data-kind="org"][data-size="small"] {
+  --avatar-radius: 4px;
+}
+
+[data-component="avatar-v2"][data-size="normal"] {
+  width: 20px;
+  height: 20px;
+}
+
+[data-component="avatar-v2"][data-size="small"] {
+  width: 16px;
+  height: 16px;
+}
+
+[data-component="avatar-v2"] [data-slot="avatar-image"] {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: inherit;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}

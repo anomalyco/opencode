@@ -22,22 +22,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "Api": {
-      "type": "sst.cloudflare.Worker"
-      "url": string
-    }
-    "AuthApi": {
-      "type": "sst.cloudflare.Worker"
-      "url": string
-    }
-    "AuthStorage": {
-      "namespaceId": string
-      "type": "sst.cloudflare.Kv"
-    }
-    "Bucket": {
-      "name": string
-      "type": "sst.cloudflare.Bucket"
-    }
+    "Api": import("@cloudflare/workers-types").Service
+    "AuthApi": import("@cloudflare/workers-types").Service
+    "AuthStorage": import("@cloudflare/workers-types").KVNamespace
+    "Bucket": import("@cloudflare/workers-types").R2Bucket
     "CLOUDFLARE_API_TOKEN": {
       "type": "sst.sst.Secret"
       "value": string
@@ -74,10 +62,7 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "EnterpriseStorage": {
-      "name": string
-      "type": "sst.cloudflare.Bucket"
-    }
+    "EnterpriseStorage": import("@cloudflare/workers-types").R2Bucket
     "FEISHU_APP_ID": {
       "type": "sst.sst.Secret"
       "value": string
@@ -114,9 +99,7 @@ declare module "sst" {
       "type": "random.index/randomPassword.RandomPassword"
       "value": string
     }
-    "LogProcessor": {
-      "type": "sst.cloudflare.Worker"
-    }
+    "LogProcessor": import("@cloudflare/workers-types").Service
     "R2AccessKey": {
       "type": "sst.sst.Secret"
       "value": string
@@ -149,10 +132,7 @@ declare module "sst" {
       "type": "sst.sst.Linkable"
       "value": string
     }
-    "Stat": {
-      "type": "sst.cloudflare.Worker"
-      "url": string
-    }
+    "Stat": import("@cloudflare/workers-types").Service
     "Teams": {
       "type": "sst.cloudflare.SolidStart"
       "url": string
@@ -311,17 +291,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "ZenData": {
-      "name": string
-      "type": "sst.cloudflare.Bucket"
-    }
-    "ZenDataNew": {
-      "name": string
-      "type": "sst.cloudflare.Bucket"
-    }
+    "ZenData": import("@cloudflare/workers-types").R2Bucket
+    "ZenDataNew": import("@cloudflare/workers-types").R2Bucket
   }
 }
-/// <reference path="sst-env.d.ts" />
 
 import "sst"
 export {}

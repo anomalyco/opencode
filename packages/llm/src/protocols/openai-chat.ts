@@ -2,7 +2,6 @@ import { Array as Arr, Effect, Schema } from "effect"
 import { Route } from "../route/client"
 import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
-import { Framing } from "../route/framing"
 import { HttpTransport } from "../route/transport"
 import { Protocol } from "../route/protocol"
 import {
@@ -128,6 +127,7 @@ type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta
 
 const OpenAIChatDelta = Schema.Struct({
   content: optionalNull(Schema.String),
+  reasoning_content: optionalNull(Schema.String),
   tool_calls: optionalNull(Schema.Array(OpenAIChatToolCallDelta)),
 })
 
@@ -325,6 +325,9 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
     let lifecycle = state.lifecycle
 
+    if (delta?.reasoning_content)
+      lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", delta.reasoning_content)
+
     if (delta?.content) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
 
     for (const tool of toolDeltas) {
@@ -393,28 +396,15 @@ export const protocol = Protocol.make({
   },
 })
 
-const encodeBody = Schema.encodeSync(Schema.fromJsonString(OpenAIChatBody))
-
-export const httpTransport = HttpTransport.httpJson({
-  endpoint: Endpoint.path(PATH),
-  auth: Auth.bearer(),
-  framing: Framing.sse,
-  encodeBody,
-})
+export const httpTransport = HttpTransport.sseJson.with<OpenAIChatBody>()
 
 export const route = Route.make({
   id: ADAPTER,
   provider: "openai",
   protocol,
+  endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
+  auth: Auth.none,
   transport: httpTransport,
-  defaults: {
-    baseURL: DEFAULT_BASE_URL,
-  },
 })
-
-// =============================================================================
-// Model Helper
-// =============================================================================
-export const model = route.model
 
 export * as OpenAIChat from "./openai-chat"

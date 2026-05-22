@@ -1,8 +1,9 @@
 import { SessionID } from "@/session/schema"
 import { SessionMessage } from "@opencode-ai/core/session-message"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { Authorization } from "../../middleware/authorization"
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../../errors"
+import { V2Authorization } from "../../middleware/authorization"
 import { WorkspaceRoutingQueryFields } from "../../middleware/workspace-routing"
 
 export const MessagesQuery = Schema.Struct({
@@ -35,7 +36,7 @@ export const MessageGroup = HttpApiGroup.make("v2.message")
           next: Schema.String.pipe(Schema.optional),
         }),
       }).annotate({ identifier: "V2SessionMessagesResponse" }),
-      error: HttpApiError.BadRequest,
+      error: [InvalidCursorError, SessionNotFoundError, UnknownError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "v2.session.messages",
@@ -51,4 +52,4 @@ export const MessageGroup = HttpApiGroup.make("v2.message")
       description: "Experimental v2 message routes.",
     }),
   )
-  .middleware(Authorization)
+  .middleware(V2Authorization)
