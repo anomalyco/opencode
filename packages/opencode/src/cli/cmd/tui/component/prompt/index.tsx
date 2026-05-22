@@ -1438,7 +1438,10 @@ export function Prompt(props: PromptProps) {
   })
 
   const spinnerDef = createMemo(() => {
-    const agent = local.agent.current()
+    const agent =
+      status().type !== "idle"
+        ? (local.agent.list().find((a) => a.name === lastUserMessage()?.agent) ?? local.agent.current())
+        : local.agent.current()
     const color = agent ? local.agent.color(agent.name) : theme.border
     return {
       frames: createFrames({

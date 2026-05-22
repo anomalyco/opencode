@@ -6,7 +6,7 @@ on:
 
 jobs:
   check-duplicates:
-    if: github.event.action == 'opened'
+    if: github.event.action == 'opened' && !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -118,7 +118,7 @@ jobs:
           Remember: post at most ONE comment combining all findings. If everything is fine, post nothing."
 
   recheck-compliance:
-    if: github.event.action == 'edited' && contains(github.event.issue.labels.*.name, 'needs:compliance')
+    if: github.event.action == 'edited' && contains(github.event.issue.labels.*.name, 'needs:compliance') && !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
