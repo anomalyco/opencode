@@ -482,9 +482,9 @@ export const dict = {
   "error.dev.rootNotFound":
     "Root element not found. Did you forget to add it to your index.html? Or maybe the id attribute got misspelled?",
 
-  "error.globalSync.connectFailed": "Could not connect to server. Is there a server running at `{{url}}`?",
-  "error.globalSDK.noServerAvailable": "No server available",
-  "error.globalSDK.serverNotAvailable": "Server not available",
+  "error.serverSync.connectFailed": "Could not connect to server. Is there a server running at `{{url}}`?",
+  "error.serverSDK.noServerAvailable": "No server available",
+  "error.serverSDK.serverNotAvailable": "Server not available",
   "error.childStore.persistedCacheCreateFailed": "Failed to create persisted cache",
   "error.childStore.persistedProjectMetadataCreateFailed": "Failed to create persisted project metadata",
   "error.childStore.persistedProjectIconCreateFailed": "Failed to create persisted project icon",

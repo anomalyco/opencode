@@ -30,8 +30,8 @@ import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
-import { GlobalSDKProvider } from "@/context/global-sdk"
-import { GlobalSyncProvider } from "@/context/global-sync"
+import { ServerSDKProvider } from "@/context/server-sdk"
+import { ServerSyncProvider } from "@/context/server-sync"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
@@ -304,8 +304,8 @@ export function AppInterface(props: {
       <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
         <ServerKey>
           <QueryProvider>
-            <GlobalSDKProvider>
-              <GlobalSyncProvider>
+            <ServerSDKProvider>
+              <ServerSyncProvider>
                 <Dynamic
                   component={props.router ?? Router}
                   root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
@@ -316,8 +316,8 @@ export function AppInterface(props: {
                     <Route path="/session/:id?" component={SessionRoute} />
                   </Route>
                 </Dynamic>
-              </GlobalSyncProvider>
-            </GlobalSDKProvider>
+              </ServerSyncProvider>
+            </ServerSDKProvider>
           </QueryProvider>
         </ServerKey>
       </ConnectionGate>

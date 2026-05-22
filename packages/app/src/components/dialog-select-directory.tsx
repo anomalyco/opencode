@@ -6,8 +6,8 @@ import type { ListRef } from "@opencode-ai/ui/list"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import fuzzysort from "fuzzysort"
 import { createMemo, createResource, createSignal } from "solid-js"
-import { useGlobalSDK } from "@/context/global-sdk"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSDK } from "@/context/server-sdk"
+import { useServerSync } from "@/context/server-sync"
 import { useLayout } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 
@@ -128,7 +128,7 @@ function uniqueRows(rows: Row[]) {
 }
 
 function useDirectorySearch(args: {
-  sdk: ReturnType<typeof useGlobalSDK>
+  sdk: ReturnType<typeof useServerSDK>
   start: () => string | undefined
   home: () => string
 }) {
@@ -246,8 +246,8 @@ function useDirectorySearch(args: {
 }
 
 export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
-  const sync = useGlobalSync()
-  const sdk = useGlobalSDK()
+  const sync = useServerSync()
+  const sdk = useServerSDK()
   const layout = useLayout()
   const dialog = useDialog()
   const language = useLanguage()

@@ -462,7 +462,7 @@ export const dict = {
   "error.page.report.discord": "在 Discord 上",
   "error.page.version": "版本：{{version}}",
   "error.dev.rootNotFound": "未找到根元素。你是不是忘了把它添加到 index.html？或者 id 属性拼写错了？",
-  "error.globalSync.connectFailed": "无法连接到服务器。是否有服务器正在 `{{url}}` 运行？",
+  "error.serverSync.connectFailed": "无法连接到服务器。是否有服务器正在 `{{url}}` 运行？",
 
   "directory.error.invalidUrl": "URL 中的目录无效。",
 
@@ -919,8 +919,8 @@ export const dict = {
   "common.key.insert": "Insert",
   "common.unknown": "未知",
   "error.page.circular": "[循环]",
-  "error.globalSDK.noServerAvailable": "无可用服务器",
-  "error.globalSDK.serverNotAvailable": "服务器不可用",
+  "error.serverSDK.noServerAvailable": "无可用服务器",
+  "error.serverSDK.serverNotAvailable": "服务器不可用",
   "error.childStore.persistedCacheCreateFailed": "创建持久化缓存失败",
   "error.childStore.persistedProjectMetadataCreateFailed": "创建持久化项目元数据失败",
   "error.childStore.persistedProjectIconCreateFailed": "创建持久化项目图标失败",

@@ -6,8 +6,8 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { createMemo, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { useGlobalSDK } from "@/context/global-sdk"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSDK } from "@/context/server-sdk"
+import { useServerSync } from "@/context/server-sync"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
@@ -30,8 +30,8 @@ const PROVIDER_NOTES = [
 export const SettingsProviders: Component = () => {
   const dialog = useDialog()
   const language = useLanguage()
-  const globalSDK = useGlobalSDK()
-  const globalSync = useGlobalSync()
+  const serverSDK = useServerSDK()
+  const serverSync = useServerSync()
   const providers = useProviders()
 
   const connected = createMemo(() => {
@@ -74,7 +74,7 @@ export const SettingsProviders: Component = () => {
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
   const isConfigCustom = (providerID: string) => {
-    const provider = globalSync.data.config.provider?.[providerID]
+    const provider = serverSync.data.config.provider?.[providerID]
     if (!provider) return false
     if (provider.npm !== "@ai-sdk/openai-compatible") return false
     if (!provider.models || Object.keys(provider.models).length === 0) return false
@@ -82,11 +82,11 @@ export const SettingsProviders: Component = () => {
   }
 
   const disableProvider = async (providerID: string, name: string) => {
-    const before = globalSync.data.config.disabled_providers ?? []
+    const before = serverSync.data.config.disabled_providers ?? []
     const next = before.includes(providerID) ? before : [...before, providerID]
-    globalSync.set("config", "disabled_providers", next)
+    serverSync.set("config", "disabled_providers", next)
 
-    await globalSync
+    await serverSync
       .updateConfig({ disabled_providers: next })
       .then(() => {
         showToast({
@@ -97,7 +97,7 @@ export const SettingsProviders: Component = () => {
         })
       })
       .catch((err: unknown) => {
-        globalSync.set("config", "disabled_providers", before)
+        serverSync.set("config", "disabled_providers", before)
         const message = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description: message })
       })
@@ -105,14 +105,14 @@ export const SettingsProviders: Component = () => {
 
   const disconnect = async (providerID: string, name: string) => {
     if (isConfigCustom(providerID)) {
-      await globalSDK.client.auth.remove({ providerID }).catch(() => undefined)
+      await serverSDK.client.auth.remove({ providerID }).catch(() => undefined)
       await disableProvider(providerID, name)
       return
     }
-    await globalSDK.client.auth
+    await serverSDK.client.auth
       .remove({ providerID })
       .then(async () => {
-        await globalSDK.client.global.dispose()
+        await serverSDK.client.global.dispose()
         showToast({
           variant: "success",
           icon: "circle-check",

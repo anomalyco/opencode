@@ -7,7 +7,7 @@ import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { Icon } from "@opencode-ai/ui/icon"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { useLayout, type LocalProject } from "@/context/layout"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
@@ -274,7 +274,7 @@ export const SortableProject = (props: {
   ctx: ProjectSidebarContext
   sortNow: Accessor<number>
 }): JSX.Element => {
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const language = useLanguage()
   const sortable = createSortable(props.project.worktree)
   const selected = createMemo(() => props.ctx.currentProject()?.worktree === props.project.worktree)
@@ -294,23 +294,23 @@ export const SortableProject = (props: {
   const hoverOpen = () => isHoverProject() && preview() && !selected() && !state.menu
 
   const label = (directory: string) => {
-    const [data] = globalSync.child(directory, { bootstrap: false })
+    const [data] = serverSync.child(directory, { bootstrap: false })
     const kind =
       directory === props.project.worktree ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
     const name = props.ctx.workspaceLabel(directory, data.vcs?.branch, props.project.id)
     return `${kind} : ${name}`
   }
 
-  const projectStore = createMemo(() => globalSync.child(props.project.worktree, { bootstrap: false })[0])
+  const projectStore = createMemo(() => serverSync.child(props.project.worktree, { bootstrap: false })[0])
   const isWorking = createMemo(() =>
     dirs().some((directory) => {
-      const [store] = globalSync.child(directory, { bootstrap: false })
+      const [store] = serverSync.child(directory, { bootstrap: false })
       return Object.keys(store.session_status).some((id) => store.session_working(id))
     }),
   )
   const projectSessions = createMemo(() => sortedRootSessions(projectStore(), props.sortNow()))
   const workspaceSessions = (directory: string) => {
-    const [data] = globalSync.child(directory, { bootstrap: false })
+    const [data] = serverSync.child(directory, { bootstrap: false })
     return sortedRootSessions(data, props.sortNow())
   }
   const tile = () => (

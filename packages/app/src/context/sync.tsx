@@ -1,5 +1,5 @@
 import { Binary } from "@opencode-ai/core/util/binary"
-import { useGlobalSync } from "./global-sync"
+import { useServerSync } from "./server-sync"
 import { useSDK } from "./sdk"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 
@@ -109,8 +109,8 @@ export function applyOptimisticRemove(draft: OptimisticStore, input: OptimisticR
 }
 
 export const useSync = () => {
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const sdk = useSDK()
 
-  return globalSync.createDirSyncContext(sdk.directory)
+  return serverSync.createDirSyncContext(sdk.directory)
 }

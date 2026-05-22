@@ -163,7 +163,7 @@ beforeAll(async () => {
   }))
 
   mock.module("@/context/global-sync", () => ({
-    useGlobalSync: () => ({
+    useServerSync: () => ({
       child: (directory: string) => {
         syncedDirectories.push(directory)
         storedSessions[directory] ??= []

@@ -5,7 +5,7 @@ import { Binary } from "@opencode-ai/core/util/binary"
 import { useNavigate, useParams } from "@solidjs/router"
 import { batch, type Accessor } from "solid-js"
 import type { FileSelection } from "@/context/file"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
@@ -38,7 +38,7 @@ export type FollowupDraft = {
 
 type FollowupSendInput = {
   client: ReturnType<typeof useSDK>["client"]
-  globalSync: ReturnType<typeof useGlobalSync>
+  serverSync: ReturnType<typeof useServerSync>
   sync: ReturnType<typeof useSync>
   draft: FollowupDraft
   messageID?: string
@@ -53,7 +53,7 @@ const draftImages = (prompt: Prompt) => prompt.filter((part): part is ImageAttac
 export async function sendFollowupDraft(input: FollowupSendInput) {
   const text = draftText(input.draft.prompt)
   const images = draftImages(input.draft.prompt)
-  const [, setStore] = input.globalSync.child(input.draft.sessionDirectory)
+  const [, setStore] = input.serverSync.child(input.draft.sessionDirectory)
 
   const setBusy = () => {
     if (!input.optimisticBusy) return
@@ -205,7 +205,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const navigate = useNavigate()
   const sdk = useSDK()
   const sync = useSync()
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const local = useLocal()
   const permission = usePermission()
   const prompt = usePrompt()
@@ -226,8 +226,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const sessionID = params.id
     if (!sessionID) return Promise.resolve()
 
-    globalSync.todo.set(sessionID, [])
-    const [, setStore] = globalSync.child(sdk.directory)
+    serverSync.todo.set(sessionID, [])
+    const [, setStore] = serverSync.child(sdk.directory)
     setStore("todo", sessionID, [])
 
     input.onAbort?.()
@@ -273,7 +273,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   }
 
   const seed = (dir: string, info: Session) => {
-    const [, setStore] = globalSync.child(dir)
+    const [, setStore] = serverSync.child(dir)
     setStore("session", (list: Session[]) => {
       const result = Binary.search(list, info.id, (item) => item.id)
       const next = [...list]
@@ -354,7 +354,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           directory: sessionDirectory,
           throwOnError: true,
         })
-        globalSync.child(sessionDirectory)
+        serverSync.child(sessionDirectory)
       }
 
       input.onNewSessionWorktreeReset?.()
@@ -557,7 +557,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     void sendFollowupDraft({
       client,
       sync,
-      globalSync,
+      serverSync,
       draft,
       messageID,
       optimisticBusy: sessionDirectory === projectDirectory,

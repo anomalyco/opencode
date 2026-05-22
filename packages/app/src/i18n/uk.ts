@@ -483,9 +483,9 @@ export const dict = {
   "error.dev.rootNotFound":
     "Кореневий елемент не знайдено. Ви забули додати його до index.html? Або, можливо, атрибут id було написано з помилкою?",
 
-  "error.globalSync.connectFailed": "Не вдалося підключитися до сервера. Чи працює сервер за адресою `{{url}}`?",
-  "error.globalSDK.noServerAvailable": "Сервер недоступний",
-  "error.globalSDK.serverNotAvailable": "Сервер недоступний",
+  "error.serverSync.connectFailed": "Не вдалося підключитися до сервера. Чи працює сервер за адресою `{{url}}`?",
+  "error.serverSDK.noServerAvailable": "Сервер недоступний",
+  "error.serverSDK.serverNotAvailable": "Сервер недоступний",
   "error.childStore.persistedCacheCreateFailed": "Не вдалося створити постійний кеш",
   "error.childStore.persistedProjectMetadataCreateFailed": "Не вдалося створити постійні метадані проєкту",
   "error.childStore.persistedProjectIconCreateFailed": "Не вдалося створити постійну іконку проєкту",

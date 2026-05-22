@@ -463,7 +463,7 @@ export const dict = {
   "error.dev.rootNotFound":
     "Rotelement ikke funnet. Glemte du å legge det til i index.html? Eller kanskje id-attributten er feilstavet?",
 
-  "error.globalSync.connectFailed": "Kunne ikke koble til server. Kjører det en server på `{{url}}`?",
+  "error.serverSync.connectFailed": "Kunne ikke koble til server. Kjører det en server på `{{url}}`?",
   "directory.error.invalidUrl": "Invalid directory in URL.",
 
   "error.chain.unknown": "Ukjent feil",
@@ -927,8 +927,8 @@ export const dict = {
   "common.key.insert": "Insert",
   "common.unknown": "ukjent",
   "error.page.circular": "[Sirkulær]",
-  "error.globalSDK.noServerAvailable": "Ingen server tilgjengelig",
-  "error.globalSDK.serverNotAvailable": "Server ikke tilgjengelig",
+  "error.serverSDK.noServerAvailable": "Ingen server tilgjengelig",
+  "error.serverSDK.serverNotAvailable": "Server ikke tilgjengelig",
   "error.childStore.persistedCacheCreateFailed": "Kunne ikke opprette vedvarende hurtigbuffer",
   "error.childStore.persistedProjectMetadataCreateFailed": "Kunne ikke opprette vedvarende prosjektmetadata",
   "error.childStore.persistedProjectIconCreateFailed": "Kunne ikke opprette vedvarende prosjektikon",

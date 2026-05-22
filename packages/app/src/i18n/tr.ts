@@ -465,7 +465,7 @@ export const dict = {
   "error.dev.rootNotFound":
     "Kök eleman bulunamadı. index.html dosyanıza eklemeyi unuttunuz mu? Ya da id özelliği yanlış mı yazıldı?",
 
-  "error.globalSync.connectFailed": "Sunucuya bağlanılamadı. `{{url}}` adresinde çalışan bir sunucu var mı?",
+  "error.serverSync.connectFailed": "Sunucuya bağlanılamadı. `{{url}}` adresinde çalışan bir sunucu var mı?",
   "directory.error.invalidUrl": "URL'de geçersiz dizin.",
 
   "error.chain.unknown": "Bilinmeyen hata",
@@ -935,8 +935,8 @@ export const dict = {
   "common.key.insert": "Insert",
   "common.unknown": "bilinmiyor",
   "error.page.circular": "[Döngüsel]",
-  "error.globalSDK.noServerAvailable": "Sunucu yok",
-  "error.globalSDK.serverNotAvailable": "Sunucu mevcut değil",
+  "error.serverSDK.noServerAvailable": "Sunucu yok",
+  "error.serverSDK.serverNotAvailable": "Sunucu mevcut değil",
   "error.childStore.persistedCacheCreateFailed": "Kalıcı önbellek oluşturulamadı",
   "error.childStore.persistedProjectMetadataCreateFailed": "Kalıcı proje meta verileri oluşturulamadı",
   "error.childStore.persistedProjectIconCreateFailed": "Kalıcı proje simgesi oluşturulamadı",

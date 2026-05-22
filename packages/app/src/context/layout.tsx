@@ -2,8 +2,8 @@ import { createStore, produce } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { useGlobalSync } from "./global-sync"
-import { useGlobalSDK } from "./global-sdk"
+import { useServerSync } from "./server-sync"
+import { useServerSDK } from "./server-sdk"
 import { useServer } from "./server"
 import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
@@ -136,8 +136,8 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   init: () => {
-    const globalSdk = useGlobalSDK()
-    const globalSync = useGlobalSync()
+    const globalSdk = useServerSDK()
+    const serverSync = useServerSync()
     const server = useServer()
     const platform = usePlatform()
 
@@ -386,11 +386,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function enrich(project: { worktree: string; expanded: boolean }) {
-      const [childStore] = globalSync.child(project.worktree, { bootstrap: false })
+      const [childStore] = serverSync.child(project.worktree, { bootstrap: false })
       const projectID = childStore.project
       const metadata = projectID
-        ? globalSync.data.project.find((x) => x.id === projectID)
-        : globalSync.data.project.find((x) => x.worktree === project.worktree)
+        ? serverSync.data.project.find((x) => x.id === projectID)
+        : serverSync.data.project.find((x) => x.worktree === project.worktree)
 
       // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
       // Without this, different subdirectories of the same git repo would share the same
@@ -404,7 +404,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const roots = createMemo(() => {
       const map = new Map<string, string>()
-      for (const project of globalSync.data.project) {
+      for (const project of serverSync.data.project) {
         const sandboxes = project.sandboxes ?? []
         for (const sandbox of sandboxes) {
           map.set(sandbox, project.worktree)
@@ -470,12 +470,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     createEffect(() => {
       const projects = enriched()
       if (projects.length === 0) return
-      if (!globalSync.ready) return
+      if (!serverSync.ready) return
 
       for (const project of projects) {
         if (!project.id) continue
         if (project.id === "global") continue
-        globalSync.project.icon(project.worktree, project.icon?.override)
+        serverSync.project.icon(project.worktree, project.icon?.override)
       }
     })
 
@@ -509,7 +509,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         colorRequested.set(worktree, color)
 
         if (project.id === "global") {
-          globalSync.project.meta(worktree, { icon: { color } })
+          serverSync.project.meta(worktree, { icon: { color } })
           continue
         }
 
@@ -531,7 +531,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           sessionTimer = undefined
           void Promise.all(
             server.projects.list().map((project) => {
-              return globalSync.project.loadSessions(project.worktree)
+              return serverSync.project.loadSessions(project.worktree)
             }),
           )
         }, 0)
@@ -560,7 +560,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         open(directory: string) {
           const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return
-          void globalSync.project.loadSessions(root)
+          void serverSync.project.loadSessions(root)
           server.projects.open(root)
         },
         close(directory: string) {

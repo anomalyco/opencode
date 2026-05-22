@@ -6,7 +6,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
 import { useLanguage } from "@/context/language"
-import { useQueryOptions } from "@/context/global-sync"
+import { useQueryOptions } from "@/context/server-sync"
 import { pathKey } from "@/utils/path-key"
 
 const statusLabels = {

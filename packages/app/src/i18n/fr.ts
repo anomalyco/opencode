@@ -417,7 +417,7 @@ export const dict = {
   "error.page.version": "Version : {{version}}",
   "error.dev.rootNotFound":
     "Élément racine introuvable. Avez-vous oublié de l'ajouter à votre index.html ? Ou peut-être que l'attribut id est mal orthographié ?",
-  "error.globalSync.connectFailed":
+  "error.serverSync.connectFailed":
     "Impossible de se connecter au serveur. Y a-t-il un serveur en cours d'exécution à `{{url}}` ?",
   "directory.error.invalidUrl": "Répertoire invalide dans l'URL.",
   "error.chain.unknown": "Erreur inconnue",
@@ -860,8 +860,8 @@ export const dict = {
   "common.key.insert": "Inser",
   "common.unknown": "inconnu",
   "error.page.circular": "[Circulaire]",
-  "error.globalSDK.noServerAvailable": "Aucun serveur disponible",
-  "error.globalSDK.serverNotAvailable": "Serveur non disponible",
+  "error.serverSDK.noServerAvailable": "Aucun serveur disponible",
+  "error.serverSDK.serverNotAvailable": "Serveur non disponible",
   "error.childStore.persistedCacheCreateFailed": "Échec de la création du cache persistant",
   "error.childStore.persistedProjectMetadataCreateFailed":
     "Échec de la création des métadonnées de projet persistantes",
