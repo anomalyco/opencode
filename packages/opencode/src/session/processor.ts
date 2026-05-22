@@ -1,4 +1,5 @@
-import { Cause, Deferred, Effect, Exit, Layer, Context, Scope } from "effect"
+import { Image } from "@/image/image"
+import { Cause, Deferred, Effect, Exit, Layer, Context, Scope, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
@@ -9,7 +10,6 @@ import { Snapshot } from "@/snapshot"
 import * as Session from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
-import { Image } from "@/image/image"
 import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
@@ -21,20 +21,18 @@ import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import * as Log from "@opencode-ai/core/util/log"
 import { isRecord } from "@/util/record"
-import { EventV2 } from "@opencode-ai/core/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionEvent } from "@opencode-ai/core/session-event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
 const log = Log.create({ service: "session.processor" })
 
 export type Result = "compact" | "stop" | "continue"
-
-export type Event = LLM.Event
 
 export interface Handle {
   readonly message: MessageV2.Assistant
@@ -69,6 +67,7 @@ type ToolCall = {
   messageID: MessageV2.ToolPart["messageID"]
   sessionID: MessageV2.ToolPart["sessionID"]
   done: Deferred.Deferred<void>
+  inputEnded: boolean
 }
 
 interface ProcessorContext extends Input {
@@ -81,7 +80,7 @@ interface ProcessorContext extends Input {
   reasoningMap: Record<string, MessageV2.ReasoningPart>
 }
 
-type StreamEvent = Event
+type StreamEvent = LLMEvent
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
@@ -137,7 +136,7 @@ export const layer = Layer.effect(
 
       const readToolCall = Effect.fn("SessionProcessor.readToolCall")(function* (toolCallID: string) {
         const call = ctx.toolcalls[toolCallID]
-        if (!call) return
+        if (!call) return undefined
         const part = yield* session.getPart({
           partID: call.partID,
           messageID: call.messageID,
@@ -145,7 +144,7 @@ export const layer = Layer.effect(
         })
         if (!part || part.type !== "tool") {
           delete ctx.toolcalls[toolCallID]
-          return
+          return undefined
         }
         return { call, part }
       })
@@ -155,7 +154,7 @@ export const layer = Layer.effect(
         update: (part: MessageV2.ToolPart) => MessageV2.ToolPart,
       ) {
         const match = yield* readToolCall(toolCallID)
-        if (!match) return
+        if (!match) return undefined
         const part = yield* session.updatePart(update(match.part))
         ctx.toolcalls[toolCallID] = {
           ...match.call,
@@ -211,12 +210,100 @@ export const layer = Layer.effect(
         return true
       })
 
+      const finishReasoning = Effect.fn("SessionProcessor.finishReasoning")(function* (reasoningID: string) {
+        if (!(reasoningID in ctx.reasoningMap)) return
+        // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+        if (flags.experimentalEventSystem) {
+          yield* events.publish(SessionEvent.Reasoning.Ended, {
+            sessionID: ctx.sessionID,
+            reasoningID,
+            text: ctx.reasoningMap[reasoningID].text,
+            timestamp: DateTime.makeUnsafe(Date.now()),
+          })
+        }
+        // oxlint-disable-next-line no-self-assign -- reactivity trigger
+        ctx.reasoningMap[reasoningID].text = ctx.reasoningMap[reasoningID].text
+        ctx.reasoningMap[reasoningID].time = { ...ctx.reasoningMap[reasoningID].time, end: Date.now() }
+        yield* session.updatePart(ctx.reasoningMap[reasoningID])
+        delete ctx.reasoningMap[reasoningID]
+      })
+
+      const ensureToolCall = Effect.fn("SessionProcessor.ensureToolCall")(function* (input: {
+        id: string
+        name: string
+        providerExecuted?: boolean
+      }) {
+        const existing = yield* readToolCall(input.id)
+        if (existing) {
+          if (!input.providerExecuted || existing.part.metadata?.providerExecuted) return existing
+          const part = yield* session.updatePart({
+            ...existing.part,
+            metadata: { ...existing.part.metadata, providerExecuted: true },
+          })
+          ctx.toolcalls[input.id] = {
+            ...existing.call,
+            partID: part.id,
+            messageID: part.messageID,
+            sessionID: part.sessionID,
+          }
+          return { call: ctx.toolcalls[input.id], part }
+        }
+        // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+        if (flags.experimentalEventSystem) {
+          yield* events.publish(SessionEvent.Tool.Input.Started, {
+            sessionID: ctx.sessionID,
+            callID: input.id,
+            name: input.name,
+            timestamp: DateTime.makeUnsafe(Date.now()),
+          })
+        }
+        const part = yield* session.updatePart({
+          id: PartID.ascending(),
+          messageID: ctx.assistantMessage.id,
+          sessionID: ctx.assistantMessage.sessionID,
+          type: "tool",
+          tool: input.name,
+          callID: input.id,
+          state: { status: "pending", input: {}, raw: "" },
+          metadata: input.providerExecuted ? { providerExecuted: true } : undefined,
+        } satisfies MessageV2.ToolPart)
+        ctx.toolcalls[input.id] = {
+          done: yield* Deferred.make<void>(),
+          partID: part.id,
+          messageID: part.messageID,
+          sessionID: part.sessionID,
+          inputEnded: false,
+        }
+        return { call: ctx.toolcalls[input.id], part }
+      })
+
+      const isFilePart = (value: unknown): value is MessageV2.FilePart => Schema.is(MessageV2.FilePart)(value)
+
+      const toolResultOutput = (
+        value: Extract<StreamEvent, { type: "tool-result" }>,
+      ): { title: string; metadata: Record<string, any>; output: string; attachments?: MessageV2.FilePart[] } => {
+        if (isRecord(value.result.value) && typeof value.result.value.output === "string") {
+          return {
+            title: typeof value.result.value.title === "string" ? value.result.value.title : value.name,
+            metadata: isRecord(value.result.value.metadata) ? value.result.value.metadata : {},
+            output: value.result.value.output,
+            attachments: Array.isArray(value.result.value.attachments)
+              ? value.result.value.attachments.filter(isFilePart)
+              : undefined,
+          }
+        }
+        return {
+          title: value.name,
+          metadata: value.result.type === "json" && isRecord(value.result.value) ? value.result.value : {},
+          output:
+            typeof value.result.value === "string" ? value.result.value : (JSON.stringify(value.result.value) ?? ""),
+        }
+      }
+
+      const toolInput = (value: unknown): Record<string, any> => (isRecord(value) ? value : { value })
+
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
         switch (value.type) {
-          case "start":
-            yield* status.set(ctx.sessionID, { type: "busy" })
-            return
-
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
@@ -240,6 +327,7 @@ export const layer = Layer.effect(
             return
 
           case "reasoning-delta":
+            // Match dev: silently drop orphan deltas (no preceding reasoning-start).
             if (!(value.id in ctx.reasoningMap)) return
             ctx.reasoningMap[value.id].text += value.text
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
@@ -253,59 +341,26 @@ export const layer = Layer.effect(
             return
 
           case "reasoning-end":
-            if (!(value.id in ctx.reasoningMap)) return
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (flags.experimentalEventSystem) {
-              yield* events.publish(SessionEvent.Reasoning.Ended, {
-                sessionID: ctx.sessionID,
-                reasoningID: value.id,
-                text: ctx.reasoningMap[value.id].text,
-                timestamp: DateTime.makeUnsafe(Date.now()),
-              })
+            if (value.providerMetadata && value.id in ctx.reasoningMap) {
+              ctx.reasoningMap[value.id].metadata = value.providerMetadata
             }
-            // oxlint-disable-next-line no-self-assign -- reactivity trigger
-            ctx.reasoningMap[value.id].text = ctx.reasoningMap[value.id].text
-            ctx.reasoningMap[value.id].time = { ...ctx.reasoningMap[value.id].time, end: Date.now() }
-            if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
-            yield* session.updatePart(ctx.reasoningMap[value.id])
-            delete ctx.reasoningMap[value.id]
+            yield* finishReasoning(value.id)
             return
 
           case "tool-input-start":
             if (ctx.assistantMessage.summary) {
-              throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
+              throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (flags.experimentalEventSystem) {
-              yield* events.publish(SessionEvent.Tool.Input.Started, {
-                sessionID: ctx.sessionID,
-                callID: value.id,
-                name: value.toolName,
-                timestamp: DateTime.makeUnsafe(Date.now()),
-              })
-            }
-            const part = yield* session.updatePart({
-              id: ctx.toolcalls[value.id]?.partID ?? PartID.ascending(),
-              messageID: ctx.assistantMessage.id,
-              sessionID: ctx.assistantMessage.sessionID,
-              type: "tool",
-              tool: value.toolName,
-              callID: value.id,
-              state: { status: "pending", input: {}, raw: "" },
-              metadata: value.providerExecuted ? { providerExecuted: true } : undefined,
-            } satisfies MessageV2.ToolPart)
-            ctx.toolcalls[value.id] = {
-              done: yield* Deferred.make<void>(),
-              partID: part.id,
-              messageID: part.messageID,
-              sessionID: part.sessionID,
-            }
+            yield* ensureToolCall(value)
             return
 
           case "tool-input-delta":
+            // AI SDK emits a final `tool-call` with the parsed `input`; accumulating
+            // delta fragments into `state.raw` is redundant work for no current consumer.
             return
 
           case "tool-input-end": {
+            const toolCall = yield* ensureToolCall(value)
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
             if (flags.experimentalEventSystem) {
               yield* events.publish(SessionEvent.Tool.Input.Ended, {
@@ -315,37 +370,52 @@ export const layer = Layer.effect(
                 timestamp: DateTime.makeUnsafe(Date.now()),
               })
             }
+            ctx.toolcalls[value.id] = { ...toolCall.call, inputEnded: true }
             return
           }
 
           case "tool-call": {
             if (ctx.assistantMessage.summary) {
-              throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
+              throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
-            const toolCall = yield* readToolCall(value.toolCallId)
+            const toolCall = yield* ensureToolCall(value)
+            const input = toolInput(value.input)
+            if (!toolCall.call.inputEnded) {
+              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
+              if (flags.experimentalEventSystem) {
+                yield* events.publish(SessionEvent.Tool.Input.Ended, {
+                  sessionID: ctx.sessionID,
+                  callID: value.id,
+                  text: "",
+                  timestamp: DateTime.makeUnsafe(Date.now()),
+                })
+              }
+            }
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
             if (flags.experimentalEventSystem) {
               yield* events.publish(SessionEvent.Tool.Called, {
                 sessionID: ctx.sessionID,
-                callID: value.toolCallId,
-                tool: value.toolName,
-                input: value.input,
+                callID: value.id,
+                tool: value.name,
+                input,
                 provider: {
-                  executed: toolCall?.part.metadata?.providerExecuted === true,
+                  executed: toolCall.part.metadata?.providerExecuted === true,
                   ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
                 },
                 timestamp: DateTime.makeUnsafe(Date.now()),
               })
             }
-            yield* updateToolCall(value.toolCallId, (match) => ({
+            yield* updateToolCall(value.id, (match) => ({
               ...match,
-              tool: value.toolName,
-              state: {
-                ...match.state,
-                status: "running",
-                input: value.input,
-                time: { start: Date.now() },
-              },
+              tool: value.name,
+              state:
+                match.state.status === "running"
+                  ? { ...match.state, input }
+                  : {
+                      status: "running",
+                      input,
+                      time: { start: Date.now() },
+                    },
               metadata: match.metadata?.providerExecuted
                 ? { ...value.providerMetadata, providerExecuted: true }
                 : value.providerMetadata,
@@ -359,9 +429,9 @@ export const layer = Layer.effect(
               !recentParts.every(
                 (part) =>
                   part.type === "tool" &&
-                  part.tool === value.toolName &&
+                  part.tool === value.name &&
                   part.state.status !== "pending" &&
-                  JSON.stringify(part.state.input) === JSON.stringify(value.input),
+                  JSON.stringify(part.state.input) === JSON.stringify(input),
               )
             ) {
               return
@@ -370,27 +440,19 @@ export const layer = Layer.effect(
             const agent = yield* agents.get(ctx.assistantMessage.agent)
             yield* permission.ask({
               permission: "doom_loop",
-              patterns: [value.toolName],
+              patterns: [value.name],
               sessionID: ctx.assistantMessage.sessionID,
-              metadata: { tool: value.toolName, input: value.input },
-              always: [value.toolName],
+              metadata: { tool: value.name, input },
+              always: [value.name],
               ruleset: agent.permission,
             })
             return
           }
 
           case "tool-result": {
-            const toolCall = yield* readToolCall(value.toolCallId)
-            const toolAttachments: MessageV2.FilePart[] = (
-              Array.isArray(value.output.attachments) ? value.output.attachments : []
-            ).filter(
-              (attachment: unknown): attachment is MessageV2.FilePart =>
-                isRecord(attachment) &&
-                attachment.type === "file" &&
-                typeof attachment.mime === "string" &&
-                typeof attachment.url === "string",
-            )
-            const normalized = yield* Effect.forEach(toolAttachments, (attachment) =>
+            const toolCall = yield* readToolCall(value.id)
+            const rawOutput = toolResultOutput(value)
+            const normalized = yield* Effect.forEach(rawOutput.attachments ?? [], (attachment) =>
               attachment.mime.startsWith("image/")
                 ? image.normalize(attachment).pipe(
                     Effect.catchIf(
@@ -404,18 +466,18 @@ export const layer = Layer.effect(
             const omitted = normalized.filter(Exit.isFailure).length
             const attachments = normalized.filter(Exit.isSuccess).map((item) => item.value)
             const output = {
-              ...value.output,
+              ...rawOutput,
               output:
                 omitted === 0
-                  ? value.output.output
-                  : `${value.output.output}\n\n[${omitted} image${omitted === 1 ? "" : "s"} omitted: could not be resized below the image size limit.]`,
-              attachments: attachments?.length ? attachments : undefined,
+                  ? rawOutput.output
+                  : `${rawOutput.output}\n\n[${omitted} image${omitted === 1 ? "" : "s"} omitted: could not be resized below the image size limit.]`,
+              attachments: attachments.length ? attachments : undefined,
             }
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
             if (flags.experimentalEventSystem) {
               yield* events.publish(SessionEvent.Tool.Success, {
                 sessionID: ctx.sessionID,
-                callID: value.toolCallId,
+                callID: value.id,
                 structured: output.metadata,
                 content: [
                   {
@@ -423,32 +485,32 @@ export const layer = Layer.effect(
                     text: output.output,
                   },
                   ...(output.attachments?.map((item: MessageV2.FilePart) => ({
-                    type: "file",
+                    type: "file" as const,
                     uri: item.url,
                     mime: item.mime,
                     name: item.filename,
                   })) ?? []),
                 ],
                 provider: {
-                  executed: toolCall?.part.metadata?.providerExecuted === true,
+                  executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
                 },
                 timestamp: DateTime.makeUnsafe(Date.now()),
               })
             }
-            yield* completeToolCall(value.toolCallId, output)
+            yield* completeToolCall(value.id, output)
             return
           }
 
           case "tool-error": {
-            const toolCall = yield* readToolCall(value.toolCallId)
+            const toolCall = yield* readToolCall(value.id)
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
             if (flags.experimentalEventSystem) {
               yield* events.publish(SessionEvent.Tool.Failed, {
                 sessionID: ctx.sessionID,
-                callID: value.toolCallId,
+                callID: value.id,
                 error: {
                   type: "unknown",
-                  message: errorMessage(value.error),
+                  message: value.message,
                 },
                 provider: {
                   executed: toolCall?.part.metadata?.providerExecuted === true,
@@ -456,14 +518,14 @@ export const layer = Layer.effect(
                 timestamp: DateTime.makeUnsafe(Date.now()),
               })
             }
-            yield* failToolCall(value.toolCallId, value.error)
+            yield* failToolCall(value.id, value.error ?? new Error(value.message))
             return
           }
 
-          case "error":
-            throw value.error
+          case "provider-error":
+            throw new Error(value.message)
 
-          case "start-step":
+          case "step-start":
             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
@@ -490,11 +552,12 @@ export const layer = Layer.effect(
             })
             return
 
-          case "finish-step": {
+          case "step-finish": {
             const completedSnapshot = yield* snapshot.track()
+            yield* Effect.forEach(Object.keys(ctx.reasoningMap), finishReasoning)
             const usage = Session.getUsage({
               model: ctx.model,
-              usage: value.usage,
+              usage: value.usage ?? new Usage({}),
               metadata: value.providerMetadata,
             })
             if (!ctx.assistantMessage.summary) {
@@ -502,7 +565,7 @@ export const layer = Layer.effect(
               if (flags.experimentalEventSystem) {
                 yield* events.publish(SessionEvent.Step.Ended, {
                   sessionID: ctx.sessionID,
-                  finish: value.finishReason,
+                  finish: value.reason,
                   cost: usage.cost,
                   tokens: usage.tokens,
                   snapshot: completedSnapshot,
@@ -510,12 +573,12 @@ export const layer = Layer.effect(
                 })
               }
             }
-            ctx.assistantMessage.finish = value.finishReason
+            ctx.assistantMessage.finish = value.reason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
             yield* session.updatePart({
               id: PartID.ascending(),
-              reason: value.finishReason,
+              reason: value.reason,
               snapshot: completedSnapshot,
               messageID: ctx.assistantMessage.id,
               sessionID: ctx.assistantMessage.sessionID,
@@ -622,10 +685,6 @@ export const layer = Layer.effect(
 
           case "finish":
             return
-
-          default:
-            slog.info("unhandled", { event: value.type, value })
-            return
         }
       })
 
@@ -727,6 +786,7 @@ export const layer = Layer.effect(
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
+            yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
 
             yield* stream.pipe(

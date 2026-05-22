@@ -15,7 +15,10 @@ const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
 type Issue = {
   number: number
   updated_at: string
+  author_association: string
 }
+
+const teamAssociations = new Set(["OWNER", "MEMBER", "COLLABORATOR"])
 
 const headers = {
   Authorization: `Bearer ${token}`,
@@ -63,6 +66,10 @@ async function main() {
     for (const i of all) {
       const updated = new Date(i.updated_at)
       if (updated < cutoff) {
+        if (teamAssociations.has(i.author_association)) {
+          console.log(`Skipping #${i.number}: author association is ${i.author_association}`)
+          continue
+        }
         stale.push(i.number)
       } else {
         console.log(`\nFound fresh issue #${i.number}, stopping`)

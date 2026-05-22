@@ -219,6 +219,14 @@ export function createTuiApi(input: Input): TuiPluginApi {
       },
     },
     keymap: input.keymap,
+    mode: {
+      current() {
+        return Keymap.getOpencodeModeStack(input.keymap).current()
+      },
+      push(mode) {
+        return Keymap.getOpencodeModeStack(input.keymap).push(mode)
+      },
+    },
     route: {
       register(list) {
         return routeRegister(input.routes, list, input.bump)
@@ -269,7 +277,6 @@ export function createTuiApi(input: Input): TuiPluginApi {
         return (
           <Prompt
             sessionID={props.sessionID}
-            workspaceID={props.workspaceID}
             visible={props.visible}
             disabled={props.disabled}
             onSubmit={props.onSubmit}

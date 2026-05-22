@@ -404,19 +404,14 @@ export const protocol = Protocol.make({
 
 export const route = Route.make({
   id: ADAPTER,
+  provider: "google",
   protocol,
   // Gemini's path embeds the model id and pins SSE framing at the URL level.
-  endpoint: Endpoint.path(({ request }) => `/models/${request.model.id}:streamGenerateContent?alt=sse`),
-  auth: Auth.apiKeyHeader("x-goog-api-key"),
+  endpoint: Endpoint.path(({ request }) => `/models/${request.model.id}:streamGenerateContent?alt=sse`, {
+    baseURL: DEFAULT_BASE_URL,
+  }),
+  auth: Auth.none,
   framing: Framing.sse,
-})
-
-// =============================================================================
-// Model Helper
-// =============================================================================
-export const model = Route.model(route, {
-  provider: "google",
-  baseURL: DEFAULT_BASE_URL,
 })
 
 export * as Gemini from "./gemini"
