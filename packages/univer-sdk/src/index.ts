@@ -521,3 +521,12 @@ export function createUniverSdk(input: UniverSdkRuntime) {
     },
   }
 }
+
+export {
+  createVeritlyUniverBridge,
+  dispatchUniverOp,
+  type RelayRequest,
+  type RelayResponse,
+  type VeritlyUniverBridge,
+  type VeritlyUniverBridgeWindow,
+} from "./relay-dispatch"

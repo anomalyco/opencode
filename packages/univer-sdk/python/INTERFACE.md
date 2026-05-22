@@ -4,9 +4,11 @@ This file is the API contract for Python/AI clients talking to the local relay a
 
 ## Transport
 
-- WebSocket URL (agent): `ws://127.0.0.1:18766/ws?role=agent` (relay default port `18766` when `PORT` / `UNIVER_SDK_PORT` are unset; Docker/k8s images set `PORT=8080` explicitly).
-- Python `UniverSDK` defaults: no-arg constructor → `UNIVER_SDK_WS` env if set, else `ws://127.0.0.1:{UNIVER_SDK_PORT}/ws` with `UNIVER_SDK_PORT` defaulting to `18766`.
-- After each request, Python waits for one JSON response on the same socket. If the browser never answers (tab closed, sheet not loaded, main thread stuck), that wait can hang. `UNIVER_SDK_CALL_TIMEOUT_SEC` caps this wait (default `30`).
+**Pyodide (browser):** `UniverSDK.connect()` uses `window.__veritlyUniverBridge.call(JSON)` — in-process, no relay. Requires a spreadsheet open in the same tab.
+
+**CPython / external agent:** WebSocket URL (agent): `ws://127.0.0.1:18766/ws?role=agent` (relay default port `18766` when `PORT` / `UNIVER_SDK_PORT` are unset; Docker/k8s images set `PORT=8080` explicitly). `UniverSDK()` defaults → `UNIVER_SDK_WS` env if set, else `ws://127.0.0.1:{UNIVER_SDK_PORT}/ws`.
+
+After each request, Python waits for one JSON response. If the browser never answers (tab closed, sheet not loaded, main thread stuck), that wait can hang. `UNIVER_SDK_CALL_TIMEOUT_SEC` caps this wait (default `30`).
 - Request JSON: `{ "id": "<string>", "op": "<operation>", "params": { ... } }`
 - Response JSON: `{ "id": "<string>", "ok": true, "result": <any> }` or `{ "id": "<string>", "ok": false, "error": "<message>" }`
 
@@ -67,6 +69,12 @@ This file is the API contract for Python/AI clients talking to the local relay a
 ```
 
 - result: `unknown[][]` (2D array of cell values or null)
+- Python: `range` is required. Use `get_sheet(max_row=, max_col=)` or `RangeRect.block(end_row, end_column)` for a large top-left read — not `None`.
+
+### `get_sheet` (Python only)
+
+- Convenience wrapper: `get_range` from (0,0) through `(max_row, max_col)` inclusive.
+- Defaults: `max_row=500`, `max_col=50`.
 
 ### `set_range`
 
@@ -108,7 +116,8 @@ This file is the API contract for Python/AI clients talking to the local relay a
 }
 ```
 
-- result: `true`
+- result: `{ "chartId": "..." }` when successful
+- Python: `type` / `chart_type` is an **integer** (`CHART_BAR = 4`). One `range` for the data block. No `title`. No separate label/value ranges on this API.
 
 ### `sdk_introspect`
 

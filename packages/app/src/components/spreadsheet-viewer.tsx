@@ -9,7 +9,17 @@ import sheetsDrawingEnUs from "@univerjs/presets/preset-sheets-drawing/locales/e
 import "@univerjs/presets/lib/styles/preset-sheets-drawing.css"
 import type { FUniver } from "@univerjs/core/facade"
 import type { IFUniverUIMixin } from "@univerjs/ui/facade"
-import { createUniverSdk, type AddChartInput, type PushSetRangeInput, type RangeRect, type SetRangeValuesInput, type UniverHostApi, type UniverSdkRuntime } from "@opencode-ai/univer-sdk"
+import {
+  createUniverSdk,
+  createVeritlyUniverBridge,
+  dispatchUniverOp,
+  type PushSetRangeInput,
+  type RelayRequest,
+  type RelayResponse,
+  type UniverHostApi,
+  type UniverSdkRuntime,
+  type VeritlyUniverBridgeWindow,
+} from "@opencode-ai/univer-sdk"
 import { VeritlyLiveChartPlugin, bindVeritlyChartHost, clearVeritlyChartHost, registerVeritlyLiveChartFloat } from "@opencode-ai/veritly-univer-chart"
 import { bindVeritlyUniverHost, clearVeritlyUniverHost, type Host } from "@/lib/veritly-univer-runtime"
 import { augmentVeritlyHost } from "@/lib/veritly-univer-host-api"
@@ -19,8 +29,6 @@ import { browserTracer } from "@/lib/telemetry/browser-otel"
 import { context, propagation, SpanStatusCode, type TextMapGetter } from "@opentelemetry/api"
 
 type PendingImport = { base64: string; mimeType?: string }
-type RelayRequest = { id: string; op: string; params?: unknown; traceparent?: string }
-type RelayResponse = { id: string; ok: boolean; result?: unknown; error?: string; traceparent?: string }
 
 const relayTextMapSetter = {
   set(carrier: Record<string, string>, key: string, value: string) {
@@ -36,8 +44,6 @@ const relayTextMapGetter: TextMapGetter<Record<string, string>> = {
     return Object.keys(carrier)
   },
 }
-type GetRangeInput = { sheetId?: string; range: RangeRect }
-
 type Props = {
   unitId?: string
   unitType?: 1 | 2 | 3
@@ -58,7 +64,7 @@ function veritlySdk(cur: ReturnType<typeof createUniver>) {
   } as unknown as UniverSdkRuntime)
 }
 
-type VeritlyWindow = Window & { __veritlyUniverSdk?: () => ReturnType<typeof createUniverSdk> }
+type VeritlyWindow = VeritlyUniverBridgeWindow & { __veritlyUniverSdk?: () => ReturnType<typeof createUniverSdk> }
 
 function base64ToFile(base64: string, name: string, mimeType?: string): File {
   const bin = atob(base64)
@@ -123,10 +129,14 @@ export function SpreadsheetViewer(props: Props) {
     })
 
     runtime = instance
-    if (import.meta.env.DEV) {
-      const w = window as VeritlyWindow
-      w.__veritlyUniverSdk = () => veritlySdk(instance)
-    }
+    const sdkRuntime = {
+      univerAPI: instance.univerAPI,
+      univer: instance.univer,
+    } as UniverSdkRuntime
+    const sdk = veritlySdk(instance)
+    const w = window as VeritlyWindow
+    w.__veritlyUniverBridge = createVeritlyUniverBridge(sdk, sdkRuntime)
+    w.__veritlyUniverSdk = () => sdk
 
     browserTracer().startActiveSpan(
       "spreadsheet.viewer.univer_init",
@@ -161,10 +171,9 @@ export function SpreadsheetViewer(props: Props) {
       clearVeritlyChartHost()
       chartReg.dispose()
       runtime = null
-      if (import.meta.env.DEV) {
-        const w = window as VeritlyWindow
-        delete w.__veritlyUniverSdk
-      }
+      const w = window as VeritlyWindow
+      delete w.__veritlyUniverBridge
+      delete w.__veritlyUniverSdk
       instance.univer.dispose()
     })
   })
@@ -277,84 +286,18 @@ export function SpreadsheetViewer(props: Props) {
               "messaging.destination.name": req.op,
             })
 
-            try {
-              switch (req.op) {
-                case "get_active_document":
-                  respond({ id: req.id, ok: true, result: sdk.getActiveDocument() })
-                  return
-                case "list_sheets":
-                  respond({ id: req.id, ok: true, result: sdk.listSheets() })
-                  return
-                case "get_range":
-                  respond({ id: req.id, ok: true, result: sdk.getSheetRange(req.params as GetRangeInput) })
-                  return
-                case "set_range":
-                  sdk.setRangeValues(req.params as SetRangeValuesInput)
-                  respond({ id: req.id, ok: true, result: true })
-                  return
-                case "add_chart":
-                  respond({ id: req.id, ok: true, result: await sdk.addChart(req.params as AddChartInput) })
-                  return
-                case "sdk_introspect":
-                  respond({
-                    id: req.id,
-                    ok: true,
-                    result: sdk.inspectFacadeCapabilities(
-                      req.params as
-                        | {
-                            sheetId?: string
-                            range?: { startRow: number; endRow: number; startColumn: number; endColumn: number }
-                          }
-                        | undefined,
-                    ),
-                  })
-                  return
-                case "execute_command": {
-                  const raw = req.params
-                  if (raw === null || typeof raw !== "object") {
-                    span.setStatus({ code: SpanStatusCode.ERROR, message: "execute_command params" })
-                    respond({ id: req.id, ok: false, error: "execute_command requires params object" })
-                    return
-                  }
-                  const cmdId = Reflect.get(raw, "id")
-                  if (typeof cmdId !== "string") {
-                    span.setStatus({ code: SpanStatusCode.ERROR, message: "execute_command cmd id" })
-                    respond({ id: req.id, ok: false, error: "execute_command requires params.id (string)" })
-                    return
-                  }
-                  const cmdParams = Reflect.get(raw, "params")
-                  if (cmdParams !== undefined && (cmdParams === null || typeof cmdParams !== "object")) {
-                    span.setStatus({ code: SpanStatusCode.ERROR, message: "execute_command nested params" })
-                    respond({
-                      id: req.id,
-                      ok: false,
-                      error: "execute_command params.params must be an object when set",
-                    })
-                    return
-                  }
-                  const result = await cur.univerAPI.executeCommand(
-                    cmdId,
-                    cmdParams === undefined ? undefined : cmdParams,
-                  )
-                  respond({ id: req.id, ok: true, result })
-                  return
-                }
-                default:
-                  span.setStatus({ code: SpanStatusCode.ERROR, message: "unsupported op" })
-                  respond({ id: req.id, ok: false, error: `unsupported op: ${req.op}` })
-              }
-            } catch (err) {
+            const runtimeInput = {
+              univerAPI: cur.univerAPI,
+              univer: cur.univer,
+            } as UniverSdkRuntime
+            const resp = await dispatchUniverOp(sdk, runtimeInput, req)
+            if (!resp.ok) {
               if (req.op === "add_chart") {
-                const info = sdk.inspectFacadeCapabilities()
-                console.warn("univer-sdk add_chart failed; facade capabilities:", info)
+                console.warn("univer-sdk add_chart failed; facade capabilities:", sdk.inspectFacadeCapabilities())
               }
-              span.setStatus({
-                code: SpanStatusCode.ERROR,
-                message: err instanceof Error ? err.message : "sdk operation failed",
-              })
-              span.recordException(err instanceof Error ? err : new Error(String(err)))
-              respond({ id: req.id, ok: false, error: err instanceof Error ? err.message : "sdk operation failed" })
+              span.setStatus({ code: SpanStatusCode.ERROR, message: resp.error ?? "sdk operation failed" })
             }
+            respond(resp)
           } finally {
             span.end()
           }

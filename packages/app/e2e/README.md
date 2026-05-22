@@ -26,6 +26,8 @@ From **repo root**: `bun run app:e2e`, `bun run app:playwright`.
 
 **Subset / grep:** `bun run e2e -- test/browser/integration/foo.test.ts` or Vitest flags after `--`.
 
+**Pyodide ↔ Univer bridge:** `bun run e2e -- test/browser/integration/pyodide-univer-bridge.test.ts` — real `veritly_univer_sdk` in Pyodide against `window.__veritlyUniverBridge` (spreadsheet must load in the same tab).
+
 **Infra smoke** (start Postgres + Univer stack then stop, no app): `bun run test:browser -- test/browser/infra/infra-smoke.test.ts` (with the same env files as `e2e` if WorkOS vars are not already exported).
 
 ## Troubleshooting

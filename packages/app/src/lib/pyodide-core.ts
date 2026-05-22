@@ -37,7 +37,7 @@ m = sys.modules.get("veritly_univer_sdk")
 
 export type InstallVeritlyUniverSdkOpts = {
   source: string
-  /** When set, runs `os.environ.setdefault("UNIVER_SDK_WS", value)` before install. */
+  /** When set, runs `os.environ.setdefault("UNIVER_SDK_WS", value)` before install (relay / CPython only). */
   relayWsDefault?: string
 }
 

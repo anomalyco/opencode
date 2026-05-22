@@ -36,8 +36,9 @@ describe("univer veritly sdk (webdriver)", () => {
       await noVisibleLoadingSpreadsheet(app.page, wait)
       await assertSpreadsheetImportOk(app.page, wait)
 
-      const matrix = (await app.page.evaluate(() => {
+      const matrix = (await app.page.evaluate(async () => {
         const w = window as unknown as {
+          __veritlyUniverBridge?: { call: (payload: string) => Promise<string> }
           __veritlyUniverSdk?: () => {
             setRangeValues: (o: {
               range: { startRow: number; endRow: number; startColumn: number; endColumn: number }
@@ -48,15 +49,35 @@ describe("univer veritly sdk (webdriver)", () => {
             }) => unknown[][]
           }
         }
-        const sdk = w.__veritlyUniverSdk?.()
-        if (!sdk) throw new Error("missing window.__veritlyUniverSdk — run full browser E2E (`bun run e2e` from packages/app)")
-        sdk.setRangeValues({
-          range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
-          values: [["sdk-e2e"]],
-        })
-        return sdk.getSheetRange({
-          range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
-        })
+        const bridge = w.__veritlyUniverBridge
+        if (!bridge) {
+          throw new Error("missing window.__veritlyUniverBridge — run full browser E2E (`bun run e2e` from packages/app)")
+        }
+        const setRaw = await bridge.call(
+          JSON.stringify({
+            id: "e2e-set",
+            op: "set_range",
+            params: {
+              range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
+              values: [["sdk-e2e"]],
+            },
+          }),
+        )
+        const setResp = JSON.parse(setRaw) as { ok: boolean; error?: string }
+        if (!setResp.ok) throw new Error(setResp.error ?? "set_range failed")
+
+        const getRaw = await bridge.call(
+          JSON.stringify({
+            id: "e2e-get",
+            op: "get_range",
+            params: {
+              range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
+            },
+          }),
+        )
+        const getResp = JSON.parse(getRaw) as { ok: boolean; result?: unknown[][]; error?: string }
+        if (!getResp.ok) throw new Error(getResp.error ?? "get_range failed")
+        return getResp.result ?? []
       })) as unknown[][]
 
       expect(cellPrimitive(matrix[0]?.[0])).toBe("sdk-e2e")

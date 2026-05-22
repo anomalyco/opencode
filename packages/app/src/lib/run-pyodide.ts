@@ -6,7 +6,6 @@ import {
   PYODIDE_CDN_INDEX_URL,
   runCapturedPython,
 } from "./pyodide-core"
-import { browserUniverSdkWsUrl } from "./univer-sdk-ws-browser"
 
 let py: PyodideInterface | undefined
 
@@ -16,10 +15,7 @@ async function runtime() {
   if (typeof sdkSource !== "string" || sdkSource.length < 50) {
     throw new Error("veritly_univer_sdk.py did not bundle (?raw import empty). Pyodide cannot install the Univer SDK.")
   }
-  await installVeritlyUniverSdkFromSource(next, {
-    source: sdkSource,
-    relayWsDefault: browserUniverSdkWsUrl(),
-  })
+  await installVeritlyUniverSdkFromSource(next, { source: sdkSource })
   py = next
   return py
 }

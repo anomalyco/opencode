@@ -1,3 +1,14 @@
+"""
+Veritly Univer SDK — control the live spreadsheet from Python.
+
+Pyodide (pyodide tool): ``await UniverSDK().connect()`` uses ``window.__veritlyUniverBridge``.
+Open a spreadsheet in the same tab first. Do **not** call ``asyncio.run()``; use ``async def main():`` only.
+
+Relay (MCP / CPython): ``UniverSDK(ws_url)`` over WebSocket — see ``sdk_help()`` and SKILL.md relay section.
+
+Quick help: ``print(sdk_help())`` or ``help(UniverSDK)``.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -13,13 +24,63 @@ _PYODIDE = sys.platform == "emscripten"
 if not _PYODIDE:
     import websockets
 
+# Univer chartType integers (not strings). Default in add_chart is CHART_BAR.
+CHART_BAR = 4
+
+SDK_HELP = """\
+Veritly Univer SDK — cheat sheet for agents
+
+## Pyodide (pyodide tool) — usual path
+- Spreadsheet must be open in this browser tab.
+- async def main(): ...   # tool runs main for you
+- Do NOT use asyncio.run(main()) — raises "cannot be called from a running event loop".
+- sdk = UniverSDK(); await sdk.connect()
+
+## Reading data
+- get_range(range_rect, sheet_id=None) — range_rect is required (no None).
+- get_sheet(sheet_id=None, max_row=500, max_col=50) — reads top-left block (0..max_row, 0..max_col).
+- RangeRect.block(end_row, end_column) — helper from origin, e.g. RangeRect.block(99, 25).
+
+## Writing
+- set_range(range_rect, values, sheet_id=None) — values is 2D list aligned to range.
+
+## Charts (add_chart)
+- One range_rect: contiguous block (often header row + data in same rectangle).
+- chart_type: int (CHART_BAR = 4), not "bar".
+- No title parameter. No separate label_range / data_range — use one range or execute_command.
+- anchor: optional {"row": int, "column": int} for chart position on sheet.
+- Returns dict with chartId on success.
+
+## Discovery
+- print(sdk_help()) — this text
+- help(UniverSDK), help(RangeRect), inspect.signature(sdk.add_chart)
+- await sdk.inspect_facade() — facade method names in the browser runtime
+
+## Relay-only (MCP / local CPython)
+- UniverSDK() uses UNIVER_SDK_WS or ws://127.0.0.1:18766/ws?role=agent
+- Browser tab must connect relay as role=browser (VITE_UNIVER_SDK_WS)
+"""
+
+
+def sdk_help() -> str:
+    return SDK_HELP
+
 
 @dataclass(frozen=True)
 class RangeRect:
+    """Inclusive row/column indices on the sheet (0-based)."""
+
     startRow: int
     endRow: int
     startColumn: int
     endColumn: int
+
+    @classmethod
+    def block(cls, end_row: int, end_column: int) -> RangeRect:
+        """Rectangle from (0,0) through (end_row, end_column) inclusive."""
+        if end_row < 0 or end_column < 0:
+            raise ValueError("end_row and end_column must be >= 0")
+        return cls(0, end_row, 0, end_column)
 
 
 @dataclass(frozen=True)
@@ -49,7 +110,6 @@ def _call_timeout_sec() -> float:
 
 
 def _resolve_ws_url(explicit: str | None) -> str:
-    """Default matches Bun `sdk-relay` (`UNIVER_SDK_PORT`, default 18766). Override with `UNIVER_SDK_WS`."""
     if explicit is not None:
         return explicit.strip()
     env = os.environ.get("UNIVER_SDK_WS", "").strip()
@@ -60,84 +120,59 @@ def _resolve_ws_url(explicit: str | None) -> str:
 
 
 def default_agent_ws_url(explicit: str | None = None) -> str:
-    """WebSocket URL the `UniverSDK` constructor would use (for diagnostics)."""
     return _resolve_ws_url(explicit)
 
 
-async def _browser_ws_connect(url: str) -> Any:
-    """Pyodide / Emscripten: browser WebSocket (same-origin rules as the host tab)."""
-    from pyodide.ffi import create_proxy
-
+def _pyodide_bridge() -> Any | None:
     import js
 
-    loop = asyncio.get_running_loop()
-    ws = js.WebSocket.new(url)
-    open_fut: asyncio.Future[None] = loop.create_future()
-    incoming: asyncio.Queue[str | None] = asyncio.Queue()
-    proxies: list[Any] = []
+    bridge = getattr(js.window, "__veritlyUniverBridge", None)
+    if bridge is None:
+        return None
+    if not hasattr(bridge, "call"):
+        return None
+    return bridge
 
-    def on_open(_event: object | None = None) -> None:
-        if not open_fut.done():
-            open_fut.set_result(None)
 
-    def on_message(event: object) -> None:
-        d = getattr(event, "data", "")
-        if not isinstance(d, str):
-            d = str(d)
-        incoming.put_nowait(d)
-
-    def on_error(_event: object | None = None) -> None:
-        if not open_fut.done():
-            open_fut.set_exception(UniverSDKError("WebSocket error"))
-        incoming.put_nowait(None)
-
-    def on_close(_event: object | None = None) -> None:
-        if not open_fut.done():
-            open_fut.set_exception(UniverSDKError("WebSocket closed before open"))
-        incoming.put_nowait(None)
-
-    proxies.append(create_proxy(on_open))
-    proxies.append(create_proxy(on_message))
-    proxies.append(create_proxy(on_error))
-    proxies.append(create_proxy(on_close))
-
-    ws.addEventListener("open", proxies[0])
-    ws.addEventListener("message", proxies[1])
-    ws.addEventListener("error", proxies[2])
-    ws.addEventListener("close", proxies[3])
-
-    await open_fut
+async def _inprocess_connect() -> Any:
+    bridge = _pyodide_bridge()
+    if bridge is None:
+        raise UniverSDKError(
+            "No in-page Univer bridge. Open a spreadsheet in this tab before using UniverSDK."
+        )
 
     class Conn:
-        __slots__ = ("_incoming", "_proxies", "_ws")
+        __slots__ = ("_bridge", "_pending")
 
-        def __init__(self) -> None:
-            self._ws = ws
-            self._incoming = incoming
-            self._proxies = proxies
+        def __init__(self, b: Any) -> None:
+            self._bridge = b
+            self._pending: str | None = None
 
         async def send(self, data: str) -> None:
-            self._ws.send(data)
+            raw = await self._bridge.call(data)
+            self._pending = str(raw)
 
         async def recv(self) -> str:
-            item = await self._incoming.get()
-            if item is None:
-                raise UniverSDKError("WebSocket closed")
-            return item
+            if self._pending is None:
+                raise UniverSDKError("in-process Univer bridge: recv without send")
+            out = self._pending
+            self._pending = None
+            return out
 
         async def close(self) -> None:
-            try:
-                self._ws.close(1000, "client close")
-            finally:
-                for p in self._proxies:
-                    p.destroy()
-                self._proxies.clear()
+            self._pending = None
 
-    return Conn()
+    return Conn(bridge)
 
 
 class UniverSDK:
+    """Async client for the open Univer sheet. Call ``await connect()`` before other methods."""
+
     def __init__(self, ws_url: str | None = None) -> None:
+        """
+        Pyodide: ignore ws_url; uses in-page bridge.
+        Relay: optional WebSocket URL (else UNIVER_SDK_WS / UNIVER_SDK_PORT).
+        """
         self._ws_url = _resolve_ws_url(ws_url)
         self._conn: Any = None
         self._lock = asyncio.Lock()
@@ -145,12 +180,12 @@ class UniverSDK:
     async def connect(self) -> None:
         if self._conn is not None:
             return
+        if _PYODIDE:
+            self._conn = await _inprocess_connect()
+            return
         url = self._ws_url if "?" in self._ws_url else f"{self._ws_url}?role=agent"
         if "role=" not in url:
             url = f"{url}&role=agent"
-        if _PYODIDE:
-            self._conn = await _browser_ws_connect(url)
-            return
         self._conn = await websockets.connect(url)
 
     async def close(self) -> None:
@@ -172,6 +207,7 @@ class UniverSDK:
         return [SheetMeta(id=str(x["id"]), name=str(x["name"])) for x in data]
 
     async def get_range(self, range_rect: RangeRect, sheet_id: str | None = None) -> list[list[Any]]:
+        """Read a rectangular block. ``range_rect`` is required — use ``get_sheet()`` for a large top-left read."""
         return await self._call(
             "get_range",
             {
@@ -184,6 +220,18 @@ class UniverSDK:
                 },
             },
         )
+
+    async def get_sheet(
+        self,
+        sheet_id: str | None = None,
+        *,
+        max_row: int = 500,
+        max_col: int = 50,
+    ) -> list[list[Any]]:
+        """Read rows 0..max_row and columns 0..max_col (inclusive). Trailing empty cells may be null."""
+        if max_row < 0 or max_col < 0:
+            raise ValueError("max_row and max_col must be >= 0")
+        return await self.get_range(RangeRect.block(max_row, max_col), sheet_id=sheet_id)
 
     async def set_range(self, range_rect: RangeRect, values: list[list[Any]], sheet_id: str | None = None) -> bool:
         result = await self._call(
@@ -205,9 +253,22 @@ class UniverSDK:
         self,
         range_rect: RangeRect,
         sheet_id: str | None = None,
-        chart_type: int | None = None,
+        *,
+        chart_type: int = CHART_BAR,
         anchor: dict[str, int] | None = None,
     ) -> dict[str, Any]:
+        """
+        Insert a chart from one contiguous cell range (data + optional header row in the same block).
+
+        Args:
+            range_rect: Inclusive cell bounds for chart data (not separate label/value ranges).
+            sheet_id: Target sheet; default active sheet.
+            chart_type: Univer integer type (default CHART_BAR = 4), not a string name.
+            anchor: Optional sheet position ``{"row": int, "column": int}`` for the chart float.
+
+        Returns:
+            Dict with ``chartId`` on success. No ``title`` parameter on this API.
+        """
         params: dict[str, Any] = {
             "sheetId": sheet_id,
             "range": {
@@ -216,9 +277,8 @@ class UniverSDK:
                 "startColumn": range_rect.startColumn,
                 "endColumn": range_rect.endColumn,
             },
+            "type": chart_type,
         }
-        if chart_type is not None:
-            params["type"] = chart_type
         if anchor is not None:
             params["anchor"] = anchor
         result = await self._call("add_chart", params)
@@ -263,17 +323,34 @@ class UniverSDK:
             try:
                 raw = await asyncio.wait_for(self._conn.recv(), timeout=timeout)
             except TimeoutError as e:
+                hint = (
+                    "spreadsheet may be closed or the main thread is busy"
+                    if _PYODIDE
+                    else "relay forwarded the request; browser tab may be closed, frozen, or not running the spreadsheet viewer"
+                )
                 raise UniverSDKError(
-                    f"timed out after {timeout}s waiting for browser response to op={op!r} "
-                    "(relay forwarded the request; browser tab may be closed, frozen, or not running the spreadsheet viewer)"
+                    f"timed out after {timeout}s waiting for browser response to op={op!r} ({hint})"
                 ) from e
 
         if not isinstance(raw, str):
-            raise UniverSDKError("Received non-text response from relay.")
+            raise UniverSDKError("Received non-text response from Univer bridge.")
 
         data = json.loads(raw)
         if data.get("id") != req_id:
             raise UniverSDKError(f"Unexpected response id. expected={req_id} actual={data.get('id')}")
         if data.get("ok") is not True:
-            raise UniverSDKError(str(data.get("error") or "Unknown relay error"))
+            raise UniverSDKError(str(data.get("error") or "Unknown Univer bridge error"))
         return data.get("result")
+
+
+__all__ = [
+    "CHART_BAR",
+    "SDK_HELP",
+    "ActiveDocument",
+    "RangeRect",
+    "SheetMeta",
+    "UniverSDK",
+    "UniverSDKError",
+    "default_agent_ws_url",
+    "sdk_help",
+]

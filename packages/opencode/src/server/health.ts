@@ -140,7 +140,7 @@ export function instructionCheck(): HealthCheckResult {
     }
   }
 
-  const miss = ["$WORKSPACE", "veritly_univer_sdk", "UniverSDK", "Pyodide"].filter((item) => !text.includes(item))
+  const miss = ["$WORKSPACE", "veritly_univer_sdk", "UniverSDK", "Pyodide", "sdk_help"].filter((item) => !text.includes(item))
   return {
     name: "instructions",
     ok: miss.length === 0,

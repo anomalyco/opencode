@@ -1,95 +1,85 @@
 ---
 name: univer-sdk
-description: Control the live Univer spreadsheet from Python via the Veritly WebSocket relay. Load when reading or editing cells, charts, or running Univer facade commands against the open sheet in the browser.
+description: Edit the live Univer spreadsheet from Python (pyodide tool). Use sdk_help() for signatures. Relay path is only for MCP/external agents.
 ---
 
-# Veritly Univer Python SDK
+# Univer Python SDK (pyodide tool)
 
-The SDK talks to a **local Bun relay** (`packages/univer-sdk/script/sdk-relay.ts`) that bridges **agent** WebSocket clients to the **browser** tab running Univer. The app must set `VITE_UNIVER_SDK_WS` so the viewer connects as `role=browser`; agents use `role=agent` (added automatically by the SDK).
+Control the **open spreadsheet in this browser tab**. Not server Python.
 
-## Prerequisites
+## Before you write code
 
-1. **Relay running** on the same machine as OpenCode (e.g. `bun run sdk-relay` from `packages/univer-sdk`, or your process manager). Default listen: `ws://127.0.0.1:18766/ws` (port from `UNIVER_SDK_PORT`, default `18766`).
-2. **Browser session** with a spreadsheet open and connected to the relay (otherwise agent requests have no peer).
-3. **Python** with `websockets` (declared in `packages/univer-sdk/python/pyproject.toml`).
+1. Spreadsheet open in the same tab as the pyodide tool.
+2. Run `print(sdk_help())` or `help(UniverSDK)` if unsure about parameters.
+3. **Never** `asyncio.run(main())` — only `async def main():` (the tool runs `main` for you).
 
-### Python import: hosted vs local
-
-- **Railway / hosted OpenCode:** The Docker image runs `pip install` on `packages/univer-sdk/python` at build time. `python3` can `import veritly_univer_sdk` with no extra steps.
-- **Local dev:** From the submodule, run the install script once (editable install from the correct folder):
-
-```bash
-bash /ABS/PATH/TO/veritly/vendor/opencode-veritly/packages/univer-sdk/python/install-local.sh
-```
-
-If your cwd is the Veritly repo root:
-
-```bash
-bash vendor/opencode-veritly/packages/univer-sdk/python/install-local.sh
-```
-
-The module file is `packages/univer-sdk/python/veritly_univer_sdk.py` (path relative to the `vendor/opencode-veritly` checkout).
-
-## Default URL and environment
-
-| Variable | Purpose |
-|----------|---------|
-| `UNIVER_SDK_WS` | Full WebSocket URL (e.g. `ws://127.0.0.1:18766/ws`). Overrides host/port defaults. |
-| `UNIVER_SDK_PORT` | Used only when `UNIVER_SDK_WS` is unset: builds `ws://127.0.0.1:{port}/ws` (default port `18766`). |
-
-`UniverSDK()` with no arguments uses the above. Pass an explicit URL only when needed:
+## Minimal pattern (copy this)
 
 ```python
-UniverSDK("ws://127.0.0.1:18766/ws")
-```
-
-## Quick start
-
-```python
-import asyncio
-from veritly_univer_sdk import RangeRect, UniverSDK
+from veritly_univer_sdk import CHART_BAR, RangeRect, UniverSDK, sdk_help
 
 async def main() -> None:
     sdk = UniverSDK()
     await sdk.connect()
-    try:
-        doc = await sdk.get_active_document()
-        rows = await sdk.get_range(
-            RangeRect(startRow=0, endRow=10, startColumn=0, endColumn=2),
-            sheet_id=doc.sheetId,
-        )
-        print(rows)
-        await sdk.set_range(
-            RangeRect(startRow=0, endRow=0, startColumn=0, endColumn=1),
-            [["Hello"]],
-            sheet_id=doc.sheetId,
-        )
-    finally:
-        await sdk.close()
-
-asyncio.run(main())
+    doc = await sdk.get_active_document()
+    rows = await sdk.get_sheet(sheet_id=doc.sheetId, max_row=50, max_col=10)
+    print(rows)
+    await sdk.set_range(
+        RangeRect(0, 0, 0, 1),
+        [["A", "B"]],
+        sheet_id=doc.sheetId,
+    )
 ```
 
-## Operations (relay `op` names)
+## Reading cells
 
-| Python method | `op` | Notes |
-|---------------|------|--------|
-| `get_active_document()` | `get_active_document` | `unitId`, `sheetId`, `sheetName` |
-| `list_sheets()` | `list_sheets` | |
-| `get_range(...)` | `get_range` | Inclusive row/column indices |
-| `set_range(...)` | `set_range` | 2D values matrix |
-| `add_chart(...)` | `add_chart` | Optional `chart_type`, `anchor` |
-| `inspect_facade(...)` | `sdk_introspect` | Lists facade method names |
-| `execute_command(id, params)` | `execute_command` | Raw `univerAPI.executeCommand` |
+| Goal | Call |
+|------|------|
+| Known rectangle | `await sdk.get_range(RangeRect(r0, r1, c0, c1), sheet_id=...)` |
+| “Most of the sheet” | `await sdk.get_sheet(max_row=200, max_col=30)` — top-left block, not unbounded |
+| Helper from origin | `RangeRect.block(99, 25)` → rows 0–99, cols 0–25 |
 
-Full JSON shapes: `packages/univer-sdk/python/INTERFACE.md`.
+`get_range(None)` is invalid. There is no magic “all data” without choosing bounds.
 
-## Charts and advanced mutations
+## Charts (`add_chart`)
 
-`add_chart` inserts a Veritly live chart drawing (`VeritlyLiveChart` float DOM with ECharts). Drawing mutations (`sheet.mutation.set-drawing-apply`) are pushed through universer comb like cell edits so charts survive reload when collaboration storage is enabled. For other drawing-level commands, use `execute_command` with the command id and params your app supports (see browser / Univer docs).
+```python
+await sdk.add_chart(
+    RangeRect(0, 10, 0, 3),
+    sheet_id=doc.sheetId,
+    chart_type=CHART_BAR,  # int 4, not "bar"
+    anchor={"row": 12, "column": 0},
+)
+```
 
-## Troubleshooting
+- **One** `range_rect` for the data block (header + values in the same rectangle).
+- No `title`. No separate `label_range` / `data_range` — use `execute_command` for advanced drawing APIs.
+- `chart_type` is an **integer** (default `CHART_BAR = 4`).
 
-- **`UniverSDK is not connected`** — call `await sdk.connect()` before other methods.
-- **Relay errors / timeout** — ensure relay is up, port matches `UNIVER_SDK_WS` / `UNIVER_SDK_PORT`, and the spreadsheet tab is open with `VITE_UNIVER_SDK_WS` pointing at the relay.
-- **Railway / multi-host** — set `UNIVER_SDK_WS` to the reachable WebSocket URL for that instance; browser and agent must reach the **same** relay.
+## API reference
+
+| Method | Notes |
+|--------|--------|
+| `sdk_help()` | Printable cheat sheet |
+| `get_active_document()` | `unitId`, `sheetId`, `sheetName` |
+| `list_sheets()` | |
+| `get_range(range_rect, sheet_id=None)` | Required `RangeRect` |
+| `get_sheet(sheet_id=None, max_row=500, max_col=50)` | Large top-left read |
+| `set_range(range_rect, values, sheet_id=None)` | 2D values aligned to range |
+| `add_chart(range_rect, sheet_id=None, *, chart_type=4, anchor=None)` | Returns `{chartId}` |
+| `inspect_facade(...)` | Browser facade method names |
+| `execute_command(id, params)` | Low-level Univer command |
+
+JSON wire format: `packages/univer-sdk/python/INTERFACE.md`.
+
+## Errors
+
+| Message | Fix |
+|---------|-----|
+| `asyncio.run() cannot be called from a running event loop` | Remove `asyncio.run(...)`; keep only `async def main()` |
+| `No in-page Univer bridge` | Open a spreadsheet in this tab, then `await sdk.connect()` |
+| `UniverSDK is not connected` | `await sdk.connect()` first |
+
+## Relay / MCP (not pyodide)
+
+External agents use WebSocket relay (`packages/relay`, `VITE_UNIVER_SDK_WS`). Local CPython: `bash packages/univer-sdk/python/install-local.sh`, then `asyncio.run(main())` is OK outside Pyodide.
