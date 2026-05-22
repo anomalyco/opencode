@@ -2229,6 +2229,57 @@ noLLMServer.instance(
   },
 )
 
+// Inline agent mention uses agent's configured model
+
+it.instance(
+  "inline @agent mention uses the agent's configured model instead of default",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        noReply: true,
+        parts: [
+          { type: "agent", name: "other" },
+          { type: "text", text: "hello from other agent" },
+        ],
+      })
+
+      if (msg.info.role !== "user") throw new Error("expected user message")
+      expect(msg.info.model.providerID).toBe(ProviderID.make("test"))
+      expect(msg.info.model.modelID).toBe(ModelID.make("test-model-2"))
+
+      yield* sessions.remove(session.id)
+    }),
+  {
+    config: {
+      ...cfg,
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            ...cfg.provider.test.models,
+            "test-model-2": {
+              ...cfg.provider.test.models["test-model"],
+              id: "test-model-2",
+              name: "Test Model 2",
+            },
+          },
+        },
+      },
+      agent: {
+        other: {
+          model: "test/test-model-2",
+        },
+      },
+    },
+  },
+)
+
 // Agent / command resolution errors
 
 noLLMServer.instance(
