@@ -206,7 +206,13 @@ const AnthropicEvent = Schema.Struct({
   content_block: Schema.optional(AnthropicStreamBlock),
   delta: Schema.optional(AnthropicStreamDelta),
   usage: Schema.optional(AnthropicUsage),
-  error: Schema.optional(Schema.Struct({ type: Schema.String, message: Schema.String })),
+  // `type` and `message` are both required per Anthropic's spec, but
+  // OpenAI-compatible proxies and gateway translations occasionally drop one
+  // or the other; mark them optional so a partial payload still parses and
+  // the parser can fall back to whichever field is populated.
+  error: Schema.optional(
+    Schema.Struct({ type: Schema.optional(Schema.String), message: Schema.optional(Schema.String) }),
+  ),
 })
 type AnthropicEvent = Schema.Schema.Type<typeof AnthropicEvent>
 
@@ -701,9 +707,21 @@ const onMessageDelta = (state: ParserState, event: AnthropicEvent): StepResult =
   return [{ ...state, lifecycle, usage }, events]
 }
 
+// Anthropic puts the failure mode in `error.type` (e.g. `overloaded_error`,
+// `rate_limit_error`) and the human-facing string in `error.message`. Prefix
+// the type so consumers can distinguish overloads, rate limits, and quota
+// errors without parsing the message — the message field is sometimes empty
+// for transient overload events.
+const providerErrorMessage = (event: AnthropicEvent): string => {
+  const type = event.error?.type
+  const message = event.error?.message
+  if (type && message) return `${type}: ${message}`
+  return message || type || "Anthropic Messages stream error"
+}
+
 const onError = (state: ParserState, event: AnthropicEvent): StepResult => [
   state,
-  [LLMEvent.providerError({ message: event.error?.message ?? "Anthropic Messages stream error" })],
+  [LLMEvent.providerError({ message: providerErrorMessage(event) })],
 ]
 
 const step = (state: ParserState, event: AnthropicEvent) => {

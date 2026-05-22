@@ -877,7 +877,11 @@ describe("OpenAI Responses route", () => {
         Effect.provide(fixedResponse(sseEvents({ type: "error", code: "rate_limit_exceeded", message: "Slow down" }))),
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "Slow down" }])
+      // Prefix the code so consumers see the failure mode, not just the
+      // sometimes-generic provider message. The bare message alone meant
+      // production errors like rate limits were indistinguishable from
+      // unrelated stream failures.
+      expect(response.events).toEqual([{ type: "provider-error", message: "rate_limit_exceeded: Slow down" }])
     }),
   )
 
@@ -888,6 +892,93 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(response.events).toEqual([{ type: "provider-error", message: "internal_error" }])
+    }),
+  )
+
+  // Regression: `response.failed` carries the failure details under
+  // `response.error`, not at the top level. The previous handler only
+  // checked top-level `message`/`code` and so always emitted the bare
+  // "OpenAI Responses response failed" string, hiding the real cause.
+  it.effect("surfaces response.failed details from response.error", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.failed",
+              response: {
+                id: "resp_failed_1",
+                error: { code: "server_error", message: "Upstream model unavailable" },
+              },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events).toEqual([
+        { type: "provider-error", message: "server_error: Upstream model unavailable" },
+      ])
+    }),
+  )
+
+  it.effect("surfaces response.failed code when no nested message is present", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.failed",
+              response: { id: "resp_failed_2", error: { code: "invalid_prompt" } },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "invalid_prompt" }])
+    }),
+  )
+
+  it.effect("surfaces error event details even when they arrive nested under response.error", () =>
+    Effect.gen(function* () {
+      // Some OpenAI-compatible proxies and older SDK versions wrap the
+      // top-level error fields into a nested `response.error` payload
+      // when they bubble up an HTTP error as an SSE `error` event. Honour
+      // both shapes so the user still sees the underlying cause instead
+      // of the catch-all string.
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "error",
+              response: { error: { code: "context_length_exceeded", message: "prompt too long" } },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events).toEqual([
+        { type: "provider-error", message: "context_length_exceeded: prompt too long" },
+      ])
+    }),
+  )
+
+  it.effect("falls back to a stable default when both error and response are absent", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error" }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "OpenAI Responses stream error" }])
+    }),
+  )
+
+  it.effect("falls back to a stable default when response.failed has no error payload", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "response.failed", response: { id: "resp_failed_3" } }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "OpenAI Responses response failed" }])
     }),
   )
 

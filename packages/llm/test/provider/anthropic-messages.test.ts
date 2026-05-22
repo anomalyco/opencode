@@ -337,7 +337,29 @@ describe("Anthropic Messages route", () => {
         ),
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "Overloaded" }])
+      // Prefix the error type so consumers can distinguish overloads, rate
+      // limits, and quota errors without parsing the message string.
+      expect(response.events).toEqual([{ type: "provider-error", message: "overloaded_error: Overloaded" }])
+    }),
+  )
+
+  it.effect("falls back to error type when no message is present", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error", error: { type: "overloaded_error", message: "" } }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "overloaded_error" }])
+    }),
+  )
+
+  it.effect("falls back to a stable default when error payload is absent", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error" }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "Anthropic Messages stream error" }])
     }),
   )
 
