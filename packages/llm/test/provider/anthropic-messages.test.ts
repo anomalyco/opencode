@@ -71,6 +71,99 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  // Regression: when a tool returns structured content with an image (e.g.
+  // a screenshot reader), the protocol must emit Anthropic-native image
+  // blocks inside `tool_result.content`, not JSON-stringify the entire
+  // content array — base64 included — into a single string. The latter
+  // silently inflates the prompt to multiple megabytes and pushes long
+  // conversations over Anthropic's 1M-token limit.
+  it.effect("lowers image tool-result content as structured image blocks", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          id: "req_tool_result_image",
+          model,
+          messages: [
+            Message.user("Show me the screenshot."),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: { filePath: "shot.png" } })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              resultType: "content",
+              result: [
+                { type: "text", text: "Image read successfully" },
+                { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              ],
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      const toolResult = prepared.body.messages
+        .flatMap((message) => (message.role === "user" ? message.content : []))
+        .find((block) => block.type === "tool_result")
+      expect(toolResult).toBeDefined()
+      expect(toolResult!.content).toEqual([
+        { type: "text", text: "Image read successfully" },
+        { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
+      ])
+    }),
+  )
+
+  it.effect("lowers single-image tool-result content as a structured image block", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          id: "req_tool_result_image_only",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "screenshot", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "screenshot",
+              resultType: "content",
+              result: [{ type: "media", mediaType: "image/jpeg", data: "/9j/AA==" }],
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      const toolResult = prepared.body.messages
+        .flatMap((message) => (message.role === "user" ? message.content : []))
+        .find((block) => block.type === "tool_result")
+      expect(toolResult).toBeDefined()
+      expect(toolResult!.content).toEqual([
+        { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "/9j/AA==" } },
+      ])
+    }),
+  )
+
+  it.effect("rejects non-image media in tool-result content with a clear error", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_tool_result_unsupported_media",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "fetch", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "fetch",
+              resultType: "content",
+              result: [{ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" }],
+            }),
+          ],
+          cache: "none",
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("Anthropic Messages")
+      expect(error.message).toContain("audio/mpeg")
+    }),
+  )
+
   it.effect("prepares the composed native continuation request", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(

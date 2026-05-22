@@ -112,7 +112,10 @@ describeRecordedGoldenScenarios([
     requires: ["ANTHROPIC_API_KEY"],
     tags: ["flagship"],
     options: { redactor: Redactor.defaults({ requestHeaders: { allow: ["content-type", "anthropic-version"] } }) },
-    scenarios: [{ id: "tool-loop", temperature: false }],
+    scenarios: [
+      { id: "tool-loop", temperature: false },
+      { id: "image-tool-result", temperature: false, maxTokens: 40 },
+    ],
   },
   {
     name: "Gemini 2.5 Flash",

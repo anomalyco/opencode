@@ -317,6 +317,52 @@ const runImageScenario = (context: GoldenScenarioContext) =>
     ])
   })
 
+// Reproduces a production failure where a tool returns image bytes as part of
+// `tool-result` content and the protocol then has to round-trip those bytes
+// back to the model on the next turn. Without protocol-native image lowering,
+// the base64 data URL ends up JSON-stringified into a single string, silently
+// inflating the prompt by megabytes and pushing long conversations over the
+// provider's context limit.
+const screenshotToolName = "read_screenshot"
+const runImageToolResultScenario = (context: GoldenScenarioContext) =>
+  Effect.gen(function* () {
+    const image = yield* restroomImage()
+    const response = yield* generate(
+      LLM.request({
+        id: `${context.id}_image_tool_result`,
+        model: context.model,
+        system: "Read images carefully. Reply only with the visible text, lowercase, no punctuation.",
+        cache: "none",
+        generation: generation(context, context.maxTokens ?? 40),
+        messages: [
+          Message.user("Use the read_screenshot tool, then reply with the words shown."),
+          Message.assistant([
+            { type: "tool-call", id: "call_screenshot_1", name: screenshotToolName, input: {} },
+          ]),
+          Message.tool({
+            id: "call_screenshot_1",
+            name: screenshotToolName,
+            resultType: "content",
+            result: [
+              { type: "text", text: "Image read successfully" },
+              { type: "media", mediaType: "image/png", data: image },
+            ],
+          }),
+        ],
+        tools: [
+          ToolDefinition.make({
+            name: screenshotToolName,
+            description: "Capture a screenshot of the current screen.",
+            inputSchema: { type: "object", properties: {}, additionalProperties: false },
+          }),
+        ],
+      }),
+    )
+
+    expectFinish(response.events, "stop")
+    expect(normalizeImageText(response.text)).toBe(RESTROOM_IMAGE_TEXT)
+  })
+
 const runReasoningScenario = (context: GoldenScenarioContext) =>
   runGeneratedConversation(context, [
     user("Think briefly, then reply exactly with: Hello!"),
@@ -359,6 +405,11 @@ const goldenScenarios = {
   "tool-call": { title: "streams tool call", tags: ["tool", "tool-call", "golden"], run: runToolCallScenario },
   "tool-loop": { title: "drives a tool loop", tags: ["tool", "tool-loop", "golden"], run: runToolLoopScenario },
   image: { title: "reads image text", tags: ["media", "image", "vision", "golden"], run: runImageScenario },
+  "image-tool-result": {
+    title: "reads image returned from tool result",
+    tags: ["media", "image", "vision", "tool", "tool-result", "golden"],
+    run: runImageToolResultScenario,
+  },
   reasoning: { title: "uses reasoning", tags: ["reasoning", "golden"], run: runReasoningScenario },
   "reasoning-continuation": {
     title: "continues encrypted reasoning",

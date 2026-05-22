@@ -14,6 +14,7 @@ import {
   type ProviderMetadata,
   type ToolCallPart,
   type ToolDefinition,
+  type ToolResultContentPart,
   type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
@@ -96,10 +97,19 @@ const AnthropicServerToolResultBlock = Schema.Struct({
 })
 type AnthropicServerToolResultBlock = Schema.Schema.Type<typeof AnthropicServerToolResultBlock>
 
+// Anthropic accepts either a plain string or an ordered array of text/image
+// blocks inside `tool_result.content`. The array form is required when a tool
+// returns image bytes (screenshot, image search, etc.) so they can be passed
+// to the model as proper image inputs instead of being JSON-stringified into
+// the prompt — which silently inflates context by megabytes and can push the
+// conversation over the model's token limit.
+const AnthropicToolResultContent = Schema.Union([AnthropicTextBlock, AnthropicImageBlock])
+type AnthropicToolResultContent = Schema.Schema.Type<typeof AnthropicToolResultContent>
+
 const AnthropicToolResultBlock = Schema.Struct({
   type: Schema.tag("tool_result"),
   tool_use_id: Schema.String,
-  content: Schema.String,
+  content: Schema.Union([Schema.String, Schema.Array(AnthropicToolResultContent)]),
   is_error: Schema.optional(Schema.Boolean),
   cache_control: Schema.optional(AnthropicCacheControl),
 })
@@ -298,6 +308,34 @@ const lowerImage = Effect.fn("AnthropicMessages.lowerImage")(function* (part: Me
   } satisfies AnthropicImageBlock
 })
 
+// Tool results may carry structured content (text + images) so that vision
+// tools — screenshot readers, image search, OCR — can hand the model the
+// bytes the model actually needs. JSON-stringifying media into a single
+// string silently inflates the prompt by megabytes and pushes long
+// conversations over Anthropic's context limit.
+const lowerToolResultContentItem = Effect.fn("AnthropicMessages.lowerToolResultContentItem")(function* (
+  item: ToolResultContentPart,
+) {
+  if (item.type === "text") return { type: "text" as const, text: item.text } satisfies AnthropicTextBlock
+  if (item.mediaType.startsWith("image/"))
+    return {
+      type: "image" as const,
+      source: {
+        type: "base64" as const,
+        media_type: item.mediaType,
+        data: item.data.startsWith("data:") ? item.data.slice(item.data.indexOf(",") + 1) : item.data,
+      },
+    } satisfies AnthropicImageBlock
+  return yield* invalid(`Anthropic Messages tool-result media content only supports images, got ${item.mediaType}`)
+})
+
+const lowerToolResultContent = Effect.fn("AnthropicMessages.lowerToolResultContent")(function* (part: ToolResultPart) {
+  // Text / json / error results stay as a string for backward compatibility
+  // with existing cassettes and provider expectations.
+  if (part.result.type !== "content") return ProviderShared.toolResultText(part)
+  return yield* Effect.forEach(part.result.value, lowerToolResultContentItem)
+})
+
 const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   request: LLMRequest,
   breakpoints: Cache.Breakpoints,
@@ -360,7 +398,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
       content.push({
         type: "tool_result",
         tool_use_id: part.id,
-        content: ProviderShared.toolResultText(part),
+        content: yield* lowerToolResultContent(part),
         is_error: part.result.type === "error" ? true : undefined,
         cache_control: cacheControl(breakpoints, part.cache),
       })
