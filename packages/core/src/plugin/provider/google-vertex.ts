@@ -145,7 +145,7 @@ export const GoogleVertexAnthropicPlugin = PluginV2.define({
           project,
           location,
           // Continental multi-regions (eu, us) require Regional Endpoint Platform
-          // domains — the default {region}-aiplatform.googleapis.com does not resolve.
+          // domains; the default {region}-aiplatform.googleapis.com does not resolve.
           ...((location === "eu" || location === "us") && project && !evt.options.baseURL
             ? { baseURL: `https://aiplatform.${location}.rep.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models` }
             : {}),
