@@ -74,6 +74,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               duration: 3000,
             })
           setAgentStore("current", name)
+          model.variant.set(agent.current()?.variant)
         },
         move(direction: 1 | -1) {
           batch(() => {
