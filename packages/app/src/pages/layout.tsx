@@ -1028,19 +1028,6 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+alt+arrowdown",
         onSelect: () => navigateProjectByOffset(1),
       },
-      ...Array.from({ length: 9 }, (_, i) => {
-        const index = i
-        const number = index + 1
-        return {
-          id: `project.${number}`,
-          category: language.t("command.category.project"),
-          title: `Open Project {number}`,
-          keybind: `mod+${number}`,
-          disabled: layout.projects.list().length <= index,
-          hidden: true,
-          onSelect: () => navigateToProjectIndex(index),
-        }
-      }),
       {
         id: "provider.connect",
         title: language.t("command.provider.connect"),
@@ -1154,6 +1141,21 @@ export default function Layout(props: ParentProps) {
         onSelect: () => cycleTheme(1),
       },
     ]
+
+    if (USE_HOME_DESIGN)
+      Array.from({ length: 9 }, (_, i) => {
+        const index = i
+        const number = index + 1
+        commands.push({
+          id: `project.${number}`,
+          category: language.t("command.category.project"),
+          title: `Open Project {number}`,
+          keybind: `mod+${number}`,
+          disabled: layout.projects.list().length <= index,
+          hidden: true,
+          onSelect: () => navigateToProjectIndex(index),
+        })
+      })
 
     for (const [id] of availableThemeEntries()) {
       commands.push({
