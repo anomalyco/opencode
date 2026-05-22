@@ -72,7 +72,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                 const selected = () => row.fileIndex !== undefined && props.selectedFileIndex === row.fileIndex
                 const reviewed = () => {
                   const file = row.fileIndex === undefined ? undefined : props.files[row.fileIndex]?.file
-                  return file !== undefined && props.reviewedFileNames?.has(file)
+                  return file !== undefined && (props.reviewedFileNames?.has(file) ?? false)
                 }
                 const prefix = () => fileTreeRowPrefix(rows(), index(), row, props.expandedNodes)
                 const status = () => fileTreeRowStatus(row, props.files, reviewed())
