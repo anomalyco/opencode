@@ -145,6 +145,12 @@ export function retryable(error: Err, provider: string) {
   if (code.includes("exhausted") || code.includes("unavailable")) {
     return { message: "Provider is overloaded" }
   }
+  if (
+    json.type === "error" &&
+    (json.error?.code === "server_is_overloaded" || json.error?.type === "service_unavailable_error")
+  ) {
+    return { message: typeof json.error?.message === "string" ? json.error.message : "Provider is overloaded" }
+  }
   if (json.type === "error" && typeof json.error?.code === "string" && json.error.code.includes("rate_limit")) {
     return { message: "Rate Limited" }
   }

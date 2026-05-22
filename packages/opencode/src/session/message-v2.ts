@@ -685,7 +685,7 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
-    case APICallError.isInstance(e):
+    case APICallError.isInstance(e): {
       const parsed = ProviderError.parseAPICallError({
         providerID: ctx.providerID,
         error: e,
@@ -711,8 +711,32 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
-    case e instanceof Error:
+    }
+    case e instanceof Error: {
+      const parsed = ProviderError.parseStreamError(e)
+      if (parsed) {
+        if (parsed.type === "context_overflow") {
+          return new ContextOverflowError(
+            {
+              message: parsed.message,
+              responseBody: parsed.responseBody,
+            },
+            { cause: e },
+          ).toObject()
+        }
+        return new APIError(
+          {
+            message: parsed.message,
+            isRetryable: parsed.isRetryable,
+            responseBody: parsed.responseBody,
+          },
+          {
+            cause: e,
+          },
+        ).toObject()
+      }
       return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
+    }
     default:
       try {
         const parsed = ProviderError.parseStreamError(e)

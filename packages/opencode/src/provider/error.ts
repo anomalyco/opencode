@@ -105,45 +105,68 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
   if (!body) return
 
   const responseBody = JSON.stringify(body)
-  if (body.type !== "error") return
+  const outerError = typeof body.error === "object" && body.error !== null ? body.error : undefined
+  const wrappedError =
+    typeof outerError?.error === "object" && outerError.error !== null ? outerError.error : outerError
+  if (body.type !== "error" && !wrappedError) return
 
-  switch (body?.error?.code) {
-    case "context_length_exceeded":
-      return {
-        type: "context_overflow",
-        message: "Input exceeds context window of this model",
-        responseBody,
-      }
-    case "insufficient_quota":
-      return {
-        type: "api_error",
-        message: "Quota exceeded. Check your plan and billing details.",
-        isRetryable: false,
-        responseBody,
-      }
-    case "usage_not_included":
-      return {
-        type: "api_error",
-        message: "To use Codex with your ChatGPT plan, upgrade to Plus: https://chatgpt.com/explore/plus.",
-        isRetryable: false,
-        responseBody,
-      }
-    case "invalid_prompt":
-      return {
-        type: "api_error",
-        message: typeof body?.error?.message === "string" ? body?.error?.message : "Invalid prompt.",
-        isRetryable: false,
-        responseBody,
-      }
-    case "server_is_overloaded":
-    case "server_error":
-      return {
-        type: "api_error",
-        message: typeof body?.error?.message === "string" ? body?.error?.message : "Server error.",
-        isRetryable: true,
-        responseBody,
-      }
+  const code = typeof wrappedError?.code === "string" ? wrappedError.code : undefined
+  const type = typeof wrappedError?.type === "string" ? wrappedError.type : undefined
+  const message =
+    typeof wrappedError?.message === "string" && wrappedError.message.length > 0
+      ? wrappedError.message
+      : typeof body?.message === "string" && body.message.length > 0
+        ? body.message
+        : undefined
+
+  const fromCode = (value: string | undefined, isRetryable = false): ParsedStreamError | undefined => {
+    switch (value) {
+      case "context_length_exceeded":
+        return {
+          type: "context_overflow",
+          message: "Input exceeds context window of this model",
+          responseBody,
+        }
+      case "insufficient_quota":
+        return {
+          type: "api_error",
+          message: "Quota exceeded. Check your plan and billing details.",
+          isRetryable: false,
+          responseBody,
+        }
+      case "usage_not_included":
+        return {
+          type: "api_error",
+          message: "To use Codex with your ChatGPT plan, upgrade to Plus: https://chatgpt.com/explore/plus.",
+          isRetryable: false,
+          responseBody,
+        }
+      case "invalid_prompt":
+        return {
+          type: "api_error",
+          message: message ?? "Invalid prompt.",
+          isRetryable: false,
+          responseBody,
+        }
+      case "server_is_overloaded":
+      case "server_error":
+      case "service_unavailable_error":
+        return {
+          type: "api_error",
+          message: message ?? "Server error.",
+          isRetryable,
+          responseBody,
+        }
+    }
   }
+
+  const byCode = fromCode(code, true)
+  if (byCode) return byCode
+
+  const byType = fromCode(type, true)
+  if (byType) return byType
+
+  if (code === undefined && body.type === "error") return
 }
 
 export type ParsedAPICallError =

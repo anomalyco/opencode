@@ -127,6 +127,23 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Provider is overloaded" })
   })
 
+  test("maps persisted nested OpenAI overload errors", () => {
+    const error = wrap(
+      JSON.stringify({
+        type: "error",
+        error: {
+          type: "service_unavailable_error",
+          code: "server_is_overloaded",
+          message: "Our servers are currently overloaded. Please try again later.",
+        },
+      }),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({
+      message: "Our servers are currently overloaded. Please try again later.",
+    })
+  })
+
   test("does not retry unknown json messages", () => {
     const error = wrap(JSON.stringify({ error: { message: "no_kv_space" } }))
     expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
@@ -434,6 +451,76 @@ describe("session.message-v2.fromError", () => {
     expect(result.data.isRetryable).toBe(true)
     expect(SessionRetry.retryable(result, retryProvider)).toEqual({
       message: "An error occurred while processing your request.",
+    })
+  })
+
+  test("maps wrapped OpenAI stream errors to retryable APIError", () => {
+    const result = MessageV2.fromError(
+      new Error(
+        JSON.stringify({
+          error: {
+            code: "server_is_overloaded",
+            type: "server_error",
+            message: "The model is currently overloaded.",
+          },
+        }),
+      ),
+      { providerID: ProviderV2.ID.make("openai") },
+    )
+
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+
+    expect(result.data.isRetryable).toBe(true)
+    expect(SessionRetry.retryable(result, retryProvider)).toBeDefined()
+  })
+
+  test("maps wrapped OpenAI stream error types with empty codes to retryable APIError", () => {
+    const result = MessageV2.fromError(
+      new Error(
+        JSON.stringify({
+          error: {
+            code: "",
+            type: "server_error",
+            message: "The upstream service failed.",
+          },
+        }),
+      ),
+      { providerID: ProviderV2.ID.make("openai") },
+    )
+
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+
+    expect(result.data.isRetryable).toBe(true)
+    expect(SessionRetry.retryable(result, retryProvider)).toBeDefined()
+  })
+
+  test("maps double-wrapped OpenAI stream errors to retryable APIError", () => {
+    const result = MessageV2.fromError(
+      new Error(
+        JSON.stringify({
+          error: {
+            type: "error",
+            sequence_number: 2,
+            error: {
+              code: "server_is_overloaded",
+              type: "service_unavailable_error",
+              message: "Our servers are currently overloaded. Please try again later.",
+            },
+          },
+        }),
+      ),
+      { providerID: ProviderV2.ID.make("openai") },
+    )
+
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+
+    expect(result.data.message).toBe("Our servers are currently overloaded. Please try again later.")
+    expect(result.data.isRetryable).toBe(true)
+    expect(SessionRetry.retryable(result, retryProvider)).toEqual({
+      message: "Our servers are currently overloaded. Please try again later.",
     })
   })
 })

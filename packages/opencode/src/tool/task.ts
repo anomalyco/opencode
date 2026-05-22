@@ -9,6 +9,7 @@ import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
+import { errorMessage } from "@/util/error"
 import { Config } from "@/config/config"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
@@ -188,6 +189,9 @@ export const TaskTool = Tool.define(
           },
           parts,
         })
+        if (result.info.role === "assistant" && result.info.error) {
+          return yield* Effect.fail(new Error(`Child assistant failed: ${errorMessage(result.info.error)}`))
+        }
         return result.parts.findLast((item) => item.type === "text")?.text ?? ""
       })
 
