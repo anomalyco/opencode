@@ -6,7 +6,6 @@ import { createEffect, createMemo, For, Match, Switch } from "solid-js"
 import { buildFileTree, flattenFileTree, type FileTreeItem, type FileTreeRow } from "./diff-viewer-file-tree-utils"
 import { Panel } from "./diff-viewer-ui"
 
-const FILE_TREE_HORIZONTAL_PADDING = 2
 const FILE_TREE_STATUS_WIDTH = 2
 
 export type DiffViewerFileTreeTheme = {
@@ -76,12 +75,9 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                   return file !== undefined && props.reviewedFileNames?.has(file)
                 }
                 const prefix = () => fileTreeRowPrefix(rows(), index(), row, props.expandedNodes)
-                const status = () => fileTreeRowStatus(row, props.files)
+                const status = () => fileTreeRowStatus(row, props.files, reviewed())
                 const name = () =>
-                  Locale.truncate(
-                    row.name,
-                    Math.max(1, props.width - FILE_TREE_HORIZONTAL_PADDING - prefix().length - status().length),
-                  )
+                  Locale.truncate(row.name, Math.max(1, props.width - FILE_TREE_STATUS_WIDTH - prefix().length))
                 return (
                   <box
                     flexDirection="row"
@@ -99,11 +95,9 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                             ? props.theme.background
                             : selected()
                               ? props.theme.primary
-                              : reviewed()
+                              : reviewed() || row.kind === "directory"
                                 ? props.theme.textMuted
-                                : row.kind === "directory"
-                                  ? tint(props.theme.text, props.theme.background, 0.35)
-                                  : props.theme.text
+                                : props.theme.text
                         }
                         wrapMode="none"
                       >
@@ -160,11 +154,9 @@ function hasLaterSibling(rows: readonly FileTreeRow[], index: number, depth: num
   return rows.slice(index + 1).find((row) => row.depth <= depth)?.depth === depth
 }
 
-function fileTreeRowStatus(row: FileTreeRow, files: readonly FileTreeItem[]) {
+function fileTreeRowStatus(row: FileTreeRow, files: readonly FileTreeItem[], reviewed: boolean) {
   if (row.fileIndex === undefined) return ""
   const status = files[row.fileIndex]?.status
-  if (status === "modified") return "M".padStart(FILE_TREE_STATUS_WIDTH)
-  if (status === "added") return "A".padStart(FILE_TREE_STATUS_WIDTH)
-  if (status === "deleted") return "D".padStart(FILE_TREE_STATUS_WIDTH)
-  return "?".padStart(FILE_TREE_STATUS_WIDTH)
+  const marker = status === "modified" ? "M" : status === "added" ? "A" : status === "deleted" ? "D" : "?"
+  return `${reviewed ? "✓" : " "}${marker}`.padStart(FILE_TREE_STATUS_WIDTH)
 }
