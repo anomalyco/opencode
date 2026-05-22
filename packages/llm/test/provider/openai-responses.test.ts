@@ -895,6 +895,16 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("falls back to error code when message is empty", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error", code: "internal_error", message: "" }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "internal_error" }])
+    }),
+  )
+
   // Regression: `response.failed` carries the failure details under
   // `response.error`, not at the top level. The previous handler only
   // checked top-level `message`/`code` and so always emitted the bare

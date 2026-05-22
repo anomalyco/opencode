@@ -191,7 +191,6 @@ const OpenAIResponsesErrorPayload = Schema.Struct({
   message: optionalNull(Schema.String),
   param: optionalNull(Schema.String),
 })
-type OpenAIResponsesErrorPayload = Schema.Schema.Type<typeof OpenAIResponsesErrorPayload>
 
 const OpenAIResponsesEvent = Schema.Struct({
   type: Schema.String,
@@ -655,15 +654,12 @@ const onResponseFinish = (state: ParserState, event: OpenAIResponsesEvent): Step
 // the failure mode (e.g. `rate_limit_exceeded: Slow down`) instead of just
 // the bare message — production rate limits and context-length failures used
 // to be indistinguishable from generic stream drops.
-const providerErrorMessage = (
-  event: OpenAIResponsesEvent,
-  fallback: string,
-): string => {
+const providerErrorMessage = (event: OpenAIResponsesEvent, fallback: string): string => {
   const nested = event.response?.error ?? undefined
-  const message = event.message ?? nested?.message ?? undefined
-  const code = event.code ?? nested?.code ?? undefined
+  const message = event.message || nested?.message || undefined
+  const code = event.code || nested?.code || undefined
   if (message && code) return `${code}: ${message}`
-  return message ?? code ?? fallback
+  return message || code || fallback
 }
 
 const onResponseFailed = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [

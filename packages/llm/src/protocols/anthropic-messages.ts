@@ -707,11 +707,8 @@ const onMessageDelta = (state: ParserState, event: AnthropicEvent): StepResult =
   return [{ ...state, lifecycle, usage }, events]
 }
 
-// Anthropic puts the failure mode in `error.type` (e.g. `overloaded_error`,
-// `rate_limit_error`) and the human-facing string in `error.message`. Prefix
-// the type so consumers can distinguish overloads, rate limits, and quota
-// errors without parsing the message — the message field is sometimes empty
-// for transient overload events.
+// Prefix `error.type` so overloads, rate limits, and quota errors are visible
+// even when the provider message is generic or empty.
 const providerErrorMessage = (event: AnthropicEvent): string => {
   const type = event.error?.type
   const message = event.error?.message
