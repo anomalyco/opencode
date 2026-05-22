@@ -791,7 +791,8 @@ export namespace ProviderTransform {
           includeThoughts: true,
         }
         if (input.model.api.id.includes("gemini-3")) {
-          result["thinkingConfig"]["thinkingLevel"] = "high"
+          // AIDEV-NOTE: 운영 비용·지연 균형을 위해 medium 으로 고정. upstream 기본값은 "high".
+          result["thinkingConfig"]["thinkingLevel"] = "medium"
         }
       }
     }

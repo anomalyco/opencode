@@ -1,9 +1,10 @@
 {
   "permission": "allow",
+  "model": "google/gemini-3.5-flash",
   "provider": {
-    "anthropic": {
+    "google": {
       "options": {
-        "baseURL": "${ANTHROPIC_BASE_URL}",
+        "baseURL": "${GEMINI_BASE_URL}",
         "apiKey": "proxy-auth"
       }
     }
