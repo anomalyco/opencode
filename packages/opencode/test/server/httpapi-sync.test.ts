@@ -36,7 +36,7 @@ describe("sync HttpApi", () => {
         const tmp = yield* TestInstance
         const headers = { "x-opencode-directory": tmp.directory, "content-type": "application/json" }
         const info = spyOn(Log.create({ service: "server.sync" }), "info")
-        const session = yield* Session.Service.use((svc) => svc.create({ title: "sync" }))
+        const session = yield* Session.use.create({ title: "sync" })
 
         const started = yield* Effect.promise(() =>
           Promise.resolve(app().request(SyncPaths.start, { method: "POST", headers })),

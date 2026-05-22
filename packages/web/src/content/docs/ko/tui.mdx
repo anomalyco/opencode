@@ -357,28 +357,57 @@ VS Code와 같은 일부 편집기는 `--wait` 플래그와 함께 시작해야 
 {
   "$schema": "https://opencode.ai/tui.json",
   "theme": "opencode",
+  "leader_timeout": 2000,
   "keybinds": {
-    "leader": "ctrl+x"
+    "leader": "ctrl+x",
+    "command_list": "ctrl+p"
   },
   "scroll_speed": 3,
   "scroll_acceleration": {
-    "enabled": true
+    "enabled": false
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "mouse": true,
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "error": "./sounds/error.mp3"
+    }
+  }
 }
 ```
 
 이는 서버/런타임 동작을 구성하는 `opencode.json`과는 별개입니다.
 
+`keybinds`는 내장 기본값과 병합되므로 변경하려는 단축키만 설정하면 됩니다.
+
 ### 옵션
 
 - `theme` - UI 테마를 설정합니다. [더 알아보기](/docs/themes).
 - `keybinds` - 키보드 단축키를 사용자 정의합니다. [더 알아보기](/docs/keybinds).
+- `leader_timeout` - leader key를 누른 뒤 OpenCode가 다음 키 입력을 기다리는 시간을 제어합니다. 기본값은 `2000`입니다.
 - `scroll_acceleration.enabled` - 부드럽고 자연스러운 스크롤을 위해 macOS 스타일의 스크롤 가속을 활성화합니다. 활성화하면 빠른 스크롤 제스처로 스크롤 속도가 증가하고 느린 움직임에서는 정밀하게 유지됩니다. **이 설정은 `scroll_speed`보다 우선하며 활성화 시 이를 덮어씁니다.**
 - `scroll_speed` - 스크롤 명령을 사용할 때 TUI 스크롤 속도를 제어합니다 (최소: `0.001`, 소수점 값 지원). 기본값은 `3`입니다. **참고: `scroll_acceleration.enabled`가 `true`로 설정되면 무시됩니다.**
 - `diff_style` - diff 렌더링 방식을 제어합니다. `"auto"`는 터미널 너비에 적응하고, `"stacked"`는 항상 단일 열 레이아웃을 표시합니다.
+- `mouse` - TUI에서 마우스 캡처를 활성화하거나 비활성화합니다(기본값: `true`). 비활성화하면 터미널의 기본 마우스 선택/스크롤 동작이 유지됩니다.
+- `attention` - TUI 데스크톱 알림과 사운드를 구성합니다. 기본적으로 비활성화되어 있습니다.
 
 `OPENCODE_TUI_CONFIG`를 사용하여 사용자 정의 TUI 설정 경로를 로드할 수 있습니다.
+
+### Attention
+
+Attention을 사용하면 OpenCode가 답변을 기다리거나, 권한 승인이 필요하거나, 세션 오류가 발생했거나, 세션이 완료되었을 때 TUI가 사운드와 데스크톱 알림으로 알려줍니다. `attention.enabled`로 활성화합니다. 기본 제공 이벤트는 발생할 때 사운드를 재생합니다. 데스크톱 알림은 터미널 창에 포커스가 없을 때만 전송되며 subagent 이벤트에는 사용되지 않습니다.
+
+- `enabled` - Attention의 모든 알림과 사운드를 활성화합니다. 기본값은 `false`입니다.
+- `notifications` - Attention이 활성화된 경우 TUI가 터미널을 통해 데스크톱 알림을 보낼 수 있도록 허용합니다. 기본값은 `true`입니다.
+- `sound` - Attention이 활성화된 경우 알림음을 재생할 수 있도록 허용합니다. 기본값은 `true`입니다.
+- `volume` - 알림음의 기본 볼륨이며 `0`부터 `1`까지입니다. 기본값은 `0.4`입니다.
+- `sound_pack` - 사용할 sound pack ID입니다. 기본값은 `opencode.default`입니다.
+- `sounds` - `default`, `question`, `permission`, `error`, `done` 또는 `subagent_done`에 사용할 사용자 지정 사운드 파일을 지정합니다. 경로는 절대 경로, `file://` URL 또는 `tui.json` 기준 상대 경로일 수 있습니다.
 
 ---
 

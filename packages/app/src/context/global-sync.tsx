@@ -1,12 +1,4 @@
-import type {
-  Config,
-  OpencodeClient,
-  Path,
-  Project,
-  ProviderAuthResponse,
-  ProviderListResponse,
-  Todo,
-} from "@opencode-ai/sdk/v2/client"
+import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
@@ -36,6 +28,8 @@ import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from 
 import { createRefreshQueue } from "./global-sync/queue"
 import { directoryKey } from "./global-sync/utils"
 import { PathKey } from "@/utils/path-key"
+import { createDirSyncContext } from "./directory-sync"
+import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
 
 type GlobalStore = {
   ready: boolean
@@ -45,7 +39,7 @@ type GlobalStore = {
   session_todo: {
     [sessionID: string]: Todo[]
   }
-  provider: ProviderListResponse
+  provider: NormalizedProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
   reload: undefined | "pending" | "complete"
@@ -120,7 +114,7 @@ function createGlobalSync() {
       return pathQuery.data ?? EMPTY
     },
     get provider() {
-      const EMPTY = { all: [], connected: [], default: {} }
+      const EMPTY = { all: new Map(), connected: [], default: {} }
       if (providerQuery.isLoading) return EMPTY
       return providerQuery.data ?? EMPTY
     },
@@ -422,8 +416,17 @@ function createGlobalSync() {
 
   const updateConfigMutation = useMutation(() => ({
     mutationFn: (config: Config) => globalSDK.client.global.config.update({ config }),
-    onSuccess: () => bootstrap.refetch(),
+    onSuccess: () => {
+      bootstrap.refetch()
+      // Invalidate all provider queries so newly configured custom providers
+      // appear immediately in the available provider list across all directories.
+      queryClient.invalidateQueries({ queryKey: [null, "providers"] })
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[1] === "providers" })
+    },
   }))
+
+  const dirSyncContexts = new Map<string, ReturnType<typeof createDirSyncContext>>()
+  const dirSyncContextRefCounts = new Map<string, number>()
 
   return {
     data: globalStore,
@@ -442,6 +445,26 @@ function createGlobalSync() {
     project: projectApi,
     todo: {
       set: setSessionTodo,
+    },
+    createDirSyncContext: (directory: string) => {
+      onCleanup(() => {
+        dirSyncContextRefCounts.set(directory, (dirSyncContextRefCounts.get(directory) ?? 0) - 1)
+        if (dirSyncContextRefCounts.get(directory) === 0) {
+          dirSyncContexts.delete(directory)
+          dirSyncContextRefCounts.delete(directory)
+        }
+      })
+
+      const cached = dirSyncContexts.get(directory)
+      if (cached) {
+        dirSyncContextRefCounts.set(directory, (dirSyncContextRefCounts.get(directory) ?? 0) + 1)
+        return cached
+      }
+      const ctx = createDirSyncContext(globalSDK.createClient({ directory, throwOnError: true }), directory)
+      dirSyncContexts.set(directory, ctx)
+      dirSyncContextRefCounts.set(directory, 1)
+
+      return ctx
     },
   }
 }

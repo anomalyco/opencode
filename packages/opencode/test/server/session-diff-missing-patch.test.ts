@@ -34,10 +34,7 @@ function pathFor(template: string, params: Record<string, string>) {
 }
 
 const withSession = (input?: Parameters<Session.Interface["create"]>[0]) =>
-  Effect.acquireRelease(
-    Session.Service.use((session) => session.create(input)),
-    (created) => Session.Service.use((session) => session.remove(created.id)).pipe(Effect.ignore),
-  )
+  Effect.acquireRelease(Session.use.create(input), (created) => Session.use.remove(created.id).pipe(Effect.ignore))
 
 describe("session diff with missing patch (#26574)", () => {
   it.instance(
