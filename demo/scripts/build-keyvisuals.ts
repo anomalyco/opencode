@@ -215,14 +215,14 @@ function teeDiagram(cx: number, cy: number, scale: number) {
       ${text("$ securecode", x0 + s(dev.x + dev.w / 2), y0 + s(dev.y + 44), s(10), { fill: PAL.textDim, family: "JetBrains Mono", anchor: "middle" })}
 
       ${arrow(dev.x + dev.w, tee.x, 90)}
-      ${text("AES-GCM", x0 + s((dev.x + dev.w + tee.x) / 2), y0 + s(82), s(10), { fill: PAL.ember, family: "JetBrains Mono", anchor: "middle", upper: true, tracking: 1.5 })}
+      ${text("ENCRYPTED", x0 + s((dev.x + dev.w + tee.x) / 2), y0 + s(82), s(10), { fill: PAL.ember, family: "JetBrains Mono", anchor: "middle", upper: true, tracking: 1.5 })}
 
       <rect x="${x0 + s(tee.x)}" y="${y0 + s(tee.y)}" width="${s(tee.w)}" height="${s(tee.h)}" rx="${s(8)}" fill="${PAL.bgSoft}" stroke="url(#tee-edge)" stroke-width="${teeStrokeW}"/>
       ${text("CONFIDENTIAL VM (TEE)", x0 + s(tee.x + tee.w / 2), y0 + s(28), s(12), { fill: PAL.textMid, family: "JetBrains Mono", anchor: "middle", upper: true, tracking: 1.5 })}
-      ${text("Intel TDX  ·  NVIDIA CC", x0 + s(tee.x + tee.w / 2), y0 + s(46), s(11), { fill: PAL.textDim, family: "JetBrains Mono", anchor: "middle" })}
+      ${text("AMD SEV-SNP  ·  NVIDIA CC", x0 + s(tee.x + tee.w / 2), y0 + s(46), s(11), { fill: PAL.textDim, family: "JetBrains Mono", anchor: "middle" })}
 
       ${node(llm, "#252121", PAL.borderStrong)}
-      ${text("Qwen3-Coder-Next", x0 + s(llm.x + llm.w / 2), y0 + s(llm.y + 28), s(13), { fill: PAL.text, family: "JetBrains Mono", anchor: "middle" })}
+      ${text("Qwen3.6-35B-A3B-fp8", x0 + s(llm.x + llm.w / 2), y0 + s(llm.y + 28), s(13), { fill: PAL.text, family: "JetBrains Mono", anchor: "middle" })}
       ${text("decrypt → infer → encrypt", x0 + s(llm.x + llm.w / 2), y0 + s(llm.y + 50), s(10), { fill: PAL.textDim, family: "JetBrains Mono", anchor: "middle" })}
 
       ${arrow(tee.x + tee.w, res.x, 90)}
@@ -365,7 +365,7 @@ function buildWide(): string {
   ${teeDiagram(diagCx, diagCy, 1.3)}
 
   <g data-label="diagram-caption">
-    ${text("CONFIDENTIAL AI INFERENCE  /  attested by Intel TDX × NVIDIA CC", diagCx, diagCy + 220, 18, { fill: PAL.textDim, family: "JetBrains Mono", anchor: "middle", tracking: 1.6 })}
+    ${text("CONFIDENTIAL AI INFERENCE  /  attested by AMD SEV-SNP × NVIDIA CC", diagCx, diagCy + 220, 18, { fill: PAL.textDim, family: "JetBrains Mono", anchor: "middle", tracking: 1.6 })}
   </g>
 
   <g data-label="footer">
@@ -454,7 +454,7 @@ function terminalFrame(x: number, y: number, w: number, h: number): string {
       <circle cx="${x + 18}" cy="${y + titlebarH / 2}" r="6" fill="#ff5f56"/>
       <circle cx="${x + 36}" cy="${y + titlebarH / 2}" r="6" fill="#ffbd2e"/>
       <circle cx="${x + 54}" cy="${y + titlebarH / 2}" r="6" fill="#27c93f"/>
-      ${text("Acompany Secure Code", x + w / 2, y + titlebarH / 2 + 4, 12, { fill: PAL.textMid, family: "JetBrains Mono", anchor: "middle" })}
+      ${text("securecode", x + w / 2, y + titlebarH / 2 + 4, 12, { fill: PAL.textMid, family: "JetBrains Mono", anchor: "middle" })}
       ${text("Code review", x + w - 16, y + titlebarH / 2 + 4, 11, { fill: PAL.textDim, family: "JetBrains Mono", anchor: "end" })}
 
       <!-- sample prompt -->

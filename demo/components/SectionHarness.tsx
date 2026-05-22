@@ -237,7 +237,7 @@ function CentralMcpManagement() {
           <McpRow status="blocked" name="random-3rd-party" desc="未承認ベンダー" />
         </div>
         <div className="border-t border-sc-border bg-sc-bg-elev/60 px-3 py-1.5 text-[10px] text-sc-text-dim">
-          開発者の opencode.json はこの一覧の subset でしか書けない
+          開発者の securecode.json はこの一覧の subset でしか書けない
         </div>
       </div>
     </motion.div>

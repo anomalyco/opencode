@@ -57,14 +57,14 @@
     <line x1="1146" y1="520" x2="1276" y2="520" stroke="url(#flow)" stroke-width="3" stroke-dasharray="10.4 7.800000000000001"/>
     <polygon points="1276,520 1268.2,514.8 1268.2,525.2" fill="#034cff"/>
   
-      <text x="1211" y="509.6" font-family="JetBrains Mono, sans-serif" font-size="13" font-weight="500" fill="#fc533a" text-anchor="middle" letter-spacing="1.5">AES-GCM</text>
+      <text x="1211" y="509.6" font-family="JetBrains Mono, sans-serif" font-size="13" font-weight="500" fill="#fc533a" text-anchor="middle" letter-spacing="1.5">ENCRYPTED</text>
 
       <rect x="1276" y="403" width="312" height="234" rx="10.4" fill="#1b1818" stroke="url(#tee-edge)" stroke-width="3"/>
       <text x="1432" y="439.4" font-family="JetBrains Mono, sans-serif" font-size="15.600000000000001" font-weight="500" fill="#b7b1b1" text-anchor="middle" letter-spacing="1.5">CONFIDENTIAL VM (TEE)</text>
-      <text x="1432" y="462.8" font-family="JetBrains Mono, sans-serif" font-size="14.3" font-weight="500" fill="#716c6b" text-anchor="middle">Intel TDX  ·  NVIDIA CC</text>
+      <text x="1432" y="462.8" font-family="JetBrains Mono, sans-serif" font-size="14.3" font-weight="500" fill="#716c6b" text-anchor="middle">AMD SEV-SNP  ·  NVIDIA CC</text>
 
       <rect x="1315" y="494" width="234" height="91" rx="7.800000000000001" fill="#252121" stroke="#4b4646" stroke-width="2"/>
-      <text x="1432" y="530.4" font-family="JetBrains Mono, sans-serif" font-size="16.900000000000002" font-weight="500" fill="#f1ecec" text-anchor="middle">Qwen3-Coder-Next</text>
+      <text x="1432" y="530.4" font-family="JetBrains Mono, sans-serif" font-size="16.900000000000002" font-weight="500" fill="#f1ecec" text-anchor="middle">Qwen3.6-35B-A3B-fp8</text>
       <text x="1432" y="559" font-family="JetBrains Mono, sans-serif" font-size="13" font-weight="500" fill="#716c6b" text-anchor="middle">decrypt → infer → encrypt</text>
 
       
@@ -77,7 +77,7 @@
   
 
   <g data-label="diagram-caption">
-    <text x="1380" y="740" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="500" fill="#716c6b" text-anchor="middle" letter-spacing="1.6">CONFIDENTIAL AI INFERENCE  /  attested by Intel TDX × NVIDIA CC</text>
+    <text x="1380" y="740" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="500" fill="#716c6b" text-anchor="middle" letter-spacing="1.6">CONFIDENTIAL AI INFERENCE  /  attested by AMD SEV-SNP × NVIDIA CC</text>
   </g>
 
   <g data-label="footer">

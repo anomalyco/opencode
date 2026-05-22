@@ -6,7 +6,7 @@
 import type { ReactNode } from "react"
 
 export function TerminalChrome({
-  title = "Acompanyセキュアコード",
+  title = "securecode",
   status,
   children,
   className = "",

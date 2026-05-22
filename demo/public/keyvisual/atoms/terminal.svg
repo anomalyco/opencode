@@ -10,7 +10,7 @@
       <circle cx="58" cy="58" r="6" fill="#ff5f56"/>
       <circle cx="76" cy="58" r="6" fill="#ffbd2e"/>
       <circle cx="94" cy="58" r="6" fill="#27c93f"/>
-      <text x="600" y="62" font-family="JetBrains Mono, sans-serif" font-size="12" font-weight="500" fill="#b7b1b1" text-anchor="middle">Acompany Secure Code</text>
+      <text x="600" y="62" font-family="JetBrains Mono, sans-serif" font-size="12" font-weight="500" fill="#b7b1b1" text-anchor="middle">securecode</text>
       <text x="1144" y="62" font-family="JetBrains Mono, sans-serif" font-size="11" font-weight="500" fill="#716c6b" text-anchor="end">Code review</text>
 
       <!-- sample prompt -->

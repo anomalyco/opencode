@@ -31,7 +31,7 @@ const ROWS: Row[] = [
   {
     feature: "リモートアテステーションで実行環境を検証できる",
     generic: { mark: "—" },
-    securecode: { mark: "◎", note: "Intel TDX / NVIDIA CC" },
+    securecode: { mark: "◎", note: "AMD SEV-SNP / NVIDIA CC" },
   },
   {
     feature: "誰が何を承認したか後追いできる",

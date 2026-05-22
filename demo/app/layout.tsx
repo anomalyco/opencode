@@ -9,13 +9,18 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
+// suppressHydrationWarning: ブラウザの privacy 拡張 (Google Analytics
+// Opt-out 等) が <html> に `data-google-analytics-opt-out` 等の属性を
+// ハイドレート前に差し込んでくる。Next.js 公式の推奨対処
+// (https://nextjs.org/docs/messages/react-hydration-error#solution-2)
+// で、属性ミスマッチを <html> 要素 1 段だけに限定して抑える。
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   return (
-    <html lang="ja">
+    <html lang="ja" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link

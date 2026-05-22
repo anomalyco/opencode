@@ -83,10 +83,10 @@ export function SectionCoding() {
 
         <div className="mt-12 grid gap-8 lg:grid-cols-[2fr_1fr]">
           <TerminalChrome
-            title="Acompanyセキュアコード · /private/tmp/billing"
+            title="securecode · /private/tmp/billing"
             status={
               <span>
-                <span className="text-sc-mint">●</span> Qwen3.6
+                <span className="text-sc-mint">●</span> Qwen3.6-35B-A3B-fp8
               </span>
             }
           >
@@ -220,9 +220,9 @@ function FlowLine({
 }
 
 const MODELS = [
-  { name: "GPT-OSS-120B", note: "high reasoning", active: false },
-  { name: "GPT-OSS-20B", note: "fast", active: false },
-  { name: "Qwen3.6", note: "balanced", active: true },
+  { name: "Qwen3.6-35B-A3B-fp8", note: "high", active: true },
+  { name: "GPT-OSS-120B", note: "fast", active: false },
+  { name: "GPT-OSS-20B", note: "lite", active: false },
   { name: "Qwen3.5-27B", note: "ja-friendly", active: false },
 ] as const
 
@@ -230,7 +230,7 @@ function ModelPicker() {
   return (
     <div className="overflow-hidden rounded-md border border-sc-border bg-sc-bg-soft">
       <div className="border-b border-sc-border px-3 py-1.5 text-[11px] text-sc-text-mid">
-        Acompanyセキュアコード
+        securecode
       </div>
       <ul>
         {MODELS.map((m) => (

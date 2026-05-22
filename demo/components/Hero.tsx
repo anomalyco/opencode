@@ -79,19 +79,21 @@ export function Hero() {
                   <Wordmark />
                 </div>
               </div>
-              <div className="mx-auto max-w-md rounded-md border border-sc-border bg-sc-bg-elev px-4 py-3 font-mono text-xs">
-                <div className="flex items-center gap-2 text-sc-text-mid">
+              <div className="mx-auto w-full max-w-2xl overflow-hidden rounded-md border border-sc-border bg-sc-bg-elev px-4 py-3 font-mono text-xs">
+                <div className="flex items-baseline gap-2 whitespace-nowrap text-sc-text-mid">
                   <span className="text-sc-ember">$</span>
-                  <span className="text-sc-text-dim">Ask anything...</span>
+                  <span className="hidden text-sc-text-dim sm:inline">
+                    Ask anything...
+                  </span>
                   <span className="text-sc-text">
                     “What is the tech stack of this project?”
                   </span>
-                  <span className="cursor-blink text-sc-ember">▌</span>
+                  <span className="cursor-blink ml-0.5 text-sc-ember">▌</span>
                 </div>
-                <div className="mt-2 flex items-center gap-2 text-[11px] text-sc-text-dim">
+                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-sc-text-dim">
                   <span className="rounded bg-sc-bg px-1.5 py-0.5">Build</span>
-                  <span className="text-sc-text-mid">Qwen3.6</span>
-                  <span>Acompanyセキュアコード</span>
+                  <span className="text-sc-text-mid">Qwen3.6-35B-A3B-fp8</span>
+                  <span>securecode</span>
                 </div>
               </div>
               <div className="mt-3 text-right font-mono text-[10px] text-sc-text-dim">

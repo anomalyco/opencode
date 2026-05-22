@@ -134,7 +134,7 @@
       <circle cx="98" cy="1218" r="6" fill="#ff5f56"/>
       <circle cx="116" cy="1218" r="6" fill="#ffbd2e"/>
       <circle cx="134" cy="1218" r="6" fill="#27c93f"/>
-      <text x="800" y="1222" font-family="JetBrains Mono, sans-serif" font-size="12" font-weight="500" fill="#b7b1b1" text-anchor="middle">Acompany Secure Code</text>
+      <text x="800" y="1222" font-family="JetBrains Mono, sans-serif" font-size="12" font-weight="500" fill="#b7b1b1" text-anchor="middle">securecode</text>
       <text x="1504" y="1222" font-family="JetBrains Mono, sans-serif" font-size="11" font-weight="500" fill="#716c6b" text-anchor="end">Code review</text>
 
       <!-- sample prompt -->
@@ -175,14 +175,14 @@
     <line x1="548" y1="1920" x2="688" y2="1920" stroke="url(#flow)" stroke-width="3" stroke-dasharray="11.2 8.399999999999999"/>
     <polygon points="688,1920 679.5999999999999,1914.4 679.5999999999999,1925.6" fill="#034cff"/>
   
-      <text x="618" y="1908.8" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#fc533a" text-anchor="middle" letter-spacing="1.5">AES-GCM</text>
+      <text x="618" y="1908.8" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#fc533a" text-anchor="middle" letter-spacing="1.5">ENCRYPTED</text>
 
       <rect x="688" y="1794" width="336" height="251.99999999999997" rx="11.2" fill="#1b1818" stroke="url(#tee-edge)" stroke-width="3"/>
       <text x="856" y="1833.2" font-family="JetBrains Mono, sans-serif" font-size="16.799999999999997" font-weight="500" fill="#b7b1b1" text-anchor="middle" letter-spacing="1.5">CONFIDENTIAL VM (TEE)</text>
-      <text x="856" y="1858.4" font-family="JetBrains Mono, sans-serif" font-size="15.399999999999999" font-weight="500" fill="#716c6b" text-anchor="middle">Intel TDX  ·  NVIDIA CC</text>
+      <text x="856" y="1858.4" font-family="JetBrains Mono, sans-serif" font-size="15.399999999999999" font-weight="500" fill="#716c6b" text-anchor="middle">AMD SEV-SNP  ·  NVIDIA CC</text>
 
       <rect x="730" y="1892" width="251.99999999999997" height="98" rx="8.399999999999999" fill="#252121" stroke="#4b4646" stroke-width="2"/>
-      <text x="856" y="1931.2" font-family="JetBrains Mono, sans-serif" font-size="18.2" font-weight="500" fill="#f1ecec" text-anchor="middle">Qwen3-Coder-Next</text>
+      <text x="856" y="1931.2" font-family="JetBrains Mono, sans-serif" font-size="18.2" font-weight="500" fill="#f1ecec" text-anchor="middle">Qwen3.6-35B-A3B-fp8</text>
       <text x="856" y="1962" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#716c6b" text-anchor="middle">decrypt → infer → encrypt</text>
 
       

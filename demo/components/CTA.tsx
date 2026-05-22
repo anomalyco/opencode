@@ -15,7 +15,6 @@ type FieldErrors = Partial<{
   last_name: string
   email: string
   phone: string
-  contact: string // email / phone どちらかが必要
   privacypolicy: string
 }>
 
@@ -30,13 +29,13 @@ function validate(fd: FormData): FieldErrors {
   }
 
   const email = trim("email")
-  const phone = trim("phone")
-  if (!email && !phone) {
-    errors.contact = "メールアドレスまたは電話番号のいずれかは必須です。"
-  }
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!email) {
+    errors.email = "メールアドレスを入力してください。"
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     errors.email = "メールアドレスの形式が正しくありません。"
   }
+
+  const phone = trim("phone")
   if (phone && !/^[0-9+\-() ]{10,20}$/.test(phone)) {
     errors.phone = "電話番号の形式が正しくありません。"
   }
@@ -203,6 +202,7 @@ export function CTA() {
                 label="メールアドレス"
                 name="email"
                 type="email"
+                required
                 placeholder="例) info@example.com"
                 maxLength={100}
                 error={errors.email}
@@ -216,13 +216,6 @@ export function CTA() {
                 error={errors.phone}
               />
             </div>
-
-            {errors.contact && (
-              <p className="mt-3 text-xs text-sc-ember">{errors.contact}</p>
-            )}
-            <p className="mt-2 text-xs text-sc-text-dim">
-              ※ メールアドレスまたは電話番号のいずれかは必須です。
-            </p>
 
             {/* Honeypot — sighted users には見えない */}
             <div
@@ -273,9 +266,7 @@ export function CTA() {
                 disabled={status === "submitting"}
                 className="rounded-md border border-sc-ember bg-sc-ember/15 px-8 py-3 font-mono text-sm text-sc-text transition-colors hover:bg-sc-ember/25 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {status === "submitting"
-                  ? "$ 送信中..."
-                  : "$ 送信する →"}
+                {status === "submitting" ? "送信中..." : "送信する →"}
               </button>
               {status === "error" && (
                 <p className="text-xs text-sc-ember">
