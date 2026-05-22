@@ -224,9 +224,7 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
       body: { reply: "once" },
     }))
-    .json(200, (body) => {
-      check(body === true, "permission reply should return true even when request is no longer pending")
-    }),
+    .json(404, object, "status"),
   http.protected.get("/question", "question.list").json(200, array),
   http.protected
     .post("/question/{requestID}/reply", "question.reply.invalid")
@@ -243,18 +241,14 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
       body: { answers: [["Yes"]] },
     }))
-    .json(200, (body) => {
-      check(body === true, "question reply should return true even when request is no longer pending")
-    }),
+    .json(404, object, "status"),
   http.protected
     .post("/question/{requestID}/reject", "question.reject")
     .at((ctx) => ({
       path: route("/question/{requestID}/reject", { requestID: "que_httpapi_reject" }),
       headers: ctx.headers(),
     }))
-    .json(200, (body) => {
-      check(body === true, "question reject should return true even when request is no longer pending")
-    }),
+    .json(404, object, "status"),
   http.protected
     .get("/file", "file.list")
     .seeded((ctx) => ctx.file("hello.txt", "hello\n"))
@@ -1249,9 +1243,7 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
       body: { response: "once" },
     }))
-    .json(200, (body) => {
-      check(body === true, "deprecated permission response should return true")
-    }),
+    .json(404, object, "status"),
   http.protected
     .post("/session/{sessionID}/share", "session.share")
     .mutating()

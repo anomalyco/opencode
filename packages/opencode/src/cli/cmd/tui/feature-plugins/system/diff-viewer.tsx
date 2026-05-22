@@ -9,19 +9,24 @@ import { useTerminalDimensions } from "@opentui/solid"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, For, Match, Show, Switch } from "solid-js"
 import { DiffViewerFileTree } from "./diff-viewer-file-tree"
+import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
   flattenFileTree,
   moveFileTreeSelection,
+  moveFileTreeSelectionToFirstChild,
   moveFileTreeSelectionToFile,
+  moveFileTreeSelectionToParent,
   setFileTreeDirectoryExpanded,
   toggleFileTreeDirectory,
 } from "./diff-viewer-file-tree-utils"
 
 const ROUTE = "diff"
 const MIN_SPLIT_WIDTH = 100
+const FILE_TREE_WIDTH = 32
+const PLAIN_TEXT_FILETYPE = "opencode-plain-text"
 type DiffMode = "git" | "last-turn"
 type DiffViewerFocus = "patches" | "files"
 
@@ -100,6 +105,8 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const [highlightedFileNode, setHighlightedFileNode] = createSignal<number | undefined>()
   const [lastHighlightedFileNode, setLastHighlightedFileNode] = createSignal<number | undefined>()
   const [activePatchFileIndex, setActivePatchFileIndex] = createSignal<number | undefined>()
+  const [selectedFileIndex, setSelectedFileIndex] = createSignal<number | undefined>()
+  const [reviewedFileNames, setReviewedFileNames] = createSignal<ReadonlySet<string>>(new Set())
   const fileRows = createMemo(() => flattenFileTree(fileTree(), expandedFileNodes()))
   const focusRunner = (input: Record<DiffViewerFocus, () => void>) => () => input[focus()]()
   const switchFocusShortcut = useCommandShortcut("diff.switch_focus")
@@ -109,6 +116,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const singlePatchShortcut = useCommandShortcut("diff.single_patch")
   const switchDiffShortcut = useCommandShortcut("diff.switch_diff")
   const toggleViewShortcut = useCommandShortcut("diff.toggle_view")
+  const markReviewedShortcut = useCommandShortcut("diff.mark_reviewed")
   let scroll: ScrollBoxRenderable | undefined
   const patchNodeByFileIndex = new Map<number, BoxRenderable>()
   const [pendingPatchScrollFileIndex, setPendingPatchScrollFileIndex] = createSignal<number | undefined>()
@@ -118,6 +126,8 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     setHighlightedFileNode(undefined)
     setLastHighlightedFileNode(undefined)
     setActivePatchFileIndex(undefined)
+    setSelectedFileIndex(undefined)
+    setReviewedFileNames(new Set<string>())
   })
 
   const ensureHighlightedFileNode = () => {
@@ -144,11 +154,12 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     setActivePatchFileIndex(undefined)
   }
 
-  const scrollPatchNodeToTop = (patchNode: BoxRenderable) => {
+  const scrollPatchNodeToTop = (patchNode: BoxRenderable, fileIndex: number) => {
     if (!scroll) return
-    scroll.scrollBy(patchNode.y - scroll.viewport.y)
+    const offset = fileIndex === 0 ? 0 : 1
+    scroll.scrollBy(patchNode.y - scroll.viewport.y + offset)
     requestAnimationFrame(() => {
-      if (scroll) scroll.scrollBy(patchNode.y - scroll.viewport.y)
+      if (scroll) scroll.scrollBy(patchNode.y - scroll.viewport.y + offset)
     })
   }
 
@@ -168,8 +179,9 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const scrollToFileIndex = (fileIndex: number | undefined) => {
     if (fileIndex === undefined) return
     setActivePatchFileIndex(fileIndex)
+    setSelectedFileIndex(fileIndex)
     const patchNode = patchNodeByFileIndex.get(fileIndex)
-    if (patchNode) scrollPatchNodeToTop(patchNode)
+    if (patchNode) scrollPatchNodeToTop(patchNode, fileIndex)
   }
 
   const jumpToFileIndex = (fileIndex: number | undefined) => {
@@ -227,9 +239,9 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     patchNodeByFileIndex.set(fileIndex, element)
     if (pendingPatchScrollFileIndex() !== fileIndex) return
     requestAnimationFrame(() => {
-      scrollPatchNodeToTop(element)
+      scrollPatchNodeToTop(element, fileIndex)
       requestAnimationFrame(() => {
-        scrollPatchNodeToTop(element)
+        scrollPatchNodeToTop(element, fileIndex)
         setPendingPatchScrollFileIndex(undefined)
       })
     })
@@ -242,6 +254,21 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       return
     }
     setExpandedFileNodes((expanded) => toggleFileTreeDirectory(fileTree(), expanded, highlightedFileNode()))
+  }
+
+  const toggleSelectedFileReviewed = () => {
+    const fileIndex =
+      focus() === "files"
+        ? fileRows().find((row) => row.id === highlightedFileNode())?.fileIndex
+        : (selectedFileIndex() ?? activePatchFileIndex() ?? currentPatchFileIndex())
+    const file = fileIndex === undefined ? undefined : files()[fileIndex]?.file
+    if (!file) return
+    setReviewedFileNames((reviewed) => {
+      const next = new Set(reviewed)
+      if (next.has(file)) next.delete(file)
+      else next.add(file)
+      return next
+    })
   }
 
   const commands = [
@@ -326,6 +353,11 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       category: "VCS",
       run: focusRunner({
         files() {
+          const highlighted = highlightedFileNode()
+          if (highlighted !== undefined && expandedFileNodes().has(highlighted)) {
+            setHighlighted(moveFileTreeSelectionToFirstChild(fileRows(), highlighted))
+            return
+          }
           setExpandedFileNodes((expanded) =>
             setFileTreeDirectoryExpanded(fileTree(), expanded, highlightedFileNode(), true),
           )
@@ -339,6 +371,12 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       category: "VCS",
       run: focusRunner({
         files() {
+          const highlighted = highlightedFileNode()
+          const node = highlighted === undefined ? undefined : fileTree().nodes[highlighted]
+          if (node?.kind !== "directory" || !expandedFileNodes().has(node.id)) {
+            setHighlighted(moveFileTreeSelectionToParent(fileRows(), highlighted))
+            return
+          }
           setExpandedFileNodes((expanded) =>
             setFileTreeDirectoryExpanded(fileTree(), expanded, highlightedFileNode(), false),
           )
@@ -360,6 +398,14 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       category: "VCS",
       run() {
         jumpRelativePatchFile(-1)
+      },
+    },
+    {
+      name: "diff.mark_reviewed",
+      title: "Toggle selected diff file reviewed",
+      category: "VCS",
+      run() {
+        toggleSelectedFileReviewed()
       },
     },
     {
@@ -460,6 +506,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       { key: "k,up", cmd: "diff.up", desc: "Move diff viewer up" },
       { key: "pagedown,ctrl+f", cmd: "diff.page.down", desc: "Page diff viewer down" },
       { key: "pageup,ctrl+b", cmd: "diff.page.up", desc: "Page diff viewer up" },
+      { key: "m", cmd: "diff.mark_reviewed", desc: "Mark selected file reviewed" },
       ...props.api.tuiConfig.keybinds.gather(
         "diff",
         commands.map((command) => command.name),
@@ -468,186 +515,193 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   }))
 
   return (
-    <box
-      position="absolute"
-      zIndex={2500}
-      left={0}
-      top={0}
-      width={dimensions().width}
-      height={dimensions().height}
-      backgroundColor={theme().background}
-      paddingLeft={1}
-      paddingRight={1}
-      paddingTop={1}
-      paddingBottom={1}
-      gap={1}
-    >
-      <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
-        <box flexDirection="row" gap={1}>
-          <text fg={theme().text}>Diff</text>
+    <box position="absolute" zIndex={2500} left={0} top={0} width={dimensions().width} height={dimensions().height}>
+      <PanelGroup axis="y" width="100%" height="100%">
+        <Panel border="none" flexShrink={0} padding={0} paddingLeft={1}>
+          <text fg={theme().text}>Diff </text>
           <text fg={theme().textMuted}>{mode() === "last-turn" ? "last turn" : "working tree"}</text>
+          <box flexGrow={1} />
+          <text fg={theme().textMuted}>
+            {files().length} {files().length === 1 ? "file" : "files"}
+          </text>
+        </Panel>
+
+        <box flexGrow={1} minHeight={0}>
+          <Switch>
+            <Match when={diff.loading}>
+              <box flexGrow={1} alignItems="center" justifyContent="center">
+                <text fg={theme().textMuted}>Loading diff...</text>
+              </box>
+            </Match>
+            <Match when={!diff.loading}>
+              <PanelGroup axis="x">
+                <Show when={showFileTree()}>
+                  <DiffViewerFileTree
+                    files={files()}
+                    loading={diff.loading}
+                    error={diff.error}
+                    theme={theme()}
+                    focused={focus() === "files"}
+                    width={FILE_TREE_WIDTH}
+                    highlightedNode={highlightedFileNode()}
+                    selectedFileIndex={selectedFileIndex()}
+                    reviewedFileNames={reviewedFileNames()}
+                    expandedNodes={expandedFileNodes()}
+                  />
+                </Show>
+
+                <Panel flexGrow={1} minHeight={0} border="none">
+                  <Separator axis="x" start="edge-out" />
+                  <Switch>
+                    <Match when={diff.error}>
+                      <box paddingTop={1}>
+                        <text fg={theme().error}>Failed to load diff</text>
+                      </box>
+                    </Match>
+                    <Match when={files().length === 0}>
+                      <box paddingTop={1}>
+                        <text fg={theme().textMuted}>No diff to show</text>
+                      </box>
+                    </Match>
+                    <Match when={files().length > 0}>
+                      <scrollbox
+                        ref={(element: ScrollBoxRenderable) => (scroll = element)}
+                        flexGrow={1}
+                        minHeight={0}
+                        verticalScrollbarOptions={{ visible: false }}
+                        horizontalScrollbarOptions={{ visible: false }}
+                      >
+                        <For each={visiblePatchFiles()}>
+                          {(entry, index) => {
+                            const reviewed = () => reviewedFileNames().has(entry.file.file)
+                            return (
+                              <box ref={(element: BoxRenderable) => registerPatchNode(entry.fileIndex, element)}>
+                                {index() !== 0 ? <Separator axis="x" start="edge" /> : null}
+                                <box
+                                  flexDirection="row"
+                                  gap={1}
+                                  flexShrink={0}
+                                  paddingLeft={2}
+                                  paddingRight={1}
+                                  border={["left"]}
+                                  borderColor={theme().border}
+                                >
+                                  <text fg={reviewed() ? theme().textMuted : theme().text}>{entry.file.file}</text>
+                                  <box flexGrow={1} />
+                                  <text fg={reviewed() ? theme().textMuted : theme().diffAdded}>
+                                    +{entry.file.additions}
+                                  </text>
+                                  <text fg={reviewed() ? theme().textMuted : theme().diffRemoved}>
+                                    -{entry.file.deletions}
+                                  </text>
+                                </box>
+                                <Separator axis="x" start="edge" />
+                                <Show
+                                  when={entry.file.patch}
+                                  fallback={<text fg={theme().textMuted}>No patch available for this file.</text>}
+                                >
+                                  {(patch) => (
+                                    <box border={["left"]} borderColor={theme().border}>
+                                      <diff
+                                        diff={patch()}
+                                        view={view()}
+                                        filetype={reviewed() ? PLAIN_TEXT_FILETYPE : filetype(entry.file.file)}
+                                        syntaxStyle={themeState.syntax()}
+                                        showLineNumbers={true}
+                                        width="100%"
+                                        wrapMode="char"
+                                        fg={reviewed() ? theme().textMuted : theme().text}
+                                        addedBg={reviewed() ? theme().backgroundElement : theme().diffAddedBg}
+                                        removedBg={reviewed() ? theme().backgroundElement : theme().diffRemovedBg}
+                                        addedSignColor={reviewed() ? theme().textMuted : theme().diffHighlightAdded}
+                                        removedSignColor={reviewed() ? theme().textMuted : theme().diffHighlightRemoved}
+                                        lineNumberFg={theme().diffLineNumber}
+                                        addedLineNumberBg={
+                                          reviewed() ? theme().backgroundElement : theme().diffAddedLineNumberBg
+                                        }
+                                        removedLineNumberBg={
+                                          reviewed() ? theme().backgroundElement : theme().diffRemovedLineNumberBg
+                                        }
+                                      />
+                                    </box>
+                                  )}
+                                </Show>
+                              </box>
+                            )
+                          }}
+                        </For>
+                      </scrollbox>
+                    </Match>
+                  </Switch>
+                  <Separator axis="x" start="edge-in" />
+                </Panel>
+              </PanelGroup>
+            </Match>
+          </Switch>
         </box>
-      </box>
 
-      <Switch>
-        <Match when={diff.loading}>
-          <box flexGrow={1} alignItems="center" justifyContent="center">
-            <text fg={theme().textMuted}>Loading diff...</text>
-          </box>
-        </Match>
-        <Match when={!diff.loading}>
-          <box flexDirection="row" flexGrow={1} minHeight={0} gap={1}>
-            <Show when={showFileTree()}>
-              <DiffViewerFileTree
-                files={files()}
-                loading={diff.loading}
-                error={diff.error}
-                theme={theme()}
-                focused={focus() === "files"}
-                highlightedNode={highlightedFileNode()}
-                expandedNodes={expandedFileNodes()}
-              />
-            </Show>
-
-            <box
-              flexGrow={1}
-              minWidth={0}
-              backgroundColor={theme().background}
-              paddingLeft={0}
-              paddingRight={2}
-              gap={1}
-            >
-              <Switch>
-                <Match when={diff.error}>
-                  <box paddingTop={1}>
-                    <text fg={theme().error}>Failed to load diff</text>
-                  </box>
-                </Match>
-                <Match when={files().length === 0}>
-                  <box paddingTop={1}>
-                    <text fg={theme().textMuted}>No diff to show</text>
-                  </box>
-                </Match>
-                <Match when={files().length > 0}>
-                  <scrollbox
-                    ref={(element: ScrollBoxRenderable) => (scroll = element)}
-                    flexGrow={1}
-                    minHeight={0}
-                    verticalScrollbarOptions={{ visible: false }}
-                    horizontalScrollbarOptions={{ visible: false }}
-                  >
-                    <For each={visiblePatchFiles()}>
-                      {(entry) => (
-                        <box
-                          ref={(element: BoxRenderable) => registerPatchNode(entry.fileIndex, element)}
-                          marginBottom={1}
-                          backgroundColor={theme().backgroundPanel}
-                        >
-                          <box
-                            flexDirection="row"
-                            gap={2}
-                            flexShrink={0}
-                            paddingTop={1}
-                            paddingBottom={1}
-                            paddingLeft={2}
-                            paddingRight={1}
-                            backgroundColor={theme().backgroundPanel}
-                          >
-                            <text fg={theme().text}>{entry.file.file}</text>
-                            <text fg={theme().diffAdded}>+{entry.file.additions}</text>
-                            <text fg={theme().diffRemoved}>-{entry.file.deletions}</text>
-                          </box>
-                          <Show
-                            when={entry.file.patch}
-                            fallback={<text fg={theme().textMuted}>No patch available for this file.</text>}
-                          >
-                            {(patch) => (
-                              <diff
-                                diff={patch()}
-                                view={view()}
-                                filetype={filetype(entry.file.file)}
-                                syntaxStyle={themeState.syntax()}
-                                showLineNumbers={true}
-                                width="100%"
-                                wrapMode="word"
-                                fg={theme().text}
-                                addedBg={theme().diffAddedBg}
-                                removedBg={theme().diffRemovedBg}
-                                contextBg={theme().diffContextBg}
-                                addedSignColor={theme().diffHighlightAdded}
-                                removedSignColor={theme().diffHighlightRemoved}
-                                lineNumberFg={theme().diffLineNumber}
-                                lineNumberBg={theme().diffContextBg}
-                                addedLineNumberBg={theme().diffAddedLineNumberBg}
-                                removedLineNumberBg={theme().diffRemovedLineNumberBg}
-                              />
-                            )}
-                          </Show>
-                        </box>
-                      )}
-                    </For>
-                  </scrollbox>
-                </Match>
-              </Switch>
-            </box>
-          </box>
-        </Match>
-      </Switch>
-
-      <box flexDirection="row" gap={2} flexShrink={0}>
-        <Show when={switchFocusShortcut()}>
-          {(shortcut) => (
-            <text fg={theme().text}>
-              {shortcut()} <span style={{ fg: theme().textMuted }}>focus file tree</span>
-            </text>
-          )}
-        </Show>
-        <Show when={nextFileShortcut()}>
-          {(shortcut) => (
-            <text fg={theme().text}>
-              {shortcut()} <span style={{ fg: theme().textMuted }}>next file</span>
-            </text>
-          )}
-        </Show>
-        <Show when={previousFileShortcut()}>
-          {(shortcut) => (
-            <text fg={theme().text}>
-              {shortcut()} <span style={{ fg: theme().textMuted }}>previous file</span>
-            </text>
-          )}
-        </Show>
-        <Show when={toggleFileTreeShortcut()}>
-          {(shortcut) => (
-            <text fg={theme().text}>
-              {shortcut()}{" "}
-              <span style={{ fg: theme().textMuted }}>{showFileTree() ? "hide file tree" : "show file tree"}</span>
-            </text>
-          )}
-        </Show>
-        <Show when={singlePatchShortcut()}>
-          {(shortcut) => (
-            <text fg={theme().text}>
-              {shortcut()}{" "}
-              <span style={{ fg: theme().textMuted }}>{singlePatch() ? "all patches" : "single patch"}</span>
-            </text>
-          )}
-        </Show>
-        <Show when={switchDiffShortcut()}>
-          {(shortcut) => (
-            <text fg={theme().text}>
-              {shortcut()} <span style={{ fg: theme().textMuted }}>switch diff</span>
-            </text>
-          )}
-        </Show>
-        <Show when={toggleViewShortcut()}>
-          {(shortcut) => (
-            <text fg={theme().text}>
-              {shortcut()}{" "}
-              <span style={{ fg: theme().textMuted }}>{view() === "split" ? "unified view" : "split view"}</span>
-            </text>
-          )}
-        </Show>
-      </box>
+        <Panel flexShrink={0} gap={2} paddingLeft={1} border="none">
+          <Show when={switchFocusShortcut()}>
+            {(shortcut) => (
+              <text fg={theme().text}>
+                {shortcut()} <span style={{ fg: theme().textMuted }}>focus file tree</span>
+              </text>
+            )}
+          </Show>
+          <Show when={nextFileShortcut()}>
+            {(shortcut) => (
+              <text fg={theme().text}>
+                {shortcut()} <span style={{ fg: theme().textMuted }}>next file</span>
+              </text>
+            )}
+          </Show>
+          <Show when={previousFileShortcut()}>
+            {(shortcut) => (
+              <text fg={theme().text}>
+                {shortcut()} <span style={{ fg: theme().textMuted }}>previous file</span>
+              </text>
+            )}
+          </Show>
+          <Show when={toggleFileTreeShortcut()}>
+            {(shortcut) => (
+              <text fg={theme().text}>
+                {shortcut()}{" "}
+                <span style={{ fg: theme().textMuted }}>{showFileTree() ? "hide file tree" : "show file tree"}</span>
+              </text>
+            )}
+          </Show>
+          <Show when={singlePatchShortcut()}>
+            {(shortcut) => (
+              <text fg={theme().text}>
+                {shortcut()}{" "}
+                <span style={{ fg: theme().textMuted }}>{singlePatch() ? "all patches" : "single patch"}</span>
+              </text>
+            )}
+          </Show>
+          <Show when={switchDiffShortcut()}>
+            {(shortcut) => (
+              <text fg={theme().text}>
+                {shortcut()} <span style={{ fg: theme().textMuted }}>switch diff</span>
+              </text>
+            )}
+          </Show>
+          <Show when={toggleViewShortcut()}>
+            {(shortcut) => (
+              <text fg={theme().text}>
+                {shortcut()}{" "}
+                <span style={{ fg: theme().textMuted }}>{view() === "split" ? "unified view" : "split view"}</span>
+              </text>
+            )}
+          </Show>
+          <Show when={markReviewedShortcut()}>
+            {(shortcut) => (
+              <text fg={theme().text}>
+                {shortcut()} <span style={{ fg: theme().textMuted }}>mark reviewed</span>
+              </text>
+            )}
+          </Show>
+        </Panel>
+      </PanelGroup>
     </box>
   )
 }
