@@ -233,6 +233,10 @@ export const Info = Schema.Struct({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
       }),
     }),
+  mcp_inherit: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "When false, project-level config does NOT inherit global MCP servers. Defaults to true.",
+  }),
   ),
   experimental: Schema.optional(
     Schema.Struct({
@@ -269,6 +273,10 @@ export type Info = DeepMutable<Schema.Schema.Type<typeof Info>> & {
   // plugin_origins is derived state, not a persisted config field. It keeps each winning plugin spec together
   // with the file and scope it came from so later runtime code can make location-sensitive decisions.
   plugin_origins?: ConfigPlugin.Origin[]
+
+  // mcp_provenance is derived state (like plugin_origins) — maps each MCP server to its scope.
+  // Used by the CLI and UI to show where each server came from. Not persisted.
+  mcp_provenance?: Record<string, "global" | "local">
 }
 
 type State = {
@@ -319,7 +327,7 @@ function patchJsonc(input: string, patch: unknown, path: string[] = []): string 
 }
 
 function writable(info: Info) {
-  const { plugin_origins: _plugin_origins, ...next } = info
+  const { plugin_origins: _plugin_origins, mcp_provenance: _mcp_provenance, ...next } = info
   return next
 }
 
@@ -476,8 +484,16 @@ export const layer = Layer.effect(
           result.plugin_origins = plugins
         })
 
+        const localMcpKeys = new Set<string>()
+
         const merge = (source: string, next: Info, kind?: ConfigPlugin.Scope) => {
           result = mergeConfigConcatArrays(result, next)
+          // Track which MCP server keys come from local config sources
+          if (kind === "local" && next.mcp) {
+            for (const key of Object.keys(next.mcp)) {
+              localMcpKeys.add(key)
+            }
+          }
           return mergePluginOrigins(source, next.plugin, kind)
         }
 
@@ -681,6 +697,24 @@ export const layer = Layer.effect(
         }
         if (Flag.OPENCODE_DISABLE_PRUNE) {
           result.compaction = { ...result.compaction, prune: false }
+        }
+
+        // mcp_inherit filter and provenance
+        if (result.mcp) {
+          const provenance = result.mcp_provenance ?? {}
+          // Build provenance for every MCP server currently in the merged config
+          for (const key of Object.keys(result.mcp)) {
+            provenance[key] = localMcpKeys.has(key) ? "local" : "global"
+          }
+          // When mcp_inherit is explicitly false, drop servers not defined locally
+          if (result.mcp_inherit === false) {
+            for (const key of Object.keys(result.mcp)) {
+              if (!localMcpKeys.has(key)) {
+                delete result.mcp[key]
+              }
+            }
+          }
+          result.mcp_provenance = provenance
         }
 
         return {

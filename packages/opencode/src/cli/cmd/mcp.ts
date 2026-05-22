@@ -163,9 +163,11 @@ export const McpListCommand = cmd({
             hint = "\n    " + status.error
           }
 
+          const provenance = config.mcp_provenance?.[name]
+          const scopeTag = provenance ? "(" + provenance + ")" : ""
           const typeHint = serverConfig.type === "remote" ? serverConfig.url : serverConfig.command.join(" ")
           prompts.log.info(
-            `${statusIcon} ${name} ${UI.Style.TEXT_DIM}${statusText}${hint}\n    ${UI.Style.TEXT_DIM}${typeHint}`,
+            `${statusIcon} ${name}${scopeTag} ${UI.Style.TEXT_DIM}${statusText}${hint}\n    ${UI.Style.TEXT_DIM}${typeHint}`,
           )
         }
 
