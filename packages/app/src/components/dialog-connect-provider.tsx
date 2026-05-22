@@ -524,7 +524,7 @@ export function DialogConnectProvider(props: { provider: string }) {
     const code = createMemo(() => {
       const instructions = store.authorization?.instructions
       if (instructions?.includes(":")) {
-        return instructions.split(":")[1]?.trim()
+        return instructions.split(":").pop()?.trim()
       }
       return instructions
     })

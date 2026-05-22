@@ -1136,6 +1136,7 @@ export type McpOAuthConfig = {
   clientId?: string
   clientSecret?: string
   scope?: string
+  callbackPort?: number
   redirectUri?: string
 }
 
@@ -1691,6 +1692,12 @@ export type McpStatus =
 
 export type McpUnsupportedOAuthError = {
   error: string
+}
+
+export type McpServerNotFoundError = {
+  _tag: "McpServerNotFoundError"
+  name: string
+  message: string
 }
 
 export type NotFoundError = {
@@ -5121,9 +5128,9 @@ export type McpAuthRemoveErrors = {
    */
   400: BadRequestError
   /**
-   * Not found
+   * McpServerNotFoundError
    */
-  404: NotFoundError
+  404: McpServerNotFoundError
 }
 
 export type McpAuthRemoveError = McpAuthRemoveErrors[keyof McpAuthRemoveErrors]
@@ -5157,9 +5164,9 @@ export type McpAuthStartErrors = {
    */
   400: McpUnsupportedOAuthError | InvalidRequestError
   /**
-   * Not found
+   * McpServerNotFoundError
    */
-  404: NotFoundError
+  404: McpServerNotFoundError
 }
 
 export type McpAuthStartError = McpAuthStartErrors[keyof McpAuthStartErrors]
@@ -5196,9 +5203,9 @@ export type McpAuthCallbackErrors = {
    */
   400: EffectHttpApiErrorBadRequest | InvalidRequestError
   /**
-   * Not found
+   * McpServerNotFoundError
    */
-  404: NotFoundError
+  404: McpServerNotFoundError
 }
 
 export type McpAuthCallbackError = McpAuthCallbackErrors[keyof McpAuthCallbackErrors]
@@ -5230,9 +5237,9 @@ export type McpAuthAuthenticateErrors = {
    */
   400: McpUnsupportedOAuthError | InvalidRequestError
   /**
-   * Not found
+   * McpServerNotFoundError
    */
-  404: NotFoundError
+  404: McpServerNotFoundError
 }
 
 export type McpAuthAuthenticateError = McpAuthAuthenticateErrors[keyof McpAuthAuthenticateErrors]
@@ -5263,6 +5270,10 @@ export type McpConnectErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * McpServerNotFoundError
+   */
+  404: McpServerNotFoundError
 }
 
 export type McpConnectError = McpConnectErrors[keyof McpConnectErrors]
@@ -5293,6 +5304,10 @@ export type McpDisconnectErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * McpServerNotFoundError
+   */
+  404: McpServerNotFoundError
 }
 
 export type McpDisconnectError = McpDisconnectErrors[keyof McpDisconnectErrors]
