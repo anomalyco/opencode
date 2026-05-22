@@ -14,6 +14,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { SyncEvent } from "../../src/sync"
 
 void Log.init({ print: false })
 
@@ -71,6 +72,7 @@ function projectLayerWithFailure(failArg: string) {
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(NodePath.layer),
     Layer.provide(RuntimeFlags.defaultLayer),
+    Layer.provide(SyncEvent.defaultLayer),
   )
 }
 
@@ -80,6 +82,7 @@ function projectLayerWithRuntimeFlags(flags: Parameters<typeof RuntimeFlags.laye
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(NodePath.layer),
     Layer.provide(RuntimeFlags.layer(flags)),
+    Layer.provide(SyncEvent.defaultLayer),
   )
 }
 
@@ -709,6 +712,36 @@ describe("Project.fromDirectory with bare repos", () => {
 
       const correctCache = path.join(barePath, "opencode")
       expect(yield* Effect.promise(() => Bun.file(correctCache).exists())).toBe(true)
+    }),
+  )
+})
+
+describe("Project.remove", () => {
+  it.live("throws error for non-existent project", () =>
+    Effect.gen(function* () {
+      const exit = yield* run((svc) => svc.remove(ProjectID.make("nonexistent-project"))).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+    }),
+  )
+
+  it.live("throws error when deleting global project", () =>
+    Effect.gen(function* () {
+      const exit = yield* run((svc) => svc.remove(ProjectID.global)).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+    }),
+  )
+
+  it.live("removes existing project and cleans up data", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped({ git: true })
+      const { project } = yield* run((svc) => svc.fromDirectory(tmp))
+
+      expect(Project.get(project.id)).toBeDefined()
+
+      yield* run((svc) => svc.remove(project.id))
+
+      const afterRemove = Project.get(project.id)
+      expect(afterRemove).toBeUndefined()
     }),
   )
 })
