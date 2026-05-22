@@ -52,4 +52,9 @@ export const textVerbosity = (request: LLMRequest) => {
   return isTextVerbosity(value) ? value : undefined
 }
 
+export const instructions = (request: LLMRequest) => {
+  const value = options(request)?.instructions
+  return typeof value === "string" ? value : undefined
+}
+
 export * as OpenAIOptions from "./openai-options"

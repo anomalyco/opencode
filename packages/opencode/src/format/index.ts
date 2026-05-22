@@ -1,4 +1,5 @@
 import { Effect, Layer, Context, Schema } from "effect"
+import { serviceUse } from "@/effect/service-use"
 import { ChildProcess } from "effect/unstable/process"
 import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
@@ -26,6 +27,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Format") {}
+
+export const use = serviceUse(Service)
 
 export const layer = Layer.effect(
   Service,
