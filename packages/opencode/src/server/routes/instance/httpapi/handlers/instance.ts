@@ -6,7 +6,7 @@ import { Global } from "@opencode-ai/core/global"
 import { LSP } from "@/lsp/lsp"
 import { Vcs } from "@/project/vcs"
 import { Skill } from "@/skill"
-import { Effect } from "effect"
+import { Schema, Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { ApiVcsApplyError } from "../groups/instance"
@@ -91,6 +91,30 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
       return yield* format.status()
     })
 
+    const vcsStage = Effect.fn("InstanceHttpApi.vcsStage")(function* (ctx: { payload: Vcs.StageInput }) {
+      return yield* vcs.stage(ctx.payload)
+    })
+
+    const vcsUnstage = Effect.fn("InstanceHttpApi.vcsUnstage")(function* (ctx: { payload: Vcs.StageInput }) {
+      return yield* vcs.unstage(ctx.payload)
+    })
+
+    const vcsCommit = Effect.fn("InstanceHttpApi.vcsCommit")(function* (ctx: { payload: Vcs.CommitInput }) {
+      return yield* vcs.commit(ctx.payload)
+    })
+
+    const vcsPush = Effect.fn("InstanceHttpApi.vcsPush")(function* (ctx: { payload: Vcs.PushPullInput }) {
+      return yield* vcs.push(ctx.payload)
+    })
+
+    const vcsPull = Effect.fn("InstanceHttpApi.vcsPull")(function* (ctx: { payload: Vcs.PushPullInput }) {
+      return yield* vcs.pull(ctx.payload)
+    })
+
+    const vcsLog = Effect.fn("InstanceHttpApi.vcsLog")(function* (ctx: { query: { count?: number } }) {
+      return yield* vcs.log(ctx.query.count)
+    })
+
     return handlers
       .handle("dispose", dispose)
       .handle("path", getPath)
@@ -99,6 +123,12 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
       .handle("vcsDiff", getVcsDiff)
       .handle("vcsDiffRaw", getVcsDiffRaw)
       .handle("vcsApply", applyVcs)
+      .handle("vcsStage", vcsStage)
+      .handle("vcsUnstage", vcsUnstage)
+      .handle("vcsCommit", vcsCommit)
+      .handle("vcsPush", vcsPush)
+      .handle("vcsPull", vcsPull)
+      .handle("vcsLog", vcsLog)
       .handle("command", getCommand)
       .handle("agent", getAgent)
       .handle("skill", getSkill)

@@ -124,6 +124,36 @@ const scenarios: Scenario[] = [
     .inProject({ git: false })
     .at((ctx) => ({ path: "/vcs/apply", headers: ctx.headers(), body: { patch: "" } }))
     .status(400, undefined, "status"),
+  http.protected
+    .post("/vcs/stage", "vcs.stage")
+    .inProject({ git: false })
+    .at((ctx) => ({ path: "/vcs/stage", headers: ctx.headers(), body: { files: ["."] } }))
+    .json(200, (body) => { check(body.success === false, "non-git project should fail stage") }, "status"),
+  http.protected
+    .post("/vcs/unstage", "vcs.unstage")
+    .inProject({ git: false })
+    .at((ctx) => ({ path: "/vcs/unstage", headers: ctx.headers(), body: { files: ["."] } }))
+    .json(200, (body) => { check(body.success === false, "non-git project should fail unstage") }, "status"),
+  http.protected
+    .post("/vcs/commit", "vcs.commit")
+    .inProject({ git: false })
+    .at((ctx) => ({ path: "/vcs/commit", headers: ctx.headers(), body: { message: "test" } }))
+    .json(200, (body) => { check(body.success === false, "non-git project should fail commit") }, "status"),
+  http.protected
+    .post("/vcs/push", "vcs.push")
+    .inProject({ git: false })
+    .at((ctx) => ({ path: "/vcs/push", headers: ctx.headers(), body: {} }))
+    .json(200, (body) => { check(body.success === false, "non-git project should fail push") }, "status"),
+  http.protected
+    .post("/vcs/pull", "vcs.pull")
+    .inProject({ git: false })
+    .at((ctx) => ({ path: "/vcs/pull", headers: ctx.headers(), body: {} }))
+    .json(200, (body) => { check(body.success === false, "non-git project should fail pull") }, "status"),
+  http.protected
+    .get("/vcs/log", "vcs.log")
+    .inProject({ git: false })
+    .at((ctx) => ({ path: "/vcs/log", headers: ctx.headers() }))
+    .json(200, array, "status"),
   http.protected.get("/command", "command.list").json(200, array, "status"),
   http.protected.get("/agent", "app.agents").json(200, array, "status"),
   http.protected.get("/skill", "app.skills").json(200, array, "status"),

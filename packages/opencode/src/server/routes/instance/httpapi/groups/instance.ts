@@ -47,6 +47,12 @@ export const InstancePaths = {
   vcsDiff: "/vcs/diff",
   vcsDiffRaw: "/vcs/diff/raw",
   vcsApply: "/vcs/apply",
+  vcsStage: "/vcs/stage",
+  vcsUnstage: "/vcs/unstage",
+  vcsCommit: "/vcs/commit",
+  vcsPush: "/vcs/push",
+  vcsPull: "/vcs/pull",
+  vcsLog: "/vcs/log",
   command: "/command",
   agent: "/agent",
   skill: "/skill",
@@ -133,6 +139,74 @@ export const InstanceApi = HttpApi.make("instance")
             identifier: "vcs.apply",
             summary: "Apply VCS patch",
             description: "Apply a raw patch to the current working tree.",
+          }),
+        ),
+        HttpApiEndpoint.post("vcsStage", InstancePaths.vcsStage, {
+          query: WorkspaceRoutingQuery,
+          payload: Vcs.StageInput,
+          success: described(Vcs.ActionResult, "VCS stage result"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "vcs.stage",
+            summary: "Stage files",
+            description: "Stage files for commit.",
+          }),
+        ),
+        HttpApiEndpoint.post("vcsUnstage", InstancePaths.vcsUnstage, {
+          query: WorkspaceRoutingQuery,
+          payload: Vcs.StageInput,
+          success: described(Vcs.ActionResult, "VCS unstage result"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "vcs.unstage",
+            summary: "Unstage files",
+            description: "Unstage files from the index.",
+          }),
+        ),
+        HttpApiEndpoint.post("vcsCommit", InstancePaths.vcsCommit, {
+          query: WorkspaceRoutingQuery,
+          payload: Vcs.CommitInput,
+          success: described(Vcs.ActionResult, "VCS commit result"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "vcs.commit",
+            summary: "Commit staged changes",
+            description: "Commit all staged changes with a message.",
+          }),
+        ),
+        HttpApiEndpoint.post("vcsPush", InstancePaths.vcsPush, {
+          query: WorkspaceRoutingQuery,
+          payload: Vcs.PushPullInput,
+          success: described(Vcs.ActionResult, "VCS push result"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "vcs.push",
+            summary: "Push commits",
+            description: "Push commits to a remote repository.",
+          }),
+        ),
+        HttpApiEndpoint.post("vcsPull", InstancePaths.vcsPull, {
+          query: WorkspaceRoutingQuery,
+          payload: Vcs.PushPullInput,
+          success: described(Vcs.ActionResult, "VCS pull result"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "vcs.pull",
+            summary: "Pull from remote",
+            description: "Pull latest changes from a remote repository.",
+          }),
+        ),
+        HttpApiEndpoint.get("vcsLog", InstancePaths.vcsLog, {
+          query: Schema.Struct({
+            ...WorkspaceRoutingQueryFields,
+            count: Schema.optional(Schema.NumberFromString.pipe(Schema.int())),
+          }),
+          success: described(Schema.Array(Vcs.LogEntry), "VCS log"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "vcs.log",
+            summary: "Get commit log",
+            description: "Retrieve recent commit history.",
           }),
         ),
         HttpApiEndpoint.get("command", InstancePaths.command, {

@@ -87,6 +87,12 @@ export interface Interface {
   readonly patchUntracked: (cwd: string, file: string, options?: PatchOptions) => Effect.Effect<Patch>
   readonly statUntracked: (cwd: string, file: string) => Effect.Effect<Stat | undefined>
   readonly applyPatch: (cwd: string, patch: string) => Effect.Effect<Result>
+  readonly add: (cwd: string, paths: string[]) => Effect.Effect<Result>
+  readonly unstage: (cwd: string, paths: string[]) => Effect.Effect<Result>
+  readonly commit: (cwd: string, message: string) => Effect.Effect<Result>
+  readonly push: (cwd: string, remote: string, branch: string) => Effect.Effect<Result>
+  readonly pull: (cwd: string, remote: string, branch: string) => Effect.Effect<Result>
+  readonly log: (cwd: string, count?: number) => Effect.Effect<string>
 }
 
 const kind = (code: string): Kind => {
@@ -322,6 +328,30 @@ export const layer = Layer.effect(
       return yield* run(["apply", "-"], { cwd, stdin: stdin(patch) })
     })
 
+    const add = Effect.fn("Git.add")(function* (cwd: string, paths: string[]) {
+      return yield* run(["add", "--", ...paths], { cwd })
+    })
+
+    const unstage = Effect.fn("Git.unstage")(function* (cwd: string, paths: string[]) {
+      return yield* run(["restore", "--staged", "--", ...paths], { cwd })
+    })
+
+    const commit = Effect.fn("Git.commit")(function* (cwd: string, message: string) {
+      return yield* run(["commit", "-m", message], { cwd })
+    })
+
+    const push = Effect.fn("Git.push")(function* (cwd: string, remote: string, branch: string) {
+      return yield* run(["push", remote, branch], { cwd })
+    })
+
+    const pull = Effect.fn("Git.pull")(function* (cwd: string, remote: string, branch: string) {
+      return yield* run(["pull", remote, branch], { cwd })
+    })
+
+    const log = Effect.fn("Git.log")(function* (cwd: string, count = 10) {
+      return yield* text(["log", `--max-count=${count}`, "--oneline", "--", "."], { cwd })
+    })
+
     return Service.of({
       run,
       branch,
@@ -338,6 +368,12 @@ export const layer = Layer.effect(
       patchUntracked,
       statUntracked,
       applyPatch,
+      add,
+      unstage,
+      commit,
+      push,
+      pull,
+      log,
     })
   }),
 )

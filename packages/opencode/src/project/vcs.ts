@@ -259,6 +259,34 @@ export class PatchApplyError extends Schema.TaggedErrorClass<PatchApplyError>()(
   reason: Schema.Literals(["non-git", "not-clean"]),
 }) {}
 
+export const CommitInput = Schema.Struct({
+  message: Schema.String,
+})
+export type CommitInput = Schema.Schema.Type<typeof CommitInput>
+
+export const StageInput = Schema.Struct({
+  files: Schema.optional(Schema.Array(Schema.String)),
+})
+export type StageInput = Schema.Schema.Type<typeof StageInput>
+
+export const PushPullInput = Schema.Struct({
+  remote: Schema.optional(Schema.String),
+  branch: Schema.optional(Schema.String),
+})
+export type PushPullInput = Schema.Schema.Type<typeof PushPullInput>
+
+export const LogEntry = Schema.Struct({
+  hash: Schema.String,
+  message: Schema.String,
+}).annotate({ identifier: "VcsLogEntry" })
+export type LogEntry = Schema.Schema.Type<typeof LogEntry>
+
+export const ActionResult = Schema.Struct({
+  success: Schema.Boolean,
+  output: Schema.optional(Schema.String),
+}).annotate({ identifier: "VcsActionResult" })
+export type ActionResult = Schema.Schema.Type<typeof ActionResult>
+
 export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly branch: () => Effect.Effect<string | undefined>
@@ -267,6 +295,12 @@ export interface Interface {
   readonly diff: (mode: Mode) => Effect.Effect<FileDiff[]>
   readonly diffRaw: () => Effect.Effect<string>
   readonly apply: (input: ApplyInput) => Effect.Effect<ApplyResult, PatchApplyError>
+  readonly stage: (input: StageInput) => Effect.Effect<ActionResult>
+  readonly unstage: (input: StageInput) => Effect.Effect<ActionResult>
+  readonly commit: (input: CommitInput) => Effect.Effect<ActionResult>
+  readonly push: (input: PushPullInput) => Effect.Effect<ActionResult>
+  readonly pull: (input: PushPullInput) => Effect.Effect<ActionResult>
+  readonly log: (count?: number) => Effect.Effect<LogEntry[]>
 }
 
 interface State {
@@ -395,6 +429,57 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
           })
         }
         return { applied: true }
+      }),
+      stage: Effect.fn("Vcs.stage")(function* (input: StageInput) {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") return { success: false, output: "Not a git repository" }
+        const files = input.files ?? ["."]
+        const result = yield* git.add(ctx.directory, files)
+        return { success: result.exitCode === 0, output: result.text() }
+      }),
+      unstage: Effect.fn("Vcs.unstage")(function* (input: StageInput) {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") return { success: false, output: "Not a git repository" }
+        const files = input.files ?? ["."]
+        const result = yield* git.unstage(ctx.directory, files)
+        return { success: result.exitCode === 0, output: result.text() }
+      }),
+      commit: Effect.fn("Vcs.commit")(function* (input: CommitInput) {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") return { success: false, output: "Not a git repository" }
+        const result = yield* git.commit(ctx.directory, input.message)
+        return { success: result.exitCode === 0, output: result.text() }
+      }),
+      push: Effect.fn("Vcs.push")(function* (input: PushPullInput) {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") return { success: false, output: "Not a git repository" }
+        const remote = input.remote ?? "origin"
+        const branch = input.branch ?? (yield* git.branch(ctx.directory)) ?? ""
+        const result = yield* git.push(ctx.directory, remote, branch)
+        return { success: result.exitCode === 0, output: result.text() }
+      }),
+      pull: Effect.fn("Vcs.pull")(function* (input: PushPullInput) {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") return { success: false, output: "Not a git repository" }
+        const remote = input.remote ?? "origin"
+        const branch = input.branch ?? (yield* git.branch(ctx.directory)) ?? ""
+        const result = yield* git.pull(ctx.directory, remote, branch)
+        return { success: result.exitCode === 0, output: result.text() }
+      }),
+      log: Effect.fn("Vcs.log")(function* (count = 10) {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") return []
+        const text = yield* git.log(ctx.directory, count)
+        return text
+          .split(/\r?\n/)
+          .filter(Boolean)
+          .map((line) => {
+            const space = line.indexOf(" ")
+            return {
+              hash: space === -1 ? line : line.slice(0, space),
+              message: space === -1 ? "" : line.slice(space + 1),
+            }
+          })
       }),
     })
   }),
