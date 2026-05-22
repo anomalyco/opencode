@@ -1,7 +1,7 @@
 import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
-import type { ProviderListResponse, VcsInfo } from "@opencode-ai/sdk/v2/client"
+import type { VcsInfo } from "@opencode-ai/sdk/v2/client"
 import {
   DIR_IDLE_TTL_MS,
   MAX_DIR_STORES,
@@ -17,6 +17,7 @@ import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
 import { useQueries } from "@tanstack/solid-query"
 import { QueryOptionsApi } from "../global-sync"
 import { directoryKey, type DirectoryKey } from "./utils"
+import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
 
 export function createChildStoreManager(input: {
   owner: Owner
@@ -27,7 +28,7 @@ export function createChildStoreManager(input: {
   translate: (key: string, vars?: Record<string, string | number>) => string
   queryOptions: QueryOptionsApi
   global: {
-    provider: ProviderListResponse
+    provider: NormalizedProviderListResponse
   }
 }) {
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
@@ -190,10 +191,9 @@ export function createChildStoreManager(input: {
               return !providerQuery.isLoading
             },
             get provider() {
-              const EMPTY = { all: [], connected: [], default: {} }
+              const EMPTY = { all: new Map(), connected: [], default: {} }
               if (providerQuery.isLoading) return EMPTY
-              if (providerQuery.data?.all.length === 0 && input.global.provider.all.length > 0)
-                return input.global.provider
+              if (providerQuery.data?.all.size === 0 && input.global.provider.all.size > 0) return input.global.provider
               return providerQuery.data ?? EMPTY
             },
             config: {},
@@ -202,7 +202,7 @@ export function createChildStoreManager(input: {
                 return { state: "", config: "", worktree: "", directory: "", home: "" }
               return pathQuery.data
             },
-            status: "loading" as const,
+            status: "complete" as const,
             agent: [],
             command: [],
             session: [],

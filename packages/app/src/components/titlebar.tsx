@@ -223,19 +223,13 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const navigate = useNavigate()
             const homeMatch = useMatch(() => "/")
 
-            const openNewSession = () => {
-              if (params.dir) {
-                navigate(`/${params.dir}/session`)
-                return
-              }
+            const newSessionHref = () => {
+              if (params.dir) return `/${params.dir}/session`
 
               const project = layout.projects.list()[0]
-              if (!project) {
-                navigate("/")
-                return
-              }
+              if (!project) return "/"
 
-              navigate(`/${base64Encode(project.worktree)}/session`)
+              return `/${base64Encode(project.worktree)}/session`
             }
 
             type Tab = { dir: string; sessionId: string; href: string }
@@ -313,13 +307,21 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               return true
             }
 
+            const closeNewSessionTab = () => {
+              if (!(params.dir && !params.id)) return false
+              const last = tabsStore[tabsStore.length - 1]
+              if (last) navigate(last.href)
+              else navigate("/")
+              return true
+            }
+
             makeEventListener(
               document,
               "keydown",
               (event) => {
                 if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
                 if (event.key.toLowerCase() !== "w") return
-                if (!closeCurrentSessionTab()) return
+                if (!(closeCurrentSessionTab() || closeNewSessionTab())) return
 
                 event.preventDefault()
                 event.stopPropagation()
@@ -391,7 +393,8 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                         size="large"
                         class="shrink-0"
                         icon={<IconV2 name="plus" />}
-                        onClick={openNewSession}
+                        as="a"
+                        href={newSessionHref()}
                         aria-label={language.t("command.session.new")}
                       />
                     }
