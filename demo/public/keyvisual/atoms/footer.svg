@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="140" viewBox="0 0 1200 140" data-name="atom-footer">
+  <rect width="1200" height="140" fill="#131010"/>
+  
+    <g data-name="brand-footer">
+      <line x1="40" y1="60" x2="1160" y2="60" stroke="#3e3939" stroke-width="1"/>
+      <circle cx="40" cy="100" r="4" fill="#fc533a"/>
+      <text x="58" y="106" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="500" fill="#b7b1b1" text-anchor="start" letter-spacing="2.4">ACOMPANY  SECURE  CODE</text>
+      <text x="1160" y="106" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="500" fill="#716c6b" text-anchor="end">acompany.tech / securecode</text>
+    </g>
+  
+</svg>

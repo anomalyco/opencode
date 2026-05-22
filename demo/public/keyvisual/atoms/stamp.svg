@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="120" viewBox="0 0 900 120" data-name="atom-stamp">
+  <rect width="900" height="120" fill="#131010"/>
+  
+    <g data-name="brand-stamp">
+      <line x1="40" y1="60" x2="100" y2="60" stroke="#fc533a" stroke-width="1.5"/>
+      <text x="116" y="66" font-family="JetBrains Mono, sans-serif" font-size="22" font-weight="500" fill="#b7b1b1" text-anchor="start" letter-spacing="3.2">CONFIDENTIAL AI SUITE  /  第 2 弾製品</text>
+    </g>
+  
+</svg>

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="320" viewBox="0 0 900 320" data-name="atom-tee-diagram">
+  <rect width="900" height="320" fill="#131010"/>
+  
+    <defs>
+      <linearGradient id="flow" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#fc533a"/>
+        <stop offset="100%" stop-color="#034cff"/>
+      </linearGradient>
+      <linearGradient id="tee-edge" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#fc533a" stop-opacity="0.85"/>
+        <stop offset="100%" stop-color="#034cff" stop-opacity="0.85"/>
+      </linearGradient>
+    </defs>
+
+    <g data-label="tee-flow">
+      <rect x="90" y="124" width="144" height="72" rx="7.199999999999999" fill="#1b1818" stroke="#3e3939" stroke-width="2"/>
+      <text x="162" y="155.2" font-family="JetBrains Mono, sans-serif" font-size="13.2" font-weight="500" fill="#b7b1b1" text-anchor="middle" letter-spacing="1.2">DEVELOPER</text>
+      <text x="162" y="176.8" font-family="JetBrains Mono, sans-serif" font-size="12" font-weight="500" fill="#716c6b" text-anchor="middle">$ securecode</text>
+
+      
+    <line x1="234" y1="160" x2="354" y2="160" stroke="url(#flow)" stroke-width="2" stroke-dasharray="9.6 7.199999999999999"/>
+    <polygon points="354,160 346.8,155.2 346.8,164.8" fill="#034cff"/>
+  
+      <text x="294" y="150.39999999999998" font-family="JetBrains Mono, sans-serif" font-size="12" font-weight="500" fill="#fc533a" text-anchor="middle" letter-spacing="1.5">AES-GCM</text>
+
+      <rect x="354" y="52" width="288" height="216" rx="9.6" fill="#1b1818" stroke="url(#tee-edge)" stroke-width="2"/>
+      <text x="498" y="85.6" font-family="JetBrains Mono, sans-serif" font-size="14.399999999999999" font-weight="500" fill="#b7b1b1" text-anchor="middle" letter-spacing="1.5">CONFIDENTIAL VM (TEE)</text>
+      <text x="498" y="107.19999999999999" font-family="JetBrains Mono, sans-serif" font-size="13.2" font-weight="500" fill="#716c6b" text-anchor="middle">Intel TDX  ·  NVIDIA CC</text>
+
+      <rect x="390" y="136" width="216" height="84" rx="7.199999999999999" fill="#252121" stroke="#4b4646" stroke-width="2"/>
+      <text x="498" y="169.6" font-family="JetBrains Mono, sans-serif" font-size="15.6" font-weight="500" fill="#f1ecec" text-anchor="middle">Qwen3-Coder-Next</text>
+      <text x="498" y="196" font-family="JetBrains Mono, sans-serif" font-size="12" font-weight="500" fill="#716c6b" text-anchor="middle">decrypt → infer → encrypt</text>
+
+      
+    <line x1="642" y1="160" x2="738" y2="160" stroke="url(#flow)" stroke-width="2" stroke-dasharray="9.6 7.199999999999999"/>
+    <polygon points="738,160 730.8,155.2 730.8,164.8" fill="#034cff"/>
+  
+      <rect x="738" y="124" width="72" height="72" rx="7.199999999999999" fill="#1b1818" stroke="#3e3939" stroke-width="2"/>
+      <text x="774" y="167.2" font-family="JetBrains Mono, sans-serif" font-size="16.8" font-weight="700" fill="#c8ffc4" text-anchor="middle">OK</text>
+    </g>
+  
+</svg>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="660" viewBox="0 0 1200 660" data-name="atom-terminal">
+  <rect width="1200" height="660" fill="#131010"/>
+  
+    <g data-name="terminal-frame">
+      <rect x="40" y="40" width="1120" height="580" rx="10" fill="#1b1818" stroke="#3e3939"/>
+      <rect x="40" y="40" width="1120" height="36" rx="10" fill="#1b1818" stroke="#3e3939"/>
+      <rect x="40" y="66" width="1120" height="10" fill="#1b1818" stroke="#3e3939"/>
+      <line x1="40" y1="76" x2="1160" y2="76" stroke="#3e3939"/>
+      <circle cx="58" cy="58" r="6" fill="#ff5f56"/>
+      <circle cx="76" cy="58" r="6" fill="#ffbd2e"/>
+      <circle cx="94" cy="58" r="6" fill="#27c93f"/>
+      <text x="600" y="62" font-family="JetBrains Mono, sans-serif" font-size="12" font-weight="500" fill="#b7b1b1" text-anchor="middle">Acompany Secure Code</text>
+      <text x="1144" y="62" font-family="JetBrains Mono, sans-serif" font-size="11" font-weight="500" fill="#716c6b" text-anchor="end">Code review</text>
+
+      <!-- sample prompt -->
+      <rect x="100" y="300" width="1000" height="60" rx="6" fill="#1b1818" stroke="#3e3939"/>
+      <text x="120" y="338" font-family="JetBrains Mono, sans-serif" font-size="16" font-weight="500" fill="#f1ecec" text-anchor="start">$  Ask anything...</text>
+      <text x="300" y="338" font-family="JetBrains Mono, sans-serif" font-size="16" font-weight="500" fill="#fc533a" text-anchor="start">▌</text>
+
+      <!-- footer status bar -->
+      <line x1="40" y1="590" x2="1160" y2="590" stroke="#3e3939"/>
+      <text x="56" y="610" font-family="JetBrains Mono, sans-serif" font-size="11" font-weight="500" fill="#716c6b" text-anchor="start">/private/tmp/demo</text>
+      <text x="1020" y="610" font-family="JetBrains Mono, sans-serif" font-size="11" font-weight="500" fill="#716c6b" text-anchor="start">◯ 3 MCP  /status</text>
+      <text x="1144" y="610" font-family="JetBrains Mono, sans-serif" font-size="11" font-weight="500" fill="#fc533a" text-anchor="end">Acompany</text>
+    </g>
+  
+</svg>

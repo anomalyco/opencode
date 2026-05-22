@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="640" viewBox="0 0 1040 640" data-name="atom-palette">
+  <rect width="1040" height="640" fill="#131010"/>
+  
+        <g data-name="swatch-bg">
+          <rect x="40" y="40" width="228" height="128" fill="#131010"/>
+          <text x="54" y="70" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#f1ecec" text-anchor="start">--color-sc-bg</text>
+          <text x="54" y="150" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="700" fill="#f1ecec" text-anchor="start">#131010</text>
+        </g>
+      
+        <g data-name="swatch-bgSoft">
+          <rect x="280" y="40" width="228" height="128" fill="#1b1818"/>
+          <text x="294" y="70" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#f1ecec" text-anchor="start">--color-sc-bgSoft</text>
+          <text x="294" y="150" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="700" fill="#f1ecec" text-anchor="start">#1B1818</text>
+        </g>
+      
+        <g data-name="swatch-border">
+          <rect x="520" y="40" width="228" height="128" fill="#3e3939"/>
+          <text x="534" y="70" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#f1ecec" text-anchor="start">--color-sc-border</text>
+          <text x="534" y="150" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="700" fill="#f1ecec" text-anchor="start">#3E3939</text>
+        </g>
+      
+        <g data-name="swatch-borderStrong">
+          <rect x="760" y="40" width="228" height="128" fill="#4b4646"/>
+          <text x="774" y="70" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#f1ecec" text-anchor="start">--color-sc-borderStrong</text>
+          <text x="774" y="150" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="700" fill="#f1ecec" text-anchor="start">#4B4646</text>
+        </g>
+      
+        <g data-name="swatch-textDim">
+          <rect x="40" y="180" width="228" height="128" fill="#716c6b"/>
+          <text x="54" y="210" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#f1ecec" text-anchor="start">--color-sc-textDim</text>
+          <text x="54" y="290" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="700" fill="#f1ecec" text-anchor="start">#716C6B</text>
+        </g>
+      
+        <g data-name="swatch-textMid">
+          <rect x="280" y="180" width="228" height="128" fill="#b7b1b1"/>
+          <text x="294" y="210" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#08192e" text-anchor="start">--color-sc-textMid</text>
+          <text x="294" y="290" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="700" fill="#08192e" text-anchor="start">#B7B1B1</text>
+        </g>
+      
+        <g data-name="swatch-text">
+          <rect x="520" y="180" width="228" height="128" fill="#f1ecec"/>
+          <text x="534" y="210" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#08192e" text-anchor="start">--color-sc-text</text>
+          <text x="534" y="290" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="700" fill="#08192e" text-anchor="start">#F1ECEC</text>
+        </g>
+      
+        <g data-name="swatch-ember">
+          <rect x="760" y="180" width="228" height="128" fill="#fc533a"/>
+          <text x="774" y="210" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#f1ecec" text-anchor="start">--color-sc-ember</text>
+          <text x="774" y="290" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="700" fill="#f1ecec" text-anchor="start">#FC533A</text>
+        </g>
+      
+        <g data-name="swatch-emberSoft">
+          <rect x="40" y="320" width="228" height="128" fill="#ff8a73"/>
+          <text x="54" y="350" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#08192e" text-anchor="start">--color-sc-emberSoft</text>
+          <text x="54" y="430" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="700" fill="#08192e" text-anchor="start">#FF8A73</text>
+        </g>
+      
+        <g data-name="swatch-cobalt">
+          <rect x="280" y="320" width="228" height="128" fill="#034cff"/>
+          <text x="294" y="350" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#f1ecec" text-anchor="start">--color-sc-cobalt</text>
+          <text x="294" y="430" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="700" fill="#f1ecec" text-anchor="start">#034CFF</text>
+        </g>
+      
+        <g data-name="swatch-cobaltSoft">
+          <rect x="520" y="320" width="228" height="128" fill="#89b5ff"/>
+          <text x="534" y="350" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#08192e" text-anchor="start">--color-sc-cobaltSoft</text>
+          <text x="534" y="430" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="700" fill="#08192e" text-anchor="start">#89B5FF</text>
+        </g>
+      
+        <g data-name="swatch-mint">
+          <rect x="760" y="320" width="228" height="128" fill="#c8ffc4"/>
+          <text x="774" y="350" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#08192e" text-anchor="start">--color-sc-mint</text>
+          <text x="774" y="430" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="700" fill="#08192e" text-anchor="start">#C8FFC4</text>
+        </g>
+      
+        <g data-name="swatch-cream">
+          <rect x="40" y="460" width="228" height="128" fill="#f7f5ef"/>
+          <text x="54" y="490" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#08192e" text-anchor="start">--color-sc-cream</text>
+          <text x="54" y="570" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="700" fill="#08192e" text-anchor="start">#F7F5EF</text>
+        </g>
+      
+        <g data-name="swatch-shadow">
+          <rect x="280" y="460" width="228" height="128" fill="#08192e"/>
+          <text x="294" y="490" font-family="JetBrains Mono, sans-serif" font-size="14" font-weight="500" fill="#f1ecec" text-anchor="start">--color-sc-shadow</text>
+          <text x="294" y="570" font-family="JetBrains Mono, sans-serif" font-size="18" font-weight="700" fill="#f1ecec" text-anchor="start">#08192E</text>
+        </g>
+      
+</svg>
