@@ -119,4 +119,27 @@ describe("HttpApi CORS", () => {
       expect(rejected.headers.get("access-control-allow-origin")).not.toBe("https://evil.example")
     }),
   )
+
+  it.live("allows vscode-webview:// origins without an explicit --cors entry", () =>
+    Effect.gen(function* () {
+      // VS Code assigns each WebviewPanel a fresh `vscode-webview://<random-guid>`
+      // origin. Without this allowance, extensions that embed opencode would
+      // have to restart the process on every new panel to refresh the --cors
+      // allowlist (killing any in-flight turn). Mirrors the existing tauri
+      // allowance for the same reason.
+      const response = yield* HttpClientRequest.options(InstancePaths.path).pipe(
+        HttpClientRequest.setHeaders({
+          origin: "vscode-webview://0abc1234-5678-90de-fghi-jklmnopqrstu",
+          "access-control-request-method": "GET",
+          "access-control-request-headers": "authorization",
+        }),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(204)
+      expect(response.headers["access-control-allow-origin"]).toBe(
+        "vscode-webview://0abc1234-5678-90de-fghi-jklmnopqrstu",
+      )
+    }),
+  )
 })

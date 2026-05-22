@@ -15,6 +15,7 @@ export function isAllowedCorsOrigin(input: string | undefined, opts?: CorsOption
   if (input.startsWith("oc://renderer")) return true
   if (input === "tauri://localhost" || input === "http://tauri.localhost" || input === "https://tauri.localhost")
     return true
+  if (input.startsWith("vscode-webview://")) return true
   if (opencodeOrigin.test(input)) return true
   return opts?.cors?.includes(input) ?? false
 }
