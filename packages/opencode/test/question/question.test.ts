@@ -184,11 +184,17 @@ it.instance(
 )
 
 it.instance(
-  "reply - does nothing for unknown requestID",
+  "reply - fails for unknown requestID",
   () =>
-    replyEffect({
-      requestID: QuestionID.make("que_unknown"),
-      answers: [["Option 1"]],
+    Effect.gen(function* () {
+      const exit = yield* replyEffect({
+        requestID: QuestionID.make("que_unknown"),
+        answers: [["Option 1"]],
+      }).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "Question.NotFoundError", requestID: "que_unknown" })
+      }
     }),
   { git: true },
 )
@@ -253,9 +259,18 @@ it.instance(
   { git: true },
 )
 
-it.instance("reject - does nothing for unknown requestID", () => rejectEffect(QuestionID.make("que_unknown")), {
-  git: true,
-})
+it.instance(
+  "reject - fails for unknown requestID",
+  () =>
+    Effect.gen(function* () {
+      const exit = yield* rejectEffect(QuestionID.make("que_unknown")).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "Question.NotFoundError", requestID: "que_unknown" })
+      }
+    }),
+  { git: true },
+)
 
 // multiple questions tests
 
