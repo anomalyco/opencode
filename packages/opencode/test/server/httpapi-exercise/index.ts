@@ -329,58 +329,37 @@ const scenarios: Scenario[] = [
   http.protected
     .post("/mcp/{name}/auth", "mcp.auth.start")
     .at((ctx) => ({ path: route("/mcp/{name}/auth", { name: "httpapi-missing" }), headers: ctx.headers() }))
-    .json(
-      400,
-      (body) => {
-        object(body)
-        check(typeof body.error === "string", "unsupported MCP OAuth response should include error")
-      },
-      "status",
-    ),
+    .json(404, object, "status"),
   http.protected
     .delete("/mcp/{name}/auth", "mcp.auth.remove")
     .mutating()
     .at((ctx) => ({ path: route("/mcp/{name}/auth", { name: "httpapi-missing" }), headers: ctx.headers() }))
-    .json(200, (body) => {
-      object(body)
-      check(body.success === true, "MCP auth removal should return success")
-    }),
+    .json(404, object, "status"),
   http.protected
     .post("/mcp/{name}/auth/authenticate", "mcp.auth.authenticate")
     .at((ctx) => ({
       path: route("/mcp/{name}/auth/authenticate", { name: "httpapi-missing" }),
       headers: ctx.headers(),
     }))
-    .json(
-      400,
-      (body) => {
-        object(body)
-        check(typeof body.error === "string", "unsupported MCP OAuth authenticate response should include error")
-      },
-      "status",
-    ),
+    .json(404, object, "status"),
   http.protected
     .post("/mcp/{name}/auth/callback", "mcp.auth.callback")
     .at((ctx) => ({
       path: route("/mcp/{name}/auth/callback", { name: "httpapi-missing" }),
       headers: ctx.headers(),
-      body: { code: 1 },
+      body: { code: "code" },
     }))
-    .status(400),
+    .json(404, object, "status"),
   http.protected
     .post("/mcp/{name}/connect", "mcp.connect")
     .mutating()
     .at((ctx) => ({ path: route("/mcp/{name}/connect", { name: "httpapi-missing" }), headers: ctx.headers() }))
-    .json(200, (body) => {
-      check(body === true, "missing MCP connect should remain a no-op success")
-    }),
+    .json(404, object, "status"),
   http.protected
     .post("/mcp/{name}/disconnect", "mcp.disconnect")
     .mutating()
     .at((ctx) => ({ path: route("/mcp/{name}/disconnect", { name: "httpapi-missing" }), headers: ctx.headers() }))
-    .json(200, (body) => {
-      check(body === true, "missing MCP disconnect should remain a no-op success")
-    }),
+    .json(404, object, "status"),
   http.protected.get("/pty/shells", "pty.shells").json(200, array),
   http.protected.get("/pty", "pty.list").json(200, array),
   http.protected
