@@ -43,6 +43,7 @@ export const openaiHelper: ProviderHelper = ({ workspaceID }) => ({
       retrieve: () => usage,
     }
   },
+  extractUsage: (response: any) => response.usage ?? response.response?.usage,
   normalizeUsage: (usage: Usage) => {
     const inputTokens = usage.input_tokens ?? 0
     const outputTokens = usage.output_tokens ?? 0
