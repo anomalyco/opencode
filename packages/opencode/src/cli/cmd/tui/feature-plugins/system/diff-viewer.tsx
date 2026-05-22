@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@opencode-ai/plugin/tui"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { TextAttributes, type BorderSides, type BoxRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
@@ -80,7 +80,12 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
   const params = () =>
     ("params" in props.api.route.current ? props.api.route.current.params : undefined) as
-      | { mode?: DiffMode; sessionID?: string; messageID?: string }
+      | {
+          mode?: DiffMode
+          sessionID?: string
+          messageID?: string
+          returnRoute?: TuiRouteCurrent
+        }
       | undefined
   const mode = () => params()?.mode ?? "git"
   const diffInput = createMemo(() => ({
@@ -369,8 +374,13 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       title: "Close diff viewer",
       category: "VCS",
       run() {
+        const returnRoute = params()?.returnRoute
         props.api.ui.dialog.clear()
-        props.api.route.navigate("home")
+
+        props.api.route.navigate(
+          returnRoute?.name ?? "home",
+          returnRoute && "params" in returnRoute ? returnRoute.params : undefined,
+        )
       },
     },
     {
@@ -619,6 +629,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
               mode: option.value,
               sessionID: params()?.sessionID,
               messageID: params()?.messageID,
+              returnRoute: params()?.returnRoute,
             })
           },
         }))}
@@ -933,6 +944,7 @@ const tui: TuiPlugin = async (api) => {
           api.route.navigate(ROUTE, {
             mode: "git",
             sessionID: "params" in api.route.current ? api.route.current.params?.sessionID : undefined,
+            returnRoute: api.route.current,
           })
           api.ui.dialog.clear()
         },
