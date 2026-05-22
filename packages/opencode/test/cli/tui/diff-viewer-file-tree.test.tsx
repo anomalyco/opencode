@@ -155,7 +155,7 @@ async function renderFrame(component: () => JSX.Element) {
   const app = await testRender(() => withTheme(component), { width: 40, height: 10 })
   try {
     await renderOnceSettled(app)
-    return app.captureCharFrame()
+    return await captureSettledFrame(app)
   } finally {
     app.renderer.destroy()
   }
@@ -165,6 +165,16 @@ async function renderOnceSettled(app: Awaited<ReturnType<typeof testRender>>) {
   await app.renderOnce()
   await new Promise((resolve) => setTimeout(resolve, 25))
   await app.renderOnce()
+}
+
+async function captureSettledFrame(app: Awaited<ReturnType<typeof testRender>>) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const frame = app.captureCharFrame()
+    if (frame.trim().length > 0) return frame
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    await app.renderOnce()
+  }
+  return app.captureCharFrame()
 }
 
 function withTheme(component: () => JSX.Element) {
