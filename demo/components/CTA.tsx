@@ -72,13 +72,24 @@ export function CTA() {
 
     setStatus("submitting")
 
-    // フォーム送信先は CORS を返さない想定で no-cors で投げる。
-    // レスポンスは読めないが、fetch 自体が落ちた場合のみ error 扱いにする。
+    // Pardot Form Handler は application/x-www-form-urlencoded しか
+    // 受け付けない (multipart/form-data で投げると 400 "form handler page
+    // with no content" を返す)。FormData を fetch.body にそのまま渡すと
+    // browser が自動で multipart にしてしまうので、URLSearchParams に
+    // 詰め替えて urlencoded で送る。
+    //
+    // CORS は返らない想定で no-cors。レスポンスは読めないが、fetch 自体が
+    // 落ちた場合のみ error 扱いにする。
+    const params = new URLSearchParams()
+    for (const [key, value] of fd.entries()) {
+      if (typeof value === "string") params.append(key, value)
+    }
+
     try {
       await fetch(PARDOT_ENDPOINT, {
         method: "POST",
         mode: "no-cors",
-        body: fd,
+        body: params,
       })
       setStatus("success")
       form.reset()
