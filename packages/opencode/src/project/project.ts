@@ -22,6 +22,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AbsolutePath, NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { serviceUse } from "@/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { SyncEvent } from "../sync"
 
 const log = Log.create({ service: "project" })
 
@@ -59,6 +60,7 @@ export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const Event = {
   Updated: BusEvent.define("project.updated", Info),
+  Deleted: BusEvent.define("project.deleted", Info),
 }
 
 type Row = typeof ProjectTable.$inferSelect
@@ -132,6 +134,7 @@ export interface Interface {
   readonly sandboxes: (id: ProjectID) => Effect.Effect<string[]>
   readonly addSandbox: (id: ProjectID, directory: string) => Effect.Effect<void>
   readonly removeSandbox: (id: ProjectID, directory: string) => Effect.Effect<void>
+  readonly remove: (id: ProjectID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Project") {}
@@ -147,6 +150,7 @@ export const layer = Layer.effect(
     const projectV2 = yield* ProjectV2.Service
     const bus = yield* Bus.Service
     const flags = yield* RuntimeFlags.Service
+    const sync = yield* SyncEvent.Service
 
     const git = Effect.fnUntraced(
       function* (args: string[], opts?: { cwd?: string }) {
@@ -173,6 +177,15 @@ export const layer = Layer.effect(
           directory: "global",
           project: data.id,
           payload: { type: Event.Updated.type, properties: data },
+        }),
+      )
+
+    const emitDeleted = (data: Info) =>
+      Effect.sync(() =>
+        GlobalBus.emit("event", {
+          directory: "global",
+          project: data.id,
+          payload: { type: Event.Deleted.type, properties: data },
         }),
       )
 
@@ -461,6 +474,27 @@ export const layer = Layer.effect(
       yield* emitUpdated(fromRow(result))
     })
 
+    const remove: Interface["remove"] = Effect.fn("Project.remove")(function* (id: ProjectID) {
+      if (id === ProjectID.global) throw new Error("Cannot delete the default project")
+      const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+      if (!row) throw new Error(`Project not found: ${id}`)
+
+      const data = fromRow(row)
+
+      const sessions = yield* db((d) =>
+        d.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.project_id, id)).all(),
+      )
+      yield* Effect.forEach(
+        sessions,
+        (session) => sync.remove(session.id),
+        { concurrency: "unbounded" },
+      )
+
+      yield* db((d) => d.delete(ProjectTable).where(eq(ProjectTable.id, id)).run())
+
+      yield* emitDeleted(data)
+    })
+
     return Service.of({
       init,
       fromDirectory,
@@ -473,6 +507,7 @@ export const layer = Layer.effect(
       sandboxes,
       addSandbox,
       removeSandbox,
+      remove,
     })
   }),
 )
@@ -484,6 +519,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(CrossSpawnSpawner.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
+  Layer.provide(SyncEvent.defaultLayer),
 )
 
 export const use = serviceUse(Service)
