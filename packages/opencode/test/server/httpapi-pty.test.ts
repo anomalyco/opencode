@@ -147,6 +147,33 @@ describe("pty HttpApi bridge", () => {
     expect(response.status).toBe(404)
   })
 
+  test("returns typed not found errors for missing PTY HTTP resources", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const headers = { "x-opencode-directory": tmp.path }
+    const missingID = String(PtyID.ascending())
+    const expected = {
+      _tag: "PtyNotFoundError",
+      ptyID: missingID,
+      message: `PTY session not found: ${missingID}`,
+    }
+
+    const found = await app().request(PtyPaths.get.replace(":ptyID", missingID), { headers })
+    expect(found.status).toBe(404)
+    expect(await found.json()).toEqual(expected)
+
+    const updated = await app().request(PtyPaths.update.replace(":ptyID", missingID), {
+      method: "PUT",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ title: "missing" }),
+    })
+    expect(updated.status).toBe(404)
+    expect(await updated.json()).toEqual(expected)
+
+    const removed = await app().request(PtyPaths.remove.replace(":ptyID", missingID), { method: "DELETE", headers })
+    expect(removed.status).toBe(404)
+    expect(await removed.json()).toEqual(expected)
+  })
+
   test("returns typed errors for PTY connect token failures", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
     const headers = { "x-opencode-directory": tmp.path }
