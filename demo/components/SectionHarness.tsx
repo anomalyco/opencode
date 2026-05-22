@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { MicroCta } from "./MicroCta"
 
 // セキュアコードのハーネスは「AI に機密を渡さない」ためのものではない。
 // 機密は TEE 越しに AI へ渡してよい設計なので、ハーネスの役割は
@@ -38,6 +39,8 @@ export function SectionHarness() {
         <PermissionGate />
         <ExternalAccessControl />
         <CentralMcpManagement />
+
+        <MicroCta label="ハーネス連携を相談する" />
       </div>
     </section>
   )

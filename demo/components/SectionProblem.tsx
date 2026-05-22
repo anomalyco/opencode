@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { MicroCta } from "./MicroCta"
 
 const RISKS = [
   {
@@ -78,6 +79,8 @@ export function SectionProblem() {
       >
         Acompanyセキュアコードは、この壁を 3 つのレイヤで壊す。
       </motion.div>
+
+      <MicroCta label="課題への解決策を相談する" />
     </section>
   )
 }

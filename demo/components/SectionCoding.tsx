@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { MicroCta } from "./MicroCta"
 import { TerminalChrome } from "./TerminalChrome"
 
 // 価値 3: 実際の AI コーディング支援フローを、ターミナル風に体験させる。
@@ -143,6 +144,8 @@ export function SectionCoding() {
             </div>
           </motion.div>
         </div>
+
+        <MicroCta label="実機デモを依頼する" />
       </div>
     </section>
   )

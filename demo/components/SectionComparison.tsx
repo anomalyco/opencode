@@ -1,6 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
+import { MicroCta } from "./MicroCta"
 
 type Row = {
   feature: string
@@ -96,6 +97,8 @@ export function SectionComparison() {
             <span className="text-sc-text-dim">—</span> 非対応・対象外
           </span>
         </div>
+
+        <MicroCta label="自社への導入を相談する" />
       </div>
     </section>
   )

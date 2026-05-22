@@ -2,6 +2,7 @@
 
 import { motion, useScroll, useTransform, type MotionValue } from "framer-motion"
 import { useRef } from "react"
+import { MicroCta } from "./MicroCta"
 
 // 4 ステップの scrollytelling。各ステップが progress の 0..1 の区間を持つ。
 //   01 リモートアテステーション (TEE の正当性を検証)
@@ -94,6 +95,7 @@ export function SectionTEE() {
   const retBadgeOpacity = useTransform(a3, [0, 0.12], [0, 1], { clamp: true })
 
   return (
+    <>
     <section
       id="tee"
       ref={ref}
@@ -400,6 +402,13 @@ export function SectionTEE() {
         </div>
       </div>
     </section>
+    {/* sticky scrollytelling 終了後の自然な位置に出すため、
+        section の外で MicroCta を出す。inside だと sticky viewport に
+        張り付き続けて主役の図と CTA が常時並ぶ形になる。 */}
+    <div className="mx-auto max-w-6xl px-6 pb-16 md:pb-24">
+      <MicroCta label="TEE 構成の詳細を相談する" />
+    </div>
+    </>
   )
 }
 
