@@ -317,13 +317,9 @@ const runImageScenario = (context: GoldenScenarioContext) =>
     ])
   })
 
-// Reproduces the production failure where a tool (e.g. `read` on a screenshot
-// file) returns image bytes as part of `tool-result` content. The original
-// session ses_1b2d792ceffeTL7SQcVS940RGv hit "OpenAI Responses stream error"
-// because the protocol lowered the base64 image into a JSON-stringified string
-// shoved inside `function_call_output.output`, which the provider rejected.
-// The correct shape is a structured `[{type:input_text}, {type:input_image}]`
-// array.
+// Reproduces a tool-result image round trip: a tool returns image bytes, and
+// the next model turn must receive provider-native image content instead of a
+// JSON-stringified base64 blob.
 const screenshotToolName = "read_screenshot"
 const runImageToolResultScenario = (context: GoldenScenarioContext) =>
   Effect.gen(function* () {

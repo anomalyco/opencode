@@ -58,20 +58,17 @@ const OpenAIResponsesReasoningItem = Schema.Struct({
 })
 
 // `function_call_output.output` accepts either a plain string or an ordered
-// array of content items so tools can return images / files in addition to
-// text. The wire shape mirrors the OpenAI Responses API:
+// array of content items so tools can return images in addition to text.
 // https://platform.openai.com/docs/api-reference/responses/object
 const OpenAIResponsesFunctionCallOutputContent = Schema.Union([
   OpenAIResponsesInputText,
   OpenAIResponsesInputImage,
 ])
-type OpenAIResponsesFunctionCallOutputContent = Schema.Schema.Type<typeof OpenAIResponsesFunctionCallOutputContent>
 
 const OpenAIResponsesFunctionCallOutput = Schema.Union([
   Schema.String,
   Schema.Array(OpenAIResponsesFunctionCallOutputContent),
 ])
-type OpenAIResponsesFunctionCallOutput = Schema.Schema.Type<typeof OpenAIResponsesFunctionCallOutput>
 
 const OpenAIResponsesInputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
@@ -268,11 +265,8 @@ const lowerUserContent = Effect.fn("OpenAIResponses.lowerUserContent")(function*
   return yield* ProviderShared.unsupportedContent("OpenAI Responses", "user", ["text", "media"])
 })
 
-// Tool results may carry structured content (text + images) so that vision-
-// capable tools like screenshot readers can hand the model the bytes the user
-// actually wanted analyzed. JSON-stringifying media into a single string
-// silently inflates the prompt by megabytes and is rejected by the provider
-// as an over-large or malformed `function_call_output`.
+// Tool results may carry structured text/images. Keep media as provider-native
+// content instead of JSON-stringifying base64 into a prompt string.
 const lowerToolResultContentItem = Effect.fn("OpenAIResponses.lowerToolResultContentItem")(function* (
   item: ToolResultContentPart,
 ) {
@@ -280,7 +274,7 @@ const lowerToolResultContentItem = Effect.fn("OpenAIResponses.lowerToolResultCon
   if (item.mediaType.startsWith("image/"))
     return {
       type: "input_image" as const,
-      image_url: item.data.startsWith("data:") ? item.data : `data:${item.mediaType};base64,${item.data}`,
+      image_url: ProviderShared.mediaDataUrl(item),
     }
   return yield* invalid(`OpenAI Responses tool-result media content only supports images, got ${item.mediaType}`)
 })

@@ -26,6 +26,19 @@ const request = LLM.request({
 
 const configEnv = (env: Record<string, string>) => Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })))
 
+type OpenAIToolOutput = Extract<
+  OpenAIResponses.OpenAIResponsesBody["input"][number],
+  { readonly type: "function_call_output" }
+>
+
+const expectToolOutput = (body: OpenAIResponses.OpenAIResponsesBody): OpenAIToolOutput => {
+  const output = body.input.find(
+    (item): item is OpenAIToolOutput => "type" in item && item.type === "function_call_output",
+  )
+  expect(output).toBeDefined()
+  return output!
+}
+
 describe("OpenAI Responses route", () => {
   it.effect("prepares OpenAI Responses target", () =>
     Effect.gen(function* () {
@@ -248,13 +261,8 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  // Regression: a tool returning an image (e.g. the `read` tool on a screenshot
-  // file, or a `screenshot` browser tool) must lower the image as a structured
-  // `input_image` content item inside `function_call_output.output`, NOT as a
-  // JSON-stringified blob containing a multi-megabyte `data:image/png;base64,…`
-  // URL. The latter caused OpenAI Responses to fail the stream with a bare
-  // "OpenAI Responses stream error" because the request was effectively
-  // invalid / oversized.
+  // Regression: screenshot/read tool results must stay structured so base64
+  // image data is not JSON-stringified into `function_call_output.output`.
   it.effect("lowers image tool-result content as structured input_image items", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
@@ -277,12 +285,7 @@ describe("OpenAI Responses route", () => {
         }),
       )
 
-      const toolOutput = prepared.body.input.find(
-        (item): item is Extract<typeof item, { readonly type: "function_call_output" }> =>
-          "type" in item && item.type === "function_call_output",
-      )
-      expect(toolOutput).toBeDefined()
-      expect(toolOutput!.output).toEqual([
+      expect(expectToolOutput(prepared.body).output).toEqual([
         { type: "input_text", text: "Image read successfully" },
         { type: "input_image", image_url: "data:image/png;base64,AAECAw==" },
       ])
@@ -307,12 +310,9 @@ describe("OpenAI Responses route", () => {
         }),
       )
 
-      const toolOutput = prepared.body.input.find(
-        (item): item is Extract<typeof item, { readonly type: "function_call_output" }> =>
-          "type" in item && item.type === "function_call_output",
-      )
-      expect(toolOutput).toBeDefined()
-      expect(toolOutput!.output).toEqual([{ type: "input_image", image_url: "data:image/png;base64,AAECAw==" }])
+      expect(expectToolOutput(prepared.body).output).toEqual([
+        { type: "input_image", image_url: "data:image/png;base64,AAECAw==" },
+      ])
     }),
   )
 
