@@ -907,6 +907,43 @@ describe("session.compaction.process", () => {
     }),
   )
 
+  // Regression test for https://github.com/anomalyco/opencode/issues/15533:
+  // when the assistant message that triggered auto-compaction already
+  // finished naturally (finish != tool-calls, no pending tool calls), the
+  // synthetic Continue must NOT be injected and process() must return "stop"
+  // so the prompt loop exits instead of looping forever.
+  it.instance(
+    "skips synthetic continue and stops when prior assistant ended naturally",
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      const user = yield* createUserMessage(session.id, "hello")
+      yield* createAssistantMessage(session.id, user.id, test.directory)
+      yield* createCompactionMarker(session.id)
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+      const parent = msgs.at(-1)?.info.id
+      expect(parent).toBeTruthy()
+
+      const result = yield* SessionCompaction.use.process({
+        parentID: parent!,
+        messages: msgs,
+        sessionID: session.id,
+        auto: true,
+      })
+
+      const all = yield* ssn.messages({ sessionID: session.id })
+      const synthetic = all.find((m) =>
+        m.parts.some(
+          (p) => p.type === "text" && p.metadata?.compaction_continue === true,
+        ),
+      )
+
+      expect(result).toBe("stop")
+      expect(synthetic).toBeUndefined()
+    }),
+  )
+
   itCompaction.instance(
     "persists tail_start_id for retained recent turns",
     Effect.gen(function* () {

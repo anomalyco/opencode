@@ -474,6 +474,29 @@ export const layer = Layer.effect(
         })
       }
 
+      // Detect whether the assistant that triggered this auto-compaction ended
+      // its turn naturally (finish set, not "tool-calls"/"unknown", no pending
+      // tool calls). If so, the synthetic "Continue if you have next steps..."
+      // follow-up below would push the model into another turn, which itself
+      // overflows, triggers another compaction, injects another Continue —
+      // infinite loop. See https://github.com/anomalyco/opencode/issues/15533
+      let lastRealAssistant: { info: MessageV2.Assistant; parts: MessageV2.Part[] } | undefined
+      for (let i = input.messages.length - 1; i >= 0; i--) {
+        const m = input.messages[i]!
+        if (m.info.role !== "assistant") continue
+        if (m.info.summary || !m.info.finish) continue
+        lastRealAssistant = m as { info: MessageV2.Assistant; parts: MessageV2.Part[] }
+        break
+      }
+      const hasPendingToolCalls =
+        lastRealAssistant?.parts.some(
+          (part) => part.type === "tool" && !part.metadata?.providerExecuted,
+        ) ?? false
+      const assistantEndedNaturally =
+        lastRealAssistant !== undefined &&
+        !["tool-calls", "unknown"].includes(lastRealAssistant.info.finish ?? "") &&
+        !hasPendingToolCalls
+
       if (result === "continue" && input.auto) {
         if (replay) {
           const original = replay.info
@@ -503,7 +526,7 @@ export const layer = Layer.effect(
           }
         }
 
-        if (!replay) {
+        if (!replay && !assistantEndedNaturally) {
           const info = yield* provider.getProvider(userMessage.model.providerID)
           if (
             (yield* plugin.trigger(
@@ -578,6 +601,13 @@ export const layer = Layer.effect(
         }
         yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
       }
+      // When the previous assistant turn ended naturally and there is no user
+      // message to replay, exit the prompt loop. Without this, the loop would
+      // re-iterate, hit the natural break condition only to find that the
+      // compaction user message is newer than the last assistant, and re-enter
+      // the model call — re-triggering #15533. Returning "stop" lets the user
+      // resume with their next prompt instead.
+      if (result === "continue" && input.auto && !replay && assistantEndedNaturally) return "stop"
       return result
     })
 
