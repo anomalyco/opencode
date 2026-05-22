@@ -2988,11 +2988,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "McpServerNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
                 }
               }
             }
@@ -3067,11 +3067,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "McpServerNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
                 }
               }
             }
@@ -3146,11 +3146,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "McpServerNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
                 }
               }
             }
@@ -3241,11 +3241,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "McpServerNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
                 }
               }
             }
@@ -3312,6 +3312,16 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "McpServerNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
+                }
+              }
+            }
           }
         },
         "description": "Connect an MCP server.",
@@ -3371,6 +3381,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "McpServerNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerNotFoundError"
                 }
               }
             }
@@ -15380,6 +15400,23 @@
           }
         },
         "required": ["error"],
+        "additionalProperties": false
+      },
+      "McpServerNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["McpServerNotFoundError"]
+          },
+          "name": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "name", "message"],
         "additionalProperties": false
       },
       "NotFoundError": {
