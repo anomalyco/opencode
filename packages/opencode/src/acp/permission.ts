@@ -57,7 +57,16 @@ export class Handler {
         toolCall: {
           toolCallId: permission.tool?.callID ?? permission.id,
           status: "pending",
-          title: permission.permission,
+          title:
+            stringValue(permission.metadata?.description) ??
+            stringValue(permission.metadata?.command) ??
+            stringValue(permission.metadata?.filepath) ??
+            stringValue(permission.metadata?.filePath) ??
+            stringValue(permission.metadata?.pattern) ??
+            stringValue(permission.metadata?.url) ??
+            stringValue(permission.metadata?.repository) ??
+            stringValue(permission.metadata?.path) ??
+            permission.permission,
           rawInput: permission.metadata,
           kind: toToolKind(permission.permission),
           locations: toLocations(permission.permission, permission.metadata),
