@@ -7,6 +7,8 @@ import {
   requireNonEmpty,
   validateWorkosSession,
   WORKOS_SESSION_COOKIE_NAME,
+  workosSessionCookieBase,
+  workosSessionCookieOptions,
 } from "@veritly/auth-shared"
 import { Log } from "../../util/log"
 import { opencodeSessionResolver } from "../session-resolver"
@@ -30,23 +32,8 @@ function getWorkOS() {
   return cachedWorkOS
 }
 
-/** Browser persistence for the sealed session (WorkOS access JWT is shorter-lived; it is refreshed by the server on demand). */
-const WOS_SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 7
-
-/** Path/domain/flags shared by set and delete. Omit `maxAge` so delete can clear the cookie. */
-function cookieBase() {
-  const isProduction = process.env["NODE_ENV"] === "production"
-  return {
-    path: "/",
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: "lax" as const,
-    domain: isProduction ? ".veritly.co.uk" : undefined,
-  }
-}
-
 export function getCookieOptions() {
-  return { ...cookieBase(), maxAge: WOS_SESSION_MAX_AGE_SEC }
+  return workosSessionCookieOptions()
 }
 
 export type SessionUser = User
@@ -112,10 +99,10 @@ export const AuthRoutes = new Hono()
             cookiePassword,
           })
           const url = await session.getLogoutUrl()
-          deleteCookie(c, COOKIE_NAME, { ...cookieBase(), path: "/" })
+          deleteCookie(c, COOKIE_NAME, workosSessionCookieBase())
           return c.redirect(url)
         } catch {
-          deleteCookie(c, COOKIE_NAME, { ...cookieBase(), path: "/" })
+          deleteCookie(c, COOKIE_NAME, workosSessionCookieBase())
         }
       }
 
@@ -134,7 +121,7 @@ export const AuthRoutes = new Hono()
       const result = await auth.resolve(c.req.raw)
 
       if (!result.ok) {
-        deleteCookie(c, COOKIE_NAME, { ...cookieBase(), path: "/" })
+        deleteCookie(c, COOKIE_NAME, workosSessionCookieBase())
         return c.json({ user: null })
       }
 
@@ -145,7 +132,7 @@ export const AuthRoutes = new Hono()
       return c.json({ user: result.user })
     } catch (error) {
       log.warn("Failed to validate session", { error })
-      deleteCookie(c, COOKIE_NAME, { ...cookieBase(), path: "/" })
+      deleteCookie(c, COOKIE_NAME, workosSessionCookieBase())
       return c.json({ user: null })
     }
   })

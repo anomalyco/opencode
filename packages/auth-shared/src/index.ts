@@ -88,21 +88,36 @@ export async function validateWorkosSession(input: ValidateWorkosSessionInput): 
   return { ok: false, reason: "Invalid WorkOS session" }
 }
 
+/** Shared Set-Cookie shape for `wos-session` (api + univer-compat). */
+export function workosSessionCookieBase() {
+  const prod = process.env.NODE_ENV === "production"
+  return {
+    path: "/" as const,
+    httpOnly: true,
+    secure: prod,
+    sameSite: "lax" as const,
+    ...(prod ? { domain: ".veritly.co.uk" as const } : {}),
+  }
+}
+
+const WOS_SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 7
+
+export function workosSessionCookieOptions() {
+  return { ...workosSessionCookieBase(), maxAge: WOS_SESSION_MAX_AGE_SEC }
+}
+
 function cookie(request: Request, name: string) {
   const header = request.headers.get("cookie")
   if (!header) return
-  return header
-    .split(";")
-    .map((part) => part.trim())
-    .map((part) => {
-      const index = part.indexOf("=")
-      if (index === -1) return
-      return {
-        name: part.slice(0, index),
-        value: decodeURIComponent(part.slice(index + 1)),
-      }
-    })
-    .find((part) => part?.name === name)?.value
+  let value: string | undefined
+  for (const part of header.split(";")) {
+    const trimmed = part.trim()
+    const index = trimmed.indexOf("=")
+    if (index === -1) continue
+    if (trimmed.slice(0, index) !== name) continue
+    value = decodeURIComponent(trimmed.slice(index + 1))
+  }
+  return value
 }
 
 export function fixedSessionResolver(id: string): SessionResolver {

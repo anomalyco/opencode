@@ -32,6 +32,8 @@ spec:
               value: "8080"
             - name: LISTEN_HOST
               value: "0.0.0.0"
+            - name: NODE_ENV
+              value: "production"
             - name: UNIVER_COMPAT_PERSIST_EVERY_REV
               valueFrom:
                 configMapKeyRef:

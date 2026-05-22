@@ -1,24 +1,12 @@
 import type { Context, Next } from "hono"
 import { setCookie } from "hono/cookie"
 import type { SessionResolver } from "@veritly/auth-shared"
-import { WORKOS_SESSION_COOKIE_NAME } from "@veritly/auth-shared"
+import { WORKOS_SESSION_COOKIE_NAME, workosSessionCookieOptions } from "@veritly/auth-shared"
 import { assertSafeProjectSegment } from "./object-keys"
 import { isUniverCompatPublicPath } from "./compat-public-path"
 import { isUniverCompatProjectOptionalPath } from "./project-scope"
 import { runWithRequestUserAsync } from "./request-user"
 import { runWithRequestProjectAsync } from "./request-project"
-
-function compatSessionCookieOptions() {
-  const prod = process.env.NODE_ENV === "production"
-  return {
-    path: "/",
-    httpOnly: true,
-    secure: prod,
-    sameSite: "lax" as const,
-    maxAge: 60 * 60 * 24 * 7,
-    ...(prod ? { domain: ".veritly.co.uk" as const } : {}),
-  }
-}
 
 export function univerCompatAuthMiddleware(auth: SessionResolver) {
   return async (c: Context, next: Next) => {
@@ -36,7 +24,7 @@ export function univerCompatAuthMiddleware(auth: SessionResolver) {
       }
 
       if (result.refreshedSessionData) {
-        setCookie(c, WORKOS_SESSION_COOKIE_NAME, result.refreshedSessionData, compatSessionCookieOptions())
+        setCookie(c, WORKOS_SESSION_COOKIE_NAME, result.refreshedSessionData, workosSessionCookieOptions())
       }
 
       return await runWithRequestUserAsync(result.user.id, async () => {
