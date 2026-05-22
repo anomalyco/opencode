@@ -6,7 +6,7 @@ import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 export type AtOption =
   | { type: "agent"; name: string; display: string }
-  | { type: "file"; path: string; display: string; recent?: boolean }
+  | { type: "file"; path: string; display: string; content?: string; recent?: boolean }
 
 export interface SlashCommand {
   id: string
@@ -79,9 +79,10 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                     )
                   }
 
-                  const isDirectory = item.path.endsWith("/")
-                  const directory = isDirectory ? item.path : getDirectory(item.path)
-                  const filename = isDirectory ? "" : getFilename(item.path)
+                  const displayPath = item.display || item.path
+                  const isDirectory = displayPath.endsWith("/")
+                  const directory = isDirectory ? displayPath : getDirectory(displayPath)
+                  const filename = isDirectory ? "" : getFilename(displayPath)
 
                   return (
                     <button

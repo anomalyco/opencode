@@ -191,26 +191,30 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const browseAbsolutePath = createMemo(() => localPath(browseDisplayPath()))
   const targetPath = createMemo(() => localPath(query()))
 
-  const [entries] = createResource(browseAbsolutePath, async (directory) => {
-    if (!directory || !platform.listLocalDirectory) return [] as BrowseEntry[]
-    const list = await platform.listLocalDirectory(directory).catch(() => [])
-    const directories = list
-      .filter((item) => item.kind === "directory")
-      .map((item) => ({
-        name: getFilename(item.path),
-        path: trimTrailing(normalizeDriveRoot(item.path)),
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-    if (!resolvedHome() && browseDisplayPath().startsWith("~/") && directories[0]) {
-      setResolvedHome(parentOf(directories[0].path))
-    }
-    return directories
-  })
+  const [entries] = createResource(
+    browseAbsolutePath,
+    async (directory) => {
+      if (!directory || !platform.listLocalDirectory) return [] as BrowseEntry[]
+      const list = await platform.listLocalDirectory(directory).catch(() => [])
+      const directories = list
+        .filter((item) => item.kind === "directory")
+        .map((item) => ({
+          name: getFilename(item.path),
+          path: trimTrailing(normalizeDriveRoot(item.path)),
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+      if (!resolvedHome() && browseDisplayPath().startsWith("~/") && directories[0]) {
+        setResolvedHome(parentOf(directories[0].path))
+      }
+      return directories
+    },
+    { initialValue: [] as BrowseEntry[] },
+  )
 
   const filteredEntries = createMemo(() => {
     const needle = browseFilter().toLowerCase()
     const includeHidden = showHidden() || needle.startsWith(".")
-    return (entries() ?? []).filter((entry) => {
+    return (entries.latest ?? []).filter((entry) => {
       if (!includeHidden && entry.name.startsWith(".")) return false
       return entry.name.toLowerCase().startsWith(needle)
     })
@@ -316,17 +320,6 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
       class="w-full max-w-[720px]"
     >
       <div class="flex min-h-[520px] flex-col gap-3">
-        <div class="flex items-center justify-between gap-4">
-          <label class="flex items-center gap-2 text-12-regular text-text-weak">
-            <input
-              type="checkbox"
-              checked={showHidden()}
-              onChange={(event) => setShowHidden(event.currentTarget.checked)}
-            />
-            <span>{language.t("dialog.directory.showHidden")}</span>
-          </label>
-        </div>
-
         <div class="relative">
           <div class="pointer-events-none absolute left-3 top-1/2 flex size-4 -translate-y-1/2 items-center justify-center text-icon-weak">
             <Icon name="folder-add-left" size="small" />
@@ -358,8 +351,16 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         </div>
 
         <div class="min-h-0 flex-1 overflow-hidden rounded-xl border border-border-weak-base bg-surface-raised-base">
-          <div class="border-b border-border-weak-base px-4 py-2 text-11-regular uppercase tracking-wide text-text-weak">
-            {language.t("session.new.meta.directory")}
+          <div class="flex items-center justify-between gap-4 border-b border-border-weak-base px-4 py-2 text-11-regular text-text-weak">
+            <span class="uppercase tracking-wide">{language.t("session.new.meta.directory")}</span>
+            <label class="flex items-center gap-2 normal-case tracking-normal">
+              <input
+                type="checkbox"
+                checked={showHidden()}
+                onChange={(event) => setShowHidden(event.currentTarget.checked)}
+              />
+              <span>{language.t("dialog.directory.showHidden")}</span>
+            </label>
           </div>
           <div class="max-h-[420px] overflow-y-auto p-2">
             <Show
