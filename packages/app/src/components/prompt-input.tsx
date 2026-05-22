@@ -416,6 +416,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     url: () => sdk.url,
     directory: () => sdk.directory,
     client: sdk.client,
+    submit: () => void submit(false),
   })
 
   createEffect((prev) => {
@@ -1333,15 +1334,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     requestAnimationFrame(() => editorRef?.focus())
   }
 
-  const handleFormSubmit = async (event: Event) => {
+  async function submit(stop: boolean) {
     if (store.mode === "draw") {
-      event.preventDefault()
       const part = await drawing.commit()
       if (!part) {
-        if (working()) {
+        if (working() && stop) {
           await abort()
           return
         }
+        if (working()) return
         showToast({
           title: language.t("prompt.toast.drawEmpty.title"),
           description: language.t("prompt.toast.drawEmpty.description"),
@@ -1349,19 +1350,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
       drawing.dispose()
-      await handleSubmit(event, [part])
+      await handleSubmit(undefined, [part])
       return
     }
 
     if (store.mode === "doc") {
-      event.preventDefault()
+      if (working() && !stop) return
       const next = await doc.commitMarkdown()
       const text = next?.text
       if (!text) {
-        if (working()) {
+        if (working() && stop) {
           await abort()
           return
         }
+        if (working()) return
         showToast({
           title: language.t("prompt.toast.docEmpty.title"),
           description: language.t("prompt.toast.docEmpty.description"),
@@ -1378,7 +1380,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           dataUrl: asset.dataUrl,
         })) ?? []),
       ]
-      const sessionID = await handleSubmit(event, {
+      const sessionID = await handleSubmit(undefined, {
         prompt: base,
         prepare: async (id) => [
           ...promptFromDocMarkdown(text, prompt.current(), await doc.refresh(id)),
@@ -1397,7 +1399,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    handleSubmit(event)
+    await handleSubmit()
+  }
+
+  const handleFormSubmit = (event: Event) => {
+    event.preventDefault()
+    void submit(true)
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -1572,7 +1579,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       ) {
         return
       }
-      handleSubmit(event)
+      void handleSubmit(event)
     }
   }
 

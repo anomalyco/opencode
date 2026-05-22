@@ -288,8 +288,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     })
   }
 
-  const handleSubmit = async (event: Event, override?: Override) => {
-    event.preventDefault()
+  const handleSubmit = async (event?: Event, override?: Override) => {
+    event?.preventDefault()
 
     const saved = prompt.current()
     const currentPrompt = Array.isArray(override) ? override : (override?.prompt ?? saved)

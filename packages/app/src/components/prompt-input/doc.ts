@@ -12,6 +12,7 @@ type PromptDocInput = {
   url: () => string
   directory: () => string
   client: OpencodeClient
+  submit: () => void
 }
 
 async function register(input: PromptDocInput, sessionID: string) {
@@ -108,7 +109,13 @@ export function createPromptDoc(input: PromptDocInput) {
     if (!el || !themeFn || !next) return
     if (!opts?.keep) await drop()
     const current = handle
-    const fresh = await createPage({ theme: themeFn, locale, sync: next, init: opts?.init ?? init })
+    const fresh = await createPage({
+      theme: themeFn,
+      locale,
+      sync: next,
+      init: opts?.init ?? init,
+      submit: input.submit,
+    })
     if (opts?.seq && opts.seq !== seq) {
       await fresh.dispose()
       return
@@ -219,7 +226,13 @@ export function createPromptDoc(input: PromptDocInput) {
   }
 
   const guard = () => handle?.guard()
-  const refocus = (target?: Element) => handle?.refocus(target)
+  const refocus = (target?: Element) => {
+    if (handle) {
+      handle.refocus(target)
+      return
+    }
+    requestAnimationFrame(() => handle?.refocus(target))
+  }
 
   const undo = () => {
     handle?.undo()

@@ -8,7 +8,7 @@ import { initDoc } from "./doc-init"
 import { link, load, remote } from "./doc-remote"
 import { ensureEffects } from "./effects"
 import { frame, settled } from "./frame"
-import { inlineReady } from "./inline-editor"
+import { inlineReady, softBreak } from "./inline-editor"
 import { OpencodeAwarenessSource, OpencodeBlobSource, OpencodeDocSource, type DocSyncOpts } from "./opencode-doc-source"
 import { scheme } from "./theme"
 
@@ -18,6 +18,12 @@ export type DocMountInput = {
   sync?: DocSyncOpts
   init?: boolean
   readonly?: boolean
+  submit?: () => void
+}
+
+const slashOpen = () => {
+  const menu = document.querySelector(".slash-menu")
+  return menu instanceof HTMLElement && menu.getClientRects().length > 0
 }
 
 type SlashCtx = {
@@ -268,6 +274,7 @@ export async function createPage(input: DocMountInput) {
   let mutate: MutationObserver | undefined
   let unload: (() => void) | undefined
   let cursors: (() => void) | undefined
+  let unkeys: (() => void) | undefined
 
   const clamp = (height: number) => Math.min(650, Math.max(50, Math.ceil(height)))
 
@@ -330,8 +337,6 @@ export async function createPage(input: DocMountInput) {
 
   const attach = async (el: HTMLElement) => {
     const attached = editor.parentElement === el
-    const events = el.style.pointerEvents
-    el.style.pointerEvents = "none"
     el.setAttribute("aria-busy", "true")
     if (!attached) el.replaceChildren(editor)
     try {
@@ -358,6 +363,27 @@ export async function createPage(input: DocMountInput) {
       unload = () => editor.removeEventListener("load", loaded, true)
       cursors?.()
       cursors = input.readonly ? undefined : watchCursorLabels(editor, el)
+      unkeys?.()
+      unkeys = undefined
+      const send = input.submit
+      if (!input.readonly && send) {
+        const onKey = (event: KeyboardEvent) => {
+          if (event.key !== "Enter" || event.isComposing || slashOpen()) return
+          if (event.altKey || event.metaKey || event.ctrlKey) return
+          if (event.shiftKey) {
+            if (!softBreak(editor)) return
+            event.preventDefault()
+            event.stopPropagation()
+            return
+          }
+          if (event.repeat) return
+          event.preventDefault()
+          event.stopPropagation()
+          send()
+        }
+        editor.addEventListener("keydown", onKey, true)
+        unkeys = () => editor.removeEventListener("keydown", onKey, true)
+      }
       if (!attached && ready) await focus(ready)
       if (input.sync && awareness && !aware) {
         collection.awarenessSync.connect()
@@ -365,13 +391,15 @@ export async function createPage(input: DocMountInput) {
       }
       await frame()
       fit(el)
+      if (!input.readonly && document.activeElement === editor.querySelector("affine-page-root")) await focus(ready)
     } finally {
-      el.style.pointerEvents = events
       el.removeAttribute("aria-busy")
     }
   }
 
   const detach = () => {
+    unkeys?.()
+    unkeys = undefined
     cursors?.()
     cursors = undefined
     resize?.disconnect()
@@ -408,7 +436,8 @@ export async function createPage(input: DocMountInput) {
   }
 
   const refocus = (target?: Element) => {
-    if (target?.closest(".inline-editor")) return
+    const active = document.activeElement
+    if (target?.closest(".inline-editor") && active instanceof Element && editor.contains(active)) return
     void focus()
   }
 
@@ -453,6 +482,8 @@ export async function createPage(input: DocMountInput) {
       editor.std.get(ThemeProvider).app$.value = scheme(theme)
     },
     dispose: async () => {
+      unkeys?.()
+      unkeys = undefined
       cursors?.()
       cursors = undefined
       resize?.disconnect()
