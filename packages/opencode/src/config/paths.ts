@@ -4,7 +4,7 @@ import path from "path"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { unique } from "remeda"
-import * as Effect from "effect/Effect"
+import { Effect, Option } from "effect"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 
 export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
@@ -23,10 +23,10 @@ export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
 export const directories = Effect.fn("ConfigPaths.directories")(function* (
   directory: string,
   worktree?: string,
-  options: { configDir?: string; disableProjectConfig?: boolean } = {},
+  options: { configDir?: Option.Option<string>; disableProjectConfig?: boolean } = {},
 ) {
   const afs = yield* AppFileSystem.Service
-  const configDir = options.configDir ?? Flag.OPENCODE_CONFIG_DIR
+  const configDir = options.configDir ?? Option.fromUndefinedOr(Flag.OPENCODE_CONFIG_DIR)
   return unique([
     Global.Path.config,
     ...(!(options.disableProjectConfig ?? Flag.OPENCODE_DISABLE_PROJECT_CONFIG)
@@ -41,7 +41,7 @@ export const directories = Effect.fn("ConfigPaths.directories")(function* (
       start: Global.Path.home,
       stop: Global.Path.home,
     })),
-    ...(configDir ? [configDir] : []),
+    ...Option.toArray(configDir),
   ])
 })
 

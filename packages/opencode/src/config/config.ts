@@ -389,10 +389,6 @@ export const layer = Layer.effect(
     const configEnv = yield* ConfigEnv.Service
     const npmSvc = yield* Npm.Service
     const http = yield* HttpClient.HttpClient
-    const configPath = Option.getOrUndefined(configEnv.config)
-    const configDir = Option.getOrUndefined(configEnv.configDir)
-    const inlineConfigContent = Option.getOrUndefined(configEnv.inlineConfigContent)
-    const permission = Option.getOrUndefined(configEnv.permission)
 
     const readConfigFile = (filepath: string) => fs.readFileStringSafe(filepath).pipe(Effect.orDie)
 
@@ -450,7 +446,11 @@ export const layer = Layer.effect(
       let result: Info = {}
       // Seed the default global config with the schema for editor completion, but avoid writing when the user
       // explicitly routes config through env-provided paths or content.
-      if (!configPath && !configDir && !inlineConfigContent) {
+      if (
+        Option.isNone(configEnv.config) &&
+        Option.isNone(configEnv.configDir) &&
+        Option.isNone(configEnv.inlineConfigContent)
+      ) {
         const file = globalConfigFile()
         if (!existsSync(file)) {
           yield* fs
@@ -600,10 +600,14 @@ export const layer = Layer.effect(
         const global = Object.keys(authEnv).length ? yield* loadGlobal(authEnv) : yield* getGlobal()
         yield* merge(Global.Path.config, global, "global")
 
-        if (configPath) {
-          yield* merge(configPath, yield* loadFile(configPath, authEnv))
-          log.debug("loaded custom config", { path: configPath })
-        }
+        yield* Option.match(configEnv.config, {
+          onNone: () => Effect.void,
+          onSome: (configPath) =>
+            Effect.gen(function* () {
+              yield* merge(configPath, yield* loadFile(configPath, authEnv))
+              log.debug("loaded custom config", { path: configPath })
+            }),
+        })
 
         if (!configEnv.disableProjectConfig) {
           for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
@@ -616,18 +620,19 @@ export const layer = Layer.effect(
         result.plugin = result.plugin || []
 
         const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree, {
-          configDir,
+          configDir: configEnv.configDir,
           disableProjectConfig: configEnv.disableProjectConfig,
         })
 
-        if (configDir) {
-          log.debug("loading config from OPENCODE_CONFIG_DIR", { path: configDir })
-        }
+        Option.match(configEnv.configDir, {
+          onNone: () => undefined,
+          onSome: (configDir) => log.debug("loading config from OPENCODE_CONFIG_DIR", { path: configDir }),
+        })
 
         const deps: Fiber.Fiber<void>[] = []
 
         for (const dir of directories) {
-          if (dir.endsWith(".opencode") || dir === configDir) {
+          if (dir.endsWith(".opencode") || Option.contains(configEnv.configDir, dir)) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
               log.debug(`loading config from ${source}`)
@@ -672,12 +677,16 @@ export const layer = Layer.effect(
           yield* mergePluginOrigins(dir, list)
         }
 
-        if (inlineConfigContent) {
-          const source = "OPENCODE_CONFIG_CONTENT"
-          const next = yield* loadConfig(inlineConfigContent, { dir: ctx.directory, source }, authEnv)
-          yield* merge(source, next, "local")
-          log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
-        }
+        yield* Option.match(configEnv.inlineConfigContent, {
+          onNone: () => Effect.void,
+          onSome: (inlineConfigContent) =>
+            Effect.gen(function* () {
+              const source = "OPENCODE_CONFIG_CONTENT"
+              const next = yield* loadConfig(inlineConfigContent, { dir: ctx.directory, source }, authEnv)
+              yield* merge(source, next, "local")
+              log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
+            }),
+        })
 
         const activeAccount = Option.getOrUndefined(
           yield* accountSvc.active().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
@@ -691,9 +700,10 @@ export const layer = Layer.effect(
               [accountSvc.config(accountID, orgID), accountSvc.token(accountID)],
               { concurrency: 2 },
             )
-            const accountEnv = Option.isSome(tokenOpt)
-              ? { ...authEnv, OPENCODE_CONSOLE_TOKEN: tokenOpt.value }
-              : authEnv
+            const accountEnv = Option.match(tokenOpt, {
+              onNone: () => authEnv,
+              onSome: (token) => ({ ...authEnv, OPENCODE_CONSOLE_TOKEN: token }),
+            })
             if (Option.isSome(tokenOpt)) yield* env.set("OPENCODE_CONSOLE_TOKEN", tokenOpt.value)
 
             if (Option.isSome(configOpt)) {
@@ -748,13 +758,16 @@ export const layer = Layer.effect(
           })
         }
 
-        if (permission) {
-          try {
-            result.permission = mergeDeep(result.permission ?? {}, JSON.parse(permission))
-          } catch (err) {
-            log.warn("OPENCODE_PERMISSION contains invalid JSON, skipping", { err })
-          }
-        }
+        Option.match(configEnv.permission, {
+          onNone: () => undefined,
+          onSome: (permission) => {
+            try {
+              result.permission = mergeDeep(result.permission ?? {}, JSON.parse(permission))
+            } catch (err) {
+              log.warn("OPENCODE_PERMISSION contains invalid JSON, skipping", { err })
+            }
+          },
+        })
 
         if (result.tools) {
           const perms: Record<string, ConfigPermission.Action> = {}
