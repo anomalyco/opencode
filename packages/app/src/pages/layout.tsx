@@ -1142,7 +1142,7 @@ export default function Layout(props: ParentProps) {
       },
     ]
 
-    if (USE_HOME_DESIGN)
+    if (!USE_HOME_DESIGN)
       Array.from({ length: 9 }, (_, i) => {
         const index = i
         const number = index + 1
