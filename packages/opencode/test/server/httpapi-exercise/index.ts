@@ -1243,9 +1243,7 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
       body: { response: "once" },
     }))
-    .json(200, (body) => {
-      check(body === true, "deprecated permission response should return true")
-    }),
+    .json(404, object, "status"),
   http.protected
     .post("/session/{sessionID}/share", "session.share")
     .mutating()
