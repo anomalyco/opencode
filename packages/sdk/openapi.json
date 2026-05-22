@@ -4348,11 +4348,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "QuestionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/QuestionNotFoundError"
                 }
               }
             }
@@ -4449,11 +4449,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "QuestionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/QuestionNotFoundError"
                 }
               }
             }
@@ -4588,11 +4588,11 @@
             }
           },
           "404": {
-            "description": "Not found",
+            "description": "PermissionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "$ref": "#/components/schemas/PermissionNotFoundError"
                 }
               }
             }
@@ -7462,11 +7462,18 @@
             }
           },
           "404": {
-            "description": "NotFoundError",
+            "description": "NotFoundError | PermissionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NotFoundError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/NotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PermissionNotFoundError"
+                    }
+                  ]
                 }
               }
             }
@@ -15398,6 +15405,40 @@
           }
         },
         "required": ["_tag"],
+        "additionalProperties": false
+      },
+      "QuestionNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["QuestionNotFoundError"]
+          },
+          "requestID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "requestID", "message"],
+        "additionalProperties": false
+      },
+      "PermissionNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["PermissionNotFoundError"]
+          },
+          "requestID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "requestID", "message"],
         "additionalProperties": false
       },
       "ProviderAuthMethod": {

@@ -89,7 +89,7 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 
-const USE_HOME_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+const USE_NEW_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -154,7 +154,7 @@ export default function Layout(props: ParentProps) {
   const currentDir = createMemo(() => route().dir)
 
   const [state, setState] = createStore({
-    autoselect: !initialDirectory && !USE_HOME_DESIGN,
+    autoselect: !initialDirectory && !USE_NEW_DESIGN,
     busyWorkspaces: {} as Record<string, boolean>,
     hoverProject: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
@@ -1028,19 +1028,6 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+alt+arrowdown",
         onSelect: () => navigateProjectByOffset(1),
       },
-      ...Array.from({ length: 9 }, (_, i) => {
-        const index = i
-        const number = index + 1
-        return {
-          id: `project.${number}`,
-          category: language.t("command.category.project"),
-          title: `Open Project {number}`,
-          keybind: `mod+${number}`,
-          disabled: layout.projects.list().length <= index,
-          hidden: true,
-          onSelect: () => navigateToProjectIndex(index),
-        }
-      }),
       {
         id: "provider.connect",
         title: language.t("command.provider.connect"),
@@ -1154,6 +1141,21 @@ export default function Layout(props: ParentProps) {
         onSelect: () => cycleTheme(1),
       },
     ]
+
+    if (!USE_NEW_DESIGN)
+      Array.from({ length: 9 }, (_, i) => {
+        const index = i
+        const number = index + 1
+        commands.push({
+          id: `project.${number}`,
+          category: language.t("command.category.project"),
+          title: `Open Project {number}`,
+          keybind: `mod+${number}`,
+          disabled: layout.projects.list().length <= index,
+          hidden: true,
+          onSelect: () => navigateToProjectIndex(index),
+        })
+      })
 
     for (const [id] of availableThemeEntries()) {
       commands.push({
@@ -1819,7 +1821,7 @@ export default function Layout(props: ParentProps) {
   createEffect(() => {
     document.documentElement.style.setProperty(
       "--dialog-left-margin",
-      USE_HOME_DESIGN ? "0px" : `${layout.sidebar.opened() ? layout.sidebar.width() : 48}px`,
+      USE_NEW_DESIGN ? "0px" : `${layout.sidebar.opened() ? layout.sidebar.width() : 48}px`,
     )
   })
 
@@ -2361,7 +2363,7 @@ export default function Layout(props: ParentProps) {
     />
   )
 
-  if (USE_HOME_DESIGN) {
+  if (USE_NEW_DESIGN) {
     return (
       <div class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
         {autoselecting() ?? ""}
