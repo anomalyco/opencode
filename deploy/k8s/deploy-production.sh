@@ -16,7 +16,7 @@ REGISTRY="registry.digitalocean.com/veritly-registry"
 CLUSTER_ID="602c73dd-37fe-4c00-a23e-1aa027878fa2"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 REPOS=("relay" "opencode-api" "opencode-frontend" "univer-compat")
-APPS=("relay" "opencode-api" "opencode-frontend" "univer-compat")
+APPS=("relay" "opencode-api" "opencode-frontend" "univer-compat" "cloudflared")
 
 clean_repo() {
     local repo="$1"
@@ -126,6 +126,11 @@ fi
 echo -e "${GREEN}✅ Ingress controller ready${NC}"
 echo ""
 
+echo "Step 8b: NGINX ingress Service → ClusterIP (no DO Load Balancer; traffic via Cloudflare Tunnel)..."
+kubectl patch svc ingress-nginx-controller -n ingress-nginx --type merge --patch-file="$ROOT/deploy/k8s/base/patch-ingress-nginx-clusterip.yaml"
+echo -e "${GREEN}✅ ingress-nginx-controller is ClusterIP${NC}"
+echo ""
+
 echo "Step 9: Syncing env from .env.production..."
 "$ROOT/deploy/k8s/sync-env.sh"
 echo -e "${GREEN}✅ Env synced${NC}"
@@ -152,14 +157,14 @@ echo ""
 
 echo "Step 12: Restarting deployments so :latest is pulled..."
 for app in "${APPS[@]}"; do
-    kubectl rollout restart deployment/$app -n veritly >/dev/null
+    kubectl rollout restart deployment/"$app" -n veritly >/dev/null
 done
 echo -e "${GREEN}✅ Rollouts restarted${NC}"
 echo ""
 
 echo "Step 13: Waiting for rollout..."
 for app in "${APPS[@]}"; do
-    kubectl rollout status deployment/$app -n veritly --timeout=300s || true
+    kubectl rollout status deployment/"$app" -n veritly --timeout=300s || true
 done
 echo ""
 
@@ -175,11 +180,14 @@ echo "Ingress:"
 kubectl get ingress -n veritly
 echo ""
 
-echo "🌐 Your app will be available at:"
+echo "🌐 Your app will be available at (TLS at Cloudflare; tunnel → nginx ClusterIP):"
 echo "   - https://app.veritly.co.uk (main app)"
 echo "   - https://univer.veritly.co.uk (Univer compat / universer-api)"
 echo "   - wss://relay.veritly.co.uk/ws (WebSocket relay)"
 echo ""
-echo "⚠️  Make sure your DNS points to the ingress IP:"
-kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "   (waiting for IP...)"
+echo "⚠️  DNS: point app, api, univer, relay to the Cloudflare Tunnel (Zero Trust routes), not the DO ingress IP."
+echo "   See deploy/k8s/README.md → Cloudflare Tunnel."
+echo ""
+echo "ingress-nginx (internal only):"
+kubectl get svc -n ingress-nginx ingress-nginx-controller -o wide 2>/dev/null || true
 echo ""

@@ -1,0 +1,42 @@
+# Outbound Cloudflare Tunnel — public DNS terminates TLS at Cloudflare; origin is HTTP to nginx ClusterIP.
+# Configure hostnames in Zero Trust → same origin: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: veritly
+  labels:
+    app: cloudflared
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:2024.12.2
+          imagePullPolicy: IfNotPresent
+          args:
+            - tunnel
+            - --no-autoupdate
+            - run
+            - --token
+            - $(CLOUDFLARE_TUNNEL_TOKEN)
+          env:
+            - name: CLOUDFLARE_TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: veritly-secrets
+                  key: CLOUDFLARE_TUNNEL_TOKEN
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"

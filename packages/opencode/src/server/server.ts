@@ -35,7 +35,7 @@ import { GlobalRoutes } from "./routes/global"
 import { lazy } from "@/util/lazy"
 import { initVeritlyTracer, veritlyHonoOtelMiddleware } from "@veritly/telemetry-veritly"
 import path from "path"
-import { apiHealthReport, isPublicHealthPath } from "./health"
+import { apiHealthReport, apiHealthReportSimple, isPublicHealthPath } from "./health"
 import { AuthRoutes, getCookieOptions, type SessionUser } from "./routes/auth"
 import { resolveInstanceProject } from "./resolve-instance-project"
 import { WORKOS_SESSION_COOKIE_NAME } from "@veritly/auth-shared"
@@ -147,7 +147,7 @@ export namespace Server {
         const path = c.req.path.split("?")[0].replace(/\/+$/, "") || "/"
         if (path === "/livez") return c.text("ok")
         if (path === "/readyz") {
-          const report = await apiHealthReport()
+          const report = await apiHealthReportSimple()
           return c.json(report, report.ok ? 200 : 503)
         }
         if (path === "/debug") return c.text("debug ok")

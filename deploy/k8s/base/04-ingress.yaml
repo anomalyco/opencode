@@ -1,19 +1,15 @@
 # Ingress for OpenCode (HTTP API + Frontend only)
+# TLS at Cloudflare edge; nginx receives HTTP from cloudflared — ssl-redirect must stay off.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: veritly-app
   namespace: veritly
   annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
   ingressClassName: nginx
-  tls:
-  - hosts:
-    - app.veritly.co.uk
-    secretName: veritly-tls
   rules:
   - host: app.veritly.co.uk
     http:
@@ -33,14 +29,9 @@ metadata:
   name: veritly-api
   namespace: veritly
   annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: nginx
-  tls:
-  - hosts:
-    - api.veritly.co.uk
-    secretName: api-tls
   rules:
   - host: api.veritly.co.uk
     http:
@@ -60,15 +51,10 @@ metadata:
   name: veritly-univer
   namespace: veritly
   annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
   ingressClassName: nginx
-  tls:
-    - hosts:
-        - univer.veritly.co.uk
-      secretName: univer-tls
   rules:
     - host: univer.veritly.co.uk
       http:
@@ -88,23 +74,17 @@ metadata:
   name: veritly-relay
   namespace: veritly
   annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    # WebSocket specific settings
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
     nginx.ingress.kubernetes.io/websocket-services: "relay"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-    # Sticky sessions for WebSocket affinity
-    nginx.ingress.kubernetes.io/affinity: "cookie"
-    nginx.ingress.kubernetes.io/session-cookie-name: "veritly_relay"
-    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
-    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # re-enable when relay HPA + edge stickiness (nginx cookie affinity)
+    # nginx.ingress.kubernetes.io/affinity: "cookie"
+    # nginx.ingress.kubernetes.io/session-cookie-name: "veritly_relay"
+    # nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    # nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
 spec:
   ingressClassName: nginx
-  tls:
-  - hosts:
-    - relay.veritly.co.uk
-    secretName: relay-tls
   rules:
   - host: relay.veritly.co.uk
     http:

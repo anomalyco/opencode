@@ -1,7 +1,5 @@
 import path from "node:path"
-import {
-  frontendHealthReport,
-} from "./script/frontend-health-runtime"
+import { frontendReadinessReport } from "./script/frontend-health-runtime"
 
 function envOneOf(names: string[]): string {
   for (const k of names) {
@@ -80,7 +78,7 @@ Bun.serve({
     }
 
     if (url.pathname === "/readyz") {
-      const report = await frontendHealthReport(root, process.env)
+      const report = await frontendReadinessReport(root, process.env)
       return new Response(JSON.stringify(report), {
         status: report.ok ? 200 : 503,
         headers: { "content-type": "application/json; charset=utf-8" },

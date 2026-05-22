@@ -11,6 +11,7 @@ resources:
   - 02b-opencode-frontend.yaml
   - 03-univer-compat.yaml
   - 04-ingress.yaml
+  - 05-cloudflared.yaml
 
 images:
   - name: opencode-veritly-relay

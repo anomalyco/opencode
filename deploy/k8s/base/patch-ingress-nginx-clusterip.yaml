@@ -1,0 +1,4 @@
+# Merge patch for: kubectl patch svc ingress-nginx-controller -n ingress-nginx --type merge --patch-file=...
+# Drops DigitalOcean Load Balancer; traffic enters via cloudflared only.
+spec:
+  type: ClusterIP

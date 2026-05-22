@@ -200,7 +200,22 @@ export async function staticCheck(appRoot: string): Promise<HealthCheckResult> {
   }
 }
 
-/** Same probes as production `server.ts` full report: assets + backend + relay HTTP + relay WS. */
+/** Kubernetes `/readyz`: no relay WebSocket (WS probes are flaky behind ingress / from Bun). */
+export async function frontendReadinessReport(appRoot: string, env: NodeJS.ProcessEnv): Promise<FrontendHealthReport> {
+  const t = healthTimeoutMs(env)
+  const checks = await Promise.all([
+    staticCheck(appRoot),
+    timedHttpCheck("backend", resolveBackendHealthUrl(env), t),
+    timedHttpCheck("relay-http", resolveRelayHealthUrl(env), t),
+  ])
+  return {
+    service: "opencode-frontend",
+    ok: checks.every((c) => c.ok),
+    checks,
+  }
+}
+
+/** Full report: assets + backend + relay HTTP + relay WS (e.g. manual `curl /readyz/full` later). */
 export async function frontendHealthReport(appRoot: string, env: NodeJS.ProcessEnv): Promise<FrontendHealthReport> {
   const t = healthTimeoutMs(env)
   const checks = await Promise.all([
