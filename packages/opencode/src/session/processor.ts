@@ -354,10 +354,21 @@ export const layer = Layer.effect(
             yield* ensureToolCall(value)
             return
 
-          case "tool-input-delta":
-            // AI SDK emits a final `tool-call` with the parsed `input`; accumulating
-            // delta fragments into `state.raw` is redundant work for no current consumer.
+          case "tool-input-delta": {
+            const toolCall = yield* ensureToolCall(value)
+            const state = toolCall.part.state
+            if (state.status === "pending") {
+              state.raw += value.text
+              yield* session.updatePartDelta({
+                sessionID: toolCall.part.sessionID,
+                messageID: toolCall.part.messageID,
+                partID: toolCall.part.id,
+                field: "raw",
+                delta: value.text,
+              })
+            }
             return
+          }
 
           case "tool-input-end": {
             const toolCall = yield* ensureToolCall(value)

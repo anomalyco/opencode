@@ -25,7 +25,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { raw, reply, TestLLMServer } from "../lib/llm-server"
+import { raw, reply, TestLLMServer, toolStartLine, toolArgsLine, finishLine, role } from "../lib/llm-server"
 import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -916,6 +916,71 @@ it.live("session.processor effect tests mark interruptions aborted without manua
           expect(stored.info.error?.name).toBe("MessageAbortedError")
         }
         expect(state).toMatchObject({ type: "idle" })
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("tool-input-delta events accumulate into state.raw and emit part.delta", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const id = "call_1"
+        const fullArgs = JSON.stringify({ content: "hello world file content here" })
+        const half = Math.floor(fullArgs.length / 2)
+
+        yield* llm.push(
+          raw({
+            head: [
+              role(),
+              toolStartLine(id, "write"),
+              toolArgsLine(fullArgs.slice(0, half)),
+              toolArgsLine(fullArgs.slice(half)),
+            ],
+            tail: [finishLine("stop")],
+          }),
+        )
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "write a file")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "write a file" }],
+          tools: {},
+        })
+
+        const parts = MessageV2.parts(msg.id)
+        const toolPart = parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+
+        expect(value).toBe("continue")
+        expect(toolPart).toBeDefined()
+        expect(toolPart?.tool).toBe("write")
+        if (toolPart?.state.status === "pending") {
+          expect(toolPart.state.raw.length).toBeGreaterThan(0)
+        } else if (toolPart?.state.status === "completed") {
+          expect(toolPart.state.input).toEqual(JSON.parse(fullArgs))
+        }
       }),
     { config: (url) => providerCfg(url) },
   ),

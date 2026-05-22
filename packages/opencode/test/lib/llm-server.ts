@@ -80,7 +80,7 @@ function chunk(input: { delta?: Record<string, unknown>; finish?: string; usage?
   } satisfies Line
 }
 
-function role() {
+export function role() {
   return chunk({ delta: { role: "assistant" } })
 }
 
@@ -92,11 +92,11 @@ function reasonLine(value: string) {
   return chunk({ delta: { reasoning_content: value } })
 }
 
-function finishLine(reason: string, usage?: Usage) {
+export function finishLine(reason: string, usage?: Usage) {
   return chunk({ finish: reason, usage })
 }
 
-function toolStartLine(id: string, name: string) {
+export function toolStartLine(id: string, name: string) {
   return chunk({
     delta: {
       tool_calls: [
@@ -114,7 +114,7 @@ function toolStartLine(id: string, name: string) {
   })
 }
 
-function toolArgsLine(value: string) {
+export function toolArgsLine(value: string) {
   return chunk({
     delta: {
       tool_calls: [
