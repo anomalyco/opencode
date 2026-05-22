@@ -123,10 +123,16 @@ export function SectionTEE() {
           </div>
 
           <h2 className="mt-4 max-w-3xl text-balance text-3xl font-medium leading-tight md:text-5xl">
-            AI 推論環境を物理的に隔離、
+            AI 推論を、
+            <span className="text-sc-ember">TEE</span> で物理的に隔離する。
             <br className="md:hidden" />
-            <span className="text-sc-ember">誰も中を覗けない</span>。
+            だから、誰も中を覗けない。
           </h2>
+          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-sc-text-mid md:text-base">
+            TEE (Trusted Execution Environment) は CPU 内に物理的に隔離された
+            実行領域。推論中の平文がメモリ上に展開されても、インフラ事業者を含む
+            第三者からは参照できない。
+          </p>
 
           <div className="mt-6 grid flex-1 grid-cols-1 gap-8 md:grid-cols-[1.8fr_1fr]">
             {/* === 図 === */}
