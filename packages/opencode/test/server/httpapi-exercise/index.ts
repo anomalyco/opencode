@@ -178,6 +178,15 @@ const scenarios: Scenario[] = [
       "status",
     ),
   http.protected
+    .patch("/project/{projectID}", "project.update.missing")
+    .mutating()
+    .at((ctx) => ({
+      path: route("/project/{projectID}", { projectID: "project_httpapi_missing" }),
+      headers: ctx.headers(),
+      body: { name: "Missing Project" },
+    }))
+    .json(404, object, "status"),
+  http.protected
     .post("/project/git/init", "project.initGit")
     .mutating()
     .inProject({ git: false })

@@ -208,4 +208,12 @@ describe("PublicApi OpenAPI v2 errors", () => {
       "PtyForbiddenError",
     )
   })
+
+  test("documents project not-found errors", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    expect(componentName(responseRef(spec.paths["/project/{projectID}"]?.patch?.responses?.["404"]) ?? "")).toBe(
+      "ProjectNotFoundError",
+    )
+  })
 })
