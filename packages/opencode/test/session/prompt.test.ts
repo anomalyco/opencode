@@ -2340,7 +2340,9 @@ noLLMServer.instance(
       expect(assistants.length).toBe(1)
       const assistant = assistants[0]
       expect(assistant.info.role).toBe("assistant")
-      expect(assistant.info.time.completed).toBeDefined()
+      if (assistant.info.role === "assistant") {
+        expect(assistant.info.time.completed).toBeDefined()
+      }
       const textParts = assistant.parts.filter((p) => p.type === "text")
       expect(textParts.length).toBeGreaterThan(0)
       expect(textParts.some((p) => p.type === "text" && p.text.includes("hello"))).toBe(true)
