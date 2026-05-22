@@ -34,12 +34,9 @@ export function deriveSubagentSessionPermission(input: {
     (rule) => rule.permission === "edit" && rule.action === "allow",
   )
 
-  const parentAgentDenies =
-    !subagentAllowsEdit
-      ? (input.parentAgent?.permission.filter(
-          (rule) => rule.action === "deny" && rule.permission === "edit",
-        ) ?? [])
-      : []
+  const parentAgentDenies = !subagentAllowsEdit
+    ? (input.parentAgent?.permission.filter((rule) => rule.action === "deny" && rule.permission === "edit") ?? [])
+    : []
 
   return [
     ...parentAgentDenies,

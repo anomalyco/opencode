@@ -376,6 +376,7 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
       }
     },
     "session.next.retried": () => {},
+    "session.next.retry_exhausted": () => {},
     "session.next.compaction.started": (event) => {
       adapter.appendMessage(
         new SessionMessage.Compaction({

@@ -21,6 +21,7 @@ export type Event =
   | EventPermissionReplied
   | EventSessionDiff
   | EventSessionError
+  | EventSessionRetryExhausted1
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
@@ -74,6 +75,7 @@ export type Event =
   | EventSessionNextToolSuccess
   | EventSessionNextToolFailed
   | EventSessionNextRetried
+  | EventSessionNextRetryExhausted
   | EventSessionNextCompactionStarted
   | EventSessionNextCompactionDelta
   | EventSessionNextCompactionEnded
@@ -347,6 +349,12 @@ export type SessionStatus =
         label: string
         link?: string
       }
+      next: number
+    }
+  | {
+      type: "retry_exhausted"
+      attempt: number
+      message: string
       next: number
     }
   | {
@@ -823,6 +831,7 @@ export type GlobalEvent = {
     | EventPermissionReplied
     | EventSessionDiff
     | EventSessionError
+    | EventSessionRetryExhausted
     | EventQuestionAsked
     | EventQuestionReplied
     | EventQuestionRejected
@@ -876,6 +885,7 @@ export type GlobalEvent = {
     | EventSessionNextToolSuccess
     | EventSessionNextToolFailed
     | EventSessionNextRetried
+    | EventSessionNextRetryExhausted
     | EventSessionNextCompactionStarted
     | EventSessionNextCompactionDelta
     | EventSessionNextCompactionEnded
@@ -915,6 +925,7 @@ export type GlobalEvent = {
     | SyncEventSessionNextToolSuccess
     | SyncEventSessionNextToolFailed
     | SyncEventSessionNextRetried
+    | SyncEventSessionNextRetryExhausted
     | SyncEventSessionNextCompactionStarted
     | SyncEventSessionNextCompactionDelta
     | SyncEventSessionNextCompactionEnded
@@ -2473,6 +2484,21 @@ export type SyncEventSessionNextRetried = {
   }
 }
 
+export type SyncEventSessionNextRetryExhausted = {
+  type: "sync"
+  name: "session.next.retry_exhausted.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    timestamp: number
+    sessionID: string
+    attempt: number
+    message: string
+    error: SessionNextRetryError
+  }
+}
+
 export type SyncEventSessionNextCompactionStarted = {
   type: "sync"
   name: "session.next.compaction.started.1"
@@ -2621,6 +2647,21 @@ export type EventSessionError = {
       | StructuredOutputError
       | ContextOverflowError
       | ApiError
+  }
+}
+
+export type EventSessionRetryExhausted = {
+  id: string
+  type: "session.retry_exhausted"
+  properties: {
+    sessionID: string
+    attempt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    message: string
+    error: {
+      type: string
+      message: string
+      isRetryable: boolean
+    }
   }
 }
 
@@ -3224,6 +3265,18 @@ export type EventSessionNextRetried = {
   }
 }
 
+export type EventSessionNextRetryExhausted = {
+  id: string
+  type: "session.next.retry_exhausted"
+  properties: {
+    timestamp: number
+    sessionID: string
+    attempt: number
+    message: string
+    error: SessionNextRetryError
+  }
+}
+
 export type EventSessionNextCompactionStarted = {
   id: string
   type: "session.next.compaction.started"
@@ -3745,6 +3798,21 @@ export type EventTuiToastShow1 = {
     message: string
     variant: "info" | "success" | "warning" | "error"
     duration?: number
+  }
+}
+
+export type EventSessionRetryExhausted1 = {
+  id: string
+  type: "session.retry_exhausted"
+  properties: {
+    sessionID: string
+    attempt: number | "NaN" | "Infinity" | "-Infinity"
+    message: string
+    error: {
+      type: string
+      message: string
+      isRetryable: boolean
+    }
   }
 }
 

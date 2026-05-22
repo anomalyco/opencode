@@ -366,6 +366,19 @@ export const Event = {
       error: MessageV2.Assistant.fields.error,
     }),
   ),
+  RetryExhausted: BusEvent.define(
+    "session.retry_exhausted",
+    Schema.Struct({
+      sessionID: SessionID,
+      attempt: Schema.Number,
+      message: Schema.String,
+      error: Schema.Struct({
+        type: Schema.String,
+        message: Schema.String,
+        isRetryable: Schema.Boolean,
+      }),
+    }),
+  ),
 }
 
 export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext) {
