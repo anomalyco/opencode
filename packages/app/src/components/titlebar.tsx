@@ -23,6 +23,8 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Avatar as AvatarV2 } from "@opencode-ai/ui/v2/components/avatar-v2.jsx"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { StatusPopover } from "./status-popover"
+import { SDKProvider } from "@/context/sdk"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -296,14 +298,13 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const currentSessionTab = () => {
               if (!params.dir || !params.id) return
               const href = makeSessionHref(params.dir, params.id)
-              if (!tabsStore.some((tab) => tab.href === href)) return
-              return href
+              return tabsStore.find((tab) => tab.href === href)
             }
 
             const closeCurrentSessionTab = () => {
-              const href = currentSessionTab()
-              if (!href) return false
-              tabsStoreActions.removeTab(href)
+              const tab = currentSessionTab()
+              if (!tab) return false
+              tabsStoreActions.removeTab(tab.href)
               return true
             }
 
@@ -338,7 +339,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   keybind: `mod+option+ArrowLeft`,
                   hidden: true,
                   onSelect: () => {
-                    let index = tabsStore.findIndex((tab) => tab.href === currentSessionTab())
+                    let index = tabsStore.findIndex((tab) => tab.href === currentSessionTab()?.href)
                     if (index === -1) return
 
                     index -= 1
@@ -355,7 +356,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   keybind: `mod+option+ArrowRight`,
                   hidden: true,
                   onSelect: () => {
-                    let index = tabsStore.findIndex((tab) => tab.href === currentSessionTab())
+                    let index = tabsStore.findIndex((tab) => tab.href === currentSessionTab()?.href)
                     if (index === -1) return
 
                     index += 1
@@ -464,6 +465,15 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   </Show>
                   <div class="min-w-0 flex-1" />
                 </div>
+                <Show when={currentSessionTab()?.dir} keyed>
+                  {(dir) => (
+                    <SDKProvider directory={dir}>
+                      <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
+                        <StatusPopover />
+                      </Tooltip>
+                    </SDKProvider>
+                  )}
+                </Show>
                 <TitlebarUpdatePill update={props.update} />
                 <Show when={windows() && !electronWindows()}>
                   <div data-tauri-decorum-tb class="flex flex-row" />
