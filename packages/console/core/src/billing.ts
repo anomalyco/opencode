@@ -155,6 +155,26 @@ export namespace Billing {
     return amountInMicroCents
   }
 
+  export const subtractLiteUsage = async (workspaceID: string, amountInMicroCents: number) => {
+    await Database.transaction(async (tx) => {
+      const lite = await tx
+        .select({ id: LiteTable.id })
+        .from(LiteTable)
+        .where(and(eq(LiteTable.workspaceID, workspaceID), isNull(LiteTable.timeDeleted)))
+        .then((rows) => rows[0])
+      if (!lite) throw new Error("Subscribe to Go before applying referral rewards")
+
+      await tx
+        .update(LiteTable)
+        .set({
+          monthlyUsage: sql`GREATEST(0, COALESCE(${LiteTable.monthlyUsage}, 0) - ${amountInMicroCents})`,
+          weeklyUsage: sql`GREATEST(0, COALESCE(${LiteTable.weeklyUsage}, 0) - ${amountInMicroCents})`,
+          rollingUsage: sql`GREATEST(0, COALESCE(${LiteTable.rollingUsage}, 0) - ${amountInMicroCents})`,
+        })
+        .where(and(eq(LiteTable.workspaceID, workspaceID), isNull(LiteTable.timeDeleted)))
+    })
+  }
+
   export const redeemCoupon = async (email: string, type: (typeof CouponType)[number]) => {
     // validate coupon type
     await (async () => {

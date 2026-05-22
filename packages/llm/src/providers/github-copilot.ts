@@ -1,6 +1,5 @@
-import { Route } from "../route/client"
-import type { ModelInput } from "../llm"
-import { Provider } from "../provider"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
+import type { RouteDefaultsInput } from "../route/client"
 import { ProviderID, type ModelID } from "../schema"
 import * as OpenAIChat from "../protocols/openai-chat"
 import * as OpenAIResponses from "../protocols/openai-responses"
@@ -10,10 +9,11 @@ export const id = ProviderID.make("github-copilot")
 
 // GitHub Copilot has no canonical public URL — callers (opencode, etc.) must
 // supply `baseURL` explicitly.
-export type ModelOptions = Omit<ModelInput, "id" | "provider" | "route"> & {
-  readonly providerOptions?: OpenAIProviderOptionsInput
-}
-type CopilotModelInput = ModelOptions & Pick<ModelInput, "id">
+export type ModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+  ProviderAuthOption<"optional"> & {
+    readonly baseURL: string
+    readonly providerOptions?: OpenAIProviderOptionsInput
+  }
 
 export const shouldUseResponsesApi = (modelID: string | ModelID) => {
   const model = String(modelID)
@@ -24,25 +24,43 @@ export const shouldUseResponsesApi = (modelID: string | ModelID) => {
 
 export const routes = [OpenAIResponses.route, OpenAIChat.route]
 
-const mapInput = (input: CopilotModelInput) => withOpenAIOptions(input.id, input)
+const chatRoute = OpenAIChat.route.with({ provider: id })
+const responsesRoute = OpenAIResponses.route.with({ provider: id })
 
-const chatModel = Route.model<CopilotModelInput>(OpenAIChat.route, { provider: id }, { mapInput })
-const responsesModel = Route.model<CopilotModelInput>(OpenAIResponses.route, { provider: id }, { mapInput })
-
-export const responses = (modelID: string | ModelID, options: ModelOptions) =>
-  responsesModel({ ...options, id: modelID })
-
-export const chat = (modelID: string | ModelID, options: ModelOptions) => chatModel({ ...options, id: modelID })
-
-export const model = (modelID: string | ModelID, options: ModelOptions) => {
-  const create = shouldUseResponsesApi(modelID) ? responsesModel : chatModel
-  return create({ ...options, id: modelID })
+const defaults = (options: ModelOptions) => {
+  const { apiKey: _, auth: _auth, baseURL: _baseURL, ...rest } = options
+  return rest
 }
 
-export const provider = Provider.make({
-  id,
-  model,
-  apis: { responses, chat },
-})
+const configuredResponsesRoute = (options: ModelOptions) =>
+  responsesRoute.with({
+    endpoint: { baseURL: options.baseURL },
+    auth: AuthOptions.bearer(options, []),
+  })
 
-export const apis = provider.apis
+const configuredChatRoute = (options: ModelOptions) =>
+  chatRoute.with({
+    endpoint: { baseURL: options.baseURL },
+    auth: AuthOptions.bearer(options, []),
+  })
+
+export const configure = (options: ModelOptions) => {
+  const responsesRoute = configuredResponsesRoute(options)
+  const chatRoute = configuredChatRoute(options)
+  const responses = (modelID: string | ModelID) =>
+    responsesRoute.with(withOpenAIOptions(modelID, defaults(options))).model({ id: modelID })
+  const chat = (modelID: string | ModelID) =>
+    chatRoute.with(withOpenAIOptions(modelID, defaults(options))).model({ id: modelID })
+  return {
+    id,
+    model: (modelID: string | ModelID) => (shouldUseResponsesApi(modelID) ? responses(modelID) : chat(modelID)),
+    responses,
+    chat,
+    configure,
+  }
+}
+
+export const provider = {
+  id,
+  configure,
+}

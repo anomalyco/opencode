@@ -16,7 +16,7 @@ describe("tui.selectSession endpoint", () => {
     () =>
       Effect.gen(function* () {
         const tmp = yield* TestInstance
-        const session = yield* Session.Service.use((svc) => svc.create({}))
+        const session = yield* Session.use.create({})
 
         const app = Server.Default().app
         const response = yield* Effect.promise(() =>

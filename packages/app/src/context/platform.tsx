@@ -1,6 +1,7 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
+import type { DesktopMenuAction } from "../desktop-menu"
 import { ServerConnection } from "./server"
 
 type PickerPaths = string | string[] | null
@@ -8,13 +9,23 @@ type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
 type OpenFilePickerOptions = { title?: string; multiple?: boolean; accept?: string[]; extensions?: string[] }
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type UpdateInfo = { updateAvailable: boolean; version?: string }
+type PlatformName = "web" | "desktop"
+type DesktopOS = "macos" | "windows" | "linux"
+
+export type FatalRendererErrorLog = {
+  error: string
+  url: string
+  version?: string
+  platform: PlatformName
+  os?: DesktopOS
+}
 
 export type Platform = {
   /** Platform discriminator */
-  platform: "web" | "desktop"
+  platform: PlatformName
 
   /** Desktop OS (Tauri only) */
-  os?: "macos" | "windows" | "linux"
+  os?: DesktopOS
 
   /** App version */
   version?: string
@@ -82,11 +93,26 @@ export type Platform = {
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
 
+  /** Get whether native pinch/Ctrl-scroll zoom gestures are enabled (desktop only) */
+  getPinchZoomEnabled?(): Promise<boolean> | boolean
+
+  /** Allow native pinch/Ctrl-scroll zoom gestures (desktop only) */
+  setPinchZoomEnabled?(enabled: boolean): Promise<void> | void
+
+  /** Run a desktop-only menu action from the app chrome */
+  runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
+
   /** Check if an editor app exists (desktop only) */
   checkAppExists?(appName: string): Promise<boolean>
 
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
+
+  /** Export collected diagnostic logs (desktop only) */
+  exportDebugLogs?(): Promise<string>
+
+  /** Record a fatal renderer error in platform logs (desktop only) */
+  recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
 }
 
 export type DisplayBackend = "auto" | "wayland"

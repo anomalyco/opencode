@@ -1,4 +1,5 @@
 import path from "path"
+import { serviceUse } from "@/effect/service-use"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Cause, Context, Effect, Fiber, Layer, Queue, Schema, Stream } from "effect"
 import type { PlatformError } from "effect/PlatformError"
@@ -140,6 +141,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Ripgrep") {}
+
+export const use = serviceUse(Service)
 
 function env() {
   const env = sanitizedProcessEnv()

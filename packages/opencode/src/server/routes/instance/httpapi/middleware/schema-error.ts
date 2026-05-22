@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Log from "@opencode-ai/core/util/log"
+import { InvalidRequestError } from "../errors"
 
 const log = Log.create({ service: "server" })
 
@@ -19,11 +20,22 @@ function truncateReason(reason: string) {
 // used by other 4xx/5xx so the SDK's `wrapClientError` extracts `.data.message`.
 export class SchemaErrorMiddleware extends HttpApiMiddleware.Service<SchemaErrorMiddleware>()(
   "@opencode/HttpApiSchemaError",
+  {
+    error: InvalidRequestError,
+  },
 ) {}
 
-export const schemaErrorLayer = HttpApiMiddleware.layerSchemaErrorTransform(SchemaErrorMiddleware, (error) => {
+export const schemaErrorLayer = HttpApiMiddleware.layerSchemaErrorTransform(SchemaErrorMiddleware, (error, context) => {
   const reason = truncateReason(error.cause.message)
   log.warn("schema rejection", { kind: error.kind, reason })
+  if (context.endpoint.path.startsWith("/api/")) {
+    return Effect.fail(
+      new InvalidRequestError({
+        message: reason,
+        kind: error.kind,
+      }),
+    )
+  }
   return Effect.succeed(
     HttpServerResponse.jsonUnsafe({ name: "BadRequest", data: { message: reason, kind: error.kind } }, { status: 400 }),
   )

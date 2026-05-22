@@ -1,8 +1,7 @@
 import { Schema } from "effect"
-import { JsonSchema, ModelID, ProviderID, RouteID } from "./ids"
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
+import { JsonSchema, ModelID, ProviderID } from "./ids"
+import type { AnyRoute } from "../route/client"
+import { isRecord } from "../utils/record"
 
 export const mergeJsonRecords = (
   ...items: ReadonlyArray<Record<string, unknown> | undefined>
@@ -135,66 +134,58 @@ export namespace ModelLimits {
     input instanceof ModelLimits ? input : new ModelLimits(input ?? {})
 }
 
-export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
-  id: ModelID,
-  provider: ProviderID,
-  route: RouteID,
-  baseURL: Schema.String,
-  /** Provider-specific API key convenience. Provider helpers normalize this into `auth`. */
-  apiKey: Schema.optional(Schema.String),
-  /** Optional transport auth policy. Opaque because it may contain functions. */
-  auth: Schema.optional(Schema.Any),
-  headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  /**
-   * Query params appended to the request URL by `Endpoint.baseURL`. Used for
-   * deployment-level URL-scoped settings such as Azure's `api-version` or any
-   * provider that requires a per-request key in the URL. Generic concern, so
-   * lives as a typed first-class field instead of `native`.
-   */
-  queryParams: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  limits: ModelLimits,
-  /** Provider-neutral generation defaults. Request-level values override them. */
-  generation: Schema.optional(GenerationOptions),
-  /** Provider-owned typed-at-the-facade options for non-portable knobs. */
-  providerOptions: Schema.optional(ProviderOptions),
-  /** Serializable raw HTTP overlays applied to the final outgoing request. */
-  http: Schema.optional(HttpOptions),
-  /**
-   * Provider-specific opaque options. Reach for this only when the value is
-   * genuinely provider-private and does not fit a typed axis (e.g. Bedrock's
-   * `aws_credentials` / `aws_region` for SigV4). Anything used by more than
-   * one route should grow into a typed field instead.
-   */
-  native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-}) {}
+export class Model {
+  readonly id: ModelID
+  readonly provider: ProviderID
+  readonly route: AnyRoute
 
-export namespace ModelRef {
-  export type Input = ConstructorParameters<typeof ModelRef>[0]
+  constructor(input: Model.ConstructorInput) {
+    this.id = input.id
+    this.provider = input.provider
+    this.route = input.route
+  }
 
-  export const input = (model: ModelRef): Input => ({
-    id: model.id,
-    provider: model.provider,
-    route: model.route,
-    baseURL: model.baseURL,
-    apiKey: model.apiKey,
-    auth: model.auth,
-    headers: model.headers,
-    queryParams: model.queryParams,
-    limits: model.limits,
-    generation: model.generation,
-    providerOptions: model.providerOptions,
-    http: model.http,
-    native: model.native,
-  })
+  static make(input: Model.Input) {
+    return new Model({
+      id: ModelID.make(input.id),
+      provider: ProviderID.make(input.provider),
+      route: input.route,
+    })
+  }
 
-  export const update = (model: ModelRef, patch: Partial<Input>) => {
+  static input(model: Model): Model.ConstructorInput {
+    return {
+      id: model.id,
+      provider: model.provider,
+      route: model.route,
+    }
+  }
+
+  static update(model: Model, patch: Partial<Model.Input>) {
     if (Object.keys(patch).length === 0) return model
-    return new ModelRef({
-      ...input(model),
+    return Model.make({
+      ...Model.input(model),
       ...patch,
     })
   }
 }
+
+export namespace Model {
+  export type ConstructorInput = {
+    readonly id: ModelID
+    readonly provider: ProviderID
+    readonly route: AnyRoute
+  }
+
+  export type Input = Omit<ConstructorInput, "id" | "provider"> & {
+    readonly id: string | ModelID
+    readonly provider: string | ProviderID
+  }
+}
+
+export type ModelInput = Model.Input
+
+export const ModelSchema = Schema.declare((value): value is Model => value instanceof Model, { expected: "LLM.Model" })
 
 export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
   type: Schema.Literals(["ephemeral", "persistent"]),
