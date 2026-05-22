@@ -7,6 +7,7 @@ import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
 import * as OpenAIResponses from "../../src/protocols/openai-responses"
 import * as ProviderShared from "../../src/protocols/shared"
+import { continuationRequest, nativeOpenAIResponsesContinuation } from "../continuation-scenarios"
 import { it } from "../lib/effect"
 import { dynamicResponse, fixedResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
@@ -247,6 +248,49 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("prepares the composed native continuation request", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        continuationRequest({
+          id: "req_native_continuation_openai",
+          model,
+          features: nativeOpenAIResponsesContinuation,
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        input: [
+          { role: "system", content: "You are concise. Continue from the provided history." },
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: "What is shown here?" },
+              { type: "input_image", image_url: "data:image/png;base64,AAECAw==" },
+            ],
+          },
+          {
+            type: "reasoning",
+            id: "rs_continuation_1",
+            encrypted_content: "encrypted-continuation-state",
+            summary: [{ type: "summary_text", text: "I inspected the previous turn." }],
+          },
+          { role: "assistant", content: [{ type: "output_text", text: "It shows a small test image." }] },
+          { role: "user", content: [{ type: "input_text", text: "Check the weather in Paris before continuing." }] },
+          { type: "function_call", call_id: "call_weather_1", name: "get_weather", arguments: '{"city":"Paris"}' },
+          { type: "function_call_output", call_id: "call_weather_1", output: '{"temperature":22}' },
+          { role: "assistant", content: [{ type: "output_text", text: "Paris is 22 degrees." }] },
+          {
+            role: "user",
+            content: [{ type: "input_text", text: "Continue from this conversation in one short sentence." }],
+          },
+        ],
+        include: ["reasoning.encrypted_content"],
+        store: false,
+      })
+      expect(prepared.body.tools).toEqual([expect.objectContaining({ type: "function", name: "get_weather" })])
+    }),
+  )
+
   it.effect("maps OpenAI provider options to Responses options", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
@@ -377,6 +421,172 @@ describe("OpenAI Responses route", () => {
         { type: "step-finish", index: 0, reason: "stop" },
         { type: "finish", reason: "stop" },
       ])
+    }),
+  )
+
+  it.effect("preserves encrypted reasoning metadata for continuation", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", delta: "thinking" },
+              {
+                type: "response.output_item.done",
+                item: {
+                  type: "reasoning",
+                  id: "rs_1",
+                  encrypted_content: "encrypted-state",
+                  summary: [{ type: "summary_text", text: "thinking" }],
+                },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events).toContainEqual(
+        expect.objectContaining({
+          type: "reasoning-end",
+          id: "rs_1",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        }),
+      )
+    }),
+  )
+
+  it.effect("continues a stateless reasoning conversation", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          id: "req_reasoning_continue",
+          model,
+          messages: [
+            Message.user("What changed?"),
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "Checked the previous diff.",
+                providerMetadata: {
+                  openai: {
+                    itemId: "rs_1",
+                    reasoningEncryptedContent: "encrypted-state",
+                  },
+                },
+              },
+              { type: "text", text: "The parser changed." },
+            ]),
+            Message.user("Summarize it."),
+          ],
+        }),
+      ).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+              expect(yield* Effect.promise(() => web.json())).toMatchObject({
+                input: [
+                  { role: "user", content: [{ type: "input_text", text: "What changed?" }] },
+                  {
+                    type: "reasoning",
+                    id: "rs_1",
+                    encrypted_content: "encrypted-state",
+                    summary: [{ type: "summary_text", text: "Checked the previous diff." }],
+                  },
+                  { role: "assistant", content: [{ type: "output_text", text: "The parser changed." }] },
+                  { role: "user", content: [{ type: "input_text", text: "Summarize it." }] },
+                ],
+              })
+              return input.respond(
+                sseEvents(
+                  { type: "response.output_text.delta", item_id: "msg_1", delta: "Parser now round-trips reasoning." },
+                  { type: "response.completed", response: { id: "resp_1" } },
+                ),
+                { headers: { "content-type": "text/event-stream" } },
+              )
+            }),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Parser now round-trips reasoning.")
+    }),
+  )
+
+  it.effect("preserves assistant content order around reasoning items", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          id: "req_reasoning_order",
+          model,
+          messages: [
+            Message.assistant([
+              { type: "text", text: "Before." },
+              {
+                type: "reasoning",
+                text: "Checked order.",
+                providerMetadata: {
+                  openai: {
+                    itemId: "rs_1",
+                    reasoningEncryptedContent: "encrypted-state",
+                  },
+                },
+              },
+              { type: "text", text: "After." },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { role: "assistant", content: [{ type: "output_text", text: "Before." }] },
+        {
+          type: "reasoning",
+          id: "rs_1",
+          encrypted_content: "encrypted-state",
+          summary: [{ type: "summary_text", text: "Checked order." }],
+        },
+        { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+      ])
+    }),
+  )
+
+  it.effect("skips non-persisted reasoning ids without encrypted state", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_reasoning_without_encrypted_state",
+          model,
+          messages: [
+            Message.user("What changed?"),
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "Checked the previous diff.",
+                providerMetadata: {
+                  openai: {
+                    itemId: "rs_1",
+                    reasoningEncryptedContent: null,
+                  },
+                },
+              },
+              { type: "text", text: "The parser changed." },
+            ]),
+            Message.user("Summarize it."),
+          ],
+          providerOptions: { openai: { store: false } },
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        input: [
+          { role: "user", content: [{ type: "input_text", text: "What changed?" }] },
+          { role: "assistant", content: [{ type: "output_text", text: "The parser changed." }] },
+          { role: "user", content: [{ type: "input_text", text: "Summarize it." }] },
+        ],
+        store: false,
+      })
     }),
   )
 
