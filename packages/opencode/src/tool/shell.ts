@@ -630,7 +630,12 @@ export const ShellTool = Tool.define(
               ).pipe(
                 Effect.timeoutOrElse({
                   duration: "10 seconds",
-                  orElse: () => Effect.void,
+                  orElse: () =>
+                    Effect.gen(function* () {
+                      yield* Effect.logWarning(
+                        "Shell command scan/ask phase timed out after 10 seconds; continuing execution without completing that work, so results may be incomplete.",
+                      )
+                    }),
                 }),
               )
 
