@@ -32,6 +32,7 @@ export type DiffViewerFileTreeProps = {
   readonly selectedFileIndex?: number
   readonly reviewedFileNames?: ReadonlySet<string>
   readonly expandedNodes?: ReadonlySet<number>
+  readonly onRowClick?: (row: FileTreeRow) => void
 }
 
 export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
@@ -86,6 +87,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                     flexDirection="row"
                     width="100%"
                     backgroundColor={highlighted() ? props.theme.primary : undefined}
+                    onMouseUp={() => props.onRowClick?.(row)}
                   >
                     <text fg={highlighted() ? props.theme.background : fadedColor()} wrapMode="none" flexShrink={0}>
                       {prefix()}

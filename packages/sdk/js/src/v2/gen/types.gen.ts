@@ -4837,6 +4837,7 @@ export type VcsDiffData = {
     directory?: string
     workspace?: string
     mode: "git" | "branch"
+    context?: string
   }
   url: "/vcs/diff"
 }

@@ -179,21 +179,15 @@ export function orderedPatchFileIndexes(rows: readonly FileTreeRow[]) {
   return rows.flatMap((row) => (row.fileIndex === undefined ? [] : [row.fileIndex]))
 }
 
+export function showDiffViewerFileTree(showFileTree: boolean, fileCount: number) {
+  return showFileTree && fileCount > 0
+}
+
 export function movePatchFileIndex(fileIndexes: readonly number[], current: number | undefined, offset: number) {
   if (fileIndexes.length === 0) return undefined
   const index = current === undefined ? -1 : fileIndexes.indexOf(current)
-  if (index === -1) return offset < 0 ? fileIndexes[fileIndexes.length - 1] : fileIndexes[0]
+  if (index === -1) return fileIndexes[0]
   return fileIndexes[Math.max(0, Math.min(fileIndexes.length - 1, index + offset))]
-}
-
-export function relativePatchFileIndexFromViewport(
-  entries: readonly { readonly fileIndex: number; readonly titleContentY: number }[],
-  scrollTop: number,
-  offset: number,
-) {
-  const ordered = [...entries].sort((left, right) => left.titleContentY - right.titleContentY)
-  if (offset > 0) return ordered.find((entry) => entry.titleContentY > scrollTop)?.fileIndex
-  return ordered.findLast((entry) => entry.titleContentY < scrollTop)?.fileIndex
 }
 
 export function allExpandedFileTreeDirectories(tree: FileTree) {

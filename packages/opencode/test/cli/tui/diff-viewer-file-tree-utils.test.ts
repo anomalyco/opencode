@@ -10,8 +10,8 @@ import {
   moveFileTreeSelectionToParent,
   movePatchFileIndex,
   orderedPatchFileIndexes,
-  relativePatchFileIndexFromViewport,
   setFileTreeDirectoryExpanded,
+  showDiffViewerFileTree,
   singlePatchFileIndex,
   toggleFileTreeDirectory,
 } from "../../../src/cli/cmd/tui/feature-plugins/system/diff-viewer-file-tree-utils"
@@ -268,66 +268,24 @@ describe("diff viewer file tree utilities", () => {
     expect(orderedPatchFileIndexes(rows)).toEqual([2, 1, 0])
   })
 
+  test("shows the diff viewer file tree only when enabled and files exist", () => {
+    expect(showDiffViewerFileTree(true, 1)).toBe(true)
+    expect(showDiffViewerFileTree(true, 0)).toBe(false)
+    expect(showDiffViewerFileTree(false, 1)).toBe(false)
+    expect(showDiffViewerFileTree(false, 0)).toBe(false)
+  })
+
   test("moves patch selection through the ordered patch file indexes", () => {
     const fileIndexes = [2, 1, 0]
 
     expect(movePatchFileIndex(fileIndexes, undefined, 1)).toBe(2)
-    expect(movePatchFileIndex(fileIndexes, undefined, -1)).toBe(0)
+    expect(movePatchFileIndex(fileIndexes, undefined, -1)).toBe(2)
     expect(movePatchFileIndex(fileIndexes, 2, 1)).toBe(1)
     expect(movePatchFileIndex(fileIndexes, 1, -1)).toBe(2)
     expect(movePatchFileIndex(fileIndexes, 0, 1)).toBe(0)
     expect(movePatchFileIndex(fileIndexes, 99, 1)).toBe(2)
+    expect(movePatchFileIndex(fileIndexes, 99, -1)).toBe(2)
     expect(movePatchFileIndex([], undefined, 1)).toBeUndefined()
-  })
-
-  test("moves to the next visible patch title below the viewport", () => {
-    expect(
-      relativePatchFileIndexFromViewport(
-        [
-          { fileIndex: 0, titleContentY: 0 },
-          { fileIndex: 1, titleContentY: 30 },
-          { fileIndex: 2, titleContentY: 60 },
-        ],
-        10,
-        1,
-      ),
-    ).toBe(1)
-    expect(
-      relativePatchFileIndexFromViewport(
-        [
-          { fileIndex: 0, titleContentY: 0 },
-          { fileIndex: 1, titleContentY: 30 },
-          { fileIndex: 2, titleContentY: 60 },
-        ],
-        30,
-        1,
-      ),
-    ).toBe(2)
-  })
-
-  test("moves to the previous visible patch title above the viewport", () => {
-    expect(
-      relativePatchFileIndexFromViewport(
-        [
-          { fileIndex: 0, titleContentY: 0 },
-          { fileIndex: 1, titleContentY: 30 },
-          { fileIndex: 2, titleContentY: 60 },
-        ],
-        50,
-        -1,
-      ),
-    ).toBe(1)
-    expect(
-      relativePatchFileIndexFromViewport(
-        [
-          { fileIndex: 0, titleContentY: 0 },
-          { fileIndex: 1, titleContentY: 30 },
-          { fileIndex: 2, titleContentY: 60 },
-        ],
-        30,
-        -1,
-      ),
-    ).toBe(0)
   })
 
   test("toggles only selected directory expansion", () => {
