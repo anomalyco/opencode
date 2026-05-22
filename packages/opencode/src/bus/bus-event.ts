@@ -18,6 +18,7 @@ export function define<Type extends string, Properties extends Schema.Top>(
 }
 
 export function effectPayloads() {
+  const registered = new Set(registry.keys())
   return [
     ...registry
       .entries()
@@ -31,6 +32,7 @@ export function effectPayloads() {
       .toArray(),
     ...EventV2.registry
       .values()
+      .filter((definition) => !registered.has(definition.type))
       .map((definition) =>
         Schema.Struct({
           id: Schema.String,

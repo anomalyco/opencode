@@ -3,7 +3,11 @@ import { OpenApi } from "effect/unstable/httpapi"
 import { PublicApi } from "../../src/server/routes/instance/httpapi/public"
 
 type Method = "get" | "post" | "put" | "delete" | "patch"
-type OpenApiSchema = { readonly $ref?: string }
+type OpenApiSchema = {
+  readonly $ref?: string
+  readonly anyOf?: readonly OpenApiSchema[]
+  readonly properties?: Record<string, OpenApiSchema>
+}
 type OpenApiResponse = {
   readonly description?: string
   readonly content?: Record<string, { readonly schema?: OpenApiSchema }>
@@ -13,7 +17,10 @@ type OpenApiOperation = {
   readonly security?: unknown
 }
 type OpenApiPathItem = Partial<Record<Method, OpenApiOperation>>
-type OpenApiSpec = { readonly paths: Record<string, OpenApiPathItem> }
+type OpenApiSpec = {
+  readonly components?: { readonly schemas?: Record<string, OpenApiSchema> }
+  readonly paths: Record<string, OpenApiPathItem>
+}
 
 const methods = ["get", "post", "put", "delete", "patch"] as const
 
@@ -40,6 +47,16 @@ function componentName(ref: string) {
 
 function isBuiltInEndpointError(name: string) {
   return name.startsWith("EffectHttpApiError") || name.startsWith("effect_HttpApiError_")
+}
+
+function component(spec: OpenApiSpec, name: string) {
+  const schema = spec.components?.schemas?.[name]
+  expect(schema, name).toBeDefined()
+  return schema!
+}
+
+function uniqueRefs(schema: OpenApiSchema) {
+  return (schema.anyOf ?? []).flatMap((entry) => entry.$ref ?? [])
 }
 
 describe("PublicApi OpenAPI v2 errors", () => {
@@ -215,5 +232,17 @@ describe("PublicApi OpenAPI v2 errors", () => {
     expect(componentName(responseRef(spec.paths["/project/{projectID}"]?.patch?.responses?.["404"]) ?? "")).toBe(
       "ProjectNotFoundError",
     )
+  })
+
+  test("does not duplicate event union refs", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const refs of [
+      uniqueRefs(component(spec, "Event")),
+      uniqueRefs(component(spec, "GlobalEvent").properties?.payload ?? {}),
+    ]) {
+      expect(refs.length).toBeGreaterThan(0)
+      expect(refs).toEqual([...new Set(refs)])
+    }
   })
 })
