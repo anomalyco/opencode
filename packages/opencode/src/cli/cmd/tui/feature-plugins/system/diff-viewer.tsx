@@ -7,7 +7,7 @@ import { useBindings, useCommandShortcut } from "@tui/keymap"
 import { useTheme } from "@tui/context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
 import path from "path"
-import { createEffect, createMemo, createResource, createSignal, For, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { DiffViewerFileTree } from "./diff-viewer-file-tree"
 import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
 import { DialogSelect } from "@tui/ui/dialog-select"
@@ -142,6 +142,8 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const patchNodeByFileIndex = new Map<number, BoxRenderable>()
   const [pendingPatchScrollFileIndex, setPendingPatchScrollFileIndex] = createSignal<number | undefined>()
   const [patchFillerHeight, setPatchFillerHeight] = createSignal(0)
+
+  onCleanup(() => props.api.ui.dialog.clear())
 
   createEffect(() => {
     setExpandedFileNodes(allExpandedFileTreeDirectories(fileTree()))
@@ -365,6 +367,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       title: "Close diff viewer",
       category: "VCS",
       run() {
+        props.api.ui.dialog.clear()
         props.api.route.navigate("home")
       },
     },
@@ -602,7 +605,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const openSwitchDiffDialog = () => {
     props.api.ui.dialog.replace(() => (
       <DialogSelect
-        title="Switch diff"
+        title="Switch source"
         skipFilter={true}
         renderFilter={false}
         current={mode()}
@@ -823,49 +826,54 @@ function DiffViewerHelpDialog() {
   const { theme } = useTheme()
   const rows = [
     {
+      shortcut: () => "q",
+      action: "Close viewer",
+      description: "Quit the diff viewer",
+    },
+    {
       shortcut: useCommandShortcut("diff.switch_focus"),
       action: "Focus file tree",
-      description: "Move keyboard focus between the file tree and patch pane.",
+      description: "Move keyboard focus between the file tree and patch pane",
     },
     {
       shortcut: useCommandShortcut("diff.next_file"),
       action: "Next file",
-      description: "Select the next changed file in file-tree order.",
+      description: "Select the next changed file in file-tree order",
     },
     {
       shortcut: useCommandShortcut("diff.previous_file"),
       action: "Previous file",
-      description: "Select the previous changed file in file-tree order.",
+      description: "Select the previous changed file in file-tree order",
     },
     {
       shortcut: useCommandShortcut("diff.toggle_file_tree"),
       action: "Toggle file tree",
-      description: "Show or hide the file tree sidebar.",
+      description: "Show or hide the file tree sidebar",
     },
     {
       shortcut: useCommandShortcut("diff.single_patch"),
       action: "Toggle patches",
-      description: "Switch between one selected patch and all patches.",
+      description: "Switch between one selected patch and all patches",
     },
     {
       shortcut: useCommandShortcut("diff.switch_source"),
       action: "Switch source",
-      description: "Choose working tree or last-turn changes.",
+      description: "Choose working tree or last-turn changes",
     },
     {
       shortcut: useCommandShortcut("diff.toggle_view"),
       action: "Toggle view",
-      description: "Switch between split and unified diff layout.",
+      description: "Switch between split and unified diff layout",
     },
     {
       shortcut: useCommandShortcut("diff.expand_all"),
       action: "Expand all folders",
-      description: "Open every folder in the file tree.",
+      description: "Open every folder in the file tree",
     },
     {
       shortcut: useCommandShortcut("diff.mark_reviewed"),
       action: "Mark reviewed",
-      description: "Toggle reviewed state for the selected file.",
+      description: "Toggle reviewed state for the selected file",
     },
   ]
 
