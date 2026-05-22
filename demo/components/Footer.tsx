@@ -21,7 +21,7 @@ export function Footer() {
           </p>
         </div>
         <nav className="grid grid-cols-2 gap-x-12 gap-y-2 font-mono text-xs text-sc-text-mid">
-          <a href="#problem" className="hover:text-sc-text">なぜいま</a>
+          <a href="#problem" className="hover:text-sc-text">課題</a>
           <a href="#tee" className="hover:text-sc-text">TEE 保護</a>
           <a href="#harness" className="hover:text-sc-text">ハーネス</a>
           <a href="#coding" className="hover:text-sc-text">AI 開発</a>
@@ -37,7 +37,7 @@ export function Footer() {
             <span className="text-sc-ember">架空のデモ</span> であり、
             表示しているレスポンス・指標値・図版はすべてモックです。
           </p>
-          <p className="font-mono">© Acompany, Inc. demo build</p>
+          <p className="font-mono">© Acompany Co., Ltd. demo build</p>
         </div>
       </div>
     </footer>

@@ -69,11 +69,11 @@ export function SectionCoding() {
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.7 }}
         >
-          <span className="text-stamp">04 / 価値 3</span>
+          <span className="text-stamp">04 / 価値 3 · AI 開発</span>
           <h2 className="mt-3 text-balance text-3xl font-medium leading-tight md:text-5xl">
-            守った上で、
-            <br />
-            <span className="text-sc-ember">本物の開発</span> を加速する。
+            ターミナル完結の UI による、
+            <br className="md:hidden" />
+            <span className="text-sc-ember">開発速度の圧倒的向上</span>
           </h2>
           <p className="mt-6 max-w-2xl text-sm leading-relaxed text-sc-text-mid md:text-base">
             ターミナル中心のワークフローを崩さず、コード生成・レビュー・リファクタ・バグ修正・テスト生成までを

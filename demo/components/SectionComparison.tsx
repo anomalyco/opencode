@@ -14,39 +14,24 @@ type Row = {
 //   — = 非対応・対象外
 const ROWS: Row[] = [
   {
-    feature: "ソースコードが LLM 提供者の手に渡らない",
+    feature: "入力が社外に漏洩しない",
     generic: { mark: "○", note: "規約・契約で信頼" },
-    securecode: { mark: "◎", note: "TEE で隔離" },
+    securecode: { mark: "◎", note: "TEE による物理的隔離" },
   },
   {
-    feature: "入力が学習に使われない",
-    generic: { mark: "○", note: "Opt-out で信頼" },
-    securecode: { mark: "◎", note: "TEE 越しで見えない" },
-  },
-  {
-    feature: "推論時のコードがインフラ事業者から見えない",
+    feature: "実行環境を検証できる",
     generic: { mark: "—" },
-    securecode: { mark: "◎", note: "Confidential VM" },
+    securecode: { mark: "◎", note: "リモートアテステーション" },
   },
   {
-    feature: "リモートアテステーションで実行環境を検証できる",
-    generic: { mark: "—" },
-    securecode: { mark: "◎", note: "AMD SEV-SNP / NVIDIA CC" },
+    feature: "外部アクセス先の制限",
+    generic: { mark: "○", note: "ユーザーが設定" },
+    securecode: { mark: "◎", note: "管理者が強制" },
   },
   {
-    feature: "誰が何を承認したか後追いできる",
-    generic: { mark: "○", note: "提供者ログを信頼" },
-    securecode: { mark: "◎", note: "自社で監査ログ保有" },
-  },
-  {
-    feature: "AI の外部アクセス先を組織側から制限できる",
-    generic: { mark: "—" },
-    securecode: { mark: "◎", note: "予定 / 管理者一元管理" },
-  },
-  {
-    feature: "危険な操作を人間が承認できる",
-    generic: { mark: "○", note: "都度フックを設定" },
-    securecode: { mark: "◎", note: "permission-policy 標準搭載" },
+    feature: "操作ごとの柔軟な権限設定",
+    generic: { mark: "○", note: "ユーザーが設定" },
+    securecode: { mark: "◎", note: "管理者が強制" },
   },
 ]
 

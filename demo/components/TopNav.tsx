@@ -3,7 +3,7 @@
 import { motion, useScroll, useTransform } from "framer-motion"
 
 const SECTIONS = [
-  { id: "problem", label: "なぜいま" },
+  { id: "problem", label: "課題" },
   { id: "tee", label: "TEE 保護" },
   { id: "harness", label: "ハーネス" },
   { id: "coding", label: "AI 開発" },
@@ -40,9 +40,6 @@ export function TopNav() {
             </a>
           ))}
         </nav>
-        <span className="font-mono text-[10px] tracking-[0.2em] text-sc-text-dim">
-          BETA · 2026.03.13
-        </span>
       </div>
     </motion.header>
   )

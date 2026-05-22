@@ -21,7 +21,7 @@ export function SectionHarness() {
           transition={{ duration: 0.7 }}
           className="mb-16"
         >
-          <span className="text-stamp">03 / 価値 2</span>
+          <span className="text-stamp">03 / 価値 2 · ハーネス</span>
           <h2 className="mt-3 text-balance text-3xl font-medium leading-tight md:text-5xl">
             AI に自由を、
             <br className="md:hidden" />
@@ -78,10 +78,6 @@ function PermissionGate() {
             監査ログに残るので 誰が何を承認したか後追いできる
           </li>
         </ul>
-        <p className="mt-4 text-xs leading-relaxed text-sc-text-dim">
-          AI が「やってよい操作」と「人間に聞く操作」を明示的に分離。AI が
-          ポリシーを書き換えることはできないため、暴走しても被害が広がらない。
-        </p>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-sc-border bg-sc-bg-soft font-mono text-[12px] leading-relaxed">
@@ -174,11 +170,6 @@ deny_all_others = true`}
             AI も開発者も信頼せずに、運用責任者の意図を機械的に強制
           </li>
         </ul>
-        <p className="mt-4 text-xs leading-relaxed text-sc-text-dim">
-          AI が「rm -rf /」のような直接的に危険な命令を出す確率はそもそも低い。
-          むしろ「うっかり .env を読みに行く」「未確認のドメインに送信を試みる」
-          といった事故を、人の判断に頼らず止めるための仕組み。
-        </p>
       </div>
     </motion.div>
   )
@@ -219,10 +210,6 @@ function CentralMcpManagement() {
             ポリシー変更は監査ログ付き。誰が何を許可したかを追跡できる
           </li>
         </ul>
-        <p className="mt-4 text-xs leading-relaxed text-sc-text-dim">
-          個々のエンジニアにも AI にも「正しい設定を選ぶ判断力」を要求しない。
-          組織の許可境界が常に上書き不能な形で開発環境に降りてくる。
-        </p>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-sc-border bg-sc-bg-soft font-mono text-[12px] leading-relaxed">
@@ -237,7 +224,7 @@ function CentralMcpManagement() {
           <McpRow status="blocked" name="random-3rd-party" desc="未承認ベンダー" />
         </div>
         <div className="border-t border-sc-border bg-sc-bg-elev/60 px-3 py-1.5 text-[10px] text-sc-text-dim">
-          開発者の securecode.json はこの一覧の subset でしか書けない
+          開発者の設定ファイルはこの一覧の subset でしか書けない
         </div>
       </div>
     </motion.div>

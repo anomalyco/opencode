@@ -11,12 +11,12 @@ const RISKS = [
   {
     tag: "PROVIDER",
     title: "学習に使われない保証は契約だけ",
-    body: "デフォルトの API では入力が学習に使われるリスクがあり、Opt-out しても運用ログとしての保管は残る。結局のところ「モデル提供者を信頼する」契約で縛っているに過ぎない。Confidential Computing なら、信頼ではなく物理的な隔離で保証できる。",
+    body: "デフォルトの API では入力が学習に使われるリスクがあり、Opt-out しても運用ログとしての保管は残る。結局のところ「モデル提供者を信頼する」契約で縛っているに過ぎない。",
   },
   {
-    tag: "POLICY",
-    title: "強い制限のある組織では使えない",
-    body: "金融・防衛・医療領域では外部 SaaS への送信が厳しく制限される。結果、機密度の高いコードを扱う現場ほど、生成 AI の恩恵から取り残される。",
+    tag: "AGENT",
+    title: "AI に強い権限を与えることのリスク",
+    body: "コーディングエージェントが行うことはファイル編集・シェル実行・外部通信など多岐にわたる。AI に権限を渡すことが開発効率化には不可欠だが、その分だけインシデントリスクも増加していく。",
   },
 ] as const
 
@@ -34,11 +34,7 @@ export function SectionProblem() {
       >
         <span className="text-stamp">01 / 課題</span>
         <h2 className="mt-3 text-balance text-3xl font-medium leading-tight md:text-5xl">
-          機密コードを、
-          <br className="md:hidden" />
-          外に出せない組織にも、
-          <br />
-          AI を。
+          機密コードを外に出せない組織にも、AI を。
         </h2>
         <p className="mt-6 max-w-2xl text-sm leading-relaxed text-sc-text-mid md:text-base">
           Claude Code や Cursor の登場以降、AI コーディングはスタンダードになりつつある。

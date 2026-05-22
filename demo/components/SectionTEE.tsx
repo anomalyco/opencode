@@ -3,32 +3,31 @@
 import { motion, useScroll, useTransform, type MotionValue } from "framer-motion"
 import { useRef } from "react"
 
-// 5 ステップの scrollytelling。各ステップが progress の 0..1 の区間を持つ。
+// 4 ステップの scrollytelling。各ステップが progress の 0..1 の区間を持つ。
+//   01 リモートアテステーション (TEE の正当性を検証)
+//   02 暗号化して送信          (prompt に鍵が被さり、TEE へ移動、TEE 内で鍵が外れる)
+//   03 LLM 推論                (prompt を LLM model に渡し、response を生成)
+//   04 暗号化して返信          (response に鍵が被さり、手元へ移動、手元で鍵が外れる)
 const STEPS = [
   {
-    id: "raw",
-    title: "01. 開発者の手元",
-    body: "ローカルの IDE / TUI で生成されたプロンプトとソースコード。",
-  },
-  {
-    id: "encrypt",
-    title: "02. クライアント側で暗号化",
-    body: "TEE の公開鍵で暗号化されたまま送出。平文はネットワークにも我々のサーバにも残らない。",
-  },
-  {
     id: "attest",
-    title: "03. リモートアテステーション",
-    body: "AMD SEV-SNP / NVIDIA Confidential Computing が発行する署名済みレポートを検証し、改ざんされた実行環境を拒否する。",
+    title: "01. リモートアテステーション",
+    body: "接続先の TEE が発行する署名済みレポートを検証し、改ざんされた実行環境を拒否する。正当性を確認できてから鍵を渡す。",
+  },
+  {
+    id: "send",
+    title: "02. 暗号化して送信",
+    body: "プロンプトとソースコードを TEE の公開鍵で暗号化して送出し、TEE 内で復号する。平文はネットワークにも我々のサーバにも残らない。",
   },
   {
     id: "infer",
-    title: "04. TEE 内で LLM 推論",
-    body: "復号〜推論〜結果生成までを Enclave 内で完結。Acompany を含む第三者からは中身が見えない。",
+    title: "03. TEE 内で LLM 推論",
+    body: "復号した入力で LLM 推論を実行。Acompany を含む第三者からは、処理中のコードも生成結果も見えない。",
   },
   {
     id: "return",
-    title: "05. 暗号化されたまま応答",
-    body: "戻り値も同じ秘匿経路で開発者へ。監査用の最小ログだけが外に出る。",
+    title: "04. 暗号化して返信",
+    body: "戻り値も同じ秘匿経路で暗号化し、開発者の手元で復号。平文は最後まで TEE の外に出ない。",
   },
 ] as const
 
@@ -40,30 +39,63 @@ export function SectionTEE() {
   })
 
   // ステップごとの「進入率」 0..1
-  const a0 = useTransform(scrollYProgress, [0.0, 0.18], [0, 1], { clamp: true })
-  const a1 = useTransform(scrollYProgress, [0.18, 0.38], [0, 1], { clamp: true })
-  const a2 = useTransform(scrollYProgress, [0.38, 0.58], [0, 1], { clamp: true })
-  const a3 = useTransform(scrollYProgress, [0.58, 0.78], [0, 1], { clamp: true })
-  const a4 = useTransform(scrollYProgress, [0.78, 1.0], [0, 1], { clamp: true })
+  const a0 = useTransform(scrollYProgress, [0.0, 0.22], [0, 1], { clamp: true })
+  const a1 = useTransform(scrollYProgress, [0.26, 0.52], [0, 1], { clamp: true })
+  const a2 = useTransform(scrollYProgress, [0.54, 0.72], [0, 1], { clamp: true })
+  const a3 = useTransform(scrollYProgress, [0.74, 1.0], [0, 1], { clamp: true })
 
-  // 流線アニメ
-  const dashOffset1 = useTransform(scrollYProgress, [0.05, 0.4], [200, 0])
-  const dashOffset2 = useTransform(scrollYProgress, [0.55, 0.95], [0, -200])
-
-  // SVG 要素ごとに必要な派生値
+  // --- Step 01: アテステーション ---
+  const attestShow = useTransform(a0, [0.15, 0.55], [0, 1], { clamp: true })
   const teeBoxFilter = useTransform(
-    a2,
+    a0,
     [0, 1],
     [
       "drop-shadow(0 0 0px rgba(3,76,255,0))",
-      "drop-shadow(0 0 20px rgba(3,76,255,0.45))",
+      "drop-shadow(0 0 18px rgba(3,76,255,0.4))",
     ],
   )
-  const blockedOpacity = useTransform(a2, [0, 1], [0, 0.9])
+  const blockedOpacity = useTransform(a0, [0.5, 1], [0, 0.95], { clamp: true })
+
+  // --- Step 02: 暗号化して送信（prompt パケット）---
+  // prompt は最初から表示。Step 03 中盤で LLM model に吸収されて消える。
+  const promptOpacity = useTransform(
+    scrollYProgress,
+    [0, 0.62, 0.68],
+    [1, 1, 0],
+    { clamp: true },
+  )
+  const fwdX = useTransform(a1, [0, 0.28, 0.78, 1], [0, 0, 288, 288])
+  const fwdLock = useTransform(a1, [0.1, 0.24, 0.74, 0.88], [0, 1, 1, 0])
+  // 矢印の線は Step 02 で出現し、Step 03 に移ったタイミングで消える
+  const fwdLineOpacity = useTransform(a1, [0, 0.12, 0.9, 1], [0, 1, 1, 0], {
+    clamp: true,
+  })
+  // バッジ 02 は出現したら消さずに残す
+  const fwdBadgeOpacity = useTransform(a1, [0, 0.12], [0, 1], { clamp: true })
+
+  // --- Step 03: LLM 推論 ---
+  const llmStroke = useTransform(a2, [0, 1], ["#4b4646", "#89b5ff"])
+  const llmBarScale = useTransform(a2, [0.1, 0.9], [0, 1], { clamp: true })
+  // 他のバッジと同様、Step 03 に入ったタイミングで濃く表示する
+  const llmBadgeOpacity = useTransform(a2, [0, 0.12], [0, 1], { clamp: true })
+
+  // --- Step 04: 暗号化して返信（response パケット）---
+  // response は Step 03 後半で LLM model から出てくる。
+  const retShell = useTransform(scrollYProgress, [0.63, 0.7], [0, 1], {
+    clamp: true,
+  })
+  const retX = useTransform(a3, [0, 0.28, 0.78, 1], [0, 0, -288, -288])
+  const retLock = useTransform(a3, [0.1, 0.24, 0.74, 0.88], [0, 1, 1, 0])
+  // 矢印の線は Step 04 で出現し、Step 04 の終わりで消える
+  const retLineOpacity = useTransform(a3, [0, 0.12, 0.88, 1], [0, 1, 1, 0], {
+    clamp: true,
+  })
+  // バッジ 04 は出現したら消さずに残す
+  const retBadgeOpacity = useTransform(a3, [0, 0.12], [0, 1], { clamp: true })
 
   return (
     <section id="tee" ref={ref} className="relative h-[420vh] w-full">
-      <div className="sticky top-0 flex h-[100dvh] min-h-[640px] w-full flex-col overflow-hidden">
+      <div className="sticky top-0 flex h-screen w-full flex-col overflow-hidden">
         <div
           aria-hidden
           className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_70%_30%,rgba(3,76,255,0.12)_0%,transparent_55%)]"
@@ -71,348 +103,277 @@ export function SectionTEE() {
 
         <div className="mx-auto flex h-full w-full max-w-6xl flex-col px-6 py-12">
           <div className="flex items-center justify-between">
-            <span className="text-stamp">02 / 価値 1</span>
+            <span className="text-stamp">02 / 価値 1 · TEE 保護</span>
             <span className="font-mono text-[10px] text-sc-text-dim">
               TRUSTED EXECUTION ENVIRONMENT
             </span>
           </div>
 
           <h2 className="mt-4 max-w-3xl text-balance text-3xl font-medium leading-tight md:text-5xl">
-            AI 推論を、
-            <span className="text-sc-ember"> 暗号化された箱の中 </span>
-            だけで実行する。
+            AI 推論環境を物理的に隔離、
+            <br className="md:hidden" />
+            <span className="text-sc-ember">誰も中を覗けない</span>。
           </h2>
 
-          <div className="mt-6 grid flex-1 grid-cols-1 gap-6 md:grid-cols-[1.5fr_1fr]">
+          <div className="mt-6 grid flex-1 grid-cols-1 gap-8 md:grid-cols-[1.8fr_1fr]">
             {/* === 図 === */}
             <div className="relative flex items-center justify-center">
               <svg
-                viewBox="0 0 620 380"
-                className="block h-auto w-full"
+                viewBox="0 0 520 420"
+                className="h-full w-full max-h-[62vh]"
                 aria-hidden
               >
                 <defs>
                   <linearGradient id="tee-glow" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#fc533a" stopOpacity="0.5" />
-                    <stop offset="100%" stopColor="#034cff" stopOpacity="0.5" />
+                    <stop offset="0%" stopColor="#fc533a" stopOpacity="0.4" />
+                    <stop offset="100%" stopColor="#034cff" stopOpacity="0.4" />
                   </linearGradient>
-                  <linearGradient id="flow-right" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#fc533a" />
-                    <stop offset="100%" stopColor="#034cff" />
-                  </linearGradient>
-                  <linearGradient id="flow-left" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#034cff" />
-                    <stop offset="100%" stopColor="#fc533a" />
-                  </linearGradient>
+                  <marker
+                    id="arrow"
+                    viewBox="0 0 10 10"
+                    refX="8"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto-start-reverse"
+                  >
+                    <path d="M 0 1 L 9 5 L 0 9 z" fill="#fc533a" />
+                  </marker>
                 </defs>
 
-                {/* Zone labels: OUTSIDE (left) と INSIDE TEE (right) の 2 ゾーンのみ */}
+                {/* 領域ラベル */}
                 <text
-                  x="85"
-                  y="32"
+                  x="116"
+                  y="120"
                   textAnchor="middle"
                   fill="#716c6b"
                   fontFamily="JetBrains Mono, monospace"
                   fontSize="10"
-                  letterSpacing="1.4"
+                  letterSpacing="1.2"
                 >
-                  OUTSIDE / untrusted
+                  Developer
                 </text>
                 <text
-                  x="410"
-                  y="32"
+                  x="404"
+                  y="96"
                   textAnchor="middle"
                   fill="#89b5ff"
                   fontFamily="JetBrains Mono, monospace"
                   fontSize="10"
-                  letterSpacing="1.4"
+                  letterSpacing="1.2"
                 >
-                  INSIDE TEE / trusted
+                  TEE Server
                 </text>
-                <line
-                  x1="170"
-                  y1="20"
-                  x2="170"
-                  y2="340"
-                  stroke="#3e3939"
-                  strokeDasharray="2 4"
-                />
 
-                {/* Developer node (left, 縦に大きく配置して 2 本の矢印を上下に通せる高さ) */}
-                <g>
-                  <rect
-                    x="20"
-                    y="90"
-                    width="130"
-                    height="180"
-                    rx="6"
-                    fill="#1b1818"
-                    stroke="#3e3939"
-                  />
-                  <text
-                    x="85"
-                    y="120"
-                    textAnchor="middle"
-                    fill="#b7b1b1"
-                    fontFamily="JetBrains Mono, monospace"
-                    fontSize="11"
-                  >
-                    Developer
-                  </text>
-                  <text
-                    x="85"
-                    y="138"
-                    textAnchor="middle"
-                    fill="#716c6b"
-                    fontFamily="JetBrains Mono, monospace"
-                    fontSize="9"
-                  >
-                    $ securecode
-                  </text>
-                  <motion.text
-                    x="85"
-                    y="158"
-                    textAnchor="middle"
-                    fill="#fc533a"
-                    fontFamily="JetBrains Mono, monospace"
-                    fontSize="9"
-                    style={{ opacity: a0 }}
-                  >
-                    plaintext
-                  </motion.text>
-                  <StepBadge x={85} y={235} n="01" opacity={a0} />
-                </g>
-
-                {/* Arrow 1: Developer → TEE (top, 送信)
-                 *   - 棒線部分は strokeDashoffset を 200→0 にアニメして
-                 *     scroll に合わせて「描かれていく」ように見せる
-                 *   - 矢じり (motion.polygon) は a1 と opacity をそろえて、
-                 *     線が描き終わるタイミングで一緒に現れるようにする
-                 *     (markerEnd だと strokeDashoffset と関係なく常時表示
-                 *     されてしまい、線が無い状態で先に三角だけ見える) */}
-                <motion.path
-                  d="M 152 150 L 238 150"
-                  fill="none"
-                  stroke="#034cff"
-                  strokeWidth="2"
-                  strokeDasharray="6 6"
-                  style={{ strokeDashoffset: dashOffset1 }}
-                />
-                <motion.polygon
-                  points="228,144 239,150 228,156"
-                  fill="#034cff"
-                  style={{ opacity: a1 }}
-                />
-                <StepBadge x={195} y={120} n="02" opacity={a1} />
-                <motion.text
-                  x="195"
-                  y="170"
-                  textAnchor="middle"
-                  fill="#fc533a"
-                  fontFamily="JetBrains Mono, monospace"
-                  fontSize="9"
-                  style={{ opacity: a1 }}
-                >
-                  encrypted
-                </motion.text>
-
-                {/* TEE box (right, 大きく) */}
-                <motion.rect
-                  x="240"
-                  y="60"
-                  width="360"
-                  height="260"
-                  rx="10"
+                {/* Local node — 常時発光 */}
+                <rect
+                  x="28"
+                  y="146"
+                  width="176"
+                  height="180"
+                  rx="8"
                   fill="#1b1818"
-                  stroke="url(#tee-glow)"
-                  strokeWidth="2.5"
-                  style={{ filter: teeBoxFilter }}
+                  stroke="#3e3939"
+                  style={{ filter: "drop-shadow(0 0 12px rgba(200,255,196,0.4))" }}
                 />
                 <text
-                  x="420"
-                  y="84"
+                  x="116"
+                  y="182"
                   textAnchor="middle"
                   fill="#b7b1b1"
                   fontFamily="JetBrains Mono, monospace"
-                  fontSize="11"
-                  letterSpacing="1.2"
+                  fontSize="12"
                 >
-                  CONFIDENTIAL VM (TEE)
+                  Local
                 </text>
                 <text
-                  x="420"
-                  y="100"
+                  x="116"
+                  y="202"
                   textAnchor="middle"
                   fill="#716c6b"
                   fontFamily="JetBrains Mono, monospace"
                   fontSize="9"
                 >
-                  AMD SEV-SNP · NVIDIA CC
+                  $ securecode
                 </text>
 
-                {/* Attestation block (step 03) — シールド + 説明 */}
-                <motion.g style={{ opacity: a2 }}>
-                  <rect
-                    x="260"
-                    y="118"
-                    width="320"
-                    height="44"
-                    rx="6"
-                    fill="#034cff"
-                    fillOpacity="0.1"
-                    stroke="#034cff"
-                    strokeOpacity="0.5"
-                  />
-                  {/* Shield icon */}
-                  <g transform="translate(274, 132)">
-                    <path
-                      d="M 8 0 L 16 3 V 10 a 8 8 0 0 1 -8 8 a 8 8 0 0 1 -8 -8 V 3 Z"
-                      fill="#034cff"
-                      fillOpacity="0.25"
-                      stroke="#034cff"
-                      strokeWidth="1.4"
-                    />
-                    <path
-                      d="M 4.5 9 L 7.5 12 L 12 6.5"
-                      fill="none"
-                      stroke="#034cff"
-                      strokeWidth="1.6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </g>
+                {/* source code — Local 環境に置かれたコード */}
+                <FileIcon x={76} y={216} />
+                <text
+                  x="96"
+                  y="230"
+                  fill="#716c6b"
+                  fontFamily="JetBrains Mono, monospace"
+                  fontSize="9"
+                >
+                  source code
+                </text>
+
+                {/* TEE box */}
+                <motion.rect
+                  x="312"
+                  y="118"
+                  width="184"
+                  height="208"
+                  rx="10"
+                  fill="#1b1818"
+                  stroke="url(#tee-glow)"
+                  strokeWidth="2"
+                  style={{ filter: teeBoxFilter }}
+                />
+
+                {/* Step 01: attestation — バッジ(左) + 盾アイコン + ラベル を横並び */}
+                <motion.g style={{ opacity: attestShow }}>
+                  <StepBadge x={344} y={152} n="01" tone="cobalt" />
+                  <ShieldIcon x={362} y={144} />
                   <text
-                    x="306"
-                    y="138"
+                    x="384"
+                    y="156"
                     fill="#89b5ff"
                     fontFamily="JetBrains Mono, monospace"
-                    fontSize="11"
-                    fontWeight="700"
-                    letterSpacing="0.6"
+                    fontSize="10"
                   >
-                    ATTESTATION VERIFIED
+                    attested
                   </text>
-                  <text
-                    x="306"
-                    y="154"
-                    fill="#b7b1b1"
-                    fontFamily="JetBrains Mono, monospace"
-                    fontSize="9"
-                  >
-                    改ざんされた実行環境を検出して拒否
-                  </text>
-                  <StepBadge x={555} y={140} n="03" tone="cobalt" />
                 </motion.g>
 
-                {/* LLM block (step 04) */}
-                <motion.g style={{ opacity: a3 }}>
+                {/* Step 03: LLM box */}
+                <motion.rect
+                  x="336"
+                  y="186"
+                  width="136"
+                  height="126"
+                  rx="6"
+                  fill="#252121"
+                  style={{ stroke: llmStroke }}
+                  strokeWidth="1.5"
+                />
+                <RobotIcon x={395} y={187} />
+                <text
+                  x="404"
+                  y="218"
+                  textAnchor="middle"
+                  fill="#f1ecec"
+                  fontFamily="JetBrains Mono, monospace"
+                  fontSize="11"
+                >
+                  LLM model
+                </text>
+                <motion.g style={{ opacity: llmBadgeOpacity }}>
+                  <StepBadge x={404} y={234} n="03" tone="cobalt" />
+                </motion.g>
+                <rect
+                  x="356"
+                  y="276"
+                  width="96"
+                  height="4"
+                  rx="2"
+                  fill="#2f2b2b"
+                />
+                <motion.rect
+                  x="356"
+                  y="276"
+                  width="96"
+                  height="4"
+                  rx="2"
+                  fill="#034cff"
+                  style={{ scaleX: llmBarScale, transformOrigin: "0 0" }}
+                />
+
+                {/* Step 02: 往路の矢印 (Local → TEE) — 軸 + 三角 */}
+                <motion.path
+                  d="M 204 258 L 312 258"
+                  fill="none"
+                  stroke="#fc533a"
+                  strokeWidth="2.5"
+                  markerEnd="url(#arrow)"
+                  style={{ opacity: fwdLineOpacity }}
+                />
+                <motion.g style={{ opacity: fwdBadgeOpacity }}>
+                  <StepBadge x={258} y={234} n="02" />
+                </motion.g>
+
+                {/* Step 04: 復路の矢印 (TEE → Local) — 軸 + 三角 */}
+                <motion.path
+                  d="M 312 294 L 204 294"
+                  fill="none"
+                  stroke="#fc533a"
+                  strokeWidth="2.5"
+                  markerEnd="url(#arrow)"
+                  style={{ opacity: retLineOpacity }}
+                />
+                <motion.g style={{ opacity: retBadgeOpacity }}>
+                  <StepBadge x={258} y={318} n="04" />
+                </motion.g>
+
+                {/* prompt パケット — 最初から表示、Step 02 で TEE へ移動 */}
+                <motion.g style={{ x: fwdX, opacity: promptOpacity }}>
                   <rect
-                    x="260"
-                    y="180"
-                    width="320"
-                    height="120"
-                    rx="6"
+                    x="80"
+                    y="246"
+                    width="72"
+                    height="24"
+                    rx="4"
                     fill="#252121"
                     stroke="#4b4646"
                   />
                   <text
-                    x="280"
-                    y="208"
-                    fill="#f1ecec"
-                    fontFamily="JetBrains Mono, monospace"
-                    fontSize="13"
-                    fontWeight="600"
-                  >
-                    Qwen3.6-35B-A3B-fp8
-                  </text>
-                  <text
-                    x="280"
-                    y="228"
+                    x="116"
+                    y="262"
+                    textAnchor="middle"
                     fill="#b7b1b1"
                     fontFamily="JetBrains Mono, monospace"
                     fontSize="9"
                   >
-                    decrypt → infer → encrypt
+                    prompt
                   </text>
-                  <text
-                    x="280"
-                    y="248"
-                    fill="#716c6b"
-                    fontFamily="JetBrains Mono, monospace"
-                    fontSize="8"
-                  >
-                    平文はこの箱の中だけに存在する
-                  </text>
-                  <rect
-                    x="280"
-                    y="270"
-                    width="280"
-                    height="6"
-                    rx="3"
-                    fill="#2d2828"
-                  />
-                  <motion.rect
-                    x="280"
-                    y="270"
-                    width="280"
-                    height="6"
-                    rx="3"
-                    fill="#fc533a"
-                    style={{ scaleX: a3, transformOrigin: "280px 273px" }}
-                  />
-                  <StepBadge x={555} y={195} n="04" tone="cobalt" />
+                  {/* 鍵は prompt に被さる */}
+                  <motion.g style={{ opacity: fwdLock }}>
+                    <LockIcon x={110} y={252} />
+                  </motion.g>
                 </motion.g>
 
-                {/* Arrow 2: TEE → Developer (bottom, 応答)
-                 *   矢じりは a4 と opacity をそろえる (Arrow 1 と同じ理屈) */}
-                <motion.path
-                  d="M 238 220 L 152 220"
-                  fill="none"
-                  stroke="#fc533a"
-                  strokeWidth="2"
-                  strokeDasharray="6 6"
-                  style={{ strokeDashoffset: dashOffset2, opacity: a4 }}
-                />
-                <motion.polygon
-                  points="163,214 152,220 163,226"
-                  fill="#fc533a"
-                  style={{ opacity: a4 }}
-                />
-                <StepBadge x={195} y={250} n="05" opacity={a4} />
-                <motion.text
-                  x="195"
-                  y="208"
-                  textAnchor="middle"
-                  fill="#fc533a"
-                  fontFamily="JetBrains Mono, monospace"
-                  fontSize="9"
-                  style={{ opacity: a4 }}
-                >
-                  encrypted response
-                </motion.text>
+                {/* response パケット — Step 03 で LLM から出現、Step 04 で Local へ移動 */}
+                <motion.g style={{ x: retX, opacity: retShell }}>
+                  <rect
+                    x="368"
+                    y="282"
+                    width="72"
+                    height="24"
+                    rx="4"
+                    fill="#252121"
+                    stroke="#4b4646"
+                  />
+                  <text
+                    x="404"
+                    y="298"
+                    textAnchor="middle"
+                    fill="#c8ffc4"
+                    fontFamily="JetBrains Mono, monospace"
+                    fontSize="9"
+                  >
+                    response
+                  </text>
+                  {/* 鍵は response に被さる */}
+                  <motion.g style={{ opacity: retLock }}>
+                    <LockIcon x={398} y={288} />
+                  </motion.g>
+                </motion.g>
 
-                {/* 「TEE 内は見えない」アノテーション (TEE 図の下に配置) */}
+                {/* 「外からは覗けない」— 弾かれ表現 */}
                 <motion.g style={{ opacity: blockedOpacity }}>
                   <text
-                    x="420"
-                    y="348"
-                    textAnchor="middle"
-                    fontFamily="JetBrains Mono, monospace"
-                    fontSize="10"
-                    fill="#fc533a"
-                  >
-                    ✕ infra · cloud admin · Acompany inc.
-                  </text>
-                  <text
-                    x="420"
-                    y="365"
+                    x="404"
+                    y="350"
                     textAnchor="middle"
                     fontFamily="JetBrains Mono, monospace"
                     fontSize="9"
                     fill="#716c6b"
                   >
-                    特権アクセスでも TEE 内のデータは復号できない
+                    TEE の外からは、特権アクセスでも閲覧できない
                   </text>
+                  <DenyItem cx={348} label="クラウド事業者" />
+                  <DenyItem cx={462} label="Acompany" />
                 </motion.g>
               </svg>
             </div>
@@ -423,7 +384,6 @@ export function SectionTEE() {
               <Step progress={a1} index={1} step={STEPS[1]} />
               <Step progress={a2} index={2} step={STEPS[2]} />
               <Step progress={a3} index={3} step={STEPS[3]} />
-              <Step progress={a4} index={4} step={STEPS[4]} />
             </ol>
           </div>
         </div>
@@ -473,28 +433,24 @@ function Step({
 }
 
 // 図中の各遷移ポイントに振る "01", "02"... のバッジ。
-// opacity に右ペインの side step と同じ MotionValue を渡すことで、
-// 図中の badge と side step のフォーカス遷移を同期させる。
 // 配色: zone (ember / cobalt) を問わず白に統一し、「これはステップ番号」
 // であることを優先する。tone prop は API 互換のため残すが使わない。
 function StepBadge({
   x,
   y,
   n,
-  opacity,
 }: {
   x: number
   y: number
   n: string
   tone?: "ember" | "cobalt"
-  opacity?: MotionValue<number>
 }) {
   return (
-    <motion.g style={opacity ? { opacity } : undefined}>
+    <g>
       <circle
         cx={x}
         cy={y}
-        r="13"
+        r="11"
         fill="#f1ecec"
         fillOpacity="0.08"
         stroke="#f1ecec"
@@ -503,16 +459,119 @@ function StepBadge({
       />
       <text
         x={x}
-        y={y + 4}
+        y={y + 3}
         textAnchor="middle"
         fill="#f1ecec"
         fontFamily="JetBrains Mono, monospace"
-        fontSize="11"
+        fontSize="10"
         fontWeight="700"
         letterSpacing="0.5"
       >
         {n}
       </text>
-    </motion.g>
+    </g>
+  )
+}
+
+// 暗号化を表す錠前アイコン
+function LockIcon({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x}, ${y})`}>
+      <rect width="12" height="9" y="3" rx="1.5" fill="#fc533a" />
+      <path
+        d="M 3 3 V 1.5 a 3 3 0 0 1 6 0 V 3"
+        fill="none"
+        stroke="#fc533a"
+        strokeWidth="1.4"
+      />
+      <circle cx="6" cy="7.5" r="1.2" fill="#131010" />
+    </g>
+  )
+}
+
+// 検証済み (信頼できる) を表す盾アイコン
+function ShieldIcon({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x}, ${y})`}>
+      <path
+        d="M 7 0 L 14 3 V 8 C 14 12 7 16 7 16 C 7 16 0 12 0 8 V 3 Z"
+        fill="#89b5ff"
+        fillOpacity="0.18"
+        stroke="#89b5ff"
+        strokeWidth="1.2"
+      />
+      <path
+        d="M 4 8 L 6 10.5 L 10.5 5"
+        fill="none"
+        stroke="#89b5ff"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </g>
+  )
+}
+
+// LLM model を表すロボットアイコン
+function RobotIcon({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x}, ${y})`}>
+      {/* アンテナ */}
+      <line x1="9" y1="0" x2="9" y2="3" stroke="#89b5ff" strokeWidth="1.2" />
+      <circle cx="9" cy="0" r="1.4" fill="#89b5ff" />
+      {/* 頭 */}
+      <rect
+        x="1"
+        y="3"
+        width="16"
+        height="13"
+        rx="3"
+        fill="#89b5ff"
+        fillOpacity="0.16"
+        stroke="#89b5ff"
+        strokeWidth="1.2"
+      />
+      {/* 目 */}
+      <circle cx="6" cy="9.5" r="1.7" fill="#89b5ff" />
+      <circle cx="12" cy="9.5" r="1.7" fill="#89b5ff" />
+    </g>
+  )
+}
+
+// source code を表す書類アイコン
+function FileIcon({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x}, ${y})`}>
+      <path
+        d="M 0 0 H 9 L 13 4 V 17 H 0 Z"
+        fill="#252121"
+        stroke="#5a5454"
+        strokeWidth="1"
+      />
+      <path d="M 9 0 V 4 H 13" fill="none" stroke="#5a5454" strokeWidth="1" />
+      <line x1="3" y1="8" x2="10" y2="8" stroke="#716c6b" strokeWidth="1" />
+      <line x1="3" y1="11" x2="10" y2="11" stroke="#716c6b" strokeWidth="1" />
+      <line x1="3" y1="14" x2="8" y2="14" stroke="#716c6b" strokeWidth="1" />
+    </g>
+  )
+}
+
+// TEE の中を覗けない主体を示す「拒否アイテム」(枠なし)
+function DenyItem({ cx, label }: { cx: number; label: string }) {
+  return (
+    <text
+      x={cx}
+      y={370}
+      textAnchor="middle"
+      fontFamily="JetBrains Mono, monospace"
+      fontSize="9"
+    >
+      <tspan fill="#fc533a" fontWeight="700">
+        ✕{" "}
+      </tspan>
+      <tspan fill="#9a8f8e" textDecoration="line-through">
+        {label}
+      </tspan>
+    </text>
   )
 }
