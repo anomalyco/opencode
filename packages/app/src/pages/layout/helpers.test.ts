@@ -12,8 +12,10 @@ import {
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
+  getProjectAvatarSource,
   hasProjectPermissions,
   latestRootSession,
+  OPENCODE_PROJECT_ID,
 } from "./helpers"
 import { pathKey } from "@/utils/path-key"
 
@@ -215,6 +217,20 @@ describe("layout workspace helpers", () => {
   test("formats fallback project display name", () => {
     expect(displayName({ worktree: "/tmp/app" })).toBe("app")
     expect(displayName({ worktree: "/tmp/app", name: "My App" })).toBe("My App")
+  })
+
+  test("uses the opencode favicon as the default project icon", () => {
+    expect(getProjectAvatarSource(OPENCODE_PROJECT_ID)).toBe("https://opencode.ai/favicon.svg")
+  })
+
+  test("allows custom project icons to override the opencode favicon", () => {
+    expect(getProjectAvatarSource(OPENCODE_PROJECT_ID, { override: "data:image/png;base64,abc" })).toBe(
+      "data:image/png;base64,abc",
+    )
+  })
+
+  test("allows color avatars to override the opencode favicon", () => {
+    expect(getProjectAvatarSource(OPENCODE_PROJECT_ID, { color: "pink" })).toBeUndefined()
   })
 
   test("extracts api error message and fallback", () => {
