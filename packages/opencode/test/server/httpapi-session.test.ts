@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
@@ -13,6 +13,7 @@ import { InstanceBootstrap as InstanceBootstrapService } from "../../src/project
 import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
 import { Server } from "../../src/server/server"
+import * as HttpSessionError from "../../src/server/routes/instance/httpapi/handlers/session-errors"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
@@ -139,6 +140,24 @@ const insertLegacyAssistantMessage = (sessionID: SessionIDType, time = 1) =>
     )
   })
 
+const insertCorruptV2Message = (sessionID: SessionIDType, time = 1) =>
+  Effect.sync(() =>
+    Database.use((db) =>
+      db
+        .insert(SessionMessageTable)
+        .values([
+          {
+            id: SessionMessage.ID.create(),
+            session_id: sessionID,
+            type: "assistant",
+            time_created: time,
+            data: {} as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
+          },
+        ])
+        .run(),
+    ),
+  )
+
 const setLegacySummaryDiff = (sessionID: SessionIDType) =>
   Effect.sync(() =>
     Database.use((db) =>
@@ -197,6 +216,22 @@ afterEach(async () => {
 })
 
 describe("session HttpApi", () => {
+  it.effect("maps busy sessions to public session busy errors", () =>
+    Effect.gen(function* () {
+      const sessionID = SessionID.descending()
+      const exit = yield* HttpSessionError.mapBusy(Effect.fail(new Session.BusyError({ sessionID }))).pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toMatchObject({
+          _tag: "SessionBusyError",
+          sessionID,
+          message: `Session is busy: ${sessionID}`,
+        })
+      }
+    }),
+  )
+
   it.instance(
     "returns declared not found errors for read routes",
     () =>
@@ -477,6 +512,41 @@ describe("session HttpApi", () => {
           message: "V2 session wait is not available yet",
           service: "v2.session.wait",
         })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "returns safe v2 unknown errors for corrupt projected messages",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* createSession({ title: "v2 corrupt message" })
+        yield* insertCorruptV2Message(session.id)
+
+        const messages = yield* request(`/api/session/${session.id}/message`, {
+          headers: { "x-opencode-directory": test.directory },
+        })
+        const messagesBody = yield* responseJson(messages)
+        expect(messages.status).toBe(500)
+        expect(messagesBody).toMatchObject({
+          _tag: "UnknownError",
+          message: "Unexpected server error. Check server logs for details.",
+        })
+        expect((messagesBody as { ref?: unknown }).ref).toMatch(/^err_[0-9a-f-]{8}$/)
+        expect(JSON.stringify(messagesBody)).not.toContain("assistant")
+
+        const context = yield* request(`/api/session/${session.id}/context`, {
+          headers: { "x-opencode-directory": test.directory },
+        })
+        const contextBody = yield* responseJson(context)
+        expect(context.status).toBe(500)
+        expect(contextBody).toMatchObject({
+          _tag: "UnknownError",
+          message: "Unexpected server error. Check server logs for details.",
+        })
+        expect((contextBody as { ref?: unknown }).ref).toMatch(/^err_[0-9a-f-]{8}$/)
+        expect(JSON.stringify(contextBody)).not.toContain("assistant")
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

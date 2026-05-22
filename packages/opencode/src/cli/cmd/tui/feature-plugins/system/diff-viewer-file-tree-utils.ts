@@ -5,6 +5,7 @@
 
 export type FileTreeItem = {
   readonly file: string
+  readonly status?: "added" | "deleted" | "modified"
 }
 
 export type FileTreeNode = {
@@ -123,6 +124,21 @@ export function moveFileTreeSelection(rows: readonly FileTreeRow[], selected: nu
   const index = selected === undefined ? -1 : rows.findIndex((row) => row.id === selected)
   if (index === -1) return rows[0]!.id
   return rows[Math.max(0, Math.min(rows.length - 1, index + offset))]!.id
+}
+
+export function moveFileTreeSelectionToFirstChild(rows: readonly FileTreeRow[], selected: number | undefined) {
+  const index = selected === undefined ? -1 : rows.findIndex((row) => row.id === selected)
+  const row = index === -1 ? undefined : rows[index]
+  if (row?.kind !== "directory") return selected
+  const child = rows[index + 1]
+  return child && child.depth > row.depth ? child.id : selected
+}
+
+export function moveFileTreeSelectionToParent(rows: readonly FileTreeRow[], selected: number | undefined) {
+  const index = selected === undefined ? -1 : rows.findIndex((row) => row.id === selected)
+  const row = index === -1 ? undefined : rows[index]
+  if (!row || row.depth === 0) return selected
+  return rows.findLast((item, itemIndex) => itemIndex < index && item.depth < row.depth)?.id ?? selected
 }
 
 export function moveFileTreeSelectionToFile(
