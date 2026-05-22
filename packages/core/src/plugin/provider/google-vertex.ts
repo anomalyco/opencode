@@ -26,9 +26,6 @@ function resolveLocation(options: Record<string, any>) {
 
 function vertexEndpoint(location: string) {
   if (location === "global") return "aiplatform.googleapis.com"
-  // Continental multi-regions (eu, us) use Regional Endpoint Platform domains.
-  // Standard {region}-aiplatform.googleapis.com does not resolve for these.
-  if (location === "eu" || location === "us") return `aiplatform.${location}.rep.googleapis.com`
   return `${location}-aiplatform.googleapis.com`
 }
 
