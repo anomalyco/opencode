@@ -1,4 +1,4 @@
-export * as ConfigEnv from "./env"
+export * as ConfigLoaderEnv from "./loader-env"
 
 import { Config as EffectConfig, ConfigProvider, Context, Effect, Layer } from "effect"
 import { ConfigService } from "@/effect/config-service"
@@ -11,7 +11,7 @@ const fields = {
   permission: EffectConfig.string("OPENCODE_PERMISSION").pipe(EffectConfig.option),
 }
 
-export class Service extends ConfigService.Service<Service>()("@opencode/ConfigEnv", fields) {}
+export class Service extends ConfigService.Service<Service>()("@opencode/ConfigLoaderEnv", fields) {}
 
 export type Info = Context.Service.Shape<typeof Service>
 

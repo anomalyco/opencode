@@ -3,7 +3,7 @@ import { Effect, Exit, Layer, Option } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "@/config/config"
-import { ConfigEnv } from "@/config/env"
+import { ConfigLoaderEnv } from "@/config/loader-env"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
@@ -57,8 +57,8 @@ const json = (request: Parameters<typeof HttpClientResponse.fromWeb>[0], body: u
     }),
   )
 
-const configEnvLayer = (input: Partial<ConfigEnv.Info> = {}) =>
-  ConfigEnv.layer({
+const loaderEnvLayer = (input: Partial<ConfigLoaderEnv.Info> = {}) =>
+  ConfigLoaderEnv.layer({
     config: Option.none(),
     configDir: Option.none(),
     inlineConfigContent: Option.none(),
@@ -99,14 +99,14 @@ const configLayer = (
     auth?: Layer.Layer<Auth.Service>
     account?: Layer.Layer<Account.Service>
     client?: HttpClient.HttpClient
-    configEnv?: Layer.Layer<ConfigEnv.Service>
+    loaderEnv?: Layer.Layer<ConfigLoaderEnv.Service>
   } = {},
 ) =>
   Config.layer.pipe(
     Layer.provide(testFlock),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Env.defaultLayer),
-    Layer.provide(options.configEnv ?? ConfigEnv.defaultLayer),
+    Layer.provide(options.loaderEnv ?? ConfigLoaderEnv.defaultLayer),
     Layer.provide(options.auth ?? AuthTest.empty),
     Layer.provide(options.account ?? AccountTest.empty),
     Layer.provideMerge(infra),
@@ -264,7 +264,7 @@ test("does not create global config when OPENCODE_CONFIG_DIR is set", async () =
     await withTestInstance({
       directory: tmp.path,
       fn: async (ctx) => {
-        await loadWith(ctx, configLayer({ configEnv: configEnvLayer({ configDir: Option.some(custom.path) }) }))
+        await loadWith(ctx, configLayer({ loaderEnv: loaderEnvLayer({ configDir: Option.some(custom.path) }) }))
       },
     })
 
@@ -1680,7 +1680,7 @@ test("remote well-known config can use FetchHttpClient layer", async () => {
           Layer.provide(testFlock),
           Layer.provide(AppFileSystem.defaultLayer),
           Layer.provide(Env.defaultLayer),
-          Layer.provide(ConfigEnv.defaultLayer),
+          Layer.provide(ConfigLoaderEnv.defaultLayer),
           Layer.provide(wellKnownAuth(server.url.origin)),
           Layer.provide(AccountTest.empty),
           Layer.provideMerge(infra),
@@ -1994,7 +1994,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
       { config: { model: "project/model", username: "project-user" } },
     ).pipe(
       Effect.scoped,
-      Effect.provide(configLayer({ configEnv: configEnvLayer({ disableProjectConfig: true }) })),
+      Effect.provide(configLayer({ loaderEnv: loaderEnvLayer({ disableProjectConfig: true }) })),
       Effect.runPromise,
     )
   })
@@ -2015,7 +2015,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
       ),
     ).pipe(
       Effect.scoped,
-      Effect.provide(configLayer({ configEnv: configEnvLayer({ disableProjectConfig: true }) })),
+      Effect.provide(configLayer({ loaderEnv: loaderEnvLayer({ disableProjectConfig: true }) })),
       Effect.runPromise,
     )
   })
@@ -2031,7 +2031,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
       ),
     ).pipe(
       Effect.scoped,
-      Effect.provide(configLayer({ configEnv: configEnvLayer({ disableProjectConfig: true }) })),
+      Effect.provide(configLayer({ loaderEnv: loaderEnvLayer({ disableProjectConfig: true }) })),
       Effect.runPromise,
     )
   })
@@ -2049,7 +2049,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
       { config: { instructions: ["./CUSTOM.md"] } },
     ).pipe(
       Effect.scoped,
-      Effect.provide(configLayer({ configEnv: configEnvLayer({ disableProjectConfig: true }) })),
+      Effect.provide(configLayer({ loaderEnv: loaderEnvLayer({ disableProjectConfig: true }) })),
       Effect.runPromise,
     )
   })
@@ -2062,7 +2062,10 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
           const config = yield* Config.Service.use((svc) => svc.get()).pipe(
             Effect.provide(
               configLayer({
-                configEnv: configEnvLayer({ configDir: Option.some(configDir), disableProjectConfig: true }),
+                loaderEnv: loaderEnvLayer({
+                  configDir: Option.some(configDir),
+                  disableProjectConfig: true,
+                }),
               }),
             ),
           )
@@ -2089,14 +2092,14 @@ describe("OPENCODE_PERMISSION env var", () => {
       ),
     ).pipe(
       Effect.scoped,
-      Effect.provide(configLayer({ configEnv: configEnvLayer({ permission: Option.some("{invalid") }) })),
+      Effect.provide(configLayer({ loaderEnv: loaderEnvLayer({ permission: Option.some("{invalid") }) })),
       Effect.runPromise,
     )
   })
 })
 
 describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
-  test("loads inline config from ConfigEnv service", async () => {
+  test("loads inline config from ConfigLoaderEnv service", async () => {
     await provideTmpdirInstance(() =>
       Config.Service.use((svc) =>
         Effect.gen(function* () {
@@ -2108,7 +2111,7 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
       Effect.scoped,
       Effect.provide(
         configLayer({
-          configEnv: configEnvLayer({
+          loaderEnv: loaderEnvLayer({
             inlineConfigContent: Option.some(
               JSON.stringify({ $schema: "https://opencode.ai/config.json", username: "inline-config-user" }),
             ),
@@ -2120,37 +2123,33 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
   })
 
   test("substitutes {env:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
-    const originalTestVar = process.env["TEST_CONFIG_VAR"]
-    process.env["TEST_CONFIG_VAR"] = "test_api_key_12345"
-
-    try {
-      await provideTmpdirInstance(() =>
+    await withProcessEnv(
+      "TEST_CONFIG_VAR",
+      "test_api_key_12345",
+      provideTmpdirInstance(() =>
         Config.Service.use((svc) =>
           Effect.gen(function* () {
             const config = yield* svc.get()
             expect(config.username).toBe("test_api_key_12345")
           }),
         ),
-      ).pipe(
-        Effect.scoped,
-        Effect.provide(
-          configLayer({
-            configEnv: configEnvLayer({
-              inlineConfigContent: Option.some(
-                JSON.stringify({
-                  $schema: "https://opencode.ai/config.json",
-                  username: "{env:TEST_CONFIG_VAR}",
-                }),
-              ),
-            }),
+      ),
+    ).pipe(
+      Effect.scoped,
+      Effect.provide(
+        configLayer({
+          loaderEnv: loaderEnvLayer({
+            inlineConfigContent: Option.some(
+              JSON.stringify({
+                $schema: "https://opencode.ai/config.json",
+                username: "{env:TEST_CONFIG_VAR}",
+              }),
+            ),
           }),
-        ),
-        Effect.runPromise,
-      )
-    } finally {
-      if (originalTestVar !== undefined) process.env["TEST_CONFIG_VAR"] = originalTestVar
-      else delete process.env["TEST_CONFIG_VAR"]
-    }
+        }),
+      ),
+      Effect.runPromise,
+    )
   })
 
   test("substitutes {file:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
@@ -2166,7 +2165,7 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
       Effect.scoped,
       Effect.provide(
         configLayer({
-          configEnv: configEnvLayer({
+          loaderEnv: loaderEnvLayer({
             inlineConfigContent: Option.some(
               JSON.stringify({
                 $schema: "https://opencode.ai/config.json",

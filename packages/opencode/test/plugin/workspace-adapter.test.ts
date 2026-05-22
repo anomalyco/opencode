@@ -9,7 +9,7 @@ import { pathToFileURL } from "url"
 import { Auth } from "../../src/auth"
 import { Bus } from "../../src/bus"
 import { Config } from "../../src/config/config"
-import { ConfigEnv } from "../../src/config/env"
+import { ConfigLoaderEnv } from "../../src/config/loader-env"
 import { Env } from "../../src/env"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Workspace } from "../../src/control-plane/workspace"
@@ -32,7 +32,7 @@ const configLayer = Config.layer.pipe(
   Layer.provide(EffectFlock.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Env.defaultLayer),
-  Layer.provide(ConfigEnv.defaultLayer),
+  Layer.provide(ConfigLoaderEnv.defaultLayer),
   Layer.provide(AuthTest.empty),
   Layer.provide(AccountTest.empty),
   Layer.provide(NpmTest.noop),
