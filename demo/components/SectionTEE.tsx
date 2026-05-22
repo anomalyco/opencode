@@ -94,8 +94,19 @@ export function SectionTEE() {
   const retBadgeOpacity = useTransform(a3, [0, 0.12], [0, 1], { clamp: true })
 
   return (
-    <section id="tee" ref={ref} className="relative h-[420vh] w-full">
-      <div className="sticky top-0 flex h-screen w-full flex-col overflow-hidden">
+    <section
+      id="tee"
+      ref={ref}
+      className="relative w-full md:h-[420vh]"
+    >
+      {/*
+       * Desktop (>= md): sticky + h-[100dvh] で scrollytelling として、
+       *   外側 h-[420vh] の 4 倍スクロール範囲で a0..a3 を進行させる。
+       * Mobile (< md): sticky を外して縦スクロール。図とステップカードが
+       *   viewport を超えても自然に下にスクロールできる
+       *   (sticky のまま h-screen 固定だと下のカードが見切れる)。
+       */}
+      <div className="flex w-full flex-col md:sticky md:top-0 md:h-[100dvh] md:min-h-[640px] md:overflow-hidden">
         <div
           aria-hidden
           className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_70%_30%,rgba(3,76,255,0.12)_0%,transparent_55%)]"
