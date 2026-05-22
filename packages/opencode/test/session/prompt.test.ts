@@ -2314,3 +2314,46 @@ noLLMServer.instance(
     }),
   30_000,
 )
+
+// noReply command semantics
+
+noLLMServer.instance(
+  "noReply command skips LLM and creates assistant message with parts",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      const result = yield* prompt.command({
+        sessionID: session.id,
+        command: "noreply-test",
+        arguments: "hello",
+      })
+
+      // command() returns the user message
+      expect(result.info.role).toBe("user")
+
+      // check that an assistant message was created with the template text
+      const messages = yield* sessions.messages({ sessionID: session.id })
+      const assistants = messages.filter((msg) => msg.info.role === "assistant")
+      expect(assistants.length).toBe(1)
+      const assistant = assistants[0]
+      expect(assistant.info.role).toBe("assistant")
+      expect(assistant.info.time.completed).toBeDefined()
+      const textParts = assistant.parts.filter((p) => p.type === "text")
+      expect(textParts.length).toBeGreaterThan(0)
+      expect(textParts.some((p) => p.type === "text" && p.text.includes("hello"))).toBe(true)
+    }),
+  {
+    config: {
+      ...cfg,
+      command: {
+        "noreply-test": {
+          template: "NoReply test: $ARGUMENTS",
+          noReply: true,
+        },
+      },
+    },
+  },
+)

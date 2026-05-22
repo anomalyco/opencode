@@ -1225,7 +1225,35 @@ export const layer = Layer.effect(
         yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
       }
 
-      if (input.noReply === true) return message
+      if (input.noReply === true) {
+        const ctx = yield* InstanceState.context
+        const assistantMsg: MessageV2.Assistant = {
+          id: MessageID.ascending(),
+          parentID: message.info.id,
+          role: "assistant",
+          mode: message.info.agent,
+          agent: message.info.agent,
+          variant: message.info.model.variant,
+          path: { cwd: ctx.directory, root: ctx.worktree },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: message.info.model.modelID,
+          providerID: message.info.model.providerID,
+          time: { created: Date.now(), completed: Date.now() },
+          sessionID: input.sessionID,
+        }
+        yield* sessions.updateMessage(assistantMsg)
+
+        for (const part of input.parts) {
+          yield* sessions.updatePart({
+            ...part,
+            id: PartID.ascending(),
+            messageID: assistantMsg.id,
+            sessionID: input.sessionID,
+          } as MessageV2.Part)
+        }
+        return message
+      }
       return yield* loop({ sessionID: input.sessionID })
     })
 
@@ -1602,6 +1630,7 @@ export const layer = Layer.effect(
         agent: userAgent,
         parts,
         variant: input.variant,
+        noReply: cmd.noReply ?? false,
       })
       yield* bus.publish(Command.Event.Executed, {
         name: input.command,

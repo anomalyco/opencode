@@ -35,6 +35,7 @@ export const Info = Schema.Struct({
   // Some command templates are lazy promises from MCP prompt resolution.
   template: Schema.Unknown,
   subtask: Schema.optional(Schema.Boolean),
+  noReply: Schema.optional(Schema.Boolean),
   hints: Schema.Array(Schema.String),
 }).annotate({ identifier: "Command" })
 
@@ -105,6 +106,7 @@ export const layer = Layer.effect(
             return command.template
           },
           subtask: command.subtask,
+          noReply: command.noReply,
           hints: hints(command.template),
         }
       }
