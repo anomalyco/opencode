@@ -16,6 +16,7 @@ export function isAllowedCorsOrigin(input: string | undefined, opts?: CorsOption
   if (input === "tauri://localhost" || input === "http://tauri.localhost" || input === "https://tauri.localhost")
     return true
   if (opencodeOrigin.test(input)) return true
+  if (opts?.cors?.includes("*")) return true
   return opts?.cors?.includes(input) ?? false
 }
 

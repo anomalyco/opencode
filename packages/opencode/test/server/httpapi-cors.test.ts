@@ -119,4 +119,28 @@ describe("HttpApi CORS", () => {
       expect(rejected.headers.get("access-control-allow-origin")).not.toBe("https://evil.example")
     }),
   )
+
+  it.live("allows any origin when cors contains wildcard *", () =>
+    Effect.gen(function* () {
+      const listener = yield* Effect.acquireRelease(
+        Effect.promise(() => Server.listen({ hostname: "127.0.0.1", port: 0, cors: ["*"] })),
+        (listener) => Effect.promise(() => listener.stop(true)),
+      )
+
+      const response = yield* Effect.promise(() =>
+        fetch(new URL(InstancePaths.path, listener.url), {
+          method: "OPTIONS",
+          headers: {
+            origin: "https://any.origin.example",
+            "access-control-request-method": "GET",
+            "access-control-request-headers": "authorization",
+          },
+        }),
+      )
+
+      expect(response.status).toBe(204)
+      expect(response.headers.get("access-control-allow-origin")).toBe("https://any.origin.example")
+      expect(response.headers.get("access-control-allow-headers")).toBe("authorization")
+    }),
+  )
 })
