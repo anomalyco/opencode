@@ -272,16 +272,12 @@ new sst.cloudflare.x.SolidStart("Console", {
           new sst.Secret("CLOUDFLARE_API_TOKEN", process.env.CLOUDFLARE_API_TOKEN!),
         ]
       : []),
-    // TODO
-    new sst.Secret("FOO"),
   ],
   environment: {
     //VITE_DOCS_URL: web.url.apply((url) => url!),
     //VITE_API_URL: gateway.url.apply((url) => url!),
     VITE_AUTH_URL: auth.url.apply((url) => url!),
     VITE_STRIPE_PUBLISHABLE_KEY: STRIPE_PUBLISHABLE_KEY.value,
-    // TODO
-    KEEPALIVE: "keepalive3",
   },
   transform: {
     server: {

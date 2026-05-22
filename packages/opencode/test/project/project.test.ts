@@ -22,7 +22,7 @@ const encoder = new TextEncoder()
 const layer = Layer.mergeAll(Project.defaultLayer, CrossSpawnSpawner.defaultLayer)
 const it = testEffect(layer)
 
-function run<A>(fn: (svc: Project.Interface) => Effect.Effect<A>) {
+function run<A, E>(fn: (svc: Project.Interface) => Effect.Effect<A, E>) {
   return Effect.gen(function* () {
     const svc = yield* Project.Service
     return yield* fn(svc)
@@ -481,7 +481,7 @@ describe("Project.update", () => {
     }),
   )
 
-  it.live("should throw error when project not found", () =>
+  it.live("should fail when project not found", () =>
     Effect.gen(function* () {
       const exit = yield* run((svc) =>
         svc.update({
@@ -492,9 +492,7 @@ describe("Project.update", () => {
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
         const error = Cause.squash(exit.cause)
-        expect(error instanceof Error ? error.message : String(error)).toContain(
-          "Project not found: nonexistent-project-id",
-        )
+        expect(error).toMatchObject({ _tag: "Project.NotFoundError", projectID: "nonexistent-project-id" })
       }
     }),
   )

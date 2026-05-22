@@ -4,6 +4,7 @@ import { ProjectID } from "@/project/schema"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
+import { ProjectNotFoundError } from "../errors"
 import { markInstanceForReload } from "../lifecycle"
 
 export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", (handlers) =>
@@ -35,7 +36,16 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
       params: { projectID: ProjectID }
       payload: Project.UpdatePayload
     }) {
-      return yield* svc.update({ ...ctx.payload, projectID: ctx.params.projectID })
+      return yield* svc.update({ ...ctx.payload, projectID: ctx.params.projectID }).pipe(
+        Effect.catchTag("Project.NotFoundError", (error) =>
+          Effect.fail(
+            new ProjectNotFoundError({
+              projectID: error.projectID,
+              message: `Project not found: ${error.projectID}`,
+            }),
+          ),
+        ),
+      )
     })
 
     return handlers.handle("list", list).handle("current", current).handle("initGit", initGit).handle("update", update)
