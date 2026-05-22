@@ -85,9 +85,9 @@ export interface Interface {
   readonly list: (input: {
     limit?: number
     order?: "asc" | "desc"
-    directory?: string
-    path?: string
+    projectID?: ProjectID
     workspaceID?: WorkspaceID
+    path?: string
     roots?: boolean
     start?: number
     search?: string
@@ -110,24 +110,18 @@ export interface Interface {
   readonly context: (
     sessionID: SessionID,
   ) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
-  readonly prompt: (input: {
-    id?: EventV2.ID
-    sessionID: SessionID
-    prompt: Prompt
-    delivery?: Delivery
-  }) => Effect.Effect<SessionMessage.User, NotFoundError | OperationUnavailableError>
-  readonly shell: (input: { id?: EventV2.ID; sessionID: SessionID; command: string }) => Effect.Effect<void, never>
-  readonly skill: (input: { id?: EventV2.ID; sessionID: SessionID; skill: string }) => Effect.Effect<void, never>
   readonly subagent: (input: {
     id?: EventV2.ID
     parentID: SessionID
     prompt: Prompt
     agent: string
     model?: ModelV2.Ref
+    resume?: boolean
   }) => Effect.Effect<void, NotFoundError | OperationUnavailableError | MessageDecodeError>
   readonly switchAgent: (input: { sessionID: SessionID; agent: string }) => Effect.Effect<void, never>
   readonly switchModel: (input: { sessionID: SessionID; model: ModelV2.Ref }) => Effect.Effect<void, never>
   readonly compact: (sessionID: SessionID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
+  readonly resume: (sessionID: SessionID) => Effect.Effect<void>
   readonly wait: (sessionID: SessionID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
 }
 

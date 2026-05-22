@@ -56,7 +56,6 @@ export const ModelsDevPlugin = PluginV2.define({
     const catalog = yield* Catalog.Service
     const modelsDev = yield* ModelsDev.Service
     const events = yield* EventV2.Service
-    const scope = yield* Scope.Scope
     const load = yield* catalog.loader()
     const refresh = Effect.fn("ModelsDevPlugin.refresh")(function* () {
       const data = yield* modelsDev.get()
@@ -114,7 +113,7 @@ export const ModelsDevPlugin = PluginV2.define({
     yield* refresh()
     yield* events.subscribe(ModelsDev.Event.Refreshed).pipe(
       Stream.runForEach(() => refresh()),
-      Effect.forkIn(scope, { startImmediately: true }),
+      Effect.forkScoped({ startImmediately: true }),
     )
   }).pipe(Effect.provide(ModelsDev.defaultLayer)),
 })

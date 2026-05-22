@@ -3,6 +3,8 @@ import { AccountV2 } from "../account"
 import { EventV2 } from "../event"
 import { PluginV2 } from "../plugin"
 
+// Depending on what account is active, enable matching providers for that
+// service
 export const AccountPlugin = PluginV2.define({
   id: PluginV2.ID.make("account"),
   effect: Effect.gen(function* () {

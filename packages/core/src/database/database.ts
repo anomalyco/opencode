@@ -6,6 +6,7 @@ import { Context, Effect, Layer } from "effect"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
 import path from "path"
+import { DatabaseMigration } from "./migration"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
 type DatabaseShape = Effect.Success<typeof makeDatabase>
@@ -23,6 +24,9 @@ const layer = Layer.effect(
     yield* db.run("PRAGMA cache_size = -64000")
     yield* db.run("PRAGMA foreign_keys = ON")
     yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
+
+    console.log(DatabaseMigration.ensure
+
 
     return db
   }),
