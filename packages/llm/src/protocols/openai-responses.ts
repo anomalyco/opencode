@@ -14,6 +14,8 @@ import {
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
+  type ToolResultContentPart,
+  type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { OpenAIOptions } from "./utils/openai-options"
@@ -55,6 +57,22 @@ const OpenAIResponsesReasoningItem = Schema.Struct({
   encrypted_content: optionalNull(Schema.String),
 })
 
+// `function_call_output.output` accepts either a plain string or an ordered
+// array of content items so tools can return images / files in addition to
+// text. The wire shape mirrors the OpenAI Responses API:
+// https://platform.openai.com/docs/api-reference/responses/object
+const OpenAIResponsesFunctionCallOutputContent = Schema.Union([
+  OpenAIResponsesInputText,
+  OpenAIResponsesInputImage,
+])
+type OpenAIResponsesFunctionCallOutputContent = Schema.Schema.Type<typeof OpenAIResponsesFunctionCallOutputContent>
+
+const OpenAIResponsesFunctionCallOutput = Schema.Union([
+  Schema.String,
+  Schema.Array(OpenAIResponsesFunctionCallOutputContent),
+])
+type OpenAIResponsesFunctionCallOutput = Schema.Schema.Type<typeof OpenAIResponsesFunctionCallOutput>
+
 const OpenAIResponsesInputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
   Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenAIResponsesInputContent) }),
@@ -69,7 +87,7 @@ const OpenAIResponsesInputItem = Schema.Union([
   Schema.Struct({
     type: Schema.tag("function_call_output"),
     call_id: Schema.String,
-    output: Schema.String,
+    output: OpenAIResponsesFunctionCallOutput,
   }),
 ])
 type OpenAIResponsesInputItem = Schema.Schema.Type<typeof OpenAIResponsesInputItem>
@@ -250,6 +268,30 @@ const lowerUserContent = Effect.fn("OpenAIResponses.lowerUserContent")(function*
   return yield* ProviderShared.unsupportedContent("OpenAI Responses", "user", ["text", "media"])
 })
 
+// Tool results may carry structured content (text + images) so that vision-
+// capable tools like screenshot readers can hand the model the bytes the user
+// actually wanted analyzed. JSON-stringifying media into a single string
+// silently inflates the prompt by megabytes and is rejected by the provider
+// as an over-large or malformed `function_call_output`.
+const lowerToolResultContentItem = Effect.fn("OpenAIResponses.lowerToolResultContentItem")(function* (
+  item: ToolResultContentPart,
+) {
+  if (item.type === "text") return { type: "input_text" as const, text: item.text }
+  if (item.mediaType.startsWith("image/"))
+    return {
+      type: "input_image" as const,
+      image_url: item.data.startsWith("data:") ? item.data : `data:${item.mediaType};base64,${item.data}`,
+    }
+  return yield* invalid(`OpenAI Responses tool-result media content only supports images, got ${item.mediaType}`)
+})
+
+const lowerToolResultOutput = Effect.fn("OpenAIResponses.lowerToolResultOutput")(function* (part: ToolResultPart) {
+  // Text/json/error results are encoded as a plain string for backward
+  // compatibility with existing cassettes and provider expectations.
+  if (part.result.type !== "content") return ProviderShared.toolResultText(part)
+  return yield* Effect.forEach(part.result.value, lowerToolResultContentItem)
+})
+
 const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIResponsesInputItem[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
@@ -298,7 +340,11 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent("OpenAI Responses", "tool", ["tool-result"])
-      input.push({ type: "function_call_output", call_id: part.id, output: ProviderShared.toolResultText(part) })
+      input.push({
+        type: "function_call_output",
+        call_id: part.id,
+        output: yield* lowerToolResultOutput(part),
+      })
     }
   }
 

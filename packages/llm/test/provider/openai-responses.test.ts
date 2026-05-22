@@ -248,6 +248,97 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  // Regression: a tool returning an image (e.g. the `read` tool on a screenshot
+  // file, or a `screenshot` browser tool) must lower the image as a structured
+  // `input_image` content item inside `function_call_output.output`, NOT as a
+  // JSON-stringified blob containing a multi-megabyte `data:image/png;base64,…`
+  // URL. The latter caused OpenAI Responses to fail the stream with a bare
+  // "OpenAI Responses stream error" because the request was effectively
+  // invalid / oversized.
+  it.effect("lowers image tool-result content as structured input_image items", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          id: "req_tool_result_image",
+          model,
+          messages: [
+            Message.user("Show me the screenshot."),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: { filePath: "shot.png" } })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              resultType: "content",
+              result: [
+                { type: "text", text: "Image read successfully" },
+                { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              ],
+            }),
+          ],
+        }),
+      )
+
+      const toolOutput = prepared.body.input.find(
+        (item): item is Extract<typeof item, { readonly type: "function_call_output" }> =>
+          "type" in item && item.type === "function_call_output",
+      )
+      expect(toolOutput).toBeDefined()
+      expect(toolOutput!.output).toEqual([
+        { type: "input_text", text: "Image read successfully" },
+        { type: "input_image", image_url: "data:image/png;base64,AAECAw==" },
+      ])
+    }),
+  )
+
+  it.effect("lowers single-image tool-result content as structured input_image array", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          id: "req_tool_result_image_only",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "screenshot", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "screenshot",
+              resultType: "content",
+              result: [{ type: "media", mediaType: "image/png", data: "AAECAw==" }],
+            }),
+          ],
+        }),
+      )
+
+      const toolOutput = prepared.body.input.find(
+        (item): item is Extract<typeof item, { readonly type: "function_call_output" }> =>
+          "type" in item && item.type === "function_call_output",
+      )
+      expect(toolOutput).toBeDefined()
+      expect(toolOutput!.output).toEqual([{ type: "input_image", image_url: "data:image/png;base64,AAECAw==" }])
+    }),
+  )
+
+  it.effect("rejects non-image media in tool-result content with a clear error", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_tool_result_unsupported_media",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "fetch", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "fetch",
+              resultType: "content",
+              result: [{ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" }],
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("OpenAI Responses")
+      expect(error.message).toContain("audio/mpeg")
+    }),
+  )
+
   it.effect("prepares the composed native continuation request", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(

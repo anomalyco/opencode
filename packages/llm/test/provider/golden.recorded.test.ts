@@ -87,6 +87,7 @@ describeRecordedGoldenScenarios([
       { id: "reasoning-continuation", temperature: false },
       { id: "tool-call", temperature: false },
       { id: "tool-loop", temperature: false },
+      { id: "image-tool-result", temperature: false, maxTokens: 40 },
     ],
   },
   {
