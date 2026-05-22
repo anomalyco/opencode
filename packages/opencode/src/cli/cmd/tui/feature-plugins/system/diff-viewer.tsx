@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
-import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
+import type { BorderSides, BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { useBindings, useCommandShortcut } from "@tui/keymap"
 import { useTheme } from "@tui/context/theme"
@@ -100,18 +100,18 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     }
 
     const result = await props.api.client.vcs.diff(
-      { mode: "git", context: WORKING_TREE_DIFF_CONTEXT_LINES },
+      { mode: "git", context: String(WORKING_TREE_DIFF_CONTEXT_LINES) },
       { throwOnError: true },
     )
     return normalizeDiffs(result.data ?? [])
   })
   const files = createMemo(() => diff() ?? [])
   const [focus, setFocus] = createSignal<DiffViewerFocus>("patches")
-  const [fileTreeEnabled, setFileTreeEnabled] = createSignal(props.api.kv.get(KV_SHOW_FILE_TREE, true) !== false)
+  const [fileTreeEnabled, setFileTreeEnabled] = createSignal(props.api.kv.get<boolean>(KV_SHOW_FILE_TREE, true) !== false)
   const showFileTree = createMemo(() => showDiffViewerFileTree(fileTreeEnabled(), files().length))
-  const [singlePatch, setSinglePatch] = createSignal(props.api.kv.get(KV_SINGLE_PATCH, false) === true)
+  const [singlePatch, setSinglePatch] = createSignal(props.api.kv.get<boolean>(KV_SINGLE_PATCH, false) === true)
   const patchPaneWidth = createMemo(() => dimensions().width - (showFileTree() ? 33 : 0) - 4)
-  const patchLeftBorder = createMemo(() => (showFileTree() ? (["left"] as const) : []))
+  const patchLeftBorder = createMemo<BorderSides[]>(() => (showFileTree() ? ["left"] : []))
   const splitAvailable = createMemo(() => patchPaneWidth() >= MIN_SPLIT_WIDTH)
   const defaultView = createMemo(() => {
     if (props.api.tuiConfig.diff_style === "stacked") return "unified"
