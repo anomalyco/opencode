@@ -1,35 +1,14 @@
 "use client"
 
-import { motion, useScroll, useTransform } from "framer-motion"
-import { useRef } from "react"
+import { motion } from "framer-motion"
 
-// 機密値・大量出力・危険コマンドの 3 種の "ハーネス" を順に紹介する scrollytelling。
-// 実装の根拠:
-//   packages/opencode/src/securecode/plugins/secret-mask.ts
-//   packages/opencode/src/securecode/plugins/overflow-guard.ts
-//   packages/opencode/src/permission
-
-const RAW_TOOL_OUTPUT = `[curl] GET https://api.acompany.tech/v1/billing
-HTTP/2 200
-authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyXzQyIn0.s9k_signed
-x-api-key: ghp_VyXc4nQk6mP9aZ2tWfRb8sLpHj3uG7Md1eOe
-
-{
-  "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
-  "db_url": "postgres://app:hunter2@db.acompany.local:5432/prod",
-  "billing": { "amount": 12_400, "currency": "JPY" }
-}`
-
-const MASKED_TOOL_OUTPUT = `[curl] GET https://api.acompany.tech/v1/billing
-HTTP/2 200
-authorization: [REDACTED_AUTH]
-x-api-key: [REDACTED_GITHUB_PAT]
-
-{
-  "aws_access_key_id": "[REDACTED_AWS_ACCESS_KEY]",
-  "db_url": "postgres://app:[REDACTED_URL_PASS]@db.acompany.local:5432/prod",
-  "billing": { "amount": 12_400, "currency": "JPY" }
-}`
+// セキュアコードのハーネスは「AI に機密を渡さない」ためのものではない。
+// 機密は TEE 越しに AI へ渡してよい設計なので、ハーネスの役割は
+// 「AI に自由に作業させた上で、外側を組織側から縛る」ことにある。
+// ここでは 3 つの統制レイヤを提示する:
+//   1. permission-policy (実装済み, packages/opencode/src/securecode/plugins)
+//   2. 外部通信先・編集可能フォルダの縛り (予定)
+//   3. 管理者アカウントによる MCP / URL の一元管理 (予定)
 
 export function SectionHarness() {
   return (
@@ -44,270 +23,41 @@ export function SectionHarness() {
         >
           <span className="text-stamp">03 / 価値 2</span>
           <h2 className="mt-3 text-balance text-3xl font-medium leading-tight md:text-5xl">
-            AI に渡る前に、
-            <br />
-            <span className="text-sc-ember">ハーネス</span> が
+            AI に自由を、
             <br className="md:hidden" />
-            止める・隠す・刈り込む。
+            <span className="text-sc-ember">運用に統制</span> を。
           </h2>
           <p className="mt-6 max-w-2xl text-sm leading-relaxed text-sc-text-mid md:text-base">
-            opencode・claude code との差別化はここ。エージェントの自律的な振る舞いを、
-            プラグイン層で常時監視する。社内のセキュリティポリシーに合わせて
-            プラグインを足せば、AI の挙動はそのまま統制下に入る。
+            機密コードを丸ごと AI に渡してよい設計だからこそ、AI が出す操作・通信を
+            組織側から縛れることが要になる。Acompanyセキュアコードは AI 自身が
+            改変できない設定ファイルと管理者アカウントによって、AI とエンドユーザーの
+            双方を信頼することなく安全性を担保する。
           </p>
         </motion.div>
 
-        <HarnessSecretMask />
-        <HarnessOverflowGuard />
-        <HarnessPermissionGate />
+        <PermissionGate />
+        <ExternalAccessControl />
+        <CentralMcpManagement />
       </div>
     </section>
   )
 }
 
-function HarnessSecretMask() {
-  const ref = useRef<HTMLDivElement>(null)
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start 80%", "end 30%"],
-  })
+// ---- 1. 永続的な権限ポリシー (実装済み) -------------------------------
 
-  // 0..1 でマスク済み版へクロスフェード
-  const rawOpacity = useTransform(scrollYProgress, [0.2, 0.5], [1, 0])
-  const maskedOpacity = useTransform(scrollYProgress, [0.4, 0.7], [0, 1])
-  const beamX = useTransform(scrollYProgress, [0.2, 0.7], ["-100%", "100%"])
-
-  return (
-    <div ref={ref} className="mb-24 grid gap-8 md:grid-cols-[1fr_1.2fr] md:items-start">
-      <motion.div
-        initial={{ opacity: 0, x: -20 }}
-        whileInView={{ opacity: 1, x: 0 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.6 }}
-      >
-        <span className="font-mono text-[10px] tracking-[0.2em] text-sc-ember">
-          PLUGIN · secret-mask
-        </span>
-        <h3 className="mt-2 text-xl font-medium leading-snug md:text-2xl">
-          tool output から、
-          <br />
-          機密値を黒塗りしてから LLM へ
-        </h3>
-        <ul className="mt-4 space-y-2 text-sm leading-relaxed text-sc-text-mid">
-          <li>
-            <span className="font-mono text-sc-text">▪</span> AWS / GitHub /
-            GitLab / Slack トークン
-          </li>
-          <li>
-            <span className="font-mono text-sc-text">▪</span> Bearer ・ JWT ・
-            Authorization ヘッダ
-          </li>
-          <li>
-            <span className="font-mono text-sc-text">▪</span> Basic auth 入り
-            URL ・ password / api_key 形式
-          </li>
-        </ul>
-        <p className="mt-4 text-xs leading-relaxed text-sc-text-dim">
-          experimental.chat.messages.transform フックで全 tool output を
-          走査し、検出パターンに合致した値を [REDACTED_*] に置換。
-        </p>
-      </motion.div>
-
-      <div className="relative overflow-hidden rounded-lg border border-sc-border bg-sc-bg-soft">
-        {/* スキャンビーム */}
-        <motion.div
-          aria-hidden
-          style={{ x: beamX }}
-          className="absolute inset-y-0 left-0 z-20 w-32 bg-gradient-to-r from-transparent via-sc-ember/30 to-transparent"
-        />
-        <div className="flex items-center justify-between border-b border-sc-border bg-sc-bg-elev/60 px-3 py-1.5">
-          <span className="font-mono text-[10px] text-sc-text-dim">
-            tool: bash · status: completed
-          </span>
-          <motion.span
-            style={{ opacity: maskedOpacity }}
-            className="rounded bg-sc-ember/20 px-2 py-0.5 font-mono text-[10px] tracking-wider text-sc-ember"
-          >
-            MASKED · 4
-          </motion.span>
-        </div>
-        <div className="relative h-[280px]">
-          <motion.pre
-            style={{ opacity: rawOpacity }}
-            className="absolute inset-0 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed"
-          >
-            <HighlightSecrets text={RAW_TOOL_OUTPUT} />
-          </motion.pre>
-          <motion.pre
-            style={{ opacity: maskedOpacity }}
-            className="absolute inset-0 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-sc-text"
-          >
-            <HighlightRedactions text={MASKED_TOOL_OUTPUT} />
-          </motion.pre>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function HighlightSecrets({ text }: { text: string }) {
-  // ざっくり「いかにも秘密」な部分を赤強調する
-  const pattern = /(Bearer\s+\S+|ghp_\S+|AKIA[0-9A-Z]+|hunter2)/g
-  const parts = text.split(pattern)
-  return (
-    <code>
-      {parts.map((p, i) =>
-        pattern.test(p) ? (
-          <span
-            key={i}
-            className="rounded bg-sc-ember/15 px-0.5 text-sc-ember"
-          >
-            {p}
-          </span>
-        ) : (
-          <span key={i} className="text-sc-text-mid">
-            {p}
-          </span>
-        ),
-      )}
-    </code>
-  )
-}
-
-function HighlightRedactions({ text }: { text: string }) {
-  const pattern = /(\[REDACTED[_A-Z]*\])/g
-  const parts = text.split(pattern)
-  return (
-    <code>
-      {parts.map((p, i) =>
-        pattern.test(p) ? (
-          <span
-            key={i}
-            className="rounded bg-sc-mint/15 px-0.5 text-sc-mint"
-          >
-            {p}
-          </span>
-        ) : (
-          <span key={i} className="text-sc-text-mid">
-            {p}
-          </span>
-        ),
-      )}
-    </code>
-  )
-}
-
-function HarnessOverflowGuard() {
-  const ref = useRef<HTMLDivElement>(null)
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start 90%", "end 30%"],
-  })
-  // バーの「切り取られた」割合
-  const cutWidth = useTransform(scrollYProgress, [0.2, 0.7], ["0%", "62%"])
-  const savedTokens = useTransform(scrollYProgress, [0.2, 0.7], [0, 14_280])
-
-  return (
-    <div ref={ref} className="mb-24 grid gap-8 md:grid-cols-[1.2fr_1fr] md:items-start">
-      <div className="relative overflow-hidden rounded-lg border border-sc-border bg-sc-bg-soft p-6">
-        <div className="font-mono text-[10px] tracking-wider text-sc-text-dim">
-          /v1/chat/completions · prompt tokens (estimated)
-        </div>
-
-        <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-sc-bg-elev">
-          <div className="relative h-full w-full">
-            <div className="absolute inset-y-0 left-0 w-full bg-gradient-to-r from-sc-cobalt-mid via-sc-cobalt to-sc-ember" />
-            <motion.div
-              style={{ width: cutWidth }}
-              className="absolute inset-y-0 right-0 bg-sc-bg-elev"
-            />
-            <div className="absolute inset-y-0 right-[38%] w-px bg-sc-amber" />
-          </div>
-        </div>
-
-        <div className="mt-2 flex justify-between font-mono text-[10px] text-sc-text-dim">
-          <span>0</span>
-          <span className="text-sc-amber">context limit</span>
-          <span>32k</span>
-        </div>
-
-        <div className="mt-8 grid grid-cols-2 gap-4">
-          <div className="rounded-md border border-sc-border bg-sc-bg p-4">
-            <div className="font-mono text-[10px] tracking-widest text-sc-text-dim">
-              BEFORE
-            </div>
-            <div className="mt-1 font-mono text-2xl text-sc-text">23,118</div>
-            <div className="font-mono text-[10px] text-sc-text-dim">tokens</div>
-          </div>
-          <div className="rounded-md border border-sc-ember/40 bg-sc-ember/5 p-4">
-            <div className="font-mono text-[10px] tracking-widest text-sc-ember">
-              AFTER
-            </div>
-            <motion.div className="mt-1 font-mono text-2xl text-sc-text">
-              <SavedNumber value={savedTokens} from={23_118} />
-            </motion.div>
-            <div className="font-mono text-[10px] text-sc-text-dim">
-              head + tail 残し / 中央を要約
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <span className="font-mono text-[10px] tracking-[0.2em] text-sc-ember">
-          PLUGIN · overflow-guard
-        </span>
-        <h3 className="mt-2 text-xl font-medium leading-snug md:text-2xl">
-          小さなコンテキストに、
-          <br />
-          意味のある情報だけ残す
-        </h3>
-        <ul className="mt-4 space-y-2 text-sm leading-relaxed text-sc-text-mid">
-          <li>
-            <span className="font-mono text-sc-text">▪</span> 巨大な tool 出力
-            (ログ・grep 結果) を head + tail で head 8KB · tail 8KB に切り詰め
-          </li>
-          <li>
-            <span className="font-mono text-sc-text">▪</span> CJK にも安全な UTF-8
-            境界整合・置換マーカー付き
-          </li>
-          <li>
-            <span className="font-mono text-sc-text">▪</span>{" "}
-            事前見積もりでコンテキスト溢れを検知し maxOutputTokens を縮める
-          </li>
-        </ul>
-        <p className="mt-4 text-xs leading-relaxed text-sc-text-dim">
-          小さなコンテキスト幅しか持たないオープン LLM
-          (Qwen 系) でも、賢く動かすための足回り。
-        </p>
-      </div>
-    </div>
-  )
-}
-
-function SavedNumber({
-  value,
-  from,
-}: {
-  value: import("framer-motion").MotionValue<number>
-  from: number
-}) {
-  const display = useTransform(value, (v) => Math.round(from - v).toLocaleString())
-  return <motion.span>{display}</motion.span>
-}
-
-function HarnessPermissionGate() {
+function PermissionGate() {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-100px" }}
       transition={{ duration: 0.7 }}
-      className="grid gap-8 md:grid-cols-[1fr_1.2fr] md:items-start"
+      className="mb-24 grid gap-8 md:grid-cols-[1fr_1.2fr] md:items-start"
     >
       <div>
-        <span className="font-mono text-[10px] tracking-[0.2em] text-sc-ember">
-          POLICY · permission
+        <StatusBadge kind="shipped" />
+        <span className="ml-3 font-mono text-[10px] tracking-[0.2em] text-sc-ember">
+          PLUGIN · permission-policy
         </span>
         <h3 className="mt-2 text-xl font-medium leading-snug md:text-2xl">
           危険な操作は、
@@ -328,6 +78,10 @@ function HarnessPermissionGate() {
             監査ログに残るので 誰が何を承認したか後追いできる
           </li>
         </ul>
+        <p className="mt-4 text-xs leading-relaxed text-sc-text-dim">
+          AI が「やってよい操作」と「人間に聞く操作」を明示的に分離。AI が
+          ポリシーを書き換えることはできないため、暴走しても被害が広がらない。
+        </p>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-sc-border bg-sc-bg-soft font-mono text-[12px] leading-relaxed">
@@ -353,5 +107,184 @@ function HarnessPermissionGate() {
         </div>
       </div>
     </motion.div>
+  )
+}
+
+// ---- 2. 外部通信先・編集可能フォルダの縛り (予定) ----------------------
+
+function ExternalAccessControl() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-100px" }}
+      transition={{ duration: 0.7 }}
+      className="mb-24 grid gap-8 md:grid-cols-[1.2fr_1fr] md:items-start"
+    >
+      <div className="overflow-hidden rounded-lg border border-sc-border bg-sc-bg-soft font-mono text-[12px] leading-relaxed">
+        <div className="border-b border-sc-border bg-sc-bg-elev/60 px-3 py-1.5 text-[10px] text-sc-text-dim">
+          /etc/securecode/policy.toml · 読み取り専用 (AI 不可触)
+        </div>
+        <pre className="px-4 py-3 text-sc-text-mid">
+{`# 編集可能パス (これ以外は read-only)
+[fs.writable]
+allow = [
+  "{project}/src/**",
+  "{project}/tests/**",
+]
+deny = [
+  "{project}/.env*",
+  "{project}/secrets/**",
+]
+
+# 外部通信先 (これ以外は禁止)
+[net.outbound]
+allow = [
+  "https://api.github.com/*",
+  "https://registry.npmjs.org/*",
+]
+deny_all_others = true`}
+        </pre>
+        <div className="border-t border-sc-border bg-sc-bg-elev/60 px-3 py-1.5 text-[10px] text-sc-ember">
+          ✕ AI からの書き込み試行 → policy.toml により拒否
+        </div>
+      </div>
+
+      <div>
+        <StatusBadge kind="planned" />
+        <span className="ml-3 font-mono text-[10px] tracking-[0.2em] text-sc-ember">
+          GUARDRAIL · fs / net
+        </span>
+        <h3 className="mt-2 text-xl font-medium leading-snug md:text-2xl">
+          編集可能パスと
+          <br />
+          外部通信先を、外から縛る
+        </h3>
+        <ul className="mt-4 space-y-2 text-sm leading-relaxed text-sc-text-mid">
+          <li>
+            <span className="font-mono text-sc-text">▪</span>{" "}
+            セキュアコードのプロセス外、AI が触れない場所に置く設定ファイル
+          </li>
+          <li>
+            <span className="font-mono text-sc-text">▪</span>{" "}
+            「書き換えてよいパス」「到達してよいネットワーク先」をホワイトリスト化
+          </li>
+          <li>
+            <span className="font-mono text-sc-text">▪</span>{" "}
+            AI も開発者も信頼せずに、運用責任者の意図を機械的に強制
+          </li>
+        </ul>
+        <p className="mt-4 text-xs leading-relaxed text-sc-text-dim">
+          AI が「rm -rf /」のような直接的に危険な命令を出す確率はそもそも低い。
+          むしろ「うっかり .env を読みに行く」「未確認のドメインに送信を試みる」
+          といった事故を、人の判断に頼らず止めるための仕組み。
+        </p>
+      </div>
+    </motion.div>
+  )
+}
+
+// ---- 3. 管理者アカウントによる MCP / URL の一元管理 (予定) ------------
+
+function CentralMcpManagement() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-100px" }}
+      transition={{ duration: 0.7 }}
+      className="grid gap-8 md:grid-cols-[1fr_1.2fr] md:items-start"
+    >
+      <div>
+        <StatusBadge kind="planned" />
+        <span className="ml-3 font-mono text-[10px] tracking-[0.2em] text-sc-ember">
+          GOVERNANCE · admin
+        </span>
+        <h3 className="mt-2 text-xl font-medium leading-snug md:text-2xl">
+          連携 MCP・接続 URL は
+          <br />
+          管理者が一元管理
+        </h3>
+        <ul className="mt-4 space-y-2 text-sm leading-relaxed text-sc-text-mid">
+          <li>
+            <span className="font-mono text-sc-text">▪</span>{" "}
+            開発者が勝手に MCP サーバーを追加できない。管理者が承認したものだけが選べる
+          </li>
+          <li>
+            <span className="font-mono text-sc-text">▪</span>{" "}
+            接続可能な外部 URL のホワイトリストを管理者アカウントから配信
+          </li>
+          <li>
+            <span className="font-mono text-sc-text">▪</span>{" "}
+            ポリシー変更は監査ログ付き。誰が何を許可したかを追跡できる
+          </li>
+        </ul>
+        <p className="mt-4 text-xs leading-relaxed text-sc-text-dim">
+          個々のエンジニアにも AI にも「正しい設定を選ぶ判断力」を要求しない。
+          組織の許可境界が常に上書き不能な形で開発環境に降りてくる。
+        </p>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-sc-border bg-sc-bg-soft font-mono text-[12px] leading-relaxed">
+        <div className="border-b border-sc-border bg-sc-bg-elev/60 px-3 py-1.5 text-[10px] text-sc-text-dim">
+          Admin Console · MCP allowlist (org: acompany)
+        </div>
+        <div className="divide-y divide-sc-border/60">
+          <McpRow status="approved" name="github" desc="リポジトリ閲覧 / Issue / PR" />
+          <McpRow status="approved" name="confluence-internal" desc="社内 Wiki 検索" />
+          <McpRow status="approved" name="postgres-readonly" desc="ステージング DB 参照" />
+          <McpRow status="pending" name="slack-mcp" desc="承認待ち · 申請者: dev-a" />
+          <McpRow status="blocked" name="random-3rd-party" desc="未承認ベンダー" />
+        </div>
+        <div className="border-t border-sc-border bg-sc-bg-elev/60 px-3 py-1.5 text-[10px] text-sc-text-dim">
+          開発者の opencode.json はこの一覧の subset でしか書けない
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+function McpRow({
+  status,
+  name,
+  desc,
+}: {
+  status: "approved" | "pending" | "blocked"
+  name: string
+  desc: string
+}) {
+  const tone = {
+    approved: { dot: "bg-sc-mint", text: "text-sc-mint", label: "APPROVED" },
+    pending: { dot: "bg-sc-amber", text: "text-sc-amber", label: "PENDING" },
+    blocked: { dot: "bg-sc-ember", text: "text-sc-ember", label: "BLOCKED" },
+  }[status]
+  return (
+    <div className="flex items-center gap-3 px-4 py-2">
+      <span className={`block size-1.5 rounded-full ${tone.dot}`} />
+      <span className="w-28 text-sc-text">{name}</span>
+      <span className="flex-1 text-sc-text-dim">{desc}</span>
+      <span className={`text-[10px] tracking-wider ${tone.text}`}>
+        {tone.label}
+      </span>
+    </div>
+  )
+}
+
+// ---- shared ------------------------------------------------------------
+
+function StatusBadge({ kind }: { kind: "shipped" | "planned" }) {
+  if (kind === "shipped") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-sc-mint/40 bg-sc-mint/10 px-2 py-0.5 font-mono text-[10px] tracking-wider text-sc-mint">
+        <span className="block size-1 rounded-full bg-sc-mint" />
+        SHIPPED
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-sc-amber/40 bg-sc-amber/10 px-2 py-0.5 font-mono text-[10px] tracking-wider text-sc-amber">
+      <span className="block size-1 rounded-full bg-sc-amber" />
+      PLANNED
+    </span>
   )
 }

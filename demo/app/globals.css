@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ========================================================================
- * Acompany Secure Code — design tokens
+ * Acompanyセキュアコード — design tokens
  *
  * Palette は本体 (packages/ui/src/styles/colors.css) の "gray" / "ember" /
  * "cobalt" / "apple" / "amber" を縮約。本体は Radix スケール 1-12 を採用するが、

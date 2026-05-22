@@ -1,6 +1,6 @@
-# demo — Acompany Secure Code チュートリアル / デモサイト
+# demo — Acompanyセキュアコード チュートリアル / デモサイト
 
-Acompany Secure Code の **本質的な価値** をスクロールテリングで体感してもらう、
+Acompanyセキュアコードの **本質的な価値** をスクロールテリングで体感してもらう、
 独立 Next.js サイト。
 
 > ⚠️ このサイトは **デモ用** です。表示しているレスポンス・モデル名・トークン数・
@@ -11,7 +11,7 @@ Acompany Secure Code の **本質的な価値** をスクロールテリング�
 
 ## なぜ作ったか (Intent)
 
-本体の TUI / CLI / Desktop アプリを触っただけでは、Acompany Secure Code が
+本体の TUI / CLI / Desktop アプリを触っただけでは、Acompanyセキュアコードが
 「**機密コードを TEE 越しに LLM へ渡す**」という構造になっていることや、
 ハーネス層で何を制御しているかは分かりにくい。
 
@@ -23,14 +23,16 @@ Acompany Secure Code の **本質的な価値** をスクロールテリング�
 1. **TEE による機密コードの保護** — Confidential Computing 環境内でのみ
    推論が走り、インフラ事業者・モデル提供者を含む第三者から処理中データが
    見えないこと
-2. **ハーネスによる自律的な AI の挙動制御** — secret-mask, overflow-guard,
-   permission といったプラグインで、生成 AI の入出力を組織ポリシーに沿って
-   自律的に絞り込めること
+2. **外側からの統制で AI に自由を与える** — AI に機密を渡してよい設計だからこそ、
+   外部通信先・編集可能フォルダ・連携 MCP を組織側の設定ファイル / 管理者
+   アカウントから機械的に縛れること (permission-policy は実装済み、
+   設定ファイル系・管理者統制系は今後の予定)
 3. **生成 AI を利用した開発補助** — 上記 2 つを担保しつつ、コード生成 /
    レビュー / リファクタ / バグ修正 / テスト生成といった日常開発に組み込めること
 
-エアギャップ環境や生成 AI が禁止されている組織でも開発支援を成立させる、
-という Secure Code の差別化ポイントを「触って分かる」形にしている。
+生成 AI の利用に強い制限がかかる組織でも、機密コードを守ったまま開発支援を
+成立させる、というAcompanyセキュアコードの差別化ポイントを「触って分かる」
+形にしている。
 
 ---
 
@@ -40,13 +42,13 @@ Acompany Secure Code の **本質的な価値** をスクロールテリング�
 | --- | --- |
 | `app/page.tsx` | 全セクションを縦に積む 1 枚もののランディング |
 | `app/layout.tsx` | フォント / メタデータ (noindex) / グローバル CSS の取り込み |
-| `app/globals.css` | Tailwind v4 設定 + Secure Code カラートークン (`--color-sc-*`) |
+| `app/globals.css` | Tailwind v4 設定 + Acompanyセキュアコードのカラートークン (`--color-sc-*`) |
 | `components/Hero.tsx` | ピクセル wordmark + 本体 TUI を再現したターミナル |
-| `components/SectionProblem.tsx` | 「なぜいま Secure Code か」3 リスクカード |
+| `components/SectionProblem.tsx` | 「なぜいまAcompanyセキュアコードか」3 リスクカード |
 | `components/SectionTEE.tsx` | TEE フロー (sticky + scrollytelling) |
-| `components/SectionHarness.tsx` | secret-mask / overflow-guard / permission の 3 デモ |
+| `components/SectionHarness.tsx` | permission-policy (実装済) + 外部アクセス制限 + MCP 一元管理 (予定) |
 | `components/SectionCoding.tsx` | AI コーディングセッションの再現 |
-| `components/SectionComparison.tsx` | Claude Code / opencode / Secure Code 比較表 |
+| `components/SectionComparison.tsx` | 一般的なコーディングエージェントとの安全性比較 |
 | `components/CTA.tsx` + `Footer.tsx` | 申込み導線とデモ宣言 |
 
 ---

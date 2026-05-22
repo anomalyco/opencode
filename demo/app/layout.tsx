@@ -2,9 +2,9 @@ import type { Metadata } from "next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Acompany Secure Code — チュートリアル / デモ",
+  title: "Acompanyセキュアコード — チュートリアル / デモ",
   description:
-    "機密ソースコードを漏洩させずに AI コーディング支援を実現する、Acompany Secure Code のスクロールテリングデモ。",
+    "機密ソースコードを漏洩させずに AI コーディング支援を実現する、Acompanyセキュアコードのスクロールテリングデモ。",
   // 検索エンジンに乗せたいデモではないので noindex
   robots: { index: false, follow: false },
 }

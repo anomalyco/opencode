@@ -5,18 +5,18 @@ import { motion } from "framer-motion"
 const RISKS = [
   {
     tag: "INFRA",
-    title: "クラウド事業者に丸見え",
-    body: "生成 AI への問い合わせは、推論を提供するインフラ事業者を経由する。コードや認証情報は処理の過程でメモリ上に展開され、特権アクセスがあれば見える。",
+    title: "インフラ事業者を信頼するしかない",
+    body: "生成 AI への問い合わせは、推論を提供するインフラ事業者を経由する。データの取り扱いは規約に基づくが、最終的には事業者の運用と特権アクセス管理を信頼することが前提になる。",
   },
   {
     tag: "PROVIDER",
-    title: "モデル提供者の学習に流れうる",
-    body: "デフォルトの API では入力が学習に使われるリスクがあり、Opt-out しても運用ログとしての保管は残る。社外秘の独自ロジックを送るのは難しい。",
+    title: "学習に使われない保証は契約だけ",
+    body: "デフォルトの API では入力が学習に使われるリスクがあり、Opt-out しても運用ログとしての保管は残る。結局のところ「モデル提供者を信頼する」契約で縛っているに過ぎない。Confidential Computing なら、信頼ではなく物理的な隔離で保証できる。",
   },
   {
-    tag: "AIR-GAP",
-    title: "閉域環境では使えない",
-    body: "金融・防衛・医療領域はそもそも外部 SaaS への送信が禁じられている。結果、現場のエンジニアだけが生成 AI の恩恵から取り残される。",
+    tag: "POLICY",
+    title: "強い制限のある組織では使えない",
+    body: "金融・防衛・医療領域では外部 SaaS への送信が厳しく制限される。結果、機密度の高いコードを扱う現場ほど、生成 AI の恩恵から取り残される。",
   },
 ] as const
 
@@ -80,7 +80,7 @@ export function SectionProblem() {
         transition={{ duration: 0.8, delay: 0.4 }}
         className="mt-20 border-t border-sc-border pt-10 text-center font-mono text-xs tracking-widest text-sc-text-dim"
       >
-        Secure Code は、この壁を 3 つのレイヤで壊す。
+        Acompanyセキュアコードは、この壁を 3 つのレイヤで壊す。
       </motion.div>
     </section>
   )

@@ -61,7 +61,7 @@ export function Hero() {
           <p className="mt-4 text-sm leading-relaxed text-sc-text-mid md:text-base">
             Trusted Execution Environment と専用ハーネスにより、
             <br className="hidden md:inline" />
-            エアギャップ・生成 AI 利用禁止環境でも、AI で開発を加速できます。
+            生成 AI の利用に強い制限がかかる組織でも、機密コードを守ったまま開発を加速できます。
           </p>
         </motion.div>
 
@@ -90,10 +90,8 @@ export function Hero() {
                 </div>
                 <div className="mt-2 flex items-center gap-2 text-[11px] text-sc-text-dim">
                   <span className="rounded bg-sc-bg px-1.5 py-0.5">Build</span>
-                  <span className="text-sc-text-mid">
-                    Qwen3-Coder-Next
-                  </span>
-                  <span>Acompany SecureCode</span>
+                  <span className="text-sc-text-mid">Qwen3.6</span>
+                  <span>Acompanyセキュアコード</span>
                 </div>
               </div>
               <div className="mt-3 text-right font-mono text-[10px] text-sc-text-dim">
@@ -101,11 +99,11 @@ export function Hero() {
               </div>
               <div className="mt-6 text-center font-mono text-[11px] text-sc-text-dim">
                 <span className="text-sc-mint">●</span> Tip Create a plugin to
-                prevent SecureCode from reading sensitive files
+                prevent agent from reading sensitive files
               </div>
             </div>
             <div className="flex items-center justify-between border-t border-sc-border bg-sc-bg-elev/60 px-4 py-1.5 font-mono text-[10px] text-sc-text-dim">
-              <span>/private/tmp/demo-qwen3-coder-next</span>
+              <span>/private/tmp/demo-billing</span>
               <span>
                 <span className="mr-3">◯ 3 MCP</span>
                 <span>/status</span>

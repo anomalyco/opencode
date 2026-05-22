@@ -78,9 +78,9 @@ export function SectionTEE() {
           </div>
 
           <h2 className="mt-4 max-w-3xl text-balance text-3xl font-medium leading-tight md:text-5xl">
-            機密コードを、
-            <span className="text-sc-ember"> 誰にも見せない </span>
-            まま AI に渡す。
+            AI 推論を、
+            <span className="text-sc-ember"> 暗号化された箱の中 </span>
+            だけで実行する。
           </h2>
 
           <div className="mt-6 grid flex-1 grid-cols-1 gap-8 md:grid-cols-[1.2fr_1fr]">
@@ -102,6 +102,41 @@ export function SectionTEE() {
                   </linearGradient>
                 </defs>
 
+                {/* "Untrusted" boundary label (上部、TEE 外側) */}
+                <text
+                  x="80"
+                  y="60"
+                  textAnchor="middle"
+                  fill="#716c6b"
+                  fontFamily="JetBrains Mono, monospace"
+                  fontSize="9"
+                  letterSpacing="1.2"
+                >
+                  OUTSIDE  /  untrusted
+                </text>
+                <text
+                  x="350"
+                  y="60"
+                  textAnchor="middle"
+                  fill="#89b5ff"
+                  fontFamily="JetBrains Mono, monospace"
+                  fontSize="9"
+                  letterSpacing="1.2"
+                >
+                  INSIDE TEE  /  trusted
+                </text>
+                <text
+                  x="575"
+                  y="60"
+                  textAnchor="middle"
+                  fill="#716c6b"
+                  fontFamily="JetBrains Mono, monospace"
+                  fontSize="9"
+                  letterSpacing="1.2"
+                >
+                  OUTSIDE
+                </text>
+
                 {/* developer node */}
                 <g>
                   <rect
@@ -113,6 +148,7 @@ export function SectionTEE() {
                     fill="#1b1818"
                     stroke="#3e3939"
                   />
+                  <StepBadge x={80} y={138} n="01" />
                   <text
                     x="80"
                     y="180"
@@ -146,7 +182,7 @@ export function SectionTEE() {
                   </motion.text>
                 </g>
 
-                {/* arrow 1 */}
+                {/* arrow 1 (encryption boundary in) */}
                 <motion.path
                   d="M 140 190 L 240 190"
                   fill="none"
@@ -155,16 +191,18 @@ export function SectionTEE() {
                   strokeDasharray="6 6"
                   style={{ strokeDashoffset: dashOffset1 }}
                 />
+                <StepBadge x={190} y={166} n="02" />
+                <LockIcon x={184} y={196} />
                 <motion.text
-                  x="190"
-                  y="180"
+                  x="200"
+                  y="208"
                   textAnchor="middle"
                   fill="#fc533a"
                   fontFamily="JetBrains Mono, monospace"
                   fontSize="8"
                   style={{ opacity: a1 }}
                 >
-                  AES-GCM
+                  encrypted (AES-GCM)
                 </motion.text>
 
                 {/* TEE box */}
@@ -222,6 +260,7 @@ export function SectionTEE() {
                   >
                     attested
                   </text>
+                  <StepBadge x={350} y={138} n="03" tone="cobalt" />
                 </motion.g>
 
                 {/* LLM inside */}
@@ -235,6 +274,7 @@ export function SectionTEE() {
                     fill="#252121"
                     stroke="#4b4646"
                   />
+                  <StepBadge x={350} y={170} n="04" tone="cobalt" />
                   <text
                     x="350"
                     y="210"
@@ -243,7 +283,7 @@ export function SectionTEE() {
                     fontFamily="JetBrains Mono, monospace"
                     fontSize="11"
                   >
-                    Qwen3-Coder-Next
+                    Qwen3.6
                   </text>
                   <text
                     x="350"
@@ -266,7 +306,7 @@ export function SectionTEE() {
                   />
                 </motion.g>
 
-                {/* arrow 2 */}
+                {/* arrow 2 (encryption boundary out) */}
                 <motion.path
                   d="M 460 190 L 560 190"
                   fill="none"
@@ -275,6 +315,10 @@ export function SectionTEE() {
                   strokeDasharray="6 6"
                   style={{ strokeDashoffset: dashOffset2, opacity: a4 }}
                 />
+                <motion.g style={{ opacity: a4 }}>
+                  <StepBadge x={510} y={166} n="05" />
+                  <LockIcon x={504} y={196} />
+                </motion.g>
 
                 {/* response node */}
                 <motion.g style={{ opacity: a4 }}>
@@ -377,5 +421,53 @@ function Step({
         {step.body}
       </p>
     </motion.li>
+  )
+}
+
+// 図中の各遷移ポイントに振る "01", "02"... のバッジ
+function StepBadge({
+  x,
+  y,
+  n,
+  tone = "ember",
+}: {
+  x: number
+  y: number
+  n: string
+  tone?: "ember" | "cobalt"
+}) {
+  const fill = tone === "cobalt" ? "#034cff" : "#fc533a"
+  return (
+    <g>
+      <circle cx={x} cy={y} r="11" fill={fill} fillOpacity="0.18" stroke={fill} />
+      <text
+        x={x}
+        y={y + 3}
+        textAnchor="middle"
+        fill={fill}
+        fontFamily="JetBrains Mono, monospace"
+        fontSize="10"
+        fontWeight="700"
+        letterSpacing="0.5"
+      >
+        {n}
+      </text>
+    </g>
+  )
+}
+
+// 暗号化境界に置く錠前アイコン
+function LockIcon({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x}, ${y})`}>
+      <rect width="12" height="9" y="3" rx="1.5" fill="#fc533a" />
+      <path
+        d="M 3 3 V 1.5 a 3 3 0 0 1 6 0 V 3"
+        fill="none"
+        stroke="#fc533a"
+        strokeWidth="1.4"
+      />
+      <circle cx="6" cy="7.5" r="1.2" fill="#131010" />
+    </g>
   )
 }

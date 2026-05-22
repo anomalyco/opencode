@@ -27,7 +27,7 @@ export function TopNav() {
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
         <a href="#top" className="flex items-center gap-2 font-mono text-xs tracking-widest text-sc-text">
           <span className="inline-block size-2 rounded-full bg-sc-ember sc-pulse" />
-          ACOMPANY SECURE CODE
+          Acompanyセキュアコード
         </a>
         <nav className="hidden md:flex items-center gap-6 text-xs text-sc-text-mid">
           {SECTIONS.map((s) => (

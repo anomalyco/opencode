@@ -77,16 +77,16 @@ export function SectionCoding() {
           </h2>
           <p className="mt-6 max-w-2xl text-sm leading-relaxed text-sc-text-mid md:text-base">
             ターミナル中心のワークフローを崩さず、コード生成・レビュー・リファクタ・バグ修正・テスト生成までを
-            ひとつのセッションでこなす。下のセッションは、実機のログを縮めた例。
+            ひとつのセッションでこなす。
           </p>
         </motion.div>
 
         <div className="mt-12 grid gap-8 lg:grid-cols-[2fr_1fr]">
           <TerminalChrome
-            title="Acompany Secure Code · /private/tmp/billing"
+            title="Acompanyセキュアコード · /private/tmp/billing"
             status={
               <span>
-                <span className="text-sc-mint">●</span> Qwen3-Coder-Next
+                <span className="text-sc-mint">●</span> Qwen3.6
               </span>
             }
           >
@@ -222,7 +222,7 @@ function FlowLine({
 const MODELS = [
   { name: "GPT-OSS-120B", note: "high reasoning", active: false },
   { name: "GPT-OSS-20B", note: "fast", active: false },
-  { name: "Qwen3-Coder-Next", note: "balanced", active: true },
+  { name: "Qwen3.6", note: "balanced", active: true },
   { name: "Qwen3.5-27B", note: "ja-friendly", active: false },
 ] as const
 
@@ -230,7 +230,7 @@ function ModelPicker() {
   return (
     <div className="overflow-hidden rounded-md border border-sc-border bg-sc-bg-soft">
       <div className="border-b border-sc-border px-3 py-1.5 text-[11px] text-sc-text-mid">
-        Acompany SecureCode
+        Acompanyセキュアコード
       </div>
       <ul>
         {MODELS.map((m) => (
