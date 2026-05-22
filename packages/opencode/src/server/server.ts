@@ -2,6 +2,7 @@ import "./init-projectors"
 
 import { handleCollabRequest } from "@/collab/router"
 import { parsePreviewPath, handlePreviewHttp, attachPreviewUpgrade } from "@/collab/preview-router"
+import { Database } from "@/storage/db"
 import { NodeHttpServer } from "@effect/platform-node"
 import * as Log from "@opencode-ai/core/util/log"
 import { ConfigProvider, Context, Effect, Exit, Layer, Scope, Stream } from "effect"
@@ -16,6 +17,10 @@ import { PublicApi } from "./routes/instance/httpapi/public"
 import type { CorsOptions } from "./cors"
 import { lazy } from "@/util/lazy"
 
+// Module load time — used as a coarse server-start time for /healthz uptime.
+// Close enough for an ALB health probe; not used for SLA reporting.
+const serverStartedAt = Date.now()
+
 // ── Collab middleware ──────────────────────────────────────────────────────────
 // Intercepts /collab/* requests before the Effect HTTP router's catch-all UI
 // route can serve index.html for them. Bridges the standard Web Request/Response
@@ -25,6 +30,14 @@ const collabMiddleware: HttpMiddleware.HttpMiddleware = (app) =>
   Effect.gen(function* () {
     const req = yield* HttpServerRequest.HttpServerRequest
     const pathname = new URL(req.url, "http://localhost").pathname
+
+    // /healthz — ALB / ECS health probe.  Sits ahead of every other route so
+    // a degraded collab/preview path can't fail the liveness check on its own.
+    // Returns 503 when the SQLite handle is unreachable; the ALB pulls the
+    // task out of rotation and ECS replaces it.
+    if (pathname === "/healthz") {
+      return yield* serveHealthz()
+    }
 
     // /preview/<port>/<rest> — HTTP reverse proxy to a dev server running
     // inside this container.  WebSocket upgrades for the same path are
@@ -84,6 +97,31 @@ const collabMiddleware: HttpMiddleware.HttpMiddleware = (app) =>
     const buf = yield* Effect.promise(() => webResponse.arrayBuffer())
     return HttpServerResponse.raw(new Uint8Array(buf), { status: webResponse.status, headers: resHeaders })
   })
+
+const serveHealthz = () =>
+  Effect.sync(() => {
+    const dbOk = pingDatabase()
+    const body = {
+      ok: dbOk,
+      checks: { db: dbOk ? "ok" : "fail" },
+      version: process.env["OPENCODE_VERSION"] ?? "unknown",
+      uptime_s: Math.floor((Date.now() - serverStartedAt) / 1000),
+    }
+    return HttpServerResponse.jsonUnsafe(body, {
+      status: dbOk ? 200 : 503,
+      headers: { "cache-control": "no-store" },
+    })
+  })
+
+function pingDatabase(): boolean {
+  try {
+    Database.use((db) => db.run("SELECT 1"))
+    return true
+  } catch (err) {
+    log.error("/healthz db ping failed", { error: err instanceof Error ? err.message : String(err) })
+    return false
+  }
+}
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false

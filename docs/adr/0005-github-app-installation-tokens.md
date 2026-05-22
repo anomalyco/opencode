@@ -1,7 +1,40 @@
 # ADR-0005: Replace static PAT-in-clone-URL with GitHub App installation tokens
 
-- Status: Proposed
+- Status: Accepted (Option B interim — GitHub App migration deferred)
 - Date: 2026-05-21
+- Last updated: 2026-05-22
+
+## 2026-05-22 — Option B landed; PAT removed
+
+The collab-utils deployment ships without a server PAT.  `workspace.ts`,
+`github-pr.ts`, `router.ts` and `github-auth.ts` were updated to use each
+user's own OAuth access token (stored at-rest in `collab_auth_session`) for:
+
+- Repo clone + push (`x-access-token:${userToken}@github.com/...`)
+- PR open (`Authorization: Bearer ${userToken}` against `/repos/.../pulls`)
+- Org-membership probe (`/user/memberships/orgs/<org>` — authoritative for
+  the requester even on private / SSO-protected orgs)
+- Org repo list (`/orgs/<org>/repos` — naturally scoped to repos the caller
+  can read, fixing a pre-existing UX bug where the form showed repos no
+  participant could write to)
+
+`GITHUB_TOKEN` is dropped from `docker-compose.yml`, `.env.example`, and the
+Terraform task definition; the corresponding Secrets Manager entry is gone.
+
+The OAuth scope list grew from `read:org, read:user, user:email` to
+`read:org, read:user, user:email, repo`.  Each user sees a consent screen on
+first sign-in mentioning private-repo access — that is the accepted cost.
+
+What's still open (the original ADR-0005 recommendation): migrate from
+user-OAuth-tokens to a GitHub App installation token model.  That delivers
+three things Option B can't:
+1. Short-lived (1 hour) tokens that auto-expire on leak
+2. No per-user consent friction
+3. Background work (queue executor, scheduled GC) can run without a Driver's
+   token
+
+Trigger to revisit: either the user-consent screen becomes a UX blocker, or
+we want background work that outlasts a user's session.
 
 ## Context
 

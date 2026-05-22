@@ -1,0 +1,162 @@
+name: Deploy collab
+
+# Manual deploys only.  No auto-deploy on push — operator clicks "Run workflow"
+# in the GitHub Actions UI.  ADR-0009 single-replica contract means every
+# deploy briefly takes the site offline; we don't want that triggered by
+# every WIP push to the collab branch.
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to publish (defaults to 'latest').  Override for rollback / retry."
+        required: false
+        type: string
+        default: "latest"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  # Account ID is the only sensitive value — surfaced via repository secret.
+  # Other config stays as plain workflow env (account-agnostic).
+  AWS_REGION: ap-southeast-2
+  ECR_REPOSITORY: opencode-collab
+  ECS_CLUSTER: opencode-collab
+  ECS_SERVICE: opencode-collab
+  TASK_FAMILY: opencode-collab
+  COLLAB_DOMAIN: collab.utils.unleashlive.com
+  DEPLOY_ROLE_NAME: github-opencode-collab-deploy
+
+jobs:
+  deploy:
+    name: Build + push + deploy to utils
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Resolve image references
+        id: img
+        run: |
+          set -euo pipefail
+          IMAGE_TAG="${{ inputs.image_tag }}"
+          if [[ -z "${IMAGE_TAG}" ]]; then IMAGE_TAG="latest"; fi
+          ECR_REGISTRY="${{ secrets.AWS_UTILS_ACCOUNT_ID }}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "ecr_registry=${ECR_REGISTRY}" >> "$GITHUB_OUTPUT"
+          echo "image=${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "sha_image=${ECR_REGISTRY}/${ECR_REPOSITORY}:sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Configure AWS credentials (utils account, OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_UTILS_ACCOUNT_ID }}:role/${{ env.DEPLOY_ROLE_NAME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: gh-opencode-collab-${{ github.run_id }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registries: ${{ secrets.AWS_UTILS_ACCOUNT_ID }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          # Two tags: the requested mutable one (default 'latest') AND a
+          # SHA-pinned reference so we can always roll back to a specific
+          # commit via 'image_tag' workflow input.
+          tags: |
+            ${{ steps.img.outputs.image }}
+            ${{ steps.img.outputs.sha_image }}
+          cache-from: type=gha,scope=opencode-collab
+          cache-to: type=gha,scope=opencode-collab,mode=max
+
+      - name: Register new task definition revision
+        id: register
+        run: |
+          set -euo pipefail
+          # Pull the active task def and swap the image to the SHA-pinned
+          # tag (so a 'latest' rebuild years from now still points at a
+          # known artifact).
+          aws ecs describe-task-definition \
+            --task-definition "${TASK_FAMILY}" \
+            --query 'taskDefinition' > current.json
+
+          jq --arg img "${{ steps.img.outputs.sha_image }}" '
+            .containerDefinitions[0].image = $img
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                  .compatibilities, .registeredAt, .registeredBy)
+          ' current.json > new.json
+
+          NEW_TD_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://new.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          echo "task_definition_arn=${NEW_TD_ARN}" >> "$GITHUB_OUTPUT"
+          echo "Registered ${NEW_TD_ARN}"
+
+      - name: Update ECS service
+        run: |
+          aws ecs update-service \
+            --cluster "${ECS_CLUSTER}" \
+            --service "${ECS_SERVICE}" \
+            --task-definition "${{ steps.register.outputs.task_definition_arn }}" \
+            --force-new-deployment \
+            > /dev/null
+          echo "Update issued; waiting for stable…"
+
+      - name: Wait for service stable
+        run: |
+          aws ecs wait services-stable \
+            --cluster "${ECS_CLUSTER}" \
+            --services "${ECS_SERVICE}"
+
+      - name: Health check
+        run: |
+          set -uo pipefail
+          # Two minutes of retry — the ALB may take a moment to flip the new
+          # task into rotation after services-stable returns.  Skip the check
+          # when desired_count is 0 (no task to talk to).
+          DESIRED=$(aws ecs describe-services \
+            --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" \
+            --query 'services[0].desiredCount' --output text)
+          if [[ "${DESIRED}" == "0" ]]; then
+            echo "::notice::desired_count=0 — skipping /healthz check (service is intentionally cold)"
+            exit 0
+          fi
+          for i in $(seq 1 24); do
+            if curl -fsS -o /dev/null -w "%{http_code}" "https://${COLLAB_DOMAIN}/healthz" | grep -q '^200$'; then
+              echo "healthz: OK"
+              exit 0
+            fi
+            echo "healthz attempt ${i}/24 not OK yet; sleeping 5s"
+            sleep 5
+          done
+          echo "::error::healthz never returned 200"
+          exit 1
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Deploy collab"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Image (mutable) | \`${{ steps.img.outputs.image }}\` |"
+            echo "| Image (SHA-pinned) | \`${{ steps.img.outputs.sha_image }}\` |"
+            echo "| Task definition | \`${{ steps.register.outputs.task_definition_arn }}\` |"
+            echo "| URL | https://${COLLAB_DOMAIN} |"
+            echo "| Commit | ${GITHUB_SHA} |"
+            echo "| Triggered by | @${GITHUB_ACTOR} |"
+          } >> "$GITHUB_STEP_SUMMARY"

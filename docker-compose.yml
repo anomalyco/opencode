@@ -10,9 +10,9 @@ services:
       - GITHUB_OAUTH_CLIENT_ID=${GITHUB_OAUTH_CLIENT_ID}
       - GITHUB_OAUTH_CLIENT_SECRET=${GITHUB_OAUTH_CLIENT_SECRET}
 
-      # GitHub org + server token (PAT with read:org scope)
+      # GitHub org (PAT removed in ADR-0005 Option B — each user's OAuth
+      # access token is used server-side for clone/push/PR/membership probes)
       - GITHUB_ORG_NAME=${GITHUB_ORG_NAME:-unleashlive}
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
 
       # Public base URL — use ngrok URL when testing remotely
       - OPENCODE_BASE_URL=${OPENCODE_BASE_URL:-http://localhost:4096}
@@ -29,6 +29,12 @@ services:
       # Without this, every GET / hangs waiting for the import to fail, which
       # blocks the health check and all other requests for the entire session.
       - OPENCODE_DISABLE_EMBEDDED_WEB_UI=true
+
+      # Local-dev escape hatch.  The image sets NODE_ENV=production, which now
+      # refuses to start without OPENCODE_SERVER_PASSWORD (ADR-0001).  For
+      # local docker-compose we want zero ceremony — explicitly opt out.
+      # Production deployments MUST omit this and set OPENCODE_SERVER_PASSWORD.
+      - OPENCODE_ALLOW_UNAUTHENTICATED=1
 
       # LLM — use Claude Code subscription credentials (bind-mounted below).
       # Set to "dummy" so opencode's provider loader sees a non-empty value and

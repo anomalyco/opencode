@@ -98,7 +98,13 @@ COPY . .
 RUN --mount=type=cache,target=/app/packages/app/node_modules/.vite \
     bun run --cwd packages/app build
 
+# Container entrypoint — writes ~/.claude/.credentials.json from
+# $CLAUDE_CREDENTIALS_JSON when present, then execs the server.  See
+# scripts/entrypoint.sh for the rationale.
+COPY scripts/entrypoint.sh /usr/local/bin/opencode-entrypoint
+RUN chmod +x /usr/local/bin/opencode-entrypoint
+
 ENV NODE_ENV=production
 EXPOSE 4096
 
-CMD ["bun", "run", "--cwd", "packages/opencode", "src/index.ts", "serve", "--port", "4096", "--hostname", "0.0.0.0", "--print-logs"]
+ENTRYPOINT ["/usr/local/bin/opencode-entrypoint"]

@@ -73,18 +73,21 @@ export function nativeSessionDirectory(collabSessionId: string, repos: string[])
  * commit produced inside the workspace is signed with collab-session
  * metadata.
  *
- * Uses GITHUB_TOKEN for authentication (supports private repos).
+ * Authentication: uses the Driver's OAuth access token (passed in by the
+ * router from the just-completed session) — see ADR-0005 Option B for why
+ * the server PAT is gone.  An empty token falls through to anonymous clone
+ * which works only for public repos.
  */
 export async function initSessionWorkspace(
   collabSessionId: string,
   repos: string[],
+  userAccessToken: string,
   sessionName: string = "",
   branch: string | null = null,
 ): Promise<void> {
   const root = sessionWorkspacePath(collabSessionId)
   mkdirSync(root, { recursive: true })
 
-  const token = process.env["GITHUB_TOKEN"] ?? ""
   const env = { ...process.env, GIT_TERMINAL_PROMPT: "0" }
 
   for (const repo of repos) {
@@ -97,8 +100,8 @@ export async function initSessionWorkspace(
         console.error("[collab] git pull failed:", err),
       )
     } else {
-      const cloneUrl = token
-        ? `https://x-access-token:${token}@github.com/${repo}.git`
+      const cloneUrl = userAccessToken
+        ? `https://x-access-token:${userAccessToken}@github.com/${repo}.git`
         : `https://github.com/${repo}.git`
 
       await runAsync("git", ["clone", "--depth", "100", cloneUrl, dest], { env })
@@ -333,17 +336,13 @@ export async function configureWorkspaceGitIdentity(
 
 /**
  * Push committed changes for a workspace repo back to the GitHub remote.
+ *
+ * The token came in via the original clone URL (baked into .git/config by
+ * `initSessionWorkspace`), so git already has credentials for `origin`.
+ * Empty-string token is supported for the anonymous public-repo path.
  */
 export async function pushWorkspace(repoPath: string): Promise<{ success: boolean; error?: string }> {
-  const token = process.env["GITHUB_TOKEN"] ?? ""
-  const env = token
-    ? {
-        ...process.env,
-        GIT_ASKPASS: "echo",
-        GIT_TERMINAL_PROMPT: "0",
-        GITHUB_TOKEN: token,
-      }
-    : process.env
+  const env = { ...process.env, GIT_ASKPASS: "echo", GIT_TERMINAL_PROMPT: "0" }
 
   try {
     await runAsync("git", ["-C", repoPath, "push", "origin", "HEAD"], { env })

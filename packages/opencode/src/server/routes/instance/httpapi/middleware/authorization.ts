@@ -33,6 +33,12 @@ function validateCredential<A, E, R>(
 ) {
   return Effect.gen(function* () {
     if (!ServerAuth.required(config)) return yield* effect
+    // Same isPublicUIPath bypass the router middleware honors — needed so
+    // the SPA can call /global/health at boot without triggering the
+    // browser's native basic-auth dialog.
+    const request = yield* HttpServerRequest.HttpServerRequest
+    const url = new URL(request.url, "http://localhost")
+    if (isPublicUIPath(request.method, url.pathname)) return yield* effect
     if (!ServerAuth.authorized(credential, config)) {
       yield* HttpEffect.appendPreResponseHandler((_request, response) =>
         Effect.succeed(HttpServerResponse.setHeader(response, "www-authenticate", WWW_AUTHENTICATE)),

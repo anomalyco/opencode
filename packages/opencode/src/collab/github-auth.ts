@@ -29,7 +29,12 @@ export function buildOAuthUrl(params: {
   url.searchParams.set("client_id", params.clientId)
   url.searchParams.set("redirect_uri", params.redirectUri)
   url.searchParams.set("state", params.state)
-  url.searchParams.set("scope", (params.scopes ?? ["read:org", "read:user", "user:email"]).join(" "))
+  // `repo` scope is required so the user's OAuth token can be used for the
+  // server-side git clone + push paths (Option B in ADR-0005).  Each user
+  // sees a "this app will have access to your private repositories" consent
+  // screen on first sign-in; that's the cost of dropping the long-lived
+  // server PAT.
+  url.searchParams.set("scope", (params.scopes ?? ["read:org", "read:user", "user:email", "repo"]).join(" "))
   return url.toString()
 }
 
@@ -87,97 +92,78 @@ export async function getGitHubUser(accessToken: string): Promise<GitHubUser> {
 }
 
 /**
- * Membership check.  GitHub's `/orgs/<org>/members/<login>` endpoint returns
- * 404 for PRIVATE members unless the requesting token has visibility into
- * them — so a server-PAT-only check rejects private org members even though
- * they are in fact in the org.  We probe in two passes:
+ * Membership check using the user's own OAuth access token.
  *
- *   1. With the USER's own OAuth token (has read:org scope, hit
- *      /user/memberships/orgs/<org>) — returns membership regardless of
- *      privacy.  This is the authoritative answer for the OAuth callback.
- *   2. Fall back to the server PAT against /orgs/<org>/members/<login> —
- *      keeps the check working for paths that don't have a user token
- *      handy (legacy callers).
+ * GitHub's `/user/memberships/orgs/<org>` endpoint returns the requesting
+ * user's own membership status regardless of org privacy or SSO posture —
+ * this is the authoritative answer.  `read:org` is in every OAuth grant the
+ * collab app requests, so every signed-in caller has a usable token.
  *
- * Returns true on the first definitive YES; on definitive NO from method 1
- * we still try method 2 in case the user's SSO authorisation is missing
- * but the server token can see them publicly.
+ * Returns false on network errors or non-2xx responses (denied / not a
+ * member / token revoked); never throws.
  *
- * Pass `console` (or any { error: fn }) as `log` to get diagnostics about
- * which probe ran and what status came back.
+ * Historical note: an older fallback path probed `/orgs/<org>/members/<login>`
+ * with a server PAT, kept for SSO-protected orgs where the user's own token
+ * might be unauthorised.  Removed when ADR-0005 Option B dropped the PAT.
+ * If we ever hit users whose own token can't see their org, we restore the
+ * fallback or move to GitHub App installation tokens (the eventual ADR-0005
+ * landing).
  */
 export async function isOrgMember(params: {
   orgName: string
   githubLogin: string
-  /** Server-side PAT or GitHub App installation token with read:org scope. */
-  serverToken: string
-  /** The user's own OAuth access token from the just-completed flow. */
-  userToken?: string
+  /** The user's own OAuth access token. */
+  userToken: string
   log?: { error: (...args: unknown[]) => void; info?: (...args: unknown[]) => void }
 }): Promise<boolean> {
-  const ua = "opencode-collab"
   const logger = params.log ?? { error: console.error, info: console.log }
 
-  // ── Method 1: user token ──
-  if (params.userToken) {
-    try {
-      const res = await fetch(`${GITHUB_API}/user/memberships/orgs/${params.orgName}`, {
-        headers: {
-          Authorization: `Bearer ${params.userToken}`,
-          Accept: "application/vnd.github+json",
-          "User-Agent": ua,
-        },
-      })
-      if (res.ok) {
-        const data = (await res.json()) as { state?: string }
-        const ok = data.state === "active"
-        logger.info?.("[collab.auth] user-token membership probe", {
-          org: params.orgName, login: params.githubLogin, state: data.state, ok,
-        })
-        if (ok) return true
-        // state === "pending" or other: continue to fallback
-      } else {
-        logger.error("[collab.auth] user-token membership probe failed", {
-          org: params.orgName, login: params.githubLogin, status: res.status,
-          // SSO-protected orgs return 403 with x-github-sso header here
-          ssoHeader: res.headers.get("x-github-sso"),
-        })
-      }
-    } catch (err) {
-      logger.error("[collab.auth] user-token membership probe error", err)
-    }
-  }
-
-  // ── Method 2: server token ──
   try {
-    const res = await fetch(`${GITHUB_API}/orgs/${params.orgName}/members/${params.githubLogin}`, {
+    const res = await fetch(`${GITHUB_API}/user/memberships/orgs/${params.orgName}`, {
       headers: {
-        Authorization: `Bearer ${params.serverToken}`,
+        Authorization: `Bearer ${params.userToken}`,
         Accept: "application/vnd.github+json",
-        "User-Agent": ua,
+        "User-Agent": "opencode-collab",
       },
     })
-    const ok = res.status === 204
-    logger.info?.("[collab.auth] server-token membership probe", {
-      org: params.orgName, login: params.githubLogin, status: res.status, ok,
+    if (res.ok) {
+      const data = (await res.json()) as { state?: string }
+      const ok = data.state === "active"
+      logger.info?.("[collab.auth] membership probe", {
+        org: params.orgName, login: params.githubLogin, state: data.state, ok,
+      })
+      return ok
+    }
+    logger.error("[collab.auth] membership probe failed", {
+      org: params.orgName,
+      login: params.githubLogin,
+      status: res.status,
+      // SSO-protected orgs return 403 with x-github-sso here
+      ssoHeader: res.headers.get("x-github-sso"),
     })
-    return ok
+    return false
   } catch (err) {
-    logger.error("[collab.auth] server-token membership probe error", err)
+    logger.error("[collab.auth] membership probe error", err)
     return false
   }
 }
 
+/**
+ * List org repos the *user* has access to.  Pass the user's OAuth token
+ * (has `repo` scope since ADR-0005 Option B); the result is naturally
+ * scoped to repos the caller can read — better than the previous server-PAT
+ * approach which returned every repo the PAT owner could see.
+ */
 export async function listOrgRepos(params: {
   orgName: string
-  serverToken: string
+  userToken: string
   perPage?: number
 }): Promise<Array<{ full_name: string; name: string; private: boolean }>> {
   const res = await fetch(
     `${GITHUB_API}/orgs/${params.orgName}/repos?per_page=${params.perPage ?? 100}&sort=updated`,
     {
       headers: {
-        Authorization: `Bearer ${params.serverToken}`,
+        Authorization: `Bearer ${params.userToken}`,
         "User-Agent": "opencode-collab",
       },
     },

@@ -2,9 +2,10 @@
  * One-click "Open PR" for a collab session.
  *
  * Driver hits the button → server:
- *   1. `git push -u origin HEAD` from the cloned repo workspace
- *   2. `POST /repos/<org>/<repo>/pulls` against GitHub's REST API using
- *      the server-side GITHUB_TOKEN
+ *   1. `git push -u origin HEAD` from the cloned repo workspace (credentials
+ *      already baked into the clone URL at session-init time)
+ *   2. `POST /repos/<org>/<repo>/pulls` against GitHub's REST API using the
+ *      Driver's OAuth access token (ADR-0005 Option B — no server PAT)
  *   3. Returns the PR URL so the client can navigate to it
  *
  * Body of the PR is auto-composed from the collab session state:
@@ -28,19 +29,20 @@ import { repoWorkspacePath } from "./workspace"
 export async function openCollabPullRequest(
   collabSession: CollabSession,
   baseUrl: string,
+  userAccessToken: string,
 ): Promise<{ ok: true; url: string } | { ok: false; status: number; error: string }> {
   if (collabSession.repos.length === 0) {
     return { ok: false, status: 400, error: "Session has no linked repository." }
   }
+  if (!userAccessToken) {
+    return { ok: false, status: 401, error: "No GitHub access token in session." }
+  }
   const repoFull = collabSession.repos[0]! // "<org>/<repo>"
   const repoPath = repoWorkspacePath(collabSession.id, repoFull)
-  const token = process.env["GITHUB_TOKEN"] ?? ""
-  if (!token) {
-    return { ok: false, status: 500, error: "Server GITHUB_TOKEN is not configured." }
-  }
 
-  // Step 1: push the current branch.
-  const env = { ...process.env, GIT_TERMINAL_PROMPT: "0", GITHUB_TOKEN: token }
+  // Step 1: push the current branch.  Clone URL already has the token baked
+  // in from initSessionWorkspace, so no extra env handling is needed here.
+  const env = { ...process.env, GIT_TERMINAL_PROMPT: "0" }
   try {
     await runAsyncCapture("git", ["-C", repoPath, "push", "-u", "origin", "HEAD"], env)
   } catch (err) {
@@ -109,7 +111,7 @@ export async function openCollabPullRequest(
   const res = await fetch(`https://api.github.com/repos/${repoFull}/pulls`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${userAccessToken}`,
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
       "User-Agent": "opencode-collab",
@@ -132,7 +134,7 @@ export async function openCollabPullRequest(
       try {
         const list = await fetch(
           `https://api.github.com/repos/${repoFull}/pulls?head=${repoFull.split("/")[0]}:${encodeURIComponent(branch)}&state=open`,
-          { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "User-Agent": "opencode-collab" } },
+          { headers: { Authorization: `Bearer ${userAccessToken}`, Accept: "application/vnd.github+json", "User-Agent": "opencode-collab" } },
         )
         if (list.ok) {
           const arr = (await list.json()) as Array<{ html_url: string }>
