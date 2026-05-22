@@ -112,7 +112,7 @@ export const DocRoutes = lazy(() =>
       "/:docID/asset",
       describeRoute({
         summary: "Upload doc asset",
-        description: "Store an image asset for a collaborative doc.",
+        description: "Store an asset for a collaborative doc.",
         operationId: "doc.asset.create",
         responses: {
           200: {
@@ -131,7 +131,7 @@ export const DocRoutes = lazy(() =>
         "json",
         z.object({
           id: AssetID.zod.optional(),
-          mime: z.string().startsWith("image/"),
+          mime: z.string().min(1),
           data: z.string().min(1),
         }),
       ),
@@ -154,7 +154,7 @@ export const DocRoutes = lazy(() =>
       "/:docID/asset/:assetID",
       describeRoute({
         summary: "Get doc asset",
-        description: "Return a stored image asset for a collaborative doc.",
+        description: "Return a stored asset for a collaborative doc.",
         operationId: "doc.asset.get",
         responses: {
           200: {

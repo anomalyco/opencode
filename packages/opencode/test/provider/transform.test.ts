@@ -1012,6 +1012,33 @@ describe("ProviderTransform.message - empty image handling", () => {
       text: "ERROR: Image file is empty or corrupted. Please provide a valid image.",
     })
   })
+
+  test("should replace mislabeled image files with error text", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Open this" },
+          {
+            type: "file",
+            data: "data:image/png;base64,UEsDBAoAAAAI",
+            mediaType: "image/png",
+            filename: "project.sb3",
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(2)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Open this" })
+    expect(result[0].content[1]).toEqual({
+      type: "text",
+      text: 'ERROR: Cannot read "project.sb3" (declared image/png, but the file content is not a supported image). Inform the user.',
+    })
+  })
 })
 
 describe("ProviderTransform.message - anthropic empty content filtering", () => {

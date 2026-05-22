@@ -1,6 +1,10 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { useNavigate } from "@solidjs/router"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { Binary } from "@opencode-ai/util/binary"
+import type { Session } from "@opencode-ai/sdk/v2/client"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
@@ -17,6 +21,7 @@ import {
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
@@ -118,7 +123,9 @@ const DOC_RATIO = 0.8
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
+  const navigate = useNavigate()
   const globalSDK = useGlobalSDK()
+  const globalSync = useGlobalSync()
   const sync = useSync()
   const local = useLocal()
   const files = useFile()
@@ -136,6 +143,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
+  let pending: Promise<string | undefined> | undefined
 
   const mirror = { input: false }
   const inset = 56
@@ -300,6 +308,48 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     applyingHistory: false,
   })
   const [height, setHeight] = createSignal(DOC_HEIGHT)
+
+  const seed = (info: Session) => {
+    const [, setStore] = globalSync.child(sdk.directory)
+    setStore("session", (list: Session[]) => {
+      const result = Binary.search(list, info.id, (item) => item.id)
+      const next = [...list]
+      if (result.found) {
+        next[result.index] = info
+        return next
+      }
+      next.splice(result.index, 0, info)
+      return next
+    })
+  }
+
+  const ensure = async () => {
+    if (params.id) return params.id
+    if (pending) return pending
+    pending = sdk.client.session
+      .create()
+      .then((res) => {
+        const info = res.data
+        if (!info) return undefined
+        seed(info)
+        if (accepting()) permission.enableAutoAccept(info.id, sdk.directory)
+        local.session.promote(sdk.directory, info.id)
+        layout.handoff.setTabs(base64Encode(sdk.directory), info.id)
+        navigate(`/${base64Encode(sdk.directory)}/session/${info.id}`)
+        return info.id
+      })
+      .catch(() => {
+        showToast({
+          title: language.t("prompt.toast.sessionCreateFailed.title"),
+          description: language.t("common.requestFailed"),
+        })
+        return undefined
+      })
+      .finally(() => {
+        pending = undefined
+      })
+    return pending
+  }
 
   const max = () => Math.max(DOC_MIN, Math.floor(window.innerHeight * DOC_RATIO))
   const clamp = (value: number) => Math.min(max(), Math.max(DOC_MIN, value))
@@ -1243,6 +1293,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     permission.toggleAutoAccept(params.id, sdk.directory)
   }
 
+  createEffect(() => {
+    if (store.mode !== "doc") return
+    if (params.id) return
+    void ensure().then((id) => {
+      if (!id) return
+      void doc.refresh(id)
+    })
+  })
+
   const { abort, handleSubmit } = createPromptSubmit({
     info,
     imageAttachments,
@@ -1301,8 +1360,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         })
         return
       }
-      const sessionID = params.id
-      await handleSubmit(event, [
+      const base = [
         ...promptFromDocMarkdown(text, prompt.current(), doc.docID()),
         ...(next?.assets.map((asset) => ({
           type: "image" as const,
@@ -1311,10 +1369,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           mime: asset.mime,
           dataUrl: asset.dataUrl,
         })) ?? []),
-      ])
+      ]
+      const sessionID = await handleSubmit(event, {
+        prompt: base,
+        prepare: async (id) => [
+          ...promptFromDocMarkdown(text, prompt.current(), await doc.refresh(id)),
+          ...base.filter((part) => part.type === "image"),
+        ],
+      })
       if (!sessionID) return
       try {
-        await doc.advance()
+        await doc.advance(sessionID)
       } catch {
         showToast({
           title: language.t("prompt.toast.docAdvanceFailed.title"),

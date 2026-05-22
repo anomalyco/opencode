@@ -196,6 +196,13 @@ type CommentItem = {
   preview?: string
 }
 
+type Override =
+  | Prompt
+  | {
+      prompt: Prompt
+      prepare: (sessionID: string) => Promise<Prompt>
+    }
+
 export function createPromptSubmit(input: PromptSubmitInput) {
   const navigate = useNavigate()
   const sdk = useSDK()
@@ -281,11 +288,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     })
   }
 
-  const handleSubmit = async (event: Event, override?: Prompt) => {
+  const handleSubmit = async (event: Event, override?: Override) => {
     event.preventDefault()
 
     const saved = prompt.current()
-    const currentPrompt = override ?? saved
+    const currentPrompt = Array.isArray(override) ? override : (override?.prompt ?? saved)
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
     const images = override
       ? currentPrompt.filter((part): part is ImageAttachmentPart => part.type === "image")
@@ -387,6 +394,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
+    const prepared = !Array.isArray(override) && override?.prepare ? await override.prepare(session.id) : currentPrompt
+    const body = prepared.map((part) => ("content" in part ? part.content : "")).join("")
+    const files = !Array.isArray(override) && override?.prepare
+      ? prepared.filter((part): part is ImageAttachmentPart => part.type === "image")
+      : images
+
     const model = {
       modelID: currentModel.id,
       providerID: currentModel.provider.id,
@@ -396,7 +409,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const draft: FollowupDraft = {
       sessionID: session.id,
       sessionDirectory,
-      prompt: currentPrompt,
+      prompt: prepared,
       context,
       agent,
       model,
@@ -438,7 +451,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           sessionID: session.id,
           agent,
           model,
-          command: text,
+          command: body,
         })
         .catch((err) => {
           showToast({
@@ -447,11 +460,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           })
           restoreInput()
         })
-      return
+      return session.id
     }
 
-    if (text.startsWith("/")) {
-      const [cmdName, ...args] = text.split(" ")
+    if (body.startsWith("/")) {
+      const [cmdName, ...args] = body.split(" ")
       const commandName = cmdName.slice(1)
       const customCommand = sync.data.command.find((c) => c.name === commandName)
       if (customCommand) {
@@ -464,7 +477,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             agent,
             model: `${model.providerID}/${model.modelID}`,
             variant,
-            parts: images.map((attachment) => ({
+            parts: files.map((attachment) => ({
               id: Identifier.ascending("part"),
               type: "file" as const,
               mime: attachment.mime,
@@ -479,7 +492,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             })
             restoreInput()
           })
-        return
+        return session.id
       }
     }
 
@@ -573,6 +586,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       restoreCommentItems(commentItems)
       restoreInput()
     })
+    return session.id
   }
 
   return {

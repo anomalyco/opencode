@@ -2928,7 +2928,7 @@ export class Asset extends HeyApiClient {
   /**
    * Upload doc asset
    *
-   * Store an image asset for a collaborative doc.
+   * Store an asset for a collaborative doc.
    */
   public create<ThrowOnError extends boolean = false>(
     parameters: {
@@ -2971,7 +2971,7 @@ export class Asset extends HeyApiClient {
   /**
    * Get doc asset
    *
-   * Return a stored image asset for a collaborative doc.
+   * Return a stored asset for a collaborative doc.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters: {

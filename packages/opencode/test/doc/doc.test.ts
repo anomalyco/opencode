@@ -143,7 +143,7 @@ describe("doc", () => {
     })
   })
 
-  test("doc asset route returns uploaded image data", async () => {
+  test("doc asset route returns uploaded asset data", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
@@ -188,6 +188,24 @@ describe("doc", () => {
         expect(res.status).toBe(200)
         const pref = (await res.json()) as Doc.AssetInfo
         expect(pref.url).toBe(`/user/alice/doc/${docID}/asset/${pref.assetID}?directory=${dir}`)
+
+        Server.basePath = "/"
+        const pdf = await app.request(`/doc/${docID}/asset?directory=${dir}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: "pdf",
+            mime: "application/pdf",
+            data: Buffer.from([10, 11, 12]).toString("base64"),
+          }),
+        })
+        expect(pdf.status).toBe(200)
+        const file = (await pdf.json()) as Doc.AssetInfo
+        expect(file.mime).toBe("application/pdf")
+        const fetched = await app.request(file.url)
+        expect(fetched.status).toBe(200)
+        expect(fetched.headers.get("content-type")).toBe("application/pdf")
+        expect(Array.from(new Uint8Array(await fetched.arrayBuffer()))).toEqual([10, 11, 12])
       },
     })
   })

@@ -93,6 +93,8 @@ export async function createPage(input: DocMountInput) {
 
   const focus = async (ready?: Awaited<ReturnType<typeof inlineReady>>) => {
     ensureEditable(doc)
+    const root = editor.querySelector("affine-page-root")
+    if (root instanceof HTMLElement) root.focus()
     const next = ready ?? (await inlineReady(editor))
     next.focusEnd()
     await next.waitForUpdate()
@@ -240,6 +242,12 @@ export async function createPage(input: DocMountInput) {
     ensureEditable(doc)
   }
 
+  const refocus = () => {
+    const active = document.activeElement
+    if (active && editor.contains(active)) return
+    void focus()
+  }
+
   const undo = () => {
     if (!doc.canUndo) return
     doc.undo()
@@ -261,6 +269,7 @@ export async function createPage(input: DocMountInput) {
     attach,
     detach,
     guard,
+    refocus,
     onHistory,
     markdown: () =>
       input.sync

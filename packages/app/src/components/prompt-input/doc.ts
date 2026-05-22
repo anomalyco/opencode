@@ -216,6 +216,7 @@ export function createPromptDoc(input: PromptDocInput) {
   }
 
   const guard = () => handle?.guard()
+  const refocus = () => handle?.refocus()
 
   const undo = () => {
     handle?.undo()
@@ -231,8 +232,8 @@ export function createPromptDoc(input: PromptDocInput) {
 
   const empty = () => (handle ? handle.empty() : true)
 
-  const advance = async () => {
-    const sessionID = input.sessionID()
+  const advance = async (id?: string) => {
+    const sessionID = id ?? input.sessionID()
     if (!sessionID) return
     const res = await input.client.session.promptDoc2.advance({
       sessionID,
@@ -263,6 +264,7 @@ export function createPromptDoc(input: PromptDocInput) {
     pivot,
     clientID,
     guard,
+    refocus,
     commitMarkdown,
     empty,
     advance,

@@ -96,7 +96,9 @@ describe("docMarkdown", () => {
 
     const out = await docMarkdown(
       ctx.doc,
-      opts(async () => new Response(new Uint8Array([1, 2, 3]), { headers: { "Content-Type": "application/pdf" } })),
+      opts(async () =>
+        new Response(new TextEncoder().encode("%PDF-1.7\n"), { headers: { "Content-Type": "application/pdf" } }),
+      ),
     )
 
     expect(out.text).toContain("[brief.pdf](attachment://file_1)")
@@ -109,6 +111,34 @@ describe("docMarkdown", () => {
       filename: "brief.pdf",
     })
     expect(docPlain(ctx.doc)).toContain("brief.pdf")
+  })
+
+  test("keeps mislabeled binary attachments out of assets", async () => {
+    const ctx = page()
+
+    add(
+      ctx.doc,
+      "affine:attachment",
+      {
+        sourceId: "zip_1",
+        name: "project.sb3",
+        type: "image/png",
+        size: 4,
+      },
+      ctx.note,
+    )
+
+    const out = await docMarkdown(
+      ctx.doc,
+      opts(async () =>
+        new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), { headers: { "Content-Type": "image/png" } }),
+      ),
+    )
+
+    expect(out.text).toContain("[project.sb3](attachment://zip_1)")
+    expect(out.text).toContain("- Type: image/png")
+    expect(out.assets).toHaveLength(0)
+    expect(docPlain(ctx.doc)).toContain("project.sb3")
   })
 
   test("serializes rich BlockSuite blocks into markdown", async () => {

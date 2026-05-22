@@ -184,7 +184,7 @@ export class OpencodeBlobSource implements BlobSource {
       docID: this.opts.docID,
       directory: this.opts.directory,
       id: key,
-      mime: value.type || "image/png",
+      mime: value.type || "application/octet-stream",
       data: await blobB64(value),
     })
     return key

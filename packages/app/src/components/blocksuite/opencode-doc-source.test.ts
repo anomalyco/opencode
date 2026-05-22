@@ -52,6 +52,22 @@ describe("OpencodeBlobSource", () => {
     expect(href(reqs[0]!)).toBe("http://localhost:4096/doc/doc_1/asset?directory=%2Ftmp%2Fproject")
   })
 
+  test("uploads blobs without type as generic binary", async () => {
+    const source = new OpencodeBlobSource(
+      opts(async (input) => {
+        if (!(input instanceof Request)) throw new Error("expected request")
+        expect(input.method).toBe("POST")
+        const body = (await input.json()) as { id: string; mime: string; data: string }
+        expect(body.id).toBe("hash")
+        expect(body.mime).toBe("application/octet-stream")
+        expect(body.data).toBe("AQID")
+        return new Response(JSON.stringify({ assetID: "hash" }), { status: 200 })
+      }),
+    )
+
+    await expect(source.set("hash", new Blob([new Uint8Array([1, 2, 3])]))).resolves.toBe("hash")
+  })
+
   test("loads stored blob by source id", async () => {
     const source = new OpencodeBlobSource(
       opts(async (input) => {
