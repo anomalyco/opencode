@@ -4,7 +4,7 @@ import { motion } from "framer-motion"
 import { useState, type FormEvent } from "react"
 import { Wordmark } from "./Wordmark"
 
-const PARDOT_ENDPOINT = "https://example.com/securecode-demo-form-handler"
+const PARDOT_ENDPOINT = "https://go.acompany.tech/l/1079873/2026-05-21/2sz5dn"
 
 const PRIVACY_POLICY_URL = "https://www.acompany.tech/privacy-policy"
 
