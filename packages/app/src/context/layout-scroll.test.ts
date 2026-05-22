@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "bun:test"
-import { createScrollPersistence } from "./layout-scroll"
+import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 
 describe("createScrollPersistence", () => {
   test("debounces persisted scroll writes", () => {
@@ -9,8 +9,8 @@ describe("createScrollPersistence", () => {
         session: {
           review: { x: 0, y: 0 },
         },
-      } as Record<string, Record<string, { x: number; y: number }>>
-      const writes: Array<Record<string, { x: number; y: number }>> = []
+      } as Record<string, Record<string, SessionScroll>>
+      const writes: Array<Record<string, SessionScroll>> = []
       const scroll = createScrollPersistence({
         debounceMs: 10,
         getSnapshot: (sessionKey) => snapshot[sessionKey],
@@ -45,7 +45,7 @@ describe("createScrollPersistence", () => {
   test("reseeds empty cache after persisted snapshot loads", () => {
     const snapshot = {
       session: {},
-    } as Record<string, Record<string, { x: number; y: number }>>
+    } as Record<string, Record<string, SessionScroll>>
 
     const scroll = createScrollPersistence({
       getSnapshot: (sessionKey) => snapshot[sessionKey],
@@ -60,5 +60,36 @@ describe("createScrollPersistence", () => {
 
     expect(scroll.scroll("session", "review")).toEqual({ x: 12, y: 34 })
     scroll.dispose()
+  })
+
+  test("preserves bottom markers", () => {
+    vi.useFakeTimers()
+    try {
+      const snapshot = {
+        session: {
+          messages: { x: 0, y: 120, bottom: true },
+        },
+      } as Record<string, Record<string, SessionScroll>>
+      const writes: Array<Record<string, SessionScroll>> = []
+      const scroll = createScrollPersistence({
+        debounceMs: 10,
+        getSnapshot: (sessionKey) => snapshot[sessionKey],
+        onFlush: (sessionKey, next) => {
+          snapshot[sessionKey] = next
+          writes.push(next)
+        },
+      })
+
+      expect(scroll.scroll("session", "messages")).toEqual({ x: 0, y: 120, bottom: true })
+
+      scroll.setScroll("session", "messages", { x: 0, y: 120 })
+      vi.advanceTimersByTime(10)
+
+      expect(writes).toHaveLength(1)
+      expect(writes[0]?.messages).toEqual({ x: 0, y: 120 })
+      scroll.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

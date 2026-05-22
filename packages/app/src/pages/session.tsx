@@ -58,6 +58,7 @@ import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
+import { createSessionScrollDefaultGuard } from "@/pages/session/use-session-hash-scroll-default"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
@@ -1194,8 +1195,89 @@ export default function Page() {
   let scrollStateFrame: number | undefined
   let scrollStateTarget: HTMLDivElement | undefined
   let fillFrame: number | undefined
+  let sessionScrollProgrammaticFrame: number | undefined
+  let sessionScrollProgrammatic = false
+  const sessionScrollDefault = createSessionScrollDefaultGuard()
 
   const jumpThreshold = (el: HTMLDivElement) => Math.max(400, el.clientHeight)
+
+  const markProgrammaticSessionScroll = () => {
+    sessionScrollProgrammatic = true
+    if (sessionScrollProgrammaticFrame !== undefined) cancelAnimationFrame(sessionScrollProgrammaticFrame)
+
+    sessionScrollProgrammaticFrame = requestAnimationFrame(() => {
+      sessionScrollProgrammaticFrame = undefined
+      sessionScrollProgrammatic = false
+    })
+  }
+
+  const sessionScrollSnapshot = (el: HTMLDivElement) => {
+    const max = Math.max(0, el.scrollHeight - el.clientHeight)
+    const bottom = max <= 1 || max - el.scrollTop <= 2
+    return { x: el.scrollLeft, y: el.scrollTop, ...(bottom ? { bottom: true } : {}) }
+  }
+
+  const sessionScrollRoute = () => ({ sessionKey: sessionKey(), sessionID: params.id })
+
+  const saveSessionScroll = (force = false) => {
+    const route = sessionScrollRoute()
+    if (!force && !sessionScrollDefault.canSave(route)) return
+    if (!force && (sessionScrollProgrammatic || location.hash || ui.pendingMessage)) return
+    if (!params.id || !layout.ready()) return
+
+    const el = scroller
+    if (!el || el.clientHeight === 0 || el.clientWidth === 0) return
+
+    if (!force) sessionScrollDefault.consumeDefault(route)
+    view().setScroll("session", sessionScrollSnapshot(el))
+  }
+
+  const canRestoreSessionScroll = () => sessionScrollDefault.canRestore(sessionScrollRoute())
+
+  const consumeDefaultSessionScroll = () => sessionScrollDefault.consumeDefault(sessionScrollRoute())
+
+  createEffect(() => {
+    sessionScrollDefault.enter(sessionScrollRoute())
+  })
+
+  const restoreSessionScroll = () => {
+    if (!params.id || !layout.ready()) return
+    if (!canRestoreSessionScroll()) return false
+    sessionScrollDefault.allowSave(sessionScrollRoute())
+
+    const el = scroller
+    if (!el || el.clientHeight === 0 || el.clientWidth === 0) {
+      sessionScrollDefault.deferRestore(sessionScrollRoute())
+      return
+    }
+
+    consumeDefaultSessionScroll()
+
+    const saved = view().scroll("session")
+    if (!saved) {
+      markProgrammaticSessionScroll()
+      autoScroll.forceScrollToBottom()
+      scheduleScrollState(el)
+      return true
+    }
+
+    if (saved.bottom) {
+      markProgrammaticSessionScroll()
+      autoScroll.forceScrollToBottom()
+      scheduleScrollState(el)
+      return true
+    }
+
+    const targetY = Math.min(saved.y, Math.max(0, el.scrollHeight - el.clientHeight))
+    const targetX = Math.min(saved.x, Math.max(0, el.scrollWidth - el.clientWidth))
+
+    autoScroll.pause()
+    markProgrammaticSessionScroll()
+    if (el.scrollTop !== targetY) el.scrollTop = targetY
+    if (el.scrollLeft !== targetX) el.scrollLeft = targetX
+    scheduleScrollState(el)
+    return true
+  }
 
   const updateScrollState = (el: HTMLDivElement) => {
     const max = el.scrollHeight - el.clientHeight
@@ -1225,11 +1307,16 @@ export default function Page() {
 
   const resumeScroll = () => {
     setStore("messageId", undefined)
+    consumeDefaultSessionScroll()
+    markProgrammaticSessionScroll()
     autoScroll.forceScrollToBottom()
     clearMessageHash()
 
     const el = scroller
-    if (el) scheduleScrollState(el)
+    if (el) {
+      scheduleScrollState(el)
+      saveSessionScroll(true)
+    }
   }
 
   // When the user returns to the bottom, treat the active message as "latest".
@@ -1239,7 +1326,9 @@ export default function Page() {
       (scrolled) => {
         if (scrolled) return
         setStore("messageId", undefined)
+        consumeDefaultSessionScroll()
         clearMessageHash()
+        if (!sessionScrollProgrammatic) saveSessionScroll(true)
       },
       { defer: true },
     ),
@@ -1247,16 +1336,24 @@ export default function Page() {
 
   let fill = () => {}
 
+  const retrySessionScrollRestore = () => {
+    if (location.hash || ui.pendingMessage) return
+    if (!sessionScrollDefault.shouldRetry(sessionScrollRoute())) return
+    restoreSessionScroll()
+  }
+
   const setScrollRef = (el: HTMLDivElement | undefined) => {
     scroller = el
     autoScroll.scrollRef(el)
     if (!el) return
     scheduleScrollState(el)
+    retrySessionScrollRestore()
     fill()
   }
 
   const markUserScroll = () => {
     scrollMark += 1
+    saveSessionScroll()
   }
 
   createResizeObserver(
@@ -1264,6 +1361,7 @@ export default function Page() {
     () => {
       const el = scroller
       if (el) scheduleScrollState(el)
+      retrySessionScrollRestore()
       fill()
     },
   )
@@ -1621,7 +1719,12 @@ export default function Page() {
     anchor,
     revealMessage: (id) => revealMessage(id),
     scheduleScrollState,
-    consumePendingMessage: layout.pendingMessage.consume,
+    consumePendingMessage: (key) => layout.pendingMessage.consume(key),
+    defaultScrollReady: layout.ready,
+    canRestoreScroll: canRestoreSessionScroll,
+    restoreScroll: restoreSessionScroll,
+    consumeDefaultScroll: consumeDefaultSessionScroll,
+    markProgrammaticScroll: markProgrammaticSessionScroll,
   })
 
   createEffect(
@@ -1647,6 +1750,7 @@ export default function Page() {
     if (diffTimer !== undefined) window.clearTimeout(diffTimer)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
+    if (sessionScrollProgrammaticFrame !== undefined) cancelAnimationFrame(sessionScrollProgrammaticFrame)
   })
 
   useUsageExceededDialogs()
@@ -1773,6 +1877,7 @@ export default function Page() {
                     onAutoScrollHandleScroll={autoScroll.handleScroll}
                     onMarkScrollGesture={markScrollGesture}
                     hasScrollGesture={hasScrollGesture}
+                    onSessionScroll={saveSessionScroll}
                     onUserScroll={markUserScroll}
                     onHistoryScroll={historyLoader.onScrollerScroll}
                     onAutoScrollInteraction={autoScroll.handleInteraction}

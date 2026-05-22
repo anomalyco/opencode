@@ -259,6 +259,7 @@ export function MessageTimeline(props: {
   onAutoScrollHandleScroll: () => void
   onMarkScrollGesture: (target?: EventTarget | null) => void
   hasScrollGesture: () => boolean
+  onSessionScroll: () => void
   onUserScroll: () => void
   onHistoryScroll: () => void
   onAutoScrollInteraction: (event: MouseEvent) => void
@@ -674,6 +675,7 @@ export function MessageTimeline(props: {
     measuredBottomAnchored = isMeasuredBottom(event.currentTarget)
     props.onScheduleScrollState(event.currentTarget)
     props.onHistoryScroll()
+    props.onSessionScroll()
     if (!props.hasScrollGesture()) return
     props.onUserScroll()
     props.onAutoScrollHandleScroll()

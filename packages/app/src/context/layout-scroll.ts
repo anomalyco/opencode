@@ -3,6 +3,7 @@ import { createStore, produce } from "solid-js/store"
 export type SessionScroll = {
   x: number
   y: number
+  bottom?: boolean
 }
 
 type ScrollMap = Record<string, SessionScroll>
@@ -26,7 +27,7 @@ export function createScrollPersistence(opts: Options) {
     for (const key of Object.keys(input)) {
       const pos = input[key]
       if (!pos) continue
-      out[key] = { x: pos.x, y: pos.y }
+      out[key] = { x: pos.x, y: pos.y, ...(pos.bottom ? { bottom: true } : {}) }
     }
 
     return out
@@ -63,9 +64,14 @@ export function createScrollPersistence(opts: Options) {
     seed(sessionKey)
 
     const prev = cache[sessionKey]?.[tab]
-    if (prev?.x === pos.x && prev?.y === pos.y) return
+    if (prev?.x === pos.x && prev?.y === pos.y && !!prev.bottom === !!pos.bottom) return
 
-    setCache(sessionKey, tab, { x: pos.x, y: pos.y })
+    setCache(
+      produce((draft) => {
+        if (!draft[sessionKey]) draft[sessionKey] = {}
+        draft[sessionKey][tab] = { x: pos.x, y: pos.y, ...(pos.bottom ? { bottom: true } : {}) }
+      }),
+    )
     dirty.add(sessionKey)
     schedule(sessionKey)
   }
