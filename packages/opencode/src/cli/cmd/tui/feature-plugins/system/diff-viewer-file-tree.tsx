@@ -95,10 +95,10 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                         fg={
                           highlighted()
                             ? props.theme.background
-                            : reviewed()
-                              ? props.theme.textMuted
-                              : selected()
-                                ? props.theme.primary
+                            : selected()
+                              ? props.theme.primary
+                              : reviewed()
+                                ? props.theme.textMuted
                                 : row.kind === "directory"
                                   ? tint(props.theme.text, props.theme.background, 0.35)
                                   : props.theme.text

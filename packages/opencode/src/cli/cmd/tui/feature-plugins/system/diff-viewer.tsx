@@ -14,12 +14,17 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
+  fileTreeFileSelection,
   flattenFileTree,
   moveFileTreeSelection,
   moveFileTreeSelectionToFirstChild,
   moveFileTreeSelectionToFile,
   moveFileTreeSelectionToParent,
+  movePatchFileIndex,
+  orderedPatchFileIndexes,
+  relativePatchFileIndexFromViewport,
   setFileTreeDirectoryExpanded,
+  singlePatchFileIndex,
   toggleFileTreeDirectory,
 } from "./diff-viewer-file-tree-utils"
 
@@ -108,6 +113,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const [selectedFileIndex, setSelectedFileIndex] = createSignal<number | undefined>()
   const [reviewedFileNames, setReviewedFileNames] = createSignal<ReadonlySet<string>>(new Set())
   const fileRows = createMemo(() => flattenFileTree(fileTree(), expandedFileNodes()))
+  const patchFileIndexes = createMemo(() => orderedPatchFileIndexes(flattenFileTree(fileTree())))
   const focusRunner = (input: Record<DiffViewerFocus, () => void>) => () => input[focus()]()
   const switchFocusShortcut = useCommandShortcut("diff.switch_focus")
   const nextFileShortcut = useCommandShortcut("diff.next_file")
@@ -154,52 +160,93 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     setActivePatchFileIndex(undefined)
   }
 
-  const scrollPatchNodeToTop = (patchNode: BoxRenderable, fileIndex: number) => {
-    if (!scroll) return
-    const offset = fileIndex === 0 ? 0 : 1
-    scroll.scrollBy(patchNode.y - scroll.viewport.y + offset)
+  const scrollPatchNodeToTop = (patchNode: BoxRenderable) => {
     requestAnimationFrame(() => {
-      if (scroll) scroll.scrollBy(patchNode.y - scroll.viewport.y + offset)
+      if (!scroll) return
+      const scrollDelta = patchNode.y - scroll.viewport.y
+      const contentY = scroll.scrollTop + scrollDelta
+      const offset = contentY === 0 ? 0 : 1
+      scroll.scrollBy(scrollDelta + offset)
     })
   }
 
   const revealFileTreeFile = (fileIndex: number) => {
-    const node = fileTree().nodes.find((item) => item.kind === "file" && item.fileIndex === fileIndex)
-    if (!node) return
+    const selection = fileTreeFileSelection(fileTree(), fileIndex)
+    if (!selection) return
     setExpandedFileNodes((expanded) => {
       const next = new Set(expanded)
-      for (let parent = node.parent; parent !== undefined; parent = fileTree().nodes[parent]?.parent) {
-        next.add(parent)
-      }
+      selection.expandedNodes.forEach((node) => next.add(node))
       return next
     })
-    setHighlighted(node.id)
+    setHighlighted(selection.highlightedNode)
+  }
+
+  const selectPatchFile = (fileIndex: number) => {
+    revealFileTreeFile(fileIndex)
+    setActivePatchFileIndex(fileIndex)
+    setSelectedFileIndex(fileIndex)
   }
 
   const scrollToFileIndex = (fileIndex: number | undefined) => {
     if (fileIndex === undefined) return
-    setActivePatchFileIndex(fileIndex)
-    setSelectedFileIndex(fileIndex)
+    selectPatchFile(fileIndex)
     const patchNode = patchNodeByFileIndex.get(fileIndex)
-    if (patchNode) scrollPatchNodeToTop(patchNode, fileIndex)
+    if (patchNode) scrollPatchNodeToTop(patchNode)
   }
 
   const jumpToFileIndex = (fileIndex: number | undefined) => {
     if (fileIndex === undefined) return
-    revealFileTreeFile(fileIndex)
     scrollToFileIndex(fileIndex)
   }
 
   const currentPatchFileIndex = () => {
     if (!scroll) return undefined
-    const entries = files()
-      .map((_, fileIndex) => ({ fileIndex, node: patchNodeByFileIndex.get(fileIndex) }))
+    const viewportContentY = scroll.scrollTop + 1
+    const entries = patchFileIndexes()
+      .map((fileIndex) => ({
+        fileIndex,
+        node: patchNodeByFileIndex.get(fileIndex),
+      }))
       .filter((entry): entry is { fileIndex: number; node: BoxRenderable } => Boolean(entry.node))
-      .sort((left, right) => left.node.y - right.node.y)
-    return entries.findLast((entry) => entry.node.y <= scroll!.viewport.y + 1)?.fileIndex ?? entries[0]?.fileIndex
+      .map((entry) => ({
+        ...entry,
+        contentY: scroll!.scrollTop + entry.node.y - scroll!.viewport.y,
+      }))
+      .sort((left, right) => left.contentY - right.contentY)
+    return entries.findLast((entry) => entry.contentY <= viewportContentY)?.fileIndex ?? entries[0]?.fileIndex
+  }
+
+  const nextPatchFileIndexFromViewport = (offset: number) => {
+    if (!scroll) return undefined
+    return relativePatchFileIndexFromViewport(
+      patchFileIndexes()
+        .map((fileIndex) => ({ fileIndex, node: patchNodeByFileIndex.get(fileIndex) }))
+        .filter((entry): entry is { fileIndex: number; node: BoxRenderable } => Boolean(entry.node))
+        .map((entry) => {
+          const contentY = scroll!.scrollTop + entry.node.y - scroll!.viewport.y
+          return {
+            fileIndex: entry.fileIndex,
+            titleContentY: contentY + (contentY === 0 ? 0 : 1),
+          }
+        }),
+      scroll.scrollTop,
+      offset,
+    )
   }
 
   const jumpRelativePatchFile = (offset: number) => {
+    if (singlePatch()) {
+      const next = movePatchFileIndex(
+        patchFileIndexes(),
+        visiblePatchFiles()[0]?.fileIndex ?? selectedFileIndex() ?? activePatchFileIndex() ?? firstPatchFileIndex(),
+        offset,
+      )
+      if (next === undefined) return
+      selectPatchFile(next)
+      scrollSinglePatchToTop()
+      return
+    }
+
     const current = focus() === "files" ? highlightedFileNode() : undefined
     const nextFromSelection =
       current === undefined ? undefined : moveFileTreeSelectionToFile(fileRows(), current, offset)
@@ -207,41 +254,64 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       jumpToFileIndex(fileRows().find((row) => row.id === nextFromSelection)?.fileIndex)
       return
     }
-    const currentFileIndex = activePatchFileIndex() ?? currentPatchFileIndex()
-    const currentRow = fileRows().find((row) => row.fileIndex === currentFileIndex)
     scrollToFileIndex(
-      fileRows().find((row) => row.id === moveFileTreeSelectionToFile(fileRows(), currentRow?.id, offset))?.fileIndex,
+      nextPatchFileIndexFromViewport(offset) ??
+        movePatchFileIndex(patchFileIndexes(), currentPatchFileIndex() ?? activePatchFileIndex(), offset),
     )
   }
 
   const highlightedPatchFileIndex = () => fileRows().find((row) => row.id === highlightedFileNode())?.fileIndex
   const firstPatchFileIndex = () => fileRows().find((row) => row.fileIndex !== undefined)?.fileIndex
   const visiblePatchFiles = createMemo(() => {
-    if (!singlePatch()) return files().map((file, fileIndex) => ({ file, fileIndex }))
-    const fileIndex = activePatchFileIndex() ?? currentPatchFileIndex() ?? firstPatchFileIndex()
+    if (!singlePatch()) {
+      return patchFileIndexes().flatMap((fileIndex) => {
+        const file = files()[fileIndex]
+        return file ? [{ file, fileIndex }] : []
+      })
+    }
+    const fileIndex = singlePatchFileIndex(
+      selectedFileIndex(),
+      activePatchFileIndex(),
+      currentPatchFileIndex(),
+      firstPatchFileIndex(),
+    )
     const file = fileIndex === undefined ? undefined : files()[fileIndex]
     return file && fileIndex !== undefined ? [{ file, fileIndex }] : []
   })
 
   const ensureHighlightedPatchFile = () => {
-    if (activePatchFileIndex() !== undefined) return
-    const fileIndex = currentPatchFileIndex() ?? firstPatchFileIndex()
-    if (fileIndex !== undefined) setActivePatchFileIndex(fileIndex)
+    const fileIndex = currentPatchFileIndex() ?? activePatchFileIndex() ?? firstPatchFileIndex()
+    if (fileIndex === undefined) return
+    selectPatchFile(fileIndex)
   }
 
-  const scrollToHighlightedPatchFile = () => {
-    const fileIndex = activePatchFileIndex()
-    if (fileIndex === undefined) return
+  const scrollToPatchFileIndexAfterRender = (fileIndex: number) => {
     setPendingPatchScrollFileIndex(fileIndex)
+    requestAnimationFrame(() => {
+      const patchNode = patchNodeByFileIndex.get(fileIndex)
+      if (patchNode) scrollPatchNodeToTop(patchNode)
+      requestAnimationFrame(() => {
+        const patchNode = patchNodeByFileIndex.get(fileIndex)
+        if (patchNode) scrollPatchNodeToTop(patchNode)
+        setPendingPatchScrollFileIndex(undefined)
+      })
+    })
+  }
+
+  const scrollSinglePatchToTop = () => {
+    requestAnimationFrame(() => {
+      scroll?.scrollTo(0)
+      requestAnimationFrame(() => scroll?.scrollTo(0))
+    })
   }
 
   const registerPatchNode = (fileIndex: number, element: BoxRenderable) => {
     patchNodeByFileIndex.set(fileIndex, element)
     if (pendingPatchScrollFileIndex() !== fileIndex) return
     requestAnimationFrame(() => {
-      scrollPatchNodeToTop(element, fileIndex)
+      scrollPatchNodeToTop(element)
       requestAnimationFrame(() => {
-        scrollPatchNodeToTop(element, fileIndex)
+        scrollPatchNodeToTop(element)
         setPendingPatchScrollFileIndex(undefined)
       })
     })
@@ -437,12 +507,23 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       title: "Toggle single patch view",
       category: "VCS",
       run() {
-        setSinglePatch((value) => {
-          const next = !value
-          if (next) ensureHighlightedPatchFile()
-          else scrollToHighlightedPatchFile()
-          return next
-        })
+        if (!singlePatch()) {
+          ensureHighlightedPatchFile()
+          setSinglePatch(true)
+          scrollSinglePatchToTop()
+          return
+        }
+        const fileIndex =
+          visiblePatchFiles()[0]?.fileIndex ??
+          singlePatchFileIndex(
+            selectedFileIndex(),
+            activePatchFileIndex(),
+            currentPatchFileIndex(),
+            firstPatchFileIndex(),
+          )
+        if (fileIndex !== undefined) selectPatchFile(fileIndex)
+        setSinglePatch(false)
+        if (fileIndex !== undefined) scrollToPatchFileIndexAfterRender(fileIndex)
       },
     },
     {
@@ -581,7 +662,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
                                   flexDirection="row"
                                   gap={1}
                                   flexShrink={0}
-                                  paddingLeft={2}
+                                  paddingLeft={1}
                                   paddingRight={1}
                                   border={["left"]}
                                   borderColor={theme().border}
