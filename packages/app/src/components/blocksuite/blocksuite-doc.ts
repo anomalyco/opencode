@@ -14,9 +14,173 @@ import { scheme } from "./theme"
 
 export type DocMountInput = {
   theme: () => "light" | "dark"
+  locale?: () => string
   sync?: DocSyncOpts
   init?: boolean
   readonly?: boolean
+}
+
+type SlashCtx = {
+  rootComponent: unknown
+  model: unknown
+}
+
+type SlashItem = SlashGroup | SlashAction | SlashSub | SlashGen
+type SlashStatic = SlashGroup | SlashAction | SlashSub
+type SlashGen = (ctx: SlashCtx) => SlashStatic[]
+type SlashGroup = {
+  groupName: string
+  showWhen?: (ctx: SlashCtx) => boolean
+}
+type SlashAction = {
+  name: string
+  description?: string
+  icon?: unknown
+  tooltip?: unknown
+  alias?: string[]
+  showWhen?: (ctx: SlashCtx) => boolean
+  action: (ctx: SlashCtx) => void | Promise<void>
+  customTemplate?: unknown
+}
+type SlashSub = {
+  name: string
+  description?: string
+  icon?: unknown
+  alias?: string[]
+  showWhen?: (ctx: SlashCtx) => boolean
+  subMenu: SlashStatic[]
+}
+type SlashConfig = {
+  triggerKeys: string[]
+  ignoreBlockTypes: string[]
+  items: SlashItem[]
+  maxHeight: number
+  tooltipTimeout: number
+}
+type SlashWidget = HTMLElement & {
+  config: SlashConfig
+  __opencode?: SlashConfig
+}
+
+const ko: Record<string, string> = {
+  Basic: "기본",
+  Text: "텍스트",
+  "Start typing with plain text.": "일반 텍스트로 입력합니다.",
+  "Heading 1": "제목 1",
+  "Headings in the largest font.": "가장 큰 제목입니다.",
+  "Heading 2": "제목 2",
+  "Headings in the 2nd font size.": "두 번째 크기의 제목입니다.",
+  "Heading 3": "제목 3",
+  "Headings in the 3rd font size.": "세 번째 크기의 제목입니다.",
+  "Heading 4": "제목 4",
+  "Headings in the 4th font size.": "네 번째 크기의 제목입니다.",
+  "Heading 5": "제목 5",
+  "Headings in the 5th font size.": "다섯 번째 크기의 제목입니다.",
+  "Heading 6": "제목 6",
+  "Headings in the 6th font size.": "여섯 번째 크기의 제목입니다.",
+  "Other Headings": "다른 제목",
+  Headings: "제목",
+  "Inline equation": "인라인 수식",
+  "Create a equation block.": "수식 블록을 만듭니다.",
+  List: "목록",
+  "Bulleted List": "글머리 목록",
+  "Create a bulleted list.": "글머리 기호 목록을 만듭니다.",
+  "Numbered List": "번호 목록",
+  "Create a numbered list.": "번호가 매겨진 목록을 만듭니다.",
+  "To-do List": "할 일 목록",
+  "Add tasks to a to-do list.": "할 일 목록에 작업을 추가합니다.",
+  Style: "스타일",
+  Bold: "굵게",
+  Italic: "기울임",
+  Underline: "밑줄",
+  Strikethrough: "취소선",
+  Page: "페이지",
+  "New Doc": "새 문서",
+  "Start a new document.": "새 문서를 시작합니다.",
+  "Linked Doc": "문서 링크",
+  "Link to another document.": "다른 문서로 연결합니다.",
+  "Content & Media": "콘텐츠 및 미디어",
+  Image: "이미지",
+  "Insert an image.": "이미지를 삽입합니다.",
+  Link: "링크",
+  "Add a bookmark for reference.": "참조용 북마크를 추가합니다.",
+  Attachment: "첨부 파일",
+  "Attach a file to document.": "문서에 파일을 첨부합니다.",
+  YouTube: "YouTube",
+  "Embed a YouTube video.": "YouTube 동영상을 임베드합니다.",
+  GitHub: "GitHub",
+  "Link to a GitHub repository.": "GitHub 저장소로 연결합니다.",
+  Figma: "Figma",
+  "Embed a Figma document.": "Figma 문서를 임베드합니다.",
+  Loom: "Loom",
+  Equation: "수식",
+  "Frame: ": "프레임: ",
+  "Group: ": "그룹: ",
+  "Document Group & Frame": "문서 그룹 및 프레임",
+  Date: "날짜",
+  Today: "오늘",
+  Tomorrow: "내일",
+  Yesterday: "어제",
+  Now: "지금",
+  Database: "데이터베이스",
+  "Table View": "테이블 보기",
+  "Display items in a table format.": "항목을 테이블 형식으로 표시합니다.",
+  Todo: "할 일",
+  "Kanban View": "칸반 보기",
+  "Visualize data in a dashboard.": "데이터를 대시보드로 시각화합니다.",
+  Actions: "동작",
+  "Move Up": "위로 이동",
+  "Shift this line up.": "이 줄을 위로 이동합니다.",
+  "Move Down": "아래로 이동",
+  "Shift this line down.": "이 줄을 아래로 이동합니다.",
+  Copy: "복사",
+  "Copy this line to clipboard.": "이 줄을 클립보드에 복사합니다.",
+  Duplicate: "복제",
+  "Create a duplicate of this line.": "이 줄의 복사본을 만듭니다.",
+  Delete: "삭제",
+  "Remove this line permanently.": "이 줄을 영구적으로 삭제합니다.",
+  "Code Block": "코드 블록",
+  "Code snippet with formatting.": "서식이 있는 코드 조각입니다.",
+  Quote: "인용",
+  "Add a blockquote for emphasis.": "강조를 위한 인용 블록을 추가합니다.",
+  Divider: "구분선",
+  "Visually separate content.": "콘텐츠를 시각적으로 구분합니다.",
+}
+
+const tr = (locale: string | undefined, text: string | undefined) => {
+  if (!text) return text
+  if (locale !== "ko") return text
+  return ko[text] ?? text
+}
+
+const localize = (locale: string | undefined, entry: SlashStatic): SlashStatic => {
+  if ("groupName" in entry) return { ...entry, groupName: tr(locale, entry.groupName) ?? entry.groupName }
+  if ("subMenu" in entry) {
+    return {
+      ...entry,
+      name: tr(locale, entry.name) ?? entry.name,
+      description: tr(locale, entry.description),
+      subMenu: entry.subMenu.map((child) => localize(locale, child)),
+    }
+  }
+  return {
+    ...entry,
+    name: tr(locale, entry.name) ?? entry.name,
+    description: tr(locale, entry.description),
+  }
+}
+
+const slash = (editor: HTMLElement, locale: string | undefined) => {
+  const widget = editor.querySelector("affine-slash-menu-widget") as SlashWidget | null
+  if (!widget) return
+  widget.__opencode ??= widget.config
+  widget.config = {
+    ...widget.__opencode,
+    items: widget.__opencode.items.map((entry) => {
+      if (typeof entry !== "function") return localize(locale, entry)
+      return (ctx: SlashCtx) => entry(ctx).map((child) => localize(locale, child))
+    }),
+  }
 }
 
 export async function createPage(input: DocMountInput) {
@@ -175,6 +339,7 @@ export async function createPage(input: DocMountInput) {
       await settled(editor.host?.updateComplete)
       const ready = input.readonly ? undefined : await inlineReady(editor)
       applyTheme()
+      slash(editor, input.locale?.())
       fit(el)
       resize?.disconnect()
       resize = new ResizeObserver(() => fit(el))
@@ -242,9 +407,8 @@ export async function createPage(input: DocMountInput) {
     ensureEditable(doc)
   }
 
-  const refocus = () => {
-    const active = document.activeElement
-    if (active && editor.contains(active)) return
+  const refocus = (target?: Element) => {
+    if (target?.closest(".inline-editor")) return
     void focus()
   }
 

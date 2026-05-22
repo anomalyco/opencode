@@ -37,6 +37,7 @@ export function createPromptDoc(input: PromptDocInput) {
   const clientID = crypto.randomUUID()
   let handle: DocHandle | undefined
   let theme: DocMountInput["theme"] | undefined
+  let locale: DocMountInput["locale"] | undefined
   let sync: DocSyncOpts | undefined
   let init = true
   let historySub: { dispose: () => void } | undefined
@@ -107,7 +108,7 @@ export function createPromptDoc(input: PromptDocInput) {
     if (!el || !themeFn || !next) return
     if (!opts?.keep) await drop()
     const current = handle
-    const fresh = await createPage({ theme: themeFn, sync: next, init: opts?.init ?? init })
+    const fresh = await createPage({ theme: themeFn, locale, sync: next, init: opts?.init ?? init })
     if (opts?.seq && opts.seq !== seq) {
       await fresh.dispose()
       return
@@ -174,9 +175,10 @@ export function createPromptDoc(input: PromptDocInput) {
     return doc.docID
   }
 
-  const mount = async (opts: { el: HTMLElement; theme: () => "light" | "dark" }) => {
+  const mount = async (opts: { el: HTMLElement; theme: () => "light" | "dark"; locale?: () => string }) => {
     mounted = opts.el
     theme = opts.theme
+    locale = opts.locale
 
     const sessionID = input.sessionID()
     if (!sessionID) return
@@ -201,6 +203,7 @@ export function createPromptDoc(input: PromptDocInput) {
     void drop()
     mounted = undefined
     theme = undefined
+    locale = undefined
   }
 
   const reset = () => {
@@ -216,7 +219,7 @@ export function createPromptDoc(input: PromptDocInput) {
   }
 
   const guard = () => handle?.guard()
-  const refocus = () => handle?.refocus()
+  const refocus = (target?: Element) => handle?.refocus(target)
 
   const undo = () => {
     handle?.undo()

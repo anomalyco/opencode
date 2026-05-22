@@ -1338,6 +1338,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       event.preventDefault()
       const part = await drawing.commit()
       if (!part) {
+        if (working()) {
+          await abort()
+          return
+        }
         showToast({
           title: language.t("prompt.toast.drawEmpty.title"),
           description: language.t("prompt.toast.drawEmpty.description"),
@@ -1354,6 +1358,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const next = await doc.commitMarkdown()
       const text = next?.text
       if (!text) {
+        if (working()) {
+          await abort()
+          return
+        }
         showToast({
           title: language.t("prompt.toast.docEmpty.title"),
           description: language.t("prompt.toast.docEmpty.description"),

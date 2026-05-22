@@ -1,4 +1,5 @@
 import { Component, createEffect, createSignal, onCleanup, onMount } from "solid-js"
+import { useLanguage } from "@/context/language"
 import type { createPromptDoc } from "./doc"
 
 type PanelProps = {
@@ -12,12 +13,13 @@ function theme() {
 }
 
 export const PromptDocPanel: Component<PanelProps> = (props) => {
+  const language = useLanguage()
   const [root, setRoot] = createSignal<HTMLDivElement>()
 
   onMount(() => {
     const el = root()
     if (!el) return
-    void props.doc.mount({ el, theme })
+    void props.doc.mount({ el, theme, locale: language.locale })
     onCleanup(() => props.doc.detach())
   })
 
@@ -34,7 +36,8 @@ export const PromptDocPanel: Component<PanelProps> = (props) => {
       onPointerDown={(e) => {
         e.stopPropagation()
         props.doc.guard()
-        requestAnimationFrame(() => props.doc.refocus())
+        const target = e.target
+        requestAnimationFrame(() => props.doc.refocus(target instanceof Element ? target : undefined))
       }}
       onClick={(e) => e.stopPropagation()}
     />
