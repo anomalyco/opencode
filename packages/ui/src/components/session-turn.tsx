@@ -19,7 +19,6 @@ import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { DiffChanges } from "./diff-changes"
 import { Icon } from "./icon"
-import { TextShimmer } from "./text-shimmer"
 import { SessionRetry } from "./session-retry"
 import { TextReveal } from "./text-reveal"
 import { createAutoScroll, suppressAutoScrollResize } from "../hooks"
@@ -178,6 +177,14 @@ function heading(text: string) {
     const value = clean(strong[1])
     if (value) return value
   }
+}
+
+function formatElapsed(seconds: number) {
+  const total = Math.max(0, Math.floor(seconds))
+  if (total < 60) return total
+  const minutes = Math.floor(total / 60)
+  const remainder = total % 60
+  return { minutes, seconds: remainder } as const
 }
 
 export function SessionTurn(
@@ -443,6 +450,37 @@ export function SessionTurn(
     return hiddenReasoning(assistantList(), data.store.part ?? {}, showReasoningSummaries())
   })
 
+  const thinkingStartMs = createMemo(() => {
+    if (!showThinking() || !working()) return undefined
+    const start = message()?.time.created
+    if (typeof start !== "number") return undefined
+    return start
+  })
+  const [thinkingNow, setThinkingNow] = createSignal(Date.now())
+  createEffect(
+    on(thinkingStartMs, (start) => {
+      if (typeof start !== "number") return
+      setThinkingNow(Date.now())
+      const timer = setInterval(() => setThinkingNow(Date.now()), 1000)
+      onCleanup(() => clearInterval(timer))
+    }),
+  )
+  const thinkingElapsed = createMemo(() => {
+    const start = thinkingStartMs()
+    if (typeof start !== "number") return undefined
+    return Math.max(0, Math.floor((thinkingNow() - start) / 1000))
+  })
+  const thinkingElapsedLabel = createMemo(() => {
+    const value = thinkingElapsed()
+    if (typeof value !== "number") return ""
+    const formatted = formatElapsed(value)
+    if (typeof formatted === "number") return i18n.t("ui.message.duration.seconds", { count: formatted })
+    return i18n.t("ui.message.duration.minutesSeconds", {
+      minutes: formatted.minutes,
+      seconds: formatted.seconds,
+    })
+  })
+
   const autoScroll = createAutoScroll({
     working,
     onUserInteracted: props.onUserInteracted,
@@ -655,7 +693,10 @@ export function SessionTurn(
                       when={working()}
                       fallback={<span>{i18n.t("ui.messagePart.reasoning.thought")}</span>}
                     >
-                      <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                      <span data-slot="session-turn-thinking-status">
+                        <span data-slot="session-turn-thinking-label">{i18n.t("ui.sessionTurn.status.thinking")}</span>
+                        <span data-slot="session-turn-thinking-time">{thinkingElapsedLabel()}</span>
+                      </span>
                     </Show>
                     <Show when={!showReasoningSummaries()}>
                       <Show
