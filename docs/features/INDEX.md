@@ -20,6 +20,7 @@
 
 | feat-id | 状态 | 简介 |
 |---|---|---|
+| [auto-save-debounce-flush](./auto-save-debounce-flush/) | done | 文件查看器编辑态 debounce auto-save + flush(REQ-001 dirty tab 修复,Obsidian 风混合方案 C)— 1s debounce 后自动落盘;`<Show keyed>` 切 tab unmount 时 `onCleanup` flush(snapshot 模式+`setStoredContent` 同步更新 store 避免 race);窗口关 emit `deskfox-flush-before-close` event 前端转 DOM custom event flush;`markSelfWriting` 500ms 窗口拦自写触发的"AI 修改了此文件"误 toast;9 单测 |
 | [abandon-cloud-build-workflows](./abandon-cloud-build-workflows/) | done | 云端 build workflow 永久废止 — 3 个 release workflow yml(`release-deskfox.yml` / `release-mac-deskfox.yml` / `release-mirror-gitee-deskfox.yml`)从 "DISABLED 2026-05-11 待复活" 改 "OFFICIALLY ABANDONED 2026-05-21";所有 ship 走唯一本地路径(pack-installer → commit bump → tag → push → gh release create [--prerelease] → Gitee API → mirror-asset-to-gitee);治理 doc §四/§五/§六/§七 全面更新 |
 | [ship-scripts-naming-fix](./ship-scripts-naming-fix/) | done | ship 脚本 4 个对齐新命名规则(installer-naming-cleanup 后续) — `pack-installer.{ps1,sh}` path echo / .dmg rename 用 NumericVer(strip env suffix);`mirror-asset-to-gitee.{ps1,sh}` tag regex 加 `dev` 识别(Tier 2 预览版),Mac 顺手补 asset 自动定位。本次首次跑 Tier 2 ship 时暴露的 4 个脚本 bug |
 | [installer-naming-cleanup](./installer-naming-cleanup/) | done | installer 文件名去重 — `OutputBaseFilename` 模板用 `NumericAppVersion`(strip env suffix)替 `AppVersion`,Tier 2/beta 产物从 `DeskFox-Dev-2026.5.21.1-dev-setup.exe` 简化为 `DeskFox-Dev-2026.5.21.1-setup.exe`;env 只通过 OutputBase 前缀体现,版本号保持纯数字;Tier 1 prod 产物名不变(历史一致);治理 doc §3.4 新增命名规则段 |

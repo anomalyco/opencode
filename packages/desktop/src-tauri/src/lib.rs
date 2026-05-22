@@ -31,7 +31,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tauri::{AppHandle, Listener, Manager, RunEvent, State, ipc::Channel};
+use tauri::{AppHandle, Emitter, Listener, Manager, RunEvent, State, ipc::Channel};
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_specta::Event;
@@ -518,16 +518,24 @@ pub fn run() {
                     kill_sidecar(app.clone());
                 }
                 // FORK: 关 GUI ≠ 退主进程(C0.5.2)— 飞书 adapter 长驻 [feat: feishu-bridge]
+                // FORK: 加 dirty flush event 发给前端,前端 listener flush 后再真 hide/exit
+                //   [feat: auto-save-debounce-flush] 2026-05-21
+                //   说明:不阻塞 close — 发 event 后立即继续 hide 流程;前端 listener 同步触发
+                //   debounce flush,save 本身 async 但本地 IO <50ms,跟 hide 窗口几乎并发;
+                //   real exit(is_quitting=true)由 RunEvent::Exit 处理,sidecar kill 前事件
+                //   总线已停,故 Exit 路径靠前端 listener 在 Window CloseRequested 时已 flush 兜底。
                 RunEvent::WindowEvent { label, event: window_event, .. }
                     if label == MainWindow::LABEL =>
                 {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = window_event {
+                        // 先发 flush event,前端有 listener 时立即触发 silent save
+                        let _ = app.emit("deskfox-flush-before-close", ());
                         if !system_tray::is_quitting() {
                             api.prevent_close();
                             if let Some(w) = app.get_webview_window(MainWindow::LABEL) {
                                 let _ = w.hide();
                             }
-                            tracing::debug!("close requested → hidden(主进程仍跑)");
+                            tracing::debug!("close requested → flush + hidden(主进程仍跑)");
                         }
                     }
                 }
