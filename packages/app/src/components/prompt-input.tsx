@@ -110,6 +110,7 @@ const EXAMPLES = [
 
 const promptTriggersOff = import.meta.env.VITE_DISABLE_PROMPT_TRIGGERS === "true"
 const permissionsOff = import.meta.env.VITE_DISABLE_PROMPT_PERMISSIONS === "true"
+const footerOff = import.meta.env.VITE_DISABLE_PROMPT_FOOTER === "true"
 const wysiwygOnly = import.meta.env.VITE_DISABLE_WYSIWYG_ONLY === "true"
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
@@ -1838,7 +1839,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </Show>
         </div>
       </DockShellForm>
-      <Show when={store.mode === "normal" || store.mode === "shell" || canvasMode(store.mode)}>
+      <Show when={!footerOff && (store.mode === "normal" || store.mode === "shell" || canvasMode(store.mode))}>
         <DockTray attach="top">
           <div class="px-1.75 pt-5.5 pb-2 flex items-center gap-2 min-w-0">
             <div class="flex items-center gap-1.5 min-w-0 flex-1 relative">

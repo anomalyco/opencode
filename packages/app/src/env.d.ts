@@ -28,6 +28,11 @@ interface ImportMetaEnv {
    */
   readonly VITE_DISABLE_PROMPT_PERMISSIONS?: string
   /**
+   * Hide the prompt dock footer (agent, model, variant, permissions).
+   * @example VITE_DISABLE_PROMPT_FOOTER=true
+   */
+  readonly VITE_DISABLE_PROMPT_FOOTER?: string
+  /**
    * Hide prompt mode selection controls.
    * @example VITE_DISABLE_WYSIWYG_ONLY=true
    */

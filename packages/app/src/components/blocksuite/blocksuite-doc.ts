@@ -301,7 +301,7 @@ export async function createPage(input: DocMountInput) {
   let cursors: (() => void) | undefined
   let unkeys: (() => void) | undefined
 
-  const clamp = (height: number) => Math.min(650, Math.max(50, Math.ceil(height)))
+  const clamp = (height: number) => Math.min(650, Math.max(40, Math.ceil(height)))
 
   const content = (host: HTMLElement, root?: HTMLElement, preview?: HTMLElement) => {
     const base = host.getBoundingClientRect().top
@@ -329,10 +329,13 @@ export async function createPage(input: DocMountInput) {
     const width = host.clientWidth
     const root = editor.querySelector(".affine-page-root-block-container")
     const preview = editor.querySelector("affine-preview-root")
-    const height =
-      input.readonly && root instanceof HTMLElement
-        ? content(host, root, preview instanceof HTMLElement ? preview : undefined)
-        : host.clientHeight
+    const height = input.readonly
+      ? content(
+          host,
+          root instanceof HTMLElement ? root : undefined,
+          preview instanceof HTMLElement ? preview : undefined,
+        )
+      : host.clientHeight
     const tall = input.readonly ? clamp(height) : height
     if (tall <= 0) return
     if (input.readonly) host.style.height = `${tall}px`
