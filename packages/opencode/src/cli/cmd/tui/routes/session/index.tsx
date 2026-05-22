@@ -1538,6 +1538,8 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
               drawUnstyledText={false}
               streaming={true}
               syntaxStyle={syntax()}
+              // `_Thinking:_`/`_Thought:_` still drives markdown emphasis color and conceals the underscores;
+              // the syntax override above removes only the italic attribute from that emphasis token.
               content={(inMinimal() ? "- " : "") + (isDone() ? "_Thought:_ " : "_Thinking:_ ") + content()}
               conceal={ctx.conceal()}
               fg={theme.textMuted}
