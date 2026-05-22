@@ -1320,7 +1320,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     },
     setMode: (mode) => setStore("mode", mode),
     setPopover: (popover) => setStore("popover", popover),
-    newSessionWorktree: () => props.newSessionWorktree,
+    newSessionWorktree: () => (store.mode === "doc" ? "main" : props.newSessionWorktree),
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
     shouldQueue: props.shouldQueue,
     onQueue: props.onQueue,
