@@ -393,7 +393,11 @@ export const make = Effect.gen(function* () {
               const escalated = command.options.forceKillAfter
                 ? Effect.timeoutOrElse(attempt, {
                     duration: command.options.forceKillAfter,
-                    orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
+                    orElse: () =>
+                      send("SIGKILL").pipe(
+                        Effect.andThen(Deferred.await(signal).pipe(Effect.timeout("5 seconds"), Effect.ignore)),
+                        Effect.asVoid,
+                      ),
                   })
                 : attempt
               return yield* Effect.ignore(escalated)
@@ -430,7 +434,11 @@ export const make = Effect.gen(function* () {
               if (!opts?.forceKillAfter) return attempt
               return Effect.timeoutOrElse(attempt, {
                 duration: opts.forceKillAfter,
-                orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
+                orElse: () =>
+                  send("SIGKILL").pipe(
+                    Effect.andThen(Deferred.await(signal).pipe(Effect.timeout("5 seconds"), Effect.ignore)),
+                    Effect.asVoid,
+                  ),
               })
             },
             unref: Effect.sync(() => {

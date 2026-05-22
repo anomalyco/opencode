@@ -627,6 +627,11 @@ export const ShellTool = Tool.define(
                   if (!containsPath(cwd, instanceCtx)) scan.dirs.add(cwd)
                   yield* ask(ctx, scan)
                 }),
+              ).pipe(
+                Effect.timeoutOrElse({
+                  duration: "10 seconds",
+                  orElse: () => Effect.void,
+                }),
               )
 
               return yield* run(
