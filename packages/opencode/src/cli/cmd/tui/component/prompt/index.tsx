@@ -480,10 +480,11 @@ export function Prompt(props: PromptProps) {
         run: () => {
           if (auto()?.visible) return
           if (!input.focused) return
-          // When retry_exhausted, Escape dismisses the error (sets status to idle)
+          // When retry_exhausted, Escape dismisses the error via server-side abort
+          // (local-only sync.set would be overwritten by the next SSE push)
           if (status().type === "retry_exhausted") {
             if (props.sessionID) {
-              sync.set("session_status", props.sessionID, { type: "idle" })
+              void sdk.client.session.abort({ sessionID: props.sessionID }).catch(() => {})
             }
             return
           }
@@ -1054,6 +1055,9 @@ export function Prompt(props: PromptProps) {
           const agent = local.agent.current()
           const selectedModel = local.model.current()
           if (agent && selectedModel) {
+            // Optimistic flip to busy prevents a second Enter from double-submitting
+            // while retry_exhausted is still the server-side status
+            sync.set("session_status", props.sessionID, { type: "busy" })
             sdk.client.session
               .prompt({
                 sessionID: props.sessionID,

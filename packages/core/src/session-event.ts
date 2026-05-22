@@ -329,6 +329,18 @@ export const Retried = EventV2.define({
 })
 export type Retried = typeof Retried.Type
 
+export const RetryExhausted = EventV2.define({
+  type: "session.next.retry_exhausted",
+  ...options,
+  schema: {
+    ...Base,
+    attempt: Schema.Finite,
+    message: Schema.String,
+    error: RetryError,
+  },
+})
+export type RetryExhausted = typeof RetryExhausted.Type
+
 export namespace Compaction {
   export const Started = EventV2.define({
     type: "session.next.compaction.started",
@@ -387,6 +399,7 @@ export const All = Schema.Union(
     Reasoning.Delta,
     Reasoning.Ended,
     Retried,
+    RetryExhausted,
     Compaction.Started,
     Compaction.Delta,
     Compaction.Ended,
