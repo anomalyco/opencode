@@ -206,9 +206,11 @@ export class Agent implements ACPAgent {
                   toolCallId: permission.tool?.callID ?? permission.id,
                   status: "pending",
                   title:
-                    typeof permission.metadata?.command === "string"
-                      ? permission.metadata.command
-                      : permission.permission,
+                    typeof permission.metadata?.description === "string"
+                      ? permission.metadata.description
+                      : typeof permission.metadata?.command === "string"
+                        ? permission.metadata.command
+                        : permission.permission,
                   rawInput: permission.metadata,
                   kind: toToolKind(permission.permission),
                   locations: toLocations(permission.permission, permission.metadata),
