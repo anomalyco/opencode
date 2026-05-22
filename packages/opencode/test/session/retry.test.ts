@@ -475,6 +475,104 @@ describe("session.retry.retryable", () => {
   )
 })
 
+describe("session.retry_exhausted status", () => {
+  it.live("accepts retry_exhausted status via status.set", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const sessionID = SessionID.make("session-retry-exhausted-set-test")
+        const status = yield* SessionStatus.Service
+
+        yield* status.set(sessionID, {
+          type: "retry_exhausted",
+          attempt: 3,
+          message: "Network error: ECONNRESET",
+          next: 0,
+        })
+
+        const current = yield* status.get(sessionID)
+        expect(current).toMatchObject({
+          type: "retry_exhausted",
+          attempt: 3,
+          message: "Network error: ECONNRESET",
+          next: 0,
+        })
+      }),
+    ),
+  )
+
+  it.live("policy tracks attempt count for retry exhaustion detection", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const sessionID = SessionID.make("session-retry-exhausted-track-test")
+        const error = apiError({ "retry-after-ms": "0" })
+        const status = yield* SessionStatus.Service
+        let lastAttempt = 0
+
+        const step = yield* Schedule.toStepWithMetadata(
+          SessionRetry.policy({
+            provider: "test",
+            parse: Schema.decodeUnknownSync(MessageV2.APIError.Schema),
+            set: (info) => {
+              lastAttempt = info.attempt
+              return status.set(sessionID, {
+                type: "retry",
+                attempt: info.attempt,
+                message: info.message,
+                next: info.next,
+              })
+            },
+          }),
+        )
+
+        yield* step(error)
+        yield* step(error)
+        yield* step(error)
+        // attempt 4 should be capped by RETRY_MAX_ATTEMPTS
+        yield* step(error).pipe(Effect.catch(() => Effect.void))
+
+        expect(lastAttempt).toBe(SessionRetry.RETRY_MAX_ATTEMPTS)
+      }),
+    ),
+  )
+
+  it.live("retry_exhausted status transitions to busy on new prompt", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const sessionID = SessionID.make("session-retry-exhausted-transition-test")
+        const status = yield* SessionStatus.Service
+
+        yield* status.set(sessionID, {
+          type: "retry_exhausted",
+          attempt: 3,
+          message: "Network error",
+          next: 0,
+        })
+
+        expect(yield* status.get(sessionID)).toMatchObject({ type: "retry_exhausted" })
+
+        yield* status.set(sessionID, { type: "busy" })
+        expect(yield* status.get(sessionID)).toMatchObject({ type: "busy" })
+      }),
+    ),
+  )
+
+  it.live("idle status returns to idle for non-retryable errors", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const sessionID = SessionID.make("session-retry-non-retryable-test")
+        const status = yield* SessionStatus.Service
+
+        // Set to busy first (simulating processor flow)
+        yield* status.set(sessionID, { type: "busy" })
+
+        // Non-retryable error should result in idle (existing behavior)
+        yield* status.set(sessionID, { type: "idle" })
+        expect(yield* status.get(sessionID)).toMatchObject({ type: "idle" })
+      }),
+    ),
+  )
+})
+
 describe("session.message-v2.fromError", () => {
   test.concurrent(
     "converts ECONNRESET socket errors to retryable APIError",

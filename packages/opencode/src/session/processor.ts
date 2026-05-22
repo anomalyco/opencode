@@ -32,7 +32,7 @@ import { Usage, type LLMEvent } from "@opencode-ai/llm"
 const DOOM_LOOP_THRESHOLD = 3
 const log = Log.create({ service: "session.processor" })
 
-export type Result = "compact" | "stop" | "continue"
+export type Result = "compact" | "stop" | "continue" | "retry_exhausted"
 
 export interface Handle {
   readonly message: MessageV2.Assistant
@@ -78,6 +78,8 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: MessageV2.TextPart | undefined
   reasoningMap: Record<string, MessageV2.ReasoningPart>
+  retryAttempt: number
+  retriesExhausted: boolean
 }
 
 type StreamEvent = LLMEvent
@@ -118,6 +120,8 @@ export const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        retryAttempt: 0,
+        retriesExhausted: false,
       }
       let aborted = false
       const slog = log.clone().tag("session.id", input.sessionID).tag("messageID", input.assistantMessage.id)
@@ -774,6 +778,19 @@ export const layer = Layer.effect(
           sessionID: ctx.assistantMessage.sessionID,
           error: ctx.assistantMessage.error,
         })
+        if (
+          ctx.retryAttempt >= SessionRetry.RETRY_MAX_ATTEMPTS &&
+          SessionRetry.retryable(error, input.model.providerID)
+        ) {
+          ctx.retriesExhausted = true
+          yield* status.set(ctx.sessionID, {
+            type: "retry_exhausted",
+            attempt: ctx.retryAttempt,
+            message: errorMessage(e),
+            next: 0,
+          })
+          return
+        }
         yield* status.set(ctx.sessionID, { type: "idle" })
       })
 
@@ -812,6 +829,7 @@ export const layer = Layer.effect(
                 provider: input.model.providerID,
                 parse,
                 set: (info) => {
+                  ctx.retryAttempt = info.attempt
                   // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
                   const event = flags.experimentalEventSystem
                     ? events.publish(SessionEvent.Retried, {
@@ -843,6 +861,7 @@ export const layer = Layer.effect(
           )
 
           if (ctx.needsCompaction) return "compact"
+          if (ctx.retriesExhausted) return "retry_exhausted"
           if (ctx.blocked || ctx.assistantMessage.error) return "stop"
           return "continue"
         })

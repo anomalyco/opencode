@@ -26,6 +26,12 @@ export const Info = Schema.Union([
     next: NonNegativeInt,
   }),
   Schema.Struct({
+    type: Schema.Literal("retry_exhausted"),
+    attempt: NonNegativeInt,
+    message: Schema.String,
+    next: NonNegativeInt,
+  }),
+  Schema.Struct({
     type: Schema.Literal("busy"),
   }),
 ]).annotate({ identifier: "SessionStatus" })
