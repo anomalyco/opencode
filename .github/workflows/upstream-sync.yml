@@ -24,6 +24,7 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     env:
+      HUSKY: "0"
       SYNC_BRANCH: sync/upstream
       UPSTREAM_REPO: https://github.com/sst/opencode.git
       UPSTREAM_REF: ${{ inputs.upstream_ref || 'dev' }}
