@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, onCleanup } from "solid-js"
+import { For, Show, Suspense, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
@@ -143,14 +143,16 @@ export function NewSessionView(props: NewSessionViewProps) {
 
   const chooseGenericAgentCwd = () => {
     dialog.show(() => (
-      <DialogSelectDirectory
-        title={language.t("session.new.genericagent.cwd.choose")}
-        domain={mainDomain}
-        onSelect={(value) => {
-          if (typeof value !== "string") return
-          props.onWorktreeChange(value)
-        }}
-      />
+      <Suspense fallback={null}>
+        <DialogSelectDirectory
+          title={language.t("session.new.genericagent.cwd.choose")}
+          domain={mainDomain}
+          onSelect={(value) => {
+            if (typeof value !== "string") return
+            props.onWorktreeChange(value)
+          }}
+        />
+      </Suspense>
     ))
   }
 
