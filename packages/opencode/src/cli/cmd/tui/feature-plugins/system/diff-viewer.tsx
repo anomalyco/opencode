@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
-import type { BorderSides, BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
+import { TextAttributes, type BorderSides, type BoxRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { useBindings, useCommandShortcut } from "@tui/keymap"
 import { useTheme } from "@tui/context/theme"
@@ -134,9 +134,10 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const previousFileShortcut = useCommandShortcut("diff.previous_file")
   const toggleFileTreeShortcut = useCommandShortcut("diff.toggle_file_tree")
   const singlePatchShortcut = useCommandShortcut("diff.single_patch")
-  const switchDiffShortcut = useCommandShortcut("diff.switch_diff")
+  const switchSourceShortcut = useCommandShortcut("diff.switch_source")
   const toggleViewShortcut = useCommandShortcut("diff.toggle_view")
   const markReviewedShortcut = useCommandShortcut("diff.mark_reviewed")
+  const helpShortcut = useCommandShortcut("diff.help")
   let scroll: ScrollBoxRenderable | undefined
   const patchNodeByFileIndex = new Map<number, BoxRenderable>()
   const [pendingPatchScrollFileIndex, setPendingPatchScrollFileIndex] = createSignal<number | undefined>()
@@ -453,6 +454,17 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       }),
     },
     {
+      name: "diff.expand_all",
+      title: "Expand all diff viewer folders",
+      category: "VCS",
+      run: focusRunner({
+        files() {
+          setExpandedFileNodes(allExpandedFileTreeDirectories(fileTree()))
+        },
+        patches() {},
+      }),
+    },
+    {
       name: "diff.collapse",
       title: "Collapse diff viewer item",
       category: "VCS",
@@ -546,7 +558,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       },
     },
     {
-      name: "diff.switch_diff",
+      name: "diff.switch_source",
       title: "Switch diff viewer source",
       category: "VCS",
       run() {
@@ -562,6 +574,14 @@ function DiffViewer(props: { api: TuiPluginApi }) {
         const next = view() === "split" ? "unified" : "split"
         setViewOverride(next)
         props.api.kv.set(KV_VIEW, next)
+      },
+    },
+    {
+      name: "diff.help",
+      title: "Show more diff viewer shortcuts",
+      category: "VCS",
+      run() {
+        openHelpDialog()
       },
     },
   ]
@@ -599,6 +619,11 @@ function DiffViewer(props: { api: TuiPluginApi }) {
         }))}
       />
     ))
+  }
+
+  const openHelpDialog = () => {
+    props.api.ui.dialog.replace(() => <DiffViewerHelpDialog />)
+    props.api.ui.dialog.setSize("large")
   }
 
   useBindings(() => ({
@@ -767,34 +792,10 @@ function DiffViewer(props: { api: TuiPluginApi }) {
               </text>
             )}
           </Show>
-          <Show when={toggleFileTreeShortcut()}>
+          <Show when={switchSourceShortcut()}>
             {(shortcut) => (
               <text fg={theme().text}>
-                {shortcut()}{" "}
-                <span style={{ fg: theme().textMuted }}>{fileTreeEnabled() ? "hide file tree" : "show file tree"}</span>
-              </text>
-            )}
-          </Show>
-          <Show when={singlePatchShortcut()}>
-            {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()}{" "}
-                <span style={{ fg: theme().textMuted }}>{singlePatch() ? "all patches" : "single patch"}</span>
-              </text>
-            )}
-          </Show>
-          <Show when={switchDiffShortcut()}>
-            {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()} <span style={{ fg: theme().textMuted }}>switch diff</span>
-              </text>
-            )}
-          </Show>
-          <Show when={toggleViewShortcut()}>
-            {(shortcut) => (
-              <text fg={theme().text}>
-                {shortcut()}{" "}
-                <span style={{ fg: theme().textMuted }}>{view() === "split" ? "unified view" : "split view"}</span>
+                {shortcut()} <span style={{ fg: theme().textMuted }}>switch source</span>
               </text>
             )}
           </Show>
@@ -805,8 +806,99 @@ function DiffViewer(props: { api: TuiPluginApi }) {
               </text>
             )}
           </Show>
+          <Show when={helpShortcut()}>
+            {(shortcut) => (
+              <text fg={theme().text}>
+                {shortcut()} <span style={{ fg: theme().textMuted }}>all</span>
+              </text>
+            )}
+          </Show>
         </Panel>
       </PanelGroup>
+    </box>
+  )
+}
+
+function DiffViewerHelpDialog() {
+  const { theme } = useTheme()
+  const rows = [
+    {
+      shortcut: useCommandShortcut("diff.switch_focus"),
+      action: "Focus file tree",
+      description: "Move keyboard focus between the file tree and patch pane.",
+    },
+    {
+      shortcut: useCommandShortcut("diff.next_file"),
+      action: "Next file",
+      description: "Select the next changed file in file-tree order.",
+    },
+    {
+      shortcut: useCommandShortcut("diff.previous_file"),
+      action: "Previous file",
+      description: "Select the previous changed file in file-tree order.",
+    },
+    {
+      shortcut: useCommandShortcut("diff.toggle_file_tree"),
+      action: "Toggle file tree",
+      description: "Show or hide the file tree sidebar.",
+    },
+    {
+      shortcut: useCommandShortcut("diff.single_patch"),
+      action: "Toggle patches",
+      description: "Switch between one selected patch and all patches.",
+    },
+    {
+      shortcut: useCommandShortcut("diff.switch_source"),
+      action: "Switch source",
+      description: "Choose working tree or last-turn changes.",
+    },
+    {
+      shortcut: useCommandShortcut("diff.toggle_view"),
+      action: "Toggle view",
+      description: "Switch between split and unified diff layout.",
+    },
+    {
+      shortcut: useCommandShortcut("diff.expand_all"),
+      action: "Expand all folders",
+      description: "Open every folder in the file tree.",
+    },
+    {
+      shortcut: useCommandShortcut("diff.mark_reviewed"),
+      action: "Mark reviewed",
+      description: "Toggle reviewed state for the selected file.",
+    },
+  ]
+
+  return (
+    <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+          Diff shortcuts
+        </text>
+        <text fg={theme.textMuted}>esc</text>
+      </box>
+      <box flexDirection="row">
+        <text fg={theme.textMuted} width={5} wrapMode="none">
+          Key
+        </text>
+        <text fg={theme.textMuted} width={22} wrapMode="none">
+          Action
+        </text>
+        <text fg={theme.textMuted}>Description</text>
+      </box>
+      <For each={rows}>
+        {(row) => (
+          <box flexDirection="row">
+            <text fg={theme.text} width={5} wrapMode="none">
+              {row.shortcut() || "-"}
+            </text>
+            <text fg={theme.text} width={22} wrapMode="none">
+              {row.action}
+            </text>
+            <text fg={theme.textMuted}>{row.description}</text>
+          </box>
+        )}
+      </For>
     </box>
   )
 }
