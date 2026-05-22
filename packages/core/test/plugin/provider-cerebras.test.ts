@@ -4,7 +4,7 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { CerebrasPlugin } from "@opencode-ai/core/plugin/provider/cerebras"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { it, model, provider } from "./provider-helper"
+import { it, model } from "./provider-helper"
 
 const cerebrasOptions: Record<string, unknown>[] = []
 

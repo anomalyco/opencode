@@ -5,7 +5,6 @@ import { Effect } from "effect"
 import { CacheHint, LLM, Message, ToolCallPart, ToolChoice } from "../../src"
 import { LLMClient } from "../../src/route"
 import { AmazonBedrock } from "../../src/providers"
-import * as BedrockConverse from "../../src/protocols/bedrock-converse"
 import { it } from "../lib/effect"
 import { fixedResponse } from "../lib/http"
 import {

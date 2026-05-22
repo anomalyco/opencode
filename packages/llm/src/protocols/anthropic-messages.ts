@@ -10,6 +10,7 @@ import {
   type CacheHint,
   type FinishReason,
   type LLMRequest,
+  type MediaPart,
   type ProviderMetadata,
   type ToolCallPart,
   type ToolDefinition,
@@ -38,6 +39,17 @@ const AnthropicTextBlock = Schema.Struct({
   cache_control: Schema.optional(AnthropicCacheControl),
 })
 type AnthropicTextBlock = Schema.Schema.Type<typeof AnthropicTextBlock>
+
+const AnthropicImageBlock = Schema.Struct({
+  type: Schema.tag("image"),
+  source: Schema.Struct({
+    type: Schema.tag("base64"),
+    media_type: Schema.String,
+    data: Schema.String,
+  }),
+  cache_control: Schema.optional(AnthropicCacheControl),
+})
+type AnthropicImageBlock = Schema.Schema.Type<typeof AnthropicImageBlock>
 
 const AnthropicThinkingBlock = Schema.Struct({
   type: Schema.tag("thinking"),
@@ -92,7 +104,8 @@ const AnthropicToolResultBlock = Schema.Struct({
   cache_control: Schema.optional(AnthropicCacheControl),
 })
 
-const AnthropicUserBlock = Schema.Union([AnthropicTextBlock, AnthropicToolResultBlock])
+const AnthropicUserBlock = Schema.Union([AnthropicTextBlock, AnthropicImageBlock, AnthropicToolResultBlock])
+type AnthropicUserBlock = Schema.Schema.Type<typeof AnthropicUserBlock>
 const AnthropicAssistantBlock = Schema.Union([
   AnthropicTextBlock,
   AnthropicThinkingBlock,
@@ -272,6 +285,19 @@ const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult
   return { type: wireType, tool_use_id: part.id, content: part.result.value } satisfies AnthropicServerToolResultBlock
 })
 
+const lowerImage = Effect.fn("AnthropicMessages.lowerImage")(function* (part: MediaPart) {
+  if (!part.mediaType.startsWith("image/"))
+    return yield* invalid(`Anthropic Messages user media content only supports images`)
+  return {
+    type: "image" as const,
+    source: {
+      type: "base64" as const,
+      media_type: part.mediaType,
+      data: ProviderShared.mediaBase64(part),
+    },
+  } satisfies AnthropicImageBlock
+})
+
 const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   request: LLMRequest,
   breakpoints: Cache.Breakpoints,
@@ -280,11 +306,17 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
 
   for (const message of request.messages) {
     if (message.role === "user") {
-      const content: AnthropicTextBlock[] = []
+      const content: AnthropicUserBlock[] = []
       for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text"]))
-          return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text"])
-        content.push({ type: "text", text: part.text, cache_control: cacheControl(breakpoints, part.cache) })
+        if (part.type === "text") {
+          content.push({ type: "text", text: part.text, cache_control: cacheControl(breakpoints, part.cache) })
+          continue
+        }
+        if (part.type === "media") {
+          content.push(yield* lowerImage(part))
+          continue
+        }
+        return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text", "media"])
       }
       messages.push({ role: "user", content })
       continue

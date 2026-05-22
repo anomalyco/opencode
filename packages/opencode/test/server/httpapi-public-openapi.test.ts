@@ -142,4 +142,19 @@ describe("PublicApi OpenAPI v2 errors", () => {
       )
     }
   })
+
+  test("documents session busy errors", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const route of [
+      ["post", "/session/{sessionID}/shell"],
+      ["post", "/session/{sessionID}/revert"],
+      ["post", "/session/{sessionID}/unrevert"],
+      ["delete", "/session/{sessionID}/message/{messageID}"],
+    ] as const) {
+      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["409"]) ?? "")).toBe(
+        "SessionBusyError",
+      )
+    }
+  })
 })
