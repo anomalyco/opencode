@@ -21,7 +21,7 @@ import { useSync } from "@tui/context/sync"
 import { useEvent } from "@tui/context/event"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
-import { selectedForeground, useTheme } from "@tui/context/theme"
+import { generateSubtleSyntax, selectedForeground, useTheme } from "@tui/context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type {
@@ -1497,7 +1497,7 @@ const PART_MAPPING = {
 }
 
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
-  const { theme, subtleSyntax } = useTheme()
+  const { theme } = useTheme()
   const ctx = use()
   // Collapsed by default in hide mode: a single line throughout, so the
   // layout never shifts. Click to open the full markdown block, click to close.
@@ -1519,6 +1519,8 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   // blocks. Surface the title both while streaming and after settling so the
   // collapsed line carries real signal, not just a duration.
   const title = createMemo(() => reasoningTitle(content()))
+  // Keep markdown emphasis for the existing thinking color/concealment, but render it without italics.
+  const syntax = createMemo(() => generateSubtleSyntax(theme, { "markup.italic": { italic: false } }))
 
   const toggle = () => {
     if (!inMinimal()) return
@@ -1535,7 +1537,9 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
               filetype="markdown"
               drawUnstyledText={false}
               streaming={true}
-              syntaxStyle={subtleSyntax()}
+              syntaxStyle={syntax()}
+              // `_Thinking:_`/`_Thought:_` still drives markdown emphasis color and conceals the underscores;
+              // the syntax override above removes only the italic attribute from that emphasis token.
               content={(inMinimal() ? "- " : "") + (isDone() ? "_Thought:_ " : "_Thinking:_ ") + content()}
               conceal={ctx.conceal()}
               fg={theme.textMuted}
@@ -1563,7 +1567,7 @@ function CollapsedReasoningText(props: { title: string | null; duration: number 
 
   return (
     <text fg={theme.warning} wrapMode="none">
-      <span style={{ fg: theme.warning, italic: true }}>
+      <span style={{ fg: theme.warning }}>
         {props.title ? "+ Thought: " + props.title + " · " + duration() : "+ Thought: " + duration()}
       </span>
     </text>
