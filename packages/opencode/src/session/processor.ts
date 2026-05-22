@@ -782,42 +782,44 @@ export const layer = Layer.effect(
           ctx.retryAttempt >= SessionRetry.RETRY_MAX_ATTEMPTS &&
           SessionRetry.retryable(error, input.model.providerID)
         ) {
-          ctx.retriesExhausted = true
-          yield* bus.publish(Session.Event.RetryExhausted, {
-            sessionID: ctx.sessionID,
-            attempt: ctx.retryAttempt,
-            message: errorMessage(e),
-            error: {
-              type: error.name || "unknown",
-              message: errorMessage(e),
-              isRetryable: true,
-            },
-          })
-          if (flags.experimentalEventSystem) {
-            yield* events.publish(SessionEvent.RetryExhausted, {
-              sessionID: ctx.sessionID,
-              attempt: ctx.retryAttempt,
-              message: errorMessage(e),
-              error: {
-                message: errorMessage(e),
-                isRetryable: true,
-              },
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
-          }
-          yield* status.set(ctx.sessionID, {
-            type: "retry_exhausted",
-            attempt: ctx.retryAttempt,
-            message: errorMessage(e),
-            next: 0,
-          })
           // Subagents have no TUI to show retry_exhausted — they'd hang forever.
           // Fall back to idle + error so the task tool returns the error to the parent,
           // which can then show its own retry_exhausted UI.
           const sessionInfo = yield* session.get(ctx.sessionID).pipe(Effect.orElseSucceed(() => undefined))
           if (sessionInfo?.parentID) {
+            // Subagent: skip retry_exhausted status and event entirely, go straight to idle
             ctx.retriesExhausted = false
             yield* status.set(ctx.sessionID, { type: "idle" })
+          } else {
+            ctx.retriesExhausted = true
+            yield* bus.publish(Session.Event.RetryExhausted, {
+              sessionID: ctx.sessionID,
+              attempt: ctx.retryAttempt,
+              message: errorMessage(e),
+              error: {
+                type: error.name || "unknown",
+                message: errorMessage(e),
+                isRetryable: true,
+              },
+            })
+            if (flags.experimentalEventSystem) {
+              yield* events.publish(SessionEvent.RetryExhausted, {
+                sessionID: ctx.sessionID,
+                attempt: ctx.retryAttempt,
+                message: errorMessage(e),
+                error: {
+                  message: errorMessage(e),
+                  isRetryable: true,
+                },
+                timestamp: DateTime.makeUnsafe(Date.now()),
+              })
+            }
+            yield* status.set(ctx.sessionID, {
+              type: "retry_exhausted",
+              attempt: ctx.retryAttempt,
+              message: errorMessage(e),
+              next: 0,
+            })
           }
           return
         }

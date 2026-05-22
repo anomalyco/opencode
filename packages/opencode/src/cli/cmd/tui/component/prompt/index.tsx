@@ -1057,6 +1057,7 @@ export function Prompt(props: PromptProps) {
           if (agent && selectedModel) {
             // Optimistic flip to busy prevents a second Enter from double-submitting
             // while retry_exhausted is still the server-side status
+            const exhaustedStatus = status()
             sync.set("session_status", props.sessionID, { type: "busy" })
             sdk.client.session
               .prompt({
@@ -1068,7 +1069,9 @@ export function Prompt(props: PromptProps) {
                 variant: local.model.variant.current(),
                 parts: textParts,
               })
-              .catch(() => {})
+              .catch(() => {
+                sync.set("session_status", props.sessionID!, exhaustedStatus)
+              })
             return true
           }
         }
