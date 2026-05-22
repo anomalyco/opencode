@@ -35,18 +35,28 @@ await $`mkdir -p ./dist/${pkg.name}`
 await $`mkdir -p ./dist/${pkg.name}/bin`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE").text())
-await Bun.file(`./dist/${pkg.name}/bin/${pkg.name}.exe`).write(
+await Bun.file(`./dist/${pkg.name}/bin/${pkg.name}`).write(
   [
-    `echo "Error: ${pkg.name}-ai's postinstall script was not run." >&2`,
-    'echo "" >&2',
-    'echo "This occurs when using --ignore-scripts during installation, or when using a" >&2',
-    'echo "package manager like pnpm that does not run postinstall scripts by default." >&2',
-    'echo "" >&2',
-    'echo "To fix this, run the postinstall script manually:" >&2',
-    `echo "  cd node_modules/${pkg.name}-ai && node postinstall.mjs" >&2`,
-    'echo "" >&2',
-    `echo "Or reinstall ${pkg.name}-ai without the --ignore-scripts flag." >&2`,
-    "exit 1",
+    "#!/usr/bin/env node",
+    'var cp = require("child_process")',
+    'var fs = require("fs")',
+    'var path = require("path")',
+    'var binary = process.platform === "win32" ? "opencode.exe" : "opencode"',
+    "var target = path.join(__dirname, binary)",
+    "if (fs.existsSync(target)) {",
+    "  var child = cp.spawnSync(target, process.argv.slice(2), { stdio: \"inherit\", windowsHide: true })",
+    "  process.exit(typeof child.status === \"number\" ? child.status : 1)",
+    "}",
+    `console.error("Error: ${pkg.name}-ai's postinstall script was not run.")`,
+    'console.error("")',
+    'console.error("This occurs when using --ignore-scripts during installation, or when using a")',
+    'console.error("package manager like pnpm that does not run postinstall scripts by default.")',
+    'console.error("")',
+    'console.error("To fix this, run the postinstall script manually:")',
+    `console.error("  cd node_modules/${pkg.name}-ai && node postinstall.mjs")`,
+    'console.error("")',
+    `console.error("Or reinstall ${pkg.name}-ai without the --ignore-scripts flag.")`,
+    "process.exit(1)",
     "",
   ].join("\n"),
 )
@@ -56,7 +66,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
     {
       name: pkg.name + "-ai",
       bin: {
-        [pkg.name]: `./bin/${pkg.name}.exe`,
+        [pkg.name]: `./bin/${pkg.name}`,
       },
       scripts: {
         postinstall: "node ./postinstall.mjs",
