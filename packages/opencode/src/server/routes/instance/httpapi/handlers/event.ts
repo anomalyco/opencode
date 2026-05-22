@@ -5,18 +5,10 @@ import * as Stream from "effect/Stream"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
+import { eventData } from "@/server/shared/sse"
 import { EventApi } from "../groups/event"
 
 const log = Log.create({ service: "server" })
-
-function eventData(data: unknown): Sse.Event {
-  return {
-    _tag: "Event",
-    event: "message",
-    id: undefined,
-    data: JSON.stringify(data),
-  }
-}
 
 function eventResponse(bus: Bus.Interface) {
   return Effect.gen(function* () {
