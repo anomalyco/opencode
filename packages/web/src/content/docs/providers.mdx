@@ -751,7 +751,7 @@ OpenCode supports two authentication methods:
 3. Your browser opens to authorize OpenCode. Sign in and approve.
 
    :::note
-   OpenCode requests the `genai:read` OAuth scope to list your Inference Routers. Your DigitalOcean API token is used directly for inference. The OpenCode OAuth app must allow redirect URI `http://localhost:1456/auth/callback`.
+   OpenCode requests `genai:read` and `inference:query` OAuth scopes. Your DigitalOcean API token is used directly for inference — no separate Model Access Key is created.
    :::
 
    :::note
