@@ -3,7 +3,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { useMutation } from "@tanstack/solid-query"
+import { useMutation, useQueryClient } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
@@ -15,6 +15,8 @@ import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
+import { useQueryOptions } from "@/context/global-sync"
+import { pathKey } from "@/utils/path-key"
 
 const pollMs = 10_000
 
@@ -137,14 +139,23 @@ const useMcpToggleMutation = () => {
   const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
+  const queryClient = useQueryClient()
+  const queryOptions = useQueryOptions()
 
   return useMutation(() => ({
     mutationFn: async (name: string) => {
       const status = sync.data.mcp[name]
-      await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
-      const result = await sdk.client.mcp.status()
-      if (result.data) sync.set("mcp", result.data)
+      if (status?.status === "connected") {
+        await sdk.client.mcp.disconnect({ name })
+        return
+      }
+      if (status?.status === "needs_auth") {
+        await sdk.client.mcp.auth.authenticate({ name })
+        return
+      }
+      await sdk.client.mcp.connect({ name })
     },
+    onSuccess: () => queryClient.refetchQueries(queryOptions.mcp(pathKey(sync.directory))),
     onError: (err) => {
       showToast({
         variant: "error",
@@ -162,14 +173,6 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const dialog = useDialog()
   const language = useLanguage()
   const navigate = useNavigate()
-  const sdk = useSDK()
-
-  const [load, setLoad] = createStore({
-    lspDone: false,
-    lspLoading: false,
-    mcpDone: false,
-    mcpLoading: false,
-  })
 
   const fail = (err: unknown) => {
     showToast({
@@ -181,40 +184,6 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
 
   createEffect(() => {
     if (!props.shown()) return
-
-    if (!sync.data.mcp_ready && !load.mcpDone && !load.mcpLoading) {
-      setLoad("mcpLoading", true)
-      void sdk.client.mcp
-        .status()
-        .then((result) => {
-          sync.set("mcp", result.data ?? {})
-          sync.set("mcp_ready", true)
-        })
-        .catch((err) => {
-          setLoad("mcpDone", true)
-          fail(err)
-        })
-        .finally(() => {
-          setLoad("mcpLoading", false)
-        })
-    }
-
-    if (!sync.data.lsp_ready && !load.lspDone && !load.lspLoading) {
-      setLoad("lspLoading", true)
-      void sdk.client.lsp
-        .status()
-        .then((result) => {
-          sync.set("lsp", result.data ?? [])
-          sync.set("lsp_ready", true)
-        })
-        .catch((err) => {
-          setLoad("lspDone", true)
-          fail(err)
-        })
-        .finally(() => {
-          setLoad("lspLoading", false)
-        })
-    }
   })
 
   let dialogRun = 0
@@ -355,7 +324,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                     return (
                       <button
                         type="button"
-                        class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
+                        class="flex items-center gap-2 w-full min-h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
                         onClick={() => {
                           if (toggleMcp.isPending) return
                           toggleMcp.mutate(name)
@@ -372,7 +341,16 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                               status() === "needs_auth" || status() === "needs_client_registration",
                           }}
                         />
-                        <span class="text-14-regular text-text-base truncate flex-1">{name}</span>
+                        <span class="flex flex-col min-w-0 flex-1">
+                          <span class="flex items-center gap-2 min-w-0">
+                            <span class="text-14-regular text-text-base truncate">{name}</span>
+                          </span>
+                          <Show when={status() === "needs_auth"}>
+                            <span class="text-11-regular text-text-weaker truncate">
+                              {language.t("mcp.auth.clickToAuthenticate")}
+                            </span>
+                          </Show>
+                        </span>
                         <div onClick={(event) => event.stopPropagation()}>
                           <Switch
                             checked={enabled()}

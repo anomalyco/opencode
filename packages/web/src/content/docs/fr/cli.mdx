@@ -29,16 +29,16 @@ opencode [project]
 
 #### Options
 
-| Option       | Court | Description                                                                   |
-| ------------ | ----- | ----------------------------------------------------------------------------- |
-| `--continue` | `-c`  | Continuer la dernière session                                                 |
-| `--session`  | `-s`  | ID de session pour continuer                                                  |
-| `--fork`     |       | Forker la session en continuant (à utiliser avec `--continue` ou `--session`) |
-| `--prompt`   |       | Prompt à utiliser                                                             |
-| `--model`    | `-m`  | Modèle à utiliser sous forme de fournisseur/modèle                            |
-| `--agent`    |       | Agent à utiliser                                                              |
-| `--port`     |       | Port d'écoute                                                                 |
-| `--hostname` |       | Nom d'hôte d'écoute                                                           |
+| Option                                   | Court | Description                                                                   |
+| ---------------------------------------- | ----- | ----------------------------------------------------------------------------- |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continuer la dernière session                                                 |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID de session pour continuer                                                  |
+| <nobr><code>{"--fork"}</code></nobr>     |       | Forker la session en continuant (à utiliser avec `--continue` ou `--session`) |
+| <nobr><code>{"--prompt"}</code></nobr>   |       | Prompt à utiliser                                                             |
+| <nobr><code>{"--model"}</code></nobr>    | `-m`  | Modèle à utiliser sous forme de fournisseur/modèle                            |
+| <nobr><code>{"--agent"}</code></nobr>    |       | Agent à utiliser                                                              |
+| <nobr><code>{"--port"}</code></nobr>     |       | Port d'écoute                                                                 |
+| <nobr><code>{"--hostname"}</code></nobr> |       | Nom d'hôte d'écoute                                                           |
 
 ---
 
@@ -78,10 +78,14 @@ opencode attach http://10.20.30.40:4096
 
 #### Options
 
-| Option      | Court | Description                                    |
-| ----------- | ----- | ---------------------------------------------- |
-| `--dir`     |       | Répertoire de travail dans lequel démarrer TUI |
-| `--session` | `-s`  | ID de session pour continuer                   |
+| Option                                   | Court | Description                                                                                        |
+| ---------------------------------------- | ----- | -------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--dir"}</code></nobr>      |       | Répertoire de travail dans lequel démarrer TUI                                                     |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continuer la dernière session                                                                      |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID de session pour continuer                                                                       |
+| <nobr><code>{"--fork"}</code></nobr>     |       | Dupliquer la session lors de la reprise (à utiliser avec `--continue` ou `--session`)              |
+| <nobr><code>{"--password"}</code></nobr> | `-p`  | Mot de passe d'authentification de base (par défaut `OPENCODE_SERVER_PASSWORD`)                    |
+| <nobr><code>{"--username"}</code></nobr> | `-u`  | Nom d'utilisateur d'authentification de base (par défaut `OPENCODE_SERVER_USERNAME` ou `opencode`) |
 
 ---
 
@@ -187,10 +191,10 @@ opencode github run
 
 ##### Options
 
-| Option    | Description                                          |
-| --------- | ---------------------------------------------------- |
-| `--event` | Événement simulé GitHub pour lequel exécuter l'agent |
-| `--token` | Jeton d'accès personnel GitHub                       |
+| Option                                | Description                                          |
+| ------------------------------------- | ---------------------------------------------------- |
+| <nobr><code>{"--event"}</code></nobr> | Événement simulé GitHub pour lequel exécuter l'agent |
+| <nobr><code>{"--token"}</code></nobr> | Jeton d'accès personnel GitHub                       |
 
 ---
 
@@ -296,10 +300,10 @@ opencode models anthropic
 
 #### Options
 
-| Option      | Description                                                                                |
-| ----------- | ------------------------------------------------------------------------------------------ |
-| `--refresh` | Actualisez le cache des modèles à partir de models.dev                                     |
-| `--verbose` | Utiliser une sortie de modèle plus détaillée (inclut des métadonnées telles que les coûts) |
+| Option                                  | Description                                                                                |
+| --------------------------------------- | ------------------------------------------------------------------------------------------ |
+| <nobr><code>{"--refresh"}</code></nobr> | Actualisez le cache des modèles à partir de models.dev                                     |
+| <nobr><code>{"--verbose"}</code></nobr> | Utiliser une sortie de modèle plus détaillée (inclut des métadonnées telles que les coûts) |
 
 Utilisez l'option `--refresh` pour mettre à jour la liste des modèles mis en cache. Ceci est utile lorsque de nouveaux modèles ont été ajoutés à un fournisseur et que vous souhaitez les voir dans OpenCode.
 
@@ -335,20 +339,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Options
 
-| Option       | Court | Description                                                                                    |
-| ------------ | ----- | ---------------------------------------------------------------------------------------------- |
-| `--command`  |       | La commande à exécuter, utilisez le message pour les arguments                                 |
-| `--continue` | `-c`  | Continuer la dernière session                                                                  |
-| `--session`  | `-s`  | ID de session pour continuer                                                                   |
-| `--fork`     |       | Forker la session en continuant (à utiliser avec `--continue` ou `--session`)                  |
-| `--share`    |       | Partager la session                                                                            |
-| `--model`    | `-m`  | Modèle à utiliser sous forme de fournisseur/modèle                                             |
-| `--agent`    |       | Agent à utiliser                                                                               |
-| `--file`     | `-f`  | Fichier(s) à joindre au message                                                                |
-| `--format`   |       | Format : par défaut (formaté) ou json (événements JSON bruts)                                  |
-| `--title`    |       | Titre de la session (utilise un prompt tronqué si aucune valeur n'est fournie)                 |
-| `--attach`   |       | Connectez-vous à un serveur opencode en cours d'exécution (par exemple, http://localhost:4096) |
-| `--port`     |       | Port du serveur local (port aléatoire par défaut)                                              |
+| Option                                   | Court | Description                                                                                        |
+| ---------------------------------------- | ----- | -------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--command"}</code></nobr>  |       | La commande à exécuter, utilisez le message pour les arguments                                     |
+| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continuer la dernière session                                                                      |
+| <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID de session pour continuer                                                                       |
+| <nobr><code>{"--fork"}</code></nobr>     |       | Forker la session en continuant (à utiliser avec `--continue` ou `--session`)                      |
+| <nobr><code>{"--share"}</code></nobr>    |       | Partager la session                                                                                |
+| <nobr><code>{"--model"}</code></nobr>    | `-m`  | Modèle à utiliser sous forme de fournisseur/modèle                                                 |
+| <nobr><code>{"--agent"}</code></nobr>    |       | Agent à utiliser                                                                                   |
+| <nobr><code>{"--file"}</code></nobr>     | `-f`  | Fichier(s) à joindre au message                                                                    |
+| <nobr><code>{"--format"}</code></nobr>   |       | Format : par défaut (formaté) ou json (événements JSON bruts)                                      |
+| <nobr><code>{"--title"}</code></nobr>    |       | Titre de la session (utilise un prompt tronqué si aucune valeur n'est fournie)                     |
+| <nobr><code>{"--attach"}</code></nobr>   |       | Connectez-vous à un serveur opencode en cours d'exécution (par exemple, http://localhost:4096)     |
+| <nobr><code>{"--password"}</code></nobr> | `-p`  | Mot de passe d'authentification de base (par défaut `OPENCODE_SERVER_PASSWORD`)                    |
+| <nobr><code>{"--username"}</code></nobr> | `-u`  | Nom d'utilisateur d'authentification de base (par défaut `OPENCODE_SERVER_USERNAME` ou `opencode`) |
+| <nobr><code>{"--dir"}</code></nobr>      |       | Répertoire d'exécution, ou chemin sur le serveur distant lors de l'attachement                     |
+| <nobr><code>{"--variant"}</code></nobr>  |       | Variante du modèle (effort de raisonnement spécifique au fournisseur)                              |
+| <nobr><code>{"--thinking"}</code></nobr> |       | Afficher les blocs de réflexion                                                                    |
+| <nobr><code>{"--port"}</code></nobr>     |       | Port du serveur local (port aléatoire par défaut)                                                  |
 
 ---
 
@@ -364,12 +373,12 @@ Cela démarre un serveur HTTP qui fournit un accès API aux fonctionnalités d'O
 
 #### Options
 
-| Option       | Description                                                |
-| ------------ | ---------------------------------------------------------- |
-| `--port`     | Port d'écoute                                              |
-| `--hostname` | Nom d'hôte d'écoute                                        |
-| `--mdns`     | Activer la découverte mDNS                                 |
-| `--cors`     | Origines de navigateur supplémentaires pour autoriser CORS |
+| Option                                   | Description                                                |
+| ---------------------------------------- | ---------------------------------------------------------- |
+| <nobr><code>{"--port"}</code></nobr>     | Port d'écoute                                              |
+| <nobr><code>{"--hostname"}</code></nobr> | Nom d'hôte d'écoute                                        |
+| <nobr><code>{"--mdns"}</code></nobr>     | Activer la découverte mDNS                                 |
+| <nobr><code>{"--cors"}</code></nobr>     | Origines de navigateur supplémentaires pour autoriser CORS |
 
 ---
 
@@ -393,10 +402,10 @@ opencode session list
 
 ##### Options
 
-| Option        | Court | Description                                  |
-| ------------- | ----- | -------------------------------------------- |
-| `--max-count` | `-n`  | Limiter aux N sessions les plus récentes     |
-| `--format`    |       | Format de sortie : tableau ou json (tableau) |
+| Option                                    | Court | Description                                  |
+| ----------------------------------------- | ----- | -------------------------------------------- |
+| <nobr><code>{"--max-count"}</code></nobr> | `-n`  | Limiter aux N sessions les plus récentes     |
+| <nobr><code>{"--format"}</code></nobr>    |       | Format de sortie : tableau ou json (tableau) |
 
 ---
 
@@ -410,12 +419,12 @@ opencode stats
 
 #### Options
 
-| Option      | Description                                                                                                           |
-| ----------- | --------------------------------------------------------------------------------------------------------------------- |
-| `--days`    | Afficher les statistiques des N derniers jours (depuis le début)                                                      |
-| `--tools`   | Nombre d'outils à afficher (tous)                                                                                     |
-| `--models`  | Afficher la répartition de l'utilisation du modèle (masqué par défaut). Passez un numéro pour afficher les N premiers |
-| `--project` | Filtrer par projet (tous les projets, chaîne vide : projet actuel)                                                    |
+| Option                                  | Description                                                                                                           |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| <nobr><code>{"--days"}</code></nobr>    | Afficher les statistiques des N derniers jours (depuis le début)                                                      |
+| <nobr><code>{"--tools"}</code></nobr>   | Nombre d'outils à afficher (tous)                                                                                     |
+| <nobr><code>{"--models"}</code></nobr>  | Afficher la répartition de l'utilisation du modèle (masqué par défaut). Passez un numéro pour afficher les N premiers |
+| <nobr><code>{"--project"}</code></nobr> | Filtrer par projet (tous les projets, chaîne vide : projet actuel)                                                    |
 
 ---
 
@@ -460,12 +469,12 @@ Cela démarre un serveur HTTP et ouvre un navigateur Web pour accéder à OpenCo
 
 #### Options
 
-| Option       | Description                                                |
-| ------------ | ---------------------------------------------------------- |
-| `--port`     | Port d'écoute                                              |
-| `--hostname` | Nom d'hôte d'écoute                                        |
-| `--mdns`     | Activer la découverte mDNS                                 |
-| `--cors`     | Origines de navigateur supplémentaires pour autoriser CORS |
+| Option                                   | Description                                                |
+| ---------------------------------------- | ---------------------------------------------------------- |
+| <nobr><code>{"--port"}</code></nobr>     | Port d'écoute                                              |
+| <nobr><code>{"--hostname"}</code></nobr> | Nom d'hôte d'écoute                                        |
+| <nobr><code>{"--mdns"}</code></nobr>     | Activer la découverte mDNS                                 |
+| <nobr><code>{"--cors"}</code></nobr>     | Origines de navigateur supplémentaires pour autoriser CORS |
 
 ---
 
@@ -481,11 +490,11 @@ Cette commande démarre un serveur ACP qui communique via stdin/stdout en utilis
 
 #### Options
 
-| Option       | Description           |
-| ------------ | --------------------- |
-| `--cwd`      | Répertoire de travail |
-| `--port`     | Port d'écoute         |
-| `--hostname` | Nom d'hôte d'écoute   |
+| Option                                   | Description           |
+| ---------------------------------------- | --------------------- |
+| <nobr><code>{"--cwd"}</code></nobr>      | Répertoire de travail |
+| <nobr><code>{"--port"}</code></nobr>     | Port d'écoute         |
+| <nobr><code>{"--hostname"}</code></nobr> | Nom d'hôte d'écoute   |
 
 ---
 
@@ -499,12 +508,12 @@ opencode uninstall
 
 #### Options
 
-| Option          | Court | Description                                         |
-| --------------- | ----- | --------------------------------------------------- |
-| `--keep-config` | `-c`  | Conserver les fichiers de configuration             |
-| `--keep-data`   | `-d`  | Conserver les données de session et les instantanés |
-| `--dry-run`     |       | Afficher ce qui serait supprimé sans supprimer      |
-| `--force`       | `-f`  | Ignorer les invites de confirmation                 |
+| Option                                      | Court | Description                                         |
+| ------------------------------------------- | ----- | --------------------------------------------------- |
+| <nobr><code>{"--keep-config"}</code></nobr> | `-c`  | Conserver les fichiers de configuration             |
+| <nobr><code>{"--keep-data"}</code></nobr>   | `-d`  | Conserver les données de session et les instantanés |
+| <nobr><code>{"--dry-run"}</code></nobr>     |       | Afficher ce qui serait supprimé sans supprimer      |
+| <nobr><code>{"--force"}</code></nobr>       | `-f`  | Ignorer les invites de confirmation                 |
 
 ---
 
@@ -530,9 +539,9 @@ opencode upgrade v0.1.48
 
 #### Options
 
-| Option     | Court | Description                                                     |
-| ---------- | ----- | --------------------------------------------------------------- |
-| `--method` | `-m`  | La méthode d'installation utilisée ; curl, npm, pnpm, bun, brew |
+| Option                                 | Court | Description                                                     |
+| -------------------------------------- | ----- | --------------------------------------------------------------- |
+| <nobr><code>{"--method"}</code></nobr> | `-m`  | La méthode d'installation utilisée ; curl, npm, pnpm, bun, brew |
 
 ---
 
@@ -540,12 +549,12 @@ opencode upgrade v0.1.48
 
 La CLI opencode prend les flags globaux suivants.
 
-| Option         | Court | Description                              |
-| -------------- | ----- | ---------------------------------------- |
-| `--help`       | `-h`  | Afficher l'aide                          |
-| `--version`    | `-v`  | Afficher le numéro de version            |
-| `--print-logs` |       | Afficher les logs sur stderr             |
-| `--log-level`  |       | Niveau de log (DEBUG, INFO, WARN, ERROR) |
+| Option                                     | Court | Description                              |
+| ------------------------------------------ | ----- | ---------------------------------------- |
+| <nobr><code>{"--help"}</code></nobr>       | `-h`  | Afficher l'aide                          |
+| <nobr><code>{"--version"}</code></nobr>    | `-v`  | Afficher le numéro de version            |
+| <nobr><code>{"--print-logs"}</code></nobr> |       | Afficher les logs sur stderr             |
+| <nobr><code>{"--log-level"}</code></nobr>  |       | Niveau de log (DEBUG, INFO, WARN, ERROR) |
 
 ---
 
@@ -599,5 +608,4 @@ Ces variables d'environnement activent des fonctionnalités expérimentales qui 
 | `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | booléen | Désactiver l'observateur de fichiers                            |
 | `OPENCODE_EXPERIMENTAL_EXA`                     | booléen | Activer les fonctionnalités Exa expérimentales                  |
 | `OPENCODE_EXPERIMENTAL_LSP_TY`                  | booléen | Activer TY LSP pour les fichiers python                         |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | booléen | Activer les fonctionnalités Markdown expérimentales             |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | booléen | Activer le mode plan                                            |

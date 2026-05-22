@@ -55,3 +55,5 @@ function matchSequence(items: string[], patterns: string[]): boolean {
   }
   return false
 }
+
+export * as Wildcard from "./wildcard"
