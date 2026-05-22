@@ -67,7 +67,11 @@ export function isLocal() {
 
 export class UpgradeFailedError extends Schema.TaggedErrorClass<UpgradeFailedError>()("UpgradeFailedError", {
   stderr: Schema.String,
-}) {}
+}) {
+  override get message() {
+    return this.stderr
+  }
+}
 
 // Response schemas for external version APIs
 const GitHubRelease = Schema.Struct({ tag_name: Schema.String })
@@ -139,6 +143,12 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
       return "opencode"
     })
 
+    const upgradeFailure = (method: Method, result?: { code: number; stdout: string; stderr: string }) => {
+      if (method === "choco") return "not running from an elevated command shell"
+      if (result) return `Upgrade failed for ${method} (exit code ${result.code}).`
+      return `Upgrade failed for ${method}.`
+    }
+
     const upgradeCurl = Effect.fnUntraced(function* (target: string) {
       const response = yield* httpOk.execute(HttpClientRequest.get("https://opencode.ai/install"))
       const body = yield* response.text
@@ -155,7 +165,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         stdout: result.stdout.toString("utf8"),
         stderr: result.stderr.toString("utf8"),
       }
-    }, Effect.orDie)
+    }, Effect.mapError(() => new UpgradeFailedError({ stderr: upgradeFailure("curl") })))
 
     const result: Interface = {
       info: Effect.fn("Installation.info")(function* () {
@@ -299,11 +309,10 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
             upgradeResult = yield* run(["scoop", "install", `opencode@${target}`])
             break
           default:
-            return yield* new UpgradeFailedError({ stderr: `Unknown method: ${m}` })
+            return yield* new UpgradeFailedError({ stderr: `Unknown installation method: ${m}` })
         }
         if (!upgradeResult || upgradeResult.code !== 0) {
-          const stderr = m === "choco" ? "not running from an elevated command shell" : upgradeResult?.stderr || ""
-          return yield* new UpgradeFailedError({ stderr })
+          return yield* new UpgradeFailedError({ stderr: upgradeFailure(m, upgradeResult) })
         }
         log.info("upgraded", {
           method: m,
