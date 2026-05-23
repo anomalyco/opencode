@@ -507,11 +507,12 @@ export const layer = Layer.effect(
       const ctx = yield* InstanceState.context
       const created = yield* Effect.tryPromise({
         try: () =>
-          withTimeout(
-            connection.agent.newSession({
-              cwd: ctx.directory,
-              mcpServers: [],
-            }),
+          retryACPRequest(
+            () =>
+              connection.agent.newSession({
+                cwd: ctx.directory,
+                mcpServers: [],
+              }),
             connection.config.timeout ?? DEFAULT_TIMEOUT,
           ),
         catch: (error) => new Error(`Failed to create ACP session on ${input.server}: ${errorMessage(error)}`),
@@ -1347,6 +1348,26 @@ function withTimeout<T>(promise: Promise<T>, timeout: number) {
       },
     )
   })
+}
+
+async function retryACPRequest<T>(request: () => Promise<T>, timeout: number) {
+  const delays = [0, 250, 1000, 2000]
+  let lastError: unknown
+  for (const delay of delays) {
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay))
+    try {
+      return await withTimeout(request(), timeout)
+    } catch (error) {
+      lastError = error
+      if (!isRetryableACPError(error)) break
+    }
+  }
+  throw lastError
+}
+
+function isRetryableACPError(error: unknown) {
+  const message = errorMessage(error).toLowerCase()
+  return message.includes("internal error") || message.includes("-32603")
 }
 
 export const defaultLayer = layer.pipe(
