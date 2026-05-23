@@ -166,6 +166,39 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 - **W1 7 天任务全 done**,不触发 D6 fallback,投入工作日:D1(0.5d) + D2(0.5d) + D3(0.5d) + D4-D6(0.5d 合并) + D7(0.5d) = **2.5 工作日 / 预算 7 工作日**,**节省 4.5d** — 主因是 Stage ② mock infra 复用度比预估高(page.route + 我的 vite plugin 完全正交,无 hydrate 难点)
 - **下周 W2 起点**:节省的工作量分配给 W2 buffer(SDK 深 mock 可能复杂 — `client.session.list/messages/diff/todo` 等 namespace 需要 fixture 数据)+ W3 fixture/示范用例
 
+### 2026-05-23 W2 D8(中场重大方向调整 ⚠️)
+
+**已完成**:
+- 调研 SDK URL schema(`packages/sdk/js/src/v2/gen/sdk.gen.ts` 全 endpoint URL 摸清:`/project` / `/file` / `/file/content` / `/session/{id}/message` / `/global/event` SSE 等)
+- 摸 SDK response shape(`ProjectListResponses.200 = Array<Project>`,SDK client 包装成 `{ data }` 给前端)
+- 扩展 `tauri.ts` 暴露 memfs 到 `window.__deskfoxE2eMemfs`(跨进程同步数据接口)
+- 扩展 `fixtures.ts` 加 4 个 helper:`mockProject` / `mockFileTree` / `preloadFile` / `resetMemfs`(双层 mock 架构:page.route 拦 SDK HTTP + memfs 拦 Tauri invoke,fixture 双面写入同步)
+- D8 spike(`e2e/d8-spike.spec.ts`)验证 mockProject handler 真被调(添加 `[mockProject HIT]` log 验证后清理)
+
+**Playwright route 怪癖踩坑**:
+- `new RegExp(...)` pattern 在 Playwright route 实测**不工作**(handler 不被调,即使 RegExp.test() 自己 match URL)
+- glob `**/project` pattern 工作正常
+- 决策:fixtures.ts 所有 helper 一律用 glob,不用 RegExp(`mockFileTree` / `preloadFile` 同步重写)
+
+**⚠️ 中场重大发现 — W2 范围 vs 实际工作量严重不匹配**:
+- W2 spec 写"3 个示范用例(auto-save / chat-drop / large-file-preview)全绿"
+- 实测 D8:让 UI 真走"已打开项目 + 文件树渲染 + 编辑文件"业务路径,**需要深 mock 整个 project / session / global-sync 状态机**(以下都要 mock:`/project`、`/global/config`、`/provider`、`/path`、`/global/event` SSE stream、`/project/current`、`session.list`、`session.get`、`session.messages`、`session.diff`、`session.todo`、`/find/file`、project init 流程、`globalSync.project.*` 内部状态、文件树 render 依赖 store、editor mount 依赖 reactive 状态)
+- 这每个 endpoint 都需要"shape 调研 + mock 数据设计 + 跑通验证"循环
+- mockProject 一个 endpoint 摸通就花了 D8 半天(发现 Playwright RegExp 不工作 + URL pattern 调对 + console.log 验证 hit + response shape 对齐)
+- **3 个示范用例真完整版预估:每个 2-4 工作日,总 6-12 工作日(超 W2 7 天预算 1-2 倍)**
+
+**决策选项**(等 user 锁):
+| 选项 | 行动 | 收成 | 时长 |
+|---|---|---|---|
+| **A. push 完 W2 原 scope** | 死磕 3 个示范用例完整版 + 深 mock 整个状态机 | 完整 Phase 1 e2e 闭环 | 2-3 周(超 W2 1-2 倍) |
+| **B. W2 调整为 infra-ready + 1 个 spike 用例** | 收 fixture infra + 试 large-file-preview 最浅路径(可能仍撞 UI 状态门槛) | infra 可复用,示范不全 | 留在 W2 7 天内 |
+| **C. 推迟 D12-D14 到 W3 整周专做** | W2 收尾在 D8/D9 infra,W3 专精示范用例(不接 pre-push gate + 治理升级) | 切割清晰,W3 集中精力 | W2 缩到 2-3 天,W3 整周 |
+| **D. 承认 Phase 1 中层 e2e 设计本身高复杂度,转 hybrid:Phase 1 e2e 只做工具级 unit-like spec(已有 D 系列模式)** | 放弃"完整 user flow"目标,Phase 1 仅做 helper-level e2e | Phase 1 scope 大幅缩 | W2 缩到 3-4 天,但 R5 v4 升级风险大 |
+
+**建议**:**选项 C** — D8 已证明 fixture infra 可用,glob pattern 锁定,memfs 双层架构跑通。继续硬推 D9-D14 是低效的(SDK shape 一个个对会大量碎片化时间)。W3 做整周专精示范用例(深 mock 一次性铺开,效率更高)+ 治理升级延后到示范用例稳定后。
+
+**临时停止点**:D8 fixture infra ready commit(本笔)+ d8-spike.spec.ts 作为示范模板留下。**等 user 决策**。
+
 ## 关联文档
 
 | 文档 | 关系 |

@@ -238,3 +238,9 @@ export class Channel<T = unknown> {
 export function convertFileSrc(filePath: string, _protocol = "asset"): string {
   return `https://e2e-mock.invalid/${encodeURIComponent(filePath)}`
 }
+
+// ============== 暴露 memfs 到 window 给 Playwright fixture 用 ==============
+// fixtures.ts 通过 page.evaluate 调 `window.__deskfoxE2eMemfs.preload(...)` 同步数据
+if (import.meta.env?.VITE_E2E_MOCK === "true" && typeof window !== "undefined") {
+  ;(window as unknown as { __deskfoxE2eMemfs: typeof memfs }).__deskfoxE2eMemfs = memfs
+}
