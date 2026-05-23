@@ -199,6 +199,37 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 **临时停止点**:D8 fixture infra ready commit(本笔)+ d8-spike.spec.ts 作为示范模板留下。**等 user 决策**。
 
+### 2026-05-23 W2 D9(收尾 — user 选 C 后)
+
+User 锁选项 **C** — 推迟 D12-D14 到 W3 整周专做;W2 收尾在 infra,治理升级延后到 W4。
+
+**D9 实际工作改为"W3 铺垫调研"**(原"SDK chat/session mock" 推迟):
+- 摸 `bootstrapGlobal` 内部 — 必须 4 个 query 全过(`config` / `providers` / `path` / `projects`),任一 fail 导致 `GlobalStore.ready = false`,UI 永远卡空
+- 这是 D8 spike `mockProject HIT` 但 UI 仍 "No projects open" 的真因 — 缺前 3 个 query 的有效 mock shape,bootstrap 整段失败
+- 摸 SSE event stream(`/global/event`)行为 — `eventSdk.global.event()` async iterable,catch-all 返 200 JSON 不行(可能 hang reactive 链),W3 必须返空 SSE stream
+- 摸 session / message / Part 联合 type 复杂度 — D12 auto-save 示范用例**最深**,可能需要 fixture builder helper
+
+**产物**:`packages/app/e2e/mocks/BOOTSTRAP-MOCK.md`(126 行)
+- §一 4 个必装 bootstrap query 清单 + shape 提示
+- §二 SSE event stream mock 策略
+- §三 项目工作区进入触发条件分析
+- §四 文件树 + 文件预览第二层 mock(已部分实现)
+- §五 Session / Chat 第三层 mock(W3 D19 范围)
+- §六 推荐 W3 D15-D19 切分
+- §七 风险评估(SSE hang / Message part type / bootstrap fail-fast)
+
+**W2 实际投入** = D8(1d 实测 + 摸 Playwright route 怪癖) + D9(0.5d 调研) = **1.5 工作日 / 调整后 W2 预算 2-3 天**
+
+**W3 重新切分**(C 选项落地):
+- D15 mock §一 4 query 全过 + SSE 空 stream → UI ready
+- D16 触发项目工作区(可能直接 mock store 而非走 dialog)
+- D17 large-file-preview spec(最浅)
+- D18 chat-drop spec(中等,DOM event)
+- D19 auto-save spec(最深,可能需 page.evaluate 兜底)
+- W3 buffer:超时项挂账 / CI 接入 + 治理升级延后到 W4
+
+**总投资重估**:W1(2.5d 实际)+ W2(1.5d 实际)+ W3(5d 预估)+ W4(2-3d CI + 治理升级)= **11-12 工作日**,比原 1-spec §投资估算"2-3 周"(15-21d)节省 3-9 天。
+
 ## 关联文档
 
 | 文档 | 关系 |
