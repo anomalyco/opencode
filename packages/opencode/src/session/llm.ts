@@ -1,4 +1,5 @@
 import { Provider } from "@/provider/provider"
+import { serviceUse } from "@/effect/service-use"
 import * as Log from "@opencode-ai/core/util/log"
 import { Context, Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
@@ -53,6 +54,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
+
+export const use = serviceUse(Service)
 
 const live: Layer.Layer<
   Service,
@@ -220,8 +223,6 @@ const live: Layer.Layer<
           provider: item,
           auth: info,
           llmClient,
-          isOpenaiOauth: prepared.isOpenaiOauth,
-          system: prepared.system,
           messages: prepared.messages,
           tools: prepared.tools,
           toolChoice: input.toolChoice,

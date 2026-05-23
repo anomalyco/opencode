@@ -5,6 +5,7 @@ import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { serviceUse } from "@/effect/service-use"
 import { Identifier } from "@/id/id"
 import type { InstanceContext } from "@/project/instance-context"
 import { InstanceRef } from "@/effect/instance-ref"
@@ -55,6 +56,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Bus") {}
+
+export const use = serviceUse(Service)
 
 export const layer = Layer.effect(
   Service,

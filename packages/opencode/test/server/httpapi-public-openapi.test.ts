@@ -99,4 +99,121 @@ describe("PublicApi OpenAPI v2 errors", () => {
       "ServiceUnavailableError",
     )
   })
+
+  test("documents v2 session not-found errors", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const route of [
+      ["post", "/api/session/{sessionID}/prompt"],
+      ["post", "/api/session/{sessionID}/compact"],
+      ["post", "/api/session/{sessionID}/wait"],
+      ["get", "/api/session/{sessionID}/context"],
+      ["get", "/api/session/{sessionID}/message"],
+    ] as const) {
+      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["404"]) ?? "")).toBe(
+        "SessionNotFoundError",
+      )
+    }
+  })
+
+  test("documents v2 unfinished session mutation errors", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const route of [
+      ["post", "/api/session/{sessionID}/prompt"],
+      ["post", "/api/session/{sessionID}/compact"],
+      ["post", "/api/session/{sessionID}/wait"],
+    ] as const) {
+      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["503"]) ?? "")).toBe(
+        "ServiceUnavailableError",
+      )
+    }
+  })
+
+  test("documents v2 session read data errors", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const route of [
+      ["get", "/api/session/{sessionID}/context"],
+      ["get", "/api/session/{sessionID}/message"],
+    ] as const) {
+      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["500"]) ?? "")).toMatch(
+        /^UnknownError\d*$/,
+      )
+    }
+  })
+
+  test("documents session busy errors", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const route of [
+      ["post", "/session/{sessionID}/shell"],
+      ["post", "/session/{sessionID}/revert"],
+      ["post", "/session/{sessionID}/unrevert"],
+      ["delete", "/session/{sessionID}/message/{messageID}"],
+    ] as const) {
+      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["409"]) ?? "")).toBe(
+        "SessionBusyError",
+      )
+    }
+  })
+
+  test("documents permission and question not-found errors", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    expect(
+      componentName(responseRef(spec.paths["/permission/{requestID}/reply"]?.post?.responses?.["404"]) ?? ""),
+    ).toBe("PermissionNotFoundError")
+    for (const route of [
+      ["post", "/question/{requestID}/reply"],
+      ["post", "/question/{requestID}/reject"],
+    ] as const) {
+      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["404"]) ?? "")).toBe(
+        "QuestionNotFoundError",
+      )
+    }
+  })
+
+  test("documents MCP server not-found errors", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const route of [
+      ["post", "/mcp/{name}/auth"],
+      ["post", "/mcp/{name}/auth/authenticate"],
+      ["post", "/mcp/{name}/auth/callback"],
+      ["delete", "/mcp/{name}/auth"],
+      ["post", "/mcp/{name}/connect"],
+      ["post", "/mcp/{name}/disconnect"],
+    ] as const) {
+      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["404"]) ?? "")).toBe(
+        "McpServerNotFoundError",
+      )
+    }
+  })
+
+  test("documents PTY resource and ticket errors", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const route of [
+      ["get", "/pty/{ptyID}"],
+      ["put", "/pty/{ptyID}"],
+      ["delete", "/pty/{ptyID}"],
+      ["post", "/pty/{ptyID}/connect-token"],
+    ] as const) {
+      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["404"]) ?? "")).toBe(
+        "PtyNotFoundError",
+      )
+    }
+    expect(componentName(responseRef(spec.paths["/pty/{ptyID}/connect-token"]?.post?.responses?.["403"]) ?? "")).toBe(
+      "PtyForbiddenError",
+    )
+  })
+
+  test("documents project not-found errors", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    expect(componentName(responseRef(spec.paths["/project/{projectID}"]?.patch?.responses?.["404"]) ?? "")).toBe(
+      "ProjectNotFoundError",
+    )
+  })
 })

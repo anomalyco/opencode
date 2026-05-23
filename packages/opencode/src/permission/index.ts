@@ -29,7 +29,11 @@ export type Rule = Schema.Schema.Type<typeof Rule>
 export const Ruleset = Schema.Array(Rule).annotate({ identifier: "PermissionRuleset" })
 export type Ruleset = Schema.Schema.Type<typeof Ruleset>
 
-export class Request extends Schema.Class<Request>("PermissionRequest")({
+// Pure data; nothing checks class identity. As `Schema.Struct` + type alias,
+// `Permission.ask` can trust its already-typed input and skip the inner
+// `decodeUnknownSync` that would otherwise throw uncaught on any structural
+// mismatch. Same pattern as `Question.Request` in PR #28570.
+export const Request = Schema.Struct({
   id: PermissionID,
   sessionID: SessionID,
   permission: Schema.String,
@@ -42,7 +46,8 @@ export class Request extends Schema.Class<Request>("PermissionRequest")({
       callID: Schema.String,
     }),
   ),
-}) {}
+}).annotate({ identifier: "PermissionRequest" })
+export type Request = Schema.Schema.Type<typeof Request>
 
 export const Reply = Schema.Literals(["once", "always", "reject"])
 export type Reply = Schema.Schema.Type<typeof Reply>
@@ -55,10 +60,11 @@ const reply = {
 export const ReplyBody = Schema.Struct(reply).annotate({ identifier: "PermissionReplyBody" })
 export type ReplyBody = Schema.Schema.Type<typeof ReplyBody>
 
-export class Approval extends Schema.Class<Approval>("PermissionApproval")({
+export const Approval = Schema.Struct({
   projectID: ProjectID,
   patterns: Schema.Array(Schema.String),
-}) {}
+}).annotate({ identifier: "PermissionApproval" })
+export type Approval = Schema.Schema.Type<typeof Approval>
 
 export const Event = {
   Asked: BusEvent.define("permission.asked", Request),
@@ -94,6 +100,10 @@ export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("Permiss
   }
 }
 
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Permission.NotFoundError", {
+  requestID: PermissionID,
+}) {}
+
 export type Error = DeniedError | RejectedError | CorrectedError
 
 export const AskInput = Schema.Struct({
@@ -111,7 +121,7 @@ export type ReplyInput = Schema.Schema.Type<typeof ReplyInput>
 
 export interface Interface {
   readonly ask: (input: AskInput) => Effect.Effect<void, Error>
-  readonly reply: (input: ReplyInput) => Effect.Effect<void>
+  readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
 }
 
@@ -178,10 +188,15 @@ export const layer = Layer.effect(
       if (!needsAsk) return
 
       const id = request.id ?? PermissionID.ascending()
-      const info = Schema.decodeUnknownSync(Request)({
+      const info: Request = {
         id,
-        ...request,
-      })
+        sessionID: request.sessionID,
+        permission: request.permission,
+        patterns: request.patterns,
+        metadata: request.metadata,
+        always: request.always,
+        tool: request.tool,
+      }
       log.info("asking", { id, permission: info.permission, patterns: info.patterns })
 
       const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
@@ -198,7 +213,7 @@ export const layer = Layer.effect(
     const reply = Effect.fn("Permission.reply")(function* (input: ReplyInput) {
       const { approved, pending } = yield* InstanceState.get(state)
       const existing = pending.get(input.requestID)
-      if (!existing) return
+      if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
 
       pending.delete(input.requestID)
       yield* bus.publish(Event.Replied, {
