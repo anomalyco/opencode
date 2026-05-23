@@ -172,6 +172,61 @@ describe("session.list", () => {
   )
 
   it.instance(
+    "filters path scoped sessions to the current worktree directory",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const mainWorktree = path.join(test.directory, "main", "packages", "opencode")
+        const workspaceWorktree = path.join(test.directory, "workspace", "packages", "opencode")
+        yield* Effect.promise(() => mkdir(path.join(mainWorktree, "src", "deep"), { recursive: true }))
+        yield* Effect.promise(() => mkdir(path.join(workspaceWorktree, "src", "deep"), { recursive: true }))
+
+        const main = yield* withSession({ title: "main" }).pipe(provideInstance(path.join(mainWorktree, "src")))
+        const mainDeep = yield* withSession({ title: "main-deep" }).pipe(
+          provideInstance(path.join(mainWorktree, "src", "deep")),
+        )
+        const workspace = yield* withSession({ title: "workspace" }).pipe(
+          provideInstance(path.join(workspaceWorktree, "src")),
+        )
+        const workspaceDeep = yield* withSession({ title: "workspace-deep" }).pipe(
+          provideInstance(path.join(workspaceWorktree, "src", "deep")),
+        )
+
+        yield* Effect.forEach(
+          [main, workspace].map((session) => ({ session, sessionPath: "packages/opencode/src" })),
+          (input) =>
+            Effect.sync(() =>
+              Database.use((db) =>
+                db.update(SessionTable).set({ path: input.sessionPath }).where(eq(SessionTable.id, input.session.id)).run(),
+              ),
+            ),
+        )
+        yield* Effect.forEach(
+          [mainDeep, workspaceDeep].map((session) => ({ session, sessionPath: "packages/opencode/src/deep" })),
+          (input) =>
+            Effect.sync(() =>
+              Database.use((db) =>
+                db.update(SessionTable).set({ path: input.sessionPath }).where(eq(SessionTable.id, input.session.id)).run(),
+              ),
+            ),
+        )
+
+        const ids = (yield* SessionNs.Service.use((session) =>
+          session.list({
+            directory: path.join(workspaceWorktree, "src"),
+            path: "packages/opencode/src",
+          }),
+        )).map((session) => session.id)
+
+        expect(ids).not.toContain(main.id)
+        expect(ids).not.toContain(mainDeep.id)
+        expect(ids).toContain(workspace.id)
+        expect(ids).toContain(workspaceDeep.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
     "filters root sessions",
     () =>
       Effect.gen(function* () {

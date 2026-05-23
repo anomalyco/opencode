@@ -158,6 +158,16 @@ function sessionPath(worktree: string, cwd: string) {
   return path.relative(path.resolve(worktree), cwd).replaceAll("\\", "/")
 }
 
+function sessionRootFromPath(directory: string, relativePath: string) {
+  if (!relativePath) return path.resolve(directory)
+  return path.resolve(directory, ...relativePath.split("/").map(() => ".."))
+}
+
+function directoryPrefix(directory: string) {
+  const resolved = path.resolve(directory)
+  return resolved.endsWith(path.sep) ? `${resolved}%` : `${resolved}${path.sep}%`
+}
+
 const Summary = Schema.Struct({
   additions: Schema.Finite,
   deletions: Schema.Finite,
@@ -900,14 +910,24 @@ function* listByProject(
     conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
   }
   if (input.path !== undefined) {
-    if (input.path) {
-      const conds = [eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`)]
-
-      conditions.push(
-        input.directory
-          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, input.directory))!)!
-          : or(...conds)!,
-      )
+    if (input.directory) {
+      const root = sessionRootFromPath(input.directory, input.path)
+      const directoryConds = [eq(SessionTable.directory, root), like(SessionTable.directory, directoryPrefix(root))]
+      if (!input.path) {
+        conditions.push(or(...directoryConds)!)
+      } else {
+        conditions.push(
+          or(
+            and(
+              or(eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`))!,
+              or(...directoryConds)!,
+            )!,
+            and(isNull(SessionTable.path), eq(SessionTable.directory, input.directory))!,
+          )!,
+        )
+      }
+    } else if (input.path) {
+      conditions.push(or(eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`))!)
     }
   } else if (input.scope !== "project" && !input.experimentalWorkspaces) {
     if (input.directory) {

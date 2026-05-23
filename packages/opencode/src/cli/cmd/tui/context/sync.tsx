@@ -114,14 +114,62 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     const fullSyncedSessions = new Set<string>()
 
-    function sessionListQuery(): { scope?: "project"; path?: string } {
-      if (!kv.get("session_directory_filter_enabled", true)) return { scope: "project" }
+    function filterEnabled() {
+      return kv.get("session_directory_filter_enabled", true)
+    }
+
+    function sessionListQuery(): { scope?: "project"; path?: string; directory?: string } {
+      if (!filterEnabled()) return { scope: "project" }
       if (!project.data.instance.path.worktree || !project.data.instance.path.directory) return { scope: "project" }
       return {
+        directory: project.data.instance.path.directory,
         path: path
           .relative(path.resolve(project.data.instance.path.worktree), project.data.instance.path.directory)
           .replaceAll("\\", "/"),
       }
+    }
+
+    function sessionRootFromQuery(query: { path?: string; directory?: string }) {
+      if (!query.directory) return undefined
+      if (!query.path) return path.resolve(query.directory)
+      return path.resolve(query.directory, ...query.path.split("/").map(() => ".."))
+    }
+
+    function includesSession(session: Session) {
+      const query = sessionListQuery()
+      if (query.scope === "project") return true
+      const root = sessionRootFromQuery(query)
+      if (!root) return true
+      const relative = path.relative(root, session.directory)
+      if (relative !== "" && (relative.startsWith("..") || path.isAbsolute(relative))) return false
+      if (!query.path) return true
+      if (session.path) return session.path === query.path || session.path.startsWith(`${query.path}/`)
+      return session.directory === query.directory
+    }
+
+    function upsertSession(session: Session) {
+      const result = Binary.search(store.session, session.id, (s) => s.id)
+      if (!includesSession(session)) {
+        if (result.found) {
+          setStore(
+            "session",
+            produce((draft) => {
+              draft.splice(result.index, 1)
+            }),
+          )
+        }
+        return
+      }
+      if (result.found) {
+        setStore("session", result.index, reconcile(session))
+        return
+      }
+      setStore(
+        "session",
+        produce((draft) => {
+          draft.splice(result.index, 0, session)
+        }),
+      )
     }
 
     function listSessions() {
@@ -230,18 +278,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           break
         }
+        case "session.created":
         case "session.updated": {
-          const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
-          if (result.found) {
-            setStore("session", result.index, reconcile(event.properties.info))
-            break
-          }
-          setStore(
-            "session",
-            produce((draft) => {
-              draft.splice(result.index, 0, event.properties.info)
-            }),
-          )
+          upsertSession(event.properties.info)
           break
         }
 
@@ -503,6 +542,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
         query() {
           return sessionListQuery()
+        },
+        filterEnabled,
+        async setFilterEnabled(enabled: boolean) {
+          kv.set("session_directory_filter_enabled", enabled)
+          await result.session.refresh()
         },
         async refresh() {
           const list = await listSessions()

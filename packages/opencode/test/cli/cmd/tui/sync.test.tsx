@@ -29,6 +29,7 @@ describe("tui sync", () => {
     try {
       expect(kv.get("session_directory_filter_enabled", true)).toBe(true)
       expect(session.at(-1)?.searchParams.get("scope")).toBeNull()
+      expect(session.at(-1)?.searchParams.get("directory")).toBe("/tmp/opencode/packages/opencode")
       expect(session.at(-1)?.searchParams.get("path")).toBe("packages/opencode")
 
       kv.set("session_directory_filter_enabled", false)

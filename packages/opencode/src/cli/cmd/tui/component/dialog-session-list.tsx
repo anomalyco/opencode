@@ -142,6 +142,10 @@ export function DialogSessionList() {
     const hint = quickSwitchHint()
     return hint && local.session.slots().length > 0 ? [{ title: "switch", label: hint }] : []
   })
+  const footerHints = createMemo(() => [
+    { title: sync.session.filterEnabled() ? "filtered current worktree" : "showing all sessions", label: "" },
+    ...quickSwitchFooterHints(),
+  ])
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
@@ -290,6 +294,14 @@ export function DialogSessionList() {
           },
         },
         {
+          command: "app.toggle.session_directory_filter",
+          title: sync.session.filterEnabled() ? "show all" : "filter current",
+          onTrigger: async () => {
+            await sync.session.setFilterEnabled(!sync.session.filterEnabled())
+            if (search()) await refetch()
+          },
+        },
+        {
           command: "session.rename",
           title: "rename",
           onTrigger: async (option) => {
@@ -297,7 +309,7 @@ export function DialogSessionList() {
           },
         },
       ]}
-      footerHints={quickSwitchFooterHints()}
+      footerHints={footerHints()}
     />
   )
 }
