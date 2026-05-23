@@ -1,4 +1,4 @@
-import { Bot, type Context } from "grammy"
+import { Bot, InlineKeyboard, type Context } from "grammy"
 import { createOpencode, type ToolPart } from "@opencode-ai/sdk"
 
 const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!)
@@ -89,6 +89,55 @@ void (async () => {
         }
       }
     }
+
+    // Permission request — show approve/deny inline keyboard
+    if (evt.type === "permission.asked") {
+      const { id, sessionID, permission } = evt.properties
+      for (const [_key, session] of sessions.entries()) {
+        if (session.sessionId === sessionID) {
+          const keyboard = new InlineKeyboard()
+            .text("✅ Approve", `perm:approve:${id}`)
+            .text("❌ Deny", `perm:deny:${id}`)
+          await bot.api
+            .sendMessage(session.chatId, `🔐 <b>Permission Request</b>\n\n${escapeHtml(permission || "Unknown permission")}`, {
+              parse_mode: "HTML",
+              reply_markup: keyboard,
+            })
+            .catch(() => {})
+          break
+        }
+      }
+    }
+
+    // Question asked — show inline keyboard with options or free-form prompt
+    if (evt.type === "question.asked") {
+      const { id, sessionID, questions } = evt.properties
+      for (const [_key, session] of sessions.entries()) {
+        if (session.sessionId === sessionID) {
+          for (const question of questions) {
+            let keyboard = new InlineKeyboard()
+            if (question.options && question.options.length > 0) {
+              for (const option of question.options) {
+                keyboard = keyboard.text(option, `q:${id}:${option}`)
+                if (question.options.indexOf(option) < question.options.length - 1) {
+                  keyboard = keyboard.row()
+                }
+              }
+            }
+            const messageText = question.header
+              ? `❓ <b>${escapeHtml(question.header)}</b>\n\n${escapeHtml(question.question)}`
+              : `❓ ${escapeHtml(question.question)}`
+            await bot.api
+              .sendMessage(session.chatId, messageText, {
+                parse_mode: "HTML",
+                ...(question.options && question.options.length > 0 ? { reply_markup: keyboard } : {}),
+              })
+              .catch(() => {})
+          }
+          break
+        }
+      }
+    }
   }
 })()
 
@@ -115,6 +164,93 @@ function chunkMessage(text: string, limit = 4096): string[] {
   }
   return chunks
 }
+
+// ── Command handlers ──────────────────────────────────────────────
+
+bot.command("start", async (ctx) => {
+  await ctx.reply(
+    "🤖 <b>OpenCode Telegram Bot</b>\n\n" +
+      "I can help you interact with OpenCode directly from Telegram.\n\n" +
+      "Commands:\n" +
+      "/help — List all commands\n" +
+      "/sessions — List active sessions\n" +
+      "/abort — Abort current agent loop\n" +
+      "/model — Show current model\n" +
+      "/mode — Show current mode\n\n" +
+      "Just send me a message to start a session!",
+    { parse_mode: "HTML" },
+  )
+})
+
+bot.command("help", async (ctx) => {
+  await ctx.reply(
+    "🤖 <b>Commands</b>\n\n" +
+      "/start — Welcome message\n" +
+      "/help — This message\n" +
+      "/sessions — List active sessions\n" +
+      "/abort — Abort current agent loop\n" +
+      "/model — Show current model\n" +
+      "/mode — Show current mode",
+    { parse_mode: "HTML" },
+  )
+})
+
+bot.command("sessions", async (ctx) => {
+  if (sessions.size === 0) {
+    await ctx.reply("No active sessions.")
+    return
+  }
+  const lines = [...sessions.entries()].map(
+    ([key, session]) => `• <code>${session.sessionId}</code> (${key})`,
+  )
+  await ctx.reply(`<b>Active Sessions (${sessions.size})</b>\n\n${lines.join("\n")}`, {
+    parse_mode: "HTML",
+  })
+})
+
+bot.command("abort", async (ctx) => {
+  const chatId = ctx.chat.id
+  const threadId = ctx.message?.message_thread_id ?? 0
+  const sessionKey = `${chatId}-${threadId}`
+  const session = sessions.get(sessionKey)
+  if (!session) {
+    await ctx.reply("No active session in this chat.")
+    return
+  }
+  await session.client.session.abort({ path: { id: session.sessionId } }).catch(() => {})
+  streams.delete(sessionKey)
+  await ctx.reply("🛑 Agent loop aborted.")
+})
+
+bot.command("model", async (ctx) => {
+  const chatId = ctx.chat.id
+  const threadId = ctx.message?.message_thread_id ?? 0
+  const sessionKey = `${chatId}-${threadId}`
+  const session = sessions.get(sessionKey)
+  if (!session) {
+    await ctx.reply("No active session. Send a message first.")
+    return
+  }
+  const info = await session.client.session.get({ path: { id: session.sessionId } }).catch(() => undefined)
+  const model = (info as any)?.data?.model || "unknown"
+  await ctx.reply(`📋 Current model: <code>${model}</code>`, { parse_mode: "HTML" })
+})
+
+bot.command("mode", async (ctx) => {
+  const chatId = ctx.chat.id
+  const threadId = ctx.message?.message_thread_id ?? 0
+  const sessionKey = `${chatId}-${threadId}`
+  const session = sessions.get(sessionKey)
+  if (!session) {
+    await ctx.reply("No active session. Send a message first.")
+    return
+  }
+  const info = await session.client.session.get({ path: { id: session.sessionId } }).catch(() => undefined)
+  const mode = (info as any)?.data?.mode || "unknown"
+  await ctx.reply(`📋 Current mode: <code>${mode}</code>`, { parse_mode: "HTML" })
+})
+
+// ── Message handler ───────────────────────────────────────────────
 
 bot.on("message:text", async (ctx) => {
   const chatId = ctx.chat.id
@@ -193,6 +329,60 @@ bot.on("message:text", async (ctx) => {
       })
     }
   }
+})
+
+// ── Callback query handlers ───────────────────────────────────────
+
+bot.callbackQuery(/^perm:(approve|deny):(.+)$/, async (ctx) => {
+  const action = ctx.match[1]
+  const permissionId = ctx.match[2]
+  const chatId = ctx.chat?.id
+  if (!chatId) {
+    await ctx.answerCallbackQuery("Error: no chat ID")
+    return
+  }
+  const session = [...sessions.values()].find((s) => s.chatId === chatId)
+  if (!session) {
+    await ctx.answerCallbackQuery("Error: no session")
+    return
+  }
+  const approved = action === "approve"
+  await session.client
+    .postSessionIdPermissionsPermissionId({
+      path: { id: session.sessionId, permissionID: permissionId },
+      body: { response: approved ? "once" : "reject" },
+    })
+    .catch(() => {})
+  await ctx.answerCallbackQuery(approved ? "✅ Approved" : "❌ Denied")
+  await ctx.editMessageText(`🔐 Permission: ${approved ? "✅ Approved" : "❌ Denied"}`).catch(() => {})
+})
+
+bot.callbackQuery(/^q:(.+):(.+)$/, async (ctx) => {
+  const questionId = ctx.match[1]
+  const answer = ctx.match[2]
+  const chatId = ctx.chat?.id
+  if (!chatId) {
+    await ctx.answerCallbackQuery("Error: no chat ID")
+    return
+  }
+  const session = [...sessions.values()].find((s) => s.chatId === chatId)
+  if (!session) {
+    await ctx.answerCallbackQuery("Error: no session")
+    return
+  }
+  await (session.client as any)
+    .question.respond({
+      path: { id: questionId },
+      body: { answer },
+    })
+    .catch(() => {})
+  await ctx.answerCallbackQuery(`${answer}`)
+  await ctx.editMessageText(`❓ Answered: ${answer}`).catch(() => {})
+})
+
+// Prevent grammy warnings about unhandled callback queries
+bot.callbackQuery(/.*/, async (ctx) => {
+  await ctx.answerCallbackQuery()
 })
 
 bot.start()
