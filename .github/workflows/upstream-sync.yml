@@ -35,6 +35,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: dev
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
