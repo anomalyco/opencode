@@ -569,7 +569,7 @@ export function Session() {
       title: "Unshare session",
       value: "session.unshare",
       category: "Session",
-      enabled: !!session()?.share?.url,
+      enabled: !!session()?.share?.url && sync.data.config.share !== "disabled",
       slash: {
         name: "unshare",
       },

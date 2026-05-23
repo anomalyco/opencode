@@ -774,6 +774,9 @@ export const layer = Layer.effect(
           result.share = "auto"
         }
 
+        // securecode: hard-disable sharing — overrides any user config
+        result.share = "disabled"
+
         if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
           result.compaction = { ...result.compaction, auto: false }
         }
