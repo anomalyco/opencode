@@ -29,18 +29,21 @@ import { ModelID, ProviderID } from "./schema"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { WakeWatch } from "./wake"
 
 const log = Log.create({ service: "provider" })
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 
 const DEFAULT_CHUNK_TIMEOUT_MS = 120_000
+const DEFAULT_REQUEST_TIMEOUT_MS = 300_000
+
 function shouldUseCopilotResponsesApi(modelID: string): boolean {
   const match = /^gpt-(\d+)/.exec(modelID)
   if (!match) return false
   return Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")
 }
 
-function wrapSSE(res: Response, ms: number, ctl: AbortController) {
+function wrapSSE(res: Response, ms: number, ctl: AbortController, unregister: () => void) {
   if (typeof ms !== "number" || ms <= 0) return res
   if (!res.body) return res
   if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
@@ -51,6 +54,7 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
       const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
         const id = setTimeout(() => {
           const err = new ProviderError.ResponseStreamError("SSE read timed out")
+          unregister()
           ctl.abort(err)
           void reader.cancel(err)
           reject(err)
@@ -63,12 +67,14 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
           },
           (err) => {
             clearTimeout(id)
+            unregister()
             reject(err)
           },
         )
       })
 
       if (part.done) {
+        unregister()
         ctrl.close()
         return
       }
@@ -76,6 +82,7 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
       ctrl.enqueue(part.value)
     },
     async cancel(reason) {
+      unregister()
       ctl.abort(reason)
       await reader.cancel(reason)
     },
@@ -88,12 +95,73 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   })
 }
 
-function timeoutController(ms: number) {
-  const ctl = new AbortController()
-  const id = setTimeout(() => ctl.abort(new ProviderError.HeaderTimeoutError(ms)), ms)
-  return {
-    signal: ctl.signal,
-    clear: () => clearTimeout(id),
+type FetchFn = (input: any, init?: any) => Promise<Response>
+
+export function createTimeoutFetch(
+  customFetch: FetchFn | undefined,
+  opts: { timeout: number | false; chunkTimeout: number; npm: string },
+): FetchFn {
+  return async (input: any, init?: any) => {
+    const fetchFn = customFetch ?? fetch
+    const reqOpts = init ?? {}
+
+    const requestTimeout = opts.timeout
+
+    const ctl = new AbortController()
+    const unregister = WakeWatch.register(ctl)
+
+    let requestTimerId: ReturnType<typeof setTimeout> | undefined
+    if (requestTimeout !== false) {
+      requestTimerId = setTimeout(() => {
+        unregister()
+        ctl.abort(new Error("request timed out"))
+      }, requestTimeout)
+    }
+
+    const signals: AbortSignal[] = [ctl.signal]
+    if (reqOpts.signal) signals.push(reqOpts.signal)
+
+    reqOpts.signal = signals.length === 1 ? signals[0] : AbortSignal.any(signals)
+
+    // Strip openai itemId metadata following what codex does
+    if (
+      (opts.npm === "@ai-sdk/openai" || opts.npm === "@ai-sdk/azure") &&
+      reqOpts.body &&
+      reqOpts.method === "POST"
+    ) {
+      const body = JSON.parse(reqOpts.body as string)
+      const keepIds = body.store === true
+      if (!keepIds && Array.isArray(body.input)) {
+        for (const item of body.input) {
+          if ("id" in item) {
+            delete item.id
+          }
+        }
+        reqOpts.body = JSON.stringify(body)
+      }
+    }
+
+    let res: Response
+    try {
+      res = await fetchFn(input, {
+        ...reqOpts,
+        // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+        timeout: false,
+      })
+    } catch (e) {
+      clearTimeout(requestTimerId)
+      unregister()
+      throw e
+    }
+    clearTimeout(requestTimerId)
+
+    const chunkTimeout = opts.chunkTimeout
+    const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? ctl : undefined
+    if (!chunkAbortCtl) {
+      unregister()
+      return res
+    }
+    return wrapSSE(res, chunkTimeout, chunkAbortCtl, unregister)
   }
 }
 
@@ -1617,50 +1685,15 @@ export const layer = Layer.effect(
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
 
-        options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
-          const fetchFn = customFetch ?? fetch
-          const opts = init ?? {}
-          const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
-          const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
-          const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined
-          const signals: AbortSignal[] = []
+        const rawTimeout = options["timeout"]
+        const requestTimeout: number | false =
+          rawTimeout === false ? false : typeof rawTimeout === "number" && rawTimeout > 0 ? rawTimeout : DEFAULT_REQUEST_TIMEOUT_MS
 
-          if (opts.signal) signals.push(opts.signal)
-          if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
-          if (headerTimeoutCtl) signals.push(headerTimeoutCtl.signal)
-          if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false)
-            signals.push(AbortSignal.timeout(options["timeout"]))
-
-          const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
-          if (combined) opts.signal = combined
-
-          // Strip openai itemId metadata following what codex does
-          if (
-            (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure") &&
-            opts.body &&
-            opts.method === "POST"
-          ) {
-            const body = JSON.parse(opts.body as string)
-            const keepIds = body.store === true
-            if (!keepIds && Array.isArray(body.input)) {
-              for (const item of body.input) {
-                if ("id" in item) {
-                  delete item.id
-                }
-              }
-              opts.body = JSON.stringify(body)
-            }
-          }
-
-          const res = await fetchFn(input, {
-            ...opts,
-            // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
-            timeout: false,
-          }).finally(() => headerTimeoutCtl?.clear())
-
-          if (!chunkAbortCtl) return res
-          return wrapSSE(res, chunkTimeout, chunkAbortCtl)
-        }
+        options["fetch"] = createTimeoutFetch(customFetch, {
+          timeout: requestTimeout,
+          chunkTimeout,
+          npm: model.api.npm,
+        })
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
         if (bundledLoader) {

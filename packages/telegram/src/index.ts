@@ -1,13 +1,18 @@
 import { Bot, InlineKeyboard, type Context } from "grammy"
 import { createOpencode, type ToolPart } from "@opencode-ai/sdk"
 
-const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!)
+const token = process.env.TELEGRAM_BOT_TOKEN
+if (!token) throw new Error("TELEGRAM_BOT_TOKEN is required")
+const bot = new Bot(token)
 
 console.log("🚀 Starting opencode server...")
+// TODO: Wire up OPENCODE_DIRECTORY — Config type doesn't have a directory field,
+//       it needs to be passed to the client, not server config.
 const opencode = await createOpencode({ port: 0 })
 console.log("✅ Opencode server ready")
 
 type Session = { client: any; server: any; sessionId: string; chatId: number; messageId?: number }
+// TODO: Add per-chat rate limiting and LRU eviction for production use
 const sessions = new Map<string, Session>()
 
 type StreamState = { buffer: string; lastEdit: number; messageId: number }
@@ -96,8 +101,8 @@ void (async () => {
       for (const [_key, session] of sessions.entries()) {
         if (session.sessionId === sessionID) {
           const keyboard = new InlineKeyboard()
-            .text("✅ Approve", `perm:approve:${id}`)
-            .text("❌ Deny", `perm:deny:${id}`)
+            .text("✅ Approve", `perm:approve:${id}:${sessionID}`)
+            .text("❌ Deny", `perm:deny:${id}:${sessionID}`)
           await bot.api
             .sendMessage(session.chatId, `🔐 <b>Permission Request</b>\n\n${escapeHtml(permission || "Unknown permission")}`, {
               parse_mode: "HTML",
@@ -118,7 +123,7 @@ void (async () => {
             let keyboard = new InlineKeyboard()
             if (question.options && question.options.length > 0) {
               for (const option of question.options) {
-                keyboard = keyboard.text(option, `q:${id}:${option}`)
+                keyboard = keyboard.text(option, `q:${id}:${sessionID}:${option}`)
                 if (question.options.indexOf(option) < question.options.length - 1) {
                   keyboard = keyboard.row()
                 }
@@ -143,7 +148,7 @@ void (async () => {
 
 async function handleToolUpdate(part: ToolPart, chatId: number) {
   if (part.state.status !== "completed") return
-  const toolMessage = `🔧 <b>${part.tool}</b> — ${part.state.title}`
+  const toolMessage = `🔧 <b>${escapeHtml(part.tool)}</b> — ${escapeHtml(part.state.title)}`
   await bot.api.sendMessage(chatId, toolMessage, { parse_mode: "HTML" }).catch(() => {})
 }
 
@@ -333,15 +338,11 @@ bot.on("message:text", async (ctx) => {
 
 // ── Callback query handlers ───────────────────────────────────────
 
-bot.callbackQuery(/^perm:(approve|deny):(.+)$/, async (ctx) => {
+bot.callbackQuery(/^perm:(approve|deny):([^:]+):(.+)$/, async (ctx) => {
   const action = ctx.match[1]
   const permissionId = ctx.match[2]
-  const chatId = ctx.chat?.id
-  if (!chatId) {
-    await ctx.answerCallbackQuery("Error: no chat ID")
-    return
-  }
-  const session = [...sessions.values()].find((s) => s.chatId === chatId)
+  const sessionID = ctx.match[3]
+  const session = [...sessions.values()].find((s) => s.sessionId === sessionID)
   if (!session) {
     await ctx.answerCallbackQuery("Error: no session")
     return
@@ -357,15 +358,11 @@ bot.callbackQuery(/^perm:(approve|deny):(.+)$/, async (ctx) => {
   await ctx.editMessageText(`🔐 Permission: ${approved ? "✅ Approved" : "❌ Denied"}`).catch(() => {})
 })
 
-bot.callbackQuery(/^q:(.+):(.+)$/, async (ctx) => {
+bot.callbackQuery(/^q:([^:]+):([^:]+):(.+)$/, async (ctx) => {
   const questionId = ctx.match[1]
-  const answer = ctx.match[2]
-  const chatId = ctx.chat?.id
-  if (!chatId) {
-    await ctx.answerCallbackQuery("Error: no chat ID")
-    return
-  }
-  const session = [...sessions.values()].find((s) => s.chatId === chatId)
+  const sessionID = ctx.match[2]
+  const answer = ctx.match[3]
+  const session = [...sessions.values()].find((s) => s.sessionId === sessionID)
   if (!session) {
     await ctx.answerCallbackQuery("Error: no session")
     return
