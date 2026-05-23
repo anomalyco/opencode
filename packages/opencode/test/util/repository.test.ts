@@ -3,6 +3,9 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { Global } from "@opencode-ai/core/global"
 import {
+  InvalidRepositoryBranchError,
+  InvalidRepositoryReferenceError,
+  UnsupportedLocalRepositoryError,
   isFileRepositoryReference,
   isRemoteRepositoryReference,
   parseRemoteRepositoryReference,
@@ -61,6 +64,14 @@ describe("util.repository", () => {
     expect(() => parseRemoteRepositoryReference(pathToFileURL(localPath).href)).toThrow(
       "Local file repositories are not supported",
     )
+    expect(() => parseRemoteRepositoryReference(pathToFileURL(localPath).href)).toThrow(UnsupportedLocalRepositoryError)
+  })
+
+  test("rejects invalid remote repository references with typed errors", () => {
+    expect(() => parseRemoteRepositoryReference("not-a-repo")).toThrow(InvalidRepositoryReferenceError)
+    expect(() => parseRemoteRepositoryReference("git@github.com:../../../etc/passwd")).toThrow(
+      InvalidRepositoryReferenceError,
+    )
   })
 
   test("compares cache identity independent of input spelling", () => {
@@ -77,5 +88,6 @@ describe("util.repository", () => {
     expect(() => validateRepositoryBranch("-bad")).toThrow("Branch must contain only alphanumeric characters")
     expect(() => validateRepositoryBranch("bad..branch")).toThrow("Branch must contain only alphanumeric characters")
     expect(() => validateRepositoryBranch("bad branch")).toThrow("Branch must contain only alphanumeric characters")
+    expect(() => validateRepositoryBranch("bad branch")).toThrow(InvalidRepositoryBranchError)
   })
 })

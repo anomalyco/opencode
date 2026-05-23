@@ -278,7 +278,6 @@ new sst.cloudflare.x.SolidStart("Console", {
     //VITE_API_URL: gateway.url.apply((url) => url!),
     VITE_AUTH_URL: auth.url.apply((url) => url!),
     VITE_STRIPE_PUBLISHABLE_KEY: STRIPE_PUBLISHABLE_KEY.value,
-    PLACEHOLDER: "keepalive",
   },
   transform: {
     server: {

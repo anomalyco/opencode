@@ -317,6 +317,47 @@ const runImageScenario = (context: GoldenScenarioContext) =>
     ])
   })
 
+// Reproduces a tool-result image round trip: a tool returns image bytes, and
+// the next model turn must receive provider-native image content instead of a
+// JSON-stringified base64 blob.
+const screenshotToolName = "read_screenshot"
+const runImageToolResultScenario = (context: GoldenScenarioContext) =>
+  Effect.gen(function* () {
+    const image = yield* restroomImage()
+    const response = yield* generate(
+      LLM.request({
+        id: `${context.id}_image_tool_result`,
+        model: context.model,
+        system: "Read images carefully. Reply only with the visible text, lowercase, no punctuation.",
+        cache: "none",
+        generation: generation(context, context.maxTokens ?? 40),
+        messages: [
+          Message.user("Use the read_screenshot tool, then reply with the words shown."),
+          Message.assistant([{ type: "tool-call", id: "call_screenshot_1", name: screenshotToolName, input: {} }]),
+          Message.tool({
+            id: "call_screenshot_1",
+            name: screenshotToolName,
+            resultType: "content",
+            result: [
+              { type: "text", text: "Image read successfully" },
+              { type: "media", mediaType: "image/png", data: image },
+            ],
+          }),
+        ],
+        tools: [
+          ToolDefinition.make({
+            name: screenshotToolName,
+            description: "Capture a screenshot of the current screen.",
+            inputSchema: { type: "object", properties: {}, additionalProperties: false },
+          }),
+        ],
+      }),
+    )
+
+    expectFinish(response.events, "stop")
+    expect(normalizeImageText(response.text)).toBe(RESTROOM_IMAGE_TEXT)
+  })
+
 const runReasoningScenario = (context: GoldenScenarioContext) =>
   runGeneratedConversation(context, [
     user("Think briefly, then reply exactly with: Hello!"),
@@ -359,6 +400,11 @@ const goldenScenarios = {
   "tool-call": { title: "streams tool call", tags: ["tool", "tool-call", "golden"], run: runToolCallScenario },
   "tool-loop": { title: "drives a tool loop", tags: ["tool", "tool-loop", "golden"], run: runToolLoopScenario },
   image: { title: "reads image text", tags: ["media", "image", "vision", "golden"], run: runImageScenario },
+  "image-tool-result": {
+    title: "reads image returned from tool result",
+    tags: ["media", "image", "vision", "tool", "tool-result", "golden"],
+    run: runImageToolResultScenario,
+  },
   reasoning: { title: "uses reasoning", tags: ["reasoning", "golden"], run: runReasoningScenario },
   "reasoning-continuation": {
     title: "continues encrypted reasoning",
