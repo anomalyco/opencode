@@ -547,6 +547,96 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("streams each reasoning summary part as a separate block", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, { providerOptions: { openai: { store: false } } }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+              },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "First" },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 1 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 1, delta: "Second" },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 1 },
+              {
+                type: "response.output_item.done",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: "encrypted-state" },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("FirstSecond")
+      expect(response.events).toMatchObject([
+        { type: "step-start", index: 0 },
+        {
+          type: "reasoning-start",
+          id: "rs_1:0",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:0", text: "First" },
+        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { openai: { itemId: "rs_1" } } },
+        {
+          type: "reasoning-start",
+          id: "rs_1:1",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: null } },
+        },
+        { type: "reasoning-delta", id: "rs_1:1", text: "Second" },
+        {
+          type: "reasoning-end",
+          id: "rs_1:1",
+          providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+        },
+        { type: "step-finish", index: 0, reason: "stop" },
+        { type: "finish", reason: "stop" },
+      ])
+    }),
+  )
+
+  it.effect("closes stored reasoning summary parts when each part completes", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLM.updateRequest(request, { providerOptions: { openai: { store: true } } }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                type: "response.output_item.added",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+              },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "First" },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 0 },
+              { type: "response.reasoning_summary_part.added", item_id: "rs_1", summary_index: 1 },
+              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 1, delta: "Second" },
+              { type: "response.reasoning_summary_part.done", item_id: "rs_1", summary_index: 1 },
+              {
+                type: "response.output_item.done",
+                item: { type: "reasoning", id: "rs_1", encrypted_content: null },
+              },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter((event) => event.type === "reasoning-end")).toEqual([
+        { type: "reasoning-end", id: "rs_1:0", providerMetadata: { openai: { itemId: "rs_1" } } },
+        { type: "reasoning-end", id: "rs_1:1", providerMetadata: { openai: { itemId: "rs_1" } } },
+      ])
+    }),
+  )
+
   it.effect("continues a stateless reasoning conversation", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
@@ -639,6 +729,44 @@ describe("OpenAI Responses route", () => {
           summary: [{ type: "summary_text", text: "Checked order." }],
         },
         { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+      ])
+    }),
+  )
+
+  it.effect("joins streamed summary blocks into one continuation reasoning item", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          id: "req_multi_summary_continuation",
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "First",
+                providerMetadata: { openai: { itemId: "rs_1" } },
+              },
+              {
+                type: "reasoning",
+                text: "Second",
+                providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted-state" } },
+              },
+            ]),
+          ],
+          providerOptions: { openai: { store: false } },
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          type: "reasoning",
+          id: "rs_1",
+          encrypted_content: "encrypted-state",
+          summary: [
+            { type: "summary_text", text: "First" },
+            { type: "summary_text", text: "Second" },
+          ],
+        },
       ])
     }),
   )
