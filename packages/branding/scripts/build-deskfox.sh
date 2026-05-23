@@ -55,6 +55,25 @@ fi
 #   - macOS x64      → x86_64-apple-darwin      → opencode-darwin-x64-baseline
 #   - Linux x64      → x86_64-unknown-linux-gnu → opencode-linux-x64-baseline
 #   - Linux arm64    → aarch64-unknown-linux-gnu → opencode-linux-arm64
+
+# FORK-BEGIN: feishu-pipeline-401-fix(2026-05-23)
+# 锁 sidecar baked CHANNEL=prod,避免 git branch 名漂移触发上游 HTTPAPI 默认 ON 路径。
+#
+# 背景:packages/script/src/index.ts:30 读 `git branch --show-current` 作为 fallback,
+# 当时主分支叫 dev → CHANNEL=dev → InstallationChannel 命中 HTTPAPI_DEFAULT_ON_CHANNELS
+# (`["dev", "beta", "local"]`,见 packages/core/src/flag/flag.ts:16)→ sidecar 默认走
+# 上游不成熟的 effect-httpapi stack。该 stack 当前两个已知 bug 撞死飞书桥接的
+# session.messages 调用(① Authorization 多 security 实现成 AND 而非 OR → 401;
+# ② StepFinishPart schema 要求 reason 必填但 DB 实际可能缺 → 编码 400)。
+#
+# 锁 CHANNEL=prod 让 InstallationChannel="prod" → 不在 HTTPAPI_DEFAULT_ON_CHANNELS
+# 集合内 → HTTPAPI OFF → 走稳定的 Hono legacy stack(c.json 直出,不做 Schema 编码,
+# 两个 sub-bug 都规避)。**这也是上游 prod 渠道用户 + Win 端实际在用的路径**。
+#
+# 后续上游 effect-httpapi 稳定后(或我们决定 dogfood)可移除这行。
+export OPENCODE_CHANNEL=prod
+# FORK-END
+
 detect_rust_target() {
     local os arch
     os="$(uname -s)"

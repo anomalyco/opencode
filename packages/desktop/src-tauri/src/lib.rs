@@ -26,12 +26,12 @@ use std::{
     env,
     future::Future,
     net::TcpListener,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tauri::{AppHandle, Listener, Manager, RunEvent, State, ipc::Channel};
+use tauri::{AppHandle, Emitter, Listener, Manager, RunEvent, State, ipc::Channel};
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_specta::Event;
@@ -518,16 +518,24 @@ pub fn run() {
                     kill_sidecar(app.clone());
                 }
                 // FORK: 关 GUI ≠ 退主进程(C0.5.2)— 飞书 adapter 长驻 [feat: feishu-bridge]
+                // FORK: 加 dirty flush event 发给前端,前端 listener flush 后再真 hide/exit
+                //   [feat: auto-save-debounce-flush] 2026-05-21
+                //   说明:不阻塞 close — 发 event 后立即继续 hide 流程;前端 listener 同步触发
+                //   debounce flush,save 本身 async 但本地 IO <50ms,跟 hide 窗口几乎并发;
+                //   real exit(is_quitting=true)由 RunEvent::Exit 处理,sidecar kill 前事件
+                //   总线已停,故 Exit 路径靠前端 listener 在 Window CloseRequested 时已 flush 兜底。
                 RunEvent::WindowEvent { label, event: window_event, .. }
                     if label == MainWindow::LABEL =>
                 {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = window_event {
+                        // 先发 flush event,前端有 listener 时立即触发 silent save
+                        let _ = app.emit("deskfox-flush-before-close", ());
                         if !system_tray::is_quitting() {
                             api.prevent_close();
                             if let Some(w) = app.get_webview_window(MainWindow::LABEL) {
                                 let _ = w.hide();
                             }
-                            tracing::debug!("close requested → hidden(主进程仍跑)");
+                            tracing::debug!("close requested → flush + hidden(主进程仍跑)");
                         }
                     }
                 }
@@ -612,6 +620,15 @@ struct LoadingWindowComplete;
 
 async fn initialize(app: AppHandle) {
     tracing::info!("Initializing app");
+
+    // FORK: feishu-pipeline-401-fix(2026-05-23)
+    // build-deskfox.{sh,ps1} 锁了 sidecar baked CHANNEL=prod 规避上游 effect-httpapi 两个 bug。
+    // 副作用是 sidecar 读 DB 路径从 opencode-dev.db / opencode-<branch>.db 切到 opencode.db
+    // (见 packages/opencode/src/storage/db.ts:30 getChannelPath 逻辑)。
+    // 现役 prod 1.14.33(channel=dev)用户升级后会发现 GUI session list 空(数据在另一个 DB)。
+    // 一次性幂等迁移:opencode.db 不存 + opencode-dev.db 存 → cp 过去(WAL/SHM 同步)。
+    // 仅 cp,不删旧文件 — 用户感知零损失,旧 DB 保留作回退兜底。
+    migrate_pre_prod_db();
 
     let (init_tx, init_rx) = watch::channel(InitStep::ServerWaiting);
 
@@ -778,6 +795,183 @@ fn opencode_db_path() -> Result<PathBuf, &'static str> {
 
     Ok(data_home.join("opencode").join("opencode.db"))
 }
+
+// FORK-BEGIN: feishu-pipeline-401-fix(2026-05-23)
+// 一次性幂等 DB 迁移:把 pre-fix channel=dev 时代的 opencode-dev.db cp 成 opencode.db。
+// 完整背景见 build-deskfox.sh 顶部 FORK marker 段。
+// 触发条件(全部满足才迁移):
+//   1) 目标 opencode.db 不存在
+//   2) 源 opencode-dev.db 存在
+// 满足 → cp 3 个文件:.db / .db-wal / .db-shm(SQLite WAL 模式),旧文件保留不删。
+// 不满足任一 → skip(可能已迁过 / 全新用户 / 啥都没有)。
+// 日志通过 tracing 抛 INFO 级,失败抛 WARN 不阻断启动。
+fn migrate_pre_prod_db() {
+    let target = match opencode_db_path() {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!("[fork-db-migrate] cannot resolve opencode.db path: {e}");
+            return;
+        }
+    };
+    let Some(parent) = target.parent() else {
+        tracing::warn!("[fork-db-migrate] target has no parent dir, skip");
+        return;
+    };
+    let source = parent.join("opencode-dev.db");
+    migrate_db_files(&source, &target);
+}
+
+// 抽出文件复制核心逻辑给单测调用,跟 opencode_db_path() / tracing 解耦。
+// 单测见 #[cfg(test)] mod fork_db_migrate_tests。
+fn migrate_db_files(source: &Path, target: &Path) {
+    if target.exists() {
+        tracing::debug!("[fork-db-migrate] {} already exists, skip", target.display());
+        return;
+    }
+    if !source.exists() {
+        tracing::debug!(
+            "[fork-db-migrate] {} not found, skip (fresh install or already migrated)",
+            source.display()
+        );
+        return;
+    }
+    tracing::info!(
+        "[fork-db-migrate] migrating {} → {} (one-time, idempotent)",
+        source.display(),
+        target.display()
+    );
+    // SQLite WAL 模式有 3 个文件:.db 主库 / .db-wal write-ahead log / .db-shm shared memory
+    // 同时存在时全部 cp,任一缺失视为该副文件不在(SQLite 启动会自动重建)。
+    let source_name = source.file_name().and_then(|s| s.to_str()).unwrap_or("opencode-dev.db");
+    let target_name = target.file_name().and_then(|s| s.to_str()).unwrap_or("opencode.db");
+    let suffixes = ["", "-wal", "-shm"];
+    let mut copied = 0u8;
+    for suffix in suffixes {
+        let src_path = source.with_file_name(format!("{source_name}{suffix}"));
+        if !src_path.exists() {
+            continue;
+        }
+        let dst_path = target.with_file_name(format!("{target_name}{suffix}"));
+        match std::fs::copy(&src_path, &dst_path) {
+            Ok(bytes) => {
+                copied += 1;
+                tracing::info!(
+                    "[fork-db-migrate] cp {} → {} ({} bytes)",
+                    src_path.display(),
+                    dst_path.display(),
+                    bytes
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "[fork-db-migrate] failed to cp {}: {e} — startup continues, sidecar 会建空 DB",
+                    src_path.display()
+                );
+                // 不 break — 继续试其他副文件
+            }
+        }
+    }
+    if copied == 0 {
+        tracing::warn!("[fork-db-migrate] nothing copied; source detected but cp 全失败,sidecar 会建空 DB");
+    } else {
+        tracing::info!("[fork-db-migrate] done, {copied} file(s) migrated");
+    }
+}
+
+#[cfg(test)]
+mod fork_db_migrate_tests {
+    use super::migrate_db_files;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn tmpdir(name: &str) -> PathBuf {
+        let base = std::env::temp_dir().join(format!("deskfox-fork-db-migrate-{name}-{}", std::process::id()));
+        if base.exists() {
+            let _ = fs::remove_dir_all(&base);
+        }
+        fs::create_dir_all(&base).expect("create tmpdir");
+        base
+    }
+
+    fn write(p: &PathBuf, content: &[u8]) {
+        fs::write(p, content).expect("write file");
+    }
+
+    #[test]
+    fn skips_when_target_already_exists() {
+        let dir = tmpdir("target-exists");
+        let source = dir.join("opencode-dev.db");
+        let target = dir.join("opencode.db");
+        write(&source, b"old-data");
+        write(&target, b"existing-target");
+        migrate_db_files(&source, &target);
+        // target 不应被覆盖
+        assert_eq!(fs::read(&target).unwrap(), b"existing-target");
+    }
+
+    #[test]
+    fn skips_when_source_missing() {
+        let dir = tmpdir("source-missing");
+        let source = dir.join("opencode-dev.db");
+        let target = dir.join("opencode.db");
+        migrate_db_files(&source, &target);
+        // target 不应被创建
+        assert!(!target.exists());
+    }
+
+    #[test]
+    fn copies_main_only() {
+        let dir = tmpdir("main-only");
+        let source = dir.join("opencode-dev.db");
+        let target = dir.join("opencode.db");
+        write(&source, b"main-db-bytes");
+        migrate_db_files(&source, &target);
+        assert_eq!(fs::read(&target).unwrap(), b"main-db-bytes");
+        // 没有 wal/shm 副文件就不创建
+        assert!(!dir.join("opencode.db-wal").exists());
+        assert!(!dir.join("opencode.db-shm").exists());
+    }
+
+    #[test]
+    fn copies_main_wal_shm_all() {
+        let dir = tmpdir("all-three");
+        let source = dir.join("opencode-dev.db");
+        let target = dir.join("opencode.db");
+        write(&source, b"main");
+        write(&dir.join("opencode-dev.db-wal"), b"wal-content");
+        write(&dir.join("opencode-dev.db-shm"), b"shm-content");
+        migrate_db_files(&source, &target);
+        assert_eq!(fs::read(&target).unwrap(), b"main");
+        assert_eq!(fs::read(&dir.join("opencode.db-wal")).unwrap(), b"wal-content");
+        assert_eq!(fs::read(&dir.join("opencode.db-shm")).unwrap(), b"shm-content");
+    }
+
+    #[test]
+    fn idempotent_second_run_is_noop() {
+        let dir = tmpdir("idempotent");
+        let source = dir.join("opencode-dev.db");
+        let target = dir.join("opencode.db");
+        write(&source, b"main");
+        migrate_db_files(&source, &target);
+        // 修改源,再跑一次 — target 不应被刷新
+        write(&source, b"main-mutated");
+        migrate_db_files(&source, &target);
+        assert_eq!(fs::read(&target).unwrap(), b"main");
+    }
+
+    #[test]
+    fn preserves_source_after_migration() {
+        let dir = tmpdir("preserve-source");
+        let source = dir.join("opencode-dev.db");
+        let target = dir.join("opencode.db");
+        write(&source, b"main");
+        migrate_db_files(&source, &target);
+        // 源文件应保留(cp 不 move)
+        assert!(source.exists());
+        assert_eq!(fs::read(&source).unwrap(), b"main");
+    }
+}
+// FORK-END
 
 // Creates a `once` listener for the specified event and returns a future that resolves
 // when the listener is fired.

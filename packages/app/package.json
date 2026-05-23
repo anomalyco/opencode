@@ -12,6 +12,7 @@
     "typecheck": "tsgo -b",
     "start": "vite",
     "dev": "vite",
+    "dev:e2e-mock": "vite --mode e2e-mock",
     "build": "vite build",
     "serve": "vite preview",
     "test": "bun run test:unit",

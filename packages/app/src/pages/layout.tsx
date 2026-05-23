@@ -224,6 +224,22 @@ export default function Layout(props: ParentProps) {
     makeEventListener(document, "visibilitychange", hide)
   })
 
+  // FORK: window close 时 Tauri 发 "deskfox-flush-before-close" event,这里转成 DOM custom event
+  // 让 file-tabs 等 dirty 持有者监听并 flush。listener 总线挂在 layout(app 生命周期内常驻)。
+  // [feat: auto-save-debounce-flush] 2026-05-21
+  onMount(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return
+    let unlisten: (() => void) | undefined
+    void import("@tauri-apps/api/event").then(({ listen }) => {
+      void listen("deskfox-flush-before-close", () => {
+        window.dispatchEvent(new CustomEvent("deskfox-flush-now"))
+      }).then((fn) => {
+        unlisten = fn
+      })
+    })
+    onCleanup(() => unlisten?.())
+  })
+
   const sidebarHovering = createMemo(() => !layout.sidebar.opened() && state.hoverProject !== undefined)
   const sidebarExpanded = createMemo(() => layout.sidebar.opened() || sidebarHovering())
   const setHoverProject = (value: string | undefined) => {

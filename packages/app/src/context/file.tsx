@@ -265,6 +265,25 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       if (!file) return false
       return dirtyPaths.has(file)
     }
+    // FORK: self-writing 短期窗口 — auto-save 写盘 ms 级后会触发 file.edited watcher,
+    //   若 path 还在 dirtyPaths 会误弹"AI 修改了此文件"toast。500ms 窗口内跳过
+    //   notifyDirtyConflict,真外部修改(AI / 编辑器)进 dirtyPaths 时再弹。
+    //   [feat: auto-save-debounce-flush] 2026-05-21
+    const selfWritingExpiry = new Map<string, number>()
+    const markSelfWriting = (input: string, windowMs = 500) => {
+      const file = path.normalize(input)
+      if (!file) return
+      selfWritingExpiry.set(file, Date.now() + windowMs)
+    }
+    const isSelfWriting = (file: string) => {
+      const expiry = selfWritingExpiry.get(file)
+      if (expiry === undefined) return false
+      if (Date.now() > expiry) {
+        selfWritingExpiry.delete(file)
+        return false
+      }
+      return true
+    }
     // 同一次 AI 写会触发多事件(file.edited + 显式 file.watcher.updated + parcel/watcher OS 监听 + 可能的 format pass),
     // 且 2 秒内可能有多次连续 edit。按 path + 时间窗去重,避免 toast 洪泛。
     const dirtyConflictWindowMs = 2000
@@ -273,6 +292,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     // (修"保存后双提示框"bug — 详 docs/features/md-editing-enhance/3-changelog.md)2026-05-05
     const dirtyConflictToastIds = new Map<string, number>()
     const notifyDirtyConflict = (file: string) => {
+      // FORK: 跳过 auto-save 自写触发的 file.edited [feat: auto-save-debounce-flush] 2026-05-21
+      if (isSelfWriting(file)) return
       const now = Date.now()
       const last = recentDirtyConflicts.get(file)
       if (last !== undefined && now - last < dirtyConflictWindowMs) return
@@ -398,6 +419,28 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       // FORK: 编辑态 dirty 守卫(查看器-自动刷新)2026-04-28
       markDirty,
       isDirty,
+      // FORK: auto-save 自写窗口标记 [feat: auto-save-debounce-flush] 2026-05-21
+      markSelfWriting,
+      // FORK: tab switch flush 用 — 写盘后直接更新 store(知道磁盘内容 = content,跳过一次 IO + 避免 race)
+      // 调用方负责确保 user 已退 editing(否则 CodeMirror value 变化可能 reset editor 丢 user 输入)
+      // [feat: auto-save-debounce-flush] 2026-05-22
+      setStoredContent: (input: string, content: string) => {
+        const file = path.normalize(input)
+        if (!file) return
+        setStore(
+          "file",
+          file,
+          produce((draft) => {
+            draft.loaded = true
+            draft.loading = false
+            if (!draft.content) {
+              draft.content = { type: "text", content }
+            } else {
+              draft.content.content = content
+            }
+          }),
+        )
+      },
       // FORK: 保存成功后让调用方清掉 dirtyConflict toast(修"保存后双提示框"bug)2026-05-05
       dismissDirtyConflict,
       scrollTop,

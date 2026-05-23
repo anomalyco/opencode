@@ -37,6 +37,8 @@ import { isBinary, isOfficeDocument, tooLarge } from "@/utils/file-limits"
 import { localAssetUrl, resolveAbsolute, rewriteAssetSrc } from "@/utils/local-asset"
 // FORK: 大文件预览统一防护 — L4 UX 兜底组件 [feat: large-file-preview-guard] 2026-05-21
 import { FileTooLarge } from "@/components/file-too-large"
+// FORK: debounce auto-save + flush [feat: auto-save-debounce-flush] 2026-05-21
+import { createDebounced } from "@/utils/debounce"
 // FORK: .md frontmatter 隐藏(Obsidian 风)2026-05-05
 import { stripFrontmatter } from "@/utils/markdown-frontmatter"
 // FORK: 聊天输入框焦点跟随 [feat: chat-input-focus-follow] 2026-05-21
@@ -464,19 +466,49 @@ export function FileTabContent(props: {
     setLoadedMtime(null)
     await file.load(p, { force: true })
   }
-  const saveEdit = async () => {
+  // FORK: saveEdit 重构为 saveEditCore({ silent }) — auto-save 用 silent 路径:
+  //   - silent=true(auto-save):成功不 toast,失败仍 toast;mtime 冲突不弹 confirm
+  //     (保持 editing 让 user 主动 save 时再走 confirm 流程,避免 auto-save 突然弹窗);
+  //     成功后不 reloadAndExitEdit(user 还在编辑,只更新 loadedMtime 让下次 save 也能 mtime 检测)
+  //   - silent=false(主动 Save 按钮):原行为不变(toast + reloadAndExitEdit + confirm)
+  // [feat: auto-save-debounce-flush] 2026-05-21
+  const saveEditCore = async (opts: { silent: boolean }) => {
     const p = path()
     const root = sdk.directory
     if (!p || !root || draft() === null) return
     try {
+      // FORK: 标记 self-writing 短期窗口,防 watcher 误识别为外部 AI 修改弹 toast
+      // [feat: auto-save-debounce-flush] 2026-05-21
+      if (opts.silent) file.markSelfWriting(p)
       await performWrite(root, p, draft() ?? "", loadedMtime())
-      await reloadAndExitEdit(p)
       // FORK: 保存成功后清掉残留的 dirtyConflict toast(修"保存后双提示框"bug)2026-05-05
       file.dismissDirtyConflict(p)
-      showToast({ variant: "success", title: "Saved" })
+      if (opts.silent) {
+        // auto-save:保持 editing,更新 loadedMtime 让下次 save 也能用 mtime 检测
+        try {
+          const newMtime = await invoke<number>("get_file_mtime", { root, path: p })
+          setLoadedMtime(newMtime)
+        } catch {
+          setLoadedMtime(null)
+        }
+      } else {
+        // 主动 Save:退编辑 + reload contents
+        await reloadAndExitEdit(p)
+        showToast({ variant: "success", title: "Saved" })
+      }
     } catch (e) {
       const msg = String(e)
       if (msg.includes("mtime_conflict")) {
+        if (opts.silent) {
+          // FORK: auto-save 遇外部修改不弹 confirm,toast warning 让 user 主动 save 再处理
+          // [feat: auto-save-debounce-flush] 2026-05-21
+          showToast({
+            variant: "error",
+            title: "自动保存暂停 — 文件已被外部修改",
+            description: "请手动点 Save 选择覆盖或重载磁盘版本",
+          })
+          return
+        }
         const overwrite = window.confirm(
           "⚠ 磁盘上的这个文件已被其他程序修改(可能是 AI 或外部编辑器)。\n\n" +
             "[确定] 覆盖磁盘版本,保存我的改动\n" +
@@ -503,19 +535,76 @@ export function FileTabContent(props: {
       }
     }
   }
-  // close editing when tab/path switches
+  const saveEdit = () => saveEditCore({ silent: false })
+
+  // FORK: debounce auto-save — editing 中 draft 变化 1s 静默后自动落盘
+  // [feat: auto-save-debounce-flush] 2026-05-21
+  const AUTO_SAVE_DELAY_MS = 1000
+  const autoSave = createDebounced(() => saveEditCore({ silent: true }), AUTO_SAVE_DELAY_MS)
+
+  // draft 改动 + editing + dirty → trigger debounce(1s 后没新改动则 save)
+  createEffect(() => {
+    draft()
+    if (editing() && dirty()) {
+      autoSave.trigger()
+    }
+  })
+
+  // editing 退出取消挂起的 autoSave(cancelEdit / saveEditCore 退编辑 / tab 切换 都会 cover)
   createEffect(
-    on(
-      path,
-      () => {
-        if (editing()) {
-          setEditing(false)
-          setDraft(null)
-        }
-      },
-      { defer: true },
-    ),
+    on(editing, (now) => {
+      if (!now) autoSave.cancel()
+    }),
   )
+
+  // FORK: unmount 时 flush dirty draft + cancel debounce(切 tab 真触发点)
+  //   关键发现:`<Show when={activeFileTab()} keyed>`(session-side-panel.tsx)切 tab 时
+  //   整个 FileTabContent unmount + remount,path signal 不会"变化",createEffect(on(path))
+  //   永不 fire。flush 必须放 onCleanup,unmount 前 signal 仍可读,setStoredContent 经
+  //   父级 file context 安全生效(下次 mount 看新 store 内容)。
+  //   [feat: auto-save-debounce-flush] 2026-05-22
+  onCleanup(() => {
+    autoSave.cancel()
+    const oldPath = path()
+    if (editing() && dirty() && oldPath && sdk.directory) {
+      const snap = draft() ?? ""
+      const mtime = loadedMtime()
+      const root = sdk.directory
+      void (async () => {
+        try {
+          file.markSelfWriting(oldPath)
+          await performWrite(root, oldPath, snap, mtime)
+          file.dismissDirtyConflict(oldPath)
+          file.setStoredContent(oldPath, snap)
+        } catch (e) {
+          const msg = String(e)
+          if (msg.includes("mtime_conflict")) {
+            showToast({
+              variant: "error",
+              title: "切 tab 时自动保存失败 — 文件已被外部修改",
+              description: `${oldPath} 改动已丢失,原文件未变(磁盘上是外部最新版本)`,
+            })
+          } else if (msg.includes("readonly:")) {
+            showToast({ variant: "error", title: `${oldPath} 是只读文件,自动保存失败` })
+          } else {
+            showToast({ variant: "error", title: `${oldPath} 自动保存失败:${e}` })
+          }
+        }
+      })()
+    }
+  })
+
+  // FORK: window close flush — 监听 Tauri prevent_close 之前发的 "flush-before-close" event
+  // [feat: auto-save-debounce-flush] 2026-05-21
+  onMount(() => {
+    const handler = () => {
+      if (editing() && dirty()) {
+        autoSave.flush()
+      }
+    }
+    window.addEventListener("deskfox-flush-now", handler)
+    onCleanup(() => window.removeEventListener("deskfox-flush-now", handler))
+  })
   // FORK: dirty 状态同步给 file context,让 watcher reload 守卫(查看器-自动刷新)2026-04-28
   createEffect(
     on(
