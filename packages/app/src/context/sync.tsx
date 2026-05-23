@@ -1,5 +1,4 @@
 import { Binary } from "@opencode-ai/core/util/binary"
-import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
@@ -10,25 +9,7 @@ function sortParts(parts: Part[]) {
   return parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id))
 }
 
-function runInflight(map: Map<string, Promise<void>>, key: string, task: () => Promise<void>) {
-  const pending = map.get(key)
-  if (pending) return pending
-  const promise = task().finally(() => {
-    map.delete(key)
-  })
-  map.set(key, promise)
-  return promise
-}
-
-const keyFor = (directory: string, id: string) => `${directory}\n${id}`
-
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
-
-function merge<T extends { id: string }>(a: readonly T[], b: readonly T[]) {
-  const map = new Map(a.map((item) => [item.id, item] as const))
-  for (const item of b) map.set(item.id, item)
-  return [...map.values()].sort((x, y) => cmp(x.id, y.id))
-}
 
 type OptimisticStore = {
   message: Record<string, Message[] | undefined>
@@ -127,40 +108,9 @@ export function applyOptimisticRemove(draft: OptimisticStore, input: OptimisticR
   delete draft.part[input.messageID]
 }
 
-function setOptimisticAdd(setStore: (...args: unknown[]) => void, input: OptimisticAddInput) {
-  setStore("message", input.sessionID, (messages: Message[] | undefined) => {
-    if (!messages) return [input.message]
-    const result = Binary.search(messages, input.message.id, (m) => m.id)
-    const next = [...messages]
-    next.splice(result.index, 0, input.message)
-    return next
-  })
-  setStore("part", input.message.id, sortParts(input.parts))
+export const useSync = () => {
+  const globalSync = useGlobalSync()
+  const sdk = useSDK()
+
+  return globalSync.createDirSyncContext(sdk.directory)
 }
-
-function setOptimisticRemove(setStore: (...args: unknown[]) => void, input: OptimisticRemoveInput) {
-  setStore("message", input.sessionID, (messages: Message[] | undefined) => {
-    if (!messages) return messages
-    const result = Binary.search(messages, input.messageID, (m) => m.id)
-    if (!result.found) return messages
-    const next = [...messages]
-    next.splice(result.index, 1)
-    return next
-  })
-  setStore("part", (part: Record<string, Part[] | undefined>) => {
-    if (!(input.messageID in part)) return part
-    const next = { ...part }
-    delete next[input.messageID]
-    return next
-  })
-}
-
-export const { use: useSync, provider: SyncProvider } = createSimpleContext({
-  name: "Sync",
-  init: () => {
-    const globalSync = useGlobalSync()
-    const sdk = useSDK()
-
-    return globalSync.createDirSyncContext(sdk.directory)
-  },
-})
