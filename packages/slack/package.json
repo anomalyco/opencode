@@ -3,6 +3,10 @@
   "version": "1.15.12",
   "type": "module",
   "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./integration": "./src/integration.ts"
+  },
   "scripts": {
     "dev": "bun run src/index.ts",
     "typecheck": "tsgo --noEmit"
