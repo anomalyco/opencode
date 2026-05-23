@@ -8,6 +8,7 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
 import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
+import { useDialog } from "../../ui/dialog"
 
 const QUESTION_MODE = "question"
 
@@ -17,6 +18,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
   const modeStack = useOpencodeModeStack()
+  const dialog = useDialog()
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
@@ -132,7 +134,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
 
   useBindings(() => ({
     mode: QUESTION_MODE,
-    enabled: store.editing && !confirm(),
+    enabled: store.editing && !confirm() && !dialog.active,
     commands: [
       {
         name: "prompt.clear",
@@ -213,7 +215,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
 
     return {
       mode: QUESTION_MODE,
-      enabled: !store.editing,
+      enabled: !store.editing && !dialog.active,
       commands: [
         {
           name: "app.exit",

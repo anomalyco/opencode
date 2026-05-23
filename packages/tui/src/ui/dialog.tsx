@@ -163,6 +163,9 @@ function init() {
     get stack() {
       return store.stack
     },
+    get active() {
+      return store.stack.length > 0
+    },
     get size() {
       return store.size
     },

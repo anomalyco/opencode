@@ -16,6 +16,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../config"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
+import { useDialog } from "../../ui/dialog"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -448,8 +449,10 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
   const tuiConfig = useTuiConfig()
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
+  const dialog = useDialog()
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
+    enabled: !dialog.active,
     commands: [
       {
         name: "app.exit",
@@ -542,9 +545,11 @@ function Prompt<const T extends Record<string, string>>(props: {
   })
   const narrow = createMemo(() => dimensions().width < 80)
   const fullscreenHint = useCommandShortcut("permission.prompt.fullscreen")
+  const dialog = useDialog()
 
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
+    enabled: !dialog.active,
     commands: [
       {
         name: "app.exit",
