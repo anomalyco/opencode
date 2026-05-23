@@ -7,8 +7,8 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 # feishu-pipeline-401-fix — 3-changelog(实际改动 + 回退)
 
 > **状态**:✅ 已落地(2026-05-23)
-> **commit hash**:(待 commit,补)
-> **规模**:Medium(~157 行 fork-only,0 黑名单 override)
+> **commit hash**:`21eda9533`
+> **规模**:Medium(~157 行 fork-only,0 黑名单 override,large-diff override 1 笔 — 三文档同步 632 行)
 
 ---
 
