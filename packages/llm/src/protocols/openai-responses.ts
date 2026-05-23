@@ -272,7 +272,8 @@ const lowerToolCall = (part: ToolCallPart): OpenAIResponsesInputItem => ({
 
 const lowerReasoning = (part: ReasoningPart): OpenAIResponsesReasoningInput | undefined => {
   const openai = part.providerMetadata?.openai
-  if (!ProviderShared.isRecord(openai) || typeof openai.itemId !== "string") return undefined
+  if (!ProviderShared.isRecord(openai) || typeof openai.itemId !== "string" || openai.itemId.length === 0)
+    return undefined
   const encryptedContent =
     typeof openai.reasoningEncryptedContent === "string"
       ? openai.reasoningEncryptedContent
@@ -581,6 +582,18 @@ const onReasoningDone = (state: ParserState, _event: OpenAIResponsesEvent): Step
 const reasoningMetadata = (item: OpenAIResponsesStreamItem & { id: string }) =>
   openaiMetadata({ itemId: item.id, reasoningEncryptedContent: item.encrypted_content ?? null })
 
+// OpenAI Responses streams reasoning items in a stable order:
+//   `output_item.added` (reasoning) →
+//     `reasoning_summary_part.added` (index=0) →
+//     `reasoning_summary_text.delta` →
+//     `reasoning_summary_part.done` (index=0) →
+//     (repeat for index>0) →
+//   `output_item.done` (reasoning).
+// The handlers below rely on this ordering: `onOutputItemAdded` seeds the
+// per-item entry, `onReasoningSummaryPartAdded` for `summary_index === 0`
+// short-circuits when the entry already exists, and higher-index handlers
+// fold against the same entry. Behaviour for out-of-order events is
+// best-effort, not guaranteed.
 const onOutputItemAdded = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
   const item = event.item
   if (item && isReasoningItem(item)) {
@@ -782,7 +795,7 @@ const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function*
           (lifecycle, entry) => Lifecycle.reasoningEnd(lifecycle, events, `${item.id}:${entry[0]}`, providerMetadata),
           state.lifecycle,
         )
-      const reasoningItems = Object.fromEntries(Object.entries(state.reasoningItems).filter((entry) => entry[0] !== item.id))
+      const { [item.id]: _removed, ...reasoningItems } = state.reasoningItems
       return [{ ...state, lifecycle, reasoningItems }, events] satisfies StepResult
     }
     if (!state.lifecycle.reasoning.has(item.id)) {
