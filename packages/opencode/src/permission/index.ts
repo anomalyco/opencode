@@ -135,6 +135,11 @@ interface State {
   approved: Rule[]
 }
 
+interface StateContext {
+  state: State
+  cleanup: (id: PermissionID) => Effect.Effect<void>
+}
+
 export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
   return PermissionV2.evaluate(permission, pattern, ...rulesets)
 }
@@ -145,7 +150,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    const state = yield* InstanceState.make<State>(
+    const state = yield* InstanceState.make<StateContext>(
       Effect.fn("Permission.state")(function* (ctx) {
         const row = Database.use((db) =>
           db.select().from(PermissionTable).where(eq(PermissionTable.project_id, ctx.project.id)).get(),
@@ -155,21 +160,34 @@ export const layer = Layer.effect(
           approved: [...(row?.data ?? [])],
         }
 
+        const cleanup = Effect.fn("Permission.cleanup")(function* (id: PermissionID) {
+          const existing = state.pending.get(id)
+          if (!existing) return
+          state.pending.delete(id)
+          yield* bus.publish(Event.Replied, {
+            sessionID: existing.info.sessionID,
+            requestID: existing.info.id,
+            reply: "reject",
+          })
+        })
+
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
-            for (const item of state.pending.values()) {
-              yield* Deferred.fail(item.deferred, new RejectedError())
+            for (const [id, item] of state.pending.entries()) {
+              const completed = yield* Deferred.fail(item.deferred, new RejectedError())
+              if (completed) yield* cleanup(id)
             }
             state.pending.clear()
           }),
         )
 
-        return state
+        return { state, cleanup }
       }),
     )
 
     const ask = Effect.fn("Permission.ask")(function* (input: AskInput) {
-      const { approved, pending } = yield* InstanceState.get(state)
+      const { state: data, cleanup } = yield* InstanceState.get(state)
+      const { approved, pending } = data
       const { ruleset, ...request } = input
       let needsAsk = false
 
@@ -204,14 +222,12 @@ export const layer = Layer.effect(
       yield* bus.publish(Event.Asked, info)
       return yield* Effect.ensuring(
         Deferred.await(deferred),
-        Effect.sync(() => {
-          pending.delete(id)
-        }),
+        cleanup(id),
       )
     })
 
     const reply = Effect.fn("Permission.reply")(function* (input: ReplyInput) {
-      const { approved, pending } = yield* InstanceState.get(state)
+      const { approved, pending } = (yield* InstanceState.get(state)).state
       const existing = pending.get(input.requestID)
       if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
 
@@ -286,7 +302,7 @@ export const layer = Layer.effect(
     })
 
     const list = Effect.fn("Permission.list")(function* () {
-      const pending = (yield* InstanceState.get(state)).pending
+      const pending = (yield* InstanceState.get(state)).state.pending
       return Array.from(pending.values(), (item) => item.info)
     })
 

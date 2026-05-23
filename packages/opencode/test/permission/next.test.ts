@@ -910,11 +910,12 @@ it.instance(
 )
 
 it.instance(
-  "reply - publishes replied event",
+  "reply - publishes one replied event",
   () =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service
-      const seen = yield* Deferred.make<{ sessionID: SessionID; requestID: PermissionID; reply: Permission.Reply }>()
+      const seen: Array<{ sessionID: SessionID; requestID: PermissionID; reply: Permission.Reply }> = []
+      const first = yield* Deferred.make<void>()
 
       const fiber = yield* ask({
         id: PermissionID.make("per_test7"),
@@ -929,23 +930,65 @@ it.instance(
       yield* waitForPending(1)
 
       const unsub = yield* bus.subscribeCallback(Permission.Event.Replied, (event) => {
-        Deferred.doneUnsafe(seen, Effect.succeed(event.properties))
+        seen.push(event.properties)
+        Deferred.doneUnsafe(first, Effect.void)
       })
       yield* Effect.addFinalizer(() => Effect.sync(unsub))
 
       yield* reply({ requestID: PermissionID.make("per_test7"), reply: "once" })
       yield* Fiber.join(fiber)
+      yield* Deferred.await(first).pipe(
+        Effect.timeoutOrElse({
+          duration: "1 second",
+          orElse: () => Effect.fail(new Error("timed out waiting for permission replied event")),
+        }),
+      )
+      yield* Effect.sleep("50 millis")
+      expect(seen).toEqual([
+        {
+          sessionID: SessionID.make("session_test"),
+          requestID: PermissionID.make("per_test7"),
+          reply: "once",
+        },
+      ])
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - publishes reject event when pending request is cleaned up",
+  () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const seen = yield* Deferred.make<{ sessionID: SessionID; requestID: PermissionID; reply: Permission.Reply }>()
+      const fiber = yield* ask({
+        id: PermissionID.make("per_cleanup"),
+        sessionID: SessionID.make("session_cleanup"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      yield* waitForPending(1)
+      const unsub = yield* bus.subscribeCallback(Permission.Event.Replied, (event) => {
+        Deferred.doneUnsafe(seen, Effect.succeed(event.properties))
+      })
+      yield* Effect.addFinalizer(() => Effect.sync(unsub))
+
+      yield* Fiber.interrupt(fiber)
       expect(
         yield* Deferred.await(seen).pipe(
           Effect.timeoutOrElse({
             duration: "1 second",
-            orElse: () => Effect.fail(new Error("timed out waiting for permission replied event")),
+            orElse: () => Effect.fail(new Error("timed out waiting for permission cleanup event")),
           }),
         ),
       ).toEqual({
-        sessionID: SessionID.make("session_test"),
-        requestID: PermissionID.make("per_test7"),
-        reply: "once",
+        sessionID: SessionID.make("session_cleanup"),
+        requestID: PermissionID.make("per_cleanup"),
+        reply: "reject",
       })
     }),
   { git: true },

@@ -233,7 +233,7 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
       body: { reply: "once" },
     }))
-    .json(404, object, "status"),
+    .json(200, boolean, "status"),
   http.protected.get("/question", "question.list").json(200, array),
   http.protected
     .post("/question/{requestID}/reply", "question.reply.invalid")
@@ -250,14 +250,14 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
       body: { answers: [["Yes"]] },
     }))
-    .json(404, object, "status"),
+    .json(200, boolean, "status"),
   http.protected
     .post("/question/{requestID}/reject", "question.reject")
     .at((ctx) => ({
       path: route("/question/{requestID}/reject", { requestID: "que_httpapi_reject" }),
       headers: ctx.headers(),
     }))
-    .json(404, object, "status"),
+    .json(200, boolean, "status"),
   http.protected
     .get("/file", "file.list")
     .seeded((ctx) => ctx.file("hello.txt", "hello\n"))

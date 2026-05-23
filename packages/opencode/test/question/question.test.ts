@@ -1,5 +1,5 @@
 import { afterEach, expect } from "bun:test"
-import { Cause, Effect, Exit, Fiber, Layer, Queue } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Queue } from "effect"
 import { Question } from "../../src/question"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
@@ -184,6 +184,44 @@ it.instance(
 )
 
 it.instance(
+  "reply - does not publish rejected cleanup event",
+  () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      let rejected = false
+      const fiber = yield* askEffect({
+        sessionID: SessionID.make("ses_test"),
+        questions: [
+          {
+            question: "What would you like to do?",
+            header: "Action",
+            options: [
+              { label: "Option 1", description: "First option" },
+              { label: "Option 2", description: "Second option" },
+            ],
+          },
+        ],
+      }).pipe(Effect.forkScoped)
+
+      const pending = yield* waitForPending(1)
+      const unsub = yield* bus.subscribeCallback(Question.Event.Rejected, () => {
+        rejected = true
+      })
+      yield* Effect.addFinalizer(() => Effect.sync(unsub))
+
+      yield* replyEffect({
+        requestID: pending[0].id,
+        answers: [["Option 1"]],
+      })
+      yield* Fiber.join(fiber)
+      yield* Effect.sleep("50 millis")
+
+      expect(rejected).toBe(false)
+    }),
+  { git: true },
+)
+
+it.instance(
   "reply - fails for unknown requestID",
   () =>
     Effect.gen(function* () {
@@ -268,6 +306,45 @@ it.instance(
       if (Exit.isFailure(exit)) {
         expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "Question.NotFoundError", requestID: "que_unknown" })
       }
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - publishes rejected event when pending request is cleaned up",
+  () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const seen = yield* Deferred.make<{ sessionID: SessionID; requestID: QuestionID }>()
+      const fiber = yield* askEffect({
+        sessionID: SessionID.make("ses_cleanup"),
+        questions: [
+          {
+            question: "Cleanup me?",
+            header: "Cleanup",
+            options: [{ label: "Yes", description: "Yes" }],
+          },
+        ],
+      }).pipe(Effect.forkScoped)
+
+      const pending = yield* waitForPending(1)
+      const unsub = yield* bus.subscribeCallback(Question.Event.Rejected, (event) => {
+        Deferred.doneUnsafe(seen, Effect.succeed(event.properties))
+      })
+      yield* Effect.addFinalizer(() => Effect.sync(unsub))
+
+      yield* Fiber.interrupt(fiber)
+      expect(
+        yield* Deferred.await(seen).pipe(
+          Effect.timeoutOrElse({
+            duration: "1 second",
+            orElse: () => Effect.fail(new Error("timed out waiting for question rejected event")),
+          }),
+        ),
+      ).toEqual({
+        sessionID: SessionID.make("ses_cleanup"),
+        requestID: pending[0].id,
+      })
     }),
   { git: true },
 )

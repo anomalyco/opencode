@@ -3,7 +3,6 @@ import { QuestionID } from "@/question/schema"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { QuestionNotFoundError } from "../errors"
 
 export const questionHandlers = HttpApiBuilder.group(InstanceHttpApi, "question", (handlers) =>
   Effect.gen(function* () {
@@ -17,36 +16,22 @@ export const questionHandlers = HttpApiBuilder.group(InstanceHttpApi, "question"
       params: { requestID: QuestionID }
       payload: Question.Reply
     }) {
-      yield* svc
+      return yield* svc
         .reply({
           requestID: ctx.params.requestID,
           answers: ctx.payload.answers,
         })
         .pipe(
-          Effect.catchTag("Question.NotFoundError", (error) =>
-            Effect.fail(
-              new QuestionNotFoundError({
-                requestID: String(error.requestID),
-                message: `Question request not found: ${error.requestID}`,
-              }),
-            ),
-          ),
+          Effect.as(true),
+          Effect.catchTag("Question.NotFoundError", () => Effect.succeed(false)),
         )
-      return true
     })
 
     const reject = Effect.fn("QuestionHttpApi.reject")(function* (ctx: { params: { requestID: QuestionID } }) {
-      yield* svc.reject(ctx.params.requestID).pipe(
-        Effect.catchTag("Question.NotFoundError", (error) =>
-          Effect.fail(
-            new QuestionNotFoundError({
-              requestID: String(error.requestID),
-              message: `Question request not found: ${error.requestID}`,
-            }),
-          ),
-        ),
+      return yield* svc.reject(ctx.params.requestID).pipe(
+        Effect.as(true),
+        Effect.catchTag("Question.NotFoundError", () => Effect.succeed(false)),
       )
-      return true
     })
 
     return handlers.handle("list", list).handle("reply", reply).handle("reject", reject)

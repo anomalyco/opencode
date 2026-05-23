@@ -154,7 +154,7 @@ describe("instance HttpApi", () => {
     }),
   )
 
-  it.live("returns typed not found bodies for missing permission and question requests", () =>
+  it.live("returns false for stale permission and question requests", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
       const request = (path: string, init?: RequestInit) =>
@@ -185,24 +185,12 @@ describe("instance HttpApi", () => {
         { concurrency: "unbounded" },
       )
 
-      expect(permission.status).toBe(404)
-      expect(yield* Effect.promise(() => permission.json())).toEqual({
-        _tag: "PermissionNotFoundError",
-        requestID: permissionID,
-        message: `Permission request not found: ${permissionID}`,
-      })
-      expect(questionReply.status).toBe(404)
-      expect(yield* Effect.promise(() => questionReply.json())).toEqual({
-        _tag: "QuestionNotFoundError",
-        requestID: questionReplyID,
-        message: `Question request not found: ${questionReplyID}`,
-      })
-      expect(questionReject.status).toBe(404)
-      expect(yield* Effect.promise(() => questionReject.json())).toEqual({
-        _tag: "QuestionNotFoundError",
-        requestID: questionRejectID,
-        message: `Question request not found: ${questionRejectID}`,
-      })
+      expect(permission.status).toBe(200)
+      expect(yield* Effect.promise(() => permission.json())).toBe(false)
+      expect(questionReply.status).toBe(200)
+      expect(yield* Effect.promise(() => questionReply.json())).toBe(false)
+      expect(questionReject.status).toBe(200)
+      expect(yield* Effect.promise(() => questionReject.json())).toBe(false)
     }),
   )
 

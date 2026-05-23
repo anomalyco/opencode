@@ -111,6 +111,11 @@ interface State {
   pending: Map<QuestionID, PendingEntry>
 }
 
+interface StateContext {
+  state: State
+  cleanup: (id: QuestionID) => Effect.Effect<void>
+}
+
 // Service
 
 export interface Interface {
@@ -133,22 +138,33 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    const state = yield* InstanceState.make<State>(
+    const state = yield* InstanceState.make<StateContext>(
       Effect.fn("Question.state")(function* () {
         const state = {
           pending: new Map<QuestionID, PendingEntry>(),
         }
 
+        const cleanup = Effect.fn("Question.cleanup")(function* (id: QuestionID) {
+          const existing = state.pending.get(id)
+          if (!existing) return
+          state.pending.delete(id)
+          yield* bus.publish(Event.Rejected, {
+            sessionID: existing.info.sessionID,
+            requestID: existing.info.id,
+          })
+        })
+
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
-            for (const item of state.pending.values()) {
-              yield* Deferred.fail(item.deferred, new RejectedError())
+            for (const [id, item] of state.pending.entries()) {
+              const completed = yield* Deferred.fail(item.deferred, new RejectedError())
+              if (completed) yield* cleanup(id)
             }
             state.pending.clear()
           }),
         )
 
-        return state
+        return { state, cleanup }
       }),
     )
 
@@ -157,7 +173,8 @@ export const layer = Layer.effect(
       questions: ReadonlyArray<Info>
       tool?: Tool
     }) {
-      const pending = (yield* InstanceState.get(state)).pending
+      const { state: data, cleanup } = yield* InstanceState.get(state)
+      const pending = data.pending
       const id = QuestionID.ascending()
       log.info("asking", { id, questions: input.questions.length })
 
@@ -173,9 +190,7 @@ export const layer = Layer.effect(
 
       return yield* Effect.ensuring(
         Deferred.await(deferred),
-        Effect.sync(() => {
-          pending.delete(id)
-        }),
+        cleanup(id),
       )
     })
 
@@ -183,7 +198,7 @@ export const layer = Layer.effect(
       requestID: QuestionID
       answers: ReadonlyArray<Answer>
     }) {
-      const pending = (yield* InstanceState.get(state)).pending
+      const pending = (yield* InstanceState.get(state)).state.pending
       const existing = pending.get(input.requestID)
       if (!existing) {
         log.warn("reply for unknown request", { requestID: input.requestID })
@@ -204,7 +219,7 @@ export const layer = Layer.effect(
     })
 
     const reject = Effect.fn("Question.reject")(function* (requestID: QuestionID) {
-      const pending = (yield* InstanceState.get(state)).pending
+      const pending = (yield* InstanceState.get(state)).state.pending
       const existing = pending.get(requestID)
       if (!existing) {
         log.warn("reject for unknown request", { requestID })
@@ -224,7 +239,7 @@ export const layer = Layer.effect(
     })
 
     const list = Effect.fn("Question.list")(function* () {
-      const pending = (yield* InstanceState.get(state)).pending
+      const pending = (yield* InstanceState.get(state)).state.pending
       return Array.from(pending.values(), (x) => x.info)
     })
 
