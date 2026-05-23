@@ -479,10 +479,76 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("treats an explicit empty include as opting out of the alias", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          prompt: "hi",
+          // An empty array is an explicit "include nothing" — the alias must
+          // not silently re-enable encrypted reasoning behind the caller's
+          // back.
+          providerOptions: { openai: { include: [], includeEncryptedReasoning: true } },
+        }),
+      )
+
+      expect(prepared.body.include).toBeUndefined()
+    }),
+  )
+
+  it.effect("does not let the alias resurrect an include filtered to empty", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          prompt: "hi",
+          // The caller passed include — even if every entry filters out as
+          // unknown, the alias should not take over.
+          providerOptions: { openai: { include: ["bogus.thing"], includeEncryptedReasoning: true } },
+        }),
+      )
+
+      expect(prepared.body.include).toBeUndefined()
+    }),
+  )
+
   it.effect("omits include when neither include nor the alias is set", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
         LLM.request({ model, prompt: "hi", providerOptions: { openai: { store: false } } }),
+      )
+
+      expect(prepared.body.include).toBeUndefined()
+    }),
+  )
+
+  it.effect("requests encrypted reasoning by default for GPT-5 reasoning models", () =>
+    Effect.gen(function* () {
+      // The native OpenAI facade configures GPT-5 stateless (store: false) with
+      // reasoningSummary: "auto" by default. Without `include`, a follow-up
+      // turn cannot replay reasoning state, so the facade also opts into
+      // `reasoning.encrypted_content` automatically.
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-5.2"),
+          prompt: "hi",
+        }),
+      )
+
+      expect(prepared.body.store).toBe(false)
+      expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
+      expect(prepared.body.reasoning).toEqual({ effort: "medium", summary: "auto" })
+    }),
+  )
+
+  it.effect("lets callers opt out of the GPT-5 default include", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-5.2"),
+          prompt: "hi",
+          providerOptions: { openai: { include: [] } },
+        }),
       )
 
       expect(prepared.body.include).toBeUndefined()

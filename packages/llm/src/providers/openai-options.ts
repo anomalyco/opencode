@@ -52,6 +52,12 @@ export const gpt5DefaultOptions = (
   return openAIProviderOptions({
     reasoningEffort: "medium",
     reasoningSummary: "auto",
+    // GPT-5 reasoning models are configured stateless (`store: false`) by
+    // `openAIDefaultOptions` below, so the only way a follow-up turn can
+    // carry reasoning state is via the encrypted reasoning include. Without
+    // this, callers using the default model facade get reasoning summaries
+    // they cannot replay statelessly.
+    include: ["reasoning.encrypted_content"],
     textVerbosity:
       options.textVerbosity === true && id.includes("gpt-5.") && !id.includes("codex") && !id.includes("-chat")
         ? "low"
