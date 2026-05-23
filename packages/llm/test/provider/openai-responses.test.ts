@@ -393,7 +393,7 @@ describe("OpenAI Responses route", () => {
               promptCacheKey: "session_123",
               reasoningEffort: "high",
               reasoningSummary: "auto",
-              includeEncryptedReasoning: true,
+              include: ["reasoning.encrypted_content"],
             },
           },
         }),
@@ -602,11 +602,9 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("closes stored reasoning summary parts when each part completes", () =>
+  it.effect("closes reasoning summary parts when storage is not disabled", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLM.updateRequest(request, { providerOptions: { openai: { store: true } } }),
-      ).pipe(
+      const response = yield* LLMClient.generate(request).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -754,34 +752,6 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(prepared.body.input).toEqual([{ type: "item_reference", id: "rs_1" }])
-    }),
-  )
-
-  it.effect("continues stateless reasoning from encrypted content without an item id", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
-        LLM.request({
-          model,
-          messages: [
-            Message.assistant([
-              {
-                type: "reasoning",
-                text: "Checked the previous diff.",
-                providerMetadata: { openai: { reasoningEncryptedContent: "encrypted-state" } },
-              },
-            ]),
-          ],
-          providerOptions: { openai: { store: false } },
-        }),
-      )
-
-      expect(prepared.body.input).toEqual([
-        {
-          type: "reasoning",
-          encrypted_content: "encrypted-state",
-          summary: [{ type: "summary_text", text: "Checked the previous diff." }],
-        },
-      ])
     }),
   )
 

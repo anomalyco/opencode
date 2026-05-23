@@ -52,7 +52,7 @@ const OpenAIResponsesReasoningSummaryText = Schema.Struct({
 
 const OpenAIResponsesReasoningItem = Schema.Struct({
   type: Schema.tag("reasoning"),
-  id: Schema.optional(Schema.String),
+  id: Schema.String,
   summary: Schema.Array(OpenAIResponsesReasoningSummaryText),
   encrypted_content: optionalNull(Schema.String),
 })
@@ -94,7 +94,7 @@ type OpenAIResponsesInputItem = Schema.Schema.Type<typeof OpenAIResponsesInputIt
 
 type OpenAIResponsesReasoningInput = {
   type: "reasoning"
-  id?: string
+  id: string
   summary: Array<{ type: "summary_text"; text: string }>
   encrypted_content?: string | null
 }
@@ -270,18 +270,16 @@ const lowerToolCall = (part: ToolCallPart): OpenAIResponsesInputItem => ({
 
 const lowerReasoning = (part: ReasoningPart): OpenAIResponsesReasoningInput | undefined => {
   const openai = part.providerMetadata?.openai
-  if (!ProviderShared.isRecord(openai)) return undefined
-  const id = typeof openai.itemId === "string" ? openai.itemId : undefined
+  if (!ProviderShared.isRecord(openai) || typeof openai.itemId !== "string") return undefined
   const encryptedContent =
     typeof openai.reasoningEncryptedContent === "string"
       ? openai.reasoningEncryptedContent
       : openai.reasoningEncryptedContent === null
         ? null
         : undefined
-  if (!id && typeof encryptedContent !== "string") return undefined
   return {
     type: "reasoning",
-    id,
+    id: openai.itemId,
     summary: part.text.length > 0 ? [{ type: "summary_text", text: part.text }] : [],
     encrypted_content: encryptedContent,
   }
@@ -354,10 +352,6 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
             reasoningReferences.add(reasoning.id)
             continue
           }
-          if (!reasoning.id) {
-            input.push(reasoning)
-            continue
-          }
           const existing = reasoningItems[reasoning.id]
           if (existing) {
             existing.summary.push(...reasoning.summary)
@@ -411,15 +405,14 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
   if (effort && !OpenAIOptions.isReasoningEffort(effort))
     return yield* invalid(`OpenAI Responses does not support reasoning effort ${effort}`)
   const summary = OpenAIOptions.reasoningSummary(request)
-  const encryptedState = OpenAIOptions.encryptedReasoning(request)
-  const includeEncryptedReasoning = encryptedState || (store === false && OpenAIOptions.isReasoningModel(request))
+  const include = OpenAIOptions.include(request) ?? OpenAIOptions.encryptedReasoning(request)
   const verbosity = OpenAIOptions.textVerbosity(request)
   const instructions = OpenAIOptions.instructions(request)
   return {
     ...(instructions ? { instructions } : {}),
     ...(store !== undefined ? { store } : {}),
     ...(promptCacheKey ? { prompt_cache_key: promptCacheKey } : {}),
-    ...(includeEncryptedReasoning ? { include: ["reasoning.encrypted_content"] as const } : {}),
+    ...(include ? { include } : {}),
     ...(effort || summary ? { reasoning: { effort, summary } } : {}),
     ...(verbosity ? { text: { verbosity } } : {}),
   }
@@ -696,7 +689,7 @@ const onReasoningSummaryPartDone = (state: ParserState, event: OpenAIResponsesEv
     {
       ...state,
       lifecycle:
-        state.store === true
+        state.store !== false
           ? Lifecycle.reasoningEnd(
               state.lifecycle,
               events,
@@ -710,7 +703,7 @@ const onReasoningSummaryPartDone = (state: ParserState, event: OpenAIResponsesEv
           ...item,
           summaryParts: {
             ...item.summaryParts,
-            [event.summary_index]: state.store === true ? "concluded" : "can-conclude",
+            [event.summary_index]: state.store !== false ? "concluded" : "can-conclude",
           },
         },
       },

@@ -7,6 +7,7 @@ export interface OpenAIOptionsInput {
   readonly promptCacheKey?: string
   readonly reasoningEffort?: ReasoningEffort
   readonly reasoningSummary?: "auto"
+  readonly include?: ReadonlyArray<"reasoning.encrypted_content">
   readonly includeEncryptedReasoning?: boolean
   readonly textVerbosity?: TextVerbosity
 }
@@ -25,6 +26,7 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
       promptCacheKey: options?.promptCacheKey,
       reasoningEffort: options?.reasoningEffort,
       reasoningSummary: options?.reasoningSummary,
+      include: options?.include,
       includeEncryptedReasoning: options?.includeEncryptedReasoning,
       textVerbosity: options?.textVerbosity,
     }),

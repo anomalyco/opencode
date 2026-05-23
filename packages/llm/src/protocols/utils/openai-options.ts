@@ -39,18 +39,15 @@ export const reasoningSummary = (request: LLMRequest): "auto" | undefined => {
   return options(request)?.reasoningSummary === "auto" ? "auto" : undefined
 }
 
-export const encryptedReasoning = (request: LLMRequest) =>
-  options(request)?.includeEncryptedReasoning === true ? true : undefined
-
-export const isReasoningModel = (request: LLMRequest) => {
-  const id = request.model.id.toLowerCase()
-  return (
-    id.startsWith("o1") ||
-    id.startsWith("o3") ||
-    id.startsWith("o4-mini") ||
-    (id.startsWith("gpt-5") && !id.startsWith("gpt-5-chat"))
-  )
+export const include = (request: LLMRequest) => {
+  const value = options(request)?.include
+  return Array.isArray(value) && value.includes("reasoning.encrypted_content")
+    ? (["reasoning.encrypted_content"] as const)
+    : undefined
 }
+
+export const encryptedReasoning = (request: LLMRequest) =>
+  options(request)?.includeEncryptedReasoning === true ? (["reasoning.encrypted_content"] as const) : undefined
 
 export const promptCacheKey = (request: LLMRequest) => {
   const value = options(request)?.promptCacheKey
