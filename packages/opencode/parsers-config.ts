@@ -310,6 +310,7 @@ export default {
     },
     {
       filetype: "fsharp",
+      aliases: ["f#"],
       wasm: "https://github.com/ionide/tree-sitter-fsharp/releases/download/0.3.0/tree-sitter-fsharp.wasm",
       queries: {
         highlights: [
