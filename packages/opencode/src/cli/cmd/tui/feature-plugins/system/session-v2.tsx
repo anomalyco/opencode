@@ -1,6 +1,7 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
 import { useSyncV2 } from "@tui/context/sync-v2"
+import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { useTheme } from "@tui/context/theme"
@@ -302,11 +303,31 @@ function AssistantMessage(props: {
 }) {
   const { theme } = useTheme()
   const local = useLocal()
+  const sync = useSync()
   const duration = createMemo(() => {
     if (!props.message.time.completed) return 0
     return props.message.time.completed - (props.start ?? props.message.time.created)
   })
+  const acpModelLabel = createMemo(() => {
+    const agent = sync.data.agent.find((a) => a.name === props.message.agent)
+    if (agent?.backend?.type !== "acp") return undefined
+    const acpState = sync.data.acp[props.sessionID] as
+      | {
+          configOptions?: Array<{ id?: string; category?: string; currentValue?: string; options?: Array<{ value?: string; name?: string }> }>
+          models?: { currentModelId?: string; availableModels?: Array<{ modelId?: string; name?: string }> }
+        }
+      | undefined
+    const modelOption = acpState?.configOptions?.find((opt) => opt?.id === "model" || opt?.category === "model")
+    const current = typeof modelOption?.currentValue === "string" ? modelOption.currentValue : acpState?.models?.currentModelId
+    if (typeof current !== "string") return undefined
+    const match =
+      modelOption?.options?.find((opt) => opt?.value === current) ??
+      acpState?.models?.availableModels?.find((m) => m?.modelId === current)
+    return typeof match?.name === "string" ? match.name : current
+  })
   const model = createMemo(() => {
+    const overridden = acpModelLabel()
+    if (overridden) return `${overridden} ACP`
     const variant = props.message.model.variant ? `/${props.message.model.variant}` : ""
     return `${props.message.model.providerID}/${props.message.model.id}${variant}`
   })
