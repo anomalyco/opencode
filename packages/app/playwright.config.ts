@@ -16,6 +16,8 @@ if (process.env.PLAYWRIGHT_JUNIT_OUTPUT) {
 export default defineConfig({
   testDir: "./e2e",
   outputDir: "./e2e/test-results",
+  // FORK: vite mock 冷启动 warmup [feat: e2e-vite-warmup] 2026-05-23
+  globalSetup: "./e2e/global-setup.ts",
   timeout: 60_000,
   expect: {
     timeout: 10_000,
