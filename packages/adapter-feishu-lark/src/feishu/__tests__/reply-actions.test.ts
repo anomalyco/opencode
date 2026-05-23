@@ -8,6 +8,7 @@ import {
   classifyAttachment,
   FEISHU_WORKSPACE_ROOT,
   parseAttachMarkers,
+  parseCreateGroupMarkers,
   stripMentions,
   type MentionRef,
 } from "../reply-actions"
@@ -187,5 +188,53 @@ describe("classifyAttachment", () => {
     const inWs = join(FEISHU_WORKSPACE_ROOT, "test.png")
     expect(classifyAttachment(inWs).kind).toBe("image")
     expect(FEISHU_WORKSPACE_ROOT).toBe(join(homedir(), ".opencode", "feishu-workspace"))
+  })
+})
+
+// ============================================================
+// parseCreateGroupMarkers — [CREATE_GROUP:name] 解析 + strip
+// ============================================================
+
+describe("parseCreateGroupMarkers", () => {
+  test("无 marker → names 空,cleanText 原样 trim", () => {
+    const r = parseCreateGroupMarkers("  普通回复  ")
+    expect(r.names).toEqual([])
+    expect(r.cleanText).toBe("普通回复")
+  })
+
+  test("单 marker → 提取群名", () => {
+    const r = parseCreateGroupMarkers("我创建一个 [CREATE_GROUP:需求讨论] 好了")
+    expect(r.names).toEqual(["需求讨论"])
+    expect(r.cleanText).toBe("我创建一个  好了")
+  })
+
+  test("多 marker → 按出现顺序", () => {
+    const r = parseCreateGroupMarkers("先 [CREATE_GROUP:A] 再 [CREATE_GROUP:B]")
+    expect(r.names).toEqual(["A", "B"])
+  })
+
+  test("群名 trim + 内嵌空格保留", () => {
+    const r = parseCreateGroupMarkers("[CREATE_GROUP:  需求 讨论组  ]")
+    expect(r.names).toEqual(["需求 讨论组"])
+  })
+
+  test("空 marker [CREATE_GROUP:] → 跳过", () => {
+    const r = parseCreateGroupMarkers("[CREATE_GROUP:]")
+    expect(r.names).toEqual([])
+  })
+
+  test("跟 ATTACH marker 独立 — CREATE_GROUP 不解析 ATTACH", () => {
+    const r = parseCreateGroupMarkers("[ATTACH:/a.png] [CREATE_GROUP:讨论]")
+    expect(r.names).toEqual(["讨论"])
+    // ATTACH marker 仍在 cleanText 里(本函数只 strip 自己的 marker)
+    expect(r.cleanText).toContain("[ATTACH:/a.png]")
+  })
+
+  test("跟 ATTACH 联合 — 调用方应链式调两个 parser", () => {
+    const groupParse = parseCreateGroupMarkers("[ATTACH:/a.png] [CREATE_GROUP:讨论]")
+    const attachParse = parseAttachMarkers(groupParse.cleanText)
+    expect(groupParse.names).toEqual(["讨论"])
+    expect(attachParse.paths).toEqual(["/a.png"])
+    expect(attachParse.cleanText).toBe("")
   })
 })

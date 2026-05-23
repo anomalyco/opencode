@@ -59,9 +59,15 @@ const FILE_TYPE_MAP: Record<string, LarkFileType> = {
 }
 
 const ATTACH_MARKER_RE = /\[ATTACH:([^\]]+)\]/g
+const CREATE_GROUP_MARKER_RE = /\[CREATE_GROUP:([^\]]+)\]/g
 
 export interface ParsedMarkers {
   paths: string[]
+  cleanText: string
+}
+
+export interface ParsedGroupMarkers {
+  names: string[]
   cleanText: string
 }
 
@@ -77,12 +83,36 @@ export function parseAttachMarkers(text: string): ParsedMarkers {
     const p = m[1]?.trim()
     if (p) paths.push(p)
   }
-  const cleanText = text
-    .replace(ATTACH_MARKER_RE, "")
-    .replace(/[ \t]+\n/g, "\n") // 行尾空格清掉
-    .replace(/\n{3,}/g, "\n\n") // 三个以上连续空行收敛到 2
-    .trim()
+  const cleanText = stripMarkers(text, ATTACH_MARKER_RE)
   return { paths, cleanText }
+}
+
+/**
+ * 解析 reply 里所有 `[CREATE_GROUP:name]` marker(Phase 3 自动建群)。
+ *
+ * - names:按出现顺序,trim 后的群名(空 marker 跳过)
+ * - cleanText:strip 后清行尾空格 + 收敛多余空行
+ *
+ * 跟 parseAttachMarkers 共享 stripMarkers 帮手;两类 marker 独立解析,
+ * 调用方负责按 marker 类型路由处理。
+ */
+export function parseCreateGroupMarkers(text: string): ParsedGroupMarkers {
+  const names: string[] = []
+  for (const m of text.matchAll(CREATE_GROUP_MARKER_RE)) {
+    const n = m[1]?.trim()
+    if (n) names.push(n)
+  }
+  const cleanText = stripMarkers(text, CREATE_GROUP_MARKER_RE)
+  return { names, cleanText }
+}
+
+/** strip 一种 marker + 清行尾空格 + 收敛空行 + trim */
+function stripMarkers(text: string, re: RegExp): string {
+  return text
+    .replace(re, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
 }
 
 export type AttachClassification =
