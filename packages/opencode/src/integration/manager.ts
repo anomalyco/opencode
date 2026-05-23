@@ -1,4 +1,4 @@
-import type { OpencodeClient } from "@opencode-ai/sdk"
+import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 import type { Bus } from "../bus/index.js"
 import type { Integration, IntegrationFactory, IntegrationConfig } from "./types.js"
 
@@ -7,7 +7,7 @@ export class IntegrationManager {
 
   constructor(
     private readonly client: OpencodeClient,
-    private readonly bus: Bus.Interface,
+    private readonly bus?: Bus.Interface,
   ) {}
 
   register(factory: IntegrationFactory, config: IntegrationConfig): void {
