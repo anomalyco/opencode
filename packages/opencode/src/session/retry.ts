@@ -172,6 +172,8 @@ function parseJSON(value: unknown) {
   })
 }
 
+const MAX_RETRY_ATTEMPTS = 5
+
 export function policy(opts: {
   provider: string
   parse: (error: unknown) => Err
@@ -181,7 +183,7 @@ export function policy(opts: {
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
       const error = opts.parse(meta.input)
       const retry = retryable(error, opts.provider)
-      if (!retry) return Cause.done(meta.attempt)
+      if (!retry || meta.attempt > MAX_RETRY_ATTEMPTS) return Cause.done(meta.attempt)
       return Effect.gen(function* () {
         const wait = delay(meta.attempt, MessageV2.APIError.isInstance(error) ? error : undefined)
         const now = yield* Clock.currentTimeMillis
