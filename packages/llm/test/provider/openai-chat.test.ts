@@ -402,4 +402,111 @@ describe("OpenAI Chat route", () => {
       expect(events.map((event) => event.type)).toEqual(["step-start"])
     }),
   )
+
+  describe("openaiCompatible reasoning_content on assistant messages", () => {
+    it.effect("includes reasoning_content from native.openaiCompatible", () =>
+      Effect.gen(function* () {
+        const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+          LLM.request({
+            model,
+            messages: [
+              Message.make({
+                role: "assistant",
+                content: [Message.text("hello")],
+                native: { openaiCompatible: { reasoning_content: "I am thinking" } },
+              }),
+            ],
+          }),
+        )
+
+        expect(prepared.body.messages).toMatchObject([
+          { role: "assistant", reasoning_content: "I am thinking" },
+        ])
+      }),
+    )
+
+    it.effect("includes reasoning_content from native.providerOptions.openaiCompatible", () =>
+      Effect.gen(function* () {
+        const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+          LLM.request({
+            model,
+            messages: [
+              Message.make({
+                role: "assistant",
+                content: [Message.text("hello")],
+                native: { providerOptions: { openaiCompatible: { reasoning_content: "via provider" } } },
+              }),
+            ],
+          }),
+        )
+
+        expect(prepared.body.messages).toMatchObject([
+          { role: "assistant", reasoning_content: "via provider" },
+        ])
+      }),
+    )
+
+    it.effect("prefers providerOptions.openaiCompatible over native.openaiCompatible", () =>
+      Effect.gen(function* () {
+        const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+          LLM.request({
+            model,
+            messages: [
+              Message.make({
+                role: "assistant",
+                content: [Message.text("hello")],
+                native: {
+                  openaiCompatible: { reasoning_content: "fallback" },
+                  providerOptions: { openaiCompatible: { reasoning_content: "preferred" } },
+                },
+              }),
+            ],
+          }),
+        )
+
+        expect(prepared.body.messages).toMatchObject([
+          { role: "assistant", reasoning_content: "preferred" },
+        ])
+      }),
+    )
+
+    it.effect("returns undefined reasoning_content when native is undefined", () =>
+      Effect.gen(function* () {
+        const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+          LLM.request({
+            model,
+            messages: [
+              Message.make({
+                role: "assistant",
+                content: [Message.text("hello")],
+              }),
+            ],
+          }),
+        )
+
+        const msg = prepared.body.messages[0] as Record<string, unknown>
+        expect(msg.reasoning_content).toBeUndefined()
+      }),
+    )
+
+    it.effect("returns undefined reasoning_content when openaiCompatible is not a record", () =>
+      Effect.gen(function* () {
+        const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+          LLM.request({
+            model,
+            messages: [
+              Message.make({
+                role: "assistant",
+                content: [Message.text("hello")],
+                native: { openaiCompatible: "not-a-record" },
+              }),
+            ],
+          }),
+        )
+
+        const msg = prepared.body.messages[0] as Record<string, unknown>
+        expect(msg.reasoning_content).toBeUndefined()
+      }),
+    )
+  })
 })
