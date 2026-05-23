@@ -64,9 +64,20 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   ]
 
   const header = system[0]
+  // Extract last user message text for plugin hooks (e.g. topic detection)
+  const lastUserMsg = input.messages.findLast((m) => m.role === "user")
+  const lastUserMessage =
+    typeof lastUserMsg?.content === "string"
+      ? lastUserMsg.content
+      : Array.isArray(lastUserMsg?.content)
+        ? (lastUserMsg!.content as Array<{ type: string; text?: string }>)
+            .filter((p) => p.type === "text" && typeof p.text === "string")
+            .map((p) => p.text!)
+            .join(" ")
+        : undefined
   yield* input.plugin.trigger(
     "experimental.chat.system.transform",
-    { sessionID: input.sessionID, model: input.model },
+    { sessionID: input.sessionID, model: input.model, lastUserMessage },
     { system },
   )
   if (system.length > 2 && system[0] === header) {

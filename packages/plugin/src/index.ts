@@ -288,7 +288,7 @@ export interface Hooks {
     },
   ) => Promise<void>
   "experimental.chat.system.transform"?: (
-    input: { sessionID?: string; model: Model },
+    input: { sessionID?: string; model: Model; lastUserMessage?: string },
     output: {
       system: string[]
     },
