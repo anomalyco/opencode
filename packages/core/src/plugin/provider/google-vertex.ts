@@ -25,7 +25,8 @@ function resolveLocation(options: Record<string, any>) {
 }
 
 function vertexEndpoint(location: string) {
-  return location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`
+  if (location === "global") return "aiplatform.googleapis.com"
+  return `${location}-aiplatform.googleapis.com`
 }
 
 function replaceVertexVars(value: string, project: string | undefined, location: string) {
@@ -131,16 +132,25 @@ export const GoogleVertexAnthropicPlugin = PluginV2.define({
       "aisdk.sdk": Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/google-vertex/anthropic") return
         const mod = yield* Effect.promise(() => import("@ai-sdk/google-vertex/anthropic"))
+        const project =
+          typeof evt.options.project === "string"
+            ? evt.options.project
+            : (process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GCP_PROJECT ?? process.env.GCLOUD_PROJECT)
+        const location =
+          typeof evt.options.location === "string"
+            ? evt.options.location
+            : (process.env.GOOGLE_CLOUD_LOCATION ?? process.env.VERTEX_LOCATION ?? "global")
         evt.sdk = mod.createVertexAnthropic({
           ...evt.options,
-          project:
-            typeof evt.options.project === "string"
-              ? evt.options.project
-              : (process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GCP_PROJECT ?? process.env.GCLOUD_PROJECT),
-          location:
-            typeof evt.options.location === "string"
-              ? evt.options.location
-              : (process.env.GOOGLE_CLOUD_LOCATION ?? process.env.VERTEX_LOCATION ?? "global"),
+          project,
+          location,
+          // Continental multi-regions (eu, us) require Regional Endpoint Platform
+          // domains; the default {region}-aiplatform.googleapis.com does not resolve.
+          ...((location === "eu" || location === "us") && project && !evt.options.baseURL
+            ? {
+                baseURL: `https://aiplatform.${location}.rep.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models`,
+              }
+            : {}),
         })
       }),
       "aisdk.language": Effect.fn(function* (evt) {
