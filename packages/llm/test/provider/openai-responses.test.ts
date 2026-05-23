@@ -26,6 +26,19 @@ const request = LLM.request({
 
 const configEnv = (env: Record<string, string>) => Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })))
 
+type OpenAIToolOutput = Extract<
+  OpenAIResponses.OpenAIResponsesBody["input"][number],
+  { readonly type: "function_call_output" }
+>
+
+const expectToolOutput = (body: OpenAIResponses.OpenAIResponsesBody): OpenAIToolOutput => {
+  const output = body.input.find(
+    (item): item is OpenAIToolOutput => "type" in item && item.type === "function_call_output",
+  )
+  expect(output).toBeDefined()
+  return output!
+}
+
 describe("OpenAI Responses route", () => {
   it.effect("prepares OpenAI Responses target", () =>
     Effect.gen(function* () {
@@ -245,6 +258,84 @@ describe("OpenAI Responses route", () => {
         ],
         stream: true,
       })
+    }),
+  )
+
+  // Regression: screenshot/read tool results must stay structured so base64
+  // image data is not JSON-stringified into `function_call_output.output`.
+  it.effect("lowers image tool-result content as structured input_image items", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          id: "req_tool_result_image",
+          model,
+          messages: [
+            Message.user("Show me the screenshot."),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: { filePath: "shot.png" } })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              resultType: "content",
+              result: [
+                { type: "text", text: "Image read successfully" },
+                { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              ],
+            }),
+          ],
+        }),
+      )
+
+      expect(expectToolOutput(prepared.body).output).toEqual([
+        { type: "input_text", text: "Image read successfully" },
+        { type: "input_image", image_url: "data:image/png;base64,AAECAw==" },
+      ])
+    }),
+  )
+
+  it.effect("lowers single-image tool-result content as structured input_image array", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          id: "req_tool_result_image_only",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "screenshot", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "screenshot",
+              resultType: "content",
+              result: [{ type: "media", mediaType: "image/png", data: "AAECAw==" }],
+            }),
+          ],
+        }),
+      )
+
+      expect(expectToolOutput(prepared.body).output).toEqual([
+        { type: "input_image", image_url: "data:image/png;base64,AAECAw==" },
+      ])
+    }),
+  )
+
+  it.effect("rejects non-image media in tool-result content with a clear error", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_tool_result_unsupported_media",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "fetch", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "fetch",
+              resultType: "content",
+              result: [{ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" }],
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("OpenAI Responses")
+      expect(error.message).toContain("audio/mpeg")
     }),
   )
 
@@ -786,7 +877,11 @@ describe("OpenAI Responses route", () => {
         Effect.provide(fixedResponse(sseEvents({ type: "error", code: "rate_limit_exceeded", message: "Slow down" }))),
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "Slow down" }])
+      // Prefix the code so consumers see the failure mode, not just the
+      // sometimes-generic provider message. The bare message alone meant
+      // production errors like rate limits were indistinguishable from
+      // unrelated stream failures.
+      expect(response.events).toEqual([{ type: "provider-error", message: "rate_limit_exceeded: Slow down" }])
     }),
   )
 
@@ -797,6 +892,99 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(response.events).toEqual([{ type: "provider-error", message: "internal_error" }])
+    }),
+  )
+
+  it.effect("falls back to error code when message is empty", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error", code: "internal_error", message: "" }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "internal_error" }])
+    }),
+  )
+
+  // Regression: `response.failed` carries the failure details under
+  // `response.error`, not at the top level. The previous handler only
+  // checked top-level `message`/`code` and so always emitted the bare
+  // "OpenAI Responses response failed" string, hiding the real cause.
+  it.effect("surfaces response.failed details from response.error", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.failed",
+              response: {
+                id: "resp_failed_1",
+                error: { code: "server_error", message: "Upstream model unavailable" },
+              },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "server_error: Upstream model unavailable" }])
+    }),
+  )
+
+  it.effect("surfaces response.failed code when no nested message is present", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.failed",
+              response: { id: "resp_failed_2", error: { code: "invalid_prompt" } },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "invalid_prompt" }])
+    }),
+  )
+
+  it.effect("surfaces error event details even when they arrive nested under response.error", () =>
+    Effect.gen(function* () {
+      // Some OpenAI-compatible proxies and older SDK versions wrap the
+      // top-level error fields into a nested `response.error` payload
+      // when they bubble up an HTTP error as an SSE `error` event. Honour
+      // both shapes so the user still sees the underlying cause instead
+      // of the catch-all string.
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "error",
+              response: { error: { code: "context_length_exceeded", message: "prompt too long" } },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "context_length_exceeded: prompt too long" }])
+    }),
+  )
+
+  it.effect("falls back to a stable default when both error and response are absent", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error" }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "OpenAI Responses stream error" }])
+    }),
+  )
+
+  it.effect("falls back to a stable default when response.failed has no error payload", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "response.failed", response: { id: "resp_failed_3" } }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "OpenAI Responses response failed" }])
     }),
   )
 
