@@ -98,7 +98,9 @@ class MemFS {
   }
 
   list(dir: string): DirListItem[] {
-    const prefix = dir.endsWith("/") ? dir : dir + "/"
+    // FORK: 空 dir = root listing(prefix 必须空字符串,否则 "/"+"small.txt".startsWith("/") 始终 false,所有 root 文件被跳过)
+    // 2026-05-23 bug-repro-3case A6 spec 实测撞 → 修;非空 dir 走原拼 "/" 行为
+    const prefix = dir === "" ? "" : dir.endsWith("/") ? dir : dir + "/"
     const items: DirListItem[] = []
     const seenDirs = new Set<string>()
     for (const [p, entry] of this.files) {

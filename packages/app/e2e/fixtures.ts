@@ -194,8 +194,11 @@ export async function preloadFile(page: Page, path: string, content: string): Pr
 }
 
 /**
- * 拦 `GET /file?path=...`(file.list)返 memfs.list 结果
+ * 拦 `GET /file?path=...`(file.list)返 memfs.list 结果(已 shape 转换成 SDK FileNode)
  * 注:文件层级模拟简单 — memfs 已用前缀模拟目录,这里直接 page.evaluate 调
+ *
+ * W3 D17+:memfs.list 返 `{name,isDir,size,mtime}`,SDK 期望 `{name,path,absolute,type,ignored}`(FileNode);
+ * 之前 mock-foundation smoke 不点文件树没踩到,bug-repro 系列点文件触发后修(2026-05-23)
  */
 export async function mockFileTree(page: Page, files: Record<string, string>): Promise<void> {
   // 1. preload 全部文件到 memfs
@@ -207,11 +210,14 @@ export async function mockFileTree(page: Page, files: Record<string, string>): P
     w.__deskfoxE2eMemfs?.preload(fs)
   }, files)
 
-  // 2. 拦 GET /file?path=... 返 memfs.list(用 glob 而非 RegExp,Playwright RegExp 行为不稳定)
+  // 2. 拦 GET /file?path=... 返 memfs.list 转 SDK FileNode shape
+  // 用 RegExp 而非 glob — Playwright glob `**/file` 不匹配带 ?path=... query string 的 URL
   await page.route(
-    "**/file",
+    /\/file(\?|$)/,
     async (route) => {
       const url = new URL(route.request().url())
+      // 排除 /file/content 和 /file/xxx 子路径(那些已经匹配下方专门 route)
+      if (url.pathname !== "/file") return route.fallback()
       const dir = url.searchParams.get("path") ?? ""
       const items = await page.evaluate((d) => {
         const w = window as unknown as {
@@ -221,10 +227,21 @@ export async function mockFileTree(page: Page, files: Record<string, string>): P
         }
         return w.__deskfoxE2eMemfs?.list(d) ?? []
       }, dir)
+      // memfs → FileNode 转换:目录路径用 dir + name 拼,absolute 用 /mock/workspace 根
+      const nodes = items.map((it) => {
+        const rel = dir ? `${dir}/${it.name}` : it.name
+        return {
+          name: it.name,
+          path: rel,
+          absolute: `/mock/workspace/${rel}`,
+          type: it.isDir ? "directory" : "file",
+          ignored: false,
+        }
+      })
       return route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(items),
+        body: JSON.stringify(nodes),
       })
     },
   )
