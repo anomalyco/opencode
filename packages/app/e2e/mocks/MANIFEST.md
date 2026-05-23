@@ -12,28 +12,28 @@
 
 | # | 命令 | 用处 | 主要调用点 | 优先级 | impl |
 |---|---|---|---|---|---|
-| 1 | `get_file_size` | 大文件防护 pre-check | `context/file.tsx:207` | W1 | ⏳ |
-| 2 | `get_file_mtime` | mtime 冲突检测 | `pages/session/file-tabs.tsx:445,489,1300` | W1 | ⏳ |
-| 3 | `write_text_file` | 文本写盘(带 expectedMtime)| `pages/session/file-tabs.tsx:461` | W1 | ⏳ |
-| 4 | `read_binary_file_base64` | 二进制读 base64 | `utils/md-export-docx.ts:1027` | W2 | ⏳ |
-| 5 | `write_binary_file_absolute_base64` | 二进制写绝对路径 base64 | `components/file-tree.tsx:818`, `utils/markdown-editor-extensions.ts:342`, `utils/md-export-docx.ts:1722` | W2 | ⏳ |
-| 6 | `fetch_url_base64` | 远程资源 fetch | `utils/md-export-docx.ts:1665` | W2 | ⏳ |
-| 7 | `open_path` | 外部 app 打开文件/目录 | `components/file-too-large.tsx:47,55`, `pages/session/file-tabs.tsx:1383,1531` | W2 | ⏳ |
-| 8 | `reveal_in_folder` | 资源管理器定位 | `components/file-tree.tsx:954` | W2 | ⏳ |
-| 9 | `rename_path` | 文件/目录重命名(含撤销)| `components/file-tree.tsx:430,514,707,770` | W2 | ⏳ |
-| 10 | `copy_path` | 复制 | `components/file-tree.tsx:433` | W2 | ⏳ |
-| 11 | `trash_path` | 移到回收站 | `components/file-tree.tsx:538,924` | W2 | ⏳ |
-| 12 | `create_empty_file` | 新建空文件 | `components/file-tree.tsx:666` | W2 | ⏳ |
-| 13 | `create_directory` | 新建目录 | `components/file-tree.tsx:683` | W2 | ⏳ |
-| 14 | `next_available_path` | 防冲突生成不重名路径 | `utils/file-conflict.ts:24` | W2 | ⏳ |
-| 15 | `feishu_adapter_status` | 飞书 adapter 状态 | `utils/feishu-config.ts:44` | W2-stub | ⏳ |
-| 16 | `feishu_oauth_start` | 飞书 OAuth 起 device flow | `utils/feishu-config.ts:49` | W2-stub | ⏳ |
-| 17 | `feishu_oauth_poll` | 飞书 OAuth 轮询 | `utils/feishu-config.ts:56` | W2-stub | ⏳ |
-| 18 | `feishu_save_account` | 飞书账户保存 | `utils/feishu-config.ts:101` | W2-stub | ⏳ |
-| 19 | `feishu_list_accounts` | 飞书账户列表 | `utils/feishu-config.ts:108` | W2-stub | ⏳ |
-| 20 | `feishu_delete_account` | 飞书账户删除 | `utils/feishu-config.ts:113` | W2-stub | ⏳ |
-| 21 | `feishu_update_account_model` | 飞书账户改模型 | `utils/feishu-config.ts:123` | W2-stub | ⏳ |
-| 22 | `feishu_list_providers` | 飞书 providers 列出 | `utils/feishu-config.ts:131` | W2-stub | ⏳ |
+| 1 | `get_file_size` | 大文件防护 pre-check | `context/file.tsx:207` | W1 | ✅ tauri.ts |
+| 2 | `get_file_mtime` | mtime 冲突检测 | `pages/session/file-tabs.tsx:445,489,1300` | W1 | ✅ tauri.ts |
+| 3 | `write_text_file` | 文本写盘(带 expectedMtime)| `pages/session/file-tabs.tsx:461` | W1 | ✅ tauri.ts |
+| 4 | `read_binary_file_base64` | 二进制读 base64 | `utils/md-export-docx.ts:1027` | W1 D5/D6 | ✅ tauri.ts |
+| 5 | `write_binary_file_absolute_base64` | 二进制写绝对路径 base64 | `components/file-tree.tsx:818`, `utils/markdown-editor-extensions.ts:342`, `utils/md-export-docx.ts:1722` | W1 D5/D6 | ✅ tauri.ts |
+| 6 | `fetch_url_base64` | 远程资源 fetch | `utils/md-export-docx.ts:1665` | W1 D5/D6 | ✅ tauri.ts |
+| 7 | `open_path` | 外部 app 打开文件/目录 | `components/file-too-large.tsx:47,55`, `pages/session/file-tabs.tsx:1383,1531` | W1 D5/D6 | ✅ tauri.ts |
+| 8 | `reveal_in_folder` | 资源管理器定位 | `components/file-tree.tsx:954` | W1 D5/D6 | ✅ tauri.ts |
+| 9 | `rename_path` | 文件/目录重命名(含撤销)| `components/file-tree.tsx:430,514,707,770` | W1 D5/D6 | ✅ tauri.ts |
+| 10 | `copy_path` | 复制 | `components/file-tree.tsx:433` | W1 D5/D6 | ✅ tauri.ts |
+| 11 | `trash_path` | 移到回收站 | `components/file-tree.tsx:538,924` | W1 D5/D6 | ✅ tauri.ts |
+| 12 | `create_empty_file` | 新建空文件 | `components/file-tree.tsx:666` | W1 D5/D6 | ✅ tauri.ts |
+| 13 | `create_directory` | 新建目录 | `components/file-tree.tsx:683` | W1 D5/D6 | ✅ tauri.ts |
+| 14 | `next_available_path` | 防冲突生成不重名路径 | `utils/file-conflict.ts:24` | W1 D5/D6 | ✅ tauri.ts |
+| 15 | `feishu_adapter_status` | 飞书 adapter 状态 | `utils/feishu-config.ts:44` | W1 D6 | ✅ tauri.ts(stub)|
+| 16 | `feishu_oauth_start` | 飞书 OAuth 起 device flow | `utils/feishu-config.ts:49` | W1 D6 | ✅ tauri.ts(stub)|
+| 17 | `feishu_oauth_poll` | 飞书 OAuth 轮询 | `utils/feishu-config.ts:56` | W1 D6 | ✅ tauri.ts(stub)|
+| 18 | `feishu_save_account` | 飞书账户保存 | `utils/feishu-config.ts:101` | W1 D6 | ✅ tauri.ts(stub)|
+| 19 | `feishu_list_accounts` | 飞书账户列表 | `utils/feishu-config.ts:108` | W1 D6 | ✅ tauri.ts(stub)|
+| 20 | `feishu_delete_account` | 飞书账户删除 | `utils/feishu-config.ts:113` | W1 D6 | ✅ tauri.ts(stub)|
+| 21 | `feishu_update_account_model` | 飞书账户改模型 | `utils/feishu-config.ts:123` | W1 D6 | ✅ tauri.ts(stub)|
+| 22 | `feishu_list_providers` | 飞书 providers 列出 | `utils/feishu-config.ts:131` | W1 D6 | ✅ tauri.ts(stub)|
 
 **注**:`W2-stub` 表示返一个最简化值即可(不深 mock 业务逻辑),Phase 1 e2e 范围不覆盖飞书桥接(参 1-spec.md §3.1 表注)。
 
@@ -128,3 +128,6 @@ interface MemFS {
 ## 修订记录
 
 - **2026-05-23 W1 D1**:首版盘点。Tauri invoke 22 命令、SDK 4 namespace ~18 方法。下一步 W1 D2 设计 Vite mock mode 入口。
+- **2026-05-23 W1 D2**:`vite/e2e-mock.js` plugin 落地,alias `@tauri-apps/api/core` → `e2e/mocks/tauri.ts`(最简 stub)。npm script `dev:e2e-mock`。
+- **2026-05-23 W1 D3**:critical path 验证过 — `bun run dev:e2e-mock` + `bun run test:e2e` → 5/6 pass + 0 console error,UI hydrate 成功。**不触发 D6 fallback**。
+- **2026-05-23 W1 D4-D6 合并**:`e2e/mocks/memfs.ts` 完整 + `tauri.ts` 重构为 dispatch 表 + 22 个 invoke 命令全接(fs 11 / 外部 app 3 / 飞书 8 stub)。重构后 spec 仍 5/6 pass(9.1s),verify 无回归。

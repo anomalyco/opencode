@@ -134,6 +134,27 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 - **D2 验收过**(无 import 报错 + vite server ready);UI hydrate 留 D3
 - SDK / `@opencode-ai/sdk/v2/client` 拦截**未在 D2 处理**:server.ts `createSdkForServer` 是 SDK 唯一入口,D3 决定走 `page.route` HTTP 层 mock(Stage ② 思路)还是 vite alias `createOpencodeClient`
 
+### 2026-05-23 W1 D3(critical path check-in ★ PASS ★)
+
+- **关键发现**:Stage ② mock infra(`e2e/fixtures.ts:installServerMock`)已用 Playwright `page.route` 拦 4096 端口,跟我的 vite mock plugin **完全正交**(plugin 拦 Tauri invoke,page.route 拦 SDK HTTP)— 两者叠加无冲突
+- 验法:背景跑 `bun run --cwd packages/app dev:e2e-mock` → 跑 `bun run test:e2e`(playwright config `reuseExistingServer: !CI` 复用 e2e-mock vite)
+- **结果**:**5 pass / 1 skipped(上游 todo.spec.ts fixme)/ 0 console error**,smoke-mock body 渲染 395 字符含 i18n 文案("No projects open" / "Getting started" / "OpenCode includes free models")
+- 耗时:18.2s(首次)→ 9.1s(二次,dep cache 命中)
+- **不触发 D6 fallback**,W1 后续 D4-D7 按原计划推进
+
+### 2026-05-23 W1 D4-D6(合并落地)
+
+- D4-D6 任务连贯,合并为一笔 commit 减少 git log 噪音
+- **`e2e/mocks/memfs.ts`**(170 行):内存 fs MemFS class — read/write/delete/exists/list/getMtime/getSize + watcher event emitter(file.edited / file.watcher.updated)+ 测试辅助(reset/preload/snapshot);mtime 严格单调递增对齐真 sidecar
+- **`e2e/mocks/tauri.ts`** 重构为 dispatch 表,接入 **22 个 invoke 命令**:
+  - **fs 核心 7 个**:`get_file_mtime` / `get_file_size` / `write_text_file`(含 expectedMtime 冲突检测,对齐真后端 mtime_conflict 错误码)/ `read_binary_file_base64` / `write_binary_file_absolute_base64` / `fetch_url_base64`(stub 返空)+ `notFound` 错误对齐
+  - **文件树 6 个**:`rename_path` / `copy_path` / `trash_path` / `create_empty_file` / `create_directory`(no-op,memfs 用前缀模拟目录)/ `next_available_path`(name(1).ext 风格防冲突)
+  - **外部 app 2 个**:`open_path` / `reveal_in_folder`(no-op stub,console.warn)
+  - **飞书 7 个 stub**:全返最简化值(`feishu_adapter_status` 返 false / `feishu_oauth_poll` 永远 pending / `_list_accounts` 返空数组等),Phase 1 不覆盖飞书 e2e
+- 重构后 verify:5/6 spec pass(9.1s),无回归
+- MANIFEST.md 22 命令全部从 ⏳ 改 ✅ + 修订记录追加 D2/D3/D4-D6 三条 note
+- D4 没写 memfs.test.ts(本想 3 个 unit 测):memfs 行为由 D5/D6 的 invoke handler 间接验证(D8+ chat-drop / auto-save 等示范用例真用到时再加深测试)
+
 ## 关联文档
 
 | 文档 | 关系 |
