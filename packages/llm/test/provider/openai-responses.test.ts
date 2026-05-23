@@ -407,6 +407,88 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("accepts the full ResponseIncludable union", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          prompt: "hi",
+          providerOptions: {
+            openai: {
+              include: ["reasoning.encrypted_content", "code_interpreter_call.outputs", "web_search_call.results"],
+            },
+          },
+        }),
+      )
+
+      expect(prepared.body.include).toEqual([
+        "reasoning.encrypted_content",
+        "code_interpreter_call.outputs",
+        "web_search_call.results",
+      ])
+    }),
+  )
+
+  it.effect("filters unknown includable values out of the include array", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          prompt: "hi",
+          // The user passed one invalid entry alongside a valid one. Keep the
+          // valid one so the request still succeeds rather than failing on a
+          // typo from upstream config.
+          providerOptions: { openai: { include: ["reasoning.encrypted_content", "bogus.thing"] } },
+        }),
+      )
+
+      expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
+    }),
+  )
+
+  it.effect("treats includeEncryptedReasoning: true as include: [reasoning.encrypted_content]", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          prompt: "hi",
+          providerOptions: { openai: { includeEncryptedReasoning: true } },
+        }),
+      )
+
+      expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
+    }),
+  )
+
+  it.effect("prefers explicit include over the includeEncryptedReasoning alias", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          prompt: "hi",
+          providerOptions: {
+            openai: {
+              includeEncryptedReasoning: true,
+              include: ["reasoning.encrypted_content", "code_interpreter_call.outputs"],
+            },
+          },
+        }),
+      )
+
+      expect(prepared.body.include).toEqual(["reasoning.encrypted_content", "code_interpreter_call.outputs"])
+    }),
+  )
+
+  it.effect("omits include when neither include nor the alias is set", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({ model, prompt: "hi", providerOptions: { openai: { store: false } } }),
+      )
+
+      expect(prepared.body.include).toBeUndefined()
+    }),
+  )
+
   it.effect("request OpenAI provider options override route defaults", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(

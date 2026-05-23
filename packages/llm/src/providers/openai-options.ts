@@ -10,7 +10,13 @@ export interface OpenAIOptionsInput {
   readonly promptCacheKey?: string
   readonly reasoningEffort?: ReasoningEffort
   readonly reasoningSummary?: "auto"
+  // The canonical OpenAI Responses wire field. Mirrors the SDK's
+  // `ResponseIncludable[]` union. Use this when you want full control over
+  // which includable categories are requested.
   readonly include?: ReadonlyArray<OpenAIResponseIncludable>
+  // Convenience alias that requests only `reasoning.encrypted_content`.
+  // When `include` is also set, `include` wins.
+  readonly includeEncryptedReasoning?: boolean
   readonly textVerbosity?: TextVerbosity
 }
 
@@ -29,6 +35,7 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
       reasoningEffort: options?.reasoningEffort,
       reasoningSummary: options?.reasoningSummary,
       include: options?.include,
+      includeEncryptedReasoning: options?.includeEncryptedReasoning,
       textVerbosity: options?.textVerbosity,
     }),
   )

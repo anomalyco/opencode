@@ -54,11 +54,20 @@ export const reasoningEffort = (request: LLMRequest): ReasoningEffort | undefine
 export const reasoningSummary = (request: LLMRequest): "auto" | undefined =>
   options(request)?.reasoningSummary === "auto" ? "auto" : undefined
 
+// Resolve the OpenAI Responses `include` field. The official wire shape is an
+// array of `ResponseIncludable`; the boolean `includeEncryptedReasoning` is a
+// convenience that requests only `reasoning.encrypted_content`. When both are
+// set, the explicit array wins so a caller asking for multiple categories
+// isn't quietly narrowed by the alias.
 export const include = (request: LLMRequest): ReadonlyArray<OpenAIResponseIncludable> | undefined => {
-  const value = options(request)?.include
-  if (!Array.isArray(value)) return undefined
-  const filtered = value.filter((entry): entry is OpenAIResponseIncludable => INCLUDABLES.has(entry))
-  return filtered.length > 0 ? filtered : undefined
+  const opts = options(request)
+  const explicit = opts?.include
+  if (Array.isArray(explicit)) {
+    const filtered = explicit.filter((entry): entry is OpenAIResponseIncludable => INCLUDABLES.has(entry))
+    if (filtered.length > 0) return filtered
+  }
+  if (opts?.includeEncryptedReasoning === true) return ["reasoning.encrypted_content"]
+  return undefined
 }
 
 export const promptCacheKey = (request: LLMRequest) => {
