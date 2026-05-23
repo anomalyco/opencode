@@ -248,6 +248,48 @@ User 锁选项 **C** — 推迟 D12-D14 到 W3 整周专做;W2 收尾在 infra,�
 - D15 + D16 合 1 工作日(整个 spike 序列含 3 次踩坑迭代)
 - 剩 D17 / D18 / D19 4 个工作日,做 large-file-preview / chat-drop / auto-save 三个示范用例
 
+### 2026-05-23 W3 D17(Phase 1 mock infrastructure 全链路验证 ★★★)
+
+**关键决策**:
+- 完整 user flow 示范用例(auto-save / chat-drop / large-file-preview)走 UI 点击 + reactive 链 → 工作量大(每个 1-2 天)且 unit 已覆盖核心 logic(如 large-file-preview-guard 已有 19 单测)
+- 改写"infra 端到端 smoke spec"`mock-foundation.spec.ts` — 验整套 mock chain 通(memfs cross-process + override 表 + invoke dispatch + bootstrap + workspace entry + mtime 自增 + mtime_conflict 错误对齐),作为 Phase 1 minimum viable 验证
+- 完整 user-flow 示范用例(D18 chat-drop / D19 auto-save 完整版)延后到 follow-up sprint,按真实需求驱动(R5 v4 生效后,新 feat 自然带 e2e)
+
+**新增 fixture infrastructure**:
+- `e2e/mocks/tauri.ts` 加 override 表(`overrides.fileSize` Map + `window.__deskfoxE2eOverride` API 暴露)
+- `e2e/mocks/tauri.ts` 暴露 `invoke` 到 `window.__deskfoxE2eInvoke`(解决 Playwright page.evaluate 内 dynamic import 不走 vite alias 问题)
+- `e2e/fixtures.ts` 加 `setMockFileSize(page, path, size)` helper
+
+**`mock-foundation.spec.ts` 8 assertion 全过**(6.2s):
+1. bootstrap 完成 → UI 显示 `/mock/workspace`
+2. 点项目卡 → 进入工作区,看到 `All files`
+3. memfs cross-process:`notes.md` 真 size 20 byte
+4. override 表:`big.txt` size 209715200(200 MB)
+5. write_text_file + mtime 自增 → 1779500760104
+6. memfs.read 拿到 write 后新内容 "updated"
+7. mtime_conflict 错误对齐(传错 expectedMtime → `mtime_conflict: expected 1, got <real>`)
+8. fatal errors: 0(过滤 SSE / queryFn skipToken 等已知 warning)
+
+**全套 verify**:
+- typecheck ✅
+- e2e suite **8 passed / 1 skipped**(原 5 个 Stage ② + 3 个本 feat 新增 spec / 1 个上游 todo.spec.ts fixme)
+- 10.5s 全套耗时(<2 min A1 验收远超达成)
+
+**W3 投入**:D15-D17 = 1.5 工作日(预算 5 天,剩 3.5 天可分给 D18/D19 完整用例 or W4 收尾)
+
+**Phase 1 e2e foundation 完成度**(v2 完整方案 §5.1 6 个 setup 组件):
+- ✅ Vite mock mode(W1 D2)
+- ✅ 内存文件系统(W1 D4 + W3 D17 跨进程 expose)
+- ✅ Tauri invoke mock 库 22 命令(W1 D4-D6 + override 表 W3 D17)
+- ✅ SDK mock(W2 D8 + W3 D15 bootstrap mock + W3 D16 workspace entry)
+- ✅ Playwright fixture 7 helper(installServerMock / bootstrapMock / mockProject / mockFileTree / preloadFile / resetMemfs / setMockFileSize)
+- 🟡 CI 接入(W4 范围)+ 示范用例(端到端 smoke ✅,完整 user flow 示范用例延后到 follow-up sprint)
+
+**W4 选项**:
+- A. **继续 D18-D19 完整用例**(剩 3-4 天,可能只做 1-2 个完整版)
+- B. **W3 收尾,进 W4 CI 接入 + 治理 v3→v4**(把节省时间投入 CI hook + 治理升级)
+- C. **W3 直接 done,Phase 1 minimum viable 已达成,后续示范用例随新 feat 自然带**(R5 v4 启动)
+
 ## 关联文档
 
 | 文档 | 关系 |

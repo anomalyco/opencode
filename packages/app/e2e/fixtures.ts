@@ -238,6 +238,19 @@ export async function resetMemfs(page: Page): Promise<void> {
   })
 }
 
+/** 注入特定文件 size 让 Tauri get_file_size mock 返指定值(测 large-file-preview 防护用)*/
+export async function setMockFileSize(page: Page, path: string, size: number): Promise<void> {
+  await page.evaluate(
+    ({ p, s }) => {
+      const w = window as unknown as {
+        __deskfoxE2eOverride?: { setFileSize(p: string, n: number): void }
+      }
+      w.__deskfoxE2eOverride?.setFileSize(p, s)
+    },
+    { p: path, s: size },
+  )
+}
+
 // ============== 扩展 base test:自动装 catch-all mock ==============
 
 export const test = base.extend<{ mockedPage: Page }>({

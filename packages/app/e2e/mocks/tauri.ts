@@ -12,6 +12,15 @@
 
 import { memfs } from "./memfs"
 
+// ============== 测试 override 表 ==============
+// 让 spec 通过 page.evaluate 注入特定 invoke 行为(如:`get_file_size` 返巨大值触发 large-file-preview)
+// 比 memfs.preload 200MB 字符串省内存
+const overrides: {
+  fileSize: Map<string, number>
+} = {
+  fileSize: new Map(),
+}
+
 // ============== 工具 ==============
 
 function fail(msg: string): never {
@@ -56,6 +65,9 @@ const fsHandlers: Record<string, Handler> = {
   // 参 packages/app/src/context/file.tsx:207
   get_file_size: ({ path }) => {
     const p = path as string
+    // override 优先 — spec 可注入巨大值触发 large-file-preview
+    const ov = overrides.fileSize.get(p)
+    if (ov !== undefined) return ov
     const s = memfs.getSize(p)
     if (s === null) notFound(p)
     return s
@@ -239,8 +251,16 @@ export function convertFileSrc(filePath: string, _protocol = "asset"): string {
   return `https://e2e-mock.invalid/${encodeURIComponent(filePath)}`
 }
 
-// ============== 暴露 memfs 到 window 给 Playwright fixture 用 ==============
-// fixtures.ts 通过 page.evaluate 调 `window.__deskfoxE2eMemfs.preload(...)` 同步数据
+// ============== 暴露 memfs + override + invoke 到 window 给 Playwright fixture 用 ==============
+// fixtures.ts 通过 page.evaluate 调:
+//   - `window.__deskfoxE2eMemfs.preload(...)` 同步数据
+//   - `window.__deskfoxE2eOverride.setFileSize(path, size)` 注入特定 invoke 行为
+//   - `window.__deskfoxE2eInvoke(cmd, args)` 直接调 Tauri invoke(绕过 dynamic import resolve 问题)
 if (import.meta.env?.VITE_E2E_MOCK === "true" && typeof window !== "undefined") {
   ;(window as unknown as { __deskfoxE2eMemfs: typeof memfs }).__deskfoxE2eMemfs = memfs
+  ;(window as unknown as { __deskfoxE2eOverride: { setFileSize(p: string, n: number): void; reset(): void } }).__deskfoxE2eOverride = {
+    setFileSize: (path: string, size: number) => overrides.fileSize.set(path, size),
+    reset: () => overrides.fileSize.clear(),
+  }
+  ;(window as unknown as { __deskfoxE2eInvoke: typeof invoke }).__deskfoxE2eInvoke = invoke
 }
