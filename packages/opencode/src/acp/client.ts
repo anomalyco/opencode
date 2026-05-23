@@ -642,19 +642,36 @@ export const layer = Layer.effect(
       const remote = runtime.sessions.get(input.sessionID)
       if (!remote) throw new Error(`ACP session not found: ${input.sessionID}`)
       const connection = yield* connect(remote.server)
-      if (!connection.agent.setSessionConfigOption) {
-        throw new Error(`ACP server does not support session/set_config_option: ${remote.server}`)
+      const hasConfigOption = remote.configOptions?.some((option: any) => option?.id === input.configID) === true
+      if (hasConfigOption) {
+        if (!connection.agent.setSessionConfigOption) throw new Error(`ACP server does not support session/set_config_option: ${remote.server}`)
+        const response = yield* Effect.tryPromise({
+          try: () =>
+            connection.agent.setSessionConfigOption!({
+              sessionId: remote.remoteSessionID,
+              configId: input.configID,
+              value: input.value,
+            }),
+          catch: (error) => new Error(`Failed to set ACP config option: ${errorMessage(error)}`),
+        })
+        remote.configOptions = response.configOptions
+      } else if (input.configID === "mode") {
+        if (!connection.agent.setSessionMode) throw new Error(`ACP server does not support session/set_mode: ${remote.server}`)
+        yield* Effect.tryPromise({
+          try: () => connection.agent.setSessionMode!({ sessionId: remote.remoteSessionID, modeId: input.value }),
+          catch: (error) => new Error(`Failed to set ACP mode: ${errorMessage(error)}`),
+        })
+        remote.modes = { ...asRecord(remote.modes), currentModeId: input.value }
+      } else if (input.configID === "model") {
+        if (!connection.agent.unstable_setSessionModel) throw new Error(`ACP server does not support session/set_model: ${remote.server}`)
+        yield* Effect.tryPromise({
+          try: () => connection.agent.unstable_setSessionModel!({ sessionId: remote.remoteSessionID, modelId: input.value }),
+          catch: (error) => new Error(`Failed to set ACP model: ${errorMessage(error)}`),
+        })
+        remote.models = { ...asRecord(remote.models), currentModelId: input.value }
+      } else {
+        throw new Error(`ACP server does not support config option: ${input.configID}`)
       }
-      const response = yield* Effect.tryPromise({
-        try: () =>
-          connection.agent.setSessionConfigOption!({
-            sessionId: remote.remoteSessionID,
-            configId: input.configID,
-            value: input.value,
-          }),
-        catch: (error) => new Error(`Failed to set ACP config option: ${errorMessage(error)}`),
-      })
-      remote.configOptions = response.configOptions
       yield* publishACPState(bus, remote)
       return {
         sessionID: remote.localSessionID,

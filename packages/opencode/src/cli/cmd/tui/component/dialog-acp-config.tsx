@@ -23,9 +23,45 @@ export function DialogAcpConfig() {
   const dialog = useDialog()
   const toast = useToast()
   const sessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
-  const options = createMemo(() => {
+  const configOptions = createMemo(() => {
     const state = sessionID() ? sync.data.acp[sessionID()!] : undefined
-    return (state?.configOptions ?? [])
+    if (state?.configOptions?.length) return state.configOptions
+    const modes = state?.modes
+    const models = state?.models
+    return [
+      ...(modes?.availableModes
+        ? [
+            {
+              id: "mode",
+              name: "Mode",
+              type: "select",
+              currentValue: modes.currentModeId,
+              options: modes.availableModes.map((mode: any) => ({
+                value: mode.id,
+                name: mode.name,
+                description: mode.description,
+              })),
+            },
+          ]
+        : []),
+      ...(models?.availableModels
+        ? [
+            {
+              id: "model",
+              name: "Model",
+              type: "select",
+              currentValue: models.currentModelId,
+              options: models.availableModels.map((model: any) => ({
+                value: model.modelId,
+                name: model.name,
+              })),
+            },
+          ]
+        : []),
+    ]
+  })
+  const options = createMemo(() => {
+    return configOptions()
       .filter((item): item is ConfigOption => item?.type === "select" && Array.isArray(item.options))
       .flatMap((item) =>
         item.options.map((option) => ({

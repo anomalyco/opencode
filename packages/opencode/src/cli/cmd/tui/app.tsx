@@ -613,7 +613,10 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         category: "Agent",
         slashName: "acp-options",
         hidden:
-          route.data.type !== "session" || (sync.data.acp[route.data.sessionID]?.configOptions?.length ?? 0) === 0,
+          route.data.type !== "session" ||
+          ((sync.data.acp[route.data.sessionID]?.configOptions?.length ?? 0) === 0 &&
+            !sync.data.acp[route.data.sessionID]?.modes &&
+            !sync.data.acp[route.data.sessionID]?.models),
         run: () => {
           dialog.replace(() => <DialogAcpConfig />)
         },
