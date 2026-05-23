@@ -19,6 +19,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { serviceUse } from "@/effect/service-use"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const log = Log.create({ service: "project" })
 
@@ -100,6 +101,10 @@ export const UpdatePayload = Schema.Struct({
 }).annotate({ identifier: "ProjectUpdateInput" })
 export type UpdatePayload = Types.DeepMutable<Schema.Schema.Type<typeof UpdatePayload>>
 
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Project.NotFoundError", {
+  projectID: ProjectID,
+}) {}
+
 // ---------------------------------------------------------------------------
 // Effect service
 // ---------------------------------------------------------------------------
@@ -115,7 +120,7 @@ export interface Interface {
   readonly discover: (input: Info) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Info[]>
   readonly get: (id: ProjectID) => Effect.Effect<Info | undefined>
-  readonly update: (input: UpdateInput) => Effect.Effect<Info>
+  readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   readonly initGit: (input: { directory: string; project: Info }) => Effect.Effect<Info>
   readonly setInitialized: (id: ProjectID) => Effect.Effect<void>
   readonly sandboxes: (id: ProjectID) => Effect.Effect<string[]>
@@ -130,7 +135,7 @@ type GitResult = { code: number; text: string; stderr: string }
 export const layer: Layer.Layer<
   Service,
   never,
-  AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Bus.Service
+  AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Bus.Service | RuntimeFlags.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -138,6 +143,7 @@ export const layer: Layer.Layer<
     const pathSvc = yield* Path.Path
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const bus = yield* Bus.Service
+    const flags = yield* RuntimeFlags.Service
 
     const git = Effect.fnUntraced(
       function* (args: string[], opts?: { cwd?: string }) {
@@ -282,7 +288,7 @@ export const layer: Layer.Layer<
             time: { created: Date.now(), updated: Date.now() },
           }
 
-      if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
+      if (flags.experimentalIconDiscovery) yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
 
       const result: Info = {
         ...existing,
@@ -370,7 +376,9 @@ export const layer: Layer.Layer<
       const base64 = Buffer.from(buffer).toString("base64")
       const mime = AppFileSystem.mimeType(shortest)
       const url = `data:${mime};base64,${base64}`
-      yield* update({ projectID: input.id, icon: { url } })
+      yield* update({ projectID: input.id, icon: { url } }).pipe(
+        Effect.catchTag("Project.NotFoundError", () => Effect.void),
+      )
     })
 
     const list = Effect.fn("Project.list")(function* () {
@@ -398,7 +406,7 @@ export const layer: Layer.Layer<
           .returning()
           .get(),
       )
-      if (!result) throw new Error(`Project not found: ${input.projectID}`)
+      if (!result) return yield* new NotFoundError({ projectID: input.projectID })
       const data = fromRow(result)
       yield* emitUpdated(data)
       return data
@@ -423,7 +431,7 @@ export const layer: Layer.Layer<
 
     const initState = yield* InstanceState.make(
       Effect.fn("Project.initState")(function* (ctx) {
-        yield* bus.subscribe(Command.Event.Executed).pipe(
+        yield* (yield* bus.subscribe(Command.Event.Executed)).pipe(
           Stream.runForEach((payload) =>
             payload.properties.name === Command.Default.INIT ? setInitialized(ctx.project.id) : Effect.void,
           ),
@@ -505,6 +513,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(CrossSpawnSpawner.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(NodePath.layer),
+  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 export const use = serviceUse(Service)

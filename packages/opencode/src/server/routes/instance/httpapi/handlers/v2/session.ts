@@ -1,8 +1,15 @@
 import { WorkspaceID } from "@/control-plane/schema"
 import { SessionV2 } from "@/v2/session"
-import { Effect, Schema } from "effect"
-import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
+import { DateTime, Effect, Option, Schema } from "effect"
+import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
+import {
+  InvalidCursorError,
+  InvalidRequestError,
+  ServiceUnavailableError,
+  SessionNotFoundError,
+  UnknownError,
+} from "../../errors"
 
 const DefaultSessionsLimit = 50
 
@@ -55,12 +62,31 @@ const sessionCursor = {
     filters: Pick<SessionCursor, "directory" | "path" | "workspaceID" | "roots" | "start" | "search">,
   ) {
     return Buffer.from(
-      JSON.stringify({ id: session.id, time: session.time.created, order, direction, ...filters }),
+      JSON.stringify({
+        ...filters,
+        id: session.id,
+        time: DateTime.toEpochMillis(session.time.updated),
+        order,
+        direction,
+      }),
     ).toString("base64url")
   },
   decode(input: string) {
     return decodeCursor(JSON.parse(Buffer.from(input, "base64url").toString("utf8")))
   },
+}
+
+function decodeWorkspaceID(input: string | undefined) {
+  if (input === undefined) return Effect.succeed(undefined)
+  const workspaceID = Schema.decodeUnknownOption(WorkspaceID)(input)
+  if (Option.isSome(workspaceID)) return Effect.succeed(workspaceID.value)
+  return Effect.fail(
+    new InvalidRequestError({
+      message: "Invalid workspace query parameter",
+      kind: "Query",
+      field: "workspace",
+    }),
+  )
 }
 
 export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session", (handlers) =>
@@ -71,17 +97,19 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
       .handle(
         "sessions",
         Effect.fn(function* (ctx) {
-          if (ctx.query.cursor && hasCursorFilter(ctx.query)) return yield* new HttpApiError.BadRequest({})
+          if (ctx.query.cursor && hasCursorFilter(ctx.query))
+            return yield* new InvalidCursorError({ message: "Cursor cannot be combined with order or filters" })
           const decoded = yield* Effect.try({
             try: () => (ctx.query.cursor ? sessionCursor.decode(ctx.query.cursor) : undefined),
-            catch: () => new HttpApiError.BadRequest({}),
+            catch: () => new InvalidCursorError({ message: "Invalid cursor" }),
           })
-          if (hasCursorRoutingMismatch(ctx.query, decoded)) return yield* new HttpApiError.BadRequest({})
+          if (hasCursorRoutingMismatch(ctx.query, decoded))
+            return yield* new InvalidCursorError({ message: "Cursor does not match requested directory or workspace" })
           const order = decoded?.order ?? ctx.query.order ?? "desc"
           const filters = decoded ?? {
             directory: ctx.query.directory,
             path: ctx.query.path,
-            workspaceID: ctx.query.workspace ? WorkspaceID.make(ctx.query.workspace) : undefined,
+            workspaceID: yield* decodeWorkspaceID(ctx.query.workspace),
             roots: ctx.query.roots,
             start: ctx.query.start,
             search: ctx.query.search,
@@ -111,31 +139,107 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
       .handle(
         "prompt",
         Effect.fn(function* (ctx) {
-          return yield* session.prompt({
-            sessionID: ctx.params.sessionID,
-            prompt: ctx.payload.prompt,
-            delivery: ctx.payload.delivery ?? SessionV2.DefaultDelivery,
-          })
+          return yield* session
+            .prompt({
+              sessionID: ctx.params.sessionID,
+              prompt: ctx.payload.prompt,
+              delivery: ctx.payload.delivery ?? SessionV2.DefaultDelivery,
+            })
+            .pipe(
+              Effect.catchTag("Session.NotFoundError", (error) =>
+                Effect.fail(
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+                ),
+              ),
+              Effect.catchTag("Session.OperationUnavailableError", (error) =>
+                Effect.fail(
+                  new ServiceUnavailableError({
+                    message: `V2 session ${error.operation} is not available yet`,
+                    service: `v2.session.${error.operation}`,
+                  }),
+                ),
+              ),
+            )
         }),
       )
       .handle(
         "compact",
         Effect.fn(function* (ctx) {
-          yield* session.compact(ctx.params.sessionID)
+          yield* session.compact(ctx.params.sessionID).pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+            Effect.catchTag("Session.OperationUnavailableError", (error) =>
+              Effect.fail(
+                new ServiceUnavailableError({
+                  message: `V2 session ${error.operation} is not available yet`,
+                  service: `v2.session.${error.operation}`,
+                }),
+              ),
+            ),
+          )
           return HttpApiSchema.NoContent.make()
         }),
       )
       .handle(
         "wait",
         Effect.fn(function* (ctx) {
-          yield* session.wait(ctx.params.sessionID)
+          yield* session.wait(ctx.params.sessionID).pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+            Effect.catchTag("Session.OperationUnavailableError", (error) =>
+              Effect.fail(
+                new ServiceUnavailableError({
+                  message: `V2 session ${error.operation} is not available yet`,
+                  service: `v2.session.${error.operation}`,
+                }),
+              ),
+            ),
+          )
           return HttpApiSchema.NoContent.make()
         }),
       )
       .handle(
         "context",
         Effect.fn(function* (ctx) {
-          return yield* session.context(ctx.params.sessionID)
+          return yield* session.context(ctx.params.sessionID).pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+            Effect.catchTag("Session.MessageDecodeError", (error) => {
+              const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+              return Effect.logError("failed to decode v2 session message").pipe(
+                Effect.annotateLogs({ ref, sessionID: error.sessionID, messageID: error.messageID }),
+                Effect.andThen(
+                  Effect.fail(
+                    new UnknownError({
+                      message: "Unexpected server error. Check server logs for details.",
+                      ref,
+                    }),
+                  ),
+                ),
+              )
+            }),
+          )
         }),
       )
   }),

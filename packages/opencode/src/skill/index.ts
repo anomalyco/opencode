@@ -5,12 +5,12 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import type { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { Permission } from "@/permission"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Config } from "@/config/config"
 import { ConfigMarkdown } from "@/config/markdown"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Glob } from "@opencode-ai/core/util/glob"
 import * as Log from "@opencode-ai/core/util/log"
 import { Discovery } from "./discovery"
@@ -57,17 +57,26 @@ function isSkillFrontmatter(data: unknown): data is { name: string; description?
   )
 }
 
-export const InvalidError = NamedError.create("SkillInvalidError", {
+export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()("SkillInvalidError", {
   path: Schema.String,
   message: Schema.optional(Schema.String),
   issues: Schema.optional(Schema.Array(Issue)),
-})
+}) {}
 
-export const NameMismatchError = NamedError.create("SkillNameMismatchError", {
+export class NameMismatchError extends Schema.TaggedErrorClass<NameMismatchError>()("SkillNameMismatchError", {
   path: Schema.String,
   expected: Schema.String,
   actual: Schema.String,
-})
+}) {}
+
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Skill.NotFoundError", {
+  name: Schema.String,
+  available: Schema.Array(Schema.String),
+}) {
+  override get message() {
+    return `Skill "${this.name}" not found. Available skills: ${this.available.join(", ") || "none"}`
+  }
+}
 
 type State = {
   skills: Record<string, Info>
@@ -86,6 +95,7 @@ type ScanState = {
 
 export interface Interface {
   readonly get: (name: string) => Effect.Effect<Info | undefined>
+  readonly require: (name: string) => Effect.Effect<Info, NotFoundError>
   readonly all: () => Effect.Effect<Info[]>
   readonly dirs: () => Effect.Effect<string[]>
   readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
@@ -165,14 +175,16 @@ const discoverSkills = Effect.fnUntraced(function* (
   discovery: Discovery.Interface,
   fsys: AppFileSystem.Interface,
   global: Global.Interface,
+  disableExternalSkills: boolean,
+  disableClaudeCodeSkills: boolean,
   directory: string,
   worktree: string,
 ) {
   const state: ScanState = { matches: new Set(), dirs: new Set() }
 
   const externalDirs: string[] = []
-  if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
-    if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS) externalDirs.push(CLAUDE_EXTERNAL_DIR)
+  if (!disableExternalSkills) {
+    if (!disableClaudeCodeSkills) externalDirs.push(CLAUDE_EXTERNAL_DIR)
     externalDirs.push(AGENTS_EXTERNAL_DIR)
 
     for (const dir of externalDirs) {
@@ -239,9 +251,19 @@ export const layer = Layer.effect(
     const bus = yield* Bus.Service
     const fsys = yield* AppFileSystem.Service
     const global = yield* Global.Service
+    const flags = yield* RuntimeFlags.Service
     const discovered = yield* InstanceState.make(
       Effect.fn("Skill.discovery")(function* (ctx) {
-        return yield* discoverSkills(config, discovery, fsys, global, ctx.directory, ctx.worktree)
+        return yield* discoverSkills(
+          config,
+          discovery,
+          fsys,
+          global,
+          flags.disableExternalSkills,
+          flags.disableClaudeCodeSkills,
+          ctx.directory,
+          ctx.worktree,
+        )
       }),
     )
     const state = yield* InstanceState.make(
@@ -265,6 +287,13 @@ export const layer = Layer.effect(
       return s.skills[name]
     })
 
+    const require = Effect.fn("Skill.require")(function* (name: string) {
+      const s = yield* InstanceState.get(state)
+      const info = s.skills[name]
+      if (info) return info
+      return yield* new NotFoundError({ name, available: Object.keys(s.skills).toSorted() })
+    })
+
     const all = Effect.fn("Skill.all")(function* () {
       const s = yield* InstanceState.get(state)
       return Object.values(s.skills)
@@ -281,7 +310,7 @@ export const layer = Layer.effect(
       return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
     })
 
-    return Service.of({ get, all, dirs, available })
+    return Service.of({ get, require, all, dirs, available })
   }),
 )
 
@@ -291,6 +320,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Bus.layer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Global.layer),
+  Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 export function fmt(list: Info[], opts: { verbose: boolean }) {

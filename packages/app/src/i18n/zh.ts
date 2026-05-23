@@ -319,6 +319,7 @@ export const dict = {
   "mcp.status.connected": "已连接",
   "mcp.status.failed": "失败",
   "mcp.status.needs_auth": "需要授权",
+  "mcp.auth.clickToAuthenticate": "点击进行授权",
   "mcp.status.disabled": "已禁用",
 
   "dialog.fork.empty": "没有可用于分叉的消息",
@@ -497,6 +498,14 @@ export const dict = {
   "home.recentProjects": "最近项目",
   "home.empty.title": "没有最近项目",
   "home.empty.description": "通过打开本地项目开始使用",
+  "home.title": "主页",
+  "home.projects": "项目",
+  "home.project.add": "添加项目",
+  "home.sessions.search.placeholder": "搜索会话",
+  "home.sessions.empty": "未找到会话",
+  "home.sessions.group.today": "今天",
+  "home.sessions.group.yesterday": "昨天",
+  "home.sessions.group.older": "更早",
 
   "session.tab.session": "会话",
   "session.tab.review": "审查",

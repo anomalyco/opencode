@@ -13,6 +13,7 @@ import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 void Log.init({ print: false })
 
@@ -21,7 +22,7 @@ const encoder = new TextEncoder()
 const layer = Layer.mergeAll(Project.defaultLayer, CrossSpawnSpawner.defaultLayer)
 const it = testEffect(layer)
 
-function run<A>(fn: (svc: Project.Interface) => Effect.Effect<A>) {
+function run<A, E>(fn: (svc: Project.Interface) => Effect.Effect<A, E>) {
   return Effect.gen(function* () {
     const svc = yield* Project.Service
     return yield* fn(svc)
@@ -69,11 +70,35 @@ function projectLayerWithFailure(failArg: string) {
     Layer.provide(Bus.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(NodePath.layer),
+    Layer.provide(RuntimeFlags.defaultLayer),
+  )
+}
+
+function projectLayerWithRuntimeFlags(flags: Parameters<typeof RuntimeFlags.layer>[0]) {
+  return Project.layer.pipe(
+    Layer.provide(Bus.defaultLayer),
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(NodePath.layer),
+    Layer.provide(RuntimeFlags.layer(flags)),
   )
 }
 
 const failureIt = (failArg: string) =>
   testEffect(Layer.mergeAll(projectLayerWithFailure(failArg), CrossSpawnSpawner.defaultLayer))
+
+const iconDiscoveryIt = testEffect(
+  Layer.provideMerge(projectLayerWithRuntimeFlags({ experimentalIconDiscovery: true }), CrossSpawnSpawner.defaultLayer),
+)
+
+function waitForProjectIcon(id: ProjectID, attempts = 50): Effect.Effect<Project.Info> {
+  return Effect.gen(function* () {
+    const project = Project.get(id)
+    if (project?.icon?.url) return project
+    if (attempts <= 0) throw new Error(`Project icon was not discovered: ${id}`)
+    yield* Effect.sleep("10 millis")
+    return yield* waitForProjectIcon(id, attempts - 1)
+  })
+}
 
 describe("Project.fromDirectory", () => {
   it.live("should handle git repository with no commits", () =>
@@ -284,6 +309,20 @@ describe("Project.fromDirectory with worktrees", () => {
 })
 
 describe("Project.discover", () => {
+  iconDiscoveryIt.live("discovers favicon from fromDirectory when enabled", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped({ git: true })
+      const pngData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+      yield* Effect.promise(() => Bun.write(path.join(tmp, "favicon.png"), pngData))
+
+      const { project } = yield* run((svc) => svc.fromDirectory(tmp))
+      const updated = yield* waitForProjectIcon(project.id)
+
+      expect(updated.icon?.url).toStartWith("data:")
+      expect(updated.icon?.url).toContain("base64")
+    }),
+  )
+
   it.live("should discover favicon.png in root", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped({ git: true })
@@ -442,7 +481,7 @@ describe("Project.update", () => {
     }),
   )
 
-  it.live("should throw error when project not found", () =>
+  it.live("should fail when project not found", () =>
     Effect.gen(function* () {
       const exit = yield* run((svc) =>
         svc.update({
@@ -453,9 +492,7 @@ describe("Project.update", () => {
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
         const error = Cause.squash(exit.cause)
-        expect(error instanceof Error ? error.message : String(error)).toContain(
-          "Project not found: nonexistent-project-id",
-        )
+        expect(error).toMatchObject({ _tag: "Project.NotFoundError", projectID: "nonexistent-project-id" })
       }
     }),
   )
