@@ -16,6 +16,7 @@ import * as Log from "@opencode-ai/core/util/log"
 import { Discovery } from "./discovery"
 import CUSTOMIZE_OPENCODE_SKILL_BODY from "./prompt/customize-opencode.md" with { type: "text" }
 import { isRecord } from "@/util/record"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 
 const log = Log.create({ service: "skill" })
 const CLAUDE_EXTERNAL_DIR = ".claude"
@@ -242,6 +243,8 @@ const loadSkills = Effect.fnUntraced(function* (state: State, discovered: Discov
 })
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Skill") {}
+
+export const use = serviceUse(Service)
 
 export const layer = Layer.effect(
   Service,
