@@ -497,25 +497,24 @@
     content: "";
     position: absolute;
     top: 50%;
-    left: -85%;
-    width: 55%;
-    height: 165%;
-    border-radius: 999px;
-    transform: translateY(-50%) skewX(-12deg);
-    background: linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0) 0%,
-      rgba(255, 255, 255, 0.08) 24%,
-      rgba(255, 255, 255, 0.28) 40%,
-      rgba(255, 255, 255, 0.78) 50%,
-      rgba(255, 255, 255, 0.28) 60%,
-      rgba(255, 255, 255, 0.08) 76%,
+    left: 50%;
+    width: 1.4em;
+    height: 1.4em;
+    border-radius: 50%;
+    transform: translate3d(-190%, -50%, 0);
+    background: radial-gradient(
+      circle,
+      rgba(255, 255, 255, 0.34) 0%,
+      rgba(255, 255, 255, 0.18) 40%,
+      rgba(255, 255, 255, 0.07) 68%,
       rgba(255, 255, 255, 0) 100%
     );
+    filter: blur(2.5px);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
     pointer-events: none;
-    opacity: 0.95;
-    animation: session-turn-thinking-sheen 1.15s linear infinite;
-    will-change: left;
+    opacity: 0.72;
+    animation: session-turn-thinking-sheen 1.35s linear infinite;
+    will-change: transform;
   }
 
   [data-slot="session-turn-thinking-time"] {
@@ -700,10 +699,10 @@
 
 @keyframes session-turn-thinking-sheen {
   0% {
-    left: -85%;
+    transform: translate3d(-190%, -50%, 0);
   }
 
   100% {
-    left: 125%;
+    transform: translate3d(190%, -50%, 0);
   }
 }
