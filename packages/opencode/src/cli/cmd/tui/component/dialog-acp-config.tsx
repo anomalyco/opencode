@@ -83,6 +83,8 @@ export function DialogAcpConfig() {
               toast.show({ variant: "error", message: "Failed to set ACP option", duration: 3000 })
               return
             }
+            const state = await response.json().catch(() => undefined)
+            if (state && typeof state === "object") sync.acp.update(state)
             dialog.clear()
           },
         })),

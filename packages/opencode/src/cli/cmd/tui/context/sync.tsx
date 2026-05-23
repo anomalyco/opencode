@@ -147,15 +147,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       const anyEvent = event as any
       if (anyEvent.type === "acp.session.updated") {
         const state = anyEvent.properties as AcpSessionState & { sessionID: string }
-        setStore("acp", state.sessionID, (prev = {}) => ({
-          ...prev,
-          ...(state.configOptions !== undefined ? { configOptions: state.configOptions } : {}),
-          ...(state.modes !== undefined ? { modes: state.modes } : {}),
-          ...(state.models !== undefined ? { models: state.models } : {}),
-          ...(state.availableCommands !== undefined ? { availableCommands: state.availableCommands } : {}),
-          ...(state.usage !== undefined ? { usage: state.usage } : {}),
-          ...(state.info !== undefined ? { info: state.info } : {}),
-        }))
+        result.acp.update(state)
         return
       }
       switch (event.type) {
@@ -569,6 +561,19 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
           )
           fullSyncedSessions.add(sessionID)
+        },
+      },
+      acp: {
+        update(state: AcpSessionState & { sessionID: string }) {
+          setStore("acp", state.sessionID, (prev = {}) => ({
+            ...prev,
+            ...(state.configOptions !== undefined ? { configOptions: state.configOptions } : {}),
+            ...(state.modes !== undefined ? { modes: state.modes } : {}),
+            ...(state.models !== undefined ? { models: state.models } : {}),
+            ...(state.availableCommands !== undefined ? { availableCommands: state.availableCommands } : {}),
+            ...(state.usage !== undefined ? { usage: state.usage } : {}),
+            ...(state.info !== undefined ? { info: state.info } : {}),
+          }))
         },
       },
       bootstrap,
