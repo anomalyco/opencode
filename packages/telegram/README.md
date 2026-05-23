@@ -32,6 +32,31 @@ The bot responds to messages in chats, creating separate opencode sessions for e
 | `/model` | Show or switch the current model |
 | `/mode` | Show or switch the current mode |
 
+## Automatic Startup
+
+To start the Telegram bot automatically when opencode starts, add the following to your `opencode.json`:
+
+```json
+{
+  "integrations": {
+    "telegram": {
+      "enabled": true,
+      "token": "env:TELEGRAM_BOT_TOKEN"
+    }
+  }
+}
+```
+
+The `env:PREFIX` pattern reads secrets from environment variables — no tokens in config files.
+
+When enabled, the bot starts alongside the opencode server and connects in-process (no separate `bun dev` needed).
+
+For standalone development, you can still run:
+```bash
+cd packages/telegram && bun dev
+TELEGRAM_BOT_TOKEN=your_token bun run src/index.ts
+```
+
 ## Architecture
 
 Uses the same pattern as the Slack integration: `createOpencode()` spawns an opencode server, session map tracks chat+thread to opencode session mapping, and SSE events stream updates back to Telegram.

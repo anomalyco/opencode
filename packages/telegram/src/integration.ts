@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard, type Context } from "grammy"
+import { Bot, InlineKeyboard } from "grammy"
 import { type OpencodeClient, type ToolPart } from "@opencode-ai/sdk"
 
 export interface Integration {
@@ -47,7 +47,6 @@ function chunkMessage(text: string, limit = 4096): string[] {
 
 export function createTelegramIntegration(config: IntegrationConfig): Integration {
   const token = config.token as string
-  const directory = config.directory as string | undefined
 
   let bot: Bot | undefined
   let unsubBus: (() => void) | undefined
