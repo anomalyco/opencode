@@ -1,4 +1,5 @@
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
@@ -7,6 +8,7 @@ import type { Permission } from "../../src/permission"
 import type { Tool } from "@/tool/tool"
 import { SkillTool } from "../../src/tool/skill"
 import { ToolRegistry } from "@/tool/registry"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
@@ -27,17 +29,16 @@ afterEach(async () => {
 
 const node = CrossSpawnSpawner.defaultLayer
 
-const it = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, node))
+const it = testEffect(Layer.mergeAll(ToolRegistry.defaultLayer, node, AppFileSystem.defaultLayer))
 
 describe("tool.skill", () => {
   it.live("execute returns skill content block with files", () =>
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
         const skill = path.join(dir, ".opencode", "skill", "tool-skill")
-        yield* Effect.promise(() =>
-          Bun.write(
-            path.join(skill, "SKILL.md"),
-            `---
+        yield* AppFileSystem.use.writeWithDirs(
+          path.join(skill, "SKILL.md"),
+          `---
 name: tool-skill
 description: Skill for tool tests.
 ---
@@ -46,9 +47,8 @@ description: Skill for tool tests.
 
 Use this skill.
 `,
-          ),
         )
-        yield* Effect.promise(() => Bun.write(path.join(skill, "scripts", "demo.txt"), "demo"))
+        yield* AppFileSystem.use.writeWithDirs(path.join(skill, "scripts", "demo.txt"), "demo")
 
         const home = process.env.OPENCODE_TEST_HOME
         process.env.OPENCODE_TEST_HOME = dir
@@ -61,8 +61,8 @@ Use this skill.
         const registry = yield* ToolRegistry.Service
         const agent = { name: "build", mode: "primary" as const, permission: [], options: {} }
         const tool = (yield* registry.tools({
-          providerID: "opencode" as any,
-          modelID: "gpt-5" as any,
+          providerID: ProviderID.opencode,
+          modelID: ModelID.make("gpt-5"),
           agent,
         })).find((tool) => tool.id === SkillTool.id)
         if (!tool) throw new Error("Skill tool not found")
@@ -105,8 +105,8 @@ Use this skill.
         const registry = yield* ToolRegistry.Service
         const agent = { name: "build", mode: "primary" as const, permission: [], options: {} }
         const tool = (yield* registry.tools({
-          providerID: "opencode" as any,
-          modelID: "gpt-5" as any,
+          providerID: ProviderID.opencode,
+          modelID: ModelID.make("gpt-5"),
           agent,
         })).find((tool) => tool.id === SkillTool.id)
         if (!tool) throw new Error("Skill tool not found")
