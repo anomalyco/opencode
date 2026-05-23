@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { GoogleVertexAnthropicPlugin } from "@opencode-ai/core/plugin/provider/google-vertex"
+import { GoogleVertexAnthropicPlugin, GoogleVertexPlugin } from "@opencode-ai/core/plugin/provider/google-vertex"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { fakeSelectorSdk, it, model, withEnv } from "./provider-helper"
 
@@ -107,6 +107,73 @@ describe("GoogleVertexAnthropicPlugin", () => {
           )
         }),
     ),
+  )
+
+  it.effect("creates SDKs for google-vertex Anthropic models with multi-region endpoints", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      yield* plugin.add(GoogleVertexAnthropicPlugin)
+      const result = yield* plugin.trigger(
+        "aisdk.sdk",
+        {
+          model: model("google-vertex", "claude-sonnet-4-5"),
+          package: "@ai-sdk/google-vertex/anthropic",
+          options: { name: "google-vertex", project: "project", location: "eu" },
+        },
+        {},
+      )
+      expect(result.sdk.languageModel("claude-sonnet-4-5").config.baseURL).toBe(
+        "https://aiplatform.eu.rep.googleapis.com/v1/projects/project/locations/eu/publishers/anthropic/models",
+      )
+    }),
+  )
+
+  it.effect("keeps configured baseURL for google-vertex Anthropic models", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      yield* plugin.add(GoogleVertexAnthropicPlugin)
+      const result = yield* plugin.trigger(
+        "aisdk.sdk",
+        {
+          model: model("google-vertex", "claude-sonnet-4-5"),
+          package: "@ai-sdk/google-vertex/anthropic",
+          options: { name: "google-vertex", project: "project", location: "eu", baseURL: "https://proxy.example/v1" },
+        },
+        {},
+      )
+      expect(result.sdk.languageModel("claude-sonnet-4-5").config.baseURL).toBe("https://proxy.example/v1")
+    }),
+  )
+
+  it.effect("selects google-vertex Anthropic language models through V2 plugins", () =>
+    Effect.gen(function* () {
+      const plugin = yield* PluginV2.Service
+      yield* plugin.add(GoogleVertexPlugin)
+      yield* plugin.add(GoogleVertexAnthropicPlugin)
+      const sdkResult = yield* plugin.trigger(
+        "aisdk.sdk",
+        {
+          model: model("google-vertex", " claude-sonnet-4-5 "),
+          package: "@ai-sdk/google-vertex/anthropic",
+          options: { name: "google-vertex", project: "project", location: "us" },
+        },
+        {},
+      )
+      const languageResult = yield* plugin.trigger(
+        "aisdk.language",
+        {
+          model: model("google-vertex", " claude-sonnet-4-5 "),
+          sdk: sdkResult.sdk,
+          options: {},
+        },
+        {},
+      )
+      const language = languageResult.language as unknown as { config: { baseURL: string }; modelId: string }
+      expect(language.config.baseURL).toBe(
+        "https://aiplatform.us.rep.googleapis.com/v1/projects/project/locations/us/publishers/anthropic/models",
+      )
+      expect(language.modelId).toBe("claude-sonnet-4-5")
+    }),
   )
 
   it.effect("trims model IDs before selecting language models", () =>
