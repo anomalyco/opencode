@@ -63,6 +63,7 @@ describe("RuntimeFlags", () => {
       expect(flags.experimentalWorkspaces).toBe(true)
       expect(flags.experimentalIconDiscovery).toBe(true)
       expect(flags.experimentalNativeLlm).toBe(true)
+      expect(flags.experimentalRlmRepl).toBe(true)
       expect(flags.client).toBe("desktop")
     }),
   )
@@ -91,6 +92,16 @@ describe("RuntimeFlags", () => {
     }),
   )
 
+  it.effect("enables RLM REPL via dedicated or umbrella flag", () =>
+    Effect.gen(function* () {
+      const explicit = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL_RLM_REPL: "true" })))
+      const umbrella = yield* readFlags.pipe(Effect.provide(fromConfig({ OPENCODE_EXPERIMENTAL: "true" })))
+
+      expect(explicit.experimentalRlmRepl).toBe(true)
+      expect(umbrella.experimentalRlmRepl).toBe(true)
+    }),
+  )
+
   it.effect("layer accepts partial test overrides and fills defaults from Config definitions", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(
@@ -110,6 +121,7 @@ describe("RuntimeFlags", () => {
       expect(flags.enableExa).toBe(false)
       expect(flags.experimentalIconDiscovery).toBe(false)
       expect(flags.experimentalOxfmt).toBe(false)
+      expect(flags.experimentalRlmRepl).toBe(false)
       expect(flags.outputTokenMax).toBeUndefined()
       expect(flags.bashDefaultTimeoutMs).toBe(1_000)
       expect(flags.enableExperimentalModels).toBe(false)

@@ -102,6 +102,9 @@ const scout = testEffect(
 const background = testEffect(
   Layer.mergeAll(registryLayer({ flags: { experimentalBackgroundSubagents: true } }), node, Agent.defaultLayer),
 )
+const rlm = testEffect(
+  Layer.mergeAll(registryLayer({ flags: { experimentalRlmRepl: true } }), node, Agent.defaultLayer),
+)
 const withBrokenPlugin = testEffect(
   Layer.mergeAll(registryLayer({ plugin: brokenPluginLayer }), node, Agent.defaultLayer),
 )
@@ -163,6 +166,24 @@ describe("tool.registry", () => {
       const ids = yield* registry.ids()
 
       expect(ids).toContain("task_status")
+    }),
+  )
+
+  it.instance("hides rlm_repl unless experimental RLM REPL is enabled", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).not.toContain("rlm_repl")
+    }),
+  )
+
+  rlm.instance("shows rlm_repl when experimental RLM REPL is enabled", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+
+      expect(ids).toContain("rlm_repl")
     }),
   )
 

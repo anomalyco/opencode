@@ -55,6 +55,7 @@ import { Reference } from "@/reference/reference"
 import { BackgroundJob } from "@/background/job"
 import { SessionStatus } from "@/session/status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { RLMReplTool } from "./rlm-repl"
 
 const log = Log.create({ service: "tool.registry" })
 
@@ -136,6 +137,7 @@ export const layer: Layer.Layer<
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const rlmRepl = yield* RLMReplTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -246,6 +248,7 @@ export const layer: Layer.Layer<
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          rlm_repl: Tool.init(rlmRepl),
         })
 
         return {
@@ -269,6 +272,7 @@ export const layer: Layer.Layer<
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
+            ...(flags.experimentalRlmRepl ? [tool.rlm_repl] : []),
           ],
           task: tool.task,
           read: tool.read,
