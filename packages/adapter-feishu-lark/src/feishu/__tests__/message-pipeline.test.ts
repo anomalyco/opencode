@@ -6,7 +6,15 @@
 // 单测覆盖 8 个场景,纯函数,跨平台一致。
 
 import { describe, expect, test } from "bun:test"
-import { findLastUsefulAssistant, type AssistantMessageEntry } from "../message-pipeline"
+import type { FeishuAccount } from "../../core/config-schema"
+import { ChatSessionStore } from "../chat-session-store"
+import {
+  findLastUsefulAssistant,
+  MessagePipeline,
+  type AssistantMessageEntry,
+} from "../message-pipeline"
+import { PromptDispatcher } from "../prompt-dispatcher"
+import type { ImMessageEvent } from "../wss-client"
 
 // ============================================================
 // fixture builders
@@ -274,5 +282,168 @@ describe("本轮 parentID 约束", () => {
   test("userMsgId 不存在于 data → undefined(防御:userMsgId 找不到时不要误取)", () => {
     const data = [userMsgWithId("u1"), replyWithParent("u1", "r1")]
     expect(findLastUsefulAssistant(data, "u_nonexistent")).toBeUndefined()
+  })
+})
+
+// ============================================================
+// /new slash command 集成测 (feat: feishu-bridge-light)
+// ============================================================
+
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { afterEach, beforeEach } from "bun:test"
+
+interface SentText {
+  chatId: string
+  text: string
+}
+
+function makeNewCmdFakes() {
+  const sentTexts: SentText[] = []
+  const ackedMessages: string[] = []
+
+  const larkClient = {
+    im: {
+      v1: {
+        message: {
+          create: async (args: any) => {
+            const content = JSON.parse(args.data.content)
+            sentTexts.push({ chatId: args.data.receive_id, text: content.text })
+            return { data: { message_id: "om_fake" } }
+          },
+        },
+        messageReaction: {
+          create: async (args: any) => {
+            ackedMessages.push(args.path.message_id)
+            return { data: {} }
+          },
+        },
+      },
+    },
+  } as any
+
+  // /new path 不调 opencode,提供最小空 stub
+  const opencodeClient = {
+    session: {
+      create: async () => ({ data: { id: "ses_should_not_be_called" } }),
+      messages: async () => ({ data: [] }),
+      promptAsync: async () => ({ data: {} }),
+    },
+  } as any
+
+  return { sentTexts, ackedMessages, larkClient, opencodeClient }
+}
+
+function makeAccount(overrides: Partial<FeishuAccount> = {}): FeishuAccount {
+  return {
+    appId: "test_app",
+    appSecret: { type: "plaintext", value: "test_secret" },
+    domain: "feishu",
+    agent: "build",
+    ...overrides,
+  } as FeishuAccount
+}
+
+function makeEvent(overrides: Partial<ImMessageEvent> = {}): ImMessageEvent {
+  return {
+    accountId: "acc1",
+    messageId: "om_test_1",
+    chatId: "oc_chat_x",
+    chatType: "p2p",
+    messageType: "text",
+    content: JSON.stringify({ text: "/new" }),
+    senderOpenId: "ou_sender",
+    ts: String(Date.now()),
+    mentions: [],
+    ...overrides,
+  }
+}
+
+describe("/new slash command (feat: feishu-bridge-light)", () => {
+  let tmpDir: string
+  let store: ChatSessionStore
+  let dispatcher: PromptDispatcher
+  let fakes: ReturnType<typeof makeNewCmdFakes>
+  let pipeline: MessagePipeline
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "msg-pipeline-test-"))
+    store = new ChatSessionStore(join(tmpDir, "sessions.json"))
+    dispatcher = new PromptDispatcher()
+    fakes = makeNewCmdFakes()
+    pipeline = new MessagePipeline({
+      account: makeAccount(),
+      accountId: "acc1",
+      opencodeClient: fakes.opencodeClient,
+      dispatcher,
+      chatSessionStore: store,
+      larkClient: fakes.larkClient,
+    })
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  test("私聊 /new → 清 session + 发确认消息", async () => {
+    // 准备:先在 store 里有 session 映射
+    store.set("acc1", "oc_chat_x", "ses_old")
+    expect(store.get("acc1", "oc_chat_x")).toBe("ses_old")
+
+    await pipeline.testHandle(makeEvent({ content: JSON.stringify({ text: "/new" }) }))
+
+    // 断言 disk 已清
+    expect(store.get("acc1", "oc_chat_x")).toBeUndefined()
+    // 断言飞书收到确认文字
+    expect(fakes.sentTexts).toHaveLength(1)
+    expect(fakes.sentTexts[0]!.chatId).toBe("oc_chat_x")
+    expect(fakes.sentTexts[0]!.text).toBe("✅ 已开启新对话")
+    // /new 早退,不应触发 ack(ackMessage 在 /new 分支之后才执行)
+    expect(fakes.ackedMessages).toHaveLength(0)
+  })
+
+  test("私聊 @bot /new → strip mention 后识别,清 session", async () => {
+    store.set("acc1", "oc_chat_x", "ses_old")
+    await pipeline.testHandle(
+      makeEvent({
+        content: JSON.stringify({ text: "@_user_1 /new" }),
+        mentions: [{ key: "_user_1", name: "bot", openId: "ou_bot" }],
+      }),
+    )
+    expect(store.get("acc1", "oc_chat_x")).toBeUndefined()
+    expect(fakes.sentTexts[0]!.text).toBe("✅ 已开启新对话")
+  })
+
+  test("群聊 /new → 拒绝,session 不清", async () => {
+    store.set("acc1", "oc_chat_x", "ses_old")
+    await pipeline.testHandle(
+      makeEvent({
+        chatType: "group",
+        content: JSON.stringify({ text: "/new" }),
+      }),
+    )
+    // session 应保留
+    expect(store.get("acc1", "oc_chat_x")).toBe("ses_old")
+    // 提示文字
+    expect(fakes.sentTexts).toHaveLength(1)
+    expect(fakes.sentTexts[0]!.text).toContain("/new 仅支持私聊")
+  })
+
+  test("私聊 /new 无原 session(冷启)→ 也发确认,不抛", async () => {
+    expect(store.get("acc1", "oc_chat_x")).toBeUndefined()
+    await pipeline.testHandle(makeEvent({ content: JSON.stringify({ text: "/new" }) }))
+    expect(fakes.sentTexts[0]!.text).toBe("✅ 已开启新对话")
+  })
+
+  test("私聊普通消息(非 /new)→ 不走 /new 分支(走正常流程,会触发 ack)", async () => {
+    // 不准备 session;普通消息会进 opencode 流程,但本测试只验未走 /new 早退
+    // 不等正常流程完成(opencode stub 不实现 promptAsync resolve),只验早期行为
+    void pipeline.testHandle(makeEvent({ content: JSON.stringify({ text: "你好" }) }))
+    // 给 ack fire-and-forget 一点时间
+    await new Promise((r) => setTimeout(r, 50))
+    expect(fakes.ackedMessages).toEqual(["om_test_1"])
+    // 普通消息不发"已开启新对话"
+    expect(fakes.sentTexts.find((s) => s.text.includes("已开启新对话"))).toBeUndefined()
   })
 })

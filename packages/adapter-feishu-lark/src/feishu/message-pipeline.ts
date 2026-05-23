@@ -28,6 +28,7 @@ import {
   type PermissionRequest,
 } from "./permission-card"
 import type { PromptDispatcher } from "./prompt-dispatcher"
+import { stripMentions } from "./reply-actions"
 import type { ImMessageEvent } from "./wss-client"
 
 /** opencode SDK v1 client 类型(plugin PluginInput.client 类型) */
@@ -115,6 +116,12 @@ export interface PipelineOptions {
   chatSessionStore: ChatSessionStore
   /** 单次 prompt 超时(ms),默认 5min */
   promptTimeoutMs?: number
+  /**
+   * 可选注入的 lark Client(单测用 fake)。
+   * 不传时按 account 配置内部创建,跟 PermissionCardController 注入风格对齐。
+   * [feat: feishu-bridge-light]
+   */
+  larkClient?: Client
 }
 
 export class MessagePipeline {
@@ -129,12 +136,16 @@ export class MessagePipeline {
 
   constructor(opts: PipelineOptions) {
     this.opts = opts
-    const appSecret = readSecret(opts.account.appSecret)
-    this.larkClient = new Client({
-      appId: opts.account.appId,
-      appSecret,
-      domain: FEISHU_OPEN_API_DOMAIN[opts.account.domain],
-    })
+    if (opts.larkClient) {
+      this.larkClient = opts.larkClient
+    } else {
+      const appSecret = readSecret(opts.account.appSecret)
+      this.larkClient = new Client({
+        appId: opts.account.appId,
+        appSecret,
+        domain: FEISHU_OPEN_API_DOMAIN[opts.account.domain],
+      })
+    }
     this.permissionController = new PermissionCardController({
       opencodeClient: opts.opencodeClient,
       larkClient: this.larkClient,
@@ -190,6 +201,25 @@ export class MessagePipeline {
       return
     }
     if (!text) return
+
+    // [feat: feishu-bridge-light] /new slash command — 私聊清当前 session 切话题
+    // 群聊禁用(chatId 共享会影响全员);先 strip mention 再判,允许 "@bot /new" 形态
+    const cleaned = stripMentions(text, event.mentions)
+    if (cleaned === "/new") {
+      if (event.chatType !== "p2p") {
+        await this.sendFeishuText(event.chatId, "⚠️ /new 仅支持私聊(群里清会影响全员)")
+        return
+      }
+      const sessionID = this.chatToSession.get(event.chatId)
+      this.opts.chatSessionStore.delete(this.opts.accountId, event.chatId)
+      this.chatToSession.delete(event.chatId)
+      if (sessionID) this.sessionToChat.delete(sessionID)
+      await this.sendFeishuText(event.chatId, "✅ 已开启新对话")
+      console.log(
+        `[pipeline ${this.opts.accountId}] /new cleared session for chat=${event.chatId} (sessionID=${sessionID ?? "none"})`,
+      )
+      return
+    }
 
     console.log(
       `[pipeline ${this.opts.accountId}] msg from chat=${event.chatId}: "${text.slice(0, 100)}"`,
