@@ -39,7 +39,6 @@ import { openaiHelper } from "./provider/openai"
 import { oaCompatHelper } from "./provider/openai-compatible"
 import { createRateLimiter as createIpRateLimiter } from "./ipRateLimiter"
 import { createRateLimiter as createKeyRateLimiter } from "./keyRateLimiter"
-import { createDataDumper } from "./dataDumper"
 import { createTrialLimiter } from "./trialLimiter"
 import { createStickyTracker } from "./stickyProviderTracker"
 import { LiteData } from "@opencode-ai/console-core/lite.js"
@@ -103,7 +102,6 @@ export async function handler(
     const zenApiKey = rawZenApiKey === "public" ? undefined : rawZenApiKey
     const sessionId = input.request.headers.get("x-opencode-session") ?? ""
     const requestId = input.request.headers.get("x-opencode-request") ?? ""
-    const projectId = input.request.headers.get("x-opencode-project") ?? ""
     const ocClient = input.request.headers.get("x-opencode-client") ?? ""
     const userAgent = input.request.headers.get("user-agent") ?? ""
     logger.metric({
@@ -116,16 +114,16 @@ export async function handler(
     })
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
-    const dataDumper = createDataDumper(sessionId, requestId, projectId)
     const trialLimiter = createTrialLimiter(modelInfo.trialProvider, ip)
     const trialProviders = await trialLimiter?.check()
     const rateLimiter = modelInfo.allowAnonymous
       ? createIpRateLimiter(modelInfo.id, modelInfo.rateLimit, ip, input.request)
       : createKeyRateLimiter(modelInfo.id, modelInfo.rateLimit, zenApiKey, input.request)
     await rateLimiter?.check()
-    const stickyTracker = createStickyTracker(modelInfo.id, modelInfo.stickyProvider, sessionId)
-    const stickyProvider = await stickyTracker?.get()
     const authInfo = await authenticate(modelInfo, zenApiKey)
+    const stickyId = sessionId ? sessionId : (authInfo?.workspaceID ?? ip)
+    const stickyTracker = createStickyTracker(modelInfo.id, modelInfo.stickyProvider, stickyId)
+    const stickyProvider = await stickyTracker?.get()
     const billingSource = validateBilling(authInfo, modelInfo)
     logger.metric({ source: billingSource })
     const modelTpmLimiter = createModelTpmLimiter(modelInfo.providers)
@@ -139,8 +137,7 @@ export async function handler(
         zenData,
         authInfo,
         modelInfo,
-        ip,
-        sessionId,
+        stickyId,
         trialProviders,
         retry,
         stickyProvider,
@@ -167,9 +164,8 @@ export async function handler(
                   if (Array.isArray(v)) return [[k, v]]
                   if (typeof v === "object") return [[k, replacer(v)]]
                   if (typeof v === "string") {
-                    if (v === "$ip") return [[k, ip]]
                     if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
-                    if (v === "$session") return sessionId ? [[k, sessionId]] : []
+                    if (v === "$user") return stickyId ? [[k, stickyId]] : []
                     if (v.startsWith("$header.")) {
                       const headerValue = input.request.headers.get(v.slice(8))
                       return headerValue ? [[k, headerValue]] : []
@@ -188,7 +184,7 @@ export async function handler(
         method: "POST",
         headers: (() => {
           const headers = new Headers(input.request.headers)
-          providerInfo.modifyHeaders(headers, body, providerInfo.apiKey)
+          providerInfo.modifyHeaders(headers, providerInfo.apiKey, stickyId)
           Object.entries(providerInfo.headerMappings ?? {}).forEach(([k, v]) => {
             headers.set(k, headers.get(v)!)
           })
@@ -233,10 +229,6 @@ export async function handler(
 
     const { providerInfo, reqBody, res, startTimestamp } = await retriableRequest()
 
-    // Store model request
-    dataDumper?.provideModel(providerInfo.storeModel)
-    dataDumper?.provideRequest(reqBody)
-
     // Store sticky provider
     if (res.status === 200) await stickyTracker?.set(providerInfo.id)
 
@@ -277,8 +269,6 @@ export async function handler(
       const body = JSON.stringify(responseConverter(json))
       logger.metric({ response_length: body.length })
       logger.debug("RESPONSE: " + body)
-      dataDumper?.provideResponse(body)
-      dataDumper?.flush()
       return new Response(body, {
         status: resStatus,
         statusText: res.statusText,
@@ -309,7 +299,6 @@ export async function handler(
                   response_length: responseLength,
                   "timestamp.last_byte": timestampLastByte,
                 })
-                dataDumper?.flush()
                 await rateLimiter?.track()
                 const usage = usageParser.retrieve()
                 if (usage) {
@@ -347,7 +336,6 @@ export async function handler(
 
               responseLength += value.length
               buffer += decoder.decode(value, { stream: true })
-              dataDumper?.provideStream(buffer)
 
               const parts = buffer.split(providerInfo.streamSeparator)
               buffer = parts.pop() ?? ""
@@ -486,8 +474,7 @@ export async function handler(
     zenData: ZenData,
     authInfo: AuthInfo,
     modelInfo: ModelInfo,
-    ip: string,
-    sessionId: string,
+    stickyId: string,
     trialProviders: string[] | undefined,
     retry: RetryOptions,
     stickyProvider: string | undefined,
@@ -537,11 +524,10 @@ export async function handler(
           .flatMap((provider) => Array<typeof provider>(provider.weight).fill(provider))
 
         // Use the last 4 characters of session ID to select a provider
-        const identifier = sessionId.length ? sessionId : ip
         let h = 0
-        const l = identifier.length
+        const l = stickyId.length
         for (let i = l - 4; i < l; i++) {
-          h = (h * 31 + identifier.charCodeAt(i)) | 0 // 32-bit int
+          h = (h * 31 + stickyId.charCodeAt(i)) | 0 // 32-bit int
         }
         const index = (h >>> 0) % providers.length // make unsigned + range 0..length-1
         const provider = providers[index || 0]
