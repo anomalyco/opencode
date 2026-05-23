@@ -2,14 +2,13 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM } from "../../src"
 import { LLMClient } from "../../src/route"
-import * as Gemini from "../../src/protocols/gemini"
+import * as Google from "../../src/providers/google"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
-const model = Gemini.model({
-  id: "gemini-2.5-flash",
+const model = Google.configure({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY ?? "fixture",
-})
+}).model("gemini-2.5-flash")
 
 // Gemini does implicit prefix caching on 2.5+ models above ~1024 tokens. The
 // `CacheHint` is currently a no-op for Gemini (the explicit `CachedContent`
@@ -29,9 +28,8 @@ const recorded = recordedTests({
   provider: "google",
   protocol: "gemini",
   requires: ["GOOGLE_GENERATIVE_AI_API_KEY"],
-  // Two identical requests in one cassette — match by recording order so the
-  // second call replays the cached-hit interaction.
-  options: { dispatch: "sequential" },
+  // Two identical requests in one cassette — replay walks the cassette in
+  // recording order so the second call replays the cached-hit interaction.
 })
 
 describe("Gemini cache recorded", () => {

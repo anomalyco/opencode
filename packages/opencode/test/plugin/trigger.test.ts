@@ -1,26 +1,43 @@
-import { afterAll, describe, expect } from "bun:test"
+import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import path from "path"
 import { pathToFileURL } from "url"
+import { Bus } from "../../src/bus"
+import { Config } from "../../src/config/config"
+import { Env } from "../../src/env"
+import { RuntimeFlags } from "../../src/effect/runtime-flags"
+import { Plugin } from "../../src/plugin/index"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { AccountTest } from "../fake/account"
+import { AuthTest } from "../fake/auth"
+import { NpmTest } from "../fake/npm"
 
-const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
-process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
-
-const { Plugin } = await import("../../src/plugin/index")
-const it = testEffect(Layer.mergeAll(Plugin.defaultLayer, CrossSpawnSpawner.defaultLayer))
+const configLayer = Config.layer.pipe(
+  Layer.provide(EffectFlock.defaultLayer),
+  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(Env.defaultLayer),
+  Layer.provide(AuthTest.empty),
+  Layer.provide(AccountTest.empty),
+  Layer.provide(NpmTest.noop),
+  Layer.provide(FetchHttpClient.layer),
+)
+const it = testEffect(
+  Layer.mergeAll(
+    Plugin.layer.pipe(
+      Layer.provide(Bus.layer),
+      Layer.provide(configLayer),
+      Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })),
+    ),
+    CrossSpawnSpawner.defaultLayer,
+  ),
+)
 const systemHook = "experimental.chat.system.transform"
-
-afterAll(() => {
-  if (disableDefault === undefined) {
-    delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
-    return
-  }
-  process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = disableDefault
-})
 
 function withProject<A, E, R>(source: string, self: Effect.Effect<A, E, R>) {
   return provideTmpdirInstance((dir) =>

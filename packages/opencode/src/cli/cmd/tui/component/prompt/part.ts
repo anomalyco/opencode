@@ -14,3 +14,10 @@ export function assign(part: Item): Item & { id: PartID } {
     id: PartID.ascending(),
   }
 }
+
+export function expandPastedTextPlaceholders(text: string, parts: PromptInfo["parts"]) {
+  return parts.reduce((result, part) => {
+    if (part.type !== "text" || !part.source?.text) return result
+    return result.replace(part.source.text.value, part.text)
+  }, text)
+}

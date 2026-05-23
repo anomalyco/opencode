@@ -2,7 +2,6 @@ import { Effect, Schema } from "effect"
 import { Route } from "../route/client"
 import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
-import { Framing } from "../route/framing"
 import { HttpTransport, WebSocketTransport } from "../route/transport"
 import { Protocol } from "../route/protocol"
 import {
@@ -11,12 +10,16 @@ import {
   type FinishReason,
   type LLMRequest,
   type ProviderMetadata,
+  type ReasoningPart,
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
+  type ToolResultContentPart,
+  type ToolResultPart,
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { OpenAIOptions } from "./utils/openai-options"
+import { Lifecycle } from "./utils/lifecycle"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "openai-responses"
@@ -30,16 +33,45 @@ const OpenAIResponsesInputText = Schema.Struct({
   type: Schema.tag("input_text"),
   text: Schema.String,
 })
+const OpenAIResponsesInputImage = Schema.Struct({
+  type: Schema.tag("input_image"),
+  image_url: Schema.String,
+})
+const OpenAIResponsesInputContent = Schema.Union([OpenAIResponsesInputText, OpenAIResponsesInputImage])
+type OpenAIResponsesInputContent = Schema.Schema.Type<typeof OpenAIResponsesInputContent>
 
 const OpenAIResponsesOutputText = Schema.Struct({
   type: Schema.tag("output_text"),
   text: Schema.String,
 })
 
+const OpenAIResponsesReasoningSummaryText = Schema.Struct({
+  type: Schema.tag("summary_text"),
+  text: Schema.String,
+})
+
+const OpenAIResponsesReasoningItem = Schema.Struct({
+  type: Schema.tag("reasoning"),
+  id: Schema.String,
+  summary: Schema.Array(OpenAIResponsesReasoningSummaryText),
+  encrypted_content: optionalNull(Schema.String),
+})
+
+// `function_call_output.output` accepts either a plain string or an ordered
+// array of content items so tools can return images in addition to text.
+// https://platform.openai.com/docs/api-reference/responses/object
+const OpenAIResponsesFunctionCallOutputContent = Schema.Union([OpenAIResponsesInputText, OpenAIResponsesInputImage])
+
+const OpenAIResponsesFunctionCallOutput = Schema.Union([
+  Schema.String,
+  Schema.Array(OpenAIResponsesFunctionCallOutputContent),
+])
+
 const OpenAIResponsesInputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
-  Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenAIResponsesInputText) }),
+  Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenAIResponsesInputContent) }),
   Schema.Struct({ role: Schema.tag("assistant"), content: Schema.Array(OpenAIResponsesOutputText) }),
+  OpenAIResponsesReasoningItem,
   Schema.Struct({
     type: Schema.tag("function_call"),
     call_id: Schema.String,
@@ -49,7 +81,7 @@ const OpenAIResponsesInputItem = Schema.Union([
   Schema.Struct({
     type: Schema.tag("function_call_output"),
     call_id: Schema.String,
-    output: Schema.String,
+    output: OpenAIResponsesFunctionCallOutput,
   }),
 ])
 type OpenAIResponsesInputItem = Schema.Schema.Type<typeof OpenAIResponsesInputItem>
@@ -75,6 +107,7 @@ const OpenAIResponsesToolChoice = Schema.Union([
 const OpenAIResponsesCoreFields = {
   model: Schema.String,
   input: Schema.Array(OpenAIResponsesInputItem),
+  instructions: Schema.optional(Schema.String),
   tools: optionalArray(OpenAIResponsesTool),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   store: Schema.optional(Schema.Boolean),
@@ -141,8 +174,20 @@ const OpenAIResponsesStreamItem = Schema.Struct({
   server_label: Schema.optional(Schema.String),
   output: Schema.optional(Schema.Unknown),
   error: Schema.optional(Schema.Unknown),
+  encrypted_content: optionalNull(Schema.String),
 })
 type OpenAIResponsesStreamItem = Schema.Schema.Type<typeof OpenAIResponsesStreamItem>
+
+// OpenAI Responses surfaces provider failures in two related shapes. The
+// streaming `error` event carries the details at the top level
+// (`{ type: "error", code, message, param, sequence_number }`), while
+// `response.failed` carries them under `response.error`. We capture both so
+// the parser can surface a useful provider-error message in either path.
+const OpenAIResponsesErrorPayload = Schema.Struct({
+  code: optionalNull(Schema.String),
+  message: optionalNull(Schema.String),
+  param: optionalNull(Schema.String),
+})
 
 const OpenAIResponsesEvent = Schema.Struct({
   type: Schema.String,
@@ -150,21 +195,27 @@ const OpenAIResponsesEvent = Schema.Struct({
   item_id: Schema.optional(Schema.String),
   item: Schema.optional(OpenAIResponsesStreamItem),
   response: Schema.optional(
-    Schema.Struct({
-      id: Schema.optional(Schema.String),
-      service_tier: Schema.optional(Schema.String),
-      incomplete_details: optionalNull(Schema.Struct({ reason: Schema.String })),
-      usage: optionalNull(OpenAIResponsesUsage),
-    }),
+    Schema.StructWithRest(
+      Schema.Struct({
+        id: Schema.optional(Schema.String),
+        service_tier: optionalNull(Schema.String),
+        incomplete_details: optionalNull(Schema.Struct({ reason: Schema.String })),
+        usage: optionalNull(OpenAIResponsesUsage),
+        error: optionalNull(OpenAIResponsesErrorPayload),
+      }),
+      [Schema.Record(Schema.String, Schema.Unknown)],
+    ),
   ),
   code: Schema.optional(Schema.String),
   message: Schema.optional(Schema.String),
+  param: Schema.optional(Schema.String),
 })
 type OpenAIResponsesEvent = Schema.Schema.Type<typeof OpenAIResponsesEvent>
 
 interface ParserState {
   readonly tools: ToolStream.State<string>
   readonly hasFunctionCall: boolean
+  readonly lifecycle: Lifecycle.State
 }
 
 const invalid = ProviderShared.invalidRequest
@@ -194,46 +245,110 @@ const lowerToolCall = (part: ToolCallPart): OpenAIResponsesInputItem => ({
   arguments: ProviderShared.encodeJson(part.input),
 })
 
+const lowerReasoning = (part: ReasoningPart, store: boolean | undefined): OpenAIResponsesInputItem | undefined => {
+  const openai = part.providerMetadata?.openai
+  if (!ProviderShared.isRecord(openai) || typeof openai.itemId !== "string") return undefined
+  // With store:false, OpenAI only accepts previous reasoning items when the
+  // encrypted state is present. Bare rs_* ids point to non-persisted items.
+  if (store === false && typeof openai.reasoningEncryptedContent !== "string") return undefined
+  return {
+    type: "reasoning",
+    id: openai.itemId,
+    summary: part.text.length > 0 ? [{ type: "summary_text", text: part.text }] : [],
+    encrypted_content:
+      typeof openai.reasoningEncryptedContent === "string"
+        ? openai.reasoningEncryptedContent
+        : openai.reasoningEncryptedContent === null
+          ? null
+          : undefined,
+  }
+}
+
+const lowerUserContent = Effect.fn("OpenAIResponses.lowerUserContent")(function* (
+  part: LLMRequest["messages"][number]["content"][number],
+) {
+  if (part.type === "text") return { type: "input_text" as const, text: part.text }
+  if (part.type === "media" && part.mediaType.startsWith("image/")) {
+    return { type: "input_image" as const, image_url: ProviderShared.mediaDataUrl(part) }
+  }
+  if (part.type === "media") return yield* invalid("OpenAI Responses user media content only supports images")
+  return yield* ProviderShared.unsupportedContent("OpenAI Responses", "user", ["text", "media"])
+})
+
+// Tool results may carry structured text/images. Keep media as provider-native
+// content instead of JSON-stringifying base64 into a prompt string.
+const lowerToolResultContentItem = Effect.fn("OpenAIResponses.lowerToolResultContentItem")(function* (
+  item: ToolResultContentPart,
+) {
+  if (item.type === "text") return { type: "input_text" as const, text: item.text }
+  if (item.mediaType.startsWith("image/"))
+    return {
+      type: "input_image" as const,
+      image_url: ProviderShared.mediaDataUrl(item),
+    }
+  return yield* invalid(`OpenAI Responses tool-result media content only supports images, got ${item.mediaType}`)
+})
+
+const lowerToolResultOutput = Effect.fn("OpenAIResponses.lowerToolResultOutput")(function* (part: ToolResultPart) {
+  // Text/json/error results are encoded as a plain string for backward
+  // compatibility with existing cassettes and provider expectations.
+  if (part.result.type !== "content") return ProviderShared.toolResultText(part)
+  return yield* Effect.forEach(part.result.value, lowerToolResultContentItem)
+})
+
 const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIResponsesInputItem[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
   const input: OpenAIResponsesInputItem[] = [...system]
+  const store = OpenAIOptions.store(request)
 
   for (const message of request.messages) {
     if (message.role === "user") {
-      const content: TextPart[] = []
-      for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text"]))
-          return yield* ProviderShared.unsupportedContent("OpenAI Responses", "user", ["text"])
-        content.push(part)
-      }
-      input.push({ role: "user", content: content.map((part) => ({ type: "input_text", text: part.text })) })
+      input.push({ role: "user", content: yield* Effect.forEach(message.content, lowerUserContent) })
       continue
     }
 
     if (message.role === "assistant") {
       const content: TextPart[] = []
+      const flushText = () => {
+        if (content.length === 0) return
+        input.push({ role: "assistant", content: content.map((part) => ({ type: "output_text", text: part.text })) })
+        content.splice(0, content.length)
+      }
       for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text", "tool-call"]))
-          return yield* ProviderShared.unsupportedContent("OpenAI Responses", "assistant", ["text", "tool-call"])
         if (part.type === "text") {
           content.push(part)
           continue
         }
+        if (part.type === "reasoning") {
+          flushText()
+          const reasoning = lowerReasoning(part, store)
+          if (reasoning) input.push(reasoning)
+          continue
+        }
         if (part.type === "tool-call") {
+          flushText()
           input.push(lowerToolCall(part))
           continue
         }
+        return yield* ProviderShared.unsupportedContent("OpenAI Responses", "assistant", [
+          "text",
+          "reasoning",
+          "tool-call",
+        ])
       }
-      if (content.length > 0)
-        input.push({ role: "assistant", content: content.map((part) => ({ type: "output_text", text: part.text })) })
+      flushText()
       continue
     }
 
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent("OpenAI Responses", "tool", ["tool-result"])
-      input.push({ type: "function_call_output", call_id: part.id, output: ProviderShared.toolResultText(part) })
+      input.push({
+        type: "function_call_output",
+        call_id: part.id,
+        output: yield* lowerToolResultOutput(part),
+      })
     }
   }
 
@@ -249,7 +364,9 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
   const summary = OpenAIOptions.reasoningSummary(request)
   const encryptedState = OpenAIOptions.encryptedReasoning(request)
   const verbosity = OpenAIOptions.textVerbosity(request)
+  const instructions = OpenAIOptions.instructions(request)
   return {
+    ...(instructions ? { instructions } : {}),
     ...(store !== undefined ? { store } : {}),
     ...(promptCacheKey ? { prompt_cache_key: promptCacheKey } : {}),
     ...(encryptedState ? { include: ["reasoning.encrypted_content"] as const } : {}),
@@ -343,6 +460,11 @@ const isHostedToolItem = (
 ): item is OpenAIResponsesStreamItem & { type: HostedToolType; id: string } =>
   item.type in HOSTED_TOOLS && typeof item.id === "string" && item.id.length > 0
 
+const isReasoningItem = (
+  item: OpenAIResponsesStreamItem,
+): item is OpenAIResponsesStreamItem & { type: "reasoning"; id: string } =>
+  item.type === "reasoning" && typeof item.id === "string" && item.id.length > 0
+
 // Round-trip the full item as the structured result so consumers can extract
 // outputs / sources / status without re-decoding.
 const hostedToolResult = (item: OpenAIResponsesStreamItem) => {
@@ -378,30 +500,58 @@ type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 const NO_EVENTS: StepResult["1"] = []
 
 // `response.completed` / `response.incomplete` are clean finishes that emit a
-// `request-finish` event; `response.failed` is a hard failure that emits a
+// `finish` event; `response.failed` is a hard failure that emits a
 // `provider-error`. All three end the stream — kept in one set so `step` and
 // the protocol's `terminal` predicate stay in sync.
 const TERMINAL_TYPES = new Set(["response.completed", "response.incomplete", "response.failed"])
 
 const onOutputTextDelta = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
   if (!event.delta) return [state, NO_EVENTS]
-  return [state, [LLMEvent.textDelta({ id: event.item_id ?? "text-0", text: event.delta })]]
+  const events: LLMEvent[] = []
+  return [
+    { ...state, lifecycle: Lifecycle.textDelta(state.lifecycle, events, event.item_id ?? "text-0", event.delta) },
+    events,
+  ]
 }
+
+const onReasoningDelta = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
+  if (!event.delta) return [state, NO_EVENTS]
+  const events: LLMEvent[] = []
+  return [
+    {
+      ...state,
+      lifecycle: Lifecycle.reasoningDelta(state.lifecycle, events, event.item_id ?? "reasoning-0", event.delta),
+    },
+    events,
+  ]
+}
+
+// The summary done event does not carry encrypted continuation state. Finish the
+// common reasoning block when the full reasoning item arrives in output_item.done.
+const onReasoningDone = (state: ParserState, _event: OpenAIResponsesEvent): StepResult => [state, NO_EVENTS]
+
+const reasoningMetadata = (item: OpenAIResponsesStreamItem & { id: string }) =>
+  openaiMetadata({ itemId: item.id, reasoningEncryptedContent: item.encrypted_content ?? null })
 
 const onOutputItemAdded = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
   const item = event.item
   if (item?.type !== "function_call" || !item.id) return [state, NO_EVENTS]
+  const providerMetadata = openaiMetadata({ itemId: item.id })
+  const events: LLMEvent[] = []
+  const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
   return [
     {
+      ...state,
+      lifecycle,
       hasFunctionCall: state.hasFunctionCall,
       tools: ToolStream.start(state.tools, item.id, {
         id: item.call_id ?? item.id,
         name: item.name ?? "",
         input: item.arguments ?? "",
-        providerMetadata: openaiMetadata({ itemId: item.id }),
+        providerMetadata,
       }),
     },
-    NO_EVENTS,
+    [...events, LLMEvent.toolInputStart({ id: item.call_id ?? item.id, name: item.name ?? "", providerMetadata })],
   ]
 }
 
@@ -418,10 +568,10 @@ const onFunctionCallArgumentsDelta = Effect.fn("OpenAIResponses.onFunctionCallAr
     "OpenAI Responses tool argument delta is missing its tool call",
   )
   if (ToolStream.isError(result)) return yield* result
-  return [
-    { hasFunctionCall: state.hasFunctionCall, tools: result.tools },
-    result.event ? [result.event] : NO_EVENTS,
-  ] satisfies StepResult
+  const events: LLMEvent[] = []
+  const lifecycle = result.events.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
+  events.push(...result.events)
+  return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
 })
 
 const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function* (
@@ -440,46 +590,99 @@ const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function*
       item.arguments === undefined
         ? yield* ToolStream.finish(ADAPTER, tools, item.id)
         : yield* ToolStream.finishWithInput(ADAPTER, tools, item.id, item.arguments)
+    const events: LLMEvent[] = []
+    const resultEvents = result.events ?? []
+    const lifecycle = resultEvents.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
+    events.push(...resultEvents)
     return [
-      { hasFunctionCall: result.event ? true : state.hasFunctionCall, tools: result.tools },
-      result.event ? [result.event] : NO_EVENTS,
+      {
+        ...state,
+        lifecycle,
+        hasFunctionCall: resultEvents.some(LLMEvent.is.toolCall) ? true : state.hasFunctionCall,
+        tools: result.tools,
+      },
+      events,
     ] satisfies StepResult
   }
 
-  if (isHostedToolItem(item)) return [state, hostedToolEvents(item)] satisfies StepResult
+  if (isHostedToolItem(item)) {
+    const events: LLMEvent[] = []
+    const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+    events.push(...hostedToolEvents(item))
+    return [{ ...state, lifecycle }, events] satisfies StepResult
+  }
+
+  if (isReasoningItem(item)) {
+    const events: LLMEvent[] = []
+    const providerMetadata = reasoningMetadata(item)
+    if (!state.lifecycle.reasoning.has(item.id)) {
+      const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+      events.push(LLMEvent.reasoningStart({ id: item.id, providerMetadata }))
+      events.push(LLMEvent.reasoningEnd({ id: item.id, providerMetadata }))
+      return [{ ...state, lifecycle }, events] satisfies StepResult
+    }
+    return [
+      { ...state, lifecycle: Lifecycle.reasoningEnd(state.lifecycle, events, item.id, providerMetadata) },
+      events,
+    ] satisfies StepResult
+  }
 
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onResponseFinish = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
-  state,
-  [
-    LLMEvent.requestFinish({
-      reason: mapFinishReason(event, state.hasFunctionCall),
-      usage: mapUsage(event.response?.usage),
-      providerMetadata:
-        event.response?.id || event.response?.service_tier
-          ? openaiMetadata({
-              responseId: event.response.id,
-              serviceTier: event.response.service_tier,
-            })
-          : undefined,
-    }),
-  ],
-]
+const onResponseFinish = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
+  const events: LLMEvent[] = []
+  const lifecycle = Lifecycle.finish(state.lifecycle, events, {
+    reason: mapFinishReason(event, state.hasFunctionCall),
+    usage: mapUsage(event.response?.usage),
+    providerMetadata:
+      event.response?.id || event.response?.service_tier
+        ? openaiMetadata({
+            responseId: event.response.id,
+            serviceTier: event.response.service_tier,
+          })
+        : undefined,
+  })
+  return [{ ...state, lifecycle }, events]
+}
+
+// Build a single human-readable message from whatever the provider supplied.
+// When both code and message are present, prefix the code so consumers see
+// the failure mode (e.g. `rate_limit_exceeded: Slow down`) instead of just
+// the bare message — production rate limits and context-length failures used
+// to be indistinguishable from generic stream drops.
+const providerErrorMessage = (event: OpenAIResponsesEvent, fallback: string): string => {
+  const nested = event.response?.error ?? undefined
+  const message = event.message || nested?.message || undefined
+  const code = event.code || nested?.code || undefined
+  if (message && code) return `${code}: ${message}`
+  return message || code || fallback
+}
 
 const onResponseFailed = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
   state,
-  [LLMEvent.providerError({ message: event.message ?? event.code ?? "OpenAI Responses response failed" })],
+  [LLMEvent.providerError({ message: providerErrorMessage(event, "OpenAI Responses response failed") })],
 ]
 
 const onError = (state: ParserState, event: OpenAIResponsesEvent): StepResult => [
   state,
-  [LLMEvent.providerError({ message: event.message ?? event.code ?? "OpenAI Responses stream error" })],
+  [LLMEvent.providerError({ message: providerErrorMessage(event, "OpenAI Responses stream error") })],
 ]
 
 const step = (state: ParserState, event: OpenAIResponsesEvent) => {
   if (event.type === "response.output_text.delta") return Effect.succeed(onOutputTextDelta(state, event))
+  if (
+    event.type === "response.reasoning_text.delta" ||
+    event.type === "response.reasoning_summary.delta" ||
+    event.type === "response.reasoning_summary_text.delta"
+  )
+    return Effect.succeed(onReasoningDelta(state, event))
+  if (
+    event.type === "response.reasoning_text.done" ||
+    event.type === "response.reasoning_summary.done" ||
+    event.type === "response.reasoning_summary_text.done"
+  )
+    return Effect.succeed(onReasoningDone(state, event))
   if (event.type === "response.output_item.added") return Effect.succeed(onOutputItemAdded(state, event))
   if (event.type === "response.function_call_arguments.delta") return onFunctionCallArgumentsDelta(state, event)
   if (event.type === "response.output_item.done") return onOutputItemDone(state, event)
@@ -506,33 +709,24 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(OpenAIResponsesEvent),
-    initial: () => ({ hasFunctionCall: false, tools: ToolStream.empty<string>() }),
+    initial: () => ({ hasFunctionCall: false, tools: ToolStream.empty<string>(), lifecycle: Lifecycle.initial() }),
     step,
     terminal: (event) => TERMINAL_TYPES.has(event.type),
   },
 })
 
-const encodeBody = Schema.encodeSync(Schema.fromJsonString(OpenAIResponsesBody))
-const transportBase = {
-  endpoint: Endpoint.path<OpenAIResponsesBody>(PATH),
-  auth: Auth.bearer(),
-  encodeBody,
-}
-const routeDefaults = {
-  baseURL: DEFAULT_BASE_URL,
-}
+const endpoint = Endpoint.path<OpenAIResponsesBody>(PATH, { baseURL: DEFAULT_BASE_URL })
+const auth = Auth.none
 
-export const httpTransport = HttpTransport.httpJson({
-  ...transportBase,
-  framing: Framing.sse,
-})
+export const httpTransport = HttpTransport.sseJson.with<OpenAIResponsesBody>()
 
 export const route = Route.make({
   id: ADAPTER,
   provider: "openai",
   protocol,
+  endpoint,
+  auth,
   transport: httpTransport,
-  defaults: routeDefaults,
 })
 
 const decodeWebSocketMessage = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIResponsesWebSocketMessage))
@@ -545,8 +739,10 @@ const webSocketMessage = (body: OpenAIResponsesBody | Record<string, unknown>) =
     return yield* decodeWebSocketMessage({ ...message, type: "response.create" })
   })
 
-export const webSocketTransport = WebSocketTransport.json({
-  ...transportBase,
+export const webSocketTransport = WebSocketTransport.jsonTransport.with<
+  OpenAIResponsesBody,
+  OpenAIResponsesWebSocketMessage
+>({
   toMessage: webSocketMessage,
   encodeMessage: encodeWebSocketMessage,
 })
@@ -555,15 +751,9 @@ export const webSocketRoute = Route.make({
   id: `${ADAPTER}-websocket`,
   provider: "openai",
   protocol,
+  endpoint,
+  auth,
   transport: webSocketTransport,
-  defaults: routeDefaults,
 })
-
-// =============================================================================
-// Model Helper
-// =============================================================================
-export const model = route.model
-
-export const webSocketModel = webSocketRoute.model
 
 export * as OpenAIResponses from "./openai-responses"

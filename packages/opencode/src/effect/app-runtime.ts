@@ -14,7 +14,7 @@ import { FileWatcher } from "@/file/watcher"
 import { Storage } from "@/storage/storage"
 import { Snapshot } from "@/snapshot"
 import { Plugin } from "@/plugin"
-import { ModelsDev } from "@/provider/models"
+import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
 import { ProviderAuth } from "@/provider/auth"
 import { Agent } from "@/agent/agent"
@@ -55,6 +55,9 @@ import { SyncEvent } from "@/sync"
 import { Npm } from "@opencode-ai/core/npm"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { DataMigration } from "@/data-migration"
+import { BackgroundJob } from "@/background/job"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
@@ -81,6 +84,8 @@ export const AppLayer = Layer.mergeAll(
   Todo.defaultLayer,
   Session.defaultLayer,
   SessionStatus.defaultLayer,
+  BackgroundJob.defaultLayer,
+  RuntimeFlags.defaultLayer,
   SessionRunState.defaultLayer,
   SessionProcessor.defaultLayer,
   SessionCompaction.defaultLayer,
@@ -107,6 +112,7 @@ export const AppLayer = Layer.mergeAll(
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
   SyncEvent.defaultLayer,
+  EventV2Bridge.defaultLayer,
   DataMigration.defaultLayer,
 ).pipe(Layer.provideMerge(InstanceLayer.layer), Layer.provideMerge(Observability.layer))
 

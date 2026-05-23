@@ -29,6 +29,16 @@ Example:
   "plugin": ["@acme/opencode-plugin@1.2.3", ["./plugins/demo.tsx", { "label": "demo" }]],
   "plugin_enabled": {
     "acme.demo": false
+  },
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "error": "/Users/me/sounds/error.mp3"
+    }
   }
 }
 ```
@@ -45,6 +55,11 @@ Example:
 - Internal plugins can declare `enabled: false` to be registered but inactive by default; `plugin_enabled` and runtime KV can still enable them by id.
 - `plugin_enabled` is merged across config layers.
 - Runtime enable/disable state is also stored in KV under `plugin_enabled`; that KV state overrides config on startup.
+- `attention.enabled` defaults to `false`; when `false`, it disables all `api.attention.notify(...)` delivery.
+- `attention.notifications` and `attention.sound` independently control terminal-mediated desktop notifications and built-in sounds.
+- `attention.volume` sets the default built-in sound volume from `0` to `1`.
+- `attention.sound_pack` selects the initial semantic sound pack. Persisted runtime selection in KV can override it.
+- `attention.sounds` overrides individual semantic sound slots such as `error`, `done`, or `subagent_done`.
 - `leader_timeout` is a top-level TUI setting.
 - `keybinds` is a flat object keyed by command id; values are key binding values (`false`, `"none"`, a key string/object, a binding object, or an array of key strings/objects/binding objects).
 - `keybinds.leader` sets the key used by `<leader>` shortcuts.
@@ -212,8 +227,10 @@ That is what makes local config-scoped plugins able to import `@opencode-ai/plug
 Top-level API groups exposed to `tui(api, options, meta)`:
 
 - `api.app.version`
+- `api.attention.notify(input)`
 - `api.keys.formatSequence(parts)`, `formatBindings(bindings)`
 - `api.keymap`
+- `api.mode.current()`, `api.mode.push(mode)`
 - `api.route.register(routes)` / `api.route.navigate(name, params?)` / `api.route.current`
 - `api.ui.Dialog`, `DialogAlert`, `DialogConfirm`, `DialogPrompt`, `DialogSelect`, `Slot`, `Prompt`, `ui.toast`, `ui.dialog`
 - `api.tuiConfig`
@@ -239,12 +256,92 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 - Disposers returned by `api.keymap` registrations and `acquireResource(...)` are automatically cleaned up when the plugin deactivates. You do not need to add those disposers to `api.lifecycle.onDispose(...)` yourself.
 - Built-in which-key shortcuts are resolved from flat `keybinds` command ids such as `which_key_toggle`, not plugin options.
 
+#### Mode-aware layers
+
+OpenCode registers a `mode` layer field on the host keymap. Plugins can use it to keep bindings active only in the relevant UI state.
+
+Built-in modes:
+
+- `base`: normal app, route, and prompt interaction.
+- `modal`: host dialog stack is open, including dialogs rendered through `api.ui.dialog` and `api.ui.Dialog*` components.
+- `autocomplete`: host prompt autocomplete is open.
+- `api.mode.current()` returns the active top mode, or `base` when no pushed mode is active.
+
+Example: register a command and shortcut that are active only in normal app mode:
+
+```tsx
+api.keymap.registerLayer({
+  mode: "base",
+  commands: [
+    {
+      name: "demo.open",
+      title: "Demo",
+      category: "Plugin",
+      namespace: "palette",
+      run() {
+        api.route.navigate("demo")
+      },
+    },
+  ],
+  bindings: [{ key: "ctrl+shift+m", cmd: "demo.open", desc: "Open demo" }],
+})
+```
+
+Layers without `mode` are not mode-gated and can remain active while dialogs or autocomplete are open. Use that only for intentionally global commands or low-level keymap extensions.
+
+Plugins that own a full-screen route or modal-like UI can temporarily push a plugin-specific mode with `api.mode.push(...)`. Use a plugin-scoped mode name. The returned disposer pops that specific stack entry and is idempotent, so popping an older mode while a newer mode is on top leaves the newer mode active.
+
+```tsx
+import { onCleanup } from "solid-js"
+
+api.route.register([
+  {
+    name: "demo",
+    render: () => {
+      const popMode = api.mode.push("acme.demo")
+      onCleanup(popMode)
+
+      return (
+        <box>
+          <text>demo</text>
+        </box>
+      )
+    },
+  },
+])
+
+api.keymap.registerLayer({
+  mode: "acme.demo",
+  bindings: [{ key: "escape", cmd: () => api.route.navigate("home"), desc: "Close demo" }],
+})
+```
+
+Mode pushes are automatically tracked by the plugin runtime. If a plugin is disabled, fails during activation, or the TUI shuts down before the plugin calls the disposer, OpenCode pops the plugin's pushed modes during plugin cleanup. Calling the disposer yourself is still recommended for component lifetimes; cleanup remains idempotent.
+
 ### Keys
 
 - `api.keys` exposes host-formatted shortcut display helpers for plugin UI.
 - `formatSequence(parts)` formats parsed key sequence parts using the host's display policy.
 - `formatBindings(bindings)` formats binding lists and returns `undefined` when there is nothing to show.
 - For generic config-to-bindings helpers, import `createBindingLookup` from `@opencode-ai/plugin/tui`.
+
+### Attention
+
+- `api.attention.notify({ title?, message, notification?, sound? })` requests user attention while keeping terminal focus, notifications, and audio owned by the host.
+- `message` is required; `title` defaults to `"opencode"`; `notification` defaults to enabled with `when: "blurred"`; `sound` defaults to enabled with `when: "always"`.
+- `when: "always"` requests delivery regardless of terminal focus state.
+- `when: "focused"` only requests delivery after the terminal is known focused; `when: "blurred"` only requests delivery after the terminal is known blurred.
+- Example: `notification: { when: "blurred" }, sound: { name: "question", when: "always" }` plays sound while focused but only triggers system notifications when blurred.
+- Semantic sound names are `"default"`, `"question"`, `"permission"`, `"error"`, `"done"`, and `"subagent_done"`.
+- `sound: true` plays the `"default"` sound; `sound: { name: "question" }` plays a named semantic sound.
+- `sound: { volume }` overrides volume for that call; `sound: false` disables sound for that call; `notification: false` disables system notification for that call.
+- `api.attention.soundboard.registerPack({ id, name?, sounds })` registers a sound pack and returns a disposer. Relative paths resolve from the plugin root and are cleaned up on plugin deactivation.
+- `api.attention.soundboard.activate(id, { persist })` selects the active pack. `persist: true` writes the selected pack id to TUI KV state, not `tui.json`.
+- `api.attention.soundboard.current()` and `list()` expose the active/registered packs for plugin UX.
+- Config `attention.sounds` overrides active-pack sounds by slot. Failed loads fall back to the active pack and then `opencode.default`.
+- The host strips ANSI/control characters and collapses newlines before sending text to the terminal notification API.
+- Terminal and OS settings decide whether a requested notification is visibly displayed.
+- Prefer privacy-safe messages such as `"A question needs your input"`; avoid full commands, paths, prompts, errors, secrets, or file contents unless the plugin intentionally exposes them.
 
 ### Routes
 

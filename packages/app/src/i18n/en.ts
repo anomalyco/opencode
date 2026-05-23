@@ -25,6 +25,7 @@ export const dict = {
   "command.project.open": "Open project",
   "command.project.previous": "Previous project",
   "command.project.next": "Next project",
+  "command.project.index": "Switch to project {{index}}",
   "command.provider.connect": "Connect provider",
   "command.server.switch": "Switch server",
   "command.settings.open": "Open settings",
@@ -305,6 +306,7 @@ export const dict = {
   "mcp.status.failed": "failed",
   "mcp.status.needs_auth": "needs auth",
   "mcp.status.disabled": "disabled",
+  "mcp.auth.clickToAuthenticate": "Click to authenticate",
 
   "dialog.fork.empty": "No messages to fork from",
 
@@ -414,6 +416,7 @@ export const dict = {
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
   "language.bs": "Bosanski",
+  "language.uk": "Українська",
   "language.th": "ไทย",
   "language.tr": "Türkçe",
 
@@ -467,6 +470,7 @@ export const dict = {
   "error.page.action.restart": "Restart",
   "error.page.action.report": "Report Error",
   "error.page.action.reported": "Error Reported",
+  "error.page.action.exportLogs": "Export Logs",
   "error.page.action.checking": "Checking...",
   "error.page.action.checkUpdates": "Check for updates",
   "error.page.action.updateTo": "Update to {{version}}",
@@ -522,6 +526,14 @@ export const dict = {
   "home.recentProjects": "Recent projects",
   "home.empty.title": "No recent projects",
   "home.empty.description": "Get started by opening a local project",
+  "home.title": "Home",
+  "home.projects": "Projects",
+  "home.project.add": "Add project",
+  "home.sessions.search.placeholder": "Search sessions",
+  "home.sessions.empty": "No sessions found",
+  "home.sessions.group.today": "Today",
+  "home.sessions.group.yesterday": "Yesterday",
+  "home.sessions.group.older": "Older",
 
   "session.tab.session": "Session",
   "session.tab.review": "Review",
@@ -772,6 +784,8 @@ export const dict = {
   "settings.general.row.showSessionProgressBar.title": "Show session progress bar",
   "settings.general.row.showSessionProgressBar.description":
     "Display the animated progress bar at the top of the session when the agent is working",
+  "settings.general.row.pinchZoom.title": "Pinch to zoom",
+  "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
 
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",
@@ -901,7 +915,7 @@ export const dict = {
   "settings.permissions.tool.read.title": "Read",
   "settings.permissions.tool.read.description": "Reading a file (matches the file path)",
   "settings.permissions.tool.edit.title": "Edit",
-  "settings.permissions.tool.edit.description": "Modify files, including edits, writes, patches, and multi-edits",
+  "settings.permissions.tool.edit.description": "Modify files, including edits, writes, and patches",
   "settings.permissions.tool.glob.title": "Glob",
   "settings.permissions.tool.glob.description": "Match files using glob patterns",
   "settings.permissions.tool.grep.title": "Grep",

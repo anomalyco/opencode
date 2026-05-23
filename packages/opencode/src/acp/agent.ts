@@ -39,13 +39,10 @@ import { Filesystem } from "@/util/filesystem"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
+import { ACPRuntime } from "./runtime"
 import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
-import { Agent as AgentModule } from "../agent/agent"
-import { AppRuntime } from "@/effect/app-runtime"
-import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
-import { Config } from "@/config/config"
 import { ConfigMCP } from "@/config/mcp"
 import { Todo } from "@/session/todo"
 import { Result, Schema } from "effect"
@@ -1094,8 +1091,8 @@ export class Agent implements ACPAgent {
 
     const currentModeId = await (async () => {
       if (!availableModes.length) return undefined
-      const defaultAgentName = await AppRuntime.runPromise(AgentModule.Service.use((svc) => svc.defaultAgent()))
-      const resolvedModeId = availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
+      const defaultAgent = await ACPRuntime.defaultAgentInfo(directory)
+      const resolvedModeId = availableModes.find((mode) => mode.name === defaultAgent.name)?.id ?? availableModes[0].id
       this.sessionManager.setMode(sessionId, resolvedModeId)
       return resolvedModeId
     })()
@@ -1328,7 +1325,7 @@ export class Agent implements ACPAgent {
     if (!current) {
       this.sessionManager.setModel(session.id, model)
     }
-    const agent = session.modeId ?? (await AppRuntime.runPromise(AgentModule.Service.use((svc) => svc.defaultAgent())))
+    const agent = session.modeId ?? (await ACPRuntime.defaultAgentInfo(directory)).name
 
     const parts: Array<
       | { type: "text"; text: string; synthetic?: boolean; ignored?: boolean }
