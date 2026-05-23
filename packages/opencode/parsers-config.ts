@@ -313,7 +313,10 @@ export default {
       wasm: "https://github.com/ionide/tree-sitter-fsharp/releases/download/0.3.0/tree-sitter-fsharp.wasm",
       queries: {
         highlights: [
-          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/fsharp/highlights.scm",
+          "https://raw.githubusercontent.com/ionide/tree-sitter-fsharp/refs/heads/main/queries/highlights.scm",
+        ],
+        locals: [
+          "https://raw.githubusercontent.com/ionide/tree-sitter-fsharp/refs/heads/main/queries/locals.scm",
         ],
       },
     },
