@@ -186,7 +186,7 @@ export const SettingsProviders: Component = () => {
                       }
                     >
                       <div class="flex items-center gap-2">
-                        <Button size="large" variant="ghost" onClick={() => void disconnect(item.id, item.name)}>
+                        <Button size="large" variant="secondary" icon="circle-x" onClick={() => void disconnect(item.id, item.name)}>
                           {language.t("common.disconnect")}
                         </Button>
                         <Button
