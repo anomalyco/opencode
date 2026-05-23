@@ -19,6 +19,7 @@ type Spin = {
 
 export type PlugDeps = {
   spinner: () => Spin
+  tty: boolean
   log: {
     error: (msg: string) => void
     info: (msg: string) => void
@@ -46,6 +47,7 @@ export type PlugCtx = {
 
 const defaultPlugDeps: PlugDeps = {
   spinner: () => spinner(),
+  tty: process.stdout.isTTY,
   log: {
     error: (msg) => log.error(msg),
     info: (msg) => log.info(msg),
@@ -67,13 +69,26 @@ function cause(err: unknown) {
   return (err as { cause?: unknown }).cause
 }
 
+function progress(dep: PlugDeps) {
+  if (dep.tty) return dep.spinner()
+  return {
+    start(msg: string) {
+      dep.log.info(msg)
+    },
+    stop(msg: string, code?: number) {
+      if (!code) return
+      dep.log.error(msg)
+    },
+  }
+}
+
 export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps) {
   const mod = input.mod
   const force = Boolean(input.force)
   const global = Boolean(input.global)
 
   return async (ctx: PlugCtx) => {
-    const install = dep.spinner()
+    const install = progress(dep)
     install.start("Installing plugin package...")
     const target = await installPlugin(mod, dep)
     if (!target.ok) {
@@ -101,7 +116,7 @@ export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps
     }
     install.stop("Plugin package ready")
 
-    const inspect = dep.spinner()
+    const inspect = progress(dep)
     inspect.start("Reading plugin manifest...")
     const manifest = await readPluginManifest(target.target)
     if (!manifest.ok) {
@@ -129,7 +144,7 @@ export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps
       `Detected ${manifest.targets.map((item) => item.kind).join(" + ")} target${manifest.targets.length === 1 ? "" : "s"}`,
     )
 
-    const patch = dep.spinner()
+    const patch = progress(dep)
     patch.start("Updating plugin config...")
     const out = await patchPluginConfig(
       {

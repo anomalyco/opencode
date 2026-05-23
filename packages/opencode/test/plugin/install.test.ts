@@ -6,16 +6,17 @@ import { Filesystem } from "@/util/filesystem"
 import { createPlugTask, type PlugCtx, type PlugDeps } from "../../src/cli/cmd/plug"
 import { tmpdir } from "../fixture/fixture"
 
-function deps(global: string, target: string | Error): PlugDeps {
+function deps(global: string, target: string | Error, options?: { tty?: boolean; logs?: string[] }): PlugDeps {
   return {
     spinner: () => ({
       start() {},
       stop() {},
     }),
+    tty: options?.tty ?? true,
     log: {
-      error() {},
-      info() {},
-      success() {},
+      error: (msg) => options?.logs?.push(`error:${msg}`),
+      info: (msg) => options?.logs?.push(`info:${msg}`),
+      success: (msg) => options?.logs?.push(`success:${msg}`),
     },
     resolve: async () => {
       if (target instanceof Error) throw target
@@ -109,6 +110,29 @@ async function read(file: string) {
 }
 
 describe("plugin.install.task", () => {
+  test("logs plain progress messages when stdout is not a tty", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, ["server"])
+    const logs: string[] = []
+    const run = createPlugTask(
+      {
+        mod: "acme@1.2.3",
+      },
+      deps(path.join(tmp.path, "global"), target, { tty: false, logs }),
+    )
+
+    const ok = await run(ctx(tmp.path))
+    expect(ok).toBe(true)
+    expect(logs).toEqual([
+      "info:Installing plugin package...",
+      "info:Reading plugin manifest...",
+      "info:Updating plugin config...",
+      `info:Added to ${path.join(tmp.path, ".opencode", "opencode.jsonc")}`,
+      "success:Installed acme@1.2.3",
+      `info:Scope: local (${path.join(tmp.path, ".opencode")})`,
+    ])
+  })
+
   test("writes both server and tui config entries", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, ["server", "tui"])
