@@ -1,10 +1,15 @@
-import { beforeEach, describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect } from "bun:test"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import path from "path"
 import { pathToFileURL } from "url"
-import { tmpdir, withTestInstance } from "../fixture/fixture"
+import { Effect } from "effect"
+import { testEffect } from "../lib/effect"
+import { requireInstance, TestInstance } from "../fixture/fixture"
 import { LSPClient } from "@/lsp/client"
 import * as LSPServer from "@/lsp/server"
 import * as Log from "@opencode-ai/core/util/log"
+
+const it = testEffect(AppFileSystem.defaultLayer)
 
 function spawnFakeServer() {
   const { spawn } = require("child_process")
@@ -16,202 +21,168 @@ function spawnFakeServer() {
   }
 }
 
+const createClient = (handle: LSPServer.Handle, initialization?: LSPServer.Handle["initialization"]) =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const instance = yield* requireInstance
+    return yield* Effect.promise(() =>
+      LSPClient.create({
+        serverID: "fake",
+        server: initialization ? { ...handle, initialization } : handle,
+        root: test.directory,
+        directory: test.directory,
+        instance,
+      }),
+    )
+  })
+
+const writeFile = (file: string, content: string) => AppFileSystem.use.writeWithDirs(file, content)
+
+const waitForClient = Effect.sleep("100 millis")
+
 describe("LSPClient interop", () => {
   beforeEach(async () => {
     await Log.init({ print: true })
   })
 
-  test("handles workspace/workspaceFolders request", async () => {
-    const handle = spawnFakeServer() as any
+  it.instance("handles workspace/workspaceFolders request", () =>
+    Effect.gen(function* () {
+      const client = yield* createClient(spawnFakeServer())
 
-    const client = await withTestInstance({
-      directory: process.cwd(),
-      fn: (ctx) =>
-        LSPClient.create({
-          serverID: "fake",
-          server: handle as unknown as LSPServer.Handle,
-          root: process.cwd(),
-          directory: process.cwd(),
-          instance: ctx,
+      yield* Effect.promise(() =>
+        client.connection.sendNotification("test/trigger", {
+          method: "workspace/workspaceFolders",
         }),
-    })
+      )
 
-    await client.connection.sendNotification("test/trigger", {
-      method: "workspace/workspaceFolders",
-    })
+      yield* waitForClient
+      expect(client.connection).toBeDefined()
+      yield* Effect.promise(() => client.shutdown())
+    }),
+  )
 
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    expect(client.connection).toBeDefined()
-    await client.shutdown()
-  })
+  it.instance("handles client/registerCapability request", () =>
+    Effect.gen(function* () {
+      const client = yield* createClient(spawnFakeServer())
 
-  test("handles client/registerCapability request", async () => {
-    const handle = spawnFakeServer() as any
-
-    const client = await withTestInstance({
-      directory: process.cwd(),
-      fn: (ctx) =>
-        LSPClient.create({
-          serverID: "fake",
-          server: handle as unknown as LSPServer.Handle,
-          root: process.cwd(),
-          directory: process.cwd(),
-          instance: ctx,
+      yield* Effect.promise(() =>
+        client.connection.sendNotification("test/trigger", {
+          method: "client/registerCapability",
         }),
-    })
+      )
 
-    await client.connection.sendNotification("test/trigger", {
-      method: "client/registerCapability",
-    })
+      yield* waitForClient
+      expect(client.connection).toBeDefined()
+      yield* Effect.promise(() => client.shutdown())
+    }),
+  )
 
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    expect(client.connection).toBeDefined()
-    await client.shutdown()
-  })
+  it.instance("handles client/unregisterCapability request", () =>
+    Effect.gen(function* () {
+      const client = yield* createClient(spawnFakeServer())
 
-  test("handles client/unregisterCapability request", async () => {
-    const handle = spawnFakeServer() as any
-
-    const client = await withTestInstance({
-      directory: process.cwd(),
-      fn: (ctx) =>
-        LSPClient.create({
-          serverID: "fake",
-          server: handle as unknown as LSPServer.Handle,
-          root: process.cwd(),
-          directory: process.cwd(),
-          instance: ctx,
+      yield* Effect.promise(() =>
+        client.connection.sendNotification("test/trigger", {
+          method: "client/unregisterCapability",
         }),
-    })
+      )
 
-    await client.connection.sendNotification("test/trigger", {
-      method: "client/unregisterCapability",
-    })
+      yield* waitForClient
+      expect(client.connection).toBeDefined()
+      yield* Effect.promise(() => client.shutdown())
+    }),
+  )
 
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    expect(client.connection).toBeDefined()
-    await client.shutdown()
-  })
+  it.instance("initialize does not overclaim unsupported diagnostics capabilities", () =>
+    Effect.gen(function* () {
+      const client = yield* createClient(spawnFakeServer())
 
-  test("initialize does not overclaim unsupported diagnostics capabilities", async () => {
-    const handle = spawnFakeServer() as any
+      const params = yield* Effect.promise(() =>
+        client.connection.sendRequest<{
+          capabilities: {
+            workspace: { diagnostics: { refreshSupport: boolean } }
+            textDocument: { publishDiagnostics: { versionSupport: boolean } }
+          }
+        }>("test/get-initialize-params", {}),
+      )
+      expect(params.capabilities.workspace.diagnostics.refreshSupport).toBe(false)
+      expect(params.capabilities.textDocument.publishDiagnostics.versionSupport).toBe(false)
 
-    const client = await withTestInstance({
-      directory: process.cwd(),
-      fn: (ctx) =>
-        LSPClient.create({
-          serverID: "fake",
-          server: handle as unknown as LSPServer.Handle,
-          root: process.cwd(),
-          directory: process.cwd(),
-          instance: ctx,
+      yield* Effect.promise(() => client.shutdown())
+    }),
+  )
+
+  it.instance("workspace/configuration returns one result per requested item", () =>
+    Effect.gen(function* () {
+      const initialization = {
+        alpha: {
+          beta: 1,
+        },
+        gamma: true,
+      }
+
+      const client = yield* createClient(spawnFakeServer(), initialization)
+
+      const response = yield* Effect.promise(() =>
+        client.connection.sendRequest<unknown[]>("test/request-configuration", {
+          items: [{ section: "alpha" }, { section: "alpha.beta" }, { section: "missing" }, {}],
         }),
-    })
+      )
 
-    const params = await client.connection.sendRequest<any>("test/get-initialize-params", {})
-    expect(params.capabilities.workspace.diagnostics.refreshSupport).toBe(false)
-    expect(params.capabilities.textDocument.publishDiagnostics.versionSupport).toBe(false)
+      expect(response).toEqual([{ beta: 1 }, 1, null, initialization])
 
-    await client.shutdown()
-  })
+      yield* Effect.promise(() => client.shutdown())
+    }),
+  )
 
-  test("workspace/configuration returns one result per requested item", async () => {
-    const handle = spawnFakeServer() as any
-    const initialization = {
-      alpha: {
-        beta: 1,
-      },
-      gamma: true,
-    }
+  it.instance("sends ranged didChange for incremental sync servers", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const file = path.join(test.directory, "client.ts")
+      yield* writeFile(file, "first\n")
 
-    const client = await withTestInstance({
-      directory: process.cwd(),
-      fn: (ctx) =>
-        LSPClient.create({
-          serverID: "fake",
-          server: {
-            ...(handle as unknown as LSPServer.Handle),
-            initialization,
-          },
-          root: process.cwd(),
-          directory: process.cwd(),
-          instance: ctx,
-        }),
-    })
+      const client = yield* createClient(spawnFakeServer())
 
-    const response = await client.connection.sendRequest<any[]>("test/request-configuration", {
-      items: [{ section: "alpha" }, { section: "alpha.beta" }, { section: "missing" }, {}],
-    })
+      yield* Effect.promise(() => client.notify.open({ path: file }))
+      yield* writeFile(file, "second\nthird\n")
+      yield* Effect.promise(() => client.notify.open({ path: file }))
 
-    expect(response).toEqual([{ beta: 1 }, 1, null, initialization])
-
-    await client.shutdown()
-  })
-
-  test("sends ranged didChange for incremental sync servers", async () => {
-    const handle = spawnFakeServer() as any
-    await using tmp = await tmpdir()
-    const file = path.join(tmp.path, "client.ts")
-    await Bun.write(file, "first\n")
-
-    await withTestInstance({
-      directory: tmp.path,
-      fn: async (ctx) => {
-        const client = await LSPClient.create({
-          serverID: "fake",
-          server: handle as unknown as LSPServer.Handle,
-          root: tmp.path,
-          directory: tmp.path,
-          instance: ctx,
-        })
-
-        await client.notify.open({ path: file })
-        await Bun.write(file, "second\nthird\n")
-        await client.notify.open({ path: file })
-
-        const change = await client.connection.sendRequest<{
+      const change = yield* Effect.promise(() =>
+        client.connection.sendRequest<{
           textDocument: { version: number }
           contentChanges: {
             range?: { start: { line: number; character: number }; end: { line: number; character: number } }
             text: string
           }[]
-        }>("test/get-last-change", {})
-        expect(change.textDocument.version).toBe(1)
-        expect(change.contentChanges).toEqual([
-          {
-            range: {
-              start: { line: 0, character: 0 },
-              end: { line: 1, character: 0 },
-            },
-            text: "second\nthird\n",
+        }>("test/get-last-change", {}),
+      )
+      expect(change.textDocument.version).toBe(1)
+      expect(change.contentChanges).toEqual([
+        {
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 1, character: 0 },
           },
-        ])
+          text: "second\nthird\n",
+        },
+      ])
 
-        await client.shutdown()
-      },
-    })
-  })
+      yield* Effect.promise(() => client.shutdown())
+    }),
+  )
 
-  test("document mode falls back to push diagnostics", async () => {
-    const handle = spawnFakeServer() as any
-    await using tmp = await tmpdir()
-    const file = path.join(tmp.path, "client.ts")
-    await Bun.write(file, "const x = 1\n")
+  it.instance("document mode falls back to push diagnostics", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const file = path.join(test.directory, "client.ts")
+      yield* writeFile(file, "const x = 1\n")
 
-    await withTestInstance({
-      directory: tmp.path,
-      fn: async (ctx) => {
-        const client = await LSPClient.create({
-          serverID: "fake",
-          server: handle as unknown as LSPServer.Handle,
-          root: tmp.path,
-          directory: tmp.path,
-          instance: ctx,
-        })
+      const client = yield* createClient(spawnFakeServer())
 
-        const version = await client.notify.open({ path: file })
-        const wait = client.waitForDiagnostics({ path: file, version, mode: "document" })
-        await client.connection.sendNotification("test/publish-diagnostics", {
+      const version = yield* Effect.promise(() => client.notify.open({ path: file }))
+      const wait = client.waitForDiagnostics({ path: file, version, mode: "document" })
+      yield* Effect.promise(() =>
+        client.connection.sendNotification("test/publish-diagnostics", {
           uri: pathToFileURL(file).href,
           version,
           diagnostics: [
@@ -224,40 +195,32 @@ describe("LSPClient interop", () => {
               severity: 1,
             },
           ],
-        })
-        await wait
+        }),
+      )
+      yield* Effect.promise(() => wait)
 
-        const diagnostics = client.diagnostics.get(file) ?? []
-        expect(diagnostics).toHaveLength(1)
-        expect(diagnostics[0]?.message).toBe("push diagnostic")
+      const diagnostics = client.diagnostics.get(file) ?? []
+      expect(diagnostics).toHaveLength(1)
+      expect(diagnostics[0]?.message).toBe("push diagnostic")
 
-        const count = await client.connection.sendRequest("test/get-diagnostic-request-count", {})
-        expect(count).toBe(0)
+      const count = yield* Effect.promise(() => client.connection.sendRequest("test/get-diagnostic-request-count", {}))
+      expect(count).toBe(0)
 
-        await client.shutdown()
-      },
-    })
-  })
+      yield* Effect.promise(() => client.shutdown())
+    }),
+  )
 
-  test("document mode accepts matching push diagnostics published before waiting", async () => {
-    const handle = spawnFakeServer() as any
-    await using tmp = await tmpdir()
-    const file = path.join(tmp.path, "client.ts")
-    await Bun.write(file, "const x = 1\n")
+  it.instance("document mode accepts matching push diagnostics published before waiting", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const file = path.join(test.directory, "client.ts")
+      yield* writeFile(file, "const x = 1\n")
 
-    await withTestInstance({
-      directory: tmp.path,
-      fn: async (ctx) => {
-        const client = await LSPClient.create({
-          serverID: "fake",
-          server: handle as unknown as LSPServer.Handle,
-          root: tmp.path,
-          directory: tmp.path,
-          instance: ctx,
-        })
+      const client = yield* createClient(spawnFakeServer())
 
-        const version = await client.notify.open({ path: file })
-        await client.connection.sendNotification("test/publish-diagnostics", {
+      const version = yield* Effect.promise(() => client.notify.open({ path: file }))
+      yield* Effect.promise(() =>
+        client.connection.sendNotification("test/publish-diagnostics", {
           uri: pathToFileURL(file).href,
           version,
           diagnostics: [
@@ -270,41 +233,33 @@ describe("LSPClient interop", () => {
               severity: 1,
             },
           ],
-        })
+        }),
+      )
 
-        for (let i = 0; i < 20 && (client.diagnostics.get(file)?.length ?? 0) === 0; i++) {
-          await new Promise((resolve) => setTimeout(resolve, 25))
-        }
+      for (let i = 0; i < 20 && (client.diagnostics.get(file)?.length ?? 0) === 0; i++) {
+        yield* Effect.sleep("25 millis")
+      }
 
-        expect(client.diagnostics.get(file)?.[0]?.message).toBe("push diagnostic")
+      expect(client.diagnostics.get(file)?.[0]?.message).toBe("push diagnostic")
 
-        const started = Date.now()
-        await client.waitForDiagnostics({ path: file, version, mode: "document" })
-        expect(Date.now() - started).toBeLessThan(1_000)
+      const started = Date.now()
+      yield* Effect.promise(() => client.waitForDiagnostics({ path: file, version, mode: "document" }))
+      expect(Date.now() - started).toBeLessThan(1_000)
 
-        await client.shutdown()
-      },
-    })
-  })
+      yield* Effect.promise(() => client.shutdown())
+    }),
+  )
 
-  test("document mode waits for pull diagnostics", async () => {
-    const handle = spawnFakeServer() as any
-    await using tmp = await tmpdir()
-    const file = path.join(tmp.path, "client.cs")
-    await Bun.write(file, "class C {}\n")
+  it.instance("document mode waits for pull diagnostics", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const file = path.join(test.directory, "client.cs")
+      yield* writeFile(file, "class C {}\n")
 
-    await withTestInstance({
-      directory: tmp.path,
-      fn: async (ctx) => {
-        const client = await LSPClient.create({
-          serverID: "fake",
-          server: handle as unknown as LSPServer.Handle,
-          root: tmp.path,
-          directory: tmp.path,
-          instance: ctx,
-        })
+      const client = yield* createClient(spawnFakeServer())
 
-        await client.connection.sendRequest("test/configure-pull-diagnostics", {
+      yield* Effect.promise(() =>
+        client.connection.sendRequest("test/configure-pull-diagnostics", {
           registerOn: "didOpen",
           registrations: [{ identifier: "DocumentCompilerSemantic" }],
           documentDiagnosticsByIdentifier: {
@@ -319,41 +274,33 @@ describe("LSPClient interop", () => {
               },
             ],
           },
-        })
+        }),
+      )
 
-        const version = await client.notify.open({ path: file })
-        await client.waitForDiagnostics({ path: file, version, mode: "document" })
+      const version = yield* Effect.promise(() => client.notify.open({ path: file }))
+      yield* Effect.promise(() => client.waitForDiagnostics({ path: file, version, mode: "document" }))
 
-        const diagnostics = client.diagnostics.get(file) ?? []
-        expect(diagnostics).toHaveLength(1)
-        expect(diagnostics[0]?.message).toBe("pull diagnostic")
+      const diagnostics = client.diagnostics.get(file) ?? []
+      expect(diagnostics).toHaveLength(1)
+      expect(diagnostics[0]?.message).toBe("pull diagnostic")
 
-        const count = await client.connection.sendRequest("test/get-diagnostic-request-count", {})
-        expect(count).toBeGreaterThan(0)
+      const count = yield* Effect.promise(() => client.connection.sendRequest("test/get-diagnostic-request-count", {}))
+      expect(count).toBeGreaterThan(0)
 
-        await client.shutdown()
-      },
-    })
-  })
+      yield* Effect.promise(() => client.shutdown())
+    }),
+  )
 
-  test("document mode does not wait for the slowest pull identifier after current-file diagnostics arrive", async () => {
-    const handle = spawnFakeServer() as any
-    await using tmp = await tmpdir()
-    const file = path.join(tmp.path, "client.cs")
-    await Bun.write(file, "class C {}\n")
+  it.instance("document mode does not wait for the slowest pull identifier after current-file diagnostics arrive", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const file = path.join(test.directory, "client.cs")
+      yield* writeFile(file, "class C {}\n")
 
-    await withTestInstance({
-      directory: tmp.path,
-      fn: async (ctx) => {
-        const client = await LSPClient.create({
-          serverID: "fake",
-          server: handle as unknown as LSPServer.Handle,
-          root: tmp.path,
-          directory: tmp.path,
-          instance: ctx,
-        })
+      const client = yield* createClient(spawnFakeServer())
 
-        await client.connection.sendRequest("test/configure-pull-diagnostics", {
+      yield* Effect.promise(() =>
+        client.connection.sendRequest("test/configure-pull-diagnostics", {
           registrations: [{ identifier: "fast" }, { identifier: "slow" }],
           documentDiagnosticsByIdentifier: {
             fast: [
@@ -371,43 +318,37 @@ describe("LSPClient interop", () => {
           documentDelayMsByIdentifier: {
             slow: 2_500,
           },
-        })
+        }),
+      )
 
-        const version = await client.notify.open({ path: file })
-        await client.connection.sendRequest("test/register-configured-pull-diagnostics", {})
-        await new Promise((resolve) => setTimeout(resolve, 100))
-        const started = Date.now()
-        await client.waitForDiagnostics({ path: file, version, mode: "document" })
+      const version = yield* Effect.promise(() => client.notify.open({ path: file }))
+      yield* Effect.promise(() => client.connection.sendRequest("test/register-configured-pull-diagnostics", {}))
+      yield* waitForClient
+      const started = Date.now()
+      yield* Effect.promise(() => client.waitForDiagnostics({ path: file, version, mode: "document" }))
 
-        expect(Date.now() - started).toBeLessThan(1_000)
-        expect(client.diagnostics.get(file)?.[0]?.message).toBe("fast diagnostic")
-        expect(await client.connection.sendRequest("test/get-diagnostic-request-count", {})).toBeGreaterThan(1)
+      expect(Date.now() - started).toBeLessThan(1_000)
+      expect(client.diagnostics.get(file)?.[0]?.message).toBe("fast diagnostic")
+      expect(
+        yield* Effect.promise(() => client.connection.sendRequest("test/get-diagnostic-request-count", {})),
+      ).toBeGreaterThan(1)
 
-        await client.shutdown()
-      },
-    })
-  })
+      yield* Effect.promise(() => client.shutdown())
+    }),
+  )
 
-  test("full mode includes workspace pull diagnostics", async () => {
-    const handle = spawnFakeServer() as any
-    await using tmp = await tmpdir()
-    const file = path.join(tmp.path, "client.cs")
-    const related = path.join(tmp.path, "other.cs")
-    await Bun.write(file, "class C {}\n")
-    await Bun.write(related, "class D {}\n")
+  it.instance("full mode includes workspace pull diagnostics", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const file = path.join(test.directory, "client.cs")
+      const related = path.join(test.directory, "other.cs")
+      yield* writeFile(file, "class C {}\n")
+      yield* writeFile(related, "class D {}\n")
 
-    await withTestInstance({
-      directory: tmp.path,
-      fn: async (ctx) => {
-        const client = await LSPClient.create({
-          serverID: "fake",
-          server: handle as unknown as LSPServer.Handle,
-          root: tmp.path,
-          directory: tmp.path,
-          instance: ctx,
-        })
+      const client = yield* createClient(spawnFakeServer())
 
-        await client.connection.sendRequest("test/configure-pull-diagnostics", {
+      yield* Effect.promise(() =>
+        client.connection.sendRequest("test/configure-pull-diagnostics", {
           registerOn: "didOpen",
           registrations: [
             { identifier: "DocumentCompilerSemantic" },
@@ -442,52 +383,44 @@ describe("LSPClient interop", () => {
               },
             ],
           },
-        })
+        }),
+      )
 
-        const version = await client.notify.open({ path: file })
-        await client.waitForDiagnostics({ path: file, version, mode: "full" })
+      const version = yield* Effect.promise(() => client.notify.open({ path: file }))
+      yield* Effect.promise(() => client.waitForDiagnostics({ path: file, version, mode: "full" }))
 
-        expect(client.diagnostics.get(file)?.[0]?.message).toBe("current file")
-        expect(client.diagnostics.get(related)?.[0]?.message).toBe("workspace file")
+      expect(client.diagnostics.get(file)?.[0]?.message).toBe("current file")
+      expect(client.diagnostics.get(related)?.[0]?.message).toBe("workspace file")
 
-        await client.shutdown()
-      },
-    })
-  })
+      yield* Effect.promise(() => client.shutdown())
+    }),
+  )
 
-  test("full mode treats an empty workspace pull response as handled", async () => {
-    const handle = spawnFakeServer() as any
-    await using tmp = await tmpdir()
-    const file = path.join(tmp.path, "client.cs")
-    await Bun.write(file, "class C {}\n")
+  it.instance("full mode treats an empty workspace pull response as handled", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const file = path.join(test.directory, "client.cs")
+      yield* writeFile(file, "class C {}\n")
 
-    await withTestInstance({
-      directory: tmp.path,
-      fn: async (ctx) => {
-        const client = await LSPClient.create({
-          serverID: "fake",
-          server: handle as unknown as LSPServer.Handle,
-          root: tmp.path,
-          directory: tmp.path,
-          instance: ctx,
-        })
+      const client = yield* createClient(spawnFakeServer())
 
-        await client.connection.sendRequest("test/configure-pull-diagnostics", {
+      yield* Effect.promise(() =>
+        client.connection.sendRequest("test/configure-pull-diagnostics", {
           registerOn: "didOpen",
           registrations: [{ identifier: "WorkspaceDocumentsAndProject", workspaceDiagnostics: true }],
           workspaceDiagnosticsByIdentifier: {
             WorkspaceDocumentsAndProject: [],
           },
-        })
+        }),
+      )
 
-        const version = await client.notify.open({ path: file })
-        const started = Date.now()
-        await client.waitForDiagnostics({ path: file, version, mode: "full" })
+      const version = yield* Effect.promise(() => client.notify.open({ path: file }))
+      const started = Date.now()
+      yield* Effect.promise(() => client.waitForDiagnostics({ path: file, version, mode: "full" }))
 
-        expect(Date.now() - started).toBeLessThan(1_000)
+      expect(Date.now() - started).toBeLessThan(1_000)
 
-        await client.shutdown()
-      },
-    })
-  })
+      yield* Effect.promise(() => client.shutdown())
+    }),
+  )
 })
