@@ -1,0 +1,94 @@
+name: Build Patched Binary
+
+on:
+  push:
+    branches:
+      - feat/system-transform-lastUserMessage
+  workflow_dispatch:
+
+concurrency: build-patched-${{ github.ref }}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+          - os: macos-latest
+            target: macos-arm64
+          - os: macos-13
+            target: macos-x64
+          - os: windows-latest
+            target: windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build
+        run: |
+          ./packages/opencode/script/build.ts
+        env:
+          OPENCODE_VERSION: "0.0.0-patched"
+          OPENCODE_RELEASE: "false"
+
+      - name: Rename binary
+        shell: bash
+        run: |
+          cd packages/opencode/dist
+          if [ "${{ matrix.target }}" = "windows-x64" ]; then
+            cp opencode-windows-x64/bin/opencode.exe opencode-windows-x64.exe
+          elif [ "${{ matrix.target }}" = "linux-x64" ]; then
+            cp opencode-linux-x64/bin/opencode opencode-linux-x64
+            chmod +x opencode-linux-x64
+          elif [ "${{ matrix.target }}" = "macos-arm64" ]; then
+            cp opencode-darwin-arm64/bin/opencode opencode-macos-arm64
+            chmod +x opencode-macos-arm64
+          elif [ "${{ matrix.target }}" = "macos-x64" ]; then
+            cp opencode-darwin-x64/bin/opencode opencode-macos-x64
+            chmod +x opencode-macos-x64
+          fi
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-${{ matrix.target }}
+          path: |
+            packages/opencode/dist/opencode-${{ matrix.target }}*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feat/system-transform-lastUserMessage'
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+
+      - name: Create release
+        uses: softprops/action-gh-release@62c30c1b3e8493c9b3cfa4e4a4e8c6c6fcd42e18 # v2.3.0
+        with:
+          tag_name: patched-latest
+          name: Patched OpenCode (lastUserMessage)
+          body: |
+            Patched OpenCode build with `lastUserMessage` support in `experimental.chat.system.transform` hook.
+
+            **What's changed:**
+            - `packages/plugin/src/index.ts`: Added `lastUserMessage?: string` to hook input type
+            - `packages/opencode/src/session/llm/request.ts`: Extract and pass lastUserMessage from `input.messages`
+
+            **Upstream PR:** https://github.com/anomalyco/opencode/pull/28993
+
+            **Usage with PEtFiSh:**
+            ```bash
+            uv run scripts/patch_opencode.py
+            ```
+          files: |
+            opencode-linux-x64/opencode-linux-x64
+            opencode-macos-arm64/opencode-macos-arm64
+            opencode-macos-x64/opencode-macos-x64
+            opencode-windows-x64/opencode-windows-x64.exe
