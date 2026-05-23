@@ -202,7 +202,7 @@ export function createChildStoreManager(input: {
                 return { state: "", config: "", worktree: "", directory: "", home: "" }
               return pathQuery.data
             },
-            status: "complete" as const,
+            status: "loading" as const,
             agent: [],
             command: [],
             session: [],

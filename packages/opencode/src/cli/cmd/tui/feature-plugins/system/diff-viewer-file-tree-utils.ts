@@ -157,6 +157,39 @@ export function moveFileTreeSelectionToFile(
   return next?.id ?? (offset < 0 ? fileRows[0]!.id : fileRows[fileRows.length - 1]!.id)
 }
 
+export function fileTreeFileSelection(tree: FileTree, fileIndex: number) {
+  const node = tree.nodes.find((item) => item.kind === "file" && item.fileIndex === fileIndex)
+  if (!node) return undefined
+  return {
+    highlightedNode: node.id,
+    expandedNodes: fileTreeParentDirectories(tree, node.id),
+  }
+}
+
+export function singlePatchFileIndex(
+  selected: number | undefined,
+  active: number | undefined,
+  current: number | undefined,
+  first: number | undefined,
+) {
+  return selected ?? active ?? current ?? first
+}
+
+export function orderedPatchFileIndexes(rows: readonly FileTreeRow[]) {
+  return rows.flatMap((row) => (row.fileIndex === undefined ? [] : [row.fileIndex]))
+}
+
+export function showDiffViewerFileTree(showFileTree: boolean, fileCount: number) {
+  return showFileTree && fileCount > 0
+}
+
+export function movePatchFileIndex(fileIndexes: readonly number[], current: number | undefined, offset: number) {
+  if (fileIndexes.length === 0) return undefined
+  const index = current === undefined ? -1 : fileIndexes.indexOf(current)
+  if (index === -1) return fileIndexes[0]
+  return fileIndexes[Math.max(0, Math.min(fileIndexes.length - 1, index + offset))]
+}
+
 export function allExpandedFileTreeDirectories(tree: FileTree) {
   return new Set(tree.nodes.filter((node) => node.kind === "directory").map((node) => node.id))
 }
@@ -188,4 +221,12 @@ function addFileTreeNode(nodes: FileTreeNode[], roots: number[], input: Omit<Fil
   if (input.parent === undefined) roots.push(id)
   else nodes[input.parent]!.children.push(id)
   return id
+}
+
+function fileTreeParentDirectories(tree: FileTree, id: number) {
+  const result = new Set<number>()
+  for (let parent = tree.nodes[id]?.parent; parent !== undefined; parent = tree.nodes[parent]?.parent) {
+    result.add(parent)
+  }
+  return result
 }

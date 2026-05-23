@@ -2,12 +2,17 @@ import { describe, expect, test } from "bun:test"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
+  fileTreeFileSelection,
   flattenFileTree,
   moveFileTreeSelection,
   moveFileTreeSelectionToFirstChild,
   moveFileTreeSelectionToFile,
   moveFileTreeSelectionToParent,
+  movePatchFileIndex,
+  orderedPatchFileIndexes,
   setFileTreeDirectoryExpanded,
+  showDiffViewerFileTree,
+  singlePatchFileIndex,
   toggleFileTreeDirectory,
 } from "../../../src/cli/cmd/tui/feature-plugins/system/diff-viewer-file-tree-utils"
 
@@ -231,6 +236,56 @@ describe("diff viewer file tree utilities", () => {
     expect(moveFileTreeSelectionToFile(rows, tui.id, 1)).toBe(index.id)
     expect(moveFileTreeSelectionToFile(rows, index.id, -1)).toBe(tui.id)
     expect(moveFileTreeSelectionToFile(rows, readme.id, 1)).toBe(readme.id)
+  })
+
+  test("selects a file tree node and expands its parents for a patch file", () => {
+    const tree = buildFileTree([{ file: "src/config/tui.ts" }, { file: "src/session/index.ts" }, { file: "README.md" }])
+    const selection = fileTreeFileSelection(tree, 1)
+
+    expect(selection?.highlightedNode).toBe(
+      tree.nodes.find((node) => node.kind === "file" && node.name === "index.ts")?.id,
+    )
+    expect([...selection!.expandedNodes].map((id) => tree.nodes[id]!.name)).toEqual(["session", "src"])
+    expect(fileTreeFileSelection(tree, 99)).toBeUndefined()
+  })
+
+  test("prefers the selected file when choosing the single patch file", () => {
+    expect(singlePatchFileIndex(2, 1, 0, 3)).toBe(2)
+    expect(singlePatchFileIndex(undefined, 1, 0, 3)).toBe(1)
+    expect(singlePatchFileIndex(undefined, undefined, 0, 3)).toBe(0)
+    expect(singlePatchFileIndex(undefined, undefined, undefined, 3)).toBe(3)
+  })
+
+  test("orders patches by the flattened file tree order", () => {
+    const rows = flattenFileTree(
+      buildFileTree([
+        { file: "src/dir-8/juniper-4.ts" },
+        { file: "src/dir-8/harbor-94.ts" },
+        { file: "src/dir-8/cedar-16.ts" },
+      ]),
+    )
+
+    expect(orderedPatchFileIndexes(rows)).toEqual([2, 1, 0])
+  })
+
+  test("shows the diff viewer file tree only when enabled and files exist", () => {
+    expect(showDiffViewerFileTree(true, 1)).toBe(true)
+    expect(showDiffViewerFileTree(true, 0)).toBe(false)
+    expect(showDiffViewerFileTree(false, 1)).toBe(false)
+    expect(showDiffViewerFileTree(false, 0)).toBe(false)
+  })
+
+  test("moves patch selection through the ordered patch file indexes", () => {
+    const fileIndexes = [2, 1, 0]
+
+    expect(movePatchFileIndex(fileIndexes, undefined, 1)).toBe(2)
+    expect(movePatchFileIndex(fileIndexes, undefined, -1)).toBe(2)
+    expect(movePatchFileIndex(fileIndexes, 2, 1)).toBe(1)
+    expect(movePatchFileIndex(fileIndexes, 1, -1)).toBe(2)
+    expect(movePatchFileIndex(fileIndexes, 0, 1)).toBe(0)
+    expect(movePatchFileIndex(fileIndexes, 99, 1)).toBe(2)
+    expect(movePatchFileIndex(fileIndexes, 99, -1)).toBe(2)
+    expect(movePatchFileIndex([], undefined, 1)).toBeUndefined()
   })
 
   test("toggles only selected directory expansion", () => {

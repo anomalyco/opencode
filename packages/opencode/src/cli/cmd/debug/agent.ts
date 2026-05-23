@@ -1,6 +1,6 @@
 import { EOL } from "os"
 import { basename } from "path"
-import { Effect } from "effect"
+import { Cause, Effect } from "effect"
 import { Agent } from "../../../agent/agent"
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session/session"
@@ -80,7 +80,21 @@ const run = Effect.fn("Cli.debug.agent.body")(function* (
 const getAvailableTools = Effect.fn("Cli.debug.agent.getAvailableTools")(function* (agent: Agent.Info) {
   const provider = yield* Provider.Service
   const registry = yield* ToolRegistry.Service
-  const model = agent.model ?? (yield* provider.defaultModel())
+  const model =
+    agent.model ??
+    (yield* provider.defaultModel().pipe(
+      Effect.matchCauseEffect({
+        onSuccess: Effect.succeed,
+        onFailure: (cause) => {
+          const error = Cause.squash(cause) as Provider.DefaultModelError
+          if (error instanceof Provider.ModelNotFoundError) {
+            return fail(`Model not found: ${error.providerID}/${error.modelID}`)
+          }
+          if (error instanceof Provider.NoModelsError) return fail(`No models found for provider ${error.providerID}`)
+          return fail("No providers found")
+        },
+      }),
+    ))
   return yield* registry.tools({ ...model, agent })
 })
 
@@ -133,7 +147,20 @@ const createToolContext = Effect.fn("Cli.debug.agent.createToolContext")(functio
     ? agent.model
     : yield* Effect.gen(function* () {
         const provider = yield* Provider.Service
-        return yield* provider.defaultModel()
+        return yield* provider.defaultModel().pipe(
+          Effect.matchCauseEffect({
+            onSuccess: Effect.succeed,
+            onFailure: (cause) => {
+              const error = Cause.squash(cause) as Provider.DefaultModelError
+              if (error instanceof Provider.ModelNotFoundError) {
+                return fail(`Model not found: ${error.providerID}/${error.modelID}`)
+              }
+              if (error instanceof Provider.NoModelsError)
+                return fail(`No models found for provider ${error.providerID}`)
+              return fail("No providers found")
+            },
+          }),
+        )
       })
   const now = Date.now()
   const message: MessageV2.Assistant = {
