@@ -331,6 +331,83 @@ it.instance(
   { git: true },
 )
 
+it.instance("runs ACP terminal commands through a shell", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const server = path.join(test.directory, "terminal-acp-server.js")
+    yield* Effect.promise(() => fs.writeFile(server, terminalServerSource))
+    yield* Effect.promise(() =>
+      fs.writeFile(
+        path.join(test.directory, "opencode.json"),
+        JSON.stringify({
+          acp: {
+            terminal: {
+              type: "local",
+              command: [process.execPath, server],
+              timeout: 5000,
+            },
+          },
+        }),
+      ),
+    )
+
+    const sessions = yield* Session.Service
+    const acp = yield* ACPClient.Service
+    const info = yield* sessions.create({
+      title: "terminal ACP client test",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      agent: "terminal-acp",
+      model: { id: model.modelID, providerID: model.providerID },
+    })
+    const user: MessageV2.User = {
+      id: MessageID.ascending(),
+      sessionID: info.id,
+      role: "user",
+      time: { created: Date.now() },
+      agent: "terminal-acp",
+      model,
+    }
+    yield* sessions.updateMessage(user)
+    const userPart = yield* sessions.updatePart({
+      id: PartID.ascending(),
+      sessionID: info.id,
+      messageID: user.id,
+      type: "text",
+      text: "run shell",
+    })
+    const assistant: MessageV2.Assistant = {
+      id: MessageID.ascending(),
+      parentID: user.id,
+      role: "assistant",
+      mode: "terminal-acp",
+      agent: "terminal-acp",
+      path: { cwd: test.directory, root: test.directory },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      modelID: model.modelID,
+      providerID: model.providerID,
+      time: { created: Date.now() },
+      sessionID: info.id,
+    }
+    yield* sessions.updateMessage(assistant)
+
+    yield* acp.run({
+      server: "terminal",
+      agent: {
+        name: "terminal-acp",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      },
+      session: info,
+      user: { info: user, parts: [userPart] },
+      assistant,
+    })
+
+    const messages = yield* sessions.messages({ sessionID: info.id })
+    const stored = messages.find((message) => message.info.id === assistant.id)
+    expect(stored?.parts.some((part) => part.type === "text" && part.text.includes("shell-ok"))).toBe(true)
+  }),
+)
+
 const fakeServerSource = `
 const write = (message) => process.stdout.write(JSON.stringify(message) + "\\n")
 let buffer = ""
@@ -557,6 +634,75 @@ process.stdin.on("data", (chunk) => {
       })
       write({ jsonrpc: "2.0", id: pendingPromptId, result: { stopReason: "end_turn" } })
       pendingPromptId = undefined
+    }
+  }
+})
+`
+
+const terminalServerSource = `
+const write = (message) => process.stdout.write(JSON.stringify(message) + "\\n")
+let buffer = ""
+let promptId
+let sessionId
+let terminalId
+process.stdin.setEncoding("utf8")
+process.stdin.on("data", (chunk) => {
+  buffer += chunk
+  const lines = buffer.split("\\n")
+  buffer = lines.pop() ?? ""
+  for (const line of lines) {
+    if (!line.trim()) continue
+    const message = JSON.parse(line)
+    if (message.method === "initialize") {
+      write({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: {
+          protocolVersion: 1,
+          agentCapabilities: {},
+          agentInfo: { name: "terminal-acp", title: "Terminal ACP", version: "1.0.0" },
+          authMethods: [],
+        },
+      })
+      continue
+    }
+    if (message.method === "session/new") {
+      write({ jsonrpc: "2.0", id: message.id, result: { sessionId: "remote_terminal" } })
+      continue
+    }
+    if (message.method === "session/prompt") {
+      promptId = message.id
+      sessionId = message.params.sessionId
+      write({
+        jsonrpc: "2.0",
+        id: 200,
+        method: "terminal/create",
+        params: { sessionId, command: "echo shell-ok | cat", cwd: process.cwd(), outputByteLimit: 10000 },
+      })
+      continue
+    }
+    if (message.id === 200) {
+      terminalId = message.result.terminalId
+      write({ jsonrpc: "2.0", id: 201, method: "terminal/wait_for_exit", params: { sessionId, terminalId } })
+      continue
+    }
+    if (message.id === 201) {
+      write({ jsonrpc: "2.0", id: 202, method: "terminal/output", params: { sessionId, terminalId } })
+      continue
+    }
+    if (message.id === 202) {
+      write({
+        jsonrpc: "2.0",
+        method: "session/update",
+        params: {
+          sessionId,
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: message.result.output },
+          },
+        },
+      })
+      write({ jsonrpc: "2.0", id: promptId, result: { stopReason: "end_turn" } })
     }
   }
 })

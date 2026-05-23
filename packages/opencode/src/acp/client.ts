@@ -307,7 +307,10 @@ export const layer = Layer.effect(
         const remote = resolveSession(params.sessionId)
         if (!remote) throw RequestError.invalidParams(`Unknown session: ${params.sessionId}`)
         await assertExternalDirectory(permission, remote, params.cwd ?? remote.ctx.directory)
-        const commandText = [params.command, ...(params.args ?? [])].join(" ")
+        const commandText =
+          params.args && params.args.length > 0
+            ? [shellQuote(params.command), ...params.args.map(shellQuote)].join(" ")
+            : params.command
         await Effect.runPromise(
           permission
             .ask({
@@ -321,7 +324,8 @@ export const layer = Layer.effect(
             .pipe(Effect.provideService(InstanceRef, remote.ctx)),
         )
         const terminalID = `acp_${++runtime.terminalCounter}`
-        const child = spawn(params.command, params.args ?? [], {
+        const shell = Shell.preferred()
+        const child = spawn(shell, Shell.args(shell, commandText, params.cwd ?? remote.ctx.directory), {
           cwd: params.cwd ?? remote.ctx.directory,
           env: {
             ...process.env,
@@ -1328,6 +1332,11 @@ function trimUtf8Start(value: string, maxBytes: number) {
     output = output.slice(Math.max(1, output.length - maxBytes))
   }
   return output
+}
+
+function shellQuote(value: string) {
+  if (/^[A-Za-z0-9_./:=@+-]+$/.test(value)) return value
+  return `'${value.replaceAll("'", "'\\''")}'`
 }
 
 function relativeToWorktree(ctx: InstanceContext, filepath: string) {
