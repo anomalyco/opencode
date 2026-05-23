@@ -127,7 +127,6 @@ const ModelList: Component<{
 }
 
 type ModelSelectorTriggerProps = Omit<ComponentProps<typeof Kobalte.Trigger>, "as" | "ref">
-type Dismiss = "escape" | "outside" | "select" | "manage" | "provider"
 
 export function ModelSelectorPopover(props: {
   provider?: string
@@ -142,7 +141,7 @@ export function ModelSelectorPopover(props: {
   const model = props.model ?? useLocal().model
   const [store, setStore] = createStore<{
     open: boolean
-    dismiss: Dismiss | null
+    dismiss: "escape" | "outside" | null
   }>({
     open: false,
     dismiss: null,
@@ -158,23 +157,14 @@ export function ModelSelectorPopover(props: {
   let resizeObserver: ResizeObserver | undefined
   let stageAt = 0
 
-  const close = (dismiss: Dismiss) => {
-    setStore("dismiss", dismiss)
-    setStore("open", false)
-  }
-
   const handleManage = () => {
-    close("manage")
-    void import("./dialog-manage-models").then((x) => {
-      dialog.show(() => <x.DialogManageModels />)
-    })
+    setStore("open", false)
+    dialog.show(() => <DialogManageModels />)
   }
 
   const handleConnectProvider = () => {
-    close("provider")
-    void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider />)
-    })
+    setStore("open", false)
+    dialog.show(() => <DialogSelectProvider />)
   }
   const language = useLanguage()
 
@@ -473,7 +463,7 @@ export function ModelSelectorPopover(props: {
           <ModelList
             provider={props.provider}
             model={props.model}
-            onSelect={() => close("select")}
+            onSelect={() => setStore("open", false)}
             class="p-1"
             tooltip={false}
             action={
@@ -511,29 +501,26 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
   const dialog = useDialog()
   const language = useLanguage()
 
-  const provider = () => {
-    void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider />)
-    })
-  }
-
-  const manage = () => {
-    void import("./dialog-manage-models").then((x) => {
-      dialog.show(() => <x.DialogManageModels />)
-    })
-  }
-
   return (
     <Dialog
       title={language.t("dialog.model.select.title")}
       action={
-        <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1} onClick={provider}>
+        <Button
+          class="h-7 -my-1 text-14-medium"
+          icon="plus-small"
+          tabIndex={-1}
+          onClick={() => dialog.show(() => <DialogSelectProvider />)}
+        >
           {language.t("command.provider.connect")}
         </Button>
       }
     >
       <ModelList provider={props.provider} model={props.model} onSelect={() => dialog.close()} />
-      <Button variant="ghost" class="ml-3 mt-5 mb-6 text-text-base self-start" onClick={manage}>
+      <Button
+        variant="ghost"
+        class="ml-3 mt-5 mb-6 text-text-base self-start"
+        onClick={() => dialog.show(() => <DialogManageModels />)}
+      >
         {language.t("dialog.model.manage")}
       </Button>
     </Dialog>

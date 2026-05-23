@@ -1,5 +1,5 @@
 import type { Config, McpStatus, Project } from "@opencode-ai/sdk/v2/client"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { classifyPluginSource, classifySkillSource, localPath } from "@/utils/config-source"
 
 const stem = (value: string) => value.replace(/\.(?:ts|js|mjs|cjs|mts|cts)$/i, "")

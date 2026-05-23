@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import type { Prompt } from "@/context/prompt"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
@@ -76,13 +76,6 @@ beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
     useNavigate: () => () => undefined,
     useParams: () => params,
-  }))
-
-  mock.module("@opencode-ai/sdk/v2/client", () => ({
-    createOpencodeClient: (input: { directory: string }) => {
-      createdClients.push(input.directory)
-      return clientFor(input.directory)
-    },
   }))
 
   mock.module("@opencode-ai/ui/toast", () => ({
@@ -167,7 +160,7 @@ beforeAll(async () => {
           add: (value: {
             directory?: string
             sessionID?: string
-            message: { agent: string; model: { providerID: string; modelID: string; variant?: string } }
+            message: { agent: string; model: { providerID: string; modelID: string }; variant?: string }
           }) => {
             optimistic.push(value)
             optimisticSeeded.push(
@@ -231,6 +224,10 @@ beforeAll(async () => {
   const mod = await import("./submit")
   createPromptSubmit = mod.createPromptSubmit
   sendFollowupDraft = mod.sendFollowupDraft
+})
+
+afterAll(() => {
+  mock.restore()
 })
 
 beforeEach(() => {
@@ -423,7 +420,8 @@ describe("prompt submit worktree selection", () => {
     expect(optimistic[0]).toMatchObject({
       message: {
         agent: "agent",
-        model: { providerID: "provider", modelID: "model", variant: "high" },
+        model: { providerID: "provider", modelID: "model" },
+        variant: "high",
       },
     })
   })

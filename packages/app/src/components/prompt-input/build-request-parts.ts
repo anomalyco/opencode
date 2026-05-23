@@ -39,16 +39,6 @@ const absolute = (directory: string, path: string) => {
 const fileQuery = (selection: FileSelection | undefined) =>
   selection ? `?start=${selection.startLine}&end=${selection.endLine}` : ""
 
-const mention = /(^|[\s([{"'])@(\S+)/g
-
-const parseCommentMentions = (comment: string) => {
-  return Array.from(comment.matchAll(mention)).flatMap((match) => {
-    const path = (match[2] ?? "").replace(/[.,!?;:)}\]"']+$/, "")
-    if (!path) return []
-    return [path]
-  })
-}
-
 const isFileAttachment = (part: Prompt[number]): part is FileAttachmentPart => part.type === "file"
 const isAgentAttachment = (part: Prompt[number]): part is AgentPart => part.type === "agent"
 
@@ -148,21 +138,6 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
 
     if (!comment) return [filePart]
 
-    const mentions = parseCommentMentions(comment).flatMap((path) => {
-      const url = `file://${encodeFilePath(absolute(input.sessionDirectory, path))}`
-      if (used.has(url)) return []
-      used.add(url)
-      return [
-        {
-          id: Identifier.ascending("part"),
-          type: "file",
-          mime: "text/plain",
-          url,
-          filename: getFilename(path),
-        } satisfies PromptRequestPart,
-      ]
-    })
-
     return [
       {
         id: Identifier.ascending("part"),
@@ -178,7 +153,6 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
         }),
       } satisfies PromptRequestPart,
       filePart,
-      ...mentions,
     ]
   })
 

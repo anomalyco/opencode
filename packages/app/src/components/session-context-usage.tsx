@@ -14,7 +14,7 @@ import {
   estimateSessionContextBreakdown,
   type SessionContextBreakdownKey,
 } from "@/components/session/session-context-breakdown"
-import { findLast } from "@opencode-ai/util/array"
+import { findLast } from "@opencode-ai/core/util/array"
 import type { Message, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { same } from "@/utils/same"
 
@@ -68,7 +68,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       }),
   )
 
-  const metrics = createMemo(() => getSessionContextMetrics(messages(), [...providers.all().values()]))
+  const metrics = createMemo(() => getSessionContextMetrics(messages(), sync.data.provider.all))
   const context = createMemo(() => metrics().context)
   const cost = createMemo(() => usd().format(metrics().totalCost))
   const formatter = createMemo(() => createSessionContextFormatter(language.intl()))

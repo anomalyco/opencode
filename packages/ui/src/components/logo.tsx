@@ -1,4 +1,4 @@
-import { type ComponentProps } from "solid-js"
+import { ComponentProps } from "solid-js"
 
 export const Mark = (props: { class?: string }) => {
   return (

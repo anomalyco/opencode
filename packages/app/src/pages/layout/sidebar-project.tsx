@@ -1,7 +1,7 @@
 import { createMemo, createSignal, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { useLayout, type LocalProject } from "@/context/layout"

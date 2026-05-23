@@ -14,9 +14,8 @@
     "version:sync": "bun ./script/sync-version.ts",
     "typecheck": "bun turbo typecheck",
     "upgrade-opentui": "bun run script/upgrade-opentui.ts",
-    "postinstall": "bun run --cwd packages/opencode fix-node-pty",
+    "postinstall": "bun run --cwd packages/opencode fix-node-pty && bun ./script/patch-ghostty.ts",
     "prepare": "husky",
-    "postinstall": "bun ./script/patch-ghostty.ts",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
     "test": "echo 'do not run tests from root' && exit 1"
@@ -138,9 +137,7 @@
     "@npmcli/agent@4.0.0": "patches/@npmcli%2Fagent@4.0.0.patch",
     "@silvia-odwyer/photon-node@0.3.4": "patches/@silvia-odwyer%2Fphoton-node@0.3.4.patch",
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
-    "@openrouter/ai-sdk-provider@1.5.4": "patches/@openrouter%2Fai-sdk-provider@1.5.4.patch",
-    "@opentui/core@0.1.90": "patches/@opentui%2Fcore@0.1.90.patch",
-    "@ai-sdk/xai@2.0.51": "patches/@ai-sdk%2Fxai@2.0.51.patch",
-    "solid-js@1.9.10": "patches/solid-js@1.9.10.patch"
+    "solid-js@1.9.10": "patches/solid-js@1.9.10.patch",
+    "@ai-sdk/xai@3.0.82": "patches/@ai-sdk%2Fxai@3.0.82.patch"
   }
 }

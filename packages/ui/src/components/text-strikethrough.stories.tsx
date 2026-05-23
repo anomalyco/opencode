@@ -1,6 +1,5 @@
 // @ts-nocheck
-import { createSignal, onMount } from "solid-js"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSpring } from "./motion-spring"
 import { TextStrikethrough } from "./text-strikethrough"
@@ -145,7 +144,13 @@ function VariantF(props: { active: boolean; text: string }) {
   }
 
   onMount(measure)
-  createResizeObserver(() => containerRef, measure)
+  createEffect(() => {
+    const el = containerRef
+    if (!el) return
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    onCleanup(() => observer.disconnect())
+  })
 
   const clipRight = () => {
     const cw = containerWidth()

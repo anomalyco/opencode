@@ -1,4 +1,4 @@
-import { createEffect, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
+import { createEffect, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
 import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "../context/i18n"
 import { createStore } from "solid-js/store"
@@ -40,54 +40,14 @@ export interface BasicToolProps {
   locked?: boolean
   animated?: boolean
   onSubtitleClick?: () => void
-  onTriggerClick?: JSX.EventHandlerUnion<HTMLElement, MouseEvent>
-  triggerHref?: string
-  clickable?: boolean
 }
 
 const SPRING = { type: "spring" as const, visualDuration: 0.35, bounce: 0 }
-const deferredMounts: Array<{ active: boolean; fn: () => void }> = []
-let deferredFrame: number | undefined
-
-function flushDeferredMounts() {
-  while (deferredMounts.length > 0) {
-    // Timeline tools are mounted top-to-bottom, but the viewport starts at the latest turn.
-    // Pop from the end so heavy default-open bodies near the bottom become interactive first.
-    const item = deferredMounts.pop()!
-    if (item.active) {
-      deferredFrame = deferredMounts.length > 0 ? requestAnimationFrame(flushDeferredMounts) : undefined
-      item.fn()
-      return
-    }
-  }
-  deferredFrame = undefined
-}
-
-function scheduleDeferredFlush() {
-  if (deferredFrame !== undefined) return
-  deferredFrame = requestAnimationFrame(() => {
-    deferredFrame = requestAnimationFrame(flushDeferredMounts)
-  })
-}
-
-function scheduleDeferredMount(fn: () => void) {
-  const item = { active: true, fn }
-  deferredMounts.push(item)
-  scheduleDeferredFlush()
-  return () => {
-    item.active = false
-  }
-}
-
-function scheduleFrameMount(fn: () => void) {
-  const frame = requestAnimationFrame(fn)
-  return () => cancelAnimationFrame(frame)
-}
 
 export function BasicTool(props: BasicToolProps) {
   const [state, setState] = createStore({
     open: props.defaultOpen ?? false,
-    ready: !props.defer && (props.defaultOpen ?? false),
+    ready: props.defaultOpen ?? false,
   })
   const open = () => state.open
   const ready = () => state.ready
@@ -97,27 +57,15 @@ export function BasicTool(props: BasicToolProps) {
   const hasDetails = () => !!props.children && !props.hideDetails && details()
   const mountDetails = () => hasDetails() && (props.mountDetails === "always" || open() || !!props.forceOpen)
 
-  let cancelReady: (() => void) | undefined
+  let frame: number | undefined
 
   const cancel = () => {
-    cancelReady?.()
-    cancelReady = undefined
-  }
-
-  const scheduleReady = (initial = false) => {
-    cancel()
-    cancelReady = (initial ? scheduleDeferredMount : scheduleFrameMount)(() => {
-      cancelReady = undefined
-      if (!open()) return
-      setState("ready", true)
-    })
+    if (frame === undefined) return
+    cancelAnimationFrame(frame)
+    frame = undefined
   }
 
   onCleanup(cancel)
-
-  onMount(() => {
-    if (props.defer && open()) scheduleReady(true)
-  })
 
   createEffect(() => {
     if (props.forceOpen) setState("open", true)
@@ -134,7 +82,12 @@ export function BasicTool(props: BasicToolProps) {
           return
         }
 
-        scheduleReady()
+        cancel()
+        frame = requestAnimationFrame(() => {
+          frame = undefined
+          if (!open()) return
+          setState("ready", true)
+        })
       },
       { defer: true },
     ),
@@ -154,7 +107,7 @@ export function BasicTool(props: BasicToolProps) {
         if (isOpen) {
           contentRef.style.overflow = "hidden"
           heightAnim = animate(contentRef, { height: "auto" }, SPRING)
-          void heightAnim.finished.then(() => {
+          heightAnim.finished.then(() => {
             if (!contentRef || !open()) return
             contentRef.style.overflow = "visible"
             contentRef.style.height = "auto"
@@ -176,7 +129,7 @@ export function BasicTool(props: BasicToolProps) {
     if (pending() && !props.showPendingDetails) return
     if (props.locked && !value) return
     suppressAutoScrollResize()
-    setOpen(value)
+    setState("open", value)
   }
 
   return (
@@ -196,32 +149,49 @@ export function BasicTool(props: BasicToolProps) {
                     <div data-slot="basic-tool-tool-info-structured">
                       <div data-slot="basic-tool-tool-info-main">
                         <span
-                          data-slot="basic-tool-tool-subtitle"
+                          data-slot="basic-tool-tool-title"
                           classList={{
-                            [title().subtitleClass ?? ""]: !!title().subtitleClass,
-                            clickable: !!props.onSubtitleClick,
-                          }}
-                          onClick={(e) => {
-                            if (props.onSubtitleClick) {
-                              e.stopPropagation()
-                              props.onSubtitleClick()
-                            }
+                            [trigger().titleClass ?? ""]: !!trigger().titleClass,
                           }}
                         >
-                          {title().subtitle}
+                          <TextShimmer text={trigger().title} active={pending()} />
                         </span>
                         <Show when={meta()}>
                           <Show when={trigger().subtitle}>
                             <span
-                              data-slot="basic-tool-tool-arg"
+                              data-slot="basic-tool-tool-subtitle"
                               classList={{
-                                [title().argsClass ?? ""]: !!title().argsClass,
+                                [trigger().subtitleClass ?? ""]: !!trigger().subtitleClass,
+                                clickable: !!props.onSubtitleClick,
+                              }}
+                              onClick={(e) => {
+                                if (props.onSubtitleClick) {
+                                  e.stopPropagation()
+                                  props.onSubtitleClick()
+                                }
                               }}
                             >
-                              {arg}
+                              {trigger().subtitle}
                             </span>
-                          )}
-                        </For>
+                          </Show>
+                          <Show when={trigger().args?.length}>
+                            <For each={trigger().args}>
+                              {(arg) => (
+                                <span
+                                  data-slot="basic-tool-tool-arg"
+                                  classList={{
+                                    [trigger().argsClass ?? ""]: !!trigger().argsClass,
+                                  }}
+                                >
+                                  {arg}
+                                </span>
+                              )}
+                            </For>
+                          </Show>
+                        </Show>
+                      </div>
+                      <Show when={!pending() && trigger().action}>
+                        <span data-slot="basic-tool-tool-action">{trigger().action}</span>
                       </Show>
                     </div>
                   )}
@@ -245,7 +215,7 @@ export function BasicTool(props: BasicToolProps) {
             overflow: initialOpen ? "visible" : "hidden",
           }}
         >
-          <Show when={!props.defer || ready()}>{props.children}</Show>
+          {props.children}
         </div>
       </Show>
       <Show when={!props.animated && mountDetails()}>
@@ -336,7 +306,7 @@ export function GenericTool(props: {
   input?: Record<string, unknown>
   output?: string
 }) {
-  const hook = customTool(props.tool)
+  const i18n = useI18n()
 
   const inputJson = () => {
     const v = props.input
@@ -365,8 +335,7 @@ export function GenericTool(props: {
       showPendingMeta
       status={props.status}
       trigger={{
-        title: `Called \`${props.tool}\``,
-        titleClass: hook ? "hook-name" : undefined,
+        title: i18n.t("ui.basicTool.called", { tool: props.tool }),
         subtitle: label(props.input),
         args: args(props.input),
       }}

@@ -13,6 +13,7 @@ import powershell from "../assets/icons/app/powershell.svg"
 import terminal from "../assets/icons/app/terminal.png"
 import textmate from "../assets/icons/app/textmate.png"
 import vscode from "../assets/icons/app/vscode.svg"
+import warp from "../assets/icons/app/warp.png"
 import wezterm from "../assets/icons/app/wezterm.svg"
 import xcode from "../assets/icons/app/xcode.png"
 import zed from "../assets/icons/app/zed.svg"
@@ -28,6 +29,7 @@ const icons = {
   terminal,
   iterm2,
   ghostty,
+  warp,
   wezterm,
   xcode,
   "android-studio": androidStudio,
@@ -77,7 +79,7 @@ export const AppIcon: Component<AppIconProps> = (props) => {
       alt={local.alt ?? ""}
       draggable={local.draggable ?? false}
       classList={{
-        ...local.classList,
+        ...(local.classList ?? {}),
         [local.class ?? ""]: !!local.class,
       }}
     />

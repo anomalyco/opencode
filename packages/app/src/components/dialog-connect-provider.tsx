@@ -15,20 +15,13 @@ import { Link } from "@/components/link"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
-import { useProviders } from "@/hooks/use-providers"
+import { DialogSelectProvider } from "./dialog-select-provider"
 
 export function DialogConnectProvider(props: { provider: string }) {
   const dialog = useDialog()
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
   const language = useLanguage()
-  const providers = useProviders()
-
-  const all = () => {
-    void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider />)
-    })
-  }
 
   const alive = { value: true }
   const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
@@ -40,9 +33,7 @@ export function DialogConnectProvider(props: { provider: string }) {
     timer.current = undefined
   })
 
-  const provider = createMemo(
-    () => providers.all().get(props.provider) ?? globalSync.data.provider.all.get(props.provider)!,
-  )
+  const provider = createMemo(() => globalSync.data.provider.all.find((x) => x.id === props.provider)!)
   const fallback = createMemo<ProviderAuthMethod[]>(() => [
     {
       type: "api" as const,
@@ -325,7 +316,7 @@ export function DialogConnectProvider(props: { provider: string }) {
     if (loading()) return
     if (methods().length === 1) {
       auto = true
-      void selectMethod(0)
+      selectMethod(0)
     }
   })
 
@@ -342,7 +333,7 @@ export function DialogConnectProvider(props: { provider: string }) {
 
   function goBack() {
     if (methods().length === 1) {
-      all()
+      dialog.show(() => <DialogSelectProvider />)
       return
     }
     if (store.authorization) {
@@ -353,7 +344,7 @@ export function DialogConnectProvider(props: { provider: string }) {
       dispatch({ type: "method.reset" })
       return
     }
-    all()
+    dialog.show(() => <DialogSelectProvider />)
   }
 
   function MethodSelection() {
@@ -371,7 +362,7 @@ export function DialogConnectProvider(props: { provider: string }) {
             key={(m) => m?.label}
             onSelect={async (selected, index) => {
               if (!selected) return
-              void selectMethod(index)
+              selectMethod(index)
             }}
           >
             {(i) => (
@@ -524,7 +515,7 @@ export function DialogConnectProvider(props: { provider: string }) {
     const code = createMemo(() => {
       const instructions = store.authorization?.instructions
       if (instructions?.includes(":")) {
-        return instructions.split(":").pop()?.trim()
+        return instructions.split(":")[1]?.trim()
       }
       return instructions
     })

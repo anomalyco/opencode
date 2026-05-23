@@ -1,4 +1,4 @@
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 
 export function resolveLinkedPath(path: string, list: string[]) {
   const name = getFilename(path)

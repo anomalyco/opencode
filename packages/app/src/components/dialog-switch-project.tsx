@@ -1,7 +1,7 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { createMemo, Show, type Accessor } from "solid-js"
 import { useLayout, getAvatarColors, type LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"

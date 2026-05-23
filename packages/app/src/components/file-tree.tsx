@@ -14,6 +14,7 @@ import {
   Switch,
   untrack,
   type ComponentProps,
+  type JSXElement,
   type ParentProps,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
@@ -148,7 +149,7 @@ const FileTreeNode = (
       classList={{
         "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
         "bg-surface-base-active": local.node.path === local.active,
-        ...local.classList,
+        ...(local.classList ?? {}),
         [local.class ?? ""]: !!local.class,
         [local.nodeClass ?? ""]: !!local.nodeClass,
       }}
@@ -382,117 +383,6 @@ export default function FileTree(props: {
 
     return out
   })
-
-  const Node = (
-    p: ParentProps &
-      ComponentProps<"div"> &
-      ComponentProps<"button"> & {
-        node: FileNode
-        as?: "div" | "button"
-      },
-  ) => {
-    const [local, rest] = splitProps(p, ["node", "as", "children", "class", "classList"])
-    return (
-      <Dynamic
-        component={local.as ?? "div"}
-        classList={{
-          "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
-          "bg-surface-base-active": local.node.path === props.active,
-          ...(local.classList ?? {}),
-          [local.class ?? ""]: !!local.class,
-          [props.nodeClass ?? ""]: !!props.nodeClass,
-        }}
-        style={`padding-left: ${Math.max(0, 8 + level * 12 - (local.node.type === "file" ? 24 : 4))}px`}
-        draggable={draggable()}
-        onDragStart={(e: DragEvent) => {
-          if (!draggable()) return
-          e.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
-          e.dataTransfer?.setData("text/uri-list", `file://${local.node.path}`)
-          if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy"
-
-          const dragImage = document.createElement("div")
-          dragImage.className =
-            "flex items-center gap-x-2 px-2 py-1 bg-surface-raised-base rounded-md border border-border-base text-12-regular text-text-strong"
-          dragImage.style.position = "absolute"
-          dragImage.style.top = "-1000px"
-
-          const icon =
-            (e.currentTarget as HTMLElement).querySelector('[data-component="file-icon"]') ??
-            (e.currentTarget as HTMLElement).querySelector("svg")
-          const text = (e.currentTarget as HTMLElement).querySelector("span")
-          if (icon && text) {
-            dragImage.innerHTML = (icon as SVGElement).outerHTML + (text as HTMLSpanElement).outerHTML
-          }
-
-          document.body.appendChild(dragImage)
-          e.dataTransfer?.setDragImage(dragImage, 0, 12)
-          setTimeout(() => document.body.removeChild(dragImage), 0)
-        }}
-        {...rest}
-      >
-        {local.children}
-        {(() => {
-          const kind = kinds()?.get(local.node.path)
-          const marked = marks()?.has(local.node.path) ?? false
-          const active = !!kind && marked && !local.node.ignored
-          const color =
-            kind === "add"
-              ? "color: var(--icon-diff-add-base)"
-              : kind === "del"
-                ? "color: var(--icon-diff-delete-base)"
-                : kind === "mix"
-                  ? "color: var(--icon-diff-modified-base)"
-                  : undefined
-          return (
-            <span
-              classList={{
-                "flex-1 min-w-0 text-12-mono whitespace-nowrap truncate": true,
-                "text-text-weaker": local.node.ignored,
-                "text-text-weak": !local.node.ignored && !active,
-              }}
-              style={active ? color : undefined}
-            >
-              {local.node.name}
-            </span>
-          )
-        })()}
-        {(() => {
-          const kind = kinds()?.get(local.node.path)
-          if (!kind) return null
-          if (!marks()?.has(local.node.path)) return null
-
-          if (local.node.type === "file") {
-            const text = kind === "add" ? "A" : kind === "del" ? "D" : "M"
-            const color =
-              kind === "add"
-                ? "color: var(--icon-diff-add-base)"
-                : kind === "del"
-                  ? "color: var(--icon-diff-delete-base)"
-                  : "color: var(--icon-diff-modified-base)"
-
-            return (
-              <span class="shrink-0 w-4 text-center text-12-medium" style={color}>
-                {text}
-              </span>
-            )
-          }
-
-          if (local.node.type === "directory") {
-            const color =
-              kind === "add"
-                ? "background-color: var(--icon-diff-add-base)"
-                : kind === "del"
-                  ? "background-color: var(--icon-diff-delete-base)"
-                  : "background-color: var(--icon-diff-modified-base)"
-
-            return <div class="shrink-0 size-1.5 mr-1.5 rounded-full" style={color} />
-          }
-
-          return null
-        })()}
-      </Dynamic>
-    )
-  }
 
   return (
     <div data-component="filetree" class={`flex flex-col gap-0.5 ${props.class ?? ""}`}>

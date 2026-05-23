@@ -1,6 +1,5 @@
 import { Component, For, Show } from "solid-js"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
 import type { ImageAttachmentPart } from "@/context/prompt"
 
 type PromptImageAttachmentsProps = {
@@ -51,7 +50,7 @@ export const PromptImageAttachments: Component<PromptImageAttachmentsProps> = (p
               <div class={nameClass}>
                 <span class="text-10-regular text-white truncate block">{attachment.filename}</span>
               </div>
-            </Tooltip>
+            </div>
           )}
         </For>
       </div>

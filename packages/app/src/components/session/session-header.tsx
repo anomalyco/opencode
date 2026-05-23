@@ -8,7 +8,7 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/core/util/path"
-import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
+import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useCommand } from "@/context/command"
@@ -16,7 +16,6 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
-import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { focusTerminalById } from "@/pages/session/helpers"
@@ -52,7 +51,6 @@ export function SessionHeader() {
   const server = useServer()
   const platform = usePlatform()
   const language = useLanguage()
-  const settings = useSettings()
   const sync = useSync()
   const terminal = useTerminal()
   const { params, view } = useSessionLayout()
@@ -72,43 +70,9 @@ export function SessionHeader() {
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
   const os = createMemo(() => detectOS(platform))
-  const isDesktopBeta = platform.platform === "desktop" && import.meta.env.VITE_OPENCODE_CHANNEL === "beta"
-  const search = createMemo(() => !isDesktopBeta || settings.general.showSearch())
-  const tree = createMemo(() => !isDesktopBeta || settings.general.showFileTree())
-  const term = createMemo(() => !isDesktopBeta || settings.general.showTerminal())
-  const status = createMemo(() => !isDesktopBeta || settings.general.showStatus())
 
-  const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
-  const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
-  const showShare = createMemo(() => shareEnabled() && !!currentSession())
-  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const view = createMemo(() => layout.view(sessionKey))
-
-  const OPEN_APPS = [
-    "vscode",
-    "cursor",
-    "zed",
-    "textmate",
-    "antigravity",
-    "finder",
-    "terminal",
-    "iterm2",
-    "ghostty",
-    "wezterm",
-    "xcode",
-    "android-studio",
-    "powershell",
-  ] as const
-  type OpenApp = (typeof OPEN_APPS)[number]
-
-  const os = createMemo<"macos" | "windows" | "linux" | "unknown">(() => {
-    if (platform.platform === "desktop" && platform.os) return platform.os
-    if (typeof navigator !== "object") return "unknown"
-    const value = navigator.platform || navigator.userAgent
-    if (/Mac/i.test(value)) return "macos"
-    if (/Win/i.test(value)) return "windows"
-    if (/Linux/i.test(value)) return "linux"
-    return "unknown"
+  const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
+    finder: true,
   })
 
   const list = createMemo(() => apps(os()))
@@ -191,7 +155,7 @@ export function SessionHeader() {
   }
 
   const openDir = (app: OpenApp) => {
-    if (!canOpen() || !platform.openPath) return
+    if (opening() || !canOpen() || !platform.openPath) return
     const directory = projectDirectory()
     if (!directory) return
     const plan = getOpenPlan(app, options(), !!platform.openInEditor)
@@ -246,16 +210,12 @@ export function SessionHeader() {
       .catch((err: unknown) => showRequestError(language, err))
   }
 
-  const [centerMount, setCenterMount] = createSignal<HTMLElement | null>(null)
-  const [rightMount, setRightMount] = createSignal<HTMLElement | null>(null)
-  onMount(() => {
-    setCenterMount(document.getElementById("opencode-titlebar-center"))
-    setRightMount(document.getElementById("opencode-titlebar-right"))
-  })
+  const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
+  const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
 
   return (
     <>
-      <Show when={search() && centerMount()}>
+      <Show when={centerMount()}>
         {(mount) => (
           <Portal mount={mount()}>
             <Button
@@ -415,18 +375,9 @@ export function SessionHeader() {
                     aria-expanded={view().terminal.opened()}
                     aria-controls="terminal-panel"
                   >
-                    <Button
-                      variant="ghost"
-                      class="group/terminal-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
-                      onClick={toggleTerminal}
-                      aria-label={language.t("command.terminal.toggle")}
-                      aria-expanded={view().terminal.opened()}
-                      aria-controls="terminal-panel"
-                    >
-                      <Icon size="small" name={view().terminal.opened() ? "terminal-active" : "terminal"} />
-                    </Button>
-                  </TooltipKeybind>
-                </Show>
+                    <Icon size="small" name={view().terminal.opened() ? "terminal-active" : "terminal"} />
+                  </Button>
+                </TooltipKeybind>
 
                 <div class="hidden md:flex items-center gap-1 shrink-0">
                   <TooltipKeybind
@@ -445,32 +396,30 @@ export function SessionHeader() {
                     </Button>
                   </TooltipKeybind>
 
-                  <Show when={tree()}>
-                    <TooltipKeybind
-                      title={language.t("command.fileTree.toggle")}
-                      keybind={command.keybind("fileTree.toggle")}
+                  <TooltipKeybind
+                    title={language.t("command.fileTree.toggle")}
+                    keybind={command.keybind("fileTree.toggle")}
+                  >
+                    <Button
+                      variant="ghost"
+                      class="titlebar-icon w-8 h-6 p-0 box-border"
+                      onClick={() => layout.fileTree.toggle()}
+                      aria-label={language.t("command.fileTree.toggle")}
+                      aria-expanded={layout.fileTree.opened()}
+                      aria-controls="file-tree-panel"
                     >
-                      <Button
-                        variant="ghost"
-                        class="titlebar-icon w-8 h-6 p-0 box-border"
-                        onClick={() => layout.fileTree.toggle()}
-                        aria-label={language.t("command.fileTree.toggle")}
-                        aria-expanded={layout.fileTree.opened()}
-                        aria-controls="file-tree-panel"
-                      >
-                        <div class="relative flex items-center justify-center size-4">
-                          <Icon
-                            size="small"
-                            name={layout.fileTree.opened() ? "file-tree-active" : "file-tree"}
-                            classList={{
-                              "text-icon-strong": layout.fileTree.opened(),
-                              "text-icon-weak": !layout.fileTree.opened(),
-                            }}
-                          />
-                        </div>
-                      </Button>
-                    </TooltipKeybind>
-                  </Show>
+                      <div class="relative flex items-center justify-center size-4">
+                        <Icon
+                          size="small"
+                          name={layout.fileTree.opened() ? "file-tree-active" : "file-tree"}
+                          classList={{
+                            "text-icon-strong": layout.fileTree.opened(),
+                            "text-icon-weak": !layout.fileTree.opened(),
+                          }}
+                        />
+                      </div>
+                    </Button>
+                  </TooltipKeybind>
                 </div>
               </div>
             </div>

@@ -10,7 +10,7 @@ import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { Log } from "@/util/log"
 import { Identifier } from "@/id/id"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/core/util/error"
 
 type Opts = {
   hostname: string

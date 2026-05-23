@@ -1,7 +1,7 @@
 import type { Message, Part, ProviderListResponse, Session } from "@opencode-ai/sdk/v2/client"
 import { Icon } from "@opencode-ai/ui/icon"
 import { showToast } from "@opencode-ai/ui/toast"
-import { Binary } from "@opencode-ai/util/binary"
+import { Binary } from "@opencode-ai/core/util/binary"
 import { useParams } from "@solidjs/router"
 import { batch, createEffect, createMemo, Show } from "solid-js"
 import { createStore, reconcile, type SetStoreFunction } from "solid-js/store"
@@ -17,9 +17,11 @@ import { decode64 } from "@/utils/base64"
 import { Identifier } from "@/utils/id"
 import { Persist, persisted } from "@/utils/persist"
 import { working } from "@/pages/session/session-working"
-import { formatServerError } from "@/utils/server-errors"
 import { domainFromDirectory, extraAgentCapabilities, type ExtraAgentCapabilities } from "@/pages/layout/extra-agents"
-import { context, mergeMessages, prompt, render } from "./quick-assistant-helpers"
+import { formatServerError } from "@/utils/server-errors"
+import { context, mergeMessages, prompt } from "./helpers"
+import { QuickAssistantInput } from "./input"
+import { QuickAssistantMessages } from "./messages"
 
 function errorName(err: unknown) {
   if (!err || typeof err !== "object") return undefined

@@ -126,7 +126,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
           {...itemProps}
           data-slot="select-select-item"
           classList={{
-            ...local.classList,
+            ...(local.classList ?? {}),
             [local.class ?? ""]: !!local.class,
           }}
           onPointerEnter={local.onHighlight ? () => move(itemProps.item.rawValue) : undefined}
@@ -250,7 +250,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
         variant={props.variant}
         style={local.triggerStyle}
         classList={{
-          ...local.classList,
+          ...(local.classList ?? {}),
           [local.class ?? ""]: !!local.class,
         }}
       >
@@ -282,7 +282,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
             })
           }}
           classList={{
-            ...local.classList,
+            ...(local.classList ?? {}),
             [local.class ?? ""]: !!local.class,
           }}
           data-component="select-content"

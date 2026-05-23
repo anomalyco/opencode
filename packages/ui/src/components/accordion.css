@@ -51,10 +51,10 @@
         line-height: var(--line-height-large); /* 166.667% */
         letter-spacing: var(--letter-spacing-normal);
 
-        &:hover:not([data-disabled]) {
+        &:hover {
           background-color: var(--surface-base-hover);
         }
-        &:active:not([data-disabled]) {
+        &:active {
           background-color: var(--surface-base-active);
         }
         &:focus-visible {

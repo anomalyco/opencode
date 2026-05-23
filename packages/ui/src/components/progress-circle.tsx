@@ -34,7 +34,7 @@ export function ProgressCircle(props: ProgressCircleProps) {
       data-component="progress-circle"
       data-status={split.status ?? "default"}
       classList={{
-        ...split.classList,
+        ...(split.classList ?? {}),
         [split.class ?? ""]: !!split.class,
       }}
     >

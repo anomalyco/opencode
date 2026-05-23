@@ -442,7 +442,7 @@ function AnimatedHeading(props) {
 
   onMount(() => {
     measure()
-    void document.fonts?.ready.finally(() => {
+    document.fonts?.ready.finally(() => {
       measure()
       requestAnimationFrame(() => setState("ready", true))
     })

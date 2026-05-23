@@ -1,6 +1,5 @@
-import { createEffect, onMount } from "solid-js"
+import { createEffect, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
-import { makeEventListener } from "@solid-primitives/event-listener"
 import { createSimpleContext } from "../context/helper"
 import oc2ThemeJson from "./themes/oc-2.json"
 import { resolveThemeVariant, themeToCss } from "./resolve"
@@ -257,15 +256,19 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       }
     }
 
-    onMount(() => {
-      makeEventListener(window, "storage", onStorage)
+    if (typeof window === "object") {
+      window.addEventListener("storage", onStorage)
+      onCleanup(() => window.removeEventListener("storage", onStorage))
+    }
 
+    onMount(() => {
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
       const onMedia = () => {
         if (store.colorScheme !== "system") return
         setStore("mode", getSystemMode())
       }
-      makeEventListener(mediaQuery, "change", onMedia)
+      mediaQuery.addEventListener("change", onMedia)
+      onCleanup(() => mediaQuery.removeEventListener("change", onMedia))
 
       const rawTheme = read(STORAGE_KEYS.THEME_ID)
       const savedTheme = normalize(rawTheme ?? props.defaultTheme) ?? "oc-2"

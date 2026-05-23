@@ -12,7 +12,6 @@ import { type LocalProject, getAvatarColors } from "@/context/layout"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { useLanguage } from "@/context/language"
-import { getProjectAvatarSource } from "@/pages/layout/helpers"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 
@@ -27,8 +26,8 @@ export function DialogEditProject(props: { project: LocalProject }) {
 
   const [store, setStore] = createStore({
     name: defaultName(),
-    color: props.project.icon?.color,
-    iconOverride: props.project.icon?.override,
+    color: props.project.icon?.color || "pink",
+    iconUrl: props.project.icon?.override || "",
     startup: props.project.commands?.start ?? "",
     dragOver: false,
     iconHover: false,
@@ -40,7 +39,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
     if (!file.type.startsWith("image/")) return
     const reader = new FileReader()
     reader.onload = (e) => {
-      setStore("iconOverride", e.target?.result as string)
+      setStore("iconUrl", e.target?.result as string)
       setStore("iconHover", false)
     }
     reader.readAsDataURL(file)
@@ -69,7 +68,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
   }
 
   function clearIcon() {
-    setStore("iconOverride", "")
+    setStore("iconUrl", "")
   }
 
   const saveMutation = useMutation(() => ({
@@ -82,17 +81,17 @@ export function DialogEditProject(props: { project: LocalProject }) {
           projectID: props.project.id,
           directory: props.project.worktree,
           name,
-          icon: { color: store.color || "", override: store.iconOverride || "" },
+          icon: { color: store.color, override: store.iconUrl },
           commands: { start },
         })
-        globalSync.project.icon(props.project.worktree, store.iconOverride || undefined)
+        globalSync.project.icon(props.project.worktree, store.iconUrl || undefined)
         dialog.close()
         return
       }
 
       globalSync.project.meta(props.project.worktree, {
         name,
-        icon: { color: store.color || undefined, override: store.iconOverride || undefined },
+        icon: { color: store.color, override: store.iconUrl || undefined },
         commands: { start: start || undefined },
       })
       dialog.close()
@@ -131,13 +130,13 @@ export function DialogEditProject(props: { project: LocalProject }) {
                   classList={{
                     "border-text-interactive-base bg-surface-info-base/20": store.dragOver,
                     "border-border-base hover:border-border-strong": !store.dragOver,
-                    "overflow-hidden": !!store.iconOverride,
+                    "overflow-hidden": !!store.iconUrl,
                   }}
                   onDrop={handleDrop}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onClick={() => {
-                    if (store.iconOverride && store.iconHover) {
+                    if (store.iconUrl && store.iconHover) {
                       clearIcon()
                     } else {
                       iconInput?.click()
@@ -145,11 +144,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                   }}
                 >
                   <Show
-                    when={getProjectAvatarSource(props.project.id, {
-                      color: store.color,
-                      url: props.project.icon?.url,
-                      override: store.iconOverride,
-                    })}
+                    when={store.iconUrl}
                     fallback={
                       <div class="size-full flex items-center justify-center">
                         <Avatar
@@ -160,20 +155,18 @@ export function DialogEditProject(props: { project: LocalProject }) {
                       </div>
                     }
                   >
-                    {(src) => (
-                      <img
-                        src={src()}
-                        alt={language.t("dialog.project.edit.icon.alt")}
-                        class="size-full object-cover"
-                      />
-                    )}
+                    <img
+                      src={store.iconUrl}
+                      alt={language.t("dialog.project.edit.icon.alt")}
+                      class="size-full object-cover"
+                    />
                   </Show>
                 </div>
                 <div
                   class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
                   classList={{
-                    "opacity-100": store.iconHover && !store.iconOverride,
-                    "opacity-0": !(store.iconHover && !store.iconOverride),
+                    "opacity-100": store.iconHover && !store.iconUrl,
+                    "opacity-0": !(store.iconHover && !store.iconUrl),
                   }}
                 >
                   <Icon name="cloud-upload" size="large" class="text-icon-on-interactive-base drop-shadow-sm" />
@@ -181,8 +174,8 @@ export function DialogEditProject(props: { project: LocalProject }) {
                 <div
                   class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
                   classList={{
-                    "opacity-100": store.iconHover && !!store.iconOverride,
-                    "opacity-0": !(store.iconHover && !!store.iconOverride),
+                    "opacity-100": store.iconHover && !!store.iconUrl,
+                    "opacity-0": !(store.iconHover && !!store.iconUrl),
                   }}
                 >
                   <Icon name="trash" size="large" class="text-icon-on-interactive-base drop-shadow-sm" />
@@ -205,7 +198,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
             </div>
           </div>
 
-          <Show when={!store.iconOverride}>
+          <Show when={!store.iconUrl}>
             <div class="flex flex-col gap-2">
               <label class="text-12-medium text-text-weak">{language.t("dialog.project.edit.color")}</label>
               <div class="flex gap-1.5">
@@ -222,10 +215,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                         "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
                           store.color !== color,
                       }}
-                      onClick={() => {
-                        if (store.color === color && !props.project.icon?.url) return
-                        setStore("color", store.color === color ? undefined : color)
-                      }}
+                      onClick={() => setStore("color", color)}
                     >
                       <Avatar
                         fallback={store.name || defaultName()}

@@ -1,6 +1,5 @@
 import { Component, For, Show, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
-import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -50,7 +49,7 @@ function groupFor(id: string): KeybindGroup {
   if (id.startsWith("terminal.")) return "Terminal"
   if (id.startsWith("model.") || id.startsWith("agent.") || id.startsWith("mcp.") || id.startsWith("skill."))
     return "Model and agent"
-  if (id.startsWith("file.")) return "Navigation"
+  if (id.startsWith("file.") || id.startsWith("fileTree.")) return "Navigation"
   if (id.startsWith("prompt.")) return "Prompt"
   if (
     id.startsWith("session.") ||
@@ -125,13 +124,11 @@ function listFor(command: CommandContext, map: KeybindMap, palette: string) {
 
   for (const opt of command.catalog) {
     if (opt.id.startsWith("suggested.")) continue
-    if (opt.hidden) continue
     out.set(opt.id, { title: opt.title, group: groupFor(opt.id) })
   }
 
   for (const opt of command.options) {
     if (opt.id.startsWith("suggested.")) continue
-    if (opt.hidden) continue
     out.set(opt.id, { title: opt.title, group: groupFor(opt.id) })
   }
 
@@ -255,7 +252,8 @@ function useKeyCapture(input: {
       input.stop()
     }
 
-    makeEventListener(document, "keydown", handle, { capture: true })
+    document.addEventListener("keydown", handle, true)
+    onCleanup(() => document.removeEventListener("keydown", handle, true))
   })
 }
 

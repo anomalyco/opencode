@@ -12,7 +12,7 @@ import { useFile } from "@/context/file"
 import { paint } from "@/components/prompt-input/expand"
 import { type AtOption } from "@/components/prompt-input/slash-popover"
 import { at, mention, pair } from "@/components/dialog-prompt-editor-input"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 
 type DialogPromptEditorProps = {
   text: string

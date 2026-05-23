@@ -16,7 +16,6 @@ export type FileMediaOptions = {
   current?: unknown
   before?: unknown
   after?: unknown
-  deleted?: boolean
   readFile?: (path: string) => Promise<FileContent | undefined>
   onLoad?: () => void
   onError?: (ctx: { kind: "image" | "audio" | "svg" | "pdf" }) => void
@@ -50,7 +49,6 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     const media = cfg()
     const k = kind()
     if (!media || !k) return false
-    if (media.deleted) return true
     if (k === "svg") return false
     if (media.current !== undefined) return false
     return !hasMediaValue(media.after as any) && hasMediaValue(media.before as any)

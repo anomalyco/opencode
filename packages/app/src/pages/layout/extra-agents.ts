@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 import type { IconName } from "@opencode-ai/ui/icon"
 import type { LocalProject } from "@/context/layout"
 import { decode64 } from "@/utils/base64"

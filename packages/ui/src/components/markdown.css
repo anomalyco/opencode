@@ -6,7 +6,7 @@
   color: var(--markdown-text, var(--text-base));
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base); /* 14px */
-  line-height: 160%;
+  line-height: var(--line-height-x-large);
 
   /* Spacing for flow */
   > *:first-child {
@@ -27,8 +27,8 @@
     font-size: var(--font-size-base);
     color: var(--markdown-heading, var(--text-strong));
     font-weight: var(--font-weight-medium);
-    margin-top: 0px;
-    margin-bottom: 24px;
+    margin-top: 2rem;
+    margin-bottom: 0.75rem;
     line-height: var(--line-height-large);
   }
 
@@ -47,7 +47,7 @@
 
   /* Paragraphs */
   p {
-    margin-bottom: 12px;
+    margin-bottom: 1rem;
   }
 
   /* Links */
@@ -65,10 +65,10 @@
   /* Lists */
   ul,
   ol {
-    margin-top: 8px;
-    margin-bottom: 12px;
+    margin-top: 0.5rem;
+    margin-bottom: 1rem;
     margin-left: 0;
-    padding-left: 32px;
+    padding-left: 1.5rem;
     list-style-position: outside;
   }
 
@@ -82,7 +82,7 @@
   }
 
   li {
-    margin-bottom: 8px;
+    margin-bottom: 0.5rem;
   }
 
   li > p:first-child {
@@ -129,13 +129,13 @@
   hr {
     border: none;
     height: 0;
-    margin: 40px 0;
+    margin: 2.5rem 0;
   }
 
   .shiki {
     font-size: var(--font-size-base);
     padding: 8px 12px;
-    border-radius: 4px;
+    border-radius: 6px;
     border: 0.5px solid var(--border-weak-base);
   }
 
@@ -213,8 +213,8 @@
   }
 
   pre {
-    margin-top: 12px;
-    margin-bottom: 32px;
+    margin-top: 2rem;
+    margin-bottom: 2rem;
     overflow: auto;
 
     scrollbar-width: none;
@@ -241,7 +241,7 @@
   table {
     width: 100%;
     border-collapse: collapse;
-    margin: 24px 0;
+    margin: 1.5rem 0;
     font-size: var(--font-size-base);
     display: block;
     overflow-x: auto;
@@ -251,7 +251,7 @@
   td {
     /* Minimal borders for structure, matching TUI "lines" roughly but keeping it web-clean */
     border-bottom: 1px solid var(--border-weaker-base);
-    padding: 12px;
+    padding: 0.75rem 0.5rem;
     text-align: left;
     vertical-align: top;
   }

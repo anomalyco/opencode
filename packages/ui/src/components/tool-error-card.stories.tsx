@@ -44,6 +44,10 @@ const samples = [
     error: "websearch Rate limited: Please try again in 30 seconds",
   },
   {
+    tool: "codesearch",
+    error: "codesearch Timeout: exceeded 120s",
+  },
+  {
     tool: "question",
     error: "question Dismissed: user dismissed this question",
   },
@@ -68,7 +72,7 @@ export default {
   argTypes: {
     tool: {
       control: "select",
-      options: ["apply_patch", "bash", "read", "glob", "grep", "webfetch", "websearch", "question"],
+      options: ["apply_patch", "bash", "read", "glob", "grep", "webfetch", "websearch", "codesearch", "question"],
     },
     error: {
       control: "text",

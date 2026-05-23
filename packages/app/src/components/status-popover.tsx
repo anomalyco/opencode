@@ -1,4 +1,5 @@
 import { Button } from "@opencode-ai/ui/button"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Popover } from "@opencode-ai/ui/popover"
 import { Switch } from "@opencode-ai/ui/switch"
@@ -6,7 +7,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
@@ -295,7 +296,6 @@ export function StatusPopover() {
     })
     return serverHealthy && !anyMcpIssue
   })
-  const healthy = createMemo(() => server.healthy() === true && !mcpIssue())
 
   const copy = (value: string) => {
     void navigator.clipboard.writeText(value).then(
@@ -335,11 +335,9 @@ export function StatusPopover() {
           <div
             classList={{
               "absolute -top-px -right-px size-1.5 rounded-full": true,
-              "bg-icon-success-base": ready() && healthy(),
-              "bg-icon-warning-base": ready() && server.healthy() === true && mcpIssue() === "warning",
-              "bg-icon-critical-base":
-                server.healthy() === false || (ready() && server.healthy() === true && mcpIssue() === "critical"),
-              "bg-border-weak-base": server.healthy() === undefined || !ready(),
+              "bg-icon-success-base": overallHealthy(),
+              "bg-icon-critical-base": !overallHealthy() && server.healthy() !== undefined,
+              "bg-border-weak-base": server.healthy() === undefined,
             }}
           />
         </div>
@@ -365,7 +363,7 @@ export function StatusPopover() {
         >
           <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
             <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
-              {serverCount() > 0 ? `${serverCount()} ` : ""}
+              {sortedServers().length > 0 ? `${sortedServers().length} ` : ""}
               {language.t("status.popover.tab.servers")}
             </Tabs.Trigger>
             <Tabs.Trigger value="mcp" data-slot="tab" class="text-12-regular">

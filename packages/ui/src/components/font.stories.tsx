@@ -2,24 +2,24 @@
 import * as mod from "./font"
 
 const docs = `### Overview
-Uses native system font stacks for sans and mono typography.
+Loads OpenCode typography assets and mono nerd fonts.
 
-Optional compatibility component. Existing roots can keep rendering it, but it does nothing.
+Render once at the app root or Storybook preview.
 
 ### API
 - No props.
 
 ### Variants and states
-- No variants.
+- Fonts include sans and multiple mono families.
 
 ### Behavior
-- Compatibility wrapper only. No font assets are injected or preloaded.
+- Injects @font-face rules and preload links into the document head.
 
 ### Accessibility
 - Not applicable.
 
 ### Theming/tokens
-- Theme tokens come from CSS variables, not this component.
+- Provides font families used by theme tokens.
 
 `
 

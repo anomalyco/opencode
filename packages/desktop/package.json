@@ -21,7 +21,7 @@
   "dependencies": {
     "@opencode-ai/app": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
-    "@opencode-ai/util": "workspace:*",
+    "@opencode-ai/core": "workspace:*",
     "@solid-primitives/i18n": "2.2.1",
     "@solid-primitives/storage": "catalog:",
     "@tauri-apps/api": "^2",

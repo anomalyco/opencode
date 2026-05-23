@@ -1,4 +1,4 @@
-import { onMount, splitProps, type ComponentProps } from "solid-js"
+import { splitProps, type ComponentProps } from "solid-js"
 
 const icons = {
   "align-right": `<path d="M12.292 6.04167L16.2503 9.99998L12.292 13.9583M2.91699 9.99998H15.6253M17.0837 3.75V16.25" stroke="currentColor" stroke-linecap="square"/>`,
@@ -131,42 +131,6 @@ const icons = {
 <circle cx="46" cy="34" r="2.5" fill="#00e5cc"/>
 <circle cx="76" cy="34" r="2.5" fill="#00e5cc"/>`,
   models: `<path fill-rule="evenodd" clip-rule="evenodd" d="M17.5 10C12.2917 10 10 12.2917 10 17.5C10 12.2917 7.70833 10 2.5 10C7.70833 10 10 7.70833 10 2.5C10 7.70833 12.2917 10 17.5 10Z" stroke="currentColor"/>`,
-  "arrow-undo-down": `<path d="M4.08333 11.0859L1.75 8.7526L4.08333 6.41927M2.33333 8.7526L12.5417 8.7526L12.5417 3.21094L7 3.21094" stroke="currentColor" stroke-width="1" stroke-linecap="square"/>`,
-}
-
-const spriteID = "opencode-icon-sprite"
-const symbol = (name: keyof typeof icons) => `opencode-icon-${name}`
-let spriteInserted = false
-
-function viewBox(name: keyof typeof icons) {
-  return name === "magnifying-glass" || name === "arrow-undo-down" ? "0 0 16 16" : "0 0 20 20"
-}
-
-function ensureSprite() {
-  if (spriteInserted) return
-  if (typeof document === "undefined") return
-  if (document.getElementById(spriteID)) {
-    spriteInserted = true
-    return
-  }
-  const body = document.body as HTMLElement | null
-  if (!body) return
-
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
-  svg.id = spriteID
-  svg.setAttribute("aria-hidden", "true")
-  svg.setAttribute("width", "0")
-  svg.setAttribute("height", "0")
-  svg.style.position = "absolute"
-  svg.style.overflow = "hidden"
-  svg.innerHTML = Object.entries(icons)
-    .map(([name, path]) => {
-      const key = name as keyof typeof icons
-      return `<symbol id="${symbol(key)}" viewBox="${viewBox(key)}">${path}</symbol>`
-    })
-    .join("")
-  body.insertBefore(svg, body.firstChild)
-  spriteInserted = true
 }
 
 export type IconName = keyof typeof icons
@@ -188,16 +152,15 @@ export function Icon(props: IconProps) {
       <svg
         data-slot="icon-svg"
         classList={{
-          ...local.classList,
+          ...(local.classList || {}),
           [local.class ?? ""]: !!local.class,
         }}
         fill="none"
-        viewBox={viewBox(local.name)}
+        viewBox={viewBox()}
+        innerHTML={icons[local.name as keyof typeof icons]}
         aria-hidden="true"
         {...others}
-      >
-        <use href={`#${symbol(local.name)}`} />
-      </svg>
+      />
     </div>
   )
 }

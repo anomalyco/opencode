@@ -100,7 +100,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     // Force a refetch even if the value is unchanged.
     // This is important for programmatic changes like Tab completion.
     if (prev === value) {
-      void refetch()
+      refetch()
       return
     }
     queueMicrotask(() => refetch())

@@ -1,5 +1,4 @@
-import { onMount, splitProps, type ComponentProps, Show, mergeProps } from "solid-js"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { onCleanup, onMount, splitProps, type ComponentProps, Show, mergeProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useI18n } from "../context/i18n"
 

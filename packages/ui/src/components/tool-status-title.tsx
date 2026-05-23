@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, on, onCleanup } from "solid-js"
+import { Show, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextShimmer } from "./text-shimmer"
 
@@ -15,8 +15,10 @@ function common(active: string, done: string) {
 }
 
 function contentWidth(el: HTMLSpanElement | undefined) {
-  if (!el) return
-  return `${Math.ceil(el.getBoundingClientRect().width)}px`
+  if (!el) return 0
+  const range = document.createRange()
+  range.selectNodeContents(el)
+  return Math.ceil(range.getBoundingClientRect().width)
 }
 
 export function ToolStatusTitle(props: {
@@ -35,99 +37,99 @@ export function ToolStatusTitle(props: {
   const doneTail = createMemo(() => (suffix() ? split().done : props.doneText))
 
   const [state, setState] = createStore({
-    active: props.active,
-    animating: false,
-    width: undefined as string | undefined,
+    width: "auto",
+    ready: false,
   })
   const width = () => state.width
-  const active = () => state.active
-  const animating = () => state.animating
+  const ready = () => state.ready
   let activeRef: HTMLSpanElement | undefined
   let doneRef: HTMLSpanElement | undefined
-  let widthRef: HTMLSpanElement | undefined
   let frame: number | undefined
-  let finishTimer: ReturnType<typeof setTimeout> | undefined
+  let readyFrame: number | undefined
 
-  const finish = () => {
-    if (frame !== undefined) cancelAnimationFrame(frame)
-    if (finishTimer !== undefined) clearTimeout(finishTimer)
-    frame = undefined
-    finishTimer = undefined
-    setState("animating", false)
-    setState("width", undefined)
+  const measure = () => {
+    const target = props.active ? activeRef : doneRef
+    const px = contentWidth(target)
+    if (px > 0) setState("width", `${px}px`)
   }
 
-  const animate = () => {
-    const first = contentWidth(widthRef)
-    finish()
-    setState("animating", true)
-    setState("active", props.active)
-    const last = contentWidth(props.active ? activeRef : doneRef)
-    if (!first || !last) {
-      finish()
+  const schedule = () => {
+    if (typeof requestAnimationFrame !== "function") {
+      measure()
       return
     }
-
-    setState("width", first)
-    if (first === last) {
-      finishTimer = setTimeout(finish, 600)
-      return
-    }
-
+    if (frame !== undefined) cancelAnimationFrame(frame)
     frame = requestAnimationFrame(() => {
       frame = undefined
-      setState("width", last)
-      finishTimer = setTimeout(finish, 600)
+      measure()
     })
   }
 
-  createEffect(on([() => props.active, activeTail, doneTail], () => animate(), { defer: true }))
+  const finish = () => {
+    if (typeof requestAnimationFrame !== "function") {
+      setState("ready", true)
+      return
+    }
+    if (readyFrame !== undefined) cancelAnimationFrame(readyFrame)
+    readyFrame = requestAnimationFrame(() => {
+      readyFrame = undefined
+      setState("ready", true)
+    })
+  }
+
+  createEffect(on([() => props.active, activeTail, doneTail, suffix], () => schedule()))
+
+  onMount(() => {
+    measure()
+    const fonts = typeof document !== "undefined" ? document.fonts : undefined
+    if (!fonts) {
+      finish()
+      return
+    }
+    fonts.ready.finally(() => {
+      measure()
+      finish()
+    })
+  })
 
   onCleanup(() => {
-    finish()
+    if (frame !== undefined) cancelAnimationFrame(frame)
+    if (readyFrame !== undefined) cancelAnimationFrame(readyFrame)
   })
 
   return (
     <span
       data-component="tool-status-title"
-      data-active={active() ? "true" : "false"}
-      data-ready={animating() ? "true" : "false"}
+      data-active={props.active ? "true" : "false"}
+      data-ready={ready() ? "true" : "false"}
       data-mode={suffix() ? "suffix" : "swap"}
       class={props.class}
-      aria-label={active() ? props.activeText : props.doneText}
+      aria-label={props.active ? props.activeText : props.doneText}
     >
       <Show
         when={suffix()}
         fallback={
-          <span data-slot="tool-status-swap" ref={widthRef} style={{ width: width() }}>
-            <Show when={animating() || active()}>
-              <span data-slot="tool-status-active" ref={activeRef}>
-                <TextShimmer text={activeTail()} active={active()} offset={0} />
-              </span>
-            </Show>
-            <Show when={animating() || !active()}>
-              <span data-slot="tool-status-done" ref={doneRef}>
-                <TextShimmer text={doneTail()} active={false} offset={0} />
-              </span>
-            </Show>
+          <span data-slot="tool-status-swap" style={{ width: width() }}>
+            <span data-slot="tool-status-active" ref={activeRef}>
+              <TextShimmer text={activeTail()} active={props.active} offset={0} />
+            </span>
+            <span data-slot="tool-status-done" ref={doneRef}>
+              <TextShimmer text={doneTail()} active={false} offset={0} />
+            </span>
           </span>
         }
       >
         <span data-slot="tool-status-suffix">
           <span data-slot="tool-status-prefix">
-            <TextShimmer text={split().prefix} active={active()} offset={0} />
+            <TextShimmer text={split().prefix} active={props.active} offset={0} />
           </span>
-          <span data-slot="tool-status-tail" ref={widthRef} style={{ width: width() }}>
-            <Show when={animating() || active()}>
-              <span data-slot="tool-status-active" ref={activeRef}>
-                <TextShimmer text={activeTail()} active={active()} offset={prefixLen()} />
-              </span>
-            </Show>
-            <Show when={animating() || !active()}>
-              <span data-slot="tool-status-done" ref={doneRef}>
-                <TextShimmer text={doneTail()} active={false} offset={prefixLen()} />
-              </span>
-            </Show>
+          <span data-slot="tool-status-tail" style={{ width: width() }}>
+            <span data-slot="tool-status-active" ref={activeRef}>
+              <TextShimmer text={activeTail()} active={props.active} offset={prefixLen()} />
+            </span>
+            <span data-slot="tool-status-done" ref={doneRef}>
+              <TextShimmer text={doneTail()} active={false} offset={prefixLen()} />
+            </span>
           </span>
         </span>
       </Show>

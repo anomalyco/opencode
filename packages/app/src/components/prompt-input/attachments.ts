@@ -1,9 +1,9 @@
-import { onMount } from "solid-js"
-import { makeEventListener } from "@solid-primitives/event-listener"
+import { onCleanup, onMount } from "solid-js"
 import { showToast } from "@opencode-ai/ui/toast"
 import { usePrompt, type ContentPart, type ImageAttachmentPart } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
 import { attachmentMime } from "./files"
 import { normalizePaste, pasteMode } from "./paste"
@@ -122,16 +122,23 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
     if (!plainText) return
 
-    // Normalize line breaks to prevent extra blank lines when pasting
-    const normalizedText = plainText.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+    const text = normalizePaste(plainText)
 
-    // Always use addPart to ensure consistent text handling
-    // This bypasses document.execCommand which can create unexpected DOM structures
-    if (input.addPart({ type: "text", content: normalizedText, start: 0, end: 0 })) return
+    const put = () => {
+      if (input.addPart({ type: "text", content: text, start: 0, end: 0 })) return true
+      input.focusEditor()
+      return input.addPart({ type: "text", content: text, start: 0, end: 0 })
+    }
 
-    // If addPart fails (e.g., editor not focused), focus and retry
-    input.focusEditor()
-    input.addPart({ type: "text", content: normalizedText, start: 0, end: 0 })
+    if (pasteMode(text) === "manual") {
+      put()
+      return
+    }
+
+    const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, text)
+    if (inserted) return
+
+    put()
   }
 
   // HTML5 drag events — only used for intra-page dragging (text/@mention)

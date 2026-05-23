@@ -1,4 +1,4 @@
-import { Component, Show, createMemo, createResource, type JSX } from "solid-js"
+import { Component, Show, createMemo, createResource, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -7,11 +7,10 @@ import { Switch } from "@opencode-ai/ui/switch"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { showToast } from "@opencode-ai/ui/toast"
-import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSettings, monoFontFamily } from "@/context/settings"
-import { playSound, SOUND_OPTIONS } from "@/utils/sound"
+import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 import { SettingsList } from "./settings-list"
 
@@ -26,16 +25,11 @@ type ThemeOption = {
   name: string
 }
 
-type ShellOption = {
-  path: string
-  name: string
-  acceptable: boolean
-}
+let font: Promise<typeof import("@opencode-ai/ui/font-loader")> | undefined
 
-type ShellSelectOption = {
-  id: string
-  value: string
-  label: string
+function loadFont() {
+  font ??= import("@opencode-ai/ui/font-loader")
+  return font
 }
 
 // To prevent audio from overlapping/playing very quickly when navigating the settings menus,
@@ -68,10 +62,12 @@ const playDemoSound = (id: string | undefined) => {
 export const SettingsGeneral: Component = () => {
   const theme = useTheme()
   const language = useLanguage()
-  const permission = usePermission()
   const platform = usePlatform()
-  const params = useParams()
   const settings = useSettings()
+
+  onMount(() => {
+    void theme.loadThemes()
+  })
 
   const [store, setStore] = createStore({
     checking: false,
@@ -98,25 +94,27 @@ export const SettingsGeneral: Component = () => {
           return
         }
 
-        const actions = platform.updateAndRestart
-          ? [
-              {
-                label: language.t("toast.update.action.installRestart"),
-                onClick: async () => {
-                  await platform.updateAndRestart!()
+        const actions =
+          platform.update && platform.restart
+            ? [
+                {
+                  label: language.t("toast.update.action.installRestart"),
+                  onClick: async () => {
+                    await platform.update!()
+                    await platform.restart!()
+                  },
                 },
-              },
-              {
-                label: language.t("toast.update.action.notYet"),
-                onClick: "dismiss" as const,
-              },
-            ]
-          : [
-              {
-                label: language.t("toast.update.action.notYet"),
-                onClick: "dismiss" as const,
-              },
-            ]
+                {
+                  label: language.t("toast.update.action.notYet"),
+                  onClick: "dismiss" as const,
+                },
+              ]
+            : [
+                {
+                  label: language.t("toast.update.action.notYet"),
+                  onClick: "dismiss" as const,
+                },
+              ]
 
         showToast({
           persistent: true,
@@ -135,87 +133,15 @@ export const SettingsGeneral: Component = () => {
 
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
-  const globalSync = useGlobalSync()
-  const globalSdk = useGlobalSDK()
-
-  const [shells] = createResource(
-    () =>
-      globalSdk.client.pty
-        .shells()
-        .then((res) => res.data ?? [])
-        .catch(() => [] as ShellOption[]),
-    { initialValue: [] as ShellOption[] },
-  )
-
-  const [displayBackend, { refetch: refetchDisplayBackend }] = createResource(
-    () => (linux() && platform.getDisplayBackend ? true : false),
-    () => Promise.resolve(platform.getDisplayBackend?.() ?? null).catch(() => null as DisplayBackend | null),
-    { initialValue: null as DisplayBackend | null },
-  )
-
-  const [pinchZoom, { mutate: setPinchZoom }] = createResource(
-    () => (desktop() && platform.getPinchZoomEnabled ? true : false),
-    () => Promise.resolve(platform.getPinchZoomEnabled?.() ?? false).catch(() => false),
-    { initialValue: false },
-  )
-
-  onMount(() => {
-    void theme.loadThemes()
-  })
-
-  const autoOption = { id: "auto", value: "", label: language.t("settings.general.row.shell.autoDefault") }
-  const currentShell = createMemo(() => globalSync.data.config.shell ?? "")
-
-  const shellOptions = createMemo<ShellSelectOption[]>(() => {
-    const list = shells.latest
-    const current = globalSync.data.config.shell
-
-    const nameCounts = new Map<string, number>()
-    for (const s of list) {
-      nameCounts.set(s.name, (nameCounts.get(s.name) || 0) + 1)
-    }
-
-    const options = [
-      autoOption,
-      ...list.map((s) => {
-        const ambiguousName = (nameCounts.get(s.name) || 0) > 1
-        const text = ambiguousName ? s.path : s.name
-        const label = s.acceptable ? text : `${text} (${language.t("settings.general.row.shell.terminalOnly")})`
-        return {
-          id: s.path,
-          // Prefer name over path - "bash" is much cleaner than the explicit full route even when it may change due to PATH.
-          value: ambiguousName ? s.path : s.name,
-          label,
-        }
-      }),
-    ]
-
-    if (current && !options.some((o) => o.value === current)) {
-      options.push({ id: current, value: current, label: current })
-    }
-
-    return options
-  })
-
-  const onDisplayBackendChange = (checked: boolean) => {
-    const update = platform.setDisplayBackend?.(checked ? "wayland" : "auto")
-    if (!update) return
-    void update.finally(() => {
-      void refetchDisplayBackend()
-    })
-  }
-
-  const onPinchZoomChange = (checked: boolean) => {
-    setPinchZoom(checked)
-    const update = platform.setPinchZoomEnabled?.(checked)
-    if (!update) return
-    void update.catch(() => setPinchZoom(!checked))
-  }
-
   const colorSchemeOptions = createMemo((): { value: ColorScheme; label: string }[] => [
     { value: "system", label: language.t("theme.scheme.system") },
     { value: "light", label: language.t("theme.scheme.light") },
     { value: "dark", label: language.t("theme.scheme.dark") },
+  ])
+
+  const followupOptions = createMemo((): { value: "queue" | "steer"; label: string }[] => [
+    { value: "queue", label: language.t("settings.general.row.followup.option.queue") },
+    { value: "steer", label: language.t("settings.general.row.followup.option.steer") },
   ])
 
   const languageOptions = createMemo(() =>
@@ -225,11 +151,25 @@ export const SettingsGeneral: Component = () => {
     })),
   )
 
+  const fontOptions = [
+    { value: "ibm-plex-mono", label: "font.option.ibmPlexMono" },
+    { value: "cascadia-code", label: "font.option.cascadiaCode" },
+    { value: "fira-code", label: "font.option.firaCode" },
+    { value: "hack", label: "font.option.hack" },
+    { value: "inconsolata", label: "font.option.inconsolata" },
+    { value: "intel-one-mono", label: "font.option.intelOneMono" },
+    { value: "iosevka", label: "font.option.iosevka" },
+    { value: "jetbrains-mono", label: "font.option.jetbrainsMono" },
+    { value: "meslo-lgs", label: "font.option.mesloLgs" },
+    { value: "roboto-mono", label: "font.option.robotoMono" },
+    { value: "source-code-pro", label: "font.option.sourceCodePro" },
+    { value: "ubuntu-mono", label: "font.option.ubuntuMono" },
+    { value: "geist-mono", label: "font.option.geistMono" },
+  ] as const
+  const fontOptionsList = [...fontOptions]
+
   const noneSound = { id: "none", label: "sound.option.none" } as const
   const soundOptions = [noneSound, ...SOUND_OPTIONS]
-  const mono = () => monoInput(settings.appearance.font())
-  const sans = () => sansInput(settings.appearance.uiFont())
-  const terminal = () => terminalInput(settings.appearance.terminalFont())
 
   const soundSelectProps = (
     enabled: () => boolean,
@@ -282,37 +222,6 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
-          title={language.t("command.permissions.autoaccept.enable")}
-          description={language.t("toast.permissions.autoaccept.on.description")}
-        >
-          <div data-action="settings-auto-accept-permissions">
-            <Switch checked={accepting()} disabled={!dir()} onChange={toggleAccept} />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.shell.title")}
-          description={language.t("settings.general.row.shell.description")}
-        >
-          <Select
-            data-action="settings-shell"
-            options={shellOptions()}
-            current={shellOptions().find((o) => o.value === currentShell()) ?? autoOption}
-            value={(o) => o.id}
-            label={(o) => o.label}
-            onSelect={(option) => {
-              if (!option) return
-              if (option.value === currentShell()) return
-              globalSync.updateConfig({ shell: option.value })
-            }}
-            variant="secondary"
-            size="small"
-            triggerVariant="settings"
-            triggerStyle={{ "min-width": "180px" }}
-          />
-        </SettingsRow>
-
-        <SettingsRow
           title={language.t("settings.general.row.reasoningSummaries.title")}
           description={language.t("settings.general.row.reasoningSummaries.description")}
         >
@@ -349,83 +258,21 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
-          title={language.t("settings.general.row.showSessionProgressBar.title")}
-          description={language.t("settings.general.row.showSessionProgressBar.description")}
+          title={language.t("settings.general.row.followup.title")}
+          description={language.t("settings.general.row.followup.description")}
         >
-          <div data-action="settings-show-session-progress-bar">
-            <Switch
-              checked={settings.general.showSessionProgressBar()}
-              onChange={(checked) => settings.general.setShowSessionProgressBar(checked)}
-            />
-          </div>
-        </SettingsRow>
-      </SettingsList>
-    </div>
-  )
-
-  const AdvancedSection = () => (
-    <div class="flex flex-col gap-1">
-      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.advanced")}</h3>
-
-      <SettingsList>
-        <SettingsRow
-          title={language.t("settings.general.row.showFileTree.title")}
-          description={language.t("settings.general.row.showFileTree.description")}
-        >
-          <div data-action="settings-show-file-tree">
-            <Switch
-              checked={settings.general.showFileTree()}
-              onChange={(checked) => settings.general.setShowFileTree(checked)}
-            />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.showNavigation.title")}
-          description={language.t("settings.general.row.showNavigation.description")}
-        >
-          <div data-action="settings-show-navigation">
-            <Switch
-              checked={settings.general.showNavigation()}
-              onChange={(checked) => settings.general.setShowNavigation(checked)}
-            />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.showSearch.title")}
-          description={language.t("settings.general.row.showSearch.description")}
-        >
-          <div data-action="settings-show-search">
-            <Switch
-              checked={settings.general.showSearch()}
-              onChange={(checked) => settings.general.setShowSearch(checked)}
-            />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.showTerminal.title")}
-          description={language.t("settings.general.row.showTerminal.description")}
-        >
-          <div data-action="settings-show-terminal">
-            <Switch
-              checked={settings.general.showTerminal()}
-              onChange={(checked) => settings.general.setShowTerminal(checked)}
-            />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.showStatus.title")}
-          description={language.t("settings.general.row.showStatus.description")}
-        >
-          <div data-action="settings-show-status">
-            <Switch
-              checked={settings.general.showStatus()}
-              onChange={(checked) => settings.general.setShowStatus(checked)}
-            />
-          </div>
+          <Select
+            data-action="settings-followup"
+            options={followupOptions()}
+            current={followupOptions().find((o) => o.value === settings.general.followup())}
+            value={(o) => o.value}
+            label={(o) => o.label}
+            onSelect={(option) => option && settings.general.setFollowup(option.value)}
+            variant="secondary"
+            size="small"
+            triggerVariant="settings"
+            triggerStyle={{ "min-width": "180px" }}
+          />
         </SettingsRow>
       </SettingsList>
     </div>
@@ -509,29 +356,6 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
-          title={language.t("settings.general.row.uiFont.title")}
-          description={language.t("settings.general.row.uiFont.description")}
-        >
-          <div class="w-full sm:w-[220px]">
-            <TextField
-              data-action="settings-ui-font"
-              label={language.t("settings.general.row.uiFont.title")}
-              hideLabel
-              type="text"
-              value={sans()}
-              onChange={(value) => settings.appearance.setUIFont(value)}
-              placeholder={sansDefault}
-              spellcheck={false}
-              autocorrect="off"
-              autocomplete="off"
-              autocapitalize="off"
-              class="text-12-regular"
-              style={{ "font-family": sansFontFamily(settings.appearance.uiFont()) }}
-            />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
           title={language.t("settings.general.row.font.title")}
           description={language.t("settings.general.row.font.description")}
         >
@@ -541,6 +365,9 @@ export const SettingsGeneral: Component = () => {
             current={fontOptionsList.find((o) => o.value === settings.appearance.font())}
             value={(o) => o.value}
             label={(o) => language.t(o.label)}
+            onHighlight={(option) => {
+              void loadFont().then((x) => x.ensureMonoFont(option?.value))
+            }}
             onSelect={(option) => option && settings.appearance.setFont(option.value)}
             variant="secondary"
             size="small"
@@ -554,141 +381,7 @@ export const SettingsGeneral: Component = () => {
             )}
           </Select>
         </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.fontSize.title")}
-          description={language.t("settings.general.row.fontSize.description")}
-        >
-          <div class="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="small"
-              onClick={() => {
-                const current = settings.appearance.fontSize()
-                if (current > 10) {
-                  settings.appearance.setFontSize(current - 1)
-                }
-              }}
-              disabled={settings.appearance.fontSize() <= 10}
-              aria-label={language.t("settings.general.row.fontSize.decrease")}
-            >
-              −
-            </Button>
-            <span class="text-14-regular text-text-strong min-w-[48px] text-center">
-              {settings.appearance.fontSize()}px
-            </span>
-            <Button
-              variant="secondary"
-              size="small"
-              onClick={() => {
-                const current = settings.appearance.fontSize()
-                if (current < 24) {
-                  settings.appearance.setFontSize(current + 1)
-                }
-              }}
-              disabled={settings.appearance.fontSize() >= 24}
-              aria-label={language.t("settings.general.row.fontSize.increase")}
-            >
-              +
-            </Button>
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.contentWidth.title")}
-          description={language.t("settings.general.row.contentWidth.description")}
-        >
-          <div class="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="small"
-              onClick={() => {
-                const current = settings.appearance.contentWidth()
-                const widths = [200, 250, 300, 350, 400]
-                const currentIndex = widths.indexOf(current)
-                if (currentIndex > 0) {
-                  settings.appearance.setContentWidth(widths[currentIndex - 1])
-                }
-              }}
-              disabled={settings.appearance.contentWidth() <= 200}
-              aria-label={language.t("settings.general.row.contentWidth.decrease")}
-            >
-              −
-            </Button>
-            <span class="text-14-regular text-text-strong min-w-[80px] text-center">
-              {settings.appearance.contentWidth() === 200 && language.t("settings.general.row.contentWidth.narrow")}
-              {settings.appearance.contentWidth() === 250 && language.t("settings.general.row.contentWidth.medium")}
-              {settings.appearance.contentWidth() === 300 && language.t("settings.general.row.contentWidth.wide")}
-              {settings.appearance.contentWidth() === 350 && language.t("settings.general.row.contentWidth.extraWide")}
-              {settings.appearance.contentWidth() === 400 && language.t("settings.general.row.contentWidth.fullWidth")}
-            </span>
-            <Button
-              variant="secondary"
-              size="small"
-              onClick={() => {
-                const current = settings.appearance.contentWidth()
-                const widths = [200, 250, 300, 350, 400]
-                const currentIndex = widths.indexOf(current)
-                if (currentIndex >= 0 && currentIndex < widths.length - 1) {
-                  settings.appearance.setContentWidth(widths[currentIndex + 1])
-                }
-              }}
-              disabled={settings.appearance.contentWidth() >= 400}
-              aria-label={language.t("settings.general.row.contentWidth.increase")}
-            >
-              +
-            </Button>
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.reasoningSummaries.title")}
-          description={language.t("settings.general.row.reasoningSummaries.description")}
-        >
-          <div data-action="settings-feed-reasoning-summaries">
-            <Switch
-              checked={settings.general.showReasoningSummaries()}
-              onChange={(checked) => settings.general.setShowReasoningSummaries(checked)}
-            />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.customHookParts.title")}
-          description={language.t("settings.general.row.customHookParts.description")}
-        >
-          <div data-action="settings-feed-custom-hook-parts">
-            <Switch
-              checked={settings.general.showCustomHookParts()}
-              onChange={(checked) => settings.general.setShowCustomHookParts(checked)}
-            />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.shellToolPartsExpanded.title")}
-          description={language.t("settings.general.row.shellToolPartsExpanded.description")}
-        >
-          <div data-action="settings-feed-shell-tool-parts-expanded">
-            <Switch
-              checked={settings.general.shellToolPartsExpanded()}
-              onChange={(checked) => settings.general.setShellToolPartsExpanded(checked)}
-            />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.editToolPartsExpanded.title")}
-          description={language.t("settings.general.row.editToolPartsExpanded.description")}
-        >
-          <div data-action="settings-feed-edit-tool-parts-expanded">
-            <Switch
-              checked={settings.general.editToolPartsExpanded()}
-              onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
-            />
-          </div>
-        </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -986,28 +679,10 @@ export const SettingsGeneral: Component = () => {
 
         <SoundsSection />
 
-            <SettingsRow
-              title={language.t("settings.general.row.font.title")}
-              description={language.t("settings.general.row.font.description")}
-            >
-              <Select
-                options={fontOptionsList}
-                current={fontOptionsList.find((o) => o.value === settings.appearance.font())}
-                value={(o) => o.value}
-                label={(o) => language.t(o.label)}
-                onSelect={(option) => option && settings.appearance.setFont(option.value)}
-                variant="secondary"
-                size="small"
-                triggerVariant="settings"
-                triggerStyle={{ "font-family": monoFontFamily(settings.appearance.font()), "min-width": "180px" }}
-              >
-                {(option) => (
-                  <span style={{ "font-family": monoFontFamily(option?.value) }}>
-                    {option ? language.t(option.label) : ""}
-                  </span>
-                )}
-              </Select>
-            </SettingsRow>
+        {/*<Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslEnabled}>
+          {(_) => {
+            const [enabledResource, actions] = createResource(() => platform.getWslEnabled?.())
+            const enabled = () => (enabledResource.state === "pending" ? undefined : enabledResource.latest)
 
             return (
               <div class="flex flex-col gap-1">
@@ -1058,85 +733,16 @@ export const SettingsGeneral: Component = () => {
                         </Tooltip>
                       </div>
                     }
-                  }}
-                  disabled={settings.appearance.fontSize() <= 10}
-                  aria-label="Decrease font size"
-                >
-                  −
-                </Button>
-                <span class="text-14-regular text-text-strong min-w-[48px] text-center">
-                  {settings.appearance.fontSize()}px
-                </span>
-                <Button
-                  variant="secondary"
-                  size="small"
-                  onClick={() => {
-                    const current = settings.appearance.fontSize()
-                    if (current < 24) {
-                      settings.appearance.setFontSize(current + 1)
-                    }
-                  }}
-                  disabled={settings.appearance.fontSize() >= 24}
-                  aria-label="Increase font size"
-                >
-                  +
-                </Button>
+                    description={language.t("settings.general.row.wayland.description")}
+                  >
+                    <div data-action="settings-wayland">
+                      <Switch checked={value() === "wayland"} onChange={onChange} />
+                    </div>
+                  </SettingsRow>
+                </SettingsList>
               </div>
-            </SettingsRow>
-
-            <SettingsRow
-              title="Content Width"
-              description="Adjust the maximum width of conversation messages"
-            >
-              <div class="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="small"
-                  onClick={() => {
-                    const current = settings.appearance.contentWidth()
-                    const widths = [200, 250, 300, 350, 400]
-                    const currentIndex = widths.indexOf(current)
-                    if (currentIndex > 0) {
-                      settings.appearance.setContentWidth(widths[currentIndex - 1])
-                    }
-                  }}
-                  disabled={settings.appearance.contentWidth() <= 200}
-                  aria-label="Decrease content width"
-                >
-                  −
-                </Button>
-                <span class="text-14-regular text-text-strong min-w-[80px] text-center">
-                  {settings.appearance.contentWidth() === 200 && "Narrow"}
-                  {settings.appearance.contentWidth() === 250 && "Medium"}
-                  {settings.appearance.contentWidth() === 300 && "Wide"}
-                  {settings.appearance.contentWidth() === 350 && "Extra Wide"}
-                  {settings.appearance.contentWidth() === 400 && "Full Width"}
-                </span>
-                <Button
-                  variant="secondary"
-                  size="small"
-                  onClick={() => {
-                    const current = settings.appearance.contentWidth()
-                    const widths = [200, 250, 300, 350, 400]
-                    const currentIndex = widths.indexOf(current)
-                    if (currentIndex >= 0 && currentIndex < widths.length - 1) {
-                      settings.appearance.setContentWidth(widths[currentIndex + 1])
-                    }
-                  }}
-                  disabled={settings.appearance.contentWidth() >= 400}
-                  aria-label="Increase content width"
-                >
-                  +
-                </Button>
-              </div>
-            </SettingsRow>
-          </div>
-        </div>
-
-        <DisplaySection />
-
-        <Show when={desktop() && import.meta.env.VITE_OPENCODE_CHANNEL === "beta"}>
-          <AdvancedSection />
+            )
+          }}
         </Show>
       </div>
     </div>
