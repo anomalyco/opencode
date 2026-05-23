@@ -144,6 +144,8 @@ export function saveAccount(input: SaveAccountInput): SavedAccount {
     threadSession: existing?.threadSession ?? true,
     tables: existing?.tables ?? "bullets",
     blockStreamingCoalesce: existing?.blockStreamingCoalesce ?? 50,
+    // [feat: feishu-bridge-light] 自动建群 opt-in,默认关
+    enableAutoGroupCreate: existing?.enableAutoGroupCreate ?? false,
   }
 
   config.accounts[accountId] = account
