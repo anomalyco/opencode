@@ -155,6 +155,17 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 - MANIFEST.md 22 命令全部从 ⏳ 改 ✅ + 修订记录追加 D2/D3/D4-D6 三条 note
 - D4 没写 memfs.test.ts(本想 3 个 unit 测):memfs 行为由 D5/D6 的 invoke handler 间接验证(D8+ chat-drop / auto-save 等示范用例真用到时再加深测试)
 
+### 2026-05-23 W1 D7(W1 收尾 ✅)
+
+- **Contract test 骨架**锁定在 `e2e/mocks/MANIFEST.md` §四:7 个首批 contract 项(C1-C7),覆盖 write/mtime/size/binary roundtrip/rename/trash/SDK shape/watcher event。Phase 2 启动后逐项跑真后端 cross-check;漂移立即同步 mock。**不另起空 spec 文件**(反对文档膨胀,真执行点在 Phase 2)
+- **W1 收尾 verify 全套**:
+  - `bun run typecheck` ✅(tsgo -b exit 0)
+  - `bun run test:unit` 646 pass / 1 fail(kobalte 老坑,跟 e2e mock 完全无关,Stage ② 时即存在)
+  - `bun run test:e2e`(reuse e2e-mock vite)5 pass / 1 skipped(上游 todo.spec.ts fixme)/ 0 console error
+  - 9.1s 全 e2e 套耗时(<2 min A1 验收远早达成)
+- **W1 7 天任务全 done**,不触发 D6 fallback,投入工作日:D1(0.5d) + D2(0.5d) + D3(0.5d) + D4-D6(0.5d 合并) + D7(0.5d) = **2.5 工作日 / 预算 7 工作日**,**节省 4.5d** — 主因是 Stage ② mock infra 复用度比预估高(page.route + 我的 vite plugin 完全正交,无 hydrate 难点)
+- **下周 W2 起点**:节省的工作量分配给 W2 buffer(SDK 深 mock 可能复杂 — `client.session.list/messages/diff/todo` 等 namespace 需要 fixture 数据)+ W3 fixture/示范用例
+
 ## 关联文档
 
 | 文档 | 关系 |

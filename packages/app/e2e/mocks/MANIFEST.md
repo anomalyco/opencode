@@ -112,16 +112,34 @@ interface MemFS {
 
 ---
 
-## 四、跨 mock contract test 起手(W3)
+## 四、跨 mock contract test(防漂移)
 
-每周 1 次跑 Phase 2 真 Tauri(`feat/e2e-real-tauri-webdriver` 上)同一个 case,assert 行为一致;漂移立即同步 mock。
+### 设计
 
-**首批 contract 项**:
-- `write_text_file` + `get_file_mtime`:写后 mtime 严格自增,与真 sidecar 一致
-- `read` SDK file:返回 type discriminator(`type: "text" | "binary"`)对照真 SDK type definitions
-- Watcher event:emit `file.edited` shape `{ path, oldMtime, newMtime, source }` 对照真 sidecar 推送
+每周 1 次跑 Phase 2 真 Tauri(`feat/e2e-real-tauri-webdriver` 复活后)同一个 case,assert 行为一致;漂移立即同步 mock。
 
-具体落地见 W3 task。
+**首批 contract 项(W1 D7 起手锁定,Phase 2 启动时落地执行)**:
+
+| # | mock 端 | 真后端验证点 |
+|---|---|---|
+| C1 | `write_text_file` + `get_file_mtime` | 写后 mtime 严格自增 / 同时刻两次写 mtime 不撞 |
+| C2 | `write_text_file` expectedMtime 冲突 | mock throw `mtime_conflict: ...` ↔ 真后端 io error 同义 |
+| C3 | `get_file_size` | utf8 byte length 算法对齐真 Rust string.len() |
+| C4 | `read_binary_file_base64` ↔ `write_binary_file_absolute_base64` | round-trip 二进制保真(图片字节级一致) |
+| C5 | `rename_path` + `trash_path` | 操作后 list 行为对齐(真 fs 立即可见 / mock memfs 立即可见) |
+| C6 | SDK `client.file.read` shape | 返回 `{ type: "text" \| "binary", content }` 严格对照 SDK type definitions |
+| C7 | Watcher event `file.edited` | shape `{ path, oldMtime, newMtime, source }` 与真 sidecar SSE 推送对齐 |
+
+### 触发时机
+
+- **W1-W2**:仅 mock 端 self-consistency(memfs/tauri.ts unit-level 验证),W3 起跑 Phase 1 e2e 全套自动 cross-check
+- **Phase 2 启动后**:每周 contract test 跑 `feat/e2e-real-tauri-webdriver` 上同 case,diff 行为
+- **漂移处理**:任何 contract 项 mock vs 真后端不一致 → 立即同步 mock 行为(改 memfs/tauri.ts),并在 2-plan 决策轨迹记一笔
+
+### 自动化(后期)
+
+- nightly CI 跑 contract suite,通过 GitHub status / 飞书机器人推漂移告警
+- 漂移率纳入治理 KPI(参 OPENCODE-PLAN 长期规划)
 
 ---
 
@@ -131,3 +149,4 @@ interface MemFS {
 - **2026-05-23 W1 D2**:`vite/e2e-mock.js` plugin 落地,alias `@tauri-apps/api/core` → `e2e/mocks/tauri.ts`(最简 stub)。npm script `dev:e2e-mock`。
 - **2026-05-23 W1 D3**:critical path 验证过 — `bun run dev:e2e-mock` + `bun run test:e2e` → 5/6 pass + 0 console error,UI hydrate 成功。**不触发 D6 fallback**。
 - **2026-05-23 W1 D4-D6 合并**:`e2e/mocks/memfs.ts` 完整 + `tauri.ts` 重构为 dispatch 表 + 22 个 invoke 命令全接(fs 11 / 外部 app 3 / 飞书 8 stub)。重构后 spec 仍 5/6 pass(9.1s),verify 无回归。
+- **2026-05-23 W1 D7**:contract test 骨架锁定 — §四 段列出 7 个首批 contract 项(C1-C7),Phase 2 启动后逐项跑真后端 cross-check。W1 收尾 verify:typecheck ✅ / unit 646 pass + 1 kobalte 老坑 fail(无关)/ e2e 5/6 pass / 0 console error。**W1 全 7 天任务 done**。
