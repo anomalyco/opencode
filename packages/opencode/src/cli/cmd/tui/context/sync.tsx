@@ -130,23 +130,64 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
     }
 
+    function groupRequestsBySession<T extends { sessionID: string; id: string }>(requests: readonly T[]) {
+      const grouped: Record<string, T[]> = {}
+      for (const request of requests) {
+        const sessionRequests = (grouped[request.sessionID] ??= [])
+        const match = Binary.search(sessionRequests, request.id, (item) => item.id)
+        if (match.found) sessionRequests[match.index] = request
+        if (!match.found) sessionRequests.splice(match.index, 0, request)
+      }
+      return grouped
+    }
+
+    async function refreshPermissions() {
+      const workspace = project.workspace.current()
+      const response = await sdk.client.permission.list({ workspace })
+      setStore("permission", reconcile(groupRequestsBySession(response.data ?? [])))
+    }
+
+    async function refreshQuestions() {
+      const workspace = project.workspace.current()
+      const response = await sdk.client.question.list({ workspace })
+      setStore("question", reconcile(groupRequestsBySession(response.data ?? [])))
+    }
+
+    function removePermissionRequest(sessionID: string, requestID: string) {
+      const requests = store.permission[sessionID]
+      if (!requests) return
+      const match = Binary.search(requests, requestID, (r) => r.id)
+      if (!match.found) return
+      setStore(
+        "permission",
+        sessionID,
+        produce((draft) => {
+          draft.splice(match.index, 1)
+        }),
+      )
+    }
+
+    function removeQuestionRequest(sessionID: string, requestID: string) {
+      const requests = store.question[sessionID]
+      if (!requests) return
+      const match = Binary.search(requests, requestID, (r) => r.id)
+      if (!match.found) return
+      setStore(
+        "question",
+        sessionID,
+        produce((draft) => {
+          draft.splice(match.index, 1)
+        }),
+      )
+    }
+
     event.subscribe((event, { workspace }) => {
       switch (event.type) {
         case "server.instance.disposed":
           void bootstrap()
           break
         case "permission.replied": {
-          const requests = store.permission[event.properties.sessionID]
-          if (!requests) break
-          const match = Binary.search(requests, event.properties.requestID, (r) => r.id)
-          if (!match.found) break
-          setStore(
-            "permission",
-            event.properties.sessionID,
-            produce((draft) => {
-              draft.splice(match.index, 1)
-            }),
-          )
+          removePermissionRequest(event.properties.sessionID, event.properties.requestID)
           break
         }
 
@@ -174,17 +215,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "question.replied":
         case "question.rejected": {
-          const requests = store.question[event.properties.sessionID]
-          if (!requests) break
-          const match = Binary.search(requests, event.properties.requestID, (r) => r.id)
-          if (!match.found) break
-          setStore(
-            "question",
-            event.properties.sessionID,
-            produce((draft) => {
-              draft.splice(match.index, 1)
-            }),
-          )
+          removeQuestionRequest(event.properties.sessionID, event.properties.requestID)
           break
         }
 
@@ -457,6 +488,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.session.status({ workspace }).then((x) => {
               setStore("session_status", reconcile(x.data ?? {}))
             }),
+            refreshPermissions(),
+            refreshQuestions(),
             sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
             project.workspace.sync(),
@@ -545,6 +578,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
       },
       bootstrap,
+      permission: {
+        remove: removePermissionRequest,
+        refresh: refreshPermissions,
+      },
+      question: {
+        remove: removeQuestionRequest,
+        refresh: refreshQuestions,
+      },
     }
     return result
   },

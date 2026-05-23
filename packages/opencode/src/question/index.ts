@@ -191,12 +191,16 @@ export const layer = Layer.effect(
       }
       pending.delete(input.requestID)
       log.info("replied", { requestID: input.requestID, answers: input.answers })
+      const completed = yield* Deferred.succeed(existing.deferred, input.answers)
+      if (!completed) {
+        log.warn("reply target was already resolved", { requestID: input.requestID })
+        return yield* new NotFoundError({ requestID: input.requestID })
+      }
       yield* bus.publish(Event.Replied, {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,
         answers: input.answers.map((a) => [...a]),
       })
-      yield* Deferred.succeed(existing.deferred, input.answers)
     })
 
     const reject = Effect.fn("Question.reject")(function* (requestID: QuestionID) {
@@ -208,11 +212,15 @@ export const layer = Layer.effect(
       }
       pending.delete(requestID)
       log.info("rejected", { requestID })
+      const completed = yield* Deferred.fail(existing.deferred, new RejectedError())
+      if (!completed) {
+        log.warn("reject target was already resolved", { requestID })
+        return yield* new NotFoundError({ requestID })
+      }
       yield* bus.publish(Event.Rejected, {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,
       })
-      yield* Deferred.fail(existing.deferred, new RejectedError())
     })
 
     const list = Effect.fn("Question.list")(function* () {

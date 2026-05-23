@@ -5,6 +5,8 @@ import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
+import { useProject } from "../../context/project"
+import { useSync } from "../../context/sync"
 import { SplitBorder } from "../../component/border"
 import { useTuiConfig } from "../../context/tui-config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
@@ -13,6 +15,8 @@ const QUESTION_MODE = "question"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
+  const project = useProject()
+  const sync = useSync()
   const { theme } = useTheme()
   const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
@@ -45,18 +49,54 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     return store.answers[store.tab]?.includes(value) ?? false
   })
 
+  async function replyQuestion(answers: QuestionAnswer[]) {
+    try {
+      const response = await sdk.client.question.reply(
+        {
+          requestID: props.request.id,
+          answers,
+          workspace: project.workspace.current(),
+        },
+        { throwOnError: true },
+      )
+      if (response.data === true) {
+        sync.question.remove(props.request.sessionID, props.request.id)
+        return
+      }
+      await sync.question.refresh()
+    } catch (error) {
+      await sync.question.refresh().catch(() => {})
+      console.error("Failed to reply to question request", error)
+    }
+  }
+
+  async function rejectQuestion() {
+    try {
+      const response = await sdk.client.question.reject(
+        {
+          requestID: props.request.id,
+          workspace: project.workspace.current(),
+        },
+        { throwOnError: true },
+      )
+      if (response.data === true) {
+        sync.question.remove(props.request.sessionID, props.request.id)
+        return
+      }
+      await sync.question.refresh()
+    } catch (error) {
+      await sync.question.refresh().catch(() => {})
+      console.error("Failed to reject question request", error)
+    }
+  }
+
   function submit() {
     const answers = questions().map((_, i) => store.answers[i] ?? [])
-    void sdk.client.question.reply({
-      requestID: props.request.id,
-      answers,
-    })
+    void replyQuestion(answers)
   }
 
   function reject() {
-    void sdk.client.question.reject({
-      requestID: props.request.id,
-    })
+    void rejectQuestion()
   }
 
   function pick(answer: string, custom: boolean = false) {
@@ -69,14 +109,10 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       setStore("custom", inputs)
     }
     if (single()) {
-      void sdk.client.question.reply({
-        requestID: props.request.id,
-        answers: [[answer]],
-      })
+      void replyQuestion([[answer]])
       return
     }
-    setStore("tab", store.tab + 1)
-    setStore("selected", 0)
+    selectTab(store.tab + 1)
   }
 
   function toggle(answer: string) {
@@ -97,6 +133,8 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   function selectTab(index: number) {
     setStore("tab", index)
     setStore("selected", 0)
+    setStore("editing", false)
+    textarea = undefined
   }
 
   function selectOption() {

@@ -215,33 +215,48 @@ export const layer = Layer.effect(
       const existing = pending.get(input.requestID)
       if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
 
+      if (input.reply === "reject") {
+        pending.delete(input.requestID)
+        const completed = yield* Deferred.fail(
+          existing.deferred,
+          input.message ? new CorrectedError({ feedback: input.message }) : new RejectedError(),
+        )
+        if (!completed) {
+          log.warn("reply target was already resolved", { requestID: input.requestID })
+          return yield* new NotFoundError({ requestID: input.requestID })
+        }
+        yield* bus.publish(Event.Replied, {
+          sessionID: existing.info.sessionID,
+          requestID: existing.info.id,
+          reply: input.reply,
+        })
+
+        for (const [id, item] of pending.entries()) {
+          if (item.info.sessionID !== existing.info.sessionID) continue
+          pending.delete(id)
+          const rejected = yield* Deferred.fail(item.deferred, new RejectedError())
+          if (rejected) {
+            yield* bus.publish(Event.Replied, {
+              sessionID: item.info.sessionID,
+              requestID: item.info.id,
+              reply: "reject",
+            })
+          }
+        }
+        return
+      }
+
       pending.delete(input.requestID)
+      const completed = yield* Deferred.succeed(existing.deferred, undefined)
+      if (!completed) {
+        log.warn("reply target was already resolved", { requestID: input.requestID })
+        return yield* new NotFoundError({ requestID: input.requestID })
+      }
       yield* bus.publish(Event.Replied, {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,
         reply: input.reply,
       })
-
-      if (input.reply === "reject") {
-        yield* Deferred.fail(
-          existing.deferred,
-          input.message ? new CorrectedError({ feedback: input.message }) : new RejectedError(),
-        )
-
-        for (const [id, item] of pending.entries()) {
-          if (item.info.sessionID !== existing.info.sessionID) continue
-          pending.delete(id)
-          yield* bus.publish(Event.Replied, {
-            sessionID: item.info.sessionID,
-            requestID: item.info.id,
-            reply: "reject",
-          })
-          yield* Deferred.fail(item.deferred, new RejectedError())
-        }
-        return
-      }
-
-      yield* Deferred.succeed(existing.deferred, undefined)
       if (input.reply === "once") return
 
       for (const pattern of existing.info.always) {
@@ -259,12 +274,14 @@ export const layer = Layer.effect(
         )
         if (!ok) continue
         pending.delete(id)
-        yield* bus.publish(Event.Replied, {
-          sessionID: item.info.sessionID,
-          requestID: item.info.id,
-          reply: "always",
-        })
-        yield* Deferred.succeed(item.deferred, undefined)
+        const completed = yield* Deferred.succeed(item.deferred, undefined)
+        if (completed) {
+          yield* bus.publish(Event.Replied, {
+            sessionID: item.info.sessionID,
+            requestID: item.info.id,
+            reply: "always",
+          })
+        }
       }
     })
 

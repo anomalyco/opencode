@@ -122,6 +122,28 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
 
   const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
 
+  async function replyPermission(reply: "once" | "always" | "reject", message?: string) {
+    try {
+      const response = await sdk.client.permission.reply(
+        {
+          reply,
+          requestID: props.request.id,
+          message,
+          workspace: project.workspace.current(),
+        },
+        { throwOnError: true },
+      )
+      if (response.data === true) {
+        sync.permission.remove(props.request.sessionID, props.request.id)
+        return
+      }
+      await sync.permission.refresh()
+    } catch (error) {
+      await sync.permission.refresh().catch(() => {})
+      console.error("Failed to reply to permission request", error)
+    }
+  }
+
   const input = createMemo(() => {
     const tool = props.request.tool
     if (!tool) return {}
@@ -168,23 +190,14 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
           onSelect={(option) => {
             setStore("stage", "permission")
             if (option === "cancel") return
-            void sdk.client.permission.reply({
-              reply: "always",
-              requestID: props.request.id,
-              workspace: project.workspace.current(),
-            })
+            void replyPermission("always")
           }}
         />
       </Match>
       <Match when={store.stage === "reject"}>
         <RejectPrompt
           onConfirm={(message) => {
-            void sdk.client.permission.reply({
-              reply: "reject",
-              requestID: props.request.id,
-              message: message || undefined,
-              workspace: project.workspace.current(),
-            })
+            void replyPermission("reject", message || undefined)
           }}
           onCancel={() => {
             setStore("stage", "permission")
@@ -418,18 +431,10 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                     setStore("stage", "reject")
                     return
                   }
-                  void sdk.client.permission.reply({
-                    reply: "reject",
-                    requestID: props.request.id,
-                    workspace: project.workspace.current(),
-                  })
+                  void replyPermission("reject")
                   return
                 }
-                void sdk.client.permission.reply({
-                  reply: "once",
-                  requestID: props.request.id,
-                  workspace: project.workspace.current(),
-                })
+                void replyPermission("once")
               }}
             />
           )
