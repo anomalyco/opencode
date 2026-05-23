@@ -258,7 +258,7 @@ export function NewSessionView(props: NewSessionViewProps) {
               )}
             </Show>
             <Show when={extraAgent()?.id === "genericagent"}>
-              <div class="mt-5 grid gap-3 text-left">
+              <div class="mt-5 grid gap-3 text-left md:max-w-200 md:mx-auto 2xl:max-w-[1000px]">
                 <div class="rounded-xl border border-border-weak-base bg-background-base/45 px-4 py-3 shadow-xs-border-base">
                   <div class="flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-text-weaker">
                     <Icon name="folder" size="small" class="shrink-0 text-icon-base" />

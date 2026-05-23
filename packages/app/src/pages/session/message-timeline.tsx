@@ -1439,7 +1439,9 @@ export function MessageTimeline(props: {
     const schedule = () => {
       if (queued) return
       queued = true
-      mutationFrame = requestAnimationFrame(flush)
+      // Keep the bottom pin in the same turn as the DOM mutation so we do not
+      // paint an intermediate frame with the new line below the viewport.
+      flush()
     }
 
     const activeID = activeMessageID()
