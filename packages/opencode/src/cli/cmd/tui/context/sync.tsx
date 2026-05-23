@@ -565,15 +565,27 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       },
       acp: {
         update(state: AcpSessionState & { sessionID: string }) {
-          setStore("acp", state.sessionID, (prev = {}) => ({
-            ...prev,
-            ...(state.configOptions !== undefined ? { configOptions: state.configOptions } : {}),
-            ...(state.modes !== undefined ? { modes: state.modes } : {}),
-            ...(state.models !== undefined ? { models: state.models } : {}),
-            ...(state.availableCommands !== undefined ? { availableCommands: state.availableCommands } : {}),
-            ...(state.usage !== undefined ? { usage: state.usage } : {}),
-            ...(state.info !== undefined ? { info: state.info } : {}),
-          }))
+          const sessionID = state.sessionID
+          if (!store.acp[sessionID]) {
+            setStore("acp", sessionID, {
+              configOptions: state.configOptions,
+              modes: state.modes,
+              models: state.models,
+              availableCommands: state.availableCommands,
+              usage: state.usage,
+              info: state.info,
+            })
+            return
+          }
+          batch(() => {
+            if (state.configOptions !== undefined) setStore("acp", sessionID, "configOptions", state.configOptions)
+            if (state.modes !== undefined) setStore("acp", sessionID, "modes", state.modes)
+            if (state.models !== undefined) setStore("acp", sessionID, "models", state.models)
+            if (state.availableCommands !== undefined)
+              setStore("acp", sessionID, "availableCommands", state.availableCommands)
+            if (state.usage !== undefined) setStore("acp", sessionID, "usage", state.usage)
+            if (state.info !== undefined) setStore("acp", sessionID, "info", state.info)
+          })
         },
       },
       bootstrap,

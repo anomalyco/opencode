@@ -6,6 +6,7 @@ import { firstBy } from "remeda"
 import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useEditorContext } from "@tui/context/editor"
+import { useLocal } from "@tui/context/local"
 import { useProject } from "@tui/context/project"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
@@ -85,6 +86,7 @@ export function Autocomplete(props: {
   const editor = useEditorContext()
   const sdk = useSDK()
   const sync = useSync()
+  const local = useLocal()
   const project = useProject()
   const slashes = useCommandSlashes()
   const keymap = useOpencodeKeymap()
@@ -547,8 +549,12 @@ export function Autocomplete(props: {
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...slashes()]
     const acpState = sync.data.acp[props.sessionID ?? ""]
+    const currentAgentBackend = local.agent.current()?.backend?.type
 
-    if (props.sessionID && !slashes().some((item) => item.display === "/acp-options")) {
+    if (
+      (props.sessionID || currentAgentBackend === "acp") &&
+      !slashes().some((item) => item.display === "/acp-options")
+    ) {
       results.push({
         display: "/acp-options",
         description: "ACP options",

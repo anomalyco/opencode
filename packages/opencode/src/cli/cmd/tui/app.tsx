@@ -612,8 +612,38 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         title: "ACP options",
         category: "Agent",
         slashName: "acp-options",
-        hidden: route.data.type !== "session",
-        run: () => {
+        hidden: local.agent.current()?.backend?.type !== "acp",
+        run: async () => {
+          if (route.data.type === "session") {
+            dialog.replace(() => <DialogAcpConfig />)
+            return
+          }
+          const agent = local.agent.current()
+          if (!agent || agent.backend?.type !== "acp") return
+          const selectedModel = local.model.current()
+          if (!selectedModel) {
+            toast.show({ message: "Connect a provider to use ACP options", variant: "warning" })
+            return
+          }
+          const res = await sdk.client.session.create({
+            agent: agent.name,
+            model: {
+              providerID: selectedModel.providerID,
+              id: selectedModel.modelID,
+              variant: local.model.variant.current(),
+            },
+          })
+          if (res.error || !res.data) {
+            toast.show({ message: "Failed to create session for ACP options", variant: "error" })
+            return
+          }
+          route.navigate({ type: "session", sessionID: res.data.id })
+          const url = new URL(`/session/${res.data.id}/acp/prepare`, sdk.url)
+          const prepareResponse = await sdk.fetch(url, { method: "POST" })
+          if (prepareResponse.ok) {
+            const state = await prepareResponse.json().catch(() => undefined)
+            if (state && typeof state === "object") sync.acp.update(state)
+          }
           dialog.replace(() => <DialogAcpConfig />)
         },
       },

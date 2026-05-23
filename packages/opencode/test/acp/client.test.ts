@@ -3,6 +3,7 @@ import { Effect, Layer } from "effect"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { ACPClient } from "@/acp/client"
+import { Bus } from "@/bus"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { MessageV2 } from "@/session/message-v2"
 import { MessageID, PartID } from "@/session/schema"
@@ -17,6 +18,7 @@ const layer = Layer.mergeAll(
   SessionRevert.defaultLayer,
   SessionSummary.defaultLayer,
   ACPClient.defaultLayer,
+  Bus.defaultLayer,
 )
 
 const it = testEffect(layer)
@@ -408,6 +410,173 @@ it.instance("runs ACP terminal commands through a shell", () =>
   }),
 )
 
+it.instance("prepare creates remote ACP session and exposes config options without running a prompt", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const server = path.join(test.directory, "prepare-acp-server.js")
+    yield* Effect.promise(() => fs.writeFile(server, configOptionServerSource))
+    yield* Effect.promise(() =>
+      fs.writeFile(
+        path.join(test.directory, "opencode.json"),
+        JSON.stringify({
+          acp: {
+            prepare: {
+              type: "local",
+              command: [process.execPath, server],
+              timeout: 5000,
+            },
+          },
+        }),
+      ),
+    )
+
+    const sessions = yield* Session.Service
+    const acp = yield* ACPClient.Service
+    const bus = yield* Bus.Service
+    const events: ACPClient.ACPStatePayload[] = []
+    yield* bus.subscribeCallback(ACPClient.Event.StateUpdated, (event) => {
+      events.push(event.properties)
+    })
+
+    const info = yield* sessions.create({
+      title: "prepare test",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      agent: "prepare-acp",
+      model: { id: model.modelID, providerID: model.providerID },
+    })
+
+    const result = yield* acp.prepare({
+      server: "prepare",
+      agent: {
+        name: "prepare-acp",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      },
+      session: info,
+    })
+
+    expect(result.sessionID).toBe(info.id)
+    const modelOption = (result.configOptions as Array<{ id: string; currentValue: string }> | undefined)?.find(
+      (option) => option.id === "model",
+    )
+    expect(modelOption?.currentValue).toBe("alpha[]")
+
+    yield* Effect.promise(async () => {
+      const deadline = Date.now() + 2000
+      while (events.length === 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+    })
+    expect(events.length).toBeGreaterThan(0)
+    expect(events[events.length - 1]?.sessionID).toBe(info.id)
+  }),
+)
+
+it.instance("updates ACP config option current value and publishes state event", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const server = path.join(test.directory, "config-acp-server.js")
+    yield* Effect.promise(() => fs.writeFile(server, configOptionServerSource))
+    yield* Effect.promise(() =>
+      fs.writeFile(
+        path.join(test.directory, "opencode.json"),
+        JSON.stringify({
+          acp: {
+            config: {
+              type: "local",
+              command: [process.execPath, server],
+              timeout: 5000,
+            },
+          },
+        }),
+      ),
+    )
+
+    const sessions = yield* Session.Service
+    const acp = yield* ACPClient.Service
+    const bus = yield* Bus.Service
+    const events: ACPClient.ACPStatePayload[] = []
+    yield* bus.subscribeCallback(ACPClient.Event.StateUpdated, (event) => {
+      events.push(event.properties)
+    })
+
+    const info = yield* sessions.create({
+      title: "config option test",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      agent: "config-acp",
+      model: { id: model.modelID, providerID: model.providerID },
+    })
+    const user: MessageV2.User = {
+      id: MessageID.ascending(),
+      sessionID: info.id,
+      role: "user",
+      time: { created: Date.now() },
+      agent: "config-acp",
+      model,
+    }
+    yield* sessions.updateMessage(user)
+    const userPart = yield* sessions.updatePart({
+      id: PartID.ascending(),
+      sessionID: info.id,
+      messageID: user.id,
+      type: "text",
+      text: "hello",
+    })
+    const assistant: MessageV2.Assistant = {
+      id: MessageID.ascending(),
+      parentID: user.id,
+      role: "assistant",
+      mode: "config-acp",
+      agent: "config-acp",
+      path: { cwd: test.directory, root: test.directory },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      modelID: model.modelID,
+      providerID: model.providerID,
+      time: { created: Date.now() },
+      sessionID: info.id,
+    }
+    yield* sessions.updateMessage(assistant)
+
+    yield* acp.run({
+      server: "config",
+      agent: {
+        name: "config-acp",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      },
+      session: info,
+      user: { info: user, parts: [userPart] },
+      assistant,
+    })
+
+    const eventsBefore = events.length
+    const response = yield* acp.setConfigOption({
+      sessionID: info.id,
+      configID: "model",
+      value: "beta[]",
+    })
+
+    expect(response.configOptions).toBeDefined()
+    const modelOption = (response.configOptions as Array<{ id: string; currentValue: string }>).find(
+      (option) => option.id === "model",
+    )
+    expect(modelOption?.currentValue).toBe("beta[]")
+
+    yield* Effect.promise(async () => {
+      const deadline = Date.now() + 2000
+      while (events.length <= eventsBefore && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+    })
+    expect(events.length).toBeGreaterThan(eventsBefore)
+    const lastEvent = events[events.length - 1]
+    expect(lastEvent?.sessionID).toBe(info.id)
+    const eventModel = (lastEvent?.configOptions as Array<{ id: string; currentValue: string }> | undefined)?.find(
+      (option) => option.id === "model",
+    )
+    expect(eventModel?.currentValue).toBe("beta[]")
+  }),
+)
+
 const fakeServerSource = `
 const write = (message) => process.stdout.write(JSON.stringify(message) + "\\n")
 let buffer = ""
@@ -634,6 +803,76 @@ process.stdin.on("data", (chunk) => {
       })
       write({ jsonrpc: "2.0", id: pendingPromptId, result: { stopReason: "end_turn" } })
       pendingPromptId = undefined
+    }
+  }
+})
+`
+
+const configOptionServerSource = `
+const write = (message) => process.stdout.write(JSON.stringify(message) + "\\n")
+let buffer = ""
+let configOptions = [
+  {
+    id: "model",
+    name: "Model",
+    type: "select",
+    category: "model",
+    currentValue: "alpha[]",
+    options: [
+      { value: "alpha[]", name: "Alpha" },
+      { value: "beta[]", name: "Beta" },
+    ],
+  },
+]
+process.stdin.setEncoding("utf8")
+process.stdin.on("data", (chunk) => {
+  buffer += chunk
+  const lines = buffer.split("\\n")
+  buffer = lines.pop() ?? ""
+  for (const line of lines) {
+    if (!line.trim()) continue
+    const message = JSON.parse(line)
+    if (message.method === "initialize") {
+      write({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: {
+          protocolVersion: 1,
+          agentCapabilities: {},
+          agentInfo: { name: "config-acp", title: "Config ACP", version: "1.0.0" },
+          authMethods: [],
+        },
+      })
+      continue
+    }
+    if (message.method === "session/new") {
+      write({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: { sessionId: "remote_config", configOptions },
+      })
+      continue
+    }
+    if (message.method === "session/prompt") {
+      write({
+        jsonrpc: "2.0",
+        method: "session/update",
+        params: {
+          sessionId: message.params.sessionId,
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: "ack" },
+          },
+        },
+      })
+      write({ jsonrpc: "2.0", id: message.id, result: { stopReason: "end_turn" } })
+      continue
+    }
+    if (message.method === "session/set_config_option") {
+      const target = configOptions.find((option) => option.id === message.params.configId)
+      if (target) target.currentValue = message.params.value
+      write({ jsonrpc: "2.0", id: message.id, result: { configOptions } })
+      continue
     }
   }
 })

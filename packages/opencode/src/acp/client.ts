@@ -92,7 +92,7 @@ type RemoteSessionState = {
   server: string
   ctx: InstanceContext
   localSession: Session.Info
-  assistant: MessageV2.Assistant
+  assistant?: MessageV2.Assistant
   ruleset: Permission.Ruleset
   textPartID?: PartID
   textMessageID?: string
@@ -138,9 +138,19 @@ export interface RunInput {
   assistant: MessageV2.Assistant
 }
 
+export interface PrepareInput {
+  server: string
+  agent: {
+    name: string
+    permission: Permission.Ruleset
+  }
+  session: Session.Info
+}
+
 export interface Interface {
   readonly run: (input: RunInput) => Effect.Effect<MessageV2.Assistant>
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
+  readonly prepare: (input: PrepareInput) => Effect.Effect<ACPStatePayload, Error>
   readonly setConfigOption: (input: {
     sessionID: SessionID
     configID: string
@@ -485,20 +495,27 @@ export const layer = Layer.effect(
       return entry
     })
 
-    const ensureRemoteSession = Effect.fn("ACPClient.ensureRemoteSession")(function* (input: RunInput) {
+    const ensureRemoteSession = Effect.fn("ACPClient.ensureRemoteSession")(function* (input: {
+      server: string
+      agent: { name: string; permission: Permission.Ruleset }
+      session: Session.Info
+      assistant?: MessageV2.Assistant
+    }) {
       const runtime = yield* InstanceState.get(state)
       const existing = runtime.sessions.get(input.session.id)
       if (existing && existing.server === input.server) {
-        existing.assistant = input.assistant
+        if (input.assistant) {
+          existing.assistant = input.assistant
+          existing.activeAssistantID = input.assistant.id
+          existing.textPartID = undefined
+          existing.textMessageID = undefined
+          existing.reasoningPartID = undefined
+          existing.reasoningMessageID = undefined
+          existing.planPartID = undefined
+          existing.tools = new Map()
+        }
         existing.localSession = input.session
         existing.ruleset = Permission.merge(input.agent.permission, input.session.permission ?? [])
-        existing.textPartID = undefined
-        existing.textMessageID = undefined
-        existing.reasoningPartID = undefined
-        existing.reasoningMessageID = undefined
-        existing.planPartID = undefined
-        existing.tools = new Map()
-        existing.activeAssistantID = input.assistant.id
         return existing
       }
 
@@ -532,7 +549,7 @@ export const layer = Layer.effect(
         tools: new Map(),
         terminals: new Map(),
         pendingPermissions: new Set(),
-        activeAssistantID: input.assistant.id,
+        activeAssistantID: input.assistant?.id,
         configOptions: Array.isArray((created as any).configOptions) ? (created as any).configOptions : undefined,
         modes: (created as any).modes,
         models: (created as any).models,
@@ -541,6 +558,23 @@ export const layer = Layer.effect(
       runtime.remoteToLocal.set(created.sessionId, input.session.id)
       yield* publishACPState(bus, remote)
       return remote
+    })
+
+    const prepare = Effect.fn("ACPClient.prepare")(function* (input: PrepareInput) {
+      const remote = yield* ensureRemoteSession({
+        server: input.server,
+        agent: input.agent,
+        session: input.session,
+      })
+      return {
+        sessionID: remote.localSessionID,
+        configOptions: remote.configOptions,
+        modes: remote.modes,
+        models: remote.models,
+        availableCommands: remote.availableCommands,
+        usage: remote.usage,
+        info: remote.info,
+      }
     })
 
     const run = Effect.fn("ACPClient.run")(function* (input: RunInput) {
@@ -558,7 +592,12 @@ export const layer = Layer.effect(
 
       return yield* Effect.gen(function* () {
         const connection = yield* connect(input.server)
-        const remote = yield* ensureRemoteSession(input)
+        const remote = yield* ensureRemoteSession({
+          server: input.server,
+          agent: input.agent,
+          session: input.session,
+          assistant: input.assistant,
+        })
         const startSnapshot = yield* snapshot.track()
         yield* session.updatePart({
           id: PartID.ascending(),
@@ -627,7 +666,7 @@ export const layer = Layer.effect(
       remote.pendingPermissions.clear()
       yield* finishOpenParts(session, remote)
       yield* failOpenTools(session, remote, "ACP prompt cancelled")
-      clearActiveTurn(remote, remote.assistant.id)
+      if (remote.assistant) clearActiveTurn(remote, remote.assistant.id)
       const connection = runtime.connections.get(remote.server)
       if (!connection) return
       yield* Effect.promise(() => connection.agent.cancel({ sessionId: remote.remoteSessionID })).pipe(Effect.ignore)
@@ -689,6 +728,7 @@ export const layer = Layer.effect(
     return Service.of({
       run: (input) => run(input).pipe(Effect.onInterrupt(() => cancel(input.session.id))),
       cancel,
+      prepare,
       setConfigOption,
     })
   }),
@@ -735,7 +775,7 @@ function handleSessionUpdate(runtime: State, params: SessionNotification) {
         yield* publishACPState(bus, remote)
         return
     }
-    if (!remote.activeAssistantID || remote.activeAssistantID !== remote.assistant.id) return
+    if (!remote.assistant || !remote.activeAssistantID || remote.activeAssistantID !== remote.assistant.id) return
     switch (update.sessionUpdate) {
       case "agent_message_chunk":
         yield* appendContent(
@@ -809,11 +849,13 @@ function recordACPFailurePatch(
 ) {
   return Effect.gen(function* () {
     if (!startSnapshot) return
+    if (!remote.assistant) return
+    const assistant = remote.assistant
     const patch = yield* snapshot.patch(startSnapshot)
     if (!patch.files.length) return
     yield* svc.updatePart({
       id: PartID.ascending(),
-      messageID: remote.assistant.id,
+      messageID: assistant.id,
       sessionID: remote.localSessionID,
       type: "patch",
       hash: patch.hash,
@@ -832,12 +874,14 @@ function recordACPStepFinish(input: {
   userMessageID: MessageV2.User["id"]
 }) {
   return Effect.gen(function* () {
+    if (!input.remote.assistant) return
+    const assistant = input.remote.assistant
     const completedSnapshot = yield* input.snapshot.track()
     yield* input.session.updatePart({
       id: PartID.ascending(),
       reason: input.reason,
       snapshot: completedSnapshot,
-      messageID: input.remote.assistant.id,
+      messageID: assistant.id,
       sessionID: input.remote.localSessionID,
       type: "step-finish",
       tokens: {
@@ -853,7 +897,7 @@ function recordACPStepFinish(input: {
       if (patch.files.length) {
         yield* input.session.updatePart({
           id: PartID.ascending(),
-          messageID: input.remote.assistant.id,
+          messageID: assistant.id,
           sessionID: input.remote.localSessionID,
           type: "patch",
           hash: patch.hash,
@@ -869,24 +913,26 @@ function recordACPStepFinish(input: {
 
 function finishOpenParts(svc: Session.Interface, remote: RemoteSessionState) {
   return Effect.gen(function* () {
+    if (!remote.assistant) return
+    const assistant = remote.assistant
     const now = Date.now()
     if (remote.textPartID) {
       const current = yield* svc.getPart({
         sessionID: remote.localSessionID,
-        messageID: remote.assistant.id,
+        messageID: assistant.id,
         partID: remote.textPartID,
       })
       if (current?.type === "text" && current.time?.end === undefined) {
         yield* svc.updatePart({
           ...current,
-          time: { start: current.time?.start ?? remote.assistant.time.created, end: now },
+          time: { start: current.time?.start ?? assistant.time.created, end: now },
         })
       }
     }
     if (remote.reasoningPartID) {
       const current = yield* svc.getPart({
         sessionID: remote.localSessionID,
-        messageID: remote.assistant.id,
+        messageID: assistant.id,
         partID: remote.reasoningPartID,
       })
       if (current?.type === "reasoning" && current.time.end === undefined) {
@@ -901,11 +947,13 @@ function finishOpenParts(svc: Session.Interface, remote: RemoteSessionState) {
 
 function failOpenTools(svc: Session.Interface, remote: RemoteSessionState, message: string) {
   return Effect.gen(function* () {
+    if (!remote.assistant) return
+    const assistant = remote.assistant
     const now = Date.now()
     for (const partID of remote.tools.values()) {
       const current = yield* svc.getPart({
         sessionID: remote.localSessionID,
-        messageID: remote.assistant.id,
+        messageID: assistant.id,
         partID,
       })
       if (!current || current.type !== "tool") continue
@@ -927,8 +975,10 @@ function failOpenTools(svc: Session.Interface, remote: RemoteSessionState, messa
 
 function ensureVisibleResponse(svc: Session.Interface, remote: RemoteSessionState) {
   return Effect.gen(function* () {
+    if (!remote.assistant) return
+    const assistant = remote.assistant
     const messages = yield* svc.messages({ sessionID: remote.localSessionID, limit: 1 }).pipe(Effect.orDie)
-    const current = messages.find((message) => message.info.id === remote.assistant.id)
+    const current = messages.find((message) => message.info.id === assistant.id)
     const visible = current?.parts.some((part) => {
       if (part.type === "text") return !part.synthetic && !part.ignored && part.text.trim().length > 0
       if (part.type === "reasoning") return part.text.trim().length > 0
@@ -941,7 +991,7 @@ function ensureVisibleResponse(svc: Session.Interface, remote: RemoteSessionStat
     yield* svc.updatePart({
       id: PartID.ascending(),
       sessionID: remote.localSessionID,
-      messageID: remote.assistant.id,
+      messageID: assistant.id,
       type: "text",
       text: "Done.",
       metadata: { acp: { fallback: true } },
@@ -957,6 +1007,8 @@ function closeStreamingText(remote: RemoteSessionState) {
 
 function appendContent(remote: RemoteSessionState, content: unknown, messageID?: string) {
   return Effect.gen(function* () {
+    if (!remote.assistant) return
+    const assistant = remote.assistant
     const file = contentBlockFilePart(remote, content)
     if (file) {
       const svc = yield* Session.Service
@@ -964,7 +1016,7 @@ function appendContent(remote: RemoteSessionState, content: unknown, messageID?:
         ...file,
         id: PartID.ascending(),
         sessionID: remote.localSessionID,
-        messageID: remote.assistant.id,
+        messageID: assistant.id,
       })
       return
     }
@@ -976,7 +1028,7 @@ function appendContent(remote: RemoteSessionState, content: unknown, messageID?:
       const part = yield* svc.updatePart({
         id: PartID.ascending(),
         sessionID: remote.localSessionID,
-        messageID: remote.assistant.id,
+        messageID: assistant.id,
         type: "text",
         text,
         time: { start: Date.now() },
@@ -987,7 +1039,7 @@ function appendContent(remote: RemoteSessionState, content: unknown, messageID?:
     }
     const current = yield* svc.getPart({
       sessionID: remote.localSessionID,
-      messageID: remote.assistant.id,
+      messageID: assistant.id,
       partID: remote.textPartID,
     })
     if (!current || current.type !== "text") return
@@ -997,6 +1049,8 @@ function appendContent(remote: RemoteSessionState, content: unknown, messageID?:
 
 function appendReasoning(remote: RemoteSessionState, content: unknown, messageID?: string) {
   return Effect.gen(function* () {
+    if (!remote.assistant) return
+    const assistant = remote.assistant
     const text = contentBlockText(content)
     if (!text) return
     const svc = yield* Session.Service
@@ -1008,7 +1062,7 @@ function appendReasoning(remote: RemoteSessionState, content: unknown, messageID
       const part = yield* svc.updatePart({
         id: PartID.ascending(),
         sessionID: remote.localSessionID,
-        messageID: remote.assistant.id,
+        messageID: assistant.id,
         type: "reasoning",
         text,
         time: { start: Date.now() },
@@ -1019,7 +1073,7 @@ function appendReasoning(remote: RemoteSessionState, content: unknown, messageID
     }
     const current = yield* svc.getPart({
       sessionID: remote.localSessionID,
-      messageID: remote.assistant.id,
+      messageID: assistant.id,
       partID: remote.reasoningPartID,
     })
     if (!current || current.type !== "reasoning") return
@@ -1029,6 +1083,8 @@ function appendReasoning(remote: RemoteSessionState, content: unknown, messageID
 
 function upsertPlan(remote: RemoteSessionState, entries: Array<Record<string, unknown>>) {
   return Effect.gen(function* () {
+    if (!remote.assistant) return
+    const assistant = remote.assistant
     const text = entries
       .map((entry) => {
         const status = typeof entry.status === "string" ? ` [${entry.status}]` : ""
@@ -1042,7 +1098,7 @@ function upsertPlan(remote: RemoteSessionState, entries: Array<Record<string, un
       const part = yield* svc.updatePart({
         id: PartID.ascending(),
         sessionID: remote.localSessionID,
-        messageID: remote.assistant.id,
+        messageID: assistant.id,
         type: "text",
         text: value,
         synthetic: true,
@@ -1054,7 +1110,7 @@ function upsertPlan(remote: RemoteSessionState, entries: Array<Record<string, un
     }
     const current = yield* svc.getPart({
       sessionID: remote.localSessionID,
-      messageID: remote.assistant.id,
+      messageID: assistant.id,
       partID: remote.planPartID,
     })
     if (!current || current.type !== "text") return
@@ -1064,6 +1120,8 @@ function upsertPlan(remote: RemoteSessionState, entries: Array<Record<string, un
 
 function upsertTool(remote: RemoteSessionState, update: Record<string, any>) {
   return Effect.gen(function* () {
+    if (!remote.assistant) return
+    const assistant = remote.assistant
     const toolCallID = String(update.toolCallId)
     const svc = yield* Session.Service
     const existingID = remote.tools.get(toolCallID)
@@ -1074,7 +1132,7 @@ function upsertTool(remote: RemoteSessionState, update: Record<string, any>) {
       const part = yield* svc.updatePart({
         id: PartID.ascending(),
         sessionID: remote.localSessionID,
-        messageID: remote.assistant.id,
+        messageID: assistant.id,
         type: "tool",
         callID: toolCallID,
         tool: `acp:${update.kind ?? "tool"}`,

@@ -214,6 +214,22 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
     })
 
+    const acpPrepare = Effect.fn("SessionHttpApi.acpPrepare")(function* (ctx: { params: { sessionID: SessionID } }) {
+      const current = yield* requireSession(ctx.params.sessionID)
+      const messages = yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID }))
+      const defaultAgent = yield* agentSvc.defaultAgent()
+      const agentName = messages.findLast((message) => message.info.role === "user")?.info.agent ?? current.agent ?? defaultAgent
+      const agent = yield* agentSvc.get(agentName).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+      if (agent.backend?.type !== "acp") return new HttpApiError.BadRequest({})
+      return yield* acp
+        .prepare({
+          server: agent.backend.server,
+          agent: { name: agent.name, permission: agent.permission },
+          session: current,
+        })
+        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+    })
+
     const fork = Effect.fn("SessionHttpApi.fork")(function* (ctx: {
       params: { sessionID: SessionID }
       payload?: typeof ForkPayload.Type
@@ -433,6 +449,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("remove", remove)
       .handle("update", update)
       .handle("acpConfigOption", acpConfigOption)
+      .handle("acpPrepare", acpPrepare)
       .handleRaw("fork", forkRaw)
       .handle("abort", abort)
       .handle("init", init)

@@ -95,6 +95,7 @@ const acp = Layer.succeed(
   ACPClient.Service.of({
     run: () => Effect.die("unexpected ACP client run in snapshot race test"),
     cancel: () => Effect.void,
+    prepare: () => Effect.die("unexpected ACP prepare in snapshot race test"),
     setConfigOption: () => Effect.die("unexpected ACP config option in snapshot race test"),
   }),
 )

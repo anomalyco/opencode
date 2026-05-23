@@ -103,6 +103,7 @@ export const SessionPaths = {
   deletePart: `${root}/:sessionID/message/:messageID/part/:partID`,
   updatePart: `${root}/:sessionID/message/:messageID/part/:partID`,
   acpConfigOption: `${root}/:sessionID/acp/config`,
+  acpPrepare: `${root}/:sessionID/acp/prepare`,
 } as const
 
 export const SessionApi = HttpApi.make("session")
@@ -249,6 +250,19 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.acp.config",
             summary: "Set ACP session config option",
             description: "Set a configuration option on the ACP backend for this session.",
+          }),
+        ),
+        HttpApiEndpoint.post("acpPrepare", SessionPaths.acpPrepare, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Any, "Prepared ACP session"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.acp.prepare",
+            summary: "Prepare ACP session",
+            description:
+              "Connect to the ACP backend and create the remote session so its config options and modes are available.",
           }),
         ),
         HttpApiEndpoint.post("fork", SessionPaths.fork, {

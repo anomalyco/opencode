@@ -138,6 +138,7 @@ const acp = Layer.succeed(
   ACPClient.Service.of({
     run: () => Effect.die("unexpected ACP client run in prompt tests"),
     cancel: () => Effect.void,
+    prepare: () => Effect.die("unexpected ACP prepare in prompt tests"),
     setConfigOption: () => Effect.die("unexpected ACP config option in prompt tests"),
   }),
 )

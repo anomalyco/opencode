@@ -271,6 +271,20 @@ export function Session() {
       editor.reconnect(result.data.directory)
       await sync.session.sync(sessionID)
       if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
+      const agentName = result.data.agent
+      if (agentName && !sync.data.acp[sessionID]?.configOptions?.length) {
+        const agent = sync.data.agent.find((a) => a.name === agentName)
+        if (agent?.backend?.type === "acp") {
+          try {
+            const prepareUrl = new URL(`/session/${sessionID}/acp/prepare`, sdk.url)
+            const prepareResponse = await sdk.fetch(prepareUrl, { method: "POST" })
+            if (prepareResponse.ok) {
+              const state = await prepareResponse.json().catch(() => undefined)
+              if (state && typeof state === "object") sync.acp.update(state)
+            }
+          } catch {}
+        }
+      }
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
       toast.show({
