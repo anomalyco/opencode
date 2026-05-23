@@ -52,12 +52,102 @@ function mergeConfig(target: Info, source: Info): Info {
   return mergeDeep(target, source) as Info
 }
 
+
 function mergeConfigConcatArrays(target: Info, source: Info): Info {
   const merged = mergeConfig(target, source)
   if (target.instructions && source.instructions) {
     merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
   }
+  if (target.allowed_models && source.allowed_models) {
+    merged.allowed_models = Array.from(new Set([...target.allowed_models, ...source.allowed_models]))
+  }
+  if (target.user_agent_suffixes && source.user_agent_suffixes) {
+    merged.user_agent_suffixes = [...target.user_agent_suffixes, ...source.user_agent_suffixes]
+  }
+  if (target.enabled_providers && source.enabled_providers) {
+    merged.enabled_providers = Array.from(new Set([...target.enabled_providers, ...source.enabled_providers]))
+  }
+  if (target.disabled_providers && source.disabled_providers) {
+    merged.disabled_providers = Array.from(new Set([...target.disabled_providers, ...source.disabled_providers]))
+  }
   return merged
+}
+
+const REPLACE_KEYS = [
+  "agent",
+  "allowed_models",
+  "command",
+  "disabled_providers",
+  "enabled_providers",
+  "experimental",
+  "formatter",
+  "instructions",
+  "lsp",
+  "mcp",
+  "mode",
+  "provider",
+  "skills",
+  "user_agent_suffixes",
+] as const
+
+function applyAuthoritative(target: Info, source: Info): Info {
+  const merged = mergeDeep(target, source)
+  for (const key of REPLACE_KEYS) {
+    if (key in source) {
+      ;(merged as Record<string, unknown>)[key] = (source as Record<string, unknown>)[key]
+    }
+  }
+  return merged
+}
+
+function parseManagedFile(text: string, source: string): Info {
+  const raw = ConfigParse.jsonc(text, source)
+  return ConfigParse.schema(Info, raw, source)
+}
+
+async function loadManagedSettings(dir: string): Promise<Info> {
+  const baseFile = path.join(dir, "managed-settings.json")
+  const dropinDir = path.join(dir, "managed-settings.d")
+
+  let result: Info = {}
+
+  try {
+    const text = await fsNode.readFile(baseFile, "utf-8")
+    result = parseManagedFile(text, baseFile)
+    log.info("loaded managed settings", { path: baseFile })
+  } catch (err: any) {
+    if (err.code !== "ENOENT") {
+      log.warn("failed to parse managed-settings.json", { path: baseFile, error: String(err) })
+    }
+  }
+
+  let entries: string[] = []
+  try {
+    entries = await fsNode.readdir(dropinDir)
+  } catch (err: any) {
+    if (err.code !== "ENOENT" && err.code !== "ENOTDIR") {
+      log.warn("failed to read managed-settings.d", { path: dropinDir, error: String(err) })
+    }
+    return result
+  }
+
+  const fragments = entries.filter((name) => name.endsWith(".json") && !name.startsWith(".")).sort()
+
+  for (const name of fragments) {
+    const fragPath = path.join(dropinDir, name)
+    try {
+      const text = await fsNode.readFile(fragPath, "utf-8")
+      const parsed = parseManagedFile(text, fragPath)
+      result = mergeConfigConcatArrays(result, parsed)
+      log.info("loaded managed settings fragment", { path: fragPath })
+    } catch (err: any) {
+      if (err.code !== "ENOENT") {
+        log.warn("failed to parse managed settings fragment", { path: fragPath, error: String(err) })
+      }
+    }
+  }
+
+  return result
 }
 
 function normalizeLoadedConfig(data: unknown, source: string) {
@@ -177,6 +267,10 @@ export const Info = Schema.Struct({
   enabled_providers: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
     description: "When set, ONLY these providers will be enabled. All other providers will be ignored",
   }),
+  allowed_models: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description:
+      "When set, ONLY these models will be available. Values are in 'provider/model' format, e.g. 'google-vertex/gemini-2.5-pro'. If not set, all models from enabled providers are available.",
+  }),
   model: Schema.optional(ConfigModelID).annotate({
     description: "Model to use in the format of provider/model, eg anthropic/claude-2",
   }),
@@ -252,6 +346,10 @@ export const Info = Schema.Struct({
       url: Schema.optional(Schema.String).annotate({ description: "Enterprise URL" }),
     }),
   ),
+  user_agent_suffixes: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description:
+      "Additional strings appended to the User-Agent header, joined with spaces. Each managed-settings drop-in file can contribute its own entry; all values are concatenated across files.",
+  }),
   tool_output: Schema.optional(
     Schema.Struct({
       max_lines: Schema.optional(PositiveInt).annotate({
@@ -760,6 +858,15 @@ export const layer = Layer.effect(
             perms[tool] = action
           }
           result.permission = mergeDeep(perms, result.permission ?? {})
+        }
+
+        // managed-settings.json is the authoritative source, applied after all user,
+        // project, env, and legacy processing so it cannot be overridden by any of them.
+        // Only macOS MDM preferences (above) take higher priority.
+        const managedSettings = yield* Effect.promise(() => loadManagedSettings(managedDir))
+        if (Object.keys(managedSettings).length > 0) {
+          result = applyAuthoritative(result, managedSettings)
+          log.info("applied managed settings (authoritative override)", { source: managedDir })
         }
 
         if (!result.username) result.username = os.userInfo().username
