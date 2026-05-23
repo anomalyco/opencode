@@ -14,12 +14,30 @@ import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSch
 import { Effect } from "effect"
 import { MessageV2 } from "./message-v2"
 import * as Session from "./session"
+import { SessionGoal } from "./goal"
 import { SessionProcessor } from "./processor"
 import { PartID } from "./schema"
 import * as Log from "@opencode-ai/core/util/log"
 import { EffectBridge } from "@/effect/bridge"
 
 const log = Log.create({ service: "session.tools" })
+
+const userRequestedGoalCreate = (messages: MessageV2.WithParts[]) => {
+  const latest = messages.findLast((message) => message.info.role === "user")
+  if (!latest) return false
+  const text = latest.parts
+    .filter((part): part is MessageV2.TextPart => part.type === "text" && !part.synthetic && !part.ignored)
+    .map((part) => part.text)
+    .join("\n")
+    .trim()
+  if (!text) return false
+  if (/^\/goal\s+(?!(edit|pause|resume|clear)\b)\S/i.test(text)) return true
+  if (/\b(create|set|start|add|make|establish)\s+(a\s+|an\s+|the\s+|my\s+|this\s+)?(session\s+)?goal\b/i.test(text)) {
+    return true
+  }
+  if (/\b(set|make|change)\s+(the\s+|my\s+)?goal\s+(to|as)\b/i.test(text)) return true
+  return false
+}
 
 export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
@@ -38,6 +56,94 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const registry = yield* ToolRegistry.Service
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
+  const goals = yield* SessionGoal.Service
+
+  const goalToolResult = (title: string, goal: SessionGoal.Info | null) => ({
+    title,
+    metadata: goal ? { goal } : { goal: null },
+    output: JSON.stringify(goal ? { goal } : { goal: null }, null, 2),
+  })
+
+  tools["get_goal"] = tool({
+    description: "Get the current session goal and usage metadata.",
+    inputSchema: jsonSchema({ type: "object", properties: {}, additionalProperties: false }),
+    execute() {
+      return run.promise(
+        Effect.gen(function* () {
+          const goal = (yield* goals.get(input.session.id)) ?? null
+          return goalToolResult(goal ? "Current goal" : "No current goal", goal)
+        }),
+      )
+    },
+  })
+
+  const canCreateGoal = userRequestedGoalCreate(input.messages)
+  if (canCreateGoal) {
+    tools["create_goal"] = tool({
+      description: "Create a session goal only when the user explicitly requested one.",
+      inputSchema: jsonSchema({
+        type: "object",
+        additionalProperties: false,
+        required: ["objective"],
+        properties: {
+          objective: { type: "string" },
+          tokenBudget: { type: "number" },
+        },
+      }),
+      execute(args) {
+        return run.promise(
+          Effect.gen(function* () {
+            if (!canCreateGoal) {
+              throw new Error("create_goal requires an explicit user request in the latest message")
+            }
+            const payload = args as { objective?: unknown; tokenBudget?: unknown }
+            if (typeof payload.objective !== "string") throw new Error("objective is required")
+            const current = yield* goals.get(input.session.id)
+            const tokenBudget = typeof payload.tokenBudget === "number" ? payload.tokenBudget : undefined
+            const goal = current
+              ? yield* goals.update({
+                  sessionID: input.session.id,
+                  objective: payload.objective,
+                  status: "active",
+                  ...(tokenBudget === undefined ? {} : { tokenBudget }),
+                })
+              : yield* goals.create({
+                  sessionID: input.session.id,
+                  objective: payload.objective,
+                  tokenBudget,
+                })
+            return goalToolResult(current ? "Goal updated" : "Goal created", goal)
+          }),
+        )
+      },
+    })
+  }
+
+  tools["update_goal"] = tool({
+    description: "Mark the current session goal complete only after the objective is fully achieved and verified.",
+    inputSchema: jsonSchema({
+      type: "object",
+      additionalProperties: false,
+      required: ["status"],
+      properties: {
+        status: { type: "string", enum: ["complete"] },
+      },
+    }),
+    execute(args) {
+      return run.promise(
+        Effect.gen(function* () {
+          const payload = args as { status?: unknown }
+          if (payload.status !== "complete") throw new Error("Models can only mark goals complete")
+          const goal = yield* goals.modelUpdate({
+            sessionID: input.session.id,
+            messageID: input.processor.message.id,
+            status: "complete",
+          })
+          return goalToolResult("Goal complete", goal)
+        }),
+      )
+    },
+  })
 
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
     sessionID: input.session.id,

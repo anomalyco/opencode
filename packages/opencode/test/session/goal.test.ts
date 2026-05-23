@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { AppRuntime } from "../../src/effect/app-runtime"
+import { InstanceRef } from "../../src/effect/instance-ref"
+import type { InstanceContext } from "../../src/project/instance-context"
 import { ProjectID } from "../../src/project/schema"
 import { SessionGoal } from "../../src/session/goal"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -8,8 +10,20 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { provideTestInstance, tmpdir } from "../fixture/fixture"
 import { Effect } from "effect"
 
+let activeContext: InstanceContext | undefined
+
 function runIn<A>(directory: string, fn: (directory: string) => A) {
-  return provideTestInstance({ directory, fn: () => fn(directory) })
+  return provideTestInstance({
+    directory,
+    fn: async (ctx) => {
+      activeContext = ctx
+      try {
+        return await fn(directory)
+      } finally {
+        activeContext = undefined
+      }
+    },
+  })
 }
 
 async function run<A>(fn: (directory: string) => A) {
@@ -18,7 +32,8 @@ async function run<A>(fn: (directory: string) => A) {
 }
 
 function effect<A, E, R>(value: Effect.Effect<A, E, R>) {
-  return AppRuntime.runPromise(value as never) as Promise<A>
+  const scoped = activeContext ? value.pipe(Effect.provideService(InstanceRef, activeContext)) : value
+  return AppRuntime.runPromise(scoped as never) as Promise<A>
 }
 
 async function expectRejects(fn: () => Promise<unknown>, message: string) {

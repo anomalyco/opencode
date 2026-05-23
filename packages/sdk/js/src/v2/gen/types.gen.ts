@@ -17,6 +17,7 @@ export type Event =
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessagePartDelta
+  | EventSessionGoalIdleContinue
   | EventPermissionAsked
   | EventPermissionReplied
   | EventSessionDiff
@@ -48,6 +49,8 @@ export type Event =
   | EventMessageRemoved
   | EventMessagePartUpdated
   | EventMessagePartRemoved
+  | EventSessionGoalUpdated
+  | EventSessionGoalCleared
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
@@ -107,6 +110,24 @@ export type WellKnownAuth = {
 }
 
 export type Auth = OAuth | ApiAuth | WellKnownAuth
+
+export type SessionGoalStatus = "active" | "paused" | "budget_limited" | "complete"
+
+export type SessionGoal = {
+  id: string
+  sessionID: string
+  objective: string
+  status: SessionGoalStatus
+  tokens: {
+    used: number
+    budget?: number
+  }
+  time: {
+    used: number
+    created: number
+    updated: number
+  }
+}
 
 export type EffectHttpApiErrorBadRequest = {
   _tag: "BadRequest"
@@ -818,6 +839,7 @@ export type GlobalEvent = {
     | EventLspClientDiagnostics
     | EventLspUpdated
     | EventMessagePartDelta
+    | EventSessionGoalIdleContinue
     | EventPermissionAsked
     | EventPermissionReplied
     | EventSessionDiff
@@ -849,6 +871,8 @@ export type GlobalEvent = {
     | EventMessageRemoved
     | EventMessagePartUpdated
     | EventMessagePartRemoved
+    | EventSessionGoalUpdated
+    | EventSessionGoalCleared
     | EventSessionCreated
     | EventSessionUpdated
     | EventSessionDeleted
@@ -887,6 +911,8 @@ export type GlobalEvent = {
     | SyncEventMessageRemoved
     | SyncEventMessagePartUpdated
     | SyncEventMessagePartRemoved
+    | SyncEventSessionGoalUpdated
+    | SyncEventSessionGoalCleared
     | SyncEventSessionCreated
     | SyncEventSessionUpdated
     | SyncEventSessionDeleted
@@ -2017,6 +2043,30 @@ export type SyncEventMessagePartRemoved = {
   }
 }
 
+
+export type SyncEventSessionGoalUpdated = {
+  type: "sync"
+  name: "session.goal.updated.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    sessionID: string
+    goal: SessionGoal
+  }
+}
+
+export type SyncEventSessionGoalCleared = {
+  type: "sync"
+  name: "session.goal.cleared.1"
+  id: string
+  seq: number
+  aggregateID: "sessionID"
+  data: {
+    sessionID: string
+  }
+}
+
 export type SyncEventSessionCreated = {
   type: "sync"
   name: "session.created.1"
@@ -2569,6 +2619,16 @@ export type EventMessagePartDelta = {
   }
 }
 
+
+export type EventSessionGoalIdleContinue = {
+  id: string
+  type: "session.goal.idle_continue"
+  properties: {
+    sessionID: string
+    goal: SessionGoal
+  }
+}
+
 export type EventPermissionAsked = {
   id: string
   type: "permission.asked"
@@ -2830,6 +2890,24 @@ export type EventMessagePartRemoved = {
     sessionID: string
     messageID: string
     partID: string
+  }
+}
+
+
+export type EventSessionGoalUpdated = {
+  id: string
+  type: "session.goal.updated"
+  properties: {
+    sessionID: string
+    goal: SessionGoal
+  }
+}
+
+export type EventSessionGoalCleared = {
+  id: string
+  type: "session.goal.cleared"
+  properties: {
+    sessionID: string
   }
 }
 
@@ -6297,6 +6375,149 @@ export type SessionTodoResponses = {
 }
 
 export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
+
+export type SessionGoalClearData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/goal"
+}
+
+export type SessionGoalClearErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionGoalClearError = SessionGoalClearErrors[keyof SessionGoalClearErrors]
+
+export type SessionGoalClearResponses = {
+  /**
+   * Cleared session goal
+   */
+  200: boolean
+}
+
+export type SessionGoalClearResponse = SessionGoalClearResponses[keyof SessionGoalClearResponses]
+
+export type SessionGoalGetData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/goal"
+}
+
+export type SessionGoalGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionGoalGetError = SessionGoalGetErrors[keyof SessionGoalGetErrors]
+
+export type SessionGoalGetResponses = {
+  /**
+   * Session goal
+   */
+  200: SessionGoal | null
+}
+
+export type SessionGoalGetResponse = SessionGoalGetResponses[keyof SessionGoalGetResponses]
+
+export type SessionGoalUpdateData = {
+  body?: {
+    objective?: string
+    status?: SessionGoalStatus
+    tokenBudget?: number | null
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/goal"
+}
+
+export type SessionGoalUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionGoalUpdateError = SessionGoalUpdateErrors[keyof SessionGoalUpdateErrors]
+
+export type SessionGoalUpdateResponses = {
+  /**
+   * Updated session goal
+   */
+  200: SessionGoal
+}
+
+export type SessionGoalUpdateResponse = SessionGoalUpdateResponses[keyof SessionGoalUpdateResponses]
+
+export type SessionGoalCreateData = {
+  body?: {
+    objective: string
+    tokenBudget?: number
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/goal"
+}
+
+export type SessionGoalCreateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionGoalCreateError = SessionGoalCreateErrors[keyof SessionGoalCreateErrors]
+
+export type SessionGoalCreateResponses = {
+  /**
+   * Created session goal
+   */
+  200: SessionGoal
+}
+
+export type SessionGoalCreateResponse = SessionGoalCreateResponses[keyof SessionGoalCreateResponses]
 
 export type SessionDiffData = {
   body?: never

@@ -159,7 +159,7 @@ function budget(input: number | null | undefined) {
   return Effect.void
 }
 
-export const layer = Layer.effect(
+export const layer: Layer.Layer<Service, never, SyncEvent.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
     const sync = yield* SyncEvent.Service
@@ -361,6 +361,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(SyncEvent.defaultLayer))
+export const defaultLayer: Layer.Layer<Service> = layer.pipe(Layer.provide(SyncEvent.defaultLayer))
 
 export * as SessionGoal from "./goal"
