@@ -644,3 +644,296 @@ describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
     expect(out).toContain("超过")
   })
 })
+
+// ============================================================
+// [CREATE_GROUP:name] processGroupMarkers 集成测 (feat: feishu-bridge-light Phase 3)
+// ============================================================
+
+interface GroupFakeCreateCall {
+  name: string
+  user_id_list?: string[]
+}
+
+function makeGroupFakes(opts: { createError?: Error; linkError?: Error; linkResponse?: any } = {}) {
+  const sentCards: Array<{ chatId: string; content: string }> = []
+  const sentTexts: Array<{ chatId: string; text: string }> = []
+  const deletedCards: string[] = []
+  const createCalls: GroupFakeCreateCall[] = []
+  const linkCalls: string[] = []
+  let counter = 0
+
+  const larkClient = {
+    im: {
+      v1: {
+        message: {
+          create: async (args: any) => {
+            counter++
+            if (args.data.msg_type === "interactive") {
+              sentCards.push({ chatId: args.data.receive_id, content: args.data.content })
+            } else if (args.data.msg_type === "text") {
+              const parsed = JSON.parse(args.data.content)
+              sentTexts.push({ chatId: args.data.receive_id, text: parsed.text })
+            }
+            return { data: { message_id: `om_${counter}` } }
+          },
+          delete: async (args: any) => {
+            deletedCards.push(args.path.message_id)
+            return { data: {} }
+          },
+        },
+        messageReaction: { create: async () => ({ data: {} }) },
+        chat: {
+          create: async (args: any) => {
+            if (opts.createError) throw opts.createError
+            createCalls.push({ name: args.data.name, user_id_list: args.data.user_id_list })
+            return { data: { chat_id: `oc_NEW_${createCalls.length}`, name: args.data.name } }
+          },
+          link: async (args: any) => {
+            linkCalls.push(args.path.chat_id)
+            if (opts.linkError) throw opts.linkError
+            return opts.linkResponse ?? { data: { share_link: "https://applink.feishu.cn/x" } }
+          },
+        },
+      },
+    },
+  } as any
+
+  const opencodeClient = { session: { create: async () => ({}) } } as any
+  return { sentCards, sentTexts, deletedCards, createCalls, linkCalls, larkClient, opencodeClient }
+}
+
+describe("processGroupMarkers (feat: feishu-bridge-light Phase 3)", () => {
+  let store: ChatSessionStore
+  let dispatcher: PromptDispatcher
+  let fakes: ReturnType<typeof makeGroupFakes>
+  let pipeline: MessagePipeline
+  let tmpDirGroup: string
+
+  function build(enable: boolean) {
+    fakes = makeGroupFakes()
+    pipeline = new MessagePipeline({
+      account: makeAccount({ enableAutoGroupCreate: enable } as any),
+      accountId: "acc1",
+      opencodeClient: fakes.opencodeClient,
+      dispatcher,
+      chatSessionStore: store,
+      larkClient: fakes.larkClient,
+    })
+  }
+
+  beforeEach(() => {
+    tmpDirGroup = mkdtempSync(join(tmpdir(), "group-pipeline-test-"))
+    store = new ChatSessionStore(join(tmpDirGroup, "sessions.json"))
+    dispatcher = new PromptDispatcher()
+  })
+
+  afterEach(() => {
+    if (pipeline) pipeline.confirmController.abortAll()
+    rmSync(tmpDirGroup, { recursive: true, force: true })
+  })
+
+  function makeEventGroup(overrides: Partial<ImMessageEvent> = {}): ImMessageEvent {
+    return {
+      accountId: "acc1",
+      messageId: "om_user_msg",
+      chatId: "oc_orig_chat",
+      chatType: "p2p",
+      messageType: "text",
+      content: "",
+      senderOpenId: "ou_user_sender",
+      ts: String(Date.now()),
+      mentions: [],
+      ...overrides,
+    }
+  }
+
+  test("opt-in + p2p:CREATE_GROUP marker → 发 confirm 卡片,marker strip", async () => {
+    build(true)
+    const cleanText = pipeline.processGroupMarkers(
+      "好,我创建一个 [CREATE_GROUP:需求讨论] 群",
+      makeEventGroup(),
+    )
+    expect(cleanText).not.toContain("[CREATE_GROUP:")
+    expect(cleanText).toContain("我创建一个")
+    expect(cleanText).toContain("群")
+    // 给 fire-and-forget confirm.start 一点时间
+    await new Promise((r) => setTimeout(r, 30))
+    expect(fakes.sentCards).toHaveLength(1)
+    const cardJson = JSON.parse(fakes.sentCards[0]!.content)
+    expect(cardJson.header.title.content).toContain("需求讨论")
+  })
+
+  test("opt-in 关:marker strip 但不发卡片", async () => {
+    build(false)
+    const cleanText = pipeline.processGroupMarkers(
+      "[CREATE_GROUP:讨论]",
+      makeEventGroup(),
+    )
+    expect(cleanText).not.toContain("[CREATE_GROUP:")
+    await new Promise((r) => setTimeout(r, 30))
+    expect(fakes.sentCards).toHaveLength(0)
+  })
+
+  test("opt-in 开 + 群聊:marker strip 但不发卡片(p2p only)", async () => {
+    build(true)
+    pipeline.processGroupMarkers(
+      "[CREATE_GROUP:讨论]",
+      makeEventGroup({ chatType: "group" }),
+    )
+    await new Promise((r) => setTimeout(r, 30))
+    expect(fakes.sentCards).toHaveLength(0)
+  })
+
+  test("无 marker → 不发卡片,返原文", async () => {
+    build(true)
+    const out = pipeline.processGroupMarkers("普通回复", makeEventGroup())
+    expect(out).toBe("普通回复")
+    expect(fakes.sentCards).toHaveLength(0)
+  })
+
+  test("多 marker → 发多张 confirm 卡片", async () => {
+    build(true)
+    pipeline.processGroupMarkers(
+      "[CREATE_GROUP:A] [CREATE_GROUP:B]",
+      makeEventGroup(),
+    )
+    await new Promise((r) => setTimeout(r, 30))
+    expect(fakes.sentCards).toHaveLength(2)
+  })
+
+  test("user 点确认 → chat.create + getShareLink + 发结果文字", async () => {
+    build(true)
+    pipeline.processGroupMarkers(
+      "我建一个 [CREATE_GROUP:需求讨论]",
+      makeEventGroup(),
+    )
+    await new Promise((r) => setTimeout(r, 30))
+    expect(fakes.sentCards).toHaveLength(1)
+    // 模拟 user 点【确认】— 直接驱动 confirmController
+    // requestID 形如 cg_<messageId>_<counter>
+    const requestID = `cg_om_user_msg_1`
+    await pipeline.confirmController.handleReply({ requestID, reply: "yes" })
+    expect(fakes.createCalls).toHaveLength(1)
+    expect(fakes.createCalls[0]!.name).toBe("需求讨论")
+    expect(fakes.createCalls[0]!.user_id_list).toEqual(["ou_user_sender"])
+    expect(fakes.linkCalls).toHaveLength(1)
+    // 结果文字发到原 chat
+    expect(fakes.sentTexts).toHaveLength(1)
+    expect(fakes.sentTexts[0]!.chatId).toBe("oc_orig_chat")
+    expect(fakes.sentTexts[0]!.text).toContain("已创建群")
+    expect(fakes.sentTexts[0]!.text).toContain("https://applink.feishu.cn/x")
+  })
+
+  test("user 点拒绝 → 不调 chat.create", async () => {
+    build(true)
+    pipeline.processGroupMarkers(
+      "[CREATE_GROUP:需求讨论]",
+      makeEventGroup(),
+    )
+    await new Promise((r) => setTimeout(r, 30))
+    const requestID = `cg_om_user_msg_1`
+    await pipeline.confirmController.handleReply({ requestID, reply: "no" })
+    expect(fakes.createCalls).toHaveLength(0)
+    expect(fakes.linkCalls).toHaveLength(0)
+  })
+
+  test("share_link 失败 → 降级 chat_id 显示", async () => {
+    build(true)
+    fakes.larkClient.im.v1.chat.link = async () => {
+      throw new Error("permission denied")
+    }
+    pipeline.processGroupMarkers(
+      "[CREATE_GROUP:讨论]",
+      makeEventGroup(),
+    )
+    await new Promise((r) => setTimeout(r, 30))
+    await pipeline.confirmController.handleReply({
+      requestID: `cg_om_user_msg_1`,
+      reply: "yes",
+    })
+    expect(fakes.sentTexts).toHaveLength(1)
+    expect(fakes.sentTexts[0]!.text).toContain("chat_id")
+    expect(fakes.sentTexts[0]!.text).toContain("分享链接获取失败")
+  })
+
+  test("chat.create 抛错 → 错误消息发回 user", async () => {
+    build(true)
+    fakes.larkClient.im.v1.chat.create = async () => {
+      throw new Error("lark 502")
+    }
+    pipeline.processGroupMarkers(
+      "[CREATE_GROUP:讨论]",
+      makeEventGroup(),
+    )
+    await new Promise((r) => setTimeout(r, 30))
+    await pipeline.confirmController.handleReply({
+      requestID: `cg_om_user_msg_1`,
+      reply: "yes",
+    })
+    expect(fakes.sentTexts).toHaveLength(1)
+    expect(fakes.sentTexts[0]!.text).toContain("创建群")
+    expect(fakes.sentTexts[0]!.text).toContain("失败")
+    expect(fakes.sentTexts[0]!.text).toContain("lark 502")
+  })
+
+  test("senderOpenId 缺失 → user_id_list 不传(只 bot 在群)", async () => {
+    build(true)
+    pipeline.processGroupMarkers(
+      "[CREATE_GROUP:讨论]",
+      makeEventGroup({ senderOpenId: undefined }),
+    )
+    await new Promise((r) => setTimeout(r, 30))
+    await pipeline.confirmController.handleReply({
+      requestID: `cg_om_user_msg_1`,
+      reply: "yes",
+    })
+    expect(fakes.createCalls[0]!.user_id_list).toBeUndefined()
+  })
+})
+
+// ============================================================
+// getSystemPrompt 动态拼接 (feat: feishu-bridge-light Phase 3)
+// ============================================================
+
+describe("getSystemPrompt (feat: feishu-bridge-light Phase 3)", () => {
+  function buildPipeline(enable: boolean): MessagePipeline {
+    const tmpDir = mkdtempSync(join(tmpdir(), "sysprompt-test-"))
+    const store = new ChatSessionStore(join(tmpDir, "sessions.json"))
+    const dispatcher = new PromptDispatcher()
+    const fakes = makeAttachFakes()
+    const pipeline = new MessagePipeline({
+      account: makeAccount({ enableAutoGroupCreate: enable } as any),
+      accountId: "acc1",
+      opencodeClient: fakes.opencodeClient,
+      dispatcher,
+      chatSessionStore: store,
+      larkClient: fakes.larkClient,
+    })
+    return pipeline
+  }
+
+  test("enableAutoGroupCreate=false:含 ATTACH 不含 CREATE_GROUP", () => {
+    const p = buildPipeline(false)
+    // 用 bracket 访问 private method(等同 testHandle 模式)
+    const prompt = (p as any).getSystemPrompt()
+    expect(prompt).toContain("文件回传协议")
+    expect(prompt).toContain("[ATTACH:")
+    expect(prompt).not.toContain("自动建群协议")
+    expect(prompt).not.toContain("[CREATE_GROUP:")
+  })
+
+  test("enableAutoGroupCreate=true:含 ATTACH 和 CREATE_GROUP", () => {
+    const p = buildPipeline(true)
+    const prompt = (p as any).getSystemPrompt()
+    expect(prompt).toContain("文件回传协议")
+    expect(prompt).toContain("自动建群协议")
+    expect(prompt).toContain("[CREATE_GROUP:")
+  })
+
+  test("base prompt 总是含禁用反问工具的指引", () => {
+    const p = buildPipeline(false)
+    const prompt = (p as any).getSystemPrompt()
+    expect(prompt).toContain("禁止")
+    expect(prompt).toContain("反问")
+  })
+})

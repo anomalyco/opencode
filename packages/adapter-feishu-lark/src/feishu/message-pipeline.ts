@@ -23,6 +23,11 @@ import type { FeishuAccount } from "../core/config-schema"
 import { readSecret } from "../core/secret-ref"
 import type { ChatSessionStore } from "./chat-session-store"
 import {
+  ConfirmCardController,
+  type ParsedConfirmAction,
+} from "./confirm-card"
+import { createGroup, getShareLink } from "./group-creator"
+import {
   PermissionCardController,
   type ParsedCardAction,
   type PermissionRequest,
@@ -37,6 +42,7 @@ import type { PromptDispatcher } from "./prompt-dispatcher"
 import {
   classifyAttachment,
   parseAttachMarkers,
+  parseCreateGroupMarkers,
   stripMentions,
 } from "./reply-actions"
 import type { ImMessageEvent } from "./wss-client"
@@ -95,10 +101,23 @@ const ATTACH_MARKER_PROMPT = [
   "- 一次回复可嵌多个 marker,系统按出现顺序处理",
 ].join("\n")
 
-const FEISHU_SESSION_SYSTEM_PROMPT = [
-  FEISHU_SESSION_SYSTEM_PROMPT_BASE,
-  ATTACH_MARKER_PROMPT,
-].join("\n\n")
+/**
+ * [feat: feishu-bridge-light] CREATE_GROUP marker 协议 — 教 LLM 怎么触发自动建群。
+ * 仅在 account.enableAutoGroupCreate=true 时拼入 system prompt(opt-in)。
+ * 默认关闭防 prompt injection — 即便启用,真触发还需 user 二次确认。
+ */
+const CREATE_GROUP_MARKER_PROMPT = [
+  "## 自动建群协议",
+  "当用户明确表达想创建新群(例如'拉个群讨论 X' / '建一个 Y 群')时,在回复里嵌入 marker:",
+  "  `[CREATE_GROUP:群名]`",
+  "系统会发飞书确认卡片让用户点【✅ 确认】或【❌ 拒绝】,确认后才真创建群并把用户拉进群。",
+  "",
+  "约束:",
+  "- 仅适用于私聊场景(系统会自动拒绝群里再次建群的请求)",
+  "- 群名直接写中文,系统会按字面值建群",
+  "- marker 不在用户可见的回复里(系统自动 strip)",
+  "- 同一回复嵌多个 marker → 系统发多张确认卡片",
+].join("\n")
 
 /**
  * 给飞书 user 的友好错误回复 — 把技术性 opencode error message 翻译成 user 可操作的指引。
@@ -171,6 +190,10 @@ export class MessagePipeline {
   private readonly sessionToChat = new Map<string, string>()
   /** 飞书 CardKit 权限卡片控制器(LLM 调工具触发权限时弹卡片让 user 在飞书选)*/
   readonly permissionController: PermissionCardController
+  /** [feat: feishu-bridge-light] yes/no 确认卡片控制器(自动建群二次确认等)*/
+  readonly confirmController: ConfirmCardController
+  /** [feat: feishu-bridge-light] 单调递增 confirm requestID 计数,跟 messageId 拼成唯一 key */
+  private confirmCounter = 0
 
   constructor(opts: PipelineOptions) {
     this.opts = opts
@@ -189,6 +212,25 @@ export class MessagePipeline {
       larkClient: this.larkClient,
       workspaceDir: FEISHU_WORKSPACE,
     })
+    this.confirmController = new ConfirmCardController({
+      larkClient: this.larkClient,
+    })
+  }
+
+  /**
+   * [feat: feishu-bridge-light] 动态拼接 system prompt:
+   * - base(总是)
+   * - ATTACH marker(总是 — 路径白名单 + size 限制安全)
+   * - CREATE_GROUP marker(仅 account.enableAutoGroupCreate=true 时)
+   *
+   * 默认关 CREATE_GROUP 时连教学都不发给 LLM,避免输出 marker 但功能未启用造成"哑回复"。
+   */
+  private getSystemPrompt(): string {
+    const parts = [FEISHU_SESSION_SYSTEM_PROMPT_BASE, ATTACH_MARKER_PROMPT]
+    if (this.opts.account.enableAutoGroupCreate) {
+      parts.push(CREATE_GROUP_MARKER_PROMPT)
+    }
+    return parts.join("\n\n")
   }
 
   /**
@@ -212,6 +254,14 @@ export class MessagePipeline {
       return
     }
     await this.permissionController.start(request, chatId)
+  }
+
+  /**
+   * [feat: feishu-bridge-light] 收到 confirm 卡片(yes/no)→ 路由到 ConfirmCardController。
+   * plugin.ts 在 onCardAction 里先尝试 parseCardAction(permission),再 parseConfirmAction(confirm)。
+   */
+  async handleConfirmCardReply(parsed: ParsedConfirmAction): Promise<void> {
+    await this.confirmController.handleReply(parsed)
   }
 
   /**
@@ -320,8 +370,11 @@ export class MessagePipeline {
       return
     }
 
-    // [feat: feishu-bridge-light] reply 后处理:解析 [ATTACH:path] marker → 上传文件 + strip marker
-    const finalText = await this.processAttachments(reply, event.chatId)
+    // [feat: feishu-bridge-light] reply 后处理:
+    // 1. CREATE_GROUP marker(opt-in)→ 发 confirm 卡片让 user 确认(异步),strip marker
+    // 2. ATTACH marker(总是)→ 上传文件(同步)、strip marker、失败 warning append
+    const afterGroup = this.processGroupMarkers(reply, event)
+    const finalText = await this.processAttachments(afterGroup, event.chatId)
 
     if (!finalText.trim()) {
       console.warn(`[pipeline ${this.opts.accountId}] empty reply for chat=${event.chatId}`)
@@ -388,6 +441,102 @@ export class MessagePipeline {
   }
 
   /**
+   * [feat: feishu-bridge-light] 解析 reply 里 [CREATE_GROUP:name] marker。
+   *
+   * 触发条件(双门控):
+   *   - account.enableAutoGroupCreate === true(opt-in 配置)
+   *   - event.chatType === "p2p"(仅私聊,群里不准 AI 再建群)
+   *
+   * 触发时为每个 marker 发 confirm 卡片(异步,通过 ConfirmCardController);
+   * user 点确认 → callback 触发 chat.create + getShareLink + sendFeishuText 结果消息。
+   * 不论触发与否,marker 都从 reply 文本 strip 掉。
+   *
+   * 不阻塞 — 卡片发送和后续 user 点击都是 async,本方法立即返回 strip 后的文本。
+   */
+  processGroupMarkers(reply: string, event: ImMessageEvent): string {
+    const { names, cleanText } = parseCreateGroupMarkers(reply)
+    if (names.length === 0) return reply
+
+    const enabled = this.opts.account.enableAutoGroupCreate
+    const isP2P = event.chatType === "p2p"
+    if (!enabled || !isP2P) {
+      console.log(
+        `[pipeline ${this.opts.accountId}] CREATE_GROUP markers (${names.length}) stripped but not triggered (enableAutoGroupCreate=${enabled}, chatType=${event.chatType})`,
+      )
+      return cleanText
+    }
+
+    for (const name of names) {
+      const requestID = `cg_${event.messageId}_${++this.confirmCounter}`
+      const spec = {
+        title: `🆕 创建群【${name}】?`,
+        body: `AI 想自动创建群 **${name}** 并把你拉进群。点【✅ 确认】才会建,【❌ 拒绝】不动。`,
+      }
+      // fire-and-forget:卡片发送 + user 后续点击都是 async
+      void this.confirmController
+        .start(requestID, event.chatId, spec, async (confirmed) => {
+          if (!confirmed) {
+            console.log(
+              `[pipeline ${this.opts.accountId}] user rejected group create '${name}'`,
+            )
+            return
+          }
+          await this.executeGroupCreate(name, event.chatId, event.senderOpenId)
+        })
+        .catch((err) => {
+          console.error(
+            `[pipeline ${this.opts.accountId}] confirmController.start error:`,
+            err,
+          )
+        })
+    }
+    return cleanText
+  }
+
+  /**
+   * [feat: feishu-bridge-light] user 确认建群后实际执行 — chat.create + chat.link + 发结果消息。
+   * 任一步失败都把原因发给 user(不抛,避免 confirmController callback 异常吞掉 user 反馈)。
+   */
+  private async executeGroupCreate(
+    name: string,
+    originalChatId: string,
+    senderOpenId: string | undefined,
+  ): Promise<void> {
+    try {
+      const { chatId, name: actualName } = await createGroup(
+        this.larkClient,
+        name,
+        senderOpenId ? [senderOpenId] : [],
+      )
+      console.log(
+        `[pipeline ${this.opts.accountId}] created group '${actualName}' chatId=${chatId} (拉 user=${senderOpenId ?? "none"})`,
+      )
+      const shareLink = await getShareLink(this.larkClient, chatId)
+      const msg = shareLink
+        ? `✅ 已创建群【${actualName}】\n加入链接(一周有效):${shareLink}`
+        : `✅ 已创建群【${actualName}】\nchat_id: \`${chatId}\`(分享链接获取失败,可能是团队群限制或权限不足)`
+      await this.sendFeishuText(originalChatId, msg)
+    } catch (err) {
+      const errMsg = (err as Error).message
+      console.error(
+        `[pipeline ${this.opts.accountId}] executeGroupCreate '${name}' failed:`,
+        errMsg,
+      )
+      try {
+        await this.sendFeishuText(
+          originalChatId,
+          `❌ 创建群【${name}】失败:${errMsg}`,
+        )
+      } catch (sendErr) {
+        console.error(
+          `[pipeline ${this.opts.accountId}] notify create-group failure also failed:`,
+          sendErr,
+        )
+      }
+    }
+  }
+
+  /**
    * 启动 prompt + 等 dispatcher 拿 reply。
    *
    * register waiter 必须在 promptAsync **之前**(防错过早期 events)。
@@ -414,7 +563,7 @@ export class MessagePipeline {
         query: { directory: FEISHU_WORKSPACE },
         body: {
           agent,
-          system: FEISHU_SESSION_SYSTEM_PROMPT,
+          system: this.getSystemPrompt(),
           ...(accountModel
             ? { model: { providerID: accountModel.providerID, modelID: accountModel.modelID } }
             : {}),
