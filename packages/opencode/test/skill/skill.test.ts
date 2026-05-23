@@ -289,6 +289,37 @@ description: A skill in the .claude/skills directory.
     ),
   )
 
+  it.live("fails with typed error when requiring a missing skill", () =>
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const skill = yield* Skill.Service
+          const error = yield* Effect.flip(skill.require("missing-skill"))
+          expect(error).toBeInstanceOf(Skill.NotFoundError)
+          expect(error._tag).toBe("Skill.NotFoundError")
+          expect(error.name).toBe("missing-skill")
+          expect(error.message).toContain('Skill "missing-skill" not found.')
+        }),
+      { git: true },
+    ),
+  )
+
+  it.effect("exposes tagged expected skill failure classes", () =>
+    Effect.sync(() => {
+      const invalid = new Skill.InvalidError({ path: "/tmp/SKILL.md", message: "Invalid skill frontmatter" })
+      const mismatch = new Skill.NameMismatchError({
+        path: "/tmp/SKILL.md",
+        expected: "expected-skill",
+        actual: "actual-skill",
+      })
+
+      expect(invalid).toBeInstanceOf(Skill.InvalidError)
+      expect(invalid._tag).toBe("SkillInvalidError")
+      expect(mismatch).toBeInstanceOf(Skill.NameMismatchError)
+      expect(mismatch._tag).toBe("SkillNameMismatchError")
+    }),
+  )
+
   it.live("discovers skills from .agents/skills/ directory", () =>
     provideTmpdirInstance(
       (dir) =>
