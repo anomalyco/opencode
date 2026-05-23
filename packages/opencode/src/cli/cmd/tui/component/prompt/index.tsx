@@ -1,13 +1,15 @@
 import {
-  BoxRenderable,
   RGBA,
-  TextareaRenderable,
-  MouseEvent,
-  PasteEvent,
   decodePasteBytes,
+  type BoxRenderable,
+  type MouseEvent,
   type KeyEvent,
+  type PasteEvent,
   type Renderable,
+  type TextareaRenderable,
 } from "@opentui/core"
+/* eslint-disable jsx-a11y/no-static-element-interactions */
+/* oxlint-disable jsx-a11y/no-static-element-interactions */
 import type { CommandContext } from "@opentui/keymap"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
@@ -26,6 +28,8 @@ import { useEvent } from "@tui/context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "@tui/context/editor"
 import { MessageID, PartID } from "@/session/schema"
 import { createStore, produce, unwrap } from "solid-js/store"
+
+const ClickText = "text" as unknown as (props: JSX.IntrinsicElements["text"]) => Renderable
 import { usePromptHistory, type PromptInfo } from "./history"
 import { computePromptTraits } from "./traits"
 import { assign } from "./part"
@@ -58,7 +62,7 @@ import {
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { type WorkspaceStatus } from "../workspace-label"
+import type { WorkspaceStatus } from "../workspace-label"
 import { useCommandPalette } from "../../context/command-palette"
 import { useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
 import { useTuiConfig } from "../../context/tui-config"
@@ -223,7 +227,7 @@ export function Prompt(props: PromptProps) {
     const result = await sdk.client.experimental.workspace
       .create({ type: selection.workspaceType, branch: null })
       .catch(() => undefined)
-    if (result == undefined || result.error || !result.data) {
+    if (result === undefined || result.error || !result.data) {
       selectWorkspace(undefined)
       setCreatingWorkspace(false)
       toast.show({
@@ -304,9 +308,16 @@ export function Prompt(props: PromptProps) {
     setDismissedEditorSelectionKey(editorSelectionKey(editorContext()))
     editor.clearSelection()
   }
-  const fileStyleId = syntax().getStyleId("extmark.file")!
-  const agentStyleId = syntax().getStyleId("extmark.agent")!
-  const pasteStyleId = syntax().getStyleId("extmark.paste")!
+  const requireStyleId = (name: string): number => {
+    const styleId = syntax().getStyleId(name)
+    if (styleId === null) {
+      throw new Error(`Missing syntax style id: ${name}`)
+    }
+    return styleId
+  }
+  const fileStyleId = requireStyleId("extmark.file")
+  const agentStyleId = requireStyleId("extmark.agent")
+  const pasteStyleId = requireStyleId("extmark.paste")
   let promptPartTypeId = 0
   const event = useEvent()
 
@@ -677,7 +688,7 @@ export function Prompt(props: PromptProps) {
     const saved = stashed
     stashed = undefined
     if (store.prompt.input) return
-    if (saved && saved.prompt.input) {
+    if (saved?.prompt.input) {
       input.setText(saved.prompt.input)
       setStore("prompt", saved.prompt)
       restoreExtmarksFromParts(saved.prompt.parts)
@@ -1690,9 +1701,9 @@ export function Prompt(props: PromptProps) {
 
                       return (
                         <Show when={retry()}>
-                          <box onMouseUp={handleMessageClick}>
-                            <text fg={theme.error}>{retryText()}</text>
-                          </box>
+                          {(() => {
+                            return <ClickText fg={theme.error} onMouseUp={handleMessageClick}>{retryText()}</ClickText>
+                          })()}
                         </Show>
                       )
                     })()}

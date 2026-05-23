@@ -1,9 +1,24 @@
-/** @jsxImportSource @opentui/solid */
-import { useTerminalDimensions, type JSX } from "@opentui/solid"
-import { useBindings, useKeymapSelector } from "@opentui/keymap/solid"
-import { RGBA, VignetteEffect, type KeyEvent, type Renderable } from "@opentui/core"
-import { createBindingLookup, type BindingConfig } from "@opentui/keymap/extras"
-import type { TuiPlugin, TuiPluginApi, TuiPluginMeta, TuiPluginModule, TuiSlotPlugin } from "@opencode-ai/plugin/tui"
+/** @jsxImportSource ../../packages/opencode/node_modules/@opentui/solid */
+/* eslint-disable jsx-a11y/no-static-element-interactions */
+/* oxlint-disable jsx-a11y/no-static-element-interactions */
+import { useTerminalDimensions, type JSX } from "../../packages/opencode/node_modules/@opentui/solid"
+import { useBindings, useKeymapSelector } from "../../packages/opencode/node_modules/@opentui/keymap/src/solid/index.js"
+import { RGBA, VignetteEffect, type KeyEvent, type Renderable } from "../../packages/opencode/node_modules/@opentui/core"
+import {
+  createBindingLookup,
+  type BindingConfig,
+} from "../../packages/opencode/node_modules/@opentui/keymap/src/extras/index.js"
+import type {
+  TuiDialogSelectOption,
+  TuiHostSlotMap,
+  TuiKeymap,
+  TuiPlugin,
+  TuiPluginApi,
+  TuiPluginMeta,
+  TuiPluginModule,
+  TuiSlotContext,
+  TuiSlotPlugin,
+} from "../../packages/opencode/node_modules/@opencode-ai/plugin/src/tui.ts"
 
 const tabs = ["overview", "counter", "help"]
 const command = {
@@ -36,6 +51,7 @@ const command = {
 }
 
 type SmokeBindings = BindingConfig<Renderable, KeyEvent>
+const ClickBox = "box" as unknown as (props: JSX.IntrinsicElements["box"]) => Renderable
 
 const defaultKeymap = {
   [command.modal]: "ctrl+shift+m",
@@ -158,8 +174,8 @@ type Skin = {
 }
 
 const Btn = (props: { txt: string; run: () => void; skin: Skin; on?: boolean }) => {
-  return (
-    <box
+  const button = (
+    <ClickBox
       onMouseUp={() => {
         props.run()
       }}
@@ -168,8 +184,10 @@ const Btn = (props: { txt: string; run: () => void; skin: Skin; on?: boolean }) 
       paddingRight={1}
     >
       <text fg={props.on ? props.skin.selected : props.skin.text}>{props.txt}</text>
-    </box>
+    </ClickBox>
   )
+
+  return button
 }
 
 const parse = (params: Record<string, unknown> | undefined) => {
@@ -263,7 +281,7 @@ const entry = (api: TuiPluginApi, route: Route, value: State) => {
     <DialogPrompt
       title="Smoke prompt"
       value={value.note}
-      onConfirm={(note) => {
+      onConfirm={(note: string) => {
         api.ui.dialog.clear()
         api.route.navigate(route.screen, { ...value, note, source: "prompt" })
       }}
@@ -283,7 +301,7 @@ const picker = (api: TuiPluginApi, route: Route, value: State) => {
       title="Smoke select"
       options={opts}
       current={value.tab}
-      onSelect={(item) => {
+      onSelect={(item: TuiDialogSelectOption<number>) => {
         api.ui.dialog.clear()
         api.route.navigate(route.screen, {
           ...value,
@@ -458,7 +476,7 @@ const Screen = (props: {
       command.screen_select,
     ]),
   }))
-  const shortcuts = useKeymapSelector((keymap) => {
+  const shortcuts = useKeymapSelector((keymap: TuiKeymap) => {
     const bindings = keymap.getCommandBindings({
       visibility: "registered",
       commands: [
@@ -590,50 +608,54 @@ const Screen = (props: {
         </box>
       </box>
 
-      <box
-        visible={value.local > 0}
-        width={dim().width}
-        height={dim().height}
-        alignItems="center"
-        position="absolute"
-        zIndex={3000}
-        paddingTop={dim().height / 4}
-        left={0}
-        top={0}
-        backgroundColor={RGBA.fromInts(0, 0, 0, 160)}
-        onMouseUp={() => {
-          pop()
-        }}
-      >
-        <box
-          onMouseUp={(evt) => {
-            evt.stopPropagation()
-          }}
-          width={60}
-          maxWidth={dim().width - 2}
-          backgroundColor={skin.panel}
-          border
-          borderColor={skin.border}
-          paddingTop={1}
-          paddingBottom={1}
-          paddingLeft={2}
-          paddingRight={2}
-          gap={1}
-          flexDirection="column"
-        >
-          <text fg={skin.text}>
-            <b>{props.input.label} local overlay</b>
-          </text>
-          <text fg={skin.muted}>Plugin-owned stack depth: {value.local}</text>
-          <text fg={skin.muted}>
-            {shortcuts().local_push} push nested · {shortcuts().local_pop} pop/close
-          </text>
-          <box flexDirection="row" gap={1}>
-            <Btn txt="push" run={push} skin={skin} on />
-            <Btn txt="pop" run={pop} skin={skin} />
-          </box>
-        </box>
-      </box>
+      {(() => {
+        return (
+          <ClickBox
+            visible={value.local > 0}
+            width={dim().width}
+            height={dim().height}
+            alignItems="center"
+            position="absolute"
+            zIndex={3000}
+            paddingTop={dim().height / 4}
+            left={0}
+            top={0}
+            backgroundColor={RGBA.fromInts(0, 0, 0, 160)}
+            onMouseUp={() => {
+              pop()
+            }}
+          >
+            <ClickBox
+              onMouseUp={(evt: { stopPropagation(): void }) => {
+                evt.stopPropagation()
+              }}
+              width={60}
+              maxWidth={dim().width - 2}
+              backgroundColor={skin.panel}
+              border
+              borderColor={skin.border}
+              paddingTop={1}
+              paddingBottom={1}
+              paddingLeft={2}
+              paddingRight={2}
+              gap={1}
+              flexDirection="column"
+            >
+              <text fg={skin.text}>
+                <b>{props.input.label} local overlay</b>
+              </text>
+              <text fg={skin.muted}>Plugin-owned stack depth: {value.local}</text>
+              <text fg={skin.muted}>
+                {shortcuts().local_push} push nested · {shortcuts().local_pop} pop/close
+              </text>
+              <box flexDirection="row" gap={1}>
+                <Btn txt="push" run={push} skin={skin} on />
+                <Btn txt="pop" run={pop} skin={skin} />
+              </box>
+            </ClickBox>
+          </ClickBox>
+        )
+      })()}
     </box>
   )
 }
@@ -667,7 +689,7 @@ const Modal = (props: {
     ],
     bindings: props.keys.gather("smoke.modal", [command.modal_accept, command.modal_close]),
   }))
-  const shortcuts = useKeymapSelector((keymap) => {
+  const shortcuts = useKeymapSelector((keymap: TuiKeymap) => {
     const bindings = keymap.getCommandBindings({
       visibility: "registered",
       commands: [command.modal, command.screen, command.modal_accept, command.modal_close],
@@ -710,7 +732,7 @@ const Modal = (props: {
 
 const home = (api: TuiPluginApi, input: Cfg) => ({
   slots: {
-    home_logo(ctx) {
+    home_logo(ctx: TuiSlotContext) {
       const map = ctx.theme.current
       const skin = look(map)
       const art = [
@@ -742,7 +764,7 @@ const home = (api: TuiPluginApi, input: Cfg) => ({
         </box>
       )
     },
-    home_prompt(ctx, value) {
+    home_prompt(ctx: TuiSlotContext, value: TuiHostSlotMap["home_prompt"]) {
       const skin = look(ctx.theme.current)
       const Prompt = api.ui.Prompt
       const Slot = api.ui.Slot
@@ -774,7 +796,7 @@ const home = (api: TuiPluginApi, input: Cfg) => ({
         />
       )
     },
-    home_prompt_right(ctx, value) {
+    home_prompt_right(ctx: TuiSlotContext, value: TuiHostSlotMap["home_prompt_right"]) {
       const skin = look(ctx.theme.current)
       const id = value.workspace_id?.slice(0, 8) ?? "none"
       return (
@@ -783,7 +805,7 @@ const home = (api: TuiPluginApi, input: Cfg) => ({
         </text>
       )
     },
-    session_prompt_right(ctx, value) {
+    session_prompt_right(ctx: TuiSlotContext, value: TuiHostSlotMap["session_prompt_right"]) {
       const skin = look(ctx.theme.current)
       return (
         <text fg={skin.muted}>
@@ -791,7 +813,7 @@ const home = (api: TuiPluginApi, input: Cfg) => ({
         </text>
       )
     },
-    smoke_prompt_right(ctx, value) {
+    smoke_prompt_right(ctx: TuiSlotContext, value: { workspace_id?: string; label?: string }) {
       const skin = look(ctx.theme.current)
       const id = typeof value.workspace_id === "string" ? value.workspace_id.slice(0, 8) : "none"
       const label = typeof value.label === "string" ? value.label : input.label
@@ -801,7 +823,7 @@ const home = (api: TuiPluginApi, input: Cfg) => ({
         </text>
       )
     },
-    home_bottom(ctx) {
+    home_bottom(ctx: TuiSlotContext) {
       const skin = look(ctx.theme.current)
       const text = "extra content in the unified home bottom slot"
 
@@ -830,7 +852,7 @@ const home = (api: TuiPluginApi, input: Cfg) => ({
 const block = (input: Cfg, order: number, title: string, text: string): TuiSlotPlugin => ({
   order,
   slots: {
-    sidebar_content(ctx, value) {
+    sidebar_content(ctx: TuiSlotContext, value: TuiHostSlotMap["sidebar_content"]) {
       const skin = look(ctx.theme.current)
 
       return (
@@ -978,7 +1000,7 @@ const reg = (api: TuiPluginApi, input: Cfg, keys: Keys) => {
   })
 }
 
-const tui: TuiPlugin = async (api, options, meta) => {
+const tui: TuiPlugin = async (api: TuiPluginApi, options: Record<string, unknown> | undefined, meta: TuiPluginMeta) => {
   if (options?.enabled === false) return
 
   await api.theme.install("./smoke-theme.json")
@@ -997,11 +1019,15 @@ const tui: TuiPlugin = async (api, options, meta) => {
   api.route.register([
     {
       name: route.screen,
-      render: ({ params }) => <Screen api={api} input={value} route={route} keys={keys} meta={meta} params={params} />,
+      render: ({ params }: { params?: Record<string, unknown> }) => (
+        <Screen api={api} input={value} route={route} keys={keys} meta={meta} params={params} />
+      ),
     },
     {
       name: route.modal,
-      render: ({ params }) => <Modal api={api} input={value} route={route} keys={keys} params={params} />,
+      render: ({ params }: { params?: Record<string, unknown> }) => (
+        <Modal api={api} input={value} route={route} keys={keys} params={params} />
+      ),
     },
   ])
 

@@ -1,0 +1,26 @@
+{
+	"$schema": "https://json.schemastore.org/tsconfig",
+	"extends": "../packages/opencode/tsconfig.json",
+	"compilerOptions": {
+		"ignoreDeprecations": "6.0",
+		"baseUrl": ".",
+		"paths": {
+			"@opentui/core": ["../packages/opencode/node_modules/@opentui/core"],
+			"@opentui/keymap": ["../packages/opencode/node_modules/@opentui/keymap"],
+			"@opentui/keymap/*": [
+				"../packages/opencode/node_modules/@opentui/keymap/*"
+			],
+			"@opentui/solid": ["../packages/opencode/node_modules/@opentui/solid"],
+			"@opentui/solid/*": [
+				"../packages/opencode/node_modules/@opentui/solid/*"
+			],
+			"@opencode-ai/plugin": [
+				"../packages/opencode/node_modules/@opencode-ai/plugin"
+			],
+			"@opencode-ai/plugin/*": [
+				"../packages/opencode/node_modules/@opencode-ai/plugin/*"
+			]
+		}
+	},
+	"include": ["plugins/**/*.ts", "plugins/**/*.tsx", "env.d.ts"]
+}
