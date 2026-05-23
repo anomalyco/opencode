@@ -577,20 +577,58 @@ export const cursor = {
   },
 }
 
-const info = (row: typeof MessageTable.$inferSelect) =>
-  ({
+// Row-level memoization for info() and part(). Each filterCompactedEffect call
+// re-iterates the session's entire message history; for sessions with 5k+
+// messages and 20k+ parts this allocates millions of objects per call,
+// which JSC's GC cannot keep up with. The vast majority of those
+// allocations are immutable - a message that has time.completed set, and
+// its associated parts, never change again. Caching the constructed
+// JS objects per (id, time_updated) lets repeat hydrate calls return the
+// SAME object instances rather than minting new ones every iteration of
+// session.prompt.runLoop. The output array and parts arrays in hydrate()
+// are still allocated fresh per call (they may be mutated by reminders.ts
+// to push synthetic parts), but the values inside are shared and immutable.
+const INFO_CACHE_MAX = 200_000
+const PART_CACHE_MAX = 400_000
+const infoCache = new Map<MessageID, { time_updated: number; info: Info }>()
+const partCache = new Map<PartID, { time_updated: number; part: Part }>()
+
+function evictOldest<K, V>(cache: Map<K, V>, cap: number): void {
+  if (cache.size <= cap) return
+  const toDelete = Math.floor(cap * 0.1)
+  let i = 0
+  for (const key of cache.keys()) {
+    cache.delete(key)
+    if (++i >= toDelete) break
+  }
+}
+
+const info = (row: typeof MessageTable.$inferSelect): Info => {
+  const cached = infoCache.get(row.id)
+  if (cached && cached.time_updated === row.time_updated) return cached.info
+  const fresh = {
     ...row.data,
     id: row.id,
     sessionID: row.session_id,
-  }) as Info
+  } as Info
+  infoCache.set(row.id, { time_updated: row.time_updated, info: fresh })
+  evictOldest(infoCache, INFO_CACHE_MAX)
+  return fresh
+}
 
-const part = (row: typeof PartTable.$inferSelect) =>
-  ({
+const part = (row: typeof PartTable.$inferSelect): Part => {
+  const cached = partCache.get(row.id)
+  if (cached && cached.time_updated === row.time_updated) return cached.part
+  const fresh = {
     ...row.data,
     id: row.id,
     sessionID: row.session_id,
     messageID: row.message_id,
-  }) as Part
+  } as Part
+  partCache.set(row.id, { time_updated: row.time_updated, part: fresh })
+  evictOldest(partCache, PART_CACHE_MAX)
+  return fresh
+}
 
 const older = (row: Cursor) =>
   or(lt(MessageTable.time_created, row.time), and(eq(MessageTable.time_created, row.time), lt(MessageTable.id, row.id)))
