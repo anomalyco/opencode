@@ -35,6 +35,16 @@ if (-not (Test-Path $override)) {
 # DeskFox 用户群默认现代 CPU(都有 AVX2),baseline 二进制不需要兜底,直接 build --single 即可,
 # 输出 dist/opencode-windows-x64/bin/opencode.exe,复用本机已有的 bun runtime,零下载。
 # Mac 侧 build-deskfox.sh 自己控,不受影响。
+
+# FORK-BEGIN: feishu-pipeline-401-fix(2026-05-23)
+# 锁 sidecar baked CHANNEL=prod,避免 git branch 名漂移触发上游 HTTPAPI 默认 ON 路径。
+# 完整背景见 build-deskfox.sh 同标记段(单一来源,这边不复写)。
+# 简版:CHANNEL=prod → InstallationChannel="prod" → 不命中 HTTPAPI_DEFAULT_ON_CHANNELS →
+# HTTPAPI OFF → 走稳定的 Hono legacy stack,规避上游 effect-httpapi 两个已知 bug。
+# 双端必须一致,否则下次 Mac build 漂回 dev branch 名又会撞同样 bug。
+$env:OPENCODE_CHANNEL = "prod"
+# FORK-END
+
 if (-not $env:RUST_TARGET) {
     # ARM64 Windows: add detect branch when needed
     $env:RUST_TARGET = "x86_64-pc-windows-msvc"
