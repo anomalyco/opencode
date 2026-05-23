@@ -1,14 +1,21 @@
 import { Bot, InlineKeyboard, type Context } from "grammy"
-import { createOpencode, type ToolPart } from "@opencode-ai/sdk"
+import { createOpencode, createOpencodeClient, type ToolPart } from "@opencode-ai/sdk"
 
 const token = process.env.TELEGRAM_BOT_TOKEN
 if (!token) throw new Error("TELEGRAM_BOT_TOKEN is required")
 const bot = new Bot(token)
 
 console.log("🚀 Starting opencode server...")
-// TODO: Wire up OPENCODE_DIRECTORY — Config type doesn't have a directory field,
-//       it needs to be passed to the client, not server config.
 const opencode = await createOpencode({ port: 0 })
+
+// Wire OPENCODE_DIRECTORY if set — pass it to client config so SDK sends x-opencode-directory header
+if (process.env.OPENCODE_DIRECTORY) {
+  opencode.client = createOpencodeClient({
+    baseUrl: opencode.server.url,
+    directory: process.env.OPENCODE_DIRECTORY,
+  })
+}
+
 console.log("✅ Opencode server ready")
 
 type Session = { client: any; server: any; sessionId: string; chatId: number; messageId?: number }
