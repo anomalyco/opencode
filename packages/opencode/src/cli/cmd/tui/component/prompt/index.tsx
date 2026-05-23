@@ -200,11 +200,14 @@ export function Prompt(props: PromptProps) {
   const [cursorVersion, setCursorVersion] = createSignal(0)
   const acpModel = createMemo(() => {
     const state = props.sessionID ? sync.data.acp[props.sessionID] : undefined
-    const current = state?.models?.currentModelId
+    const modelOption = state?.configOptions?.find((option: any) => option?.id === "model" || option?.category === "model")
+    const current = typeof modelOption?.currentValue === "string" ? modelOption.currentValue : state?.models?.currentModelId
     if (typeof current !== "string") return
-    const match = state?.models?.availableModels?.find((model: any) => model?.modelId === current)
+    const match =
+      modelOption?.options?.find((option: any) => option?.value === current) ??
+      state?.models?.availableModels?.find((model: any) => model?.modelId === current)
     return {
-      model: typeof match?.name === "string" ? match.name : current,
+      model: typeof match?.name === "string" ? match.name : typeof match?.modelId === "string" ? match.modelId : current,
       provider: "ACP",
     }
   })

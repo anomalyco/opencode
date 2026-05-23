@@ -655,6 +655,8 @@ export const layer = Layer.effect(
           catch: (error) => new Error(`Failed to set ACP config option: ${errorMessage(error)}`),
         })
         remote.configOptions = response.configOptions
+        if (input.configID === "mode") remote.modes = { ...asRecord(remote.modes), currentModeId: input.value }
+        if (input.configID === "model") remote.models = { ...asRecord(remote.models), currentModelId: input.value }
       } else if (input.configID === "mode") {
         if (!connection.agent.setSessionMode) throw new Error(`ACP server does not support session/set_mode: ${remote.server}`)
         yield* Effect.tryPromise({
