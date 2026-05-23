@@ -52,9 +52,14 @@ const OpenAIResponsesReasoningSummaryText = Schema.Struct({
 
 const OpenAIResponsesReasoningItem = Schema.Struct({
   type: Schema.tag("reasoning"),
-  id: Schema.String,
+  id: Schema.optional(Schema.String),
   summary: Schema.Array(OpenAIResponsesReasoningSummaryText),
   encrypted_content: optionalNull(Schema.String),
+})
+
+const OpenAIResponsesItemReference = Schema.Struct({
+  type: Schema.tag("item_reference"),
+  id: Schema.String,
 })
 
 // `function_call_output.output` accepts either a plain string or an ordered
@@ -72,6 +77,7 @@ const OpenAIResponsesInputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenAIResponsesInputContent) }),
   Schema.Struct({ role: Schema.tag("assistant"), content: Schema.Array(OpenAIResponsesOutputText) }),
   OpenAIResponsesReasoningItem,
+  OpenAIResponsesItemReference,
   Schema.Struct({
     type: Schema.tag("function_call"),
     call_id: Schema.String,
@@ -88,7 +94,7 @@ type OpenAIResponsesInputItem = Schema.Schema.Type<typeof OpenAIResponsesInputIt
 
 type OpenAIResponsesReasoningInput = {
   type: "reasoning"
-  id: string
+  id?: string
   summary: Array<{ type: "summary_text"; text: string }>
   encrypted_content?: string | null
 }
@@ -264,17 +270,20 @@ const lowerToolCall = (part: ToolCallPart): OpenAIResponsesInputItem => ({
 
 const lowerReasoning = (part: ReasoningPart): OpenAIResponsesReasoningInput | undefined => {
   const openai = part.providerMetadata?.openai
-  if (!ProviderShared.isRecord(openai) || typeof openai.itemId !== "string") return undefined
+  if (!ProviderShared.isRecord(openai)) return undefined
+  const id = typeof openai.itemId === "string" ? openai.itemId : undefined
+  const encryptedContent =
+    typeof openai.reasoningEncryptedContent === "string"
+      ? openai.reasoningEncryptedContent
+      : openai.reasoningEncryptedContent === null
+        ? null
+        : undefined
+  if (!id && typeof encryptedContent !== "string") return undefined
   return {
     type: "reasoning",
-    id: openai.itemId,
+    id,
     summary: part.text.length > 0 ? [{ type: "summary_text", text: part.text }] : [],
-    encrypted_content:
-      typeof openai.reasoningEncryptedContent === "string"
-        ? openai.reasoningEncryptedContent
-        : openai.reasoningEncryptedContent === null
-          ? null
-          : undefined,
+    encrypted_content: encryptedContent,
   }
 }
 
@@ -325,6 +334,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
     if (message.role === "assistant") {
       const content: TextPart[] = []
       const reasoningItems: Record<string, OpenAIResponsesReasoningInput> = {}
+      const reasoningReferences = new Set<string>()
       const flushText = () => {
         if (content.length === 0) return
         input.push({ role: "assistant", content: content.map((part) => ({ type: "output_text", text: part.text })) })
@@ -339,6 +349,15 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
           flushText()
           const reasoning = lowerReasoning(part)
           if (!reasoning) continue
+          if (store !== false && reasoning.id) {
+            if (!reasoningReferences.has(reasoning.id)) input.push({ type: "item_reference", id: reasoning.id })
+            reasoningReferences.add(reasoning.id)
+            continue
+          }
+          if (!reasoning.id) {
+            input.push(reasoning)
+            continue
+          }
           const existing = reasoningItems[reasoning.id]
           if (existing) {
             existing.summary.push(...reasoning.summary)
@@ -393,13 +412,14 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
     return yield* invalid(`OpenAI Responses does not support reasoning effort ${effort}`)
   const summary = OpenAIOptions.reasoningSummary(request)
   const encryptedState = OpenAIOptions.encryptedReasoning(request)
+  const includeEncryptedReasoning = encryptedState || (store === false && OpenAIOptions.isReasoningModel(request))
   const verbosity = OpenAIOptions.textVerbosity(request)
   const instructions = OpenAIOptions.instructions(request)
   return {
     ...(instructions ? { instructions } : {}),
     ...(store !== undefined ? { store } : {}),
     ...(promptCacheKey ? { prompt_cache_key: promptCacheKey } : {}),
-    ...(encryptedState ? { include: ["reasoning.encrypted_content"] as const } : {}),
+    ...(includeEncryptedReasoning ? { include: ["reasoning.encrypted_content"] as const } : {}),
     ...(effort || summary ? { reasoning: { effort, summary } } : {}),
     ...(verbosity ? { text: { verbosity } } : {}),
   }

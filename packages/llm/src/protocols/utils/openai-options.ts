@@ -42,6 +42,16 @@ export const reasoningSummary = (request: LLMRequest): "auto" | undefined => {
 export const encryptedReasoning = (request: LLMRequest) =>
   options(request)?.includeEncryptedReasoning === true ? true : undefined
 
+export const isReasoningModel = (request: LLMRequest) => {
+  const id = request.model.id.toLowerCase()
+  return (
+    id.startsWith("o1") ||
+    id.startsWith("o3") ||
+    id.startsWith("o4-mini") ||
+    (id.startsWith("gpt-5") && !id.startsWith("gpt-5-chat"))
+  )
+}
+
 export const promptCacheKey = (request: LLMRequest) => {
   const value = options(request)?.promptCacheKey
   return typeof value === "string" ? value : undefined

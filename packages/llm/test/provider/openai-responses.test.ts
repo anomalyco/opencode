@@ -660,6 +660,7 @@ describe("OpenAI Responses route", () => {
             ]),
             Message.user("Summarize it."),
           ],
+          providerOptions: { openai: { store: false } },
         }),
       ).pipe(
         Effect.provide(
@@ -717,6 +718,7 @@ describe("OpenAI Responses route", () => {
               { type: "text", text: "After." },
             ]),
           ],
+          providerOptions: { openai: { store: false } },
         }),
       )
 
@@ -729,6 +731,56 @@ describe("OpenAI Responses route", () => {
           summary: [{ type: "summary_text", text: "Checked order." }],
         },
         { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+      ])
+    }),
+  )
+
+  it.effect("references stored reasoning items by id", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "Checked the previous diff.",
+                providerMetadata: { openai: { itemId: "rs_1" } },
+              },
+            ]),
+          ],
+          providerOptions: { openai: { store: true } },
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([{ type: "item_reference", id: "rs_1" }])
+    }),
+  )
+
+  it.effect("continues stateless reasoning from encrypted content without an item id", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "Checked the previous diff.",
+                providerMetadata: { openai: { reasoningEncryptedContent: "encrypted-state" } },
+              },
+            ]),
+          ],
+          providerOptions: { openai: { store: false } },
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          type: "reasoning",
+          encrypted_content: "encrypted-state",
+          summary: [{ type: "summary_text", text: "Checked the previous diff." }],
+        },
       ])
     }),
   )
