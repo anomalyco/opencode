@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { UserMessage } from "@opencode-ai/sdk/v2"
 import { resetSessionModel, syncSessionModel } from "./session-model-helpers"
 
-const message = (input?: { agent?: string; model?: UserMessage["model"] }) =>
+const message = (input?: Partial<Pick<UserMessage, "agent" | "model" | "variant">>) =>
   ({
     id: "msg",
     sessionID: "session",
@@ -10,6 +10,7 @@ const message = (input?: { agent?: string; model?: UserMessage["model"] }) =>
     time: { created: 1 },
     agent: input?.agent ?? "build",
     model: input?.model ?? { providerID: "anthropic", modelID: "claude-sonnet-4" },
+    variant: input?.variant,
   }) as UserMessage
 
 describe("syncSessionModel", () => {
@@ -25,12 +26,10 @@ describe("syncSessionModel", () => {
           reset() {},
         },
       },
-      message({ model: { providerID: "anthropic", modelID: "claude-sonnet-4", variant: "high" } }),
+      message({ variant: "high" }),
     )
 
-    expect(calls).toEqual([
-      message({ model: { providerID: "anthropic", modelID: "claude-sonnet-4", variant: "high" } }),
-    ])
+    expect(calls).toEqual([message({ variant: "high" })])
   })
 })
 

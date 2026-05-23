@@ -127,7 +127,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const stop = (hold = false) => {
-    const el = scroll
+    const el = store.scrollRef
     if (!el) return
     if (hold) away = Date.now()
     if (!canScroll(el)) {
@@ -210,7 +210,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     () => {
       if (options.resize === "off") return
       if (resizeSuppressCount > 0) return
-      const el = scroll
+      const el = store.scrollRef
       if (el && !canScroll(el)) {
         if (store.userScrolled) setStore("userScrolled", false)
         return

@@ -7,11 +7,8 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
-import { usePlatform } from "@/context/platform"
 import { usePrompt } from "@/context/prompt"
-import { useServer } from "@/context/server"
 import { useSDK } from "@/context/sdk"
-import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { DialogSelectFile } from "@/components/dialog-select-file"
@@ -30,29 +27,6 @@ import { dict as enDict } from "@/i18n/en"
 import { working as sessionWorking } from "./session-working"
 
 export type SessionCommandContext = {
-  command: ReturnType<typeof useCommand>
-  dialog: ReturnType<typeof useDialog>
-  file: ReturnType<typeof useFile>
-  language: ReturnType<typeof useLanguage>
-  local: ReturnType<typeof useLocal>
-  permission: ReturnType<typeof usePermission>
-  platform: ReturnType<typeof usePlatform>
-  prompt: ReturnType<typeof usePrompt>
-  server: ReturnType<typeof useServer>
-  sdk: ReturnType<typeof useSDK>
-  sync: ReturnType<typeof useSync>
-  terminal: ReturnType<typeof useTerminal>
-  layout: ReturnType<typeof useLayout>
-  params: ReturnType<typeof useParams>
-  navigate: ReturnType<typeof useNavigate>
-  tabs: () => ReturnType<ReturnType<typeof useLayout>["tabs"]>
-  view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
-  info: () => { revert?: { messageID?: string }; share?: { url?: string } } | undefined
-  status: () => { type: string }
-  userMessages: () => UserMessage[]
-  visibleUserMessages: () => UserMessage[]
-  activeMessage: () => UserMessage | undefined
-  showAllFiles: () => void
   navigateMessageByOffset: (offset: number) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   focusInput: () => void
@@ -75,10 +49,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const language = useLanguage()
   const local = useLocal()
   const permission = usePermission()
-  const platform = usePlatform()
   const prompt = usePrompt()
   const sdk = useSDK()
-  const settings = useSettings()
   const sync = useSync()
   const terminal = useTerminal()
   const layout = useLayout()
@@ -107,10 +79,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   })
   const activeFileTab = tabState.activeFileTab
   const closableTab = tabState.closableTab
-  const shown = () =>
-    platform.platform !== "desktop" ||
-    import.meta.env.VITE_OPENCODE_CHANNEL !== "beta" ||
-    settings.general.showFileTree()
 
   const projectDirectory = () => decode64(params.dir) ?? ""
 
@@ -136,96 +104,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     prompt.context.add({ type: "file", path, selection, preview })
   }
 
-  const viewCommands = createMemo(() => [
-    viewCommand({
-      id: "terminal.toggle",
-      title: input.language.t("command.terminal.toggle"),
-      keybind: "ctrl+`",
-      slash: "terminal",
-      onSelect: () => input.view().terminal.toggle(),
-    }),
-    viewCommand({
-      id: "review.toggle",
-      title: input.language.t("command.review.toggle"),
-      keybind: "mod+shift+r",
-      onSelect: () => input.view().reviewPanel.toggle(),
-    }),
-    viewCommand({
-      id: "fileTree.toggle",
-      title: input.language.t("command.fileTree.toggle"),
-      keybind: "mod+\\",
-      onSelect: () => input.layout.fileTree.toggle(),
-    }),
-    viewCommand({
-      id: "input.focus",
-      title: input.language.t("command.input.focus"),
-      keybind: "ctrl+l",
-      onSelect: () => input.focusInput(),
-    }),
-    terminalCommand({
-      id: "terminal.new",
-      title: input.language.t("command.terminal.new"),
-      description: input.language.t("command.terminal.new.description"),
-      keybind: "ctrl+alt+t",
-      onSelect: () => {
-        if (input.terminal.all().length > 0) input.terminal.new()
-        input.view().terminal.open()
-      },
-    }),
-    terminalCommand({
-      id: "terminal.openGhostty",
-      title: input.language.t("command.terminal.openGhostty"),
-      description: input.language.t("command.terminal.openGhostty.description"),
-      disabled: input.platform.platform !== "desktop" || !input.platform.openPath || !input.server.isLocal(),
-      onSelect: () => {
-        const directory = input.sdk.directory
-        if (!directory) return
-        Promise.resolve(input.platform.openPath?.(directory, "Ghostty")).catch((err: unknown) => {
-          showToast({
-            variant: "error",
-            title: input.language.t("common.requestFailed"),
-            description: err instanceof Error ? err.message : String(err),
-          })
-        })
-      },
-    }),
-    terminalCommand({
-      id: "terminal.openWezTerm",
-      title: input.language.t("command.terminal.openWezTerm"),
-      description: input.language.t("command.terminal.openWezTerm.description"),
-      disabled: input.platform.platform !== "desktop" || !input.platform.openInEditor || !input.server.isLocal(),
-      onSelect: () => {
-        const directory = input.sdk.directory
-        if (!directory) return
-        Promise.resolve(input.platform.openInEditor?.("WezTerm", directory)).catch((err: unknown) => {
-          showToast({
-            variant: "error",
-            title: input.language.t("common.requestFailed"),
-            description: err instanceof Error ? err.message : String(err),
-          })
-        })
-      },
-    }),
-  ])
+  const canAddSelectionContext = () => {
+    const tab = activeFileTab()
+    if (!tab) return false
+    const path = file.pathFromTab(tab)
+    if (!path) return false
+    return file.selectedLines(path) != null
+  }
 
-  const messageCommands = createMemo(() => [
-    sessionCommand({
-      id: "message.previous",
-      title: input.language.t("command.message.previous"),
-      description: input.language.t("command.message.previous.description"),
-      keybind: "mod+shift+arrowup",
-      disabled: !input.params.id,
-      onSelect: () => input.navigateMessageByOffset(-1),
-    }),
-    sessionCommand({
-      id: "message.next",
-      title: input.language.t("command.message.next"),
-      description: input.language.t("command.message.next.description"),
-      keybind: "mod+shift+arrowdown",
-      disabled: !input.params.id,
-      onSelect: () => input.navigateMessageByOffset(1),
-    }),
-  ])
+  const navigateMessageByOffset = actions.navigateMessageByOffset
+  const setActiveMessage = actions.setActiveMessage
+  const focusInput = actions.focusInput
 
   const sessionCommand = withCategory(language.t("command.category.session"))
   const fileCommand = withCategory(language.t("command.category.file"))
@@ -262,52 +151,67 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
               onSelect: async () => {
                 if (!params.id) return
 
-    const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
-    if (!clipboard?.writeText) return false
-    return clipboard.writeText(value).then(
-      () => true,
-      () => false,
-    )
-  }
+                const write = (value: string) => {
+                  const body = typeof document === "undefined" ? undefined : document.body
+                  if (body) {
+                    const textarea = document.createElement("textarea")
+                    textarea.value = value
+                    textarea.setAttribute("readonly", "")
+                    textarea.style.position = "fixed"
+                    textarea.style.opacity = "0"
+                    textarea.style.pointerEvents = "none"
+                    body.appendChild(textarea)
+                    textarea.select()
+                    const copied = document.execCommand("copy")
+                    body.removeChild(textarea)
+                    if (copied) return Promise.resolve(true)
+                  }
 
-  const copyShare = async (url: string, existing: boolean) => {
-    if (!(await write(url))) {
-      showToast({
-        title: language.t("toast.session.share.copyFailed.title"),
-        variant: "error",
-      })
-      return
-    }
+                  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
+                  if (!clipboard?.writeText) return Promise.resolve(false)
+                  return clipboard.writeText(value).then(
+                    () => true,
+                    () => false,
+                  )
+                }
 
-    showToast({
-      title: existing ? language.t("session.share.copy.copied") : language.t("toast.session.share.success.title"),
-      description: language.t("toast.session.share.success.description"),
-      variant: "success",
-    })
-  }
+                const copy = async (url: string, existing: boolean) => {
+                  const ok = await write(url)
+                  if (!ok) {
+                    showToast({
+                      title: language.t("toast.session.share.copyFailed.title"),
+                      variant: "error",
+                    })
+                    return
+                  }
 
-  const share = async () => {
-    const sessionID = params.id
-    if (!sessionID) return
+                  showToast({
+                    title: existing
+                      ? language.t("session.share.copy.copied")
+                      : language.t("toast.session.share.success.title"),
+                    description: language.t("toast.session.share.success.description"),
+                    variant: "success",
+                  })
+                }
 
-    const existing = info()?.share?.url
-    if (existing) {
-      await copyShare(existing, true)
-      return
-    }
+                const existing = info()?.share?.url
+                if (existing) {
+                  await copy(existing, true)
+                  return
+                }
 
-    const url = await sdk.client.session
-      .share({ sessionID })
-      .then((res) => res.data?.share?.url)
-      .catch(() => undefined)
-    if (!url) {
-      showToast({
-        title: language.t("toast.session.share.failed.title"),
-        description: language.t("toast.session.share.failed.description"),
-        variant: "error",
-      })
-      return
-    }
+                const url = await sdk.client.session
+                  .share({ sessionID: params.id })
+                  .then((res) => res.data?.share?.url)
+                  .catch(() => undefined)
+                if (!url) {
+                  showToast({
+                    title: language.t("toast.session.share.failed.title"),
+                    description: language.t("toast.session.share.failed.description"),
+                    variant: "error",
+                  })
+                  return
+                }
 
                 await copy(url, false)
               },
@@ -341,166 +245,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
             }),
           ]
 
-  const unshare = async () => {
-    const sessionID = params.id
-    if (!sessionID) return
-
-    await sdk.client.session
-      .unshare({ sessionID })
-      .then(() =>
-        showToast({
-          title: language.t("toast.session.unshare.success.title"),
-          description: language.t("toast.session.unshare.success.description"),
-          variant: "success",
-        }),
-      )
-      .catch(() =>
-        showToast({
-          title: language.t("toast.session.unshare.failed.title"),
-          description: language.t("toast.session.unshare.failed.description"),
-          variant: "error",
-        }),
-      )
-  }
-
-  const openFile = () => {
-    void import("@/components/dialog-select-file").then((x) => {
-      dialog.show(() => <x.DialogSelectFile onOpenFile={showAllFiles} />)
-    })
-  }
-
-  const closeTab = () => {
-    const tab = closableTab()
-    if (!tab) return
-    tabs().close(tab)
-  }
-
-  const addSelection = () => {
-    const tab = activeFileTab()
-    if (!tab) return
-
-    const path = file.pathFromTab(tab)
-    if (!path) return
-
-    const range = file.selectedLines(path) as SelectedLineRange | null | undefined
-    if (!range) {
-      showToast({
-        title: language.t("toast.context.noLineSelection.title"),
-        description: language.t("toast.context.noLineSelection.description"),
-      })
-      return
-    }
-
-    addSelectionToContext(path, selectionFromLines(range))
-  }
-
-  const openTerminal = () => {
-    if (terminal.all().length > 0) terminal.new()
-    view().terminal.open()
-  }
-
-  const chooseModel = () => {
-    void import("@/components/dialog-select-model").then((x) => {
-      dialog.show(() => <x.DialogSelectModel model={local.model} />)
-    })
-  }
-
-  const chooseMcp = () => {
-    void import("@/components/dialog-select-mcp").then((x) => {
-      dialog.show(() => <x.DialogSelectMcp />)
-    })
-  }
-
-  const toggleAutoAccept = () => {
-    const sessionID = params.id
-    if (sessionID) permission.toggleAutoAccept(sessionID, sdk.directory)
-    else permission.toggleAutoAcceptDirectory(sdk.directory)
-
-    const active = sessionID
-      ? permission.isAutoAccepting(sessionID, sdk.directory)
-      : permission.isAutoAcceptingDirectory(sdk.directory)
-    showToast({
-      title: active
-        ? language.t("toast.permissions.autoaccept.on.title")
-        : language.t("toast.permissions.autoaccept.off.title"),
-      description: active
-        ? language.t("toast.permissions.autoaccept.on.description")
-        : language.t("toast.permissions.autoaccept.off.description"),
-    })
-  }
-
-  const undo = async () => {
-    const sessionID = params.id
-    if (!sessionID) return
-
-    if (sync.data.session_working(params.id ?? "")) {
-      await sdk.client.session.abort({ sessionID }).catch(() => {})
-    }
-
-    const revert = info()?.revert?.messageID
-    const message = findLast(userMessages(), (x) => !revert || x.id < revert)
-    if (!message) return
-
-    await sdk.client.session.revert({ sessionID, messageID: message.id })
-    const parts = sync.data.part[message.id]
-    if (parts) {
-      const restored = extractPromptFromParts(parts, { directory: sdk.directory })
-      prompt.set(restored)
-    }
-
-    const prev = findLast(userMessages(), (x) => x.id < message.id)
-    setActiveMessage(prev)
-  }
-
-  const redo = async () => {
-    const sessionID = params.id
-    if (!sessionID) return
-
-    const revertMessageID = info()?.revert?.messageID
-    if (!revertMessageID) return
-
-    const next = userMessages().find((x) => x.id > revertMessageID)
-    if (!next) {
-      await sdk.client.session.unrevert({ sessionID })
-      prompt.reset()
-      const last = findLast(userMessages(), (x) => x.id >= revertMessageID)
-      setActiveMessage(last)
-      return
-    }
-
-    await sdk.client.session.revert({ sessionID, messageID: next.id })
-    const prev = findLast(userMessages(), (x) => x.id < next.id)
-    setActiveMessage(prev)
-  }
-
-  const compact = async () => {
-    const sessionID = params.id
-    if (!sessionID) return
-
-    const model = local.model.current()
-    if (!model) {
-      showToast({
-        title: language.t("toast.model.none.title"),
-        description: language.t("toast.model.none.description"),
-      })
-      return
-    }
-
-    await sdk.client.session.summarize({
-      sessionID,
-      modelID: model.id,
-      providerID: model.provider.id,
-    })
-  }
-
-  const fork = () => {
-    void import("@/components/dialog-fork").then((x) => {
-      dialog.show(() => <x.DialogFork />)
-    })
-  }
-
-  const shareCmds = () => {
-    if (sync.data.config.share === "disabled") return []
     return [
       sessionCommand({
         id: "session.new",
@@ -647,7 +391,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         keywords: kw("command.message.previous", "command.message.previous.description"),
         keybind: "mod+arrowup",
         disabled: !params.id,
-        onSelect: share,
+        onSelect: () => navigateMessageByOffset(-1),
       }),
       sessionCommand({
         id: "message.next",
@@ -665,7 +409,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         keywords: kw("command.model.choose", "command.model.choose.description"),
         keybind: "mod+'",
         slash: "model",
-        onSelect: () => dialog.show(() => <DialogSelectModel />),
+        onSelect: () => dialog.show(() => <DialogSelectModel model={local.model} />),
       }),
       mcpCommand({
         id: "mcp.toggle",
@@ -822,210 +566,5 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       }),
       ...share,
     ]
-  }
-
-  const sessionCmds = () => [
-    sessionCommand({
-      id: "session.new",
-      title: language.t("command.session.new"),
-      keybind: "mod+shift+s",
-      slash: "new",
-      onSelect: () => navigate(`/${params.dir}/session`),
-    }),
-    sessionCommand({
-      id: "session.undo",
-      title: language.t("command.session.undo"),
-      description: language.t("command.session.undo.description"),
-      slash: "undo",
-      disabled: !params.id || visibleUserMessages().length === 0,
-      onSelect: undo,
-    }),
-    sessionCommand({
-      id: "session.redo",
-      title: language.t("command.session.redo"),
-      description: language.t("command.session.redo.description"),
-      slash: "redo",
-      disabled: !params.id || !info()?.revert?.messageID,
-      onSelect: redo,
-    }),
-    sessionCommand({
-      id: "session.compact",
-      title: language.t("command.session.compact"),
-      description: language.t("command.session.compact.description"),
-      slash: "compact",
-      disabled: !params.id || visibleUserMessages().length === 0,
-      onSelect: compact,
-    }),
-    sessionCommand({
-      id: "session.fork",
-      title: language.t("command.session.fork"),
-      description: language.t("command.session.fork.description"),
-      slash: "fork",
-      disabled: !params.id || visibleUserMessages().length === 0,
-      onSelect: fork,
-    }),
-  ]
-
-  const fileCmds = () => [
-    fileCommand({
-      id: "file.open",
-      title: language.t("command.file.open"),
-      description: language.t("palette.search.placeholder"),
-      keybind: "mod+k,mod+p",
-      slash: "open",
-      onSelect: openFile,
-    }),
-    fileCommand({
-      id: "tab.close",
-      title: language.t("command.tab.close"),
-      keybind: "mod+w",
-      disabled: !closableTab(),
-      onSelect: closeTab,
-    }),
-  ]
-
-  const contextCmds = () => [
-    contextCommand({
-      id: "context.addSelection",
-      title: language.t("command.context.addSelection"),
-      description: language.t("command.context.addSelection.description"),
-      keybind: "mod+shift+l",
-      disabled: !canAddSelectionContext(),
-      onSelect: addSelection,
-    }),
-  ]
-
-  const viewCmds = () => [
-    viewCommand({
-      id: "terminal.toggle",
-      title: language.t("command.terminal.toggle"),
-      keybind: "ctrl+`",
-      slash: "terminal",
-      onSelect: () => view().terminal.toggle(),
-    }),
-    viewCommand({
-      id: "review.toggle",
-      title: language.t("command.review.toggle"),
-      keybind: "mod+shift+r",
-      onSelect: () => view().reviewPanel.toggle(),
-    }),
-    ...(shown()
-      ? [
-          viewCommand({
-            id: "fileTree.toggle",
-            title: language.t("command.fileTree.toggle"),
-            keybind: "mod+\\",
-            onSelect: () => layout.fileTree.toggle(),
-          }),
-        ]
-      : []),
-    viewCommand({
-      id: "input.focus",
-      title: language.t("command.input.focus"),
-      keybind: "ctrl+l",
-      onSelect: focusInput,
-    }),
-  ]
-
-  const terminalCmds = () => [
-    terminalCommand({
-      id: "terminal.new",
-      title: language.t("command.terminal.new"),
-      description: language.t("command.terminal.new.description"),
-      keybind: "ctrl+alt+t",
-      onSelect: openTerminal,
-    }),
-  ]
-
-  const messageCmds = () => [
-    sessionCommand({
-      id: "message.previous",
-      title: language.t("command.message.previous"),
-      description: language.t("command.message.previous.description"),
-      keybind: "mod+alt+[",
-      disabled: !params.id,
-      onSelect: () => navigateMessageByOffset(-1),
-    }),
-    sessionCommand({
-      id: "message.next",
-      title: language.t("command.message.next"),
-      description: language.t("command.message.next.description"),
-      keybind: "mod+alt+]",
-      disabled: !params.id,
-      onSelect: () => navigateMessageByOffset(1),
-    }),
-  ]
-
-  const modelCmds = () => [
-    modelCommand({
-      id: "model.choose",
-      title: language.t("command.model.choose"),
-      description: language.t("command.model.choose.description"),
-      keybind: "mod+'",
-      slash: "model",
-      onSelect: chooseModel,
-    }),
-    modelCommand({
-      id: "model.variant.cycle",
-      title: language.t("command.model.variant.cycle"),
-      description: language.t("command.model.variant.cycle.description"),
-      keybind: "shift+mod+d",
-      onSelect: () => local.model.variant.cycle(),
-    }),
-  ]
-
-  const mcpCmds = () => [
-    mcpCommand({
-      id: "mcp.toggle",
-      title: language.t("command.mcp.toggle"),
-      description: language.t("command.mcp.toggle.description"),
-      keybind: "mod+;",
-      slash: "mcp",
-      onSelect: chooseMcp,
-    }),
-  ]
-
-  const agentCmds = () => [
-    agentCommand({
-      id: "agent.cycle",
-      title: language.t("command.agent.cycle"),
-      description: language.t("command.agent.cycle.description"),
-      keybind: "mod+.",
-      slash: "agent",
-      onSelect: () => local.agent.move(1),
-    }),
-    agentCommand({
-      id: "agent.cycle.reverse",
-      title: language.t("command.agent.cycle.reverse"),
-      description: language.t("command.agent.cycle.reverse.description"),
-      keybind: "shift+mod+.",
-      onSelect: () => local.agent.move(-1),
-    }),
-  ]
-
-  const permissionsCmds = () => [
-    permissionsCommand({
-      id: "permissions.autoaccept",
-      title: isAutoAcceptActive()
-        ? language.t("command.permissions.autoaccept.disable")
-        : language.t("command.permissions.autoaccept.enable"),
-      keybind: "mod+shift+a",
-      disabled: false,
-      onSelect: toggleAutoAccept,
-    }),
-  ]
-
-  command.register("session", () => [
-    ...sessionCmds(),
-    ...shareCmds(),
-    ...fileCmds(),
-    ...contextCmds(),
-    ...viewCmds(),
-    ...terminalCmds(),
-    ...messageCmds(),
-    ...modelCmds(),
-    ...mcpCmds(),
-    ...agentCmds(),
-    ...permissionsCmds(),
-  ])
+  })
 }

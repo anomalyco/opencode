@@ -35,8 +35,6 @@ const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
     ...input,
   }) as Session
 
-const perm = (id: string) => ({ id }) as PermissionRequest
-
 describe("layout deep links", () => {
   test("parses open-project deep links", () => {
     expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
@@ -113,8 +111,8 @@ describe("layout deep links", () => {
 
 describe("layout workspace helpers", () => {
   test("normalizes trailing slash in workspace key", () => {
-    expect(String(pathKey("/tmp/demo///"))).toBe("/tmp/demo")
-    expect(String(pathKey("C:\\tmp\\demo\\\\"))).toBe("C:/tmp/demo")
+    expect(workspaceKey("/tmp/demo///")).toBe("/tmp/demo")
+    expect(workspaceKey("C:\\tmp\\demo\\\\")).toBe("C:/tmp/demo")
   })
 
   test("matches selected project against normalized workspace paths", () => {
@@ -155,11 +153,11 @@ describe("layout workspace helpers", () => {
   })
 
   test("preserves posix and drive roots in workspace key", () => {
-    expect(String(pathKey("/"))).toBe("/")
-    expect(String(pathKey("///"))).toBe("/")
-    expect(String(pathKey("C:\\"))).toBe("C:/")
-    expect(String(pathKey("C://"))).toBe("C:/")
-    expect(String(pathKey("C:///"))).toBe("C:/")
+    expect(workspaceKey("/")).toBe("/")
+    expect(workspaceKey("///")).toBe("/")
+    expect(workspaceKey("C:\\")).toBe("C:/")
+    expect(workspaceKey("C://")).toBe("C:/")
+    expect(workspaceKey("C:///")).toBe("C:/")
   })
 
   test("uses canonical workspace dir only for the same workspace", () => {

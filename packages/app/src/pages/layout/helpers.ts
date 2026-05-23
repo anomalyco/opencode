@@ -98,9 +98,9 @@ function sortSessions(now: number) {
 }
 
 const isRootVisibleSession = (session: Session, directory: string) =>
-  pathKey(session.directory) === pathKey(directory) && !session.parentID && !session.time?.archived
+  workspaceKey(session.directory) === workspaceKey(directory) && !session.parentID && !session.time?.archived
 
-export const roots = (store: SessionStore) =>
+const roots = (store: SessionStore) =>
   (store.session ?? []).filter((session) => isRootVisibleSession(session, store.path.directory))
 
 export const sortedRootSessions = (store: SessionStore, now: number) => roots(store).sort(sortSessions(now))
@@ -162,17 +162,18 @@ export function hasProjectPermissions(
     })
 }
 
-export const childSessionOnPath = (sessions: Session[] | undefined, rootID: string, activeID?: string) => {
-  if (!activeID || activeID === rootID) return
-  const map = new Map((sessions ?? []).map((session) => [session.id, session]))
-  let id = activeID
-
-  while (id) {
-    const session = map.get(id)
-    if (!session?.parentID) return
-    if (session.parentID === rootID) return session
-    id = session.parentID
+export const childMapByParent = (sessions: Session[] | undefined) => {
+  const map = new Map<string, string[]>()
+  for (const session of sessions ?? []) {
+    if (!session.parentID) continue
+    const existing = map.get(session.parentID)
+    if (existing) {
+      existing.push(session.id)
+      continue
+    }
+    map.set(session.parentID, [session.id])
   }
+  return map
 }
 
 export const displayName = (project: { name?: string; worktree: string }) =>
@@ -220,11 +221,11 @@ export const errorMessage = (err: unknown, fallback: string) => {
 }
 
 export const effectiveWorkspaceOrder = (local: string, dirs: string[], persisted?: string[]) => {
-  const root = pathKey(local)
+  const root = workspaceKey(local)
   const live = new Map<string, string>()
 
   for (const dir of dirs) {
-    const key = pathKey(dir)
+    const key = workspaceKey(dir)
     if (key === root) continue
     if (!live.has(key)) live.set(key, dir)
   }
@@ -233,7 +234,7 @@ export const effectiveWorkspaceOrder = (local: string, dirs: string[], persisted
 
   const result = [local]
   for (const dir of persisted) {
-    const key = pathKey(dir)
+    const key = workspaceKey(dir)
     if (key === root) continue
     const match = live.get(key)
     if (!match) continue

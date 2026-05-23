@@ -118,6 +118,7 @@ type ProviderCfg = NonNullable<Config["provider"]>[string]
 
 type CustomState = FormState & {
   mode: "create" | "edit"
+  saving: boolean
   deleting: boolean
   secret: boolean
 }
@@ -1973,18 +1974,19 @@ export default function ConfigPage() {
       plugins: data?.plugins ?? [],
     }
   })
-  const cfg = mainConfig
+  const cfg = createMemo(() => globalSync.data.config)
+  const mainProviders = createMemo(() => globalSync.data.rootByDomain[mainDomain]?.provider ?? globalSync.data.provider)
   const t = language.t
 
   const setMainProviders = (provider: ProviderListResponse) => {
-    const root = mainRoot()
+    const root = globalSync.data.rootByDomain[mainDomain]
     globalSync.set("rootByDomain", mainDomain, {
       ready: root?.ready ?? globalSync.data.ready,
       error: root?.error ?? globalSync.data.error,
-      path: mainPath(),
+      path: root?.path ?? globalSync.data.path,
       provider,
-      provider_auth: mainProviderAuth(),
-      config: mainConfig(),
+      provider_auth: root?.provider_auth ?? globalSync.data.provider_auth,
+      config: root?.config ?? globalSync.data.config,
       reload: root?.reload ?? globalSync.data.reload,
     })
     globalSync.set("provider", provider)
@@ -2643,7 +2645,7 @@ export default function ConfigPage() {
   )
 
   const providers = createMemo<ProviderItem[]>(() => {
-    const data = mainProviders.data()
+    const data = mainProviders()
     const off = new Set(cfg().disabled_providers ?? [])
     const entries = cfg().provider ?? {}
     const on = new Set(data.connected ?? [])
@@ -3659,7 +3661,7 @@ export default function ConfigPage() {
   }
 
   function isConfigCustom(id: string) {
-      const provider = cfg().provider?.[id]
+    const provider = cfg().provider?.[id]
     if (!provider) return false
     if (provider.npm !== "@ai-sdk/openai-compatible") return false
     if (!provider.models || Object.keys(provider.models).length === 0) return false

@@ -14,7 +14,7 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import { type LocalProject } from "@/context/layout"
-import { useGlobalSync, useQueryOptions } from "@/context/global-sync"
+import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { extraAgentByDirectory } from "./extra-agents"
 import { NewSessionItem, SessionItem, SessionGroupHeader, SessionSearchBar } from "./sidebar-items"
@@ -39,7 +39,6 @@ export type WorkspaceSidebarContext = {
   nav: Accessor<HTMLElement | undefined>
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
-  generateSessionTitle: (session: Session) => Promise<void>
   workspaceName: (directory: string, projectId?: string, branch?: string) => string | undefined
   renameWorkspace: (directory: string, next: string, projectId?: string, branch?: string) => void
   editorOpen: (id: string) => boolean
@@ -213,7 +212,7 @@ const WorkspaceActions = (props: {
     <Show when={!props.touch()}>
       <Tooltip value={props.language.t("command.session.new")} placement="top">
         <IconButton
-          icon="new-session"
+          icon="plus-small"
           variant="ghost"
           class="size-6 rounded-md opacity-0 pointer-events-none group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto"
           data-action="workspace-new-session"
@@ -307,11 +306,11 @@ const WorkspaceSessionList = (props: {
       </Show>
       <For each={props.sessions()}>
         {(session) => {
-          const headerKey = () => boundaries().get(session.id)
+          const key = () => boundaries().get(session.id)
           return (
             <div>
-              <Show when={headerKey()}>
-                {(key) => <SessionGroupHeader label={props.language.t(GROUP_LABEL_KEYS[key()])} />}
+              <Show when={key()}>
+                {(value) => <SessionGroupHeader label={props.language.t(GROUP_LABEL_KEYS[value()])} />}
               </Show>
               <SessionItem
                 session={session}
@@ -363,7 +362,6 @@ export const SortableWorkspace = (props: {
   const navigate = useNavigate()
   const params = useParams()
   const globalSync = useGlobalSync()
-  const queryOptions = useQueryOptions()
   const language = useLanguage()
   const sortable = createSortable(props.directory)
   const [workspaceStore, setWorkspaceStore] = globalSync.child(props.directory, { bootstrap: false })
@@ -374,7 +372,7 @@ export const SortableWorkspace = (props: {
   const slug = createMemo(() => base64Encode(props.directory))
   const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
   const local = createMemo(() => props.directory === props.project.worktree)
-  const active = createMemo(() => pathKey(props.ctx.currentDir()) === pathKey(props.directory))
+  const active = createMemo(() => workspaceKey(props.ctx.currentDir()) === workspaceKey(props.directory))
   const workspaceValue = createMemo(() => {
     const branch = workspaceStore.vcs?.branch
     const name = branch ?? getFilename(props.directory)
@@ -384,7 +382,6 @@ export const SortableWorkspace = (props: {
   const boot = createMemo(() => open() || active())
   const count = createMemo(() => sessions().length)
   const hasMore = createMemo(() => workspaceStore.sessionTotal > count())
-  const fetching = useIsFetching(() => queryOptions.sessions(pathKey(props.directory)))
   const busy = createMemo(() => props.ctx.isBusy(props.directory))
   const wasBusy = createMemo((prev) => prev || busy(), false)
   const loading = createMemo(() => open() && workspaceStore.sessions === "loading" && count() === 0 && !wasBusy())
@@ -433,7 +430,6 @@ export const SortableWorkspace = (props: {
 
   return (
     <div
-      // @ts-ignore
       use:sortable
       classList={{
         "opacity-30": sortable.isActiveDraggable,
@@ -441,7 +437,7 @@ export const SortableWorkspace = (props: {
       }}
     >
       <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
-        <div class="py-1">
+        <div class="px-2 py-1">
           <div
             class="group/workspace relative"
             data-component="workspace-item"
@@ -518,7 +514,6 @@ export const LocalWorkspace = (props: {
   mobile?: boolean
 }): JSX.Element => {
   const globalSync = useGlobalSync()
-  const queryOptions = useQueryOptions()
   const language = useLanguage()
   const [searchQuery, setSearchQuery] = createSignal("")
   const [refreshing, setRefreshing] = createSignal(false)

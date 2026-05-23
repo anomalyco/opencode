@@ -1,6 +1,5 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
-import { makeEventListener } from "@solid-primitives/event-listener"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -19,6 +18,7 @@ import { terminalTabLabel } from "@/pages/session/terminal-label"
 import { createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { terminalProbe } from "@/testing/terminal"
 
 export function TerminalPanel() {
   const delays = [120, 240]
@@ -37,7 +37,6 @@ export function TerminalPanel() {
   const [store, setStore] = createStore({
     autoCreated: false,
     activeDraggable: undefined as string | undefined,
-    recovered: {} as Record<string, boolean>,
     view: typeof window === "undefined" ? 1000 : (window.visualViewport?.height ?? window.innerHeight),
   })
 
@@ -51,8 +50,12 @@ export function TerminalPanel() {
     const port = window.visualViewport
 
     sync()
-    makeEventListener(window, "resize", sync)
-    if (port) makeEventListener(port, "resize", sync)
+    window.addEventListener("resize", sync)
+    port?.addEventListener("resize", sync)
+    onCleanup(() => {
+      window.removeEventListener("resize", sync)
+      port?.removeEventListener("resize", sync)
+    })
   })
 
   createEffect(() => {
@@ -78,9 +81,12 @@ export function TerminalPanel() {
   )
 
   const focus = (id: string) => {
+    const probe = terminalProbe(id)
+    probe.focus(delays.length + 1)
     focusTerminalById(id)
 
     const frame = requestAnimationFrame(() => {
+      probe.step()
       if (!opened()) return
       if (terminal.active() !== id) return
       focusTerminalById(id)
@@ -88,6 +94,7 @@ export function TerminalPanel() {
 
     const timers = delays.map((ms) =>
       window.setTimeout(() => {
+        probe.step()
         if (!opened()) return
         if (terminal.active() !== id) return
         focusTerminalById(id)
@@ -95,6 +102,7 @@ export function TerminalPanel() {
     )
 
     return () => {
+      probe.focus(0)
       cancelAnimationFrame(frame)
       for (const timer of timers) clearTimeout(timer)
     }
@@ -145,21 +153,6 @@ export function TerminalPanel() {
 
   const all = terminal.all
   const ids = createMemo(() => all().map((pty) => pty.id))
-
-  const recoverTerminal = (key: string, id: string, clone: (id: string) => Promise<void>) => {
-    if (store.recovered[key]) return
-    setStore("recovered", key, true)
-    void clone(id)
-  }
-
-  const terminalRecoveryKey = (pty: { id: string; title: string; titleNumber: number }) => {
-    return String(pty.titleNumber || pty.title || pty.id)
-  }
-
-  const markTerminalConnected = (key: string, id: string, trim: (id: string) => void) => {
-    setStore("recovered", key, false)
-    trim(id)
-  }
 
   const handleTerminalDragStart = (event: unknown) => {
     const id = getDraggableId(event)
@@ -296,9 +289,9 @@ export function TerminalPanel() {
                             <Terminal
                               pty={pty()}
                               autoFocus={opened()}
-                              onConnect={() => markTerminalConnected(terminalRecoveryKey(pty()), id, ops.trim)}
+                              onConnect={() => ops.trim(id)}
                               onCleanup={ops.update}
-                              onConnectError={() => recoverTerminal(terminalRecoveryKey(pty()), id, ops.clone)}
+                              onConnectError={() => ops.clone(id)}
                             />
                           </div>
                         )}

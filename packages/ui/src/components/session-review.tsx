@@ -16,7 +16,10 @@ import { checksum } from "@opencode-ai/core/util/encode"
 import { createEffect, createMemo, For, Match, Show, Switch, untrack, type JSX } from "solid-js"
 import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
+import { type FileContent, type SnapshotFileDiff } from "@opencode-ai/sdk/v2"
+
+// Fork extends SnapshotFileDiff with before/after rendered content (populated server-side)
+type FileDiff = SnapshotFileDiff & { before?: string; after?: string }
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
@@ -150,7 +153,7 @@ export const SessionReview = (props: SessionReviewProps) => {
   const opened = () => store.opened
 
   const open = () => props.open ?? store.open
-  const files = createMemo(() => props.diffs.map((diff) => diff.file))
+  const files = createMemo(() => props.diffs.map((diff) => diff.file ?? ""))
   const diffStyle = () => props.diffStyle ?? (props.split ? "split" : "unified")
   const hasDiffs = () => files().length > 0
 
@@ -284,7 +287,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                 <For each={props.diffs}>
                   {(diff) => {
                     let wrapper: HTMLDivElement | undefined
-                    const file = diff.file
+                    const file = diff.file ?? ""
 
                     const expanded = createMemo(() => open().includes(file))
                     const force = () => !!store.force[file]

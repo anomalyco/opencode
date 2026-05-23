@@ -1,5 +1,8 @@
-import { AssistantMessage, type FileDiff, Message as MessageType, Part as PartType } from "@opencode-ai/sdk/v2/client"
-import type { SessionStatus } from "@opencode-ai/sdk/v2"
+import { AssistantMessage, Message as MessageType, Part as PartType } from "@opencode-ai/sdk/v2/client"
+import type { SessionStatus, SnapshotFileDiff } from "@opencode-ai/sdk/v2"
+
+// Fork extends SnapshotFileDiff with before/after rendered content (populated server-side)
+type FileDiff = SnapshotFileDiff & { before?: string; after?: string }
 import { useData } from "../context"
 import { useFileComponent } from "../context/file"
 
@@ -293,8 +296,9 @@ export function SessionTurn(
     const seen = new Set<string>()
     return files
       .reduceRight<FileDiff[]>((result, diff) => {
-        if (seen.has(diff.file)) return result
-        seen.add(diff.file)
+        const file = diff.file ?? ""
+        if (seen.has(file)) return result
+        seen.add(file)
         result.push(diff)
         return result
       }, [])
@@ -612,7 +616,7 @@ export function SessionTurn(
                             >
                               <For each={diffs()}>
                                 {(diff) => {
-                                  const active = createMemo(() => expanded().includes(diff.file))
+                                  const active = createMemo(() => expanded().includes(diff.file ?? ""))
                                   const [visible, setVisible] = createSignal(false)
 
                                   createEffect(
@@ -634,12 +638,12 @@ export function SessionTurn(
                                   )
 
                                   return (
-                                    <Accordion.Item value={diff.file}>
+                                    <Accordion.Item value={diff.file ?? ""}>
                                       <StickyAccordionHeader>
                                         <Accordion.Trigger>
                                           <div data-slot="session-turn-diff-trigger">
                                             <span data-slot="session-turn-diff-path">
-                                              <Show when={diff.file.includes("/")}>
+                                              <Show when={diff.file?.includes("/")}>
                                                 <span data-slot="session-turn-diff-directory">
                                                   {`\u202A${getDirectory(diff.file)}\u202C`}
                                                 </span>
@@ -665,8 +669,8 @@ export function SessionTurn(
                                             <Dynamic
                                               component={fileComponent}
                                               mode="diff"
-                                              before={{ name: diff.file, contents: diff.before }}
-                                              after={{ name: diff.file, contents: diff.after }}
+                                              before={{ name: diff.file ?? "", contents: diff.before }}
+                                              after={{ name: diff.file ?? "", contents: diff.after }}
                                             />
                                           </div>
                                         </Show>

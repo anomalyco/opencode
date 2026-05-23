@@ -130,7 +130,7 @@ export const createOpenReviewFile = (input: {
         input.openTab(tab)
         input.setActive(tab)
       }
-      if (maybePromise instanceof Promise) void maybePromise.then(open)
+      if (maybePromise instanceof Promise) maybePromise.then(open)
       else open()
     })
   }
@@ -185,9 +185,14 @@ export const createSizing = () => {
   }
 
   onMount(() => {
-    makeEventListener(window, "pointerup", stop)
-    makeEventListener(window, "pointercancel", stop)
-    makeEventListener(window, "blur", stop)
+    window.addEventListener("pointerup", stop)
+    window.addEventListener("pointercancel", stop)
+    window.addEventListener("blur", stop)
+    onCleanup(() => {
+      window.removeEventListener("pointerup", stop)
+      window.removeEventListener("pointercancel", stop)
+      window.removeEventListener("blur", stop)
+    })
   })
 
   onCleanup(() => {

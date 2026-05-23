@@ -15,7 +15,6 @@ import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
-import { sessionTitle } from "@/utils/session-title"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { working } from "../session/session-working"
 import { hasProjectPermissions, workspaceKey } from "./helpers"
@@ -29,6 +28,12 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
   const permission = usePermission()
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
   const loaded = createMemo(() => dirs().some((directory) => globalSync.loaded(directory)))
+  const loadingSessions = createMemo(() =>
+    dirs().some((directory) => {
+      const [store] = globalSync.child(directory, { bootstrap: false })
+      return store.sessions === "loading"
+    }),
+  )
   const count = createMemo(() =>
     dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
   )
@@ -106,11 +111,6 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
           {badge().label}
         </div>
       </Show>
-      <Show when={props.working}>
-        <div class="absolute bottom-px right-px size-3 rounded-full bg-background-base z-10 flex items-center justify-center">
-          <Spinner class="size-[9px]" />
-        </div>
-      </Show>
     </div>
   )
 }
@@ -127,7 +127,6 @@ export type SessionItemProps = {
   sidebarExpanded: Accessor<boolean>
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
-  generateSessionTitle: (session: Session) => Promise<void>
 }
 
 const SessionRow = (props: {
@@ -141,6 +140,7 @@ const SessionRow = (props: {
   hasError: Accessor<boolean>
   unseenCount: Accessor<number>
   sidebarOpened: Accessor<boolean>
+  warmHover: () => void
   warmPress: () => void
   warmFocus: () => void
   cancelHoverPrefetch: () => void
@@ -220,11 +220,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     return workspaceKey(props.session.directory) !== workspaceKey(props.root)
   })
 
-  const tint = createMemo(() => messageAgentColor(sessionStore.message[props.session.id], sessionStore.agent))
-  const tooltip = createMemo(() => props.showTooltip ?? (props.mobile || !props.sidebarExpanded()))
-  const currentChild = createMemo(() => {
-    if (!props.showChild) return
-    return childSessionOnPath(sessionStore.session, props.session.id, params.id)
+  const tint = createMemo(() => {
+    return messageAgentColor(sessionStore.message[props.session.id], sessionStore.agent)
   })
 
   const hoverAllowed = createMemo(() => !props.mobile && props.sidebarExpanded())
@@ -424,14 +421,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           </div>
         </Show>
       </div>
-      <Show when={currentChild()} keyed>
-        {(child) => (
-          <div class="w-full">
-            <SessionItem {...props} session={child} level={(props.level ?? 0) + 1} />
-          </div>
-        )}
-      </Show>
-    </>
+    </div>
   )
 }
 
@@ -450,7 +440,7 @@ export const NewSessionItem = (props: {
     <A
       href={`/${props.slug}/session`}
       end
-      class={`flex items-center gap-2 min-w-0 w-full text-left focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
+      class={`flex items-center gap-1 min-w-0 w-full text-left focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
       onClick={() => {
         if (layout.sidebar.opened()) return
       }}
@@ -472,7 +462,6 @@ export const NewSessionItem = (props: {
           {label}
         </span>
       </div>
-      <span class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{label}</span>
     </A>
   )
 
@@ -511,9 +500,7 @@ export const SessionSkeleton = (props: { count?: number }): JSX.Element => {
 
 export const SessionGroupHeader = (props: { label: string }): JSX.Element => (
   <div class="px-4 pt-3 pb-1 first:pt-1 flex justify-end">
-    <span class="text-[11px] font-medium uppercase tracking-wider text-text-weak opacity-60">
-      {props.label}
-    </span>
+    <span class="text-[11px] font-medium uppercase tracking-wider text-text-weak opacity-60">{props.label}</span>
   </div>
 )
 
@@ -540,12 +527,7 @@ export const SessionSearchBar = (props: {
         style={{ "font-size": "13px" }}
       />
       <Show when={props.value()}>
-        <IconButton
-          icon="close-small"
-          variant="ghost"
-          class="size-5 rounded"
-          onClick={() => props.onInput("")}
-        />
+        <IconButton icon="close-small" variant="ghost" class="size-5 rounded" onClick={() => props.onInput("")} />
       </Show>
     </div>
   </div>

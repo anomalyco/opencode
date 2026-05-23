@@ -1,10 +1,7 @@
 import { For, createEffect, createMemo, on, Show, Index, type JSX, createSignal, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { Dynamic } from "solid-js/web"
 import { useNavigate } from "@solidjs/router"
 import { useMutation } from "@tanstack/solid-query"
-import { Virtualizer, type VirtualizerHandle } from "virtua/solid"
-import { Accordion } from "@opencode-ai/ui/accordion"
 import { Button } from "@opencode-ai/ui/button"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
@@ -19,16 +16,13 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import type { MarkdownStage } from "@opencode-ai/ui/markdown"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Binary } from "@opencode-ai/core/util/binary"
-import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
-import { normalize } from "@opencode-ai/ui/session-diff"
-import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -60,9 +54,6 @@ type MessageComment = {
 }
 
 const emptyMessages: MessageType[] = []
-const emptyParts: PartType[] = []
-const emptyTools: ToolPart[] = []
-const emptyAssistantMessages: AssistantMessage[] = []
 const idle = { type: "idle" as const }
 const estimatedTurnHeight = 680
 const gap = 48
@@ -225,53 +216,29 @@ const turnMessages = (messages: MessageType[], id: string) => {
   return messages.slice(start, end)
 }
 
-type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, { _tag: "BottomSpacer" }>
-type TimelineRowByTag<T extends TimelineRow.TimelineRow["_tag"]> = Extract<TimelineRow.TimelineRow, { _tag: T }>
-
-function sameKeys(a: readonly string[] | undefined, b: readonly string[] | undefined) {
-  if (a === b) return true
-  if (!a || !b) return false
-  if (a.length !== b.length) return false
-  return a.every((key, index) => key === b[index])
+type UserActions = {
+  fork?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
+  revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
 }
 
-const timelineCacheLimit = 16
-const timelineFallbackItemSize = 60
-const timelineCache = new Map<string, { keys: readonly string[]; cache: VirtualizerHandle["cache"] }>()
-
-function readTimelineCache(id: string, keys: readonly string[]) {
-  const entry = timelineCache.get(id)
-  if (!entry) return
-  if (sameKeys(entry.keys, keys)) return entry.cache
-  timelineCache.delete(id)
-}
-
-function writeTimelineCache(id: string, keys: readonly string[], handle: VirtualizerHandle | undefined) {
-  if (!handle || keys.length === 0) return
-  timelineCache.delete(id)
-  timelineCache.set(id, { keys: keys.slice(), cache: handle.cache })
-  while (timelineCache.size > timelineCacheLimit) timelineCache.delete(timelineCache.keys().next().value!)
-}
-
-function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefined, rows: TimelineRow.TimelineRow[]) {
-  if (!previous?.length) return rows
-  const byKey = new Map(previous.map((row) => [TimelineRow.key(row), row] as const))
-  return rows.map((row) => {
-    const existing = byKey.get(TimelineRow.key(row))
-    if (!existing) return row
-    return TimelineRow.equals(existing, row) ? existing : row
+const messageComments = (parts: Part[]): MessageComment[] =>
+  parts.flatMap((part) => {
+    if (part.type !== "text" || !(part as TextPart).synthetic) return []
+    const next = readCommentMetadata(part.metadata) ?? parseCommentNote(part.text)
+    if (!next) return []
+    return [
+      {
+        path: next.path,
+        comment: next.comment,
+        selection: next.selection
+          ? {
+              startLine: next.selection.startLine,
+              endLine: next.selection.endLine,
+            }
+          : undefined,
+      },
+    ]
   })
-}
-
-const taskDescription = (part: PartType, sessionID: string) => {
-  if (part.type !== "tool" || part.tool !== "task") return
-  const metadata = "metadata" in part.state ? part.state.metadata : undefined
-  if (metadata?.sessionId !== sessionID) return
-  const value = part.state.input?.description
-  if (typeof value === "string" && value) return value
-}
-
-const pace = (width: number) => Math.round(Math.max(1200, Math.min(3200, (Math.max(width, 360) * 2000) / 900)))
 
 const boundaryTarget = (root: HTMLElement, target: EventTarget | null) => {
   const current = target instanceof Element ? target : undefined
@@ -341,6 +308,8 @@ function label(message: UserMessage, parts: Part[]) {
 }
 
 export function MessageTimeline(props: {
+  mobileChanges: boolean
+  mobileFallback: JSX.Element
   actions?: UserActions
   scroll: { overflow: boolean; bottom: boolean }
   live: boolean
@@ -354,7 +323,6 @@ export function MessageTimeline(props: {
   hasScrollGesture: () => boolean
   onUserScroll: () => void
   onAutoScrollInteraction: (event: MouseEvent) => void
-  shouldAnchorBottom: () => boolean
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
   historyMore: boolean
@@ -365,7 +333,6 @@ export function MessageTimeline(props: {
   seekingMessageId?: string
   onJumpToMessage: (message: UserMessage) => void
   anchor: (id: string) => string
-  setRevealMessage?: (fn: (id: string) => void) => void
 }) {
   let touchGesture: number | undefined
   let contentRef: HTMLDivElement | undefined
@@ -1545,7 +1512,6 @@ export function MessageTimeline(props: {
     return sync.session.get(id)
   })
   const titleValue = createMemo(() => info()?.title)
-  const titleLabel = createMemo(() => sessionTitle(titleValue()))
   const shareUrl = createMemo(() => info()?.share?.url)
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const parentID = createMemo(() => info()?.parentID)
@@ -1569,156 +1535,8 @@ export function MessageTimeline(props: {
     open: false,
     dismiss: null as "escape" | "outside" | null,
   })
-  const [bar, setBar] = createStore({
-    ms: pace(640),
-  })
 
   let more: HTMLButtonElement | undefined
-  let head: HTMLDivElement | undefined
-  let listRoot: HTMLDivElement | undefined
-  let listFrame: number | undefined
-  let contentFrame: number | undefined
-  let bottomAnchorFrame: number | undefined
-  let bottomAnchorFrames = 0
-  let measuredBottomAnchored = true
-  const [scrollRoot, setScrollRoot] = createSignal<HTMLDivElement>()
-
-  const updateTitleMetrics = () => {
-    if (!head || head.clientWidth <= 0) return
-    setBar("ms", pace(head.clientWidth))
-  }
-
-  createResizeObserver(() => head, updateTitleMetrics)
-
-  const isMeasuredBottom = (root: HTMLDivElement) => root.scrollHeight - root.clientHeight - root.scrollTop <= 4
-
-  function anchorMeasuredBottom() {
-    if (!listRoot) return false
-    if (!measuredBottomAnchored) return false
-    listRoot.scrollTop = listRoot.scrollHeight
-    return true
-  }
-
-  function scheduleMeasuredBottomAnchor() {
-    // Workaround for virtua issue #301: virtua does not expose a synchronous item-resize hook for
-    // "stay at bottom if already at bottom". Tool rows can briefly outgrow the measured virtual
-    // height, so keep the scroll container bottom-locked for a few frames while measurement settles.
-    bottomAnchorFrames = 90
-    if (bottomAnchorFrame !== undefined) return
-
-    const tick = () => {
-      bottomAnchorFrame = undefined
-      if (!anchorMeasuredBottom()) {
-        bottomAnchorFrames = 0
-        return
-      }
-
-      bottomAnchorFrames = working() ? 12 : bottomAnchorFrames - 1
-      if (bottomAnchorFrames <= 0) return
-      bottomAnchorFrame = requestAnimationFrame(tick)
-    }
-
-    bottomAnchorFrame = requestAnimationFrame(tick)
-  }
-
-  const bindContentRoot = (root: HTMLDivElement) => {
-    const child = root.firstElementChild
-    props.setContentRef(child instanceof HTMLDivElement ? child : root)
-  }
-
-  const scheduleContentRoot = (root: HTMLDivElement) => {
-    if (contentFrame !== undefined) cancelAnimationFrame(contentFrame)
-    contentFrame = requestAnimationFrame(() => {
-      contentFrame = undefined
-      if (listRoot !== root) return
-      bindContentRoot(root)
-    })
-  }
-
-  const connectListRoot = (root: HTMLDivElement) => {
-    if (listRoot !== root) return
-    if (!root.isConnected || !root.ownerDocument.defaultView) {
-      listFrame = requestAnimationFrame(() => {
-        listFrame = undefined
-        connectListRoot(root)
-      })
-      return
-    }
-
-    props.setScrollRef(root)
-    measuredBottomAnchored = isMeasuredBottom(root)
-    setScrollRoot(root)
-    scheduleContentRoot(root)
-  }
-
-  const bindListRoot = (root: HTMLDivElement) => {
-    if (root === listRoot) return
-
-    if (listFrame !== undefined) cancelAnimationFrame(listFrame)
-    if (contentFrame !== undefined) cancelAnimationFrame(contentFrame)
-    listRoot = root
-    setScrollRoot(undefined)
-    connectListRoot(root)
-  }
-
-  const handleListWheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {
-    const root = event.currentTarget
-    const delta = normalizeWheelDelta({
-      deltaY: event.deltaY,
-      deltaMode: event.deltaMode,
-      rootHeight: root.clientHeight,
-    })
-    if (!delta) return
-    markBoundaryGesture({ root, target: event.target, delta, onMarkScrollGesture: props.onMarkScrollGesture })
-  }
-
-  const handleListTouchStart = (event: TouchEvent) => {
-    touchGesture = event.touches[0]?.clientY
-  }
-
-  const handleListTouchMove = (event: TouchEvent & { currentTarget: HTMLDivElement }) => {
-    const next = event.touches[0]?.clientY
-    const prev = touchGesture
-    touchGesture = next
-    if (next === undefined || prev === undefined) return
-
-    const delta = prev - next
-    if (!delta) return
-
-    markBoundaryGesture({
-      root: event.currentTarget,
-      target: event.target,
-      delta,
-      onMarkScrollGesture: props.onMarkScrollGesture,
-    })
-  }
-
-  const handleListTouchEnd = () => {
-    touchGesture = undefined
-  }
-
-  const handleListPointerDown = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
-    if (event.target !== event.currentTarget) return
-    props.onMarkScrollGesture(event.currentTarget)
-  }
-
-  const handleListScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-    measuredBottomAnchored = isMeasuredBottom(event.currentTarget)
-    props.onScheduleScrollState(event.currentTarget)
-    props.onHistoryScroll()
-    if (!props.hasScrollGesture()) return
-    props.onUserScroll()
-    props.onAutoScrollHandleScroll()
-    props.onMarkScrollGesture(event.currentTarget)
-  }
-
-  onCleanup(() => {
-    if (listFrame !== undefined) cancelAnimationFrame(listFrame)
-    if (contentFrame !== undefined) cancelAnimationFrame(contentFrame)
-    if (bottomAnchorFrame !== undefined) cancelAnimationFrame(bottomAnchorFrame)
-    setScrollRoot(undefined)
-    props.setScrollRef(undefined)
-  })
 
   const viewShare = () => {
     const url = shareUrl()
@@ -1884,21 +1702,9 @@ export function MessageTimeline(props: {
     ),
   )
 
-  createEffect(
-    on(
-      () => [parentID(), childTaskDescription()] as const,
-      ([id, description]) => {
-        if (!id || description) return
-        if (sync.data.message[id] !== undefined) return
-        void sync.session.sync(id)
-      },
-      { defer: true },
-    ),
-  )
-
   const openTitleEditor = () => {
-    if (!sessionID() || parentID()) return
-    setTitle({ editing: true, draft: titleLabel() ?? "" })
+    if (!sessionID()) return
+    setTitle({ editing: true, draft: titleValue() ?? "" })
     requestAnimationFrame(() => {
       titleRef?.focus()
       titleRef?.select()
@@ -1916,7 +1722,7 @@ export function MessageTimeline(props: {
     if (titleMutation.isPending) return
 
     const next = title.draft.trim()
-    if (!next || next === (titleLabel() ?? "")) {
+    if (!next || next === (titleValue() ?? "")) {
       setTitle("editing", false)
       return
     }
@@ -2037,9 +1843,7 @@ export function MessageTimeline(props: {
   }
 
   function DialogDeleteSession(props: { sessionID: string }) {
-    const name = createMemo(
-      () => sessionTitle(sync.session.get(props.sessionID)?.title) ?? language.t("command.session.new"),
-    )
+    const name = createMemo(() => sync.session.get(props.sessionID)?.title ?? language.t("command.session.new"))
     const handleDelete = async () => {
       await deleteSession(props.sessionID)
       dialog.close()
@@ -2409,253 +2213,8 @@ export function MessageTimeline(props: {
             touchGesture = next
             if (next === undefined || prev === undefined) return
 
-  const turnDurationMs = (userMessageID: string) => {
-    const message = messageByID().get(userMessageID)
-    if (!message || message.role !== "user") return
-    const end = (assistantMessagesByParent().get(userMessageID) ?? emptyAssistantMessages).reduce<number | undefined>(
-      (max, item) => {
-        const completed = item.time.completed
-        if (typeof completed !== "number") return max
-        if (max === undefined) return completed
-        return Math.max(max, completed)
-      },
-      undefined,
-    )
-    if (typeof end !== "number") return
-    if (end < message.time.created) return
-    return end - message.time.created
-  }
-
-  const assistantCopyPartID = (userMessageID: string) => {
-    if (workingTurn(userMessageID)) return null
-    const messages = assistantMessagesByParent().get(userMessageID) ?? emptyAssistantMessages
-
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i]
-      if (!message) continue
-
-      const parts = getMsgParts(message.id)
-      for (let j = parts.length - 1; j >= 0; j--) {
-        const part = parts[j]
-        if (!part || part.type !== "text" || !part.text?.trim()) continue
-        return part.id
-      }
-    }
-  }
-
-  const getMsgPart = (messageID: string, partID: string) => getMsgParts(messageID).find((part) => part.id === partID)
-
-  const renderAssistantPartGroup = (row: TimelineRowMap["AssistantPart"]) => {
-    if (row.group.type === "context") {
-      const parts = createMemo(() => {
-        const group = row.group
-        if (group.type !== "context") return emptyTools
-        return group.refs
-          .map((ref) => getMsgPart(ref.messageID, ref.partID))
-          .filter((part): part is ToolPart => part?.type === "tool")
-      })
-
-      return <ContextToolGroup parts={parts()} busy={workingTurn(row.userMessageID) && row.lastAssistantPart} />
-    }
-
-    const message = createMemo(() => {
-      const group = row.group
-      if (group.type !== "part") return
-      return messageByID().get(group.ref.messageID)
-    })
-    const part = createMemo(() => {
-      const group = row.group
-      if (group.type !== "part") return
-      return getMsgPart(group.ref.messageID, group.ref.partID)
-    })
-
-    return (
-      <Show when={message()}>
-        {(message) => (
-          <Show when={part()}>
-            {(part) => (
-              <MessagePart
-                part={part()}
-                message={message()}
-                showAssistantCopyPartID={assistantCopyPartID(row.userMessageID)}
-                turnDurationMs={turnDurationMs(row.userMessageID)}
-                defaultOpen={partDefaultOpen(
-                  part(),
-                  settings.general.shellToolPartsExpanded(),
-                  settings.general.editToolPartsExpanded(),
-                )}
-                deferToolContent={false}
-              />
-            )}
-          </Show>
-        )}
-      </Show>
-    )
-  }
-
-  function TimelineRowFrame(input: { row: FramedTimelineRow; children: JSX.Element }) {
-    const anchor = () => {
-      const row = input.row
-      return row._tag === "CommentStrip" || (row._tag === "UserMessage" && row.anchor)
-    }
-    const previousUserMessage = () => {
-      const row = input.row
-      return (row._tag === "CommentStrip" || row._tag === "UserMessage") && row.previousUserMessage
-    }
-    const previousAssistantPart = () => {
-      const row = input.row
-      return row._tag === "AssistantPart" && row.previousAssistantPart
-    }
-
-    return (
-      <div
-        id={anchor() ? props.anchor(input.row.userMessageID) : undefined}
-        data-message-id={input.row.userMessageID}
-        data-timeline-row={input.row._tag}
-        classList={{
-          "min-w-0 w-full max-w-full": true,
-          "md:max-w-200 2xl:max-w-[1000px]": props.centered,
-          "md:mx-auto": props.centered,
-          "pt-6": previousUserMessage(),
-          "pt-3": previousAssistantPart(),
-        }}
-      >
-        <div data-component="session-turn" class="min-w-0 w-full relative" style={{ height: "auto" }}>
-          {input.children}
-        </div>
-      </div>
-    )
-  }
-
-  const renderTimelineRow = (row: TimelineRow.TimelineRow) => {
-    switch (row._tag) {
-      case "CommentStrip": {
-        const comments = createMemo(() =>
-          getMsgParts(row.userMessageID).flatMap((part) => MessageComment.fromPart(part) ?? []),
-        )
-        return (
-          <TimelineRowFrame row={row}>
-            <div class="w-full px-4 md:px-5 pb-2">
-              <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
-                <div class="flex w-max min-w-full justify-end gap-2">
-                  <Index each={comments()}>
-                    {(comment) => (
-                      <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
-                        <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
-                          <FileIcon node={{ path: comment().path, type: "file" }} class="size-3.5 shrink-0" />
-                          <span class="truncate">{getFilename(comment().path)}</span>
-                          <Show when={comment().selection}>
-                            {(selection) => (
-                              <span class="shrink-0 text-text-weak">
-                                {selection().startLine === selection().endLine
-                                  ? `:${selection().startLine}`
-                                  : `:${selection().startLine}-${selection().endLine}`}
-                              </span>
-                            )}
-                          </Show>
-                        </div>
-                        <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
-                          {comment().comment}
-                        </div>
-                      </div>
-                    )}
-                  </Index>
-                </div>
-              </div>
-            </div>
-          </TimelineRowFrame>
-        )
-      }
-      case "UserMessage": {
-        const message = createMemo(() => {
-          const m = messageByID().get(row.userMessageID)
-          if (m?.role === "user") return m
-        })
-        return (
-          <TimelineRowFrame row={row}>
-            <Show when={message()}>
-              {(message) => (
-                <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-                  <div data-slot="session-turn-message-content" aria-live="off">
-                    <Message message={message()} parts={getMsgParts(row.userMessageID)} actions={props.actions} />
-                  </div>
-                </div>
-              )}
-            </Show>
-          </TimelineRowFrame>
-        )
-      }
-      case "TurnDivider": {
-        return (
-          <TimelineRowFrame row={row}>
-            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-              <div data-slot="session-turn-compaction">
-                <MessageDivider
-                  label={language.t(
-                    row.label === "compaction" ? "ui.messagePart.compaction" : "ui.message.interrupted",
-                  )}
-                />
-              </div>
-            </div>
-          </TimelineRowFrame>
-        )
-      }
-      case "AssistantPart": {
-        return (
-          <TimelineRowFrame row={row}>
-            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-              <div data-slot="session-turn-assistant-content" aria-hidden={workingTurn(row.userMessageID)}>
-                {renderAssistantPartGroup(row)}
-              </div>
-            </div>
-          </TimelineRowFrame>
-        )
-      }
-      case "Thinking": {
-        return (
-          <TimelineRowFrame row={row}>
-            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-              <TimelineThinkingRow
-                reasoningHeading={row.reasoningHeading}
-                showReasoningSummaries={settings.general.showReasoningSummaries()}
-              />
-            </div>
-          </TimelineRowFrame>
-        )
-      }
-      case "Retry": {
-        return (
-          <TimelineRowFrame row={row}>
-            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-              <SessionRetry status={sessionStatus()} show={activeMessageID() === row.userMessageID} />
-            </div>
-          </TimelineRowFrame>
-        )
-      }
-      case "DiffSummary": {
-        return (
-          <TimelineRowFrame row={row}>
-            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-              <TimelineDiffSummaryRow diffs={row.diffs} />
-            </div>
-          </TimelineRowFrame>
-        )
-      }
-      case "Error": {
-        return (
-          <TimelineRowFrame row={row}>
-            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
-              <Card variant="error" class="error-card">
-                {row.text}
-              </Card>
-            </div>
-          </TimelineRowFrame>
-        )
-      }
-      case "BottomSpacer":
-        return <div data-timeline-row="bottom-spacer" aria-hidden="true" class="h-16" />
-    }
-  }
+            const delta = prev - next
+            if (!delta) return
 
             const root = e.currentTarget
             markBoundaryGesture({ root, target: e.target, delta, onMarkScrollGesture: props.onMarkScrollGesture })
@@ -2691,7 +2250,6 @@ export function MessageTimeline(props: {
             if (!gesture) return
             props.onUserScroll()
             props.onMarkScrollGesture(e.currentTarget)
-            if (props.isDesktop) props.onScrollSpyScroll()
           }}
           onClick={props.onAutoScrollInteraction}
           class="relative min-w-0 w-full h-full"
@@ -2750,36 +2308,9 @@ export function MessageTimeline(props: {
               </Show>
             </div>
           </div>
-        </Show>
-        <Show when={scrollRoot()}>
-          {(root) => (
-            <Virtualizer
-              data={timelineRowKeys()}
-              cache={virtualCache()}
-              itemSize={virtualCache() ? undefined : timelineFallbackItemSize}
-              scrollRef={root()}
-              shift={props.historyShift}
-              keepMounted={keepMounted()}
-              startMargin={64}
-              ref={(handle) => {
-                if (!handle) {
-                  writeTimelineCache(virtualizerSessionKey, virtualizerRowKeys, virtualizer)
-                  virtualizer = undefined
-                  return
-                }
-                virtualizer = handle
-                virtualizerSessionKey = cacheSessionKey
-                virtualizerRowKeys = cacheRowKeys
-                maybeAnchorBottom()
-                scheduleContentRoot(root())
-              }}
-            >
-              {(key) => <TimelineRowView rowKey={key} />}
-            </Virtualizer>
-          )}
-        </Show>
-      </ScrollView>
-    </div>
+        </ScrollView>
+      </div>
+    </Show>
   )
 
   function TimelineItem(item: { messageID: string; index: number }) {
