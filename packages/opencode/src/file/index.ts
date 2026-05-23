@@ -1,4 +1,5 @@
 import { BusEvent } from "@/bus/bus-event"
+import { serviceUse } from "@/effect/service-use"
 import { InstanceState } from "@/effect/instance-state"
 
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
@@ -325,6 +326,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/File") {}
+
+export const use = serviceUse(Service)
 
 export const layer = Layer.effect(
   Service,

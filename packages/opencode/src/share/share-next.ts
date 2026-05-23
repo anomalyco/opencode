@@ -1,4 +1,5 @@
 import type * as SDK from "@opencode-ai/sdk/v2"
+import { serviceUse } from "@/effect/service-use"
 import { Effect, Exit, Layer, Option, Schema, Scope, Context, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Account } from "@/account/account"
@@ -75,6 +76,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ShareNext") {}
+
+export const use = serviceUse(Service)
 
 const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
   Effect.sync(() => Database.use(fn))
@@ -168,16 +171,20 @@ export const layer = Layer.effect(
           fn: (evt: { properties: any }) => Effect.Effect<void, unknown>,
         ) =>
           bus.subscribe(def as never).pipe(
-            Stream.runForEach((evt) =>
-              fn(evt).pipe(
-                Effect.catchCause((cause) =>
-                  Effect.sync(() => {
-                    log.error("share subscriber failed", { type: def.type, cause })
-                  }),
+            Effect.flatMap((stream) =>
+              stream.pipe(
+                Stream.runForEach((evt) =>
+                  fn(evt).pipe(
+                    Effect.catchCause((cause) =>
+                      Effect.sync(() => {
+                        log.error("share subscriber failed", { type: def.type, cause })
+                      }),
+                    ),
+                  ),
                 ),
+                Effect.forkScoped,
               ),
             ),
-            Effect.forkScoped,
           )
 
         yield* watch(Session.Event.Updated, (evt) =>

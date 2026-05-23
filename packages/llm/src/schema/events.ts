@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { ContentBlockID, FinishReason, ProtocolID, ProviderMetadata, RouteID, ToolCallID } from "./ids"
-import { ModelRef } from "./options"
+import { ModelSchema } from "./options"
 import { ToolResultValue } from "./messages"
 
 /**
@@ -91,6 +91,7 @@ export const TextDelta = Schema.Struct({
   type: Schema.tag("text-delta"),
   id: ContentBlockID,
   text: Schema.String,
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.TextDelta" })
 export type TextDelta = Schema.Schema.Type<typeof TextDelta>
 
@@ -112,6 +113,7 @@ export const ReasoningDelta = Schema.Struct({
   type: Schema.tag("reasoning-delta"),
   id: ContentBlockID,
   text: Schema.String,
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ReasoningDelta" })
 export type ReasoningDelta = Schema.Schema.Type<typeof ReasoningDelta>
 
@@ -288,7 +290,7 @@ export class PreparedRequest extends Schema.Class<PreparedRequest>("LLM.Prepared
   id: Schema.String,
   route: RouteID,
   protocol: ProtocolID,
-  model: ModelRef,
+  model: ModelSchema,
   body: Schema.Unknown,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}

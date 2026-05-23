@@ -59,10 +59,9 @@ export const withOpenAIOptions = <Options extends { readonly providerOptions?: O
   modelID: string,
   options: Options,
   defaults: { readonly textVerbosity?: boolean } = {},
-): Options & { readonly id: string; readonly providerOptions?: ProviderOptions } => {
+): Omit<Options, "providerOptions"> & { readonly providerOptions?: ProviderOptions } => {
   return {
     ...options,
-    id: modelID,
     providerOptions: mergeProviderOptions(openAIDefaultOptions(modelID, defaults), options.providerOptions),
   }
 }

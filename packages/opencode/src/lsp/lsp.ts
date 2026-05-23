@@ -291,7 +291,7 @@ export const layer = Layer.effect(
           if (!client) continue
 
           result.push(client)
-          Bus.publish(Event.Updated, {})
+          await Bus.publish(ctx, Event.Updated, {})
         }
 
         return result

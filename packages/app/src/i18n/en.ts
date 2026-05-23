@@ -416,6 +416,7 @@ export const dict = {
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
   "language.bs": "Bosanski",
+  "language.uk": "Українська",
   "language.th": "ไทย",
   "language.tr": "Türkçe",
 
@@ -469,6 +470,7 @@ export const dict = {
   "error.page.action.restart": "Restart",
   "error.page.action.report": "Report Error",
   "error.page.action.reported": "Error Reported",
+  "error.page.action.exportLogs": "Export Logs",
   "error.page.action.checking": "Checking...",
   "error.page.action.checkUpdates": "Check for updates",
   "error.page.action.updateTo": "Update to {{version}}",
@@ -524,6 +526,14 @@ export const dict = {
   "home.recentProjects": "Recent projects",
   "home.empty.title": "No recent projects",
   "home.empty.description": "Get started by opening a local project",
+  "home.title": "Home",
+  "home.projects": "Projects",
+  "home.project.add": "Add project",
+  "home.sessions.search.placeholder": "Search sessions",
+  "home.sessions.empty": "No sessions found",
+  "home.sessions.group.today": "Today",
+  "home.sessions.group.yesterday": "Yesterday",
+  "home.sessions.group.older": "Older",
 
   "session.tab.session": "Session",
   "session.tab.review": "Review",
@@ -774,6 +784,8 @@ export const dict = {
   "settings.general.row.showSessionProgressBar.title": "Show session progress bar",
   "settings.general.row.showSessionProgressBar.description":
     "Display the animated progress bar at the top of the session when the agent is working",
+  "settings.general.row.pinchZoom.title": "Pinch to zoom",
+  "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
 
   "settings.general.row.wayland.title": "Use native Wayland",
   "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",

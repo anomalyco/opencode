@@ -2,6 +2,7 @@ import { Project } from "@/project/project"
 import { ProjectID } from "@/project/schema"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { ProjectNotFoundError } from "../errors"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
@@ -53,7 +54,7 @@ export const ProjectApi = HttpApi.make("project")
           query: WorkspaceRoutingQuery,
           payload: UpdatePayload,
           success: described(Project.Info, "Updated project information"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, ProjectNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "project.update",

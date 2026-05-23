@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { GenerationOptions, LLM, LLMEvent, LLMRequest, LLMResponse, ToolChoice } from "../src"
-import { LLMClient } from "../src/route"
+import { Auth, LLMClient } from "../src/route"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import { tool, ToolFailure, type ToolExecuteContext } from "../src/tool"
@@ -12,11 +12,9 @@ import { dynamicResponse, scriptedResponses } from "./lib/http"
 import { deltaChunk, finishChunk, toolCallChunk } from "./lib/openai-chunks"
 import { sseEvents } from "./lib/sse"
 
-const model = OpenAIChat.model({
-  id: "gpt-4o-mini",
-  baseURL: "https://api.openai.test/v1/",
-  headers: { authorization: "Bearer test" },
-})
+const model = OpenAIChat.route
+  .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+  .model({ id: "gpt-4o-mini" })
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)
 
@@ -141,6 +139,45 @@ describe("LLMClient tools", () => {
     }),
   )
 
+  it.effect("preserves content tool results from dynamic tools", () =>
+    Effect.gen(function* () {
+      const screenshot = tool({
+        description: "Capture a screenshot.",
+        jsonSchema: { type: "object", properties: {} },
+        execute: () =>
+          Effect.succeed({
+            type: "content" as const,
+            value: [
+              { type: "text" as const, text: "Screenshot captured." },
+              { type: "media" as const, mediaType: "image/png", data: "AAAA" },
+            ],
+          }),
+      })
+
+      const events = Array.from(
+        yield* LLMClient.stream({ request: baseRequest, tools: { screenshot } }).pipe(
+          Stream.runCollect,
+          Effect.provide(
+            scriptedResponses([sseEvents(toolCallChunk("call_1", "screenshot", "{}"), finishChunk("tool_calls"))]),
+          ),
+        ),
+      )
+
+      expect(events.find(LLMEvent.is.toolResult)).toMatchObject({
+        type: "tool-result",
+        id: "call_1",
+        name: "screenshot",
+        result: {
+          type: "content",
+          value: [
+            { type: "text", text: "Screenshot captured." },
+            { type: "media", mediaType: "image/png", data: "AAAA" },
+          ],
+        },
+      })
+    }),
+  )
+
   it.effect("executes tool calls for one step without looping by default", () =>
     Effect.gen(function* () {
       const layer = scriptedResponses([
@@ -249,7 +286,9 @@ describe("LLMClient tools", () => {
 
       yield* TestToolRuntime.runTools({
         request: LLM.updateRequest(baseRequest, {
-          model: AnthropicMessages.model({ id: "claude-sonnet-4-5", apiKey: "test" }),
+          model: AnthropicMessages.route
+            .with({ auth: Auth.header("x-api-key", "test") })
+            .model({ id: "claude-sonnet-4-5" }),
         }),
         tools: { get_weather },
       }).pipe(Stream.runCollect, Effect.provide(layer))
@@ -496,7 +535,9 @@ describe("LLMClient tools", () => {
       const events = Array.from(
         yield* TestToolRuntime.runTools({
           request: LLM.updateRequest(baseRequest, {
-            model: AnthropicMessages.model({ id: "claude-sonnet-4-5", apiKey: "test" }),
+            model: AnthropicMessages.route
+              .with({ auth: Auth.header("x-api-key", "test") })
+              .model({ id: "claude-sonnet-4-5" }),
           }),
           tools: {},
         }).pipe(Stream.runCollect, Effect.provide(layer)),
