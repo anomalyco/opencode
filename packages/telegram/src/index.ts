@@ -391,3 +391,6 @@ bot.callbackQuery(/.*/, async (ctx) => {
 
 bot.start()
 console.log("🤖 Telegram bot is running!")
+
+export { createTelegramIntegration } from "./integration.js"
+export type { Integration as TelegramIntegration, IntegrationConfig as TelegramIntegrationConfig } from "./integration.js"
