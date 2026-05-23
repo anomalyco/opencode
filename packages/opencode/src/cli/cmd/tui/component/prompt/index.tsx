@@ -198,7 +198,18 @@ export function Prompt(props: PromptProps) {
   const [workspaceCreatingDots, setWorkspaceCreatingDots] = createSignal(3)
   const [warpNotice, setWarpNotice] = createSignal<string>()
   const [cursorVersion, setCursorVersion] = createSignal(0)
-  const currentProviderLabel = createMemo(() => local.model.parsed().provider)
+  const acpModel = createMemo(() => {
+    const state = props.sessionID ? sync.data.acp[props.sessionID] : undefined
+    const current = state?.models?.currentModelId
+    if (typeof current !== "string") return
+    const match = state?.models?.availableModels?.find((model: any) => model?.modelId === current)
+    return {
+      model: typeof match?.name === "string" ? match.name : current,
+      provider: "ACP",
+    }
+  })
+  const currentModelLabel = createMemo(() => acpModel()?.model ?? local.model.parsed().model)
+  const currentProviderLabel = createMemo(() => acpModel()?.provider ?? local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
 
   function selectWorkspace(selection: WorkspaceSelection | undefined) {
@@ -1567,7 +1578,7 @@ export function Prompt(props: PromptProps) {
                             flexShrink={0}
                             fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}
                           >
-                            {local.model.parsed().model}
+                            {currentModelLabel()}
                           </text>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
                           <Show when={showVariant()}>
