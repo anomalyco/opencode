@@ -962,12 +962,78 @@ export const RustAnalyzer: Info = {
   },
 }
 
+const clangdWarnedRoots = new Set<string>()
+
 export const Clangd: Info = {
   id: "clangd",
   root: NearestRoot(["compile_commands.json", "compile_flags.txt", ".clangd"]),
   extensions: [".c", ".cpp", ".cc", ".cxx", ".c++", ".h", ".hpp", ".hh", ".hxx", ".h++"],
   async spawn(root, _ctx, flags) {
-    const args = ["--background-index", "--clang-tidy"]
+    // Ensure compile_commands.json exists; if missing, suggest how to generate it
+    let compileCommandsDir: string | undefined
+    const hasCompileCommands = await pathExists(path.join(root, "compile_commands.json"))
+    const hasCompileFlags = await pathExists(path.join(root, "compile_flags.txt"))
+    const hasClangdConfig = await pathExists(path.join(root, ".clangd"))
+
+    if (!hasCompileCommands && !hasCompileFlags && !hasClangdConfig) {
+      // Check common build subdirectories
+      for (const dir of ["build", "out", "cmake-build-debug", "cmake-build-release"]) {
+        if (await pathExists(path.join(root, dir, "compile_commands.json"))) {
+          compileCommandsDir = dir
+          break
+        }
+      }
+
+      if (!compileCommandsDir && !clangdWarnedRoots.has(root)) {
+        clangdWarnedRoots.add(root)
+        const [hasCMake, hasMakefile, hasKbuild, hasWest, hasMeson, hasBazel] = await Promise.all([
+          pathExists(path.join(root, "CMakeLists.txt")),
+          pathExists(path.join(root, "Makefile")),
+          pathExists(path.join(root, "Kbuild")),
+          pathExists(path.join(root, "west.yml")),
+          pathExists(path.join(root, "meson.build")),
+          pathExists(path.join(root, "BUILD.bazel")),
+        ])
+        if (hasWest) {
+          log.info(
+            "Detected Zephyr RTOS project (west.yml) — generate compile_commands.json with:\n" +
+              "  west build -b <board>"
+          )
+        } else if (hasCMake) {
+          log.info(
+            "Detected CMakeLists.txt — generate compile_commands.json with:\n" +
+              "  cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+          )
+        } else if (hasKbuild) {
+          log.info(
+            "Detected Linux kernel (Kbuild) — generate compile_commands.json with:\n" +
+              "  make && ./scripts/clang-tools/gen_compile_commands.py"
+          )
+        } else if (hasMakefile) {
+          log.info(
+            "Detected Makefile — generate compile_commands.json with:\n" +
+              "  bear -- make   or   compiledb make"
+          )
+        } else if (hasMeson) {
+          log.info(
+            "Detected meson.build — generate compile_commands.json with:\n" +
+              "  meson setup build"
+          )
+        } else if (hasBazel) {
+          log.info(
+            "Detected Bazel project — generate compile_commands.json with:\n" +
+              "  bazel run @hedron_compile_commands//:refresh"
+          )
+        } else {
+          log.info(
+            "No compile_commands.json found. See clangd project setup:\n" +
+              "  https://clangd.llvm.org/installation#project-setup"
+          )
+        }
+      }
+    }
+
+    const args = ["--background-index", "--clang-tidy", ...(compileCommandsDir ? [`--compile-commands-dir=${compileCommandsDir}`] : [])]
     const fromPath = which("clangd")
     if (fromPath) {
       return {
