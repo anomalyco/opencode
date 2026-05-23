@@ -17,7 +17,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
-import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
+import { useBindings, useCommandSlashes, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
 import { Reference } from "@/reference/reference"
 import { ConfigReference } from "@/config/reference"
 import { displayCharAt, mentionTriggerIndex } from "@/cli/cmd/prompt-display"
@@ -87,6 +87,7 @@ export function Autocomplete(props: {
   const sync = useSync()
   const project = useProject()
   const slashes = useCommandSlashes()
+  const keymap = useOpencodeKeymap()
   const modeStack = useOpencodeModeStack()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
@@ -553,11 +554,7 @@ export function Autocomplete(props: {
         display: "/acp-options",
         description: "ACP options",
         onSelect: () => {
-          const newText = "/acp-options "
-          const cursor = props.input().logicalCursor
-          props.input().deleteRange(0, 0, cursor.row, cursor.col)
-          props.input().insertText(newText)
-          props.input().cursorOffset = Bun.stringWidth(newText)
+          keymap.dispatchCommand("acp.config")
         },
       })
     }
