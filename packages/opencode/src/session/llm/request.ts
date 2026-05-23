@@ -34,7 +34,6 @@ type PrepareInput = {
 }
 
 export type Prepared = {
-  readonly isOpenaiOauth: boolean
   readonly system: string[]
   readonly messages: ModelMessage[]
   readonly tools: Record<string, Tool>
@@ -161,7 +160,6 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     : undefined
 
   return {
-    isOpenaiOauth,
     system,
     messages,
     tools: Object.fromEntries(Object.entries(tools).toSorted(([a], [b]) => a.localeCompare(b))),

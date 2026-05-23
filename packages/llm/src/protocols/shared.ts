@@ -80,7 +80,7 @@ export const subtractTokens = (total: number | undefined, subtrahend: number | u
  */
 export const sumTokens = (...values: ReadonlyArray<number | undefined>): number | undefined => {
   if (values.every((value) => value === undefined)) return undefined
-  return values.reduce<number>((acc, value) => acc + (value ?? 0), 0)
+  return values.reduce((acc: number, value) => acc + (value ?? 0), 0)
 }
 
 export const eventError = (route: string, message: string, raw?: string) =>
@@ -121,6 +121,16 @@ export const parseToolInput = (route: string, name: string, raw: string) =>
  */
 export const mediaBytes = (part: MediaPart) =>
   typeof part.data === "string" ? part.data : Buffer.from(part.data).toString("base64")
+
+export const mediaBase64 = (part: MediaPart) => {
+  if (typeof part.data !== "string" || !part.data.startsWith("data:")) return mediaBytes(part)
+  return part.data.slice(part.data.indexOf(",") + 1)
+}
+
+export const mediaDataUrl = (part: MediaPart) =>
+  typeof part.data === "string" && part.data.startsWith("data:")
+    ? part.data
+    : `data:${part.mediaType};base64,${mediaBytes(part)}`
 
 export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 

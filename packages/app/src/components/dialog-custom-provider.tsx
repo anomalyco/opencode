@@ -106,7 +106,7 @@ export function DialogCustomProvider(props: Props) {
       form,
       t: language.t,
       disabledProviders: globalSync.data.config.disabled_providers ?? [],
-      existingProviderIDs: new Set(globalSync.data.provider.all.map((p) => p.id)),
+      existingProviderIDs: new Set(globalSync.data.provider.all.keys()),
     })
     batch(() => {
       setForm("err", output.err)
