@@ -61,6 +61,7 @@ import { referencePromptMetadata, referenceTextPart } from "./prompt/reference"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { shouldExitPromptLoop } from "./prompt-loop"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1264,12 +1265,7 @@ export const layer = Layer.effect(
           const hasToolCalls =
             lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
 
-          if (
-            lastAssistant?.finish &&
-            !["tool-calls"].includes(lastAssistant.finish) &&
-            !hasToolCalls &&
-            lastUser.id < lastAssistant.id
-          ) {
+          if (shouldExitPromptLoop({ lastAssistant, lastUserID: lastUser.id, hasToolCalls })) {
             yield* slog.info("exiting loop")
             break
           }
