@@ -53,7 +53,7 @@ export function parse(headers: Headers): State | undefined {
   )
 }
 
-export function waitEffect(workspaceID: WorkspaceID, state: State, signal?: AbortSignal) {
+export function wait(workspaceID: WorkspaceID, state: State, signal?: AbortSignal) {
   return Effect.gen(function* () {
     log.info("waiting for state", {
       workspaceID,
