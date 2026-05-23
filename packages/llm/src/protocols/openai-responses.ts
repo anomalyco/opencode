@@ -92,6 +92,8 @@ const OpenAIResponsesInputItem = Schema.Union([
 ])
 type OpenAIResponsesInputItem = Schema.Schema.Type<typeof OpenAIResponsesInputItem>
 
+// Mutable counterpart of the schema reasoning item so `lowerMessages` can fold
+// multiple streamed summary parts into the same item before flushing.
 type OpenAIResponsesReasoningInput = {
   type: "reasoning"
   id: string
@@ -125,7 +127,7 @@ const OpenAIResponsesCoreFields = {
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   store: Schema.optional(Schema.Boolean),
   prompt_cache_key: Schema.optional(Schema.String),
-  include: optionalArray(Schema.Literal("reasoning.encrypted_content")),
+  include: optionalArray(OpenAIOptions.OpenAIResponseIncludable),
   reasoning: Schema.optional(
     Schema.Struct({
       effort: Schema.optional(OpenAIOptions.OpenAIReasoningEffort),
@@ -405,7 +407,7 @@ const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (reques
   if (effort && !OpenAIOptions.isReasoningEffort(effort))
     return yield* invalid(`OpenAI Responses does not support reasoning effort ${effort}`)
   const summary = OpenAIOptions.reasoningSummary(request)
-  const include = OpenAIOptions.include(request) ?? OpenAIOptions.encryptedReasoning(request)
+  const include = OpenAIOptions.include(request)
   const verbosity = OpenAIOptions.textVerbosity(request)
   const instructions = OpenAIOptions.instructions(request)
   return {

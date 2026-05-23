@@ -7,12 +7,28 @@ export const OpenAIReasoningEfforts = ReasoningEfforts.filter(
 )
 export type OpenAIReasoningEffort = (typeof OpenAIReasoningEfforts)[number]
 
+// Mirrors OpenAI's `ResponseIncludable` union from the official SDK. Keep this
+// in lockstep with `openai-node/src/resources/responses/responses.ts`.
+export const OpenAIResponseIncludables = [
+  "file_search_call.results",
+  "web_search_call.results",
+  "web_search_call.action.sources",
+  "message.input_image.image_url",
+  "computer_call_output.output.image_url",
+  "code_interpreter_call.outputs",
+  "reasoning.encrypted_content",
+  "message.output_text.logprobs",
+] as const
+export type OpenAIResponseIncludable = (typeof OpenAIResponseIncludables)[number]
+
 const REASONING_EFFORTS = new Set<string>(ReasoningEfforts)
 const OPENAI_REASONING_EFFORTS = new Set<string>(OpenAIReasoningEfforts)
 const TEXT_VERBOSITY = new Set<string>(["low", "medium", "high"])
+const INCLUDABLES = new Set<string>(OpenAIResponseIncludables)
 
 export const OpenAIReasoningEffort = Schema.Literals(OpenAIReasoningEfforts)
 export const OpenAITextVerbosity = TextVerbosity
+export const OpenAIResponseIncludable = Schema.Literals(OpenAIResponseIncludables)
 
 const isAnyReasoningEffort = (effort: unknown): effort is ReasoningEffort =>
   typeof effort === "string" && REASONING_EFFORTS.has(effort)
@@ -35,19 +51,15 @@ export const reasoningEffort = (request: LLMRequest): ReasoningEffort | undefine
   return isAnyReasoningEffort(value) ? value : undefined
 }
 
-export const reasoningSummary = (request: LLMRequest): "auto" | undefined => {
-  return options(request)?.reasoningSummary === "auto" ? "auto" : undefined
-}
+export const reasoningSummary = (request: LLMRequest): "auto" | undefined =>
+  options(request)?.reasoningSummary === "auto" ? "auto" : undefined
 
-export const include = (request: LLMRequest) => {
+export const include = (request: LLMRequest): ReadonlyArray<OpenAIResponseIncludable> | undefined => {
   const value = options(request)?.include
-  return Array.isArray(value) && value.includes("reasoning.encrypted_content")
-    ? (["reasoning.encrypted_content"] as const)
-    : undefined
+  if (!Array.isArray(value)) return undefined
+  const filtered = value.filter((entry): entry is OpenAIResponseIncludable => INCLUDABLES.has(entry))
+  return filtered.length > 0 ? filtered : undefined
 }
-
-export const encryptedReasoning = (request: LLMRequest) =>
-  options(request)?.includeEncryptedReasoning === true ? (["reasoning.encrypted_content"] as const) : undefined
 
 export const promptCacheKey = (request: LLMRequest) => {
   const value = options(request)?.promptCacheKey

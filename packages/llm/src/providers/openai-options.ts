@@ -1,5 +1,8 @@
 import type { ProviderOptions, ReasoningEffort, TextVerbosity } from "../schema"
 import { mergeProviderOptions } from "../schema"
+import type { OpenAIResponseIncludable } from "../protocols/utils/openai-options"
+
+export type { OpenAIResponseIncludable } from "../protocols/utils/openai-options"
 
 export interface OpenAIOptionsInput {
   readonly [key: string]: unknown
@@ -7,8 +10,7 @@ export interface OpenAIOptionsInput {
   readonly promptCacheKey?: string
   readonly reasoningEffort?: ReasoningEffort
   readonly reasoningSummary?: "auto"
-  readonly include?: ReadonlyArray<"reasoning.encrypted_content">
-  readonly includeEncryptedReasoning?: boolean
+  readonly include?: ReadonlyArray<OpenAIResponseIncludable>
   readonly textVerbosity?: TextVerbosity
 }
 
@@ -27,7 +29,6 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
       reasoningEffort: options?.reasoningEffort,
       reasoningSummary: options?.reasoningSummary,
       include: options?.include,
-      includeEncryptedReasoning: options?.includeEncryptedReasoning,
       textVerbosity: options?.textVerbosity,
     }),
   )
