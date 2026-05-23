@@ -7,19 +7,25 @@ related: ./1-spec.md ./2-plan.md
 # feishu-bridge-light — 2-plan(实施计划 v2)
 
 > **基于**:[1-spec.md](./1-spec.md) v2
-> **分支策略**:`main → feat/feishu-bridge`(merge 同步 401-fix)→ `feat/feishu-bridge-light`
+> **分支策略**:`main → feat/feishu-bridge`(merge 拉齐 main,含已 push 的 401-fix + e2e-mock + ship-dev)→ `feat/feishu-bridge-light`
 > **总工期**:~4.5 天(v1 估的 3 天偏紧;按 v2 修正后的真实工作量重估)
 
 ---
 
 ## Phase 0:基线同步(0.2 天)
 
+### 前置事实(2026-05-23 核对)
+
+- `main` HEAD `98e3bb531`,跟 `origin/main` 完全同步 ✅
+- 401-fix(`262a353f8` / `49c95852d` / `f1bd32503`)已在 main ✅
+- `feat/feishu-bridge` HEAD `3e1996bf9`(本 feat v2 doc 的 commit),**落后 main 13 commit**,需 merge 拉齐
+
 ### 操作
 
 ```bash
 cd /Volumes/ExtSSD/opencode-fork
 git checkout feat/feishu-bridge
-git merge main          # 同步今天的 feishu-pipeline-401-fix + e2e-mock W1-W3
+git merge main          # 拉齐 main 上的 401-fix + e2e-mock W1-W3 + ship-dev + e2e-bug-repro
 # 解冲突(预计 docs/features/INDEX 类小冲突)
 git checkout -b feat/feishu-bridge-light
 ```
@@ -27,6 +33,7 @@ git checkout -b feat/feishu-bridge-light
 ### 验收
 
 - [ ] `feat/feishu-bridge-light` HEAD 包含 commit `262a353f8`(401-fix)
+- [ ] `feat/feishu-bridge-light` HEAD 包含 commit `352f90991`(e2e-mock W3 done)
 - [ ] `packages/adapter-feishu-lark/` 下所有现有测试通过(`bun test packages/adapter-feishu-lark`)
 
 ### commit

@@ -7,7 +7,7 @@ related: ./1-spec.md ./2-plan.md
 # feishu-bridge-light — 1-spec(轻量版,飞书桥接增强)
 
 > **状态**:📝 撰写中 v2
-> **分支**:`feat/feishu-bridge`(先 merge main 同步今天的 pipeline-401-fix)→ `feat/feishu-bridge-light` 子分支
+> **分支**:`feat/feishu-bridge`(落后 main 13 commit,先 merge 拉齐 — 含 main 上已有的 401-fix / e2e-mock / ship-dev 等)→ `feat/feishu-bridge-light` 子分支
 > **来源**:飞书桥接需求讨论(2026-05-22 v1 草稿,2026-05-23 调研后 v2 修订)
 > **v2 修订说明**:v1 多处 API 假设错配 + 安全漏洞,详见 § 7"v1→v2 变更"
 
@@ -262,7 +262,7 @@ IO 模块,封装飞书上传 API:
 | C12 | marker 残留发给 user | regex strip 掉 marker 再发 |
 | C13 | 自动建群无任何授权 | opt-in + permission-card 二次确认双门控 |
 | C14 | reply text 无 `[ATTACH:]` 通道 | 同 `[CREATE_GROUP:]` 设计一致的 marker 协议 |
-| C15 | 分支基线落后 main | 先 merge main(含今天 401-fix)再开 light 子分支 |
+| C15 | 分支基线落后 main 13 commit | 先 merge main(401-fix 等已在 main)再开 light 子分支 |
 
 ---
 
