@@ -55,6 +55,7 @@ import { Reference } from "@/reference/reference"
 import { BackgroundJob } from "@/background/job"
 import { SessionStatus } from "@/session/status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 
 const log = Log.create({ service: "tool.registry" })
 
@@ -80,6 +81,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
+
+export const use = serviceUse(Service)
 
 export const layer: Layer.Layer<
   Service,
