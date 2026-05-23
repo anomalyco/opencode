@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest"
 import { useE2eStack } from "../support/use-e2e-stack"
 
 import { By, waitVisible } from "../support/wd-wait"
+import { cleanupSession, sessionIDFromUrl } from "../../../e2e/actions"
 import { promptSelector } from "../../../e2e/selectors"
 import { openProjectSession, useAppBrowser } from "../support/use-app-browser"
 import { dropXlsx, expandFileTree, minimalXlsx, noVisibleLoadingSpreadsheet, assertSpreadsheetImportOk } from "../support/xlsx-tree"
@@ -60,6 +61,45 @@ describe("univer upload", () => {
       await assertSpreadsheetImportOk(app.page, wait)
     },
     60_000,
+  )
+
+  test(
+    "open file tab stays open after first prompt creates session",
+    async () => {
+      await app.gotoSession()
+      const name = "e2e-tab-handoff.xlsx"
+      const b64 = Buffer.from(minimalXlsx()).toString("base64")
+      const sheet = 10_000
+
+      await expandFileTree(app.page)
+      await dropXlsx(app.page, name, b64)
+
+      const row = app.page.locator("#file-tree-panel").getByRole("button", { name })
+      await row.waitFor({ state: "visible", timeout: wait })
+      await row.click()
+
+      await app.page.getByRole("tab", { name }).waitFor({ state: "visible", timeout: wait })
+      await noVisibleLoadingSpreadsheet(app.page, sheet)
+      await assertSpreadsheetImportOk(app.page, sheet)
+
+      const prompt = await waitVisible(app.page, By.css(promptSelector))
+      await prompt.click()
+      await prompt.fill("Say ok")
+      await app.page.keyboard.press("Enter")
+
+      await expect.poll(() => app.page.url(), { timeout: 30_000 }).toMatch(/\/session\/[^/?#]+/)
+      const sid = sessionIDFromUrl(app.page.url())
+      if (!sid) throw new Error("session id missing")
+
+      try {
+        await app.page.getByRole("tab", { name }).waitFor({ state: "visible", timeout: wait })
+        await noVisibleLoadingSpreadsheet(app.page, sheet)
+        await assertSpreadsheetImportOk(app.page, sheet)
+      } finally {
+        await cleanupSession({ sdk: app.sdk, sessionID: sid })
+      }
+    },
+    90_000,
   )
 
   test(

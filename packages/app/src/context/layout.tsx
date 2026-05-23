@@ -22,12 +22,6 @@ type SessionView = {
   pendingMessageAt?: number
 }
 
-type TabHandoff = {
-  dir: string
-  id: string
-  at: number
-}
-
 export type ReviewDiffStyle = "unified" | "split"
 
 export function ensureSessionKey(key: string, touch: (key: string) => void, seed: (key: string) => void) {
@@ -75,8 +69,16 @@ function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): 
   return { all, active: tab }
 }
 
+const sessionParts = (key: string) => {
+  const index = key.lastIndexOf("/")
+  if (index === -1) return { dir: key, session: undefined }
+  const session = key.slice(index + 1)
+  if (!session.startsWith("ses_")) return { dir: key, session: undefined }
+  return { dir: key.slice(0, index), session }
+}
+
 const sessionPath = (key: string) => {
-  const dir = key.split("/")[0]
+  const dir = sessionParts(key).dir
   if (!dir) return
   return createPathHelpers(() => dir)
 }
@@ -103,6 +105,29 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
     all: normalizeSessionTabList(path, tabs.all),
     active: tabs.active ? normalizeSessionTab(path, tabs.active) : tabs.active,
   }
+}
+
+function applyProjectSessionTabs(sessionTabs: Record<string, SessionTabs>, dir: string, id: string) {
+  const from = sessionTabs[dir]
+  if (!from || (from.all.length === 0 && !from.active)) return false
+
+  const key = `${dir}/${id}`
+  const path = sessionPath(key)
+  const all = normalizeSessionTabList(
+    path,
+    from.all.filter((tab) => tab !== "review"),
+  )
+  const active = from.active ? normalizeSessionTab(path, from.active) : undefined
+  sessionTabs[key] = {
+    all,
+    active: active && all.includes(active) ? active : all[0],
+  }
+  return true
+}
+
+/** Copies open tabs from the project workspace key (`dir`) to a new session key (`dir/id`). */
+export function copyProjectSessionTabs(sessionTabs: Record<string, SessionTabs>, dir: string, id: string) {
+  return applyProjectSessionTabs(sessionTabs, dir, id)
 }
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
@@ -206,9 +231,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         sessionTabs: {} as Record<string, SessionTabs>,
         sessionView: {} as Record<string, SessionView>,
-        handoff: {
-          tabs: undefined as TabHandoff | undefined,
-        },
       }),
     )
 
@@ -227,9 +249,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const dropSessionState = (keys: string[]) => {
       for (const key of keys) {
-        const parts = key.split("/")
-        const dir = parts[0]
-        const session = parts[1]
+        const parts = sessionParts(key)
+        const dir = parts.dir
+        const session = parts.session
         if (!dir) continue
 
         for (const entry of SESSION_STATE_KEYS) {
@@ -328,13 +350,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     return {
       ready,
       handoff: {
-        tabs: createMemo(() => store.handoff?.tabs),
-        setTabs(dir: string, id: string) {
-          setStore("handoff", "tabs", { dir, id, at: Date.now() })
-        },
-        clearTabs() {
-          if (!store.handoff?.tabs) return
-          setStore("handoff", "tabs", undefined)
+        copyProjectTabs(dir: string, id: string) {
+          const key = `${dir}/${id}`
+          ensureKey(key)
+          let copied = false
+          setStore(
+            produce((draft) => {
+              copied = copyProjectSessionTabs(draft.sessionTabs, dir, id)
+            }),
+          )
+          if (copied) touch(key)
         },
       },
       sidebar: {

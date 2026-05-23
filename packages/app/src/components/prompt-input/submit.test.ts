@@ -90,7 +90,7 @@ beforeAll(async () => {
   mock.module("@/context/layout", () => ({
     useLayout: () => ({
       handoff: {
-        setTabs: () => undefined,
+        copyProjectTabs: () => undefined,
       },
     }),
   }))

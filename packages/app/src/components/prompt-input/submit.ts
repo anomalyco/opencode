@@ -146,7 +146,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       if (session) {
         captureVeritly("session_created", { session_id: session.id })
         if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
-        layout.handoff.setTabs(sessionDirectory, session.id)
+        layout.handoff.copyProjectTabs(sessionDirectory, session.id)
         navigate(`/${sessionDirectory}/session/${session.id}`)
       }
     }
