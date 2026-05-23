@@ -118,6 +118,22 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 - 飞书系列 8 个 invoke 命令降级为 W2-stub(返最简化值即可,Phase 1 不覆盖飞书桥接 e2e)
 - Event 订阅未在 grep 中显式发现(SDK 内部封装),W1 D2 vite plugin 设计时再补
 
+### 2026-05-23 W1 D2
+
+- Vite mock plugin 落地:`packages/app/vite/e2e-mock.js`(34 行,条件激活 — 仅在 `--mode e2e-mock` / `VITE_E2E_MOCK=true` 时返非 false)
+- 接入方式:**不动 `vite.config.ts`**,在 `packages/app/vite.js` 默认 export 数组末尾追加 `e2eMockPlugin()`。非 mock 模式 plugin 返 undefined,vite 自动跳过。
+- 拦截策略:**alias `@tauri-apps/api/core` → `e2e/mocks/tauri.ts`**(vite resolve.alias 同步给 esbuild dep optimizer + runtime resolve)
+- Runtime 标记:plugin define hook 注入 `import.meta.env.VITE_E2E_MOCK = "true"`,前端代码可检测
+- `e2e/mocks/tauri.ts` W1 D2 范围 stub:`invoke()` console.warn + 返 undefined;`Channel` 空类;`convertFileSrc` 返假 URL
+- npm script:`dev:e2e-mock` = `vite --mode e2e-mock`(跨平台,不依赖 cross-env)
+- 实测 `bun run --cwd packages/app dev:e2e-mock`:
+  - 首次 17s ready(re-optimize deps,正常)
+  - 二次 1.3s ready(dep cache 命中)
+  - console 高亮 `[deskfox-e2e-mock] Phase 1 mock mode ACTIVE`
+  - 端口 3000 监听成功,无 import 报错
+- **D2 验收过**(无 import 报错 + vite server ready);UI hydrate 留 D3
+- SDK / `@opencode-ai/sdk/v2/client` 拦截**未在 D2 处理**:server.ts `createSdkForServer` 是 SDK 唯一入口,D3 决定走 `page.route` HTTP 层 mock(Stage ② 思路)还是 vite alias `createOpencodeClient`
+
 ## 关联文档
 
 | 文档 | 关系 |
