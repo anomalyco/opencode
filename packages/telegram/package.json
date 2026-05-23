@@ -1,0 +1,19 @@
+{
+  "name": "@opencode-ai/telegram",
+  "version": "1.15.7",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "workspace:*",
+    "grammy": "^1.26.0"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}
