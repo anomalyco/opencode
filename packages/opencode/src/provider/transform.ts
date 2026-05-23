@@ -628,9 +628,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     id.includes("deepseek-v3") ||
     id.includes("minimax") ||
     id.includes("glm") ||
-    id.includes("kimi") ||
-    id.includes("k2p") ||
-    id.includes("qwen") ||
+    (id.includes("kimi") && !id.includes("k2.6") && !id.includes("k26") && !id.includes("k2p6")) ||
+    (id.includes("k2p") && !id.includes("k2p6")) ||
+    (id.includes("qwen") && !id.includes("3.6")) ||
     id.includes("big-pickle")
   )
     return {}
