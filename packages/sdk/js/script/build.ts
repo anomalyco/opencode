@@ -9,16 +9,9 @@ import path from "path"
 
 import { createClient } from "@hey-api/openapi-ts"
 
-const openapiSource = process.env.OPENCODE_SDK_OPENAPI === "hono" ? "hono" : "httpapi"
 const opencode = path.resolve(dir, "../../opencode")
 
-// `bun dev generate` now derives the spec from the Effect HttpApi contract by
-// default; pass `--hono` to fall back to the legacy Hono spec for parity diffs.
-if (openapiSource === "httpapi") {
-  await $`bun dev generate > ${dir}/openapi.json`.cwd(opencode)
-} else {
-  await $`bun dev generate --hono > ${dir}/openapi.json`.cwd(opencode)
-}
+await $`bun dev generate > ${dir}/openapi.json`.cwd(opencode)
 
 await createClient({
   input: "./openapi.json",
@@ -46,6 +39,24 @@ await createClient({
     },
   ],
 })
+
+// Patch a @hey-api/openapi-ts codegen bug: SseFn incorrectly passes the
+// endpoint's TError into the second generic of ServerSentEventsResult, which
+// is the AsyncGenerator's TReturn slot. Iterator return values have nothing
+// to do with HTTP errors, and any consumer that calls `.return()` or returns
+// from a mock generator gets type-checked against the wrong shape. Drop the
+// arg so TReturn defaults to void.
+const sseTypesPath = "./src/v2/gen/client/types.gen.ts"
+const sseTypesFile = Bun.file(sseTypesPath)
+const sseTypesSource = await sseTypesFile.text()
+const sseTypesPatched = sseTypesSource.replace(
+  "=> Promise<ServerSentEventsResult<TData, TError>>",
+  "=> Promise<ServerSentEventsResult<TData>>",
+)
+if (sseTypesPatched === sseTypesSource) {
+  throw new Error(`SseFn patch did not apply; @hey-api/openapi-ts output may have changed (${sseTypesPath})`)
+}
+await Bun.write(sseTypesPath, sseTypesPatched)
 
 await $`bun prettier --write src/gen`
 await $`bun prettier --write src/v2`

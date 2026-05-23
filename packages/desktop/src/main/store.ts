@@ -1,4 +1,5 @@
 import Store from "electron-store"
+import { app } from "electron"
 
 import { SETTINGS_STORE } from "./constants"
 
@@ -11,7 +12,12 @@ const cache = new Map<string, Store>()
 export function getStore(name = SETTINGS_STORE) {
   const cached = cache.get(name)
   if (cached) return cached
-  const next = new Store({ name, fileExtension: "", accessPropertiesByDotNotation: false })
+  const next = new Store({
+    name,
+    cwd: app.getPath("userData"),
+    fileExtension: "",
+    accessPropertiesByDotNotation: false,
+  })
   cache.set(name, next)
   return next
 }

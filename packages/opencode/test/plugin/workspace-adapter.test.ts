@@ -1,36 +1,63 @@
-import { afterAll, afterEach, describe, expect } from "bun:test"
+import { afterEach, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import path from "path"
 import { pathToFileURL } from "url"
+import { Auth } from "../../src/auth"
+import { Bus } from "../../src/bus"
+import { Config } from "../../src/config/config"
+import { Env } from "../../src/env"
+import { RuntimeFlags } from "../../src/effect/runtime-flags"
+import { Workspace } from "../../src/control-plane/workspace"
+import { Plugin } from "../../src/plugin/index"
+import { InstanceBootstrap } from "../../src/project/bootstrap-service"
+import { InstanceStore } from "../../src/project/instance-store"
+import { Project } from "../../src/project/project"
+import { Vcs } from "../../src/project/vcs"
+import { InstanceState } from "../../src/effect/instance-state"
+import { Session } from "../../src/session/session"
+import { SessionPrompt } from "../../src/session/prompt"
+import { SyncEvent } from "../../src/sync"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { AccountTest } from "../fake/account"
+import { AuthTest } from "../fake/auth"
+import { NpmTest } from "../fake/npm"
 
-const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
-process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
-
-const { Flag } = await import("@opencode-ai/core/flag/flag")
-const { Plugin } = await import("../../src/plugin/index")
-const { Workspace } = await import("../../src/control-plane/workspace")
-const { Instance } = await import("../../src/project/instance")
-const it = testEffect(Layer.mergeAll(Plugin.defaultLayer, Workspace.defaultLayer, CrossSpawnSpawner.defaultLayer))
-
-const experimental = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
-
-Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+const configLayer = Config.layer.pipe(
+  Layer.provide(EffectFlock.defaultLayer),
+  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(Env.defaultLayer),
+  Layer.provide(AuthTest.empty),
+  Layer.provide(AccountTest.empty),
+  Layer.provide(NpmTest.noop),
+  Layer.provide(FetchHttpClient.layer),
+)
+const pluginLayer = Plugin.layer.pipe(
+  Layer.provide(Bus.layer),
+  Layer.provide(configLayer),
+  Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })),
+)
+const noopBootstrapLayer = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
+const workspaceLayer = Workspace.layer.pipe(
+  Layer.provide(Auth.defaultLayer),
+  Layer.provide(Session.defaultLayer),
+  Layer.provide(SyncEvent.defaultLayer),
+  Layer.provide(SessionPrompt.defaultLayer),
+  Layer.provide(Project.defaultLayer),
+  Layer.provide(Vcs.defaultLayer),
+  Layer.provide(FetchHttpClient.layer),
+  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrapLayer))),
+  Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: true })),
+)
+const it = testEffect(Layer.mergeAll(pluginLayer, workspaceLayer, CrossSpawnSpawner.defaultLayer))
 
 afterEach(async () => {
   await disposeAllInstances()
-})
-
-afterAll(() => {
-  if (disableDefault === undefined) {
-    delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
-  } else {
-    process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = disableDefault
-  }
-
-  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = experimental
 })
 
 describe("plugin.workspace", () => {
@@ -84,11 +111,12 @@ describe("plugin.workspace", () => {
         const plugin = yield* Plugin.Service
         yield* plugin.init()
         const workspace = yield* Workspace.Service
+        const ctx = yield* InstanceState.context
         const info = yield* workspace.create({
           type,
           branch: null,
           extra: { key: "value" },
-          projectID: Instance.project.id,
+          projectID: ctx.project.id,
         })
 
         expect(info.type).toBe(type)

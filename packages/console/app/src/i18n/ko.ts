@@ -247,7 +247,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
   "go.meta.description":
-    "Go는 첫 달 $5, 이후 $10/월로 시작하며, GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro, DeepSeek V4 Flash에 대해 넉넉한 5시간 요청 한도를 제공합니다.",
+    "Go는 첫 달 $5, 이후 $10/월로 시작하며, GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro, DeepSeek V4 Flash에 대해 넉넉한 5시간 요청 한도를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",
   "go.hero.body":
     "Go는 전 세계 프로그래머들에게 에이전트 코딩을 제공합니다. 가장 유능한 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공하므로, 비용이나 가용성 걱정 없이 강력한 에이전트로 빌드할 수 있습니다.",
@@ -259,8 +259,6 @@ export const dict = {
   "go.cta.promo": "첫 달 $5",
   "go.pricing.body":
     "어떤 에이전트와도 사용할 수 있습니다. 첫 달 $5, 이후 $10/월. 필요하면 크레딧을 충전하세요. 언제든지 취소할 수 있습니다.",
-  "go.banner.badge": "3x",
-  "go.banner.text": "Kimi K2.6, 4월 27일까지 사용 한도 3배 확대",
   "go.graph.free": "무료",
   "go.graph.freePill": "Big Pickle 및 무료 모델",
   "go.graph.go": "Go",
@@ -299,7 +297,7 @@ export const dict = {
   "go.problem.item2": "넉넉한 한도와 안정적인 액세스",
   "go.problem.item3": "가능한 한 많은 프로그래머를 위해 제작됨",
   "go.problem.item4":
-    "GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro, DeepSeek V4 Flash 포함",
+    "GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro, DeepSeek V4 Flash 포함",
   "go.how.title": "Go 작동 방식",
   "go.how.body": "Go는 첫 달 $5, 이후 $10/월로 시작합니다. OpenCode 또는 어떤 에이전트와도 함께 사용할 수 있습니다.",
   "go.how.step1.title": "계정 생성",
@@ -323,7 +321,7 @@ export const dict = {
   "go.faq.a2": "Go에는 넉넉한 한도와 안정적인 액세스를 제공하는 아래 모델이 포함됩니다.",
   "go.faq.q3": "Go는 Zen과 같은가요?",
   "go.faq.a3":
-    "아니요. Zen은 종량제인 반면, Go는 첫 달 $5, 이후 $10/월로 시작하며, GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro, DeepSeek V4 Flash 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공합니다.",
+    "아니요. Zen은 종량제인 반면, Go는 첫 달 $5, 이후 $10/월로 시작하며, GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro, DeepSeek V4 Flash 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공합니다.",
   "go.faq.q4": "Go 비용은 얼마인가요?",
   "go.faq.a4.p1.beforePricing": "Go 비용은",
   "go.faq.a4.p1.pricingLink": "첫 달 $5",
@@ -346,7 +344,7 @@ export const dict = {
 
   "go.faq.q9": "무료 모델과 Go의 차이점은 무엇인가요?",
   "go.faq.a9":
-    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2-Pro, MiMo-V2-Omni, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro, DeepSeek V4 Flash를 포함하며, 롤링 윈도우(5시간, 주간, 월간)에 걸쳐 더 높은 요청 할당량을 적용합니다. 이는 대략 5시간당 $12, 주당 $30, 월 $60에 해당합니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
+    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.5 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, DeepSeek V4 Pro, DeepSeek V4 Flash를 포함하며, 롤링 윈도우(5시간, 주간, 월간)에 걸쳐 더 높은 요청 할당량을 적용합니다. 이는 대략 5시간당 $12, 주당 $30, 월 $60에 해당합니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
 
   "zen.api.error.rateLimitExceeded": "속도 제한을 초과했습니다. 나중에 다시 시도해 주세요.",
   "zen.api.error.modelNotSupported": "{{model}} 모델은 지원되지 않습니다",
@@ -356,8 +354,12 @@ export const dict = {
   "zen.api.error.missingApiKey": "API 키가 누락되었습니다.",
   "zen.api.error.invalidApiKey": "유효하지 않은 API 키입니다.",
   "zen.api.error.subscriptionQuotaExceeded": "구독 할당량을 초과했습니다. {{retryIn}} 후 다시 시도해 주세요.",
-  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
-    "구독 할당량을 초과했습니다. 무료 모델은 계속 사용할 수 있습니다.",
+  "zen.api.error.goSubscriptionRollingLimitExceeded":
+    "5시간 사용 한도에 도달했습니다. {{retryIn}} 후 초기화됩니다. 이 모델을 지금 계속 사용하려면 사용 가능한 잔액에서 사용을 활성화하세요: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionWeeklyLimitExceeded":
+    "주간 사용 한도에 도달했습니다. {{retryIn}} 후 초기화됩니다. 이 모델을 지금 계속 사용하려면 사용 가능한 잔액에서 사용을 활성화하세요: {{consoleGoUrl}}",
+  "zen.api.error.goSubscriptionMonthlyLimitExceeded":
+    "월간 사용 한도에 도달했습니다. {{retryIn}} 후 초기화됩니다. 이 모델을 지금 계속 사용하려면 사용 가능한 잔액에서 사용을 활성화하세요: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "결제 수단이 없습니다. 결제 수단을 추가하세요: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "잔액이 부족합니다. 결제 관리를 여기서 하세요: {{billingUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
@@ -657,6 +659,39 @@ export const dict = {
   "workspace.lite.promo.subscribing": "리디렉션 중...",
   "workspace.lite.promo.otherMethods": "기타 결제 수단",
   "workspace.lite.promo.selectMethod": "결제 수단 선택",
+
+  "workspace.referral.copyLink": "링크 복사",
+  "workspace.referral.copied": "복사됨",
+  "workspace.referral.overview.title": "친구 초대",
+  "workspace.referral.overview.subtitle": "친구가 구독하면 $5를 받으세요. 친구도 $5를 받습니다.",
+  "workspace.referral.instructions.share": "추천 링크 공유",
+  "workspace.referral.instructions.subscribe": "친구가 가입하고 Go를 구독",
+  "workspace.referral.instructions.claim": "두 분 모두 $5 사용 크레딧을 받아 Go 사용 한도에 적용할 수 있습니다",
+  "workspace.referral.rewards.title": "추천 보상",
+  "workspace.referral.rewards.description": "사용 가능한 추천 크레딧을 Go 사용량에 적용합니다.",
+  "workspace.referral.rewards.subtitle": "{{applied}} / {{total}}개 보상 사용됨.",
+  "workspace.referral.rewards.empty": "아직 추천 보상이 없습니다.",
+  "workspace.referral.table.reward": "보상",
+  "workspace.referral.table.referral": "설명",
+  "workspace.referral.table.date": "날짜",
+  "workspace.referral.reward.description.inviter": "{{email}} 초대됨",
+  "workspace.referral.reward.description.invitee": "{{email}}님이 초대",
+  "workspace.referral.reward.action.subscribeUnlock": "구독하여 잠금 해제",
+  "workspace.referral.reward.action.view": "보상 보기",
+  "workspace.referral.reward.action.applied": "보상 사용됨",
+  "workspace.referral.reward.source.pendingInviter": "친구의 구독을 기다리는 중",
+  "workspace.referral.reward.source.pendingInvitee": "구독하여 보상 잠금 해제",
+  "workspace.referral.reward.source.available": "보상 사용 가능",
+  "workspace.referral.reward.source.applied": "보상 사용됨",
+  "workspace.referral.reward.status.applied": "보상 사용됨",
+  "workspace.referral.reward.status.pendingInviter": "구독하여 잠금 해제",
+  "workspace.referral.reward.status.pendingInvitee": "구독하여 잠금 해제",
+  "workspace.referral.apply.noGo": "구독하여 잠금 해제",
+  "workspace.referral.apply.preview": "보상 보기",
+  "workspace.referral.apply.action": "사용",
+  "workspace.referral.apply.confirmTitle": "보상 사용",
+  "workspace.referral.apply.confirmBody": "{{amount}}를 사용하여 이 워크스페이스의 현재 사용량을 줄입니다.",
+  "workspace.referral.apply.confirmAction": "사용",
 
   "download.title": "OpenCode | 다운로드",
   "download.meta.description": "macOS, Windows, Linux용 OpenCode 다운로드",

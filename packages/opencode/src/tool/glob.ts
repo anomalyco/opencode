@@ -7,6 +7,7 @@ import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import DESCRIPTION from "./glob.txt"
 import * as Tool from "./tool"
+import { Reference } from "@/reference/reference"
 
 export const Parameters = Schema.Struct({
   pattern: Schema.String.annotate({ description: "The glob pattern to match files against" }),
@@ -20,6 +21,7 @@ export const GlobTool = Tool.define(
   Effect.gen(function* () {
     const rg = yield* Ripgrep.Service
     const fs = yield* AppFileSystem.Service
+    const reference = yield* Reference.Service
 
     return {
       description: DESCRIPTION,
@@ -39,11 +41,15 @@ export const GlobTool = Tool.define(
 
           let search = params.path ?? ins.directory
           search = path.isAbsolute(search) ? search : path.resolve(ins.directory, search)
+          yield* reference.ensure(search)
           const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
           if (info?.type === "File") {
             throw new Error(`glob path must be a directory: ${search}`)
           }
-          yield* assertExternalDirectoryEffect(ctx, search, { kind: "directory" })
+          yield* assertExternalDirectoryEffect(ctx, search, {
+            bypass: yield* reference.contains(search),
+            kind: "directory",
+          })
 
           const limit = 100
           let truncated = false
