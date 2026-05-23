@@ -42,6 +42,7 @@ const NETWORK_ERROR_PATTERNS = [
   "connection refused",
   "connection timed out",
   "request timed out",
+  "sse read timed out",
 ]
 
 function hasNetworkErrorMessage(message: string): boolean {

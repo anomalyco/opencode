@@ -386,6 +386,21 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "connection reset by peer" })
   })
 
+  test("retries SSE chunk read timeout errors", () => {
+    // Simulates the Mac-sleep bug: the provider stream stalls, the per-chunk
+    // watchdog (wrapSSE in provider.ts) aborts with "SSE read timed out".
+    // That error MUST be retryable, otherwise the session hangs on busy forever.
+    const error = wrap("SSE read timed out")
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "SSE read timed out" })
+  })
+
+  test("does not retry user-initiated aborts", () => {
+    // Boundary guard: pressing ESC aborts with a DOMException("Aborted").
+    // The SSE-timeout fix must NOT make generic aborts retryable.
+    const error = wrap("Aborted")
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+  })
+
   test("does not retry 4xx errors with timeout in message", () => {
     const error = Schema.decodeUnknownSync(MessageV2.APIError.Schema)(
       new MessageV2.APIError({
