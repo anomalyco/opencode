@@ -1,7 +1,7 @@
 ---
 feat-id: feishu-bridge-light
-status: draft
-related: ./1-spec.md ./2-plan.md
+status: done
+related: ./1-spec.md ./2-plan.md ./3-changelog.md
 ---
 
 # feishu-bridge-light — 2-plan(实施计划 v2)
