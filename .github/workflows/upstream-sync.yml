@@ -95,7 +95,7 @@ jobs:
       - name: Create or update PR
         if: steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0' && steps.typecheck.outcome == 'success' && steps.tests.outcome == 'success'
         env:
-          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           date=$(date +%Y-%m-%d)
           body="Automated upstream sync from \`sst/opencode\` — $date.
@@ -119,7 +119,7 @@ jobs:
       - name: Create or update conflict review PR
         if: steps.merge.outputs.result == 'conflict'
         env:
-          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           date=$(date +%Y-%m-%d)
           body="Automated upstream sync from \`sst/opencode\` hit merge conflicts on $date.
