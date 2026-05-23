@@ -1,6 +1,6 @@
 ---
 feat-id: e2e-phase1-mock-mode
-status: spec
+status: in-progress
 related: ./1-spec.md ./2-plan.md ./3-changelog.md
 ---
 
@@ -108,11 +108,15 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 > 此段在 feat 实施期间持续追加 note — 每次方向调整 / 踩坑 / 推翻前方案都记一笔,带日期 + 触发场景。
 
-### 2026-05-23 启动
+### 2026-05-23 启动 + W1 D1
 
 - 1-spec / 2-plan 起草完成,5 个决策点已锁(同 1-spec §决策点段)
 - feat 分支 `feat/e2e-phase1-mock-mode` 从 main 切出
-- 等 user 审签 spec + plan 后启动 W1
+- User 审签 spec + plan 通过("OK 启动 W1"),启动 W1 D1
+- W1 D1 grep 盘点 — `packages/app/src` 共 8 个文件 import `@tauri-apps/api/core`,~22 个不同 invoke 命令;SDK `@opencode-ai/sdk/v2/client` ~25 个 import 文件,client.{file, find, session, provider} 4 namespace ~18 个方法
+- 产出 `packages/app/e2e/mocks/MANIFEST.md` 全量清单(impl 进度跟踪表 + W1/W2 优先级标记)
+- 飞书系列 8 个 invoke 命令降级为 W2-stub(返最简化值即可,Phase 1 不覆盖飞书桥接 e2e)
+- Event 订阅未在 grep 中显式发现(SDK 内部封装),W1 D2 vite plugin 设计时再补
 
 ## 关联文档
 
