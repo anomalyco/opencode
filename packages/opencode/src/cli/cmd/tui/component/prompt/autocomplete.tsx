@@ -546,10 +546,9 @@ export function Autocomplete(props: {
 
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...slashes()]
-    const currentAgent = sync.data.agent.find((agent) => agent.name === sync.session.get(props.sessionID ?? "")?.agent)
     const acpState = sync.data.acp[props.sessionID ?? ""]
 
-    if (currentAgent?.backend?.type === "acp" && !slashes().some((item) => item.display === "/acp-options")) {
+    if (props.sessionID && !slashes().some((item) => item.display === "/acp-options")) {
       results.push({
         display: "/acp-options",
         description: "ACP options",
