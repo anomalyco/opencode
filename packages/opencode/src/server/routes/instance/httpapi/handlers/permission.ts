@@ -3,6 +3,7 @@ import { PermissionID } from "@/permission/schema"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
+import { PermissionNotFoundError } from "../errors"
 
 export const permissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "permission", (handlers) =>
   Effect.gen(function* () {
@@ -16,11 +17,22 @@ export const permissionHandlers = HttpApiBuilder.group(InstanceHttpApi, "permiss
       params: { requestID: PermissionID }
       payload: Permission.ReplyBody
     }) {
-      yield* svc.reply({
-        requestID: ctx.params.requestID,
-        reply: ctx.payload.reply,
-        message: ctx.payload.message,
-      })
+      yield* svc
+        .reply({
+          requestID: ctx.params.requestID,
+          reply: ctx.payload.reply,
+          message: ctx.payload.message,
+        })
+        .pipe(
+          Effect.catchTag("Permission.NotFoundError", (error) =>
+            Effect.fail(
+              new PermissionNotFoundError({
+                requestID: String(error.requestID),
+                message: `Permission request not found: ${error.requestID}`,
+              }),
+            ),
+          ),
+        )
       return true
     })
 
