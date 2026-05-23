@@ -21,15 +21,14 @@ test("D8 spike — mockProject + mockFileTree 后 UI 进入啥状态", async ({ 
     }
   })
 
-  // 装真实 mock 数据(specific 先)
+  // catch-all 先(兜底),specific 后(Playwright last-first match → 抢)
+  await installServerMock(page)
   await mockProject(page, {
     id: "e2e-mock-project",
     worktree: "/mock/workspace",
     vcs: undefined,
     time: { created: Date.now() },
   })
-  // 最后装 catch-all 兜底 — 未知 endpoint 返空,不破坏 hydrate
-  await installServerMock(page)
 
   await page.goto("/")
   // SolidJS hydrate

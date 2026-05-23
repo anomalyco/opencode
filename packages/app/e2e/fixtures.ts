@@ -17,9 +17,16 @@ import { test as base, expect, type Page } from "@playwright/test"
 
 const SERVER_HOST = process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"
 const SERVER_PORT = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
-const SERVER_PATTERN = `**://${SERVER_HOST}:${SERVER_PORT}/**`
+// 用 host-agnostic pattern — 前端实际可能用 localhost / 127.0.0.1 / ::1 等 alias
+// (W3 D16 实测:SDK 走 localhost,而 SERVER_HOST 默认 127.0.0.1 不 match → ERR_CONNECTION_REFUSED)
+const SERVER_PATTERN = `**:${SERVER_PORT}/**`
 
-/** 默认 catch-all server mock — Stage ② 行为保留:GET 返空数组,POST 返 ok */
+/** 默认 catch-all server mock — GET 返 raw array(SDK 大部分 list endpoint 期望 array),POST 返 ok
+ *
+ * W3 D16 实测:Stage ② 原版返 `{data:[], items:[], mock:true}` 让 SDK gen `.filter` / `.map` 报错
+ * (SDK 拿 HTTP body 直接当 list,加 `{data:..}` wrap 会把 object 当 list 失败)。
+ * 现在 GET 默认返 `[]` raw array;object-shape endpoint(Config/Path 等)走 specific 路由不走 catch-all。
+ */
 export async function installServerMock(page: Page): Promise<void> {
   await page.route(SERVER_PATTERN, (route) => {
     const url = route.request().url()
@@ -35,7 +42,7 @@ export async function installServerMock(page: Page): Promise<void> {
       return route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ data: [], items: [], mock: true }),
+        body: JSON.stringify([]),
       })
     }
     return route.fulfill({
@@ -44,6 +51,83 @@ export async function installServerMock(page: Page): Promise<void> {
       body: JSON.stringify({ ok: true, mock: true }),
     })
   })
+}
+
+// ============== W3 D15 bootstrap mock — 让 UI 进入 ready 状态 ==============
+// 必须 4 个 query 全过(参 e2e/mocks/BOOTSTRAP-MOCK.md §一):
+//   /global/config / /provider / /path / /project
+// + SSE /global/event 走 catch-all(catch error → reconnect,不 hang reactive)
+
+export interface BootstrapMockOptions {
+  /** 路径配置(覆盖默认 mock workspace 路径)*/
+  paths?: Partial<{ home: string; state: string; config: string; worktree: string; directory: string }>
+  /** 项目列表(默认一个 mock 项目)*/
+  projects?: MockProject[]
+  /** Config 覆盖(默认空对象 — Config 所有字段 optional,空 {} 即可)*/
+  config?: Record<string, unknown>
+}
+
+const DEFAULT_PATHS = {
+  home: "/mock/home",
+  state: "/mock/state",
+  config: "/mock/config",
+  worktree: "/mock/workspace",
+  directory: "/mock/workspace",
+}
+
+const DEFAULT_PROJECTS: MockProject[] = [
+  {
+    id: "e2e-mock-project",
+    worktree: "/mock/workspace",
+    vcs: undefined,
+    time: { created: Date.now() },
+  },
+]
+
+/**
+ * 一次性装齐 bootstrap 4 个 query — UI 才能进入 ready 状态
+ * 必须在 page.goto 前 await(后注册 catch-all 兜底)
+ */
+export async function bootstrapMock(page: Page, opts: BootstrapMockOptions = {}): Promise<void> {
+  const paths = { ...DEFAULT_PATHS, ...opts.paths }
+  const projects = opts.projects ?? DEFAULT_PROJECTS
+  const config = opts.config ?? {}
+
+  // 1. GET /global/config
+  await page.route("**/global/config", (route) => {
+    if (route.request().method() !== "GET") return route.fallback()
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(config),
+    })
+  })
+
+  // 2. GET /provider
+  await page.route("**/provider", (route) => {
+    if (route.request().method() !== "GET") return route.fallback()
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ all: [], default: {}, connected: [] }),
+    })
+  })
+
+  // 3. GET /path
+  await page.route("**/path", (route) => {
+    if (route.request().method() !== "GET") return route.fallback()
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(paths),
+    })
+  })
+
+  // 4. GET /project — 复用 mockProject
+  await mockProject(page, projects)
+
+  // SSE /global/event — 走 catch-all(SDK catch error reconnect,不 hang)
+  // 如果 reactive 链卡了,W3 D16 加专门 SSE mock(返 chunked empty stream)
 }
 
 // ============== W2 D8 业务级 mock helper ==============

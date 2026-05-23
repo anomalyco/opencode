@@ -230,6 +230,24 @@ User 锁选项 **C** — 推迟 D12-D14 到 W3 整周专做;W2 收尾在 infra,�
 
 **总投资重估**:W1(2.5d 实际)+ W2(1.5d 实际)+ W3(5d 预估)+ W4(2-3d CI + 治理升级)= **11-12 工作日**,比原 1-spec §投资估算"2-3 周"(15-21d)节省 3-9 天。
 
+### 2026-05-23 W3 D15-D16(突破 ★ ★ ★)
+
+**关键产出**:`fixtures.ts:bootstrapMock(page, opts)` helper — 一次性装齐 `/global/config` / `/provider` / `/path` / `/project` 4 个 query mock,让 UI 进入 ready 状态。
+
+**实测进展**(`e2e/d15-bootstrap.spec.ts`):
+- D15:bootstrap 4 query mock 完成,UI 从 "No projects open" → 显示 "Recent projects /mock/workspace 0 seconds ago",项目卡进入 UI
+- D16:点击 `/mock/workspace` 卡 → UI 完整切换到工作区视图,显示 "Build anything / Main branch / Ask anything... / Shell / Review / Create a Git repository / 0 Changes / All files / No files"
+- 错误剩 1 个无关 query skipToken 警告(不影响 UI)
+
+**踩坑两个**:
+1. **Playwright route last-registered first-match** — spec 内必须 catch-all 先装 / specific 后装(反直觉,文档说 last-first 但实测确实是 last-first 反向逻辑,实操跟我直觉相反)。修正:fixtures.ts helper 不自动装 catch-all,spec 显式 `installServerMock` → `bootstrapMock` 顺序
+2. **catch-all host 不 match** — SERVER_HOST 默认 `127.0.0.1` 但前端实际请求 `localhost:4096`(URL alias 不同),glob `**://${HOST}:${PORT}/**` 不 match。改为 host-agnostic `**:${PORT}/**`
+3. **catch-all GET body shape** — Stage ② 原版返 `{data:[], items:[], mock:true}` 让 SDK gen `.filter` / `.map` 报错(SDK 拿 HTTP body 直接当 list,object wrap fail)。改为返 raw `[]`
+
+**W3 实际节奏**:
+- D15 + D16 合 1 工作日(整个 spike 序列含 3 次踩坑迭代)
+- 剩 D17 / D18 / D19 4 个工作日,做 large-file-preview / chat-drop / auto-save 三个示范用例
+
 ## 关联文档
 
 | 文档 | 关系 |
