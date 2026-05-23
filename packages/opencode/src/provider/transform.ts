@@ -1273,6 +1273,10 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
   }
   */
 
+  if (model.providerID === "nvidia" && model.api.id.toLowerCase().includes("kimi")) {
+    return { type: "object" }
+  }
+
   if (model.providerID === "moonshotai" || model.api.id.toLowerCase().includes("kimi")) {
     const sanitizeMoonshot = (obj: unknown): unknown => {
       if (obj === null || typeof obj !== "object") return obj

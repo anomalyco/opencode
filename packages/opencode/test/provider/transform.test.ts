@@ -1068,6 +1068,31 @@ describe("ProviderTransform.schema - moonshot $ref siblings", () => {
   })
 })
 
+describe("ProviderTransform.schema - Nvidia Kimi K2.6 tool parameters", () => {
+  const nvidiaKimiModel = {
+    providerID: "nvidia",
+    api: {
+      id: "moonshotai/kimi-k2.6",
+    },
+  } as any
+
+  test("strips nested tool parameter schemas that Nvidia NIM rejects", () => {
+    const result = ProviderTransform.schema(nvidiaKimiModel, {
+      type: "object",
+      properties: {
+        repo_path: {
+          type: "string",
+          description: "Path to repository",
+        },
+      },
+      required: ["repo_path"],
+      additionalProperties: false,
+    } as any)
+
+    expect(result).toEqual({ type: "object" })
+  })
+})
+
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   test("DeepSeek with tool calls includes reasoning_content in providerOptions", () => {
     const msgs = [
