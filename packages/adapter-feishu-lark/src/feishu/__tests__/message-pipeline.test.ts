@@ -447,3 +447,200 @@ describe("/new slash command (feat: feishu-bridge-light)", () => {
     expect(fakes.sentTexts.find((s) => s.text.includes("已开启新对话"))).toBeUndefined()
   })
 })
+
+// ============================================================
+// [ATTACH:path] processAttachments 集成测 (feat: feishu-bridge-light Phase 2)
+// ============================================================
+
+import { writeFileSync } from "node:fs"
+
+interface AttachFakeImageCall {
+  image_type: string
+}
+interface AttachFakeFileCall {
+  file_type: string
+  file_name: string
+}
+interface AttachFakeMessageCall {
+  receive_id: string
+  msg_type: string
+  content: string
+}
+
+function makeAttachFakes(opts: { imageError?: Error; fileError?: Error } = {}) {
+  const imageCalls: AttachFakeImageCall[] = []
+  const fileCalls: AttachFakeFileCall[] = []
+  const messageCalls: AttachFakeMessageCall[] = []
+
+  const larkClient = {
+    im: {
+      v1: {
+        image: {
+          create: async (args: any) => {
+            if (opts.imageError) throw opts.imageError
+            imageCalls.push({ image_type: args.data.image_type })
+            return { image_key: `img_${imageCalls.length}` }
+          },
+        },
+        file: {
+          create: async (args: any) => {
+            if (opts.fileError) throw opts.fileError
+            fileCalls.push({ file_type: args.data.file_type, file_name: args.data.file_name })
+            return { file_key: `file_${fileCalls.length}` }
+          },
+        },
+        message: {
+          create: async (args: any) => {
+            messageCalls.push({
+              receive_id: args.data.receive_id,
+              msg_type: args.data.msg_type,
+              content: args.data.content,
+            })
+            return { data: { message_id: `om_${messageCalls.length}` } }
+          },
+        },
+        messageReaction: { create: async () => ({ data: {} }) },
+      },
+    },
+  } as any
+
+  const opencodeClient = { session: { create: async () => ({}) } } as any
+  return { imageCalls, fileCalls, messageCalls, larkClient, opencodeClient }
+}
+
+describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
+  let tmpDir: string
+  let workspaceRoot: string
+  let store: ChatSessionStore
+  let dispatcher: PromptDispatcher
+  let fakes: ReturnType<typeof makeAttachFakes>
+  let pipeline: MessagePipeline
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "attach-pipeline-test-"))
+    workspaceRoot = join(tmpDir, "feishu-workspace")
+    // 用 mkdir 创建 workspace 根 + 写文件 fixture
+    writeFileSync(join(tmpDir, "non-fixture.txt"), "outside")
+    // 使用 fs.mkdirSync 显式建 workspace 子目录
+    require("node:fs").mkdirSync(workspaceRoot, { recursive: true })
+    store = new ChatSessionStore(join(tmpDir, "sessions.json"))
+    dispatcher = new PromptDispatcher()
+    fakes = makeAttachFakes()
+    pipeline = new MessagePipeline({
+      account: makeAccount(),
+      accountId: "acc1",
+      opencodeClient: fakes.opencodeClient,
+      dispatcher,
+      chatSessionStore: store,
+      larkClient: fakes.larkClient,
+      attachWorkspaceRoot: workspaceRoot,
+    })
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  function writeWsFile(name: string, size = 100): string {
+    const p = join(workspaceRoot, name)
+    writeFileSync(p, Buffer.alloc(size))
+    return p
+  }
+
+  test("无 marker → 返回原文", async () => {
+    const out = await pipeline.processAttachments("hello world", "oc_x")
+    expect(out).toBe("hello world")
+    expect(fakes.imageCalls).toHaveLength(0)
+    expect(fakes.fileCalls).toHaveLength(0)
+  })
+
+  test("单 [ATTACH:img.png] workspace 内 → image.create + message.create(image)", async () => {
+    const p = writeWsFile("a.png")
+    const out = await pipeline.processAttachments(`图来了 [ATTACH:${p}] 完毕`, "oc_x")
+    expect(fakes.imageCalls).toHaveLength(1)
+    expect(fakes.messageCalls).toHaveLength(1)
+    expect(fakes.messageCalls[0]!.msg_type).toBe("image")
+    expect(JSON.parse(fakes.messageCalls[0]!.content).image_key).toBe("img_1")
+    // marker 已 strip
+    expect(out).not.toContain("[ATTACH:")
+    expect(out).toContain("图来了")
+    expect(out).toContain("完毕")
+  })
+
+  test("单 [ATTACH:report.pdf] workspace 内 → file.create(pdf) + message.create(file)", async () => {
+    const p = writeWsFile("report.pdf")
+    await pipeline.processAttachments(`报告 [ATTACH:${p}]`, "oc_x")
+    expect(fakes.fileCalls).toHaveLength(1)
+    expect(fakes.fileCalls[0]).toEqual({ file_type: "pdf", file_name: "report.pdf" })
+    expect(fakes.messageCalls[0]!.msg_type).toBe("file")
+  })
+
+  test("docx → file_type stream 兜底", async () => {
+    const p = writeWsFile("a.docx")
+    await pipeline.processAttachments(`[ATTACH:${p}]`, "oc_x")
+    expect(fakes.fileCalls[0]!.file_type).toBe("stream")
+  })
+
+  test("路径在 workspace 外 → reject,reply 含 warning,不调 SDK", async () => {
+    const p = join(tmpDir, "non-fixture.txt") // 在 tmpDir 内但不在 workspaceRoot 子树
+    const out = await pipeline.processAttachments(`看 [ATTACH:${p}]`, "oc_x")
+    expect(fakes.imageCalls).toHaveLength(0)
+    expect(fakes.fileCalls).toHaveLength(0)
+    expect(out).toContain("⚠️ 拒绝发送")
+    expect(out).toContain("workspace 外")
+  })
+
+  test("相对路径 → reject", async () => {
+    const out = await pipeline.processAttachments("[ATTACH:./local.png]", "oc_x")
+    expect(out).toContain("⚠️ 拒绝发送")
+    expect(out).toContain("非绝对路径")
+  })
+
+  test("多 ATTACH 混合:1 image + 1 file + 1 reject → 各自处理", async () => {
+    const img = writeWsFile("a.png")
+    const pdf = writeWsFile("a.pdf")
+    const out = await pipeline.processAttachments(
+      `图 [ATTACH:${img}] 文档 [ATTACH:${pdf}] 越界 [ATTACH:/etc/passwd]`,
+      "oc_x",
+    )
+    expect(fakes.imageCalls).toHaveLength(1)
+    expect(fakes.fileCalls).toHaveLength(1)
+    expect(fakes.messageCalls).toHaveLength(2) // 1 image msg + 1 file msg
+    expect(out).toContain("⚠️ 拒绝发送")
+    expect(out).toContain("/etc/passwd")
+    expect(out).not.toContain("[ATTACH:")
+  })
+
+  test("上传抛错 → 不阻断,append warning", async () => {
+    fakes = makeAttachFakes({ imageError: new Error("lark 502") })
+    pipeline = new MessagePipeline({
+      account: makeAccount(),
+      accountId: "acc1",
+      opencodeClient: fakes.opencodeClient,
+      dispatcher,
+      chatSessionStore: store,
+      larkClient: fakes.larkClient,
+      attachWorkspaceRoot: workspaceRoot,
+    })
+    const p = writeWsFile("a.png")
+    const out = await pipeline.processAttachments(`[ATTACH:${p}]`, "oc_x")
+    expect(fakes.imageCalls).toHaveLength(0) // image.create 抛了,不计 push
+    expect(fakes.messageCalls).toHaveLength(0)
+    expect(out).toContain("⚠️ 发送")
+    expect(out).toContain("lark 502")
+  })
+
+  test("仅 ATTACH 无其它文字 → cleanText 空,只发附件", async () => {
+    const p = writeWsFile("only.png")
+    const out = await pipeline.processAttachments(`[ATTACH:${p}]`, "oc_x")
+    expect(fakes.imageCalls).toHaveLength(1)
+    expect(out).toBe("") // 全 strip 后无 warning 也无文字
+  })
+
+  test("size 超 10MB image → reject(预检,不调 SDK)", async () => {
+    const p = writeWsFile("big.png", 11 * 1024 * 1024)
+    const out = await pipeline.processAttachments(`[ATTACH:${p}]`, "oc_x")
+    expect(fakes.imageCalls).toHaveLength(0)
+    expect(out).toContain("超过")
+  })
+})
