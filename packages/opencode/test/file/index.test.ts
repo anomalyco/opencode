@@ -3,7 +3,6 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { $ } from "bun"
 import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"
-import fs from "fs/promises"
 import { File } from "../../src/file"
 import { disposeAllInstances, TestInstance, withTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -48,6 +47,11 @@ const gitAddAll = (directory: string) => Effect.promise(() => $`git add .`.cwd(d
 const gitCommit = (directory: string, message: string) =>
   Effect.promise(() => $`git commit -m ${message}`.cwd(directory).quiet())
 
+const writeFixtureFile = (directory: string, file: string, content: string | Uint8Array) =>
+  AppFileSystem.use.writeWithDirs(path.join(directory, file), content)
+
+const removeFixtureFile = (directory: string, file: string) => AppFileSystem.use.remove(path.join(directory, file))
+
 const failureMessage = <A, E, R>(self: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const exit = yield* self.pipe(Effect.exit)
@@ -72,7 +76,7 @@ describe("file/index Filesystem patterns", () => {
     it.instance("reads text file via Filesystem.readText()", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "test.txt"), "Hello World", "utf-8"))
+        yield* writeFixtureFile(test.directory, "test.txt", "Hello World")
 
         const result = yield* read("test.txt")
         expect(result.type).toBe("text")
@@ -91,9 +95,7 @@ describe("file/index Filesystem patterns", () => {
     it.instance("trims whitespace from text content", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        yield* Effect.promise(() =>
-          fs.writeFile(path.join(test.directory, "test.txt"), "  content with spaces  \n\n", "utf-8"),
-        )
+        yield* writeFixtureFile(test.directory, "test.txt", "  content with spaces  \n\n")
 
         const result = yield* read("test.txt")
         expect(result.content).toBe("content with spaces")
@@ -103,7 +105,7 @@ describe("file/index Filesystem patterns", () => {
     it.instance("handles empty text file", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "empty.txt"), "", "utf-8"))
+        yield* writeFixtureFile(test.directory, "empty.txt", "")
 
         const result = yield* read("empty.txt")
         expect(result.type).toBe("text")
@@ -114,9 +116,7 @@ describe("file/index Filesystem patterns", () => {
     it.instance("handles multi-line text files", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        yield* Effect.promise(() =>
-          fs.writeFile(path.join(test.directory, "multiline.txt"), "line1\nline2\nline3", "utf-8"),
-        )
+        yield* writeFixtureFile(test.directory, "multiline.txt", "line1\nline2\nline3")
 
         const result = yield* read("multiline.txt")
         expect(result.content).toBe("line1\nline2\nline3")
@@ -129,7 +129,7 @@ describe("file/index Filesystem patterns", () => {
       Effect.gen(function* () {
         const test = yield* TestInstance
         const binaryContent = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "image.png"), binaryContent))
+        yield* writeFixtureFile(test.directory, "image.png", binaryContent)
 
         const result = yield* read("image.png")
         expect(result.type).toBe("text")
@@ -142,9 +142,7 @@ describe("file/index Filesystem patterns", () => {
     it.instance("returns empty for binary non-image files", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        yield* Effect.promise(() =>
-          fs.writeFile(path.join(test.directory, "binary.so"), Buffer.from([0x7f, 0x45, 0x4c, 0x46])),
-        )
+        yield* writeFixtureFile(test.directory, "binary.so", Buffer.from([0x7f, 0x45, 0x4c, 0x46]))
 
         const result = yield* read("binary.so")
         expect(result.type).toBe("binary")
@@ -158,7 +156,7 @@ describe("file/index Filesystem patterns", () => {
       Effect.gen(function* () {
         const test = yield* TestInstance
         const filepath = path.join(test.directory, "test.json")
-        yield* Effect.promise(() => fs.writeFile(filepath, '{"key": "value"}', "utf-8"))
+        yield* AppFileSystem.use.writeWithDirs(filepath, '{"key": "value"}')
 
         expect(AppFileSystem.mimeType(filepath)).toContain("application/json")
 
@@ -179,7 +177,7 @@ describe("file/index Filesystem patterns", () => {
 
         for (const testCase of testCases) {
           const filepath = path.join(test.directory, `test.${testCase.ext}`)
-          yield* Effect.promise(() => fs.writeFile(filepath, Buffer.from([0x00, 0x00, 0x00, 0x00])))
+          yield* AppFileSystem.use.writeWithDirs(filepath, Buffer.from([0x00, 0x00, 0x00, 0x00]))
           expect(AppFileSystem.mimeType(filepath)).toContain(testCase.mime)
         }
       }),
@@ -288,9 +286,7 @@ describe("file/index Filesystem patterns", () => {
     it.instance("treats .ts files as text", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        yield* Effect.promise(() =>
-          fs.writeFile(path.join(test.directory, "test.ts"), "export const value = 1", "utf-8"),
-        )
+        yield* writeFixtureFile(test.directory, "test.ts", "export const value = 1")
 
         const result = yield* read("test.ts")
         expect(result.type).toBe("text")
@@ -301,9 +297,7 @@ describe("file/index Filesystem patterns", () => {
     it.instance("treats .mts files as text", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        yield* Effect.promise(() =>
-          fs.writeFile(path.join(test.directory, "test.mts"), "export const value = 1", "utf-8"),
-        )
+        yield* writeFixtureFile(test.directory, "test.mts", "export const value = 1")
 
         const result = yield* read("test.mts")
         expect(result.type).toBe("text")
@@ -314,9 +308,7 @@ describe("file/index Filesystem patterns", () => {
     it.instance("treats .sh files as text", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        yield* Effect.promise(() =>
-          fs.writeFile(path.join(test.directory, "test.sh"), "#!/usr/bin/env bash\necho hello", "utf-8"),
-        )
+        yield* writeFixtureFile(test.directory, "test.sh", "#!/usr/bin/env bash\necho hello")
 
         const result = yield* read("test.sh")
         expect(result.type).toBe("text")
@@ -327,7 +319,7 @@ describe("file/index Filesystem patterns", () => {
     it.instance("treats Dockerfile as text", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "Dockerfile"), "FROM alpine:3.20", "utf-8"))
+        yield* writeFixtureFile(test.directory, "Dockerfile", "FROM alpine:3.20")
 
         const result = yield* read("Dockerfile")
         expect(result.type).toBe("text")
@@ -338,7 +330,7 @@ describe("file/index Filesystem patterns", () => {
     it.instance("returns encoding info for text files", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "test.txt"), "simple text", "utf-8"))
+        yield* writeFixtureFile(test.directory, "test.txt", "simple text")
 
         const result = yield* read("test.txt")
         expect(result.encoding).toBeUndefined()
@@ -349,9 +341,7 @@ describe("file/index Filesystem patterns", () => {
     it.instance("returns base64 encoding for images", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        yield* Effect.promise(() =>
-          fs.writeFile(path.join(test.directory, "test.jpg"), Buffer.from([0xff, 0xd8, 0xff, 0xe0])),
-        )
+        yield* writeFixtureFile(test.directory, "test.jpg", Buffer.from([0xff, 0xd8, 0xff, 0xe0]))
 
         const result = yield* read("test.jpg")
         expect(result.encoding).toBe("base64")
@@ -381,10 +371,10 @@ describe("file/index Filesystem patterns", () => {
         Effect.gen(function* () {
           const test = yield* TestInstance
           const filepath = path.join(test.directory, "file.txt")
-          yield* Effect.promise(() => fs.writeFile(filepath, "original\n", "utf-8"))
+          yield* AppFileSystem.use.writeWithDirs(filepath, "original\n")
           yield* gitAddAll(test.directory)
           yield* gitCommit(test.directory, "add file")
-          yield* Effect.promise(() => fs.writeFile(filepath, "modified\nextra line\n", "utf-8"))
+          yield* AppFileSystem.use.writeWithDirs(filepath, "modified\nextra line\n")
 
           const result = yield* status()
           const entry = result.find((file) => file.path === "file.txt")
@@ -401,9 +391,7 @@ describe("file/index Filesystem patterns", () => {
       () =>
         Effect.gen(function* () {
           const test = yield* TestInstance
-          yield* Effect.promise(() =>
-            fs.writeFile(path.join(test.directory, "new.txt"), "line1\nline2\nline3\n", "utf-8"),
-          )
+          yield* writeFixtureFile(test.directory, "new.txt", "line1\nline2\nline3\n")
 
           const result = yield* status()
           const entry = result.find((file) => file.path === "new.txt")
@@ -421,10 +409,10 @@ describe("file/index Filesystem patterns", () => {
         Effect.gen(function* () {
           const test = yield* TestInstance
           const filepath = path.join(test.directory, "gone.txt")
-          yield* Effect.promise(() => fs.writeFile(filepath, "content\n", "utf-8"))
+          yield* AppFileSystem.use.writeWithDirs(filepath, "content\n")
           yield* gitAddAll(test.directory)
           yield* gitCommit(test.directory, "add file")
-          yield* Effect.promise(() => fs.rm(filepath))
+          yield* AppFileSystem.use.remove(filepath)
 
           const result = yield* status()
           const entries = result.filter((file) => file.path === "gone.txt")
@@ -438,14 +426,14 @@ describe("file/index Filesystem patterns", () => {
       () =>
         Effect.gen(function* () {
           const test = yield* TestInstance
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "keep.txt"), "keep\n", "utf-8"))
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "remove.txt"), "remove\n", "utf-8"))
+          yield* writeFixtureFile(test.directory, "keep.txt", "keep\n")
+          yield* writeFixtureFile(test.directory, "remove.txt", "remove\n")
           yield* gitAddAll(test.directory)
           yield* gitCommit(test.directory, "initial")
 
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "keep.txt"), "changed\n", "utf-8"))
-          yield* Effect.promise(() => fs.rm(path.join(test.directory, "remove.txt")))
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "brand-new.txt"), "hello\n", "utf-8"))
+          yield* writeFixtureFile(test.directory, "keep.txt", "changed\n")
+          yield* removeFixtureFile(test.directory, "remove.txt")
+          yield* writeFixtureFile(test.directory, "brand-new.txt", "hello\n")
 
           const result = yield* status()
           expect(result.some((file) => file.path === "keep.txt" && file.status === "modified")).toBe(true)
@@ -476,13 +464,15 @@ describe("file/index Filesystem patterns", () => {
         Effect.gen(function* () {
           const test = yield* TestInstance
           const filepath = path.join(test.directory, "data.bin")
-          yield* Effect.promise(() =>
-            fs.writeFile(filepath, Buffer.from(Array.from({ length: 256 }, (_, index) => index))),
+          yield* AppFileSystem.use.writeWithDirs(
+            filepath,
+            Buffer.from(Array.from({ length: 256 }, (_, index) => index)),
           )
           yield* gitAddAll(test.directory)
           yield* gitCommit(test.directory, "add binary")
-          yield* Effect.promise(() =>
-            fs.writeFile(filepath, Buffer.from(Array.from({ length: 512 }, (_, index) => index % 256))),
+          yield* AppFileSystem.use.writeWithDirs(
+            filepath,
+            Buffer.from(Array.from({ length: 512 }, (_, index) => index % 256)),
           )
 
           const result = yield* status()
@@ -502,11 +492,9 @@ describe("file/index Filesystem patterns", () => {
       () =>
         Effect.gen(function* () {
           const test = yield* TestInstance
-          yield* Effect.promise(() => fs.mkdir(path.join(test.directory, "subdir")))
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "file.txt"), "content", "utf-8"))
-          yield* Effect.promise(() =>
-            fs.writeFile(path.join(test.directory, "subdir", "nested.txt"), "nested", "utf-8"),
-          )
+          yield* AppFileSystem.use.ensureDir(path.join(test.directory, "subdir"))
+          yield* writeFixtureFile(test.directory, "file.txt", "content")
+          yield* writeFixtureFile(test.directory, path.join("subdir", "nested.txt"), "nested")
 
           const nodes = yield* list()
           expect(nodes.length).toBeGreaterThanOrEqual(2)
@@ -527,10 +515,10 @@ describe("file/index Filesystem patterns", () => {
       () =>
         Effect.gen(function* () {
           const test = yield* TestInstance
-          yield* Effect.promise(() => fs.mkdir(path.join(test.directory, "beta")))
-          yield* Effect.promise(() => fs.mkdir(path.join(test.directory, "alpha")))
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "zz.txt"), "", "utf-8"))
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "aa.txt"), "", "utf-8"))
+          yield* AppFileSystem.use.ensureDir(path.join(test.directory, "beta"))
+          yield* AppFileSystem.use.ensureDir(path.join(test.directory, "alpha"))
+          yield* writeFixtureFile(test.directory, "zz.txt", "")
+          yield* writeFixtureFile(test.directory, "aa.txt", "")
 
           const nodes = yield* list()
           const dirs = nodes.filter((node) => node.type === "directory")
@@ -551,8 +539,8 @@ describe("file/index Filesystem patterns", () => {
       () =>
         Effect.gen(function* () {
           const test = yield* TestInstance
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, ".DS_Store"), "", "utf-8"))
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "visible.txt"), "", "utf-8"))
+          yield* writeFixtureFile(test.directory, ".DS_Store", "")
+          yield* writeFixtureFile(test.directory, "visible.txt", "")
 
           const names = (yield* list()).map((node) => node.name)
           expect(names).not.toContain(".git")
@@ -567,10 +555,10 @@ describe("file/index Filesystem patterns", () => {
       () =>
         Effect.gen(function* () {
           const test = yield* TestInstance
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, ".gitignore"), "*.log\nbuild/\n", "utf-8"))
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "app.log"), "log data", "utf-8"))
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "main.ts"), "code", "utf-8"))
-          yield* Effect.promise(() => fs.mkdir(path.join(test.directory, "build")))
+          yield* writeFixtureFile(test.directory, ".gitignore", "*.log\nbuild/\n")
+          yield* writeFixtureFile(test.directory, "app.log", "log data")
+          yield* writeFixtureFile(test.directory, "main.ts", "code")
+          yield* AppFileSystem.use.ensureDir(path.join(test.directory, "build"))
 
           const nodes = yield* list()
           expect(nodes.find((node) => node.name === "app.log")?.ignored).toBe(true)
@@ -585,9 +573,9 @@ describe("file/index Filesystem patterns", () => {
       () =>
         Effect.gen(function* () {
           const test = yield* TestInstance
-          yield* Effect.promise(() => fs.mkdir(path.join(test.directory, "sub")))
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "sub", "a.txt"), "", "utf-8"))
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "sub", "b.txt"), "", "utf-8"))
+          yield* AppFileSystem.use.ensureDir(path.join(test.directory, "sub"))
+          yield* writeFixtureFile(test.directory, path.join("sub", "a.txt"), "")
+          yield* writeFixtureFile(test.directory, path.join("sub", "b.txt"), "")
 
           const nodes = yield* list("sub")
           expect(nodes.length).toBe(2)
@@ -609,7 +597,7 @@ describe("file/index Filesystem patterns", () => {
     it.instance("works without git", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
-        yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "file.txt"), "hi", "utf-8"))
+        yield* writeFixtureFile(test.directory, "file.txt", "hi")
 
         const nodes = yield* list()
         expect(nodes.length).toBeGreaterThanOrEqual(1)
@@ -755,7 +743,7 @@ describe("file/index Filesystem patterns", () => {
           yield* init()
           expect(yield* search({ query: "fresh", type: "file" })).toEqual([])
 
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "fresh.ts"), "fresh", "utf-8"))
+          yield* writeFixtureFile(test.directory, "fresh.ts", "fresh")
 
           expect(yield* search({ query: "fresh", type: "file" })).toContain("fresh.ts")
         }),
@@ -770,10 +758,10 @@ describe("file/index Filesystem patterns", () => {
         Effect.gen(function* () {
           const test = yield* TestInstance
           const filepath = path.join(test.directory, "file.txt")
-          yield* Effect.promise(() => fs.writeFile(filepath, "original content\n", "utf-8"))
+          yield* AppFileSystem.use.writeWithDirs(filepath, "original content\n")
           yield* gitAddAll(test.directory)
           yield* gitCommit(test.directory, "add file")
-          yield* Effect.promise(() => fs.writeFile(filepath, "modified content\n", "utf-8"))
+          yield* AppFileSystem.use.writeWithDirs(filepath, "modified content\n")
 
           const result = yield* read("file.txt")
           expect(result.type).toBe("text")
@@ -793,10 +781,10 @@ describe("file/index Filesystem patterns", () => {
         Effect.gen(function* () {
           const test = yield* TestInstance
           const filepath = path.join(test.directory, "staged.txt")
-          yield* Effect.promise(() => fs.writeFile(filepath, "before\n", "utf-8"))
+          yield* AppFileSystem.use.writeWithDirs(filepath, "before\n")
           yield* gitAddAll(test.directory)
           yield* gitCommit(test.directory, "add file")
-          yield* Effect.promise(() => fs.writeFile(filepath, "after\n", "utf-8"))
+          yield* AppFileSystem.use.writeWithDirs(filepath, "after\n")
           yield* gitAddAll(test.directory)
 
           const result = yield* read("staged.txt")
@@ -812,7 +800,7 @@ describe("file/index Filesystem patterns", () => {
         Effect.gen(function* () {
           const test = yield* TestInstance
           const filepath = path.join(test.directory, "clean.txt")
-          yield* Effect.promise(() => fs.writeFile(filepath, "unchanged\n", "utf-8"))
+          yield* AppFileSystem.use.writeWithDirs(filepath, "unchanged\n")
           yield* gitAddAll(test.directory)
           yield* gitCommit(test.directory, "add file")
 
@@ -832,14 +820,14 @@ describe("file/index Filesystem patterns", () => {
       () =>
         Effect.gen(function* () {
           const one = yield* TestInstance
-          yield* Effect.promise(() => fs.writeFile(path.join(one.directory, "a.ts"), "one", "utf-8"))
+          yield* writeFixtureFile(one.directory, "a.ts", "one")
           yield* init()
           expect(yield* search({ query: "a.ts", type: "file" })).toContain("a.ts")
           expect(yield* search({ query: "b.ts", type: "file" })).not.toContain("b.ts")
 
           yield* Effect.gen(function* () {
             const two = yield* TestInstance
-            yield* Effect.promise(() => fs.writeFile(path.join(two.directory, "b.ts"), "two", "utf-8"))
+            yield* writeFixtureFile(two.directory, "b.ts", "two")
             yield* init()
             expect(yield* search({ query: "b.ts", type: "file" })).toContain("b.ts")
             expect(yield* search({ query: "a.ts", type: "file" })).not.toContain("a.ts")
@@ -853,14 +841,14 @@ describe("file/index Filesystem patterns", () => {
       () =>
         Effect.gen(function* () {
           const test = yield* TestInstance
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "before.ts"), "before", "utf-8"))
+          yield* writeFixtureFile(test.directory, "before.ts", "before")
           yield* init()
           expect(yield* search({ query: "before", type: "file" })).toContain("before.ts")
 
           yield* Effect.promise(() => disposeAllInstances())
 
-          yield* Effect.promise(() => fs.writeFile(path.join(test.directory, "after.ts"), "after", "utf-8"))
-          yield* Effect.promise(() => fs.rm(path.join(test.directory, "before.ts")))
+          yield* writeFixtureFile(test.directory, "after.ts", "after")
+          yield* removeFixtureFile(test.directory, "before.ts")
 
           yield* init()
           expect(yield* search({ query: "after", type: "file" })).toContain("after.ts")
