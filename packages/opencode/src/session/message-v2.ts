@@ -577,20 +577,236 @@ export const cursor = {
   },
 }
 
-const info = (row: typeof MessageTable.$inferSelect) =>
-  ({
-    ...row.data,
-    id: row.id,
-    sessionID: row.session_id,
-  }) as Info
+// Shape-stable row -> info/part constructors. session.prompt.runLoop calls
+// MessageV2.filterCompactedEffect on every iteration, which hydrates the
+// session's full message history; for sessions with thousands of messages
+// the pre-existing spread-based `{...row.data, id, sessionID}` produced
+// objects whose hidden-class (JSC `Structure`) varied based on which
+// optional keys row.data happened to contain. With dozens of optional
+// fields combined across thousands of rows, JSStructureHeap accumulated
+// 50k+ distinct Structures; JSC's inline caches went megamorphic and every
+// `.role`, `.parts`, `.id` access fell to the slow path. JSC::Heap GC
+// then walked this shape-diverse graph and ran at 35-78% of CPU.
+//
+// Fix: build each output object with an EXPLICIT, FIXED key list per
+// discriminator (`role` for Info, `type` for Part). Every Assistant info
+// has the same Structure; every TextPart has the same Structure; etc.
+// Total Structure count drops from 50k+ to ~15.
+//
+// A row-level cache layered on top still saves the object allocation
+// itself when `(id, time_updated)` is unchanged - cached objects are
+// returned by reference. Callers mutate `parts` arrays (reminders.ts
+// pushes synthetic parts) but never mutate the cached Info / Part
+// objects themselves; confirmed via grep.
+const INFO_CACHE_MAX = 200_000
+const PART_CACHE_MAX = 400_000
+const infoCache = new Map<MessageID, { time_updated: number; info: Info }>()
+const partCache = new Map<PartID, { time_updated: number; part: Part }>()
 
-const part = (row: typeof PartTable.$inferSelect) =>
-  ({
-    ...row.data,
+function evictOldest<K, V>(cache: Map<K, V>, cap: number): void {
+  if (cache.size <= cap) return
+  const toDelete = Math.floor(cap * 0.1)
+  let i = 0
+  for (const key of cache.keys()) {
+    cache.delete(key)
+    if (++i >= toDelete) break
+  }
+}
+
+function buildAssistantInfo(row: typeof MessageTable.$inferSelect): Info {
+  const d = row.data as Partial<Assistant>
+  return {
+    role: "assistant",
+    time: d.time,
+    error: d.error,
+    parentID: d.parentID,
+    modelID: d.modelID,
+    providerID: d.providerID,
+    mode: d.mode,
+    agent: d.agent,
+    path: d.path,
+    summary: d.summary,
+    cost: d.cost,
+    tokens: d.tokens,
+    structured: d.structured,
+    variant: d.variant,
+    finish: d.finish,
     id: row.id,
     sessionID: row.session_id,
-    messageID: row.message_id,
-  }) as Part
+  } as Info
+}
+
+function buildUserInfo(row: typeof MessageTable.$inferSelect): Info {
+  const d = row.data as Partial<User>
+  return {
+    role: "user",
+    time: d.time,
+    format: d.format,
+    summary: d.summary,
+    agent: d.agent,
+    model: d.model,
+    system: d.system,
+    tools: d.tools,
+    id: row.id,
+    sessionID: row.session_id,
+  } as Info
+}
+
+const info = (row: typeof MessageTable.$inferSelect): Info => {
+  const cached = infoCache.get(row.id)
+  if (cached && cached.time_updated === row.time_updated) return cached.info
+  const role = (row.data as { role?: string }).role
+  const fresh = role === "assistant" ? buildAssistantInfo(row) : buildUserInfo(row)
+  infoCache.set(row.id, { time_updated: row.time_updated, info: fresh })
+  evictOldest(infoCache, INFO_CACHE_MAX)
+  return fresh
+}
+
+function buildPart(row: typeof PartTable.$inferSelect): Part {
+  const d = row.data as { type: string; [k: string]: unknown }
+  const id = row.id
+  const sessionID = row.session_id
+  const messageID = row.message_id
+  switch (d.type) {
+    case "text":
+      return {
+        type: "text",
+        text: d.text,
+        synthetic: d.synthetic,
+        ignored: d.ignored,
+        time: d.time,
+        metadata: d.metadata,
+        id,
+        sessionID,
+        messageID,
+      } as unknown as Part
+    case "reasoning":
+      return {
+        type: "reasoning",
+        text: d.text,
+        metadata: d.metadata,
+        time: d.time,
+        id,
+        sessionID,
+        messageID,
+      } as unknown as Part
+    case "tool":
+      return {
+        type: "tool",
+        callID: d.callID,
+        tool: d.tool,
+        state: d.state,
+        metadata: d.metadata,
+        id,
+        sessionID,
+        messageID,
+      } as unknown as Part
+    case "file":
+      return {
+        type: "file",
+        mime: d.mime,
+        filename: d.filename,
+        url: d.url,
+        source: d.source,
+        id,
+        sessionID,
+        messageID,
+      } as unknown as Part
+    case "compaction":
+      return {
+        type: "compaction",
+        auto: d.auto,
+        overflow: d.overflow,
+        tail_start_id: d.tail_start_id,
+        id,
+        sessionID,
+        messageID,
+      } as unknown as Part
+    case "subtask":
+      return {
+        type: "subtask",
+        prompt: d.prompt,
+        description: d.description,
+        agent: d.agent,
+        model: d.model,
+        command: d.command,
+        id,
+        sessionID,
+        messageID,
+      } as unknown as Part
+    case "step-start":
+      return {
+        type: "step-start",
+        snapshot: d.snapshot,
+        id,
+        sessionID,
+        messageID,
+      } as unknown as Part
+    case "step-finish":
+      return {
+        type: "step-finish",
+        reason: d.reason,
+        snapshot: d.snapshot,
+        cost: d.cost,
+        tokens: d.tokens,
+        id,
+        sessionID,
+        messageID,
+      } as unknown as Part
+    case "snapshot":
+      return {
+        type: "snapshot",
+        snapshot: d.snapshot,
+        id,
+        sessionID,
+        messageID,
+      } as unknown as Part
+    case "patch":
+      return {
+        type: "patch",
+        hash: d.hash,
+        files: d.files,
+        id,
+        sessionID,
+        messageID,
+      } as unknown as Part
+    case "agent":
+      return {
+        type: "agent",
+        name: d.name,
+        source: d.source,
+        id,
+        sessionID,
+        messageID,
+      } as unknown as Part
+    case "retry":
+      return {
+        type: "retry",
+        attempt: d.attempt,
+        error: d.error,
+        time: d.time,
+        id,
+        sessionID,
+        messageID,
+      } as unknown as Part
+    default:
+      return {
+        ...d,
+        id,
+        sessionID,
+        messageID,
+      } as unknown as Part
+  }
+}
+
+const part = (row: typeof PartTable.$inferSelect): Part => {
+  const cached = partCache.get(row.id)
+  if (cached && cached.time_updated === row.time_updated) return cached.part
+  const fresh = buildPart(row)
+  partCache.set(row.id, { time_updated: row.time_updated, part: fresh })
+  evictOldest(partCache, PART_CACHE_MAX)
+  return fresh
+}
 
 const older = (row: Cursor) =>
   or(lt(MessageTable.time_created, row.time), and(eq(MessageTable.time_created, row.time), lt(MessageTable.id, row.id)))
