@@ -545,6 +545,22 @@ export function Autocomplete(props: {
 
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...slashes()]
+    const currentAgent = sync.data.agent.find((agent) => agent.name === sync.session.get(props.sessionID ?? "")?.agent)
+    const acpState = sync.data.acp[props.sessionID ?? ""]
+
+    if (currentAgent?.backend?.type === "acp" && !slashes().some((item) => item.display === "/acp-options")) {
+      results.push({
+        display: "/acp-options",
+        description: "ACP options",
+        onSelect: () => {
+          const newText = "/acp-options "
+          const cursor = props.input().logicalCursor
+          props.input().deleteRange(0, 0, cursor.row, cursor.col)
+          props.input().insertText(newText)
+          props.input().cursorOffset = Bun.stringWidth(newText)
+        },
+      })
+    }
 
     for (const serverCommand of sync.data.command) {
       if (serverCommand.source === "skill") continue
@@ -562,7 +578,7 @@ export function Autocomplete(props: {
       })
     }
 
-    for (const command of sync.data.acp[props.sessionID ?? ""]?.availableCommands ?? []) {
+    for (const command of acpState?.availableCommands ?? []) {
       if (!command || typeof command.name !== "string") continue
       results.push({
         display: "/" + command.name + ":acp",
