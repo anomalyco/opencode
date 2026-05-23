@@ -17,6 +17,7 @@ import { Env } from "../../src/env"
 import {
   provideTestInstance,
   provideTmpdirInstance,
+  reloadTestInstance,
   TestInstance,
   tmpdir,
   tmpdirScoped,
@@ -294,18 +295,111 @@ it.instance(
 it.instance("updates config and preserves empty shell sentinel", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
-    yield* writeConfigEffect(
-      test.directory,
-      { $schema: "https://opencode.ai/config.json", shell: "bash" },
-      "config.json",
-    )
+    yield* mkdirEffect(path.join(test.directory, ".opencode"))
+    yield* writeConfigEffect(test.directory, { $schema: "https://opencode.ai/config.json", shell: "bash" }, ".opencode/opencode.jsonc")
 
     yield* Config.Service.use((svc) => svc.update(ConfigParse.schema(Config.Info, { shell: "" }, "test:config")))
 
     const writtenConfig = yield* Effect.promise(() =>
-      Filesystem.readJson<{ shell?: string }>(path.join(test.directory, "config.json")),
+      Filesystem.readJson<{ $schema?: string; shell?: string }>(path.join(test.directory, ".opencode", "opencode.jsonc")),
     )
-    expect(writtenConfig.shell).toBe("")
+    expect(writtenConfig).toMatchObject({
+      $schema: "https://opencode.ai/config.json",
+      shell: "",
+    })
+  }),
+)
+
+it.instance("writes runtime local config to .opencode overlay and survives reload", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+
+    yield* Config.Service.use((svc) =>
+      svc.update(
+        ConfigParse.schema(
+          Config.Info,
+          {
+            agent: {
+              orchestrator: {
+                description: "Runtime orchestrator",
+                mode: "primary",
+              },
+            },
+          },
+          "test:config",
+        ),
+      ),
+    )
+
+    expect(yield* Effect.promise(() => Filesystem.exists(path.join(test.directory, "config.json")))).toBe(false)
+    expect(yield* Effect.promise(() => Filesystem.exists(path.join(test.directory, ".opencode", "opencode.jsonc")))).toBe(true)
+
+    const before = yield* Effect.promise(() =>
+      provideTestInstance({
+        directory: test.directory,
+        fn: (ctx) => load(ctx),
+      }),
+    )
+    expect(before.agent?.orchestrator?.description).toBe("Runtime orchestrator")
+
+    const reloaded = yield* Effect.promise(() =>
+      provideTestInstance({
+        directory: test.directory,
+        fn: (ctx) => load(ctx),
+      }),
+    )
+    expect(reloaded.agent?.orchestrator?.description).toBe("Runtime orchestrator")
+  }),
+)
+
+it.instance("runtime-added agent survives explicit instance reload", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+
+    yield* Config.Service.use((svc) =>
+      svc.update(
+        ConfigParse.schema(
+          Config.Info,
+          {
+            agent: {
+              orchestrator: {
+                description: "Runtime orchestrator",
+                mode: "primary",
+              },
+            },
+          },
+          "test:config",
+        ),
+      ),
+    )
+
+    yield* Effect.promise(() => reloadTestInstance({ directory: test.directory }))
+
+    const reloaded = yield* Effect.promise(() =>
+      provideTestInstance({
+        directory: test.directory,
+        fn: (ctx) => load(ctx),
+      }),
+    )
+    expect(reloaded.agent?.orchestrator?.description).toBe("Runtime orchestrator")
+  }),
+)
+
+it.instance("updates existing .opencode json overlay without creating jsonc", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* mkdirEffect(path.join(test.directory, ".opencode"))
+    yield* writeConfigEffect(test.directory, { $schema: "https://opencode.ai/config.json", model: "seed/model" }, ".opencode/opencode.json")
+
+    yield* Config.Service.use((svc) =>
+      svc.update(ConfigParse.schema(Config.Info, { model: "updated/model" }, "test:config")),
+    )
+
+    expect(yield* Effect.promise(() => Filesystem.exists(path.join(test.directory, ".opencode", "opencode.jsonc")))).toBe(false)
+    const writtenConfig = yield* Effect.promise(() =>
+      Filesystem.readJson<{ model: string }>(path.join(test.directory, ".opencode", "opencode.json")),
+    )
+    expect(writtenConfig.model).toBe("updated/model")
   }),
 )
 
@@ -875,7 +969,7 @@ it.instance("updates config and writes to file", () =>
     )
 
     const writtenConfig = yield* Effect.promise(() =>
-      Filesystem.readJson<{ model: string }>(path.join(test.directory, "config.json")),
+      Filesystem.readJson<{ model: string }>(path.join(test.directory, ".opencode", "opencode.jsonc")),
     )
     expect(writtenConfig.model).toBe("updated/model")
   }),

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect } from "bun:test"
 import { mkdir } from "node:fs/promises"
+import fs from "node:fs/promises"
 import path from "node:path"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -229,6 +230,50 @@ describe("session HttpApi", () => {
           message: `Session is busy: ${sessionID}`,
         })
       }
+    }),
+  )
+
+  it.instance("prompt still resolves runtime-added agent after config update disposal", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+      const create = yield* requestJson<Session.Info>(SessionPaths.create, { method: "POST", headers })
+
+      const update = yield* request("/config", {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({
+          agent: {
+            orchestrator: {
+              description: "Runtime orchestrator",
+              mode: "primary",
+            },
+          },
+        }),
+      })
+      expect(update.status).toBe(200)
+
+      const file = path.join(test.directory, ".opencode", "opencode.jsonc")
+      expect(yield* Effect.promise(() => fs.access(file).then(() => true).catch(() => false))).toBe(true)
+
+      const prompt = yield* request(pathFor(SessionPaths.prompt, { sessionID: String(create.id) }), {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          agent: "orchestrator",
+          noReply: true,
+          parts: [{ type: "text", text: "hello" }],
+        }),
+      })
+
+      expect(prompt.status).toBe(200)
+      const body = yield* responseJson(prompt)
+      expect(body).toMatchObject({
+        info: {
+          role: "user",
+          agent: "orchestrator",
+        },
+      })
     }),
   )
 

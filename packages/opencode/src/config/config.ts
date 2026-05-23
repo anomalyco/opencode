@@ -346,6 +346,11 @@ function globalConfigFile() {
   return candidates[0]
 }
 
+function localRuntimeConfigFiles(ctx: InstanceContext) {
+  const root = ctx.project.vcs === "git" && ctx.worktree !== "/" ? ctx.worktree : ctx.directory
+  return [path.join(root, ".opencode", "opencode.jsonc"), path.join(root, ".opencode", "opencode.json")] as const
+}
+
 function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
   if (!isRecord(patch)) {
     const edits = modify(input, path, patch, {
@@ -814,12 +819,21 @@ export const layer = Layer.effect(
     })
 
     const update = Effect.fn("Config.update")(function* (config: Info) {
-      const dir = yield* InstanceState.directory
-      const file = path.join(dir, "config.json")
-      const existing = yield* loadFile(file)
-      yield* fs
-        .writeFileString(file, JSON.stringify(mergeDeep(writable(existing), writable(config)), null, 2))
-        .pipe(Effect.orDie)
+      const ctx = yield* InstanceState.context
+      const [jsonc, json] = localRuntimeConfigFiles(ctx)
+      const file = (yield* fs.existsSafe(jsonc)) ? jsonc : (yield* fs.existsSafe(json)) ? json : jsonc
+      const before =
+        (yield* readConfigFile(file)) || JSON.stringify({ $schema: "https://opencode.ai/config.json" }, null, 2)
+      const patch = writable(config)
+
+      if (!file.endsWith(".jsonc")) {
+        const existing = ConfigParse.schema(Info, ConfigParse.jsonc(before, file), file)
+        const next = mergeDeep(writable(existing), patch)
+        yield* fs.writeWithDirs(file, JSON.stringify(next, null, 2)).pipe(Effect.orDie)
+        return
+      }
+
+      yield* fs.writeWithDirs(file, patchJsonc(before, patch)).pipe(Effect.orDie)
     })
 
     const invalidate = Effect.fn("Config.invalidate")(function* () {
