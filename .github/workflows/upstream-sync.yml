@@ -96,7 +96,7 @@ jobs:
       - name: Create or update PR
         if: steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0' && steps.typecheck.outcome == 'success' && steps.tests.outcome == 'success'
         env:
-          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           date=$(date +%Y-%m-%d)
           body="Automated upstream sync from \`sst/opencode\` — $date.
@@ -120,7 +120,7 @@ jobs:
       - name: Create or update conflict review PR
         if: steps.merge.outputs.result == 'conflict'
         env:
-          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           date=$(date +%Y-%m-%d)
           body="Automated upstream sync from \`sst/opencode\` hit merge conflicts on $date.
@@ -150,7 +150,7 @@ jobs:
       - name: Open issue on merge conflict
         if: always() && steps.merge.outputs.result == 'conflict'
         env:
-          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh issue create \
             --title "⚠️ Upstream sync conflict — $(date +%Y-%m-%d)" \
@@ -171,7 +171,7 @@ jobs:
       - name: Open issue on validation failure
         if: always() && (steps.typecheck.outcome == 'failure' || steps.tests.outcome == 'failure')
         env:
-          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh issue create \
             --title "⚠️ Upstream sync validation failed — $(date +%Y-%m-%d)" \
