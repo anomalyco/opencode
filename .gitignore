@@ -77,3 +77,9 @@ tsconfig.tsbuildinfo
 
 # Sisyphus run continuation
 .sisyphus/
+
+# Python cache
+__pycache__/
+
+# Manager run continuation
+.manager/

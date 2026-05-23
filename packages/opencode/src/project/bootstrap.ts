@@ -1,7 +1,6 @@
 import { Plugin } from "../plugin"
 import { Format } from "../format"
 import { LSP } from "../lsp"
-import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Snapshot } from "../snapshot"
 import { Project } from "./project"
@@ -41,7 +40,6 @@ export async function InstanceBootstrap() {
   })
   await run("format", () => Format.init())
   await run("lsp", () => LSP.init())
-  await run("file", () => File.init())
   await run("watcher", () => FileWatcher.init())
   await run("vcs", () => Vcs.init())
   await run("snapshot", () => Snapshot.init())

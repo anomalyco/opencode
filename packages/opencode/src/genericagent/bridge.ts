@@ -4,10 +4,13 @@ import { cors } from "hono/cors"
 import { basicAuth } from "hono/basic-auth"
 import fs from "node:fs/promises"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
+import fuzzysort from "fuzzysort"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { Log } from "@/util/log"
 import { Identifier } from "@/id/id"
+import { Ripgrep } from "@/file/ripgrep"
 import { NamedError } from "@opencode-ai/util/error"
 import shimSource from "./python/bridge_shim.py" with { type: "text" }
 
@@ -704,15 +707,100 @@ function welcomeMessages(): Message[] {
   return [{ info, parts: [part] }]
 }
 
-function extractPrompt(body: unknown): string {
-  if (!body || typeof body !== "object") return ""
-  const parts = (body as { parts?: Array<{ type?: string; text?: string }> }).parts
-  if (!Array.isArray(parts)) return ""
-  return parts
-    .filter((p) => p && p.type === "text" && typeof p.text === "string")
-    .map((p) => p.text as string)
-    .join("\n")
-    .trim()
+function decodeMaybe(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function requestDirectory(raw: string | undefined) {
+  const value = raw?.trim()
+  if (!value) return
+  return path.resolve(decodeMaybe(value))
+}
+
+function isDirectory(value: string) {
+  return fs
+    .stat(value)
+    .then((stat) => stat.isDirectory())
+    .catch(() => false)
+}
+
+async function searchWorkspaceFiles(input: { cwd: string; query: string; dirs: boolean; type?: string; limit: number }) {
+  if (!(await isDirectory(input.cwd))) return []
+
+  const files: string[] = []
+  const dirs = new Set<string>()
+  const includeFiles = input.type !== "directory"
+  const includeDirs = input.type === "directory" || (input.type !== "file" && input.dirs)
+
+  try {
+    for await (const file of Ripgrep.files({ cwd: input.cwd })) {
+      if (includeFiles) files.push(file)
+      if (!includeDirs) continue
+
+      let current = file
+      while (true) {
+        const dir = path.dirname(current)
+        if (dir === "." || dir === current) break
+        current = dir
+        dirs.add(dir + "/")
+      }
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    log.warn("genericagent file search failed", { cwd: input.cwd, error: message })
+    return []
+  }
+
+  const items =
+    input.type === "directory"
+      ? [...dirs].toSorted()
+      : input.type === "file" || !input.dirs
+        ? files
+        : [...files, ...dirs]
+  const query = input.query.trim()
+  if (!query) return items.slice(0, input.limit)
+  return fuzzysort.go(query, items, { limit: input.limit }).map((item) => item.target)
+}
+
+function filePromptPath(part: { url?: string; filename?: string }) {
+  if (!part.url) return
+  let url: URL
+  try {
+    url = new URL(part.url)
+  } catch {
+    return
+  }
+  if (url.protocol !== "file:") return
+
+  return fileURLToPath(url)
+}
+
+function extractPrompt(body: unknown): { display: string; runtime: string } {
+  if (!body || typeof body !== "object") return { display: "", runtime: "" }
+  const parts = (body as { parts?: Array<{ type?: string; text?: string; url?: string; filename?: string }> }).parts
+  if (!Array.isArray(parts)) return { display: "", runtime: "" }
+  const display: string[] = []
+  const runtime: string[] = []
+  for (const part of parts) {
+    if (!part) continue
+    if (part.type === "text" && typeof part.text === "string") {
+      display.push(part.text)
+      runtime.push(part.text)
+      continue
+    }
+    if (part.type === "file") {
+      const filepath = filePromptPath(part)
+      if (filepath) runtime.push(filepath)
+    }
+  }
+  return {
+    display: display.join("\n").trim(),
+    runtime: runtime.join("\n\n").trim(),
+  }
 }
 
 function extractPromptIds(body: unknown): { messageID?: string; partID?: string } {
@@ -1050,6 +1138,21 @@ export namespace GenericAgentBridge {
       .get("/mcp", (c) => c.json({}))
       .get("/lsp", (c) => c.json([]))
       .get("/vcs", (c) => c.json({ branch: "genericagent" }))
+      .get("/find/file", async (c) => {
+        const cwd = requestDirectory(c.req.query("directory") || c.req.header("x-opencode-directory"))
+        if (!cwd || cwd === directory) return c.json([])
+        const query = c.req.query("query") || ""
+        if (!query.trim()) return c.json([])
+        const limit = Math.max(1, Math.min(200, Number.parseInt(c.req.query("limit") || "10", 10) || 10))
+        const results = await searchWorkspaceFiles({
+          cwd,
+          query,
+          dirs: c.req.query("dirs") !== "false",
+          type: c.req.query("type"),
+          limit,
+        })
+        return c.json(results)
+      })
       .get("/file", () => {
         throw new Error(fileUnsupported)
       })
@@ -1194,10 +1297,12 @@ export namespace GenericAgentBridge {
       .post("/session/:sessionID/prompt_async", async (c) => {
         const sessionID = c.req.param("sessionID")
         const body = await c.req.json().catch(() => ({}))
-        const query = extractPrompt(body)
-        if (!query) {
+        const prompt = extractPrompt(body)
+        if (!prompt.runtime) {
           return c.json(new NamedError.Unknown({ message: "empty prompt" }).toObject(), { status: 400 })
         }
+        const displayQuery = prompt.display || prompt.runtime
+        const runtimeQuery = prompt.runtime
         const cwd = resolveSessionCwd(sessionID, extractCwd(body))
 
         const requestedModelID = typeof (body as { modelID?: string }).modelID === "string" ? (body as { modelID: string }).modelID : undefined
@@ -1220,7 +1325,7 @@ export namespace GenericAgentBridge {
             projectID,
             directory,
             cwd,
-            title: query.slice(0, 60) || sessionID,
+            title: displayQuery.slice(0, 60) || sessionID,
             version,
             time: { created: Date.now(), updated: Date.now() },
           }
@@ -1237,7 +1342,7 @@ export namespace GenericAgentBridge {
         }
 
         const sessionCwd = sessions.get(sessionID)?.cwd
-        const user = userMessage(sessionID, query, currentModelID_, sessionCwd, extractPromptIds(body))
+        const user = userMessage(sessionID, displayQuery, currentModelID_, sessionCwd, extractPromptIds(body))
         const assistant = assistantMessage(sessionID, user.info.id, currentModelID_, sessionCwd)
         const bucket = messages.get(sessionID) ?? []
         bucket.push(user, assistant)
@@ -1280,7 +1385,7 @@ export namespace GenericAgentBridge {
             return reply
           }
           try {
-            await shim.prompt(sessionID, query, sessionCwd, (event) => {
+            await shim.prompt(sessionID, runtimeQuery, sessionCwd, (event) => {
               if (event.type === "tool_use") {
                 log.info("Received tool_use event", { data: event.data })
                 const toolData = event.data
@@ -1358,7 +1463,7 @@ export namespace GenericAgentBridge {
                 emit({ type: "message.updated", properties: { info: assistant.info } })
                 const existing = sessions.get(sessionID)
                 if (existing && existing.title === "New Conversation") {
-                  const updated = { ...existing, title: query.slice(0, 60) || existing.title, time: { ...existing.time, updated: Date.now() } }
+                  const updated = { ...existing, title: displayQuery.slice(0, 60) || existing.title, time: { ...existing.time, updated: Date.now() } }
                   sessions.set(sessionID, updated)
                   emit({ type: "session.updated", properties: { info: updated } })
                 }
