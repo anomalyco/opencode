@@ -562,6 +562,21 @@ export function Autocomplete(props: {
       })
     }
 
+    for (const command of sync.data.acp[props.sessionID ?? ""]?.availableCommands ?? []) {
+      if (!command || typeof command.name !== "string") continue
+      results.push({
+        display: "/" + command.name + ":acp",
+        description: typeof command.description === "string" ? command.description : undefined,
+        onSelect: () => {
+          const newText = "/" + command.name + " "
+          const cursor = props.input().logicalCursor
+          props.input().deleteRange(0, 0, cursor.row, cursor.col)
+          props.input().insertText(newText)
+          props.input().cursorOffset = Bun.stringWidth(newText)
+        },
+      })
+    }
+
     results.sort((a, b) => a.display.localeCompare(b.display))
 
     const max = firstBy(results, [(x) => x.display.length, "desc"])?.display.length

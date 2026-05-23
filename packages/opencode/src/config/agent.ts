@@ -18,9 +18,20 @@ const Color = Schema.Union([
   Schema.Literals(["primary", "secondary", "accent", "success", "warning", "error", "info"]),
 ])
 
+export const Backend = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("acp"),
+    server: Schema.String.annotate({
+      description: "Name of the configured ACP server to use for this agent",
+    }),
+  }),
+]).annotate({ discriminator: "type", identifier: "AgentBackendConfig" })
+export type Backend = Schema.Schema.Type<typeof Backend>
+
 const AgentSchema = Schema.StructWithRest(
   Schema.Struct({
     model: Schema.optional(ConfigModelID),
+    backend: Schema.optional(Backend),
     variant: Schema.optional(Schema.String).annotate({
       description: "Default model variant for this agent (applies only when using the agent's configured model).",
     }),
@@ -52,6 +63,7 @@ const AgentSchema = Schema.StructWithRest(
 const KNOWN_KEYS = new Set([
   "name",
   "model",
+  "backend",
   "variant",
   "prompt",
   "description",

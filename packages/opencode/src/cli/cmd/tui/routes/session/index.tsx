@@ -1692,6 +1692,12 @@ type ToolProps<T> = {
 function GenericTool(props: ToolProps<any>) {
   const { theme } = useTheme()
   const ctx = use()
+  const acp = createMemo(() =>
+    props.part.metadata?.acp && typeof props.part.metadata.acp === "object"
+      ? (props.part.metadata.acp as Record<string, any>)
+      : undefined,
+  )
+  const title = createMemo(() => String(acp()?.title ?? props.tool))
   const output = createMemo(() => props.output?.trim() ?? "")
   const [expanded, setExpanded] = createSignal(false)
   const maxLines = 3
@@ -1706,14 +1712,21 @@ function GenericTool(props: ToolProps<any>) {
     <Show
       when={props.output && ctx.showGenericToolOutput()}
       fallback={
-        <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
-          {props.tool} {input(props.input)}
+        <InlineTool
+          icon="⚙"
+          pending={title()}
+          complete={props.part.state.status === "completed" || props.part.state.status === "error"}
+          spinner={props.part.state.status === "pending" || props.part.state.status === "running"}
+          part={props.part}
+        >
+          {title()} {input(props.input)}
         </InlineTool>
       }
     >
       <BlockTool
-        title={`# ${props.tool} ${input(props.input)}`}
+        title={`# ${title()} ${input(props.input)}`}
         part={props.part}
+        spinner={props.part.state.status === "pending" || props.part.state.status === "running"}
         onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
       >
         <box gap={1}>

@@ -63,6 +63,7 @@ import { RepositoryCache } from "../../src/reference/repository-cache"
 import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { ACPClient } from "@/acp/client"
 
 void Log.init({ print: false })
 
@@ -86,6 +87,15 @@ const mcp = Layer.succeed(
     supportsOAuth: () => Effect.succeed(false),
     hasStoredTokens: () => Effect.succeed(false),
     getAuthStatus: () => Effect.succeed("not_authenticated" as const),
+  }),
+)
+
+const acp = Layer.succeed(
+  ACPClient.Service,
+  ACPClient.Service.of({
+    run: () => Effect.die("unexpected ACP client run in snapshot race test"),
+    cancel: () => Effect.void,
+    setConfigOption: () => Effect.die("unexpected ACP config option in snapshot race test"),
   }),
 )
 
@@ -127,6 +137,7 @@ function makeHttp() {
     ProviderSvc.defaultLayer,
     lsp,
     mcp,
+    acp,
     AppFileSystem.defaultLayer,
     BackgroundJob.defaultLayer,
     status,

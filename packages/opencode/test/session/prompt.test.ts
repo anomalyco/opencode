@@ -55,6 +55,7 @@ import { reply, TestLLMServer } from "../lib/llm-server"
 import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { ACPClient } from "@/acp/client"
 
 void Log.init({ print: false })
 
@@ -132,6 +133,15 @@ const mcp = Layer.succeed(
   }),
 )
 
+const acp = Layer.succeed(
+  ACPClient.Service,
+  ACPClient.Service.of({
+    run: () => Effect.die("unexpected ACP client run in prompt tests"),
+    cancel: () => Effect.void,
+    setConfigOption: () => Effect.die("unexpected ACP config option in prompt tests"),
+  }),
+)
+
 const lsp = Layer.succeed(
   LSP.Service,
   LSP.Service.of({
@@ -178,6 +188,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     ProviderSvc.defaultLayer,
     lsp,
     mcp,
+    acp,
     AppFileSystem.defaultLayer,
     BackgroundJob.defaultLayer,
     status,

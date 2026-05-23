@@ -1,4 +1,5 @@
 import { Config } from "@/config/config"
+import { ConfigAgent } from "@/config/agent"
 import { serviceUse } from "@/effect/service-use"
 import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
@@ -42,6 +43,7 @@ export const Info = Schema.Struct({
       providerID: ProviderID,
     }),
   ),
+  backend: Schema.optional(ConfigAgent.Backend),
   variant: Schema.optional(Schema.String),
   prompt: Schema.optional(Schema.String),
   options: Schema.Record(Schema.String, Schema.Unknown),
@@ -295,6 +297,7 @@ export const layer = Layer.effect(
               native: false,
             }
           if (value.model) item.model = Provider.parseModel(value.model)
+          item.backend = value.backend ?? item.backend
           item.variant = value.variant ?? item.variant
           item.prompt = value.prompt ?? item.prompt
           item.description = value.description ?? item.description

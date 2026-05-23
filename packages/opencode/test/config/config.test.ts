@@ -634,6 +634,41 @@ it.instance("handles agent configuration", () =>
   }),
 )
 
+it.instance("handles ACP server and agent backend configuration", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* writeConfigEffect(test.directory, {
+      $schema: "https://opencode.ai/config.json",
+      acp: {
+        cursor: {
+          type: "local",
+          command: ["cursor", "acp"],
+          environment: { CURSOR_CHANNEL: "stable" },
+          enabled: true,
+          timeout: 30000,
+        },
+      },
+      agent: {
+        cursor: {
+          mode: "primary",
+          description: "Use Cursor through ACP",
+          backend: { type: "acp", server: "cursor" },
+        },
+      },
+    })
+
+    const config = yield* Config.use.get()
+    expect(config.acp?.cursor).toEqual({
+      type: "local",
+      command: ["cursor", "acp"],
+      environment: { CURSOR_CHANNEL: "stable" },
+      enabled: true,
+      timeout: 30000,
+    })
+    expect(config.agent?.cursor?.backend).toEqual({ type: "acp", server: "cursor" })
+  }),
+)
+
 it.instance("treats agent variant as model-scoped setting (not provider option)", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance

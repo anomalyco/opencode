@@ -1,4 +1,5 @@
 import { Agent } from "@/agent/agent"
+import { ACPClient } from "@/acp/client"
 import { Bus } from "@/bus"
 import { Command } from "@/command"
 import { Permission } from "@/permission"
@@ -21,6 +22,7 @@ import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import {
+  AcpConfigOptionPayload,
   CommandPayload,
   DiffQuery,
   ForkPayload,
@@ -57,6 +59,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
     const bus = yield* Bus.Service
+    const acp = yield* ACPClient.Service
     const scope = yield* Scope.Scope
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
@@ -195,6 +198,20 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         yield* session.setArchived({ sessionID: ctx.params.sessionID, time: ctx.payload.time.archived })
       }
       return yield* requireSession(ctx.params.sessionID)
+    })
+
+    const acpConfigOption = Effect.fn("SessionHttpApi.acpConfigOption")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof AcpConfigOptionPayload.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      return yield* acp
+        .setConfigOption({
+          sessionID: ctx.params.sessionID,
+          configID: ctx.payload.configID,
+          value: ctx.payload.value,
+        })
+        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
     })
 
     const fork = Effect.fn("SessionHttpApi.fork")(function* (ctx: {
@@ -415,6 +432,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handleRaw("create", createRaw)
       .handle("remove", remove)
       .handle("update", update)
+      .handle("acpConfigOption", acpConfigOption)
       .handleRaw("fork", forkRaw)
       .handle("abort", abort)
       .handle("init", init)

@@ -70,6 +70,10 @@ export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput
 export const PermissionResponsePayload = Schema.Struct({
   response: Permission.Reply,
 })
+export const AcpConfigOptionPayload = Schema.Struct({
+  configID: Schema.String,
+  value: Schema.String,
+})
 
 export const SessionPaths = {
   list: root,
@@ -98,6 +102,7 @@ export const SessionPaths = {
   deleteMessage: `${root}/:sessionID/message/:messageID`,
   deletePart: `${root}/:sessionID/message/:messageID/part/:partID`,
   updatePart: `${root}/:sessionID/message/:messageID/part/:partID`,
+  acpConfigOption: `${root}/:sessionID/acp/config`,
 } as const
 
 export const SessionApi = HttpApi.make("session")
@@ -231,6 +236,19 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.update",
             summary: "Update session",
             description: "Update properties of an existing session, such as title or other metadata.",
+          }),
+        ),
+        HttpApiEndpoint.post("acpConfigOption", SessionPaths.acpConfigOption, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: AcpConfigOptionPayload,
+          success: described(Schema.Any, "Updated ACP config options"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.acp.config",
+            summary: "Set ACP session config option",
+            description: "Set a configuration option on the ACP backend for this session.",
           }),
         ),
         HttpApiEndpoint.post("fork", SessionPaths.fork, {

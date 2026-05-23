@@ -34,6 +34,15 @@ import path from "path"
 import { useKV } from "./kv"
 import { aggregateFailures } from "./aggregate-failures"
 
+type AcpSessionState = {
+  configOptions?: any[]
+  modes?: any
+  models?: any
+  availableCommands?: any[]
+  usage?: any
+  info?: any
+}
+
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
@@ -76,6 +85,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp_resource: {
         [key: string]: McpResource
       }
+      acp: {
+        [sessionID: string]: AcpSessionState
+      }
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
     }>({
@@ -103,6 +115,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       lsp: [],
       mcp: {},
       mcp_resource: {},
+      acp: {},
       formatter: [],
       vcs: undefined,
     })
@@ -131,6 +144,20 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     }
 
     event.subscribe((event, { workspace }) => {
+      const anyEvent = event as any
+      if (anyEvent.type === "acp.session.updated") {
+        const state = anyEvent.properties as AcpSessionState & { sessionID: string }
+        setStore("acp", state.sessionID, (prev = {}) => ({
+          ...prev,
+          ...(state.configOptions !== undefined ? { configOptions: state.configOptions } : {}),
+          ...(state.modes !== undefined ? { modes: state.modes } : {}),
+          ...(state.models !== undefined ? { models: state.models } : {}),
+          ...(state.availableCommands !== undefined ? { availableCommands: state.availableCommands } : {}),
+          ...(state.usage !== undefined ? { usage: state.usage } : {}),
+          ...(state.info !== undefined ? { info: state.info } : {}),
+        }))
+        return
+      }
       switch (event.type) {
         case "server.instance.disposed":
           void bootstrap()

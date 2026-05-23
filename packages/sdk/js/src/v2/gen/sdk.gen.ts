@@ -159,6 +159,8 @@ import type {
   QuestionReplyResponses,
   SessionAbortErrors,
   SessionAbortResponses,
+  SessionAcpConfigErrors,
+  SessionAcpConfigResponses,
   SessionChildrenErrors,
   SessionChildrenResponses,
   SessionCommandErrors,
@@ -3036,6 +3038,49 @@ export class Provider extends HeyApiClient {
   }
 }
 
+export class Acp extends HeyApiClient {
+  /**
+   * Set ACP session config option
+   *
+   * Set a configuration option on the ACP backend for this session.
+   */
+  public config<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      configID?: string
+      value?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "configID" },
+            { in: "body", key: "value" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionAcpConfigResponses, SessionAcpConfigErrors, ThrowOnError>({
+      url: "/session/{sessionID}/acp/config",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Session2 extends HeyApiClient {
   /**
    * List sessions
@@ -3993,6 +4038,11 @@ export class Session2 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _acp?: Acp
+  get acp(): Acp {
+    return (this._acp ??= new Acp({ client: this.client }))
   }
 }
 

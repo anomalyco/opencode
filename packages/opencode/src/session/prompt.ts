@@ -61,6 +61,7 @@ import { referencePromptMetadata, referenceTextPart } from "./prompt/reference"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { ACPClient } from "@/acp/client"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -120,6 +121,7 @@ export const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
+    const acp = yield* ACPClient.Service
     const references = yield* Reference.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
@@ -1355,6 +1357,23 @@ export const layer = Layer.effect(
             yield* sessions.updateMessage(msg)
           })
 
+          if (agent.backend?.type === "acp") {
+            const lastUserMsg = msgs.findLast(
+              (m): m is MessageV2.WithParts & { info: MessageV2.User } => m.info.role === "user",
+            )
+            if (!lastUserMsg) throw new Error("No user message found for ACP prompt")
+            yield* acp
+              .run({
+                server: agent.backend.server,
+                agent,
+                session,
+                user: lastUserMsg,
+                assistant: msg,
+              })
+              .pipe(Effect.onInterrupt(() => finalizeInterruptedAssistant))
+            break
+          }
+
           const handle = yield* processor
             .create({
               assistantMessage: msg,
@@ -1646,6 +1665,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(
       Layer.mergeAll(
         EventV2Bridge.defaultLayer,
+        ACPClient.defaultLayer,
         Agent.defaultLayer,
         SystemPrompt.defaultLayer,
         LLM.defaultLayer,

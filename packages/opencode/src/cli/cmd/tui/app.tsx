@@ -78,6 +78,7 @@ import {
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
+import { DialogAcpConfig } from "./component/dialog-acp-config"
 
 const appBindingCommands = [
   "command.palette.show",
@@ -103,6 +104,7 @@ const appBindingCommands = [
   "agent.cycle.reverse",
   "variant.cycle",
   "variant.list",
+  "acp.config",
   "provider.connect",
   "console.org.switch",
   "opencode.status",
@@ -603,6 +605,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         slashName: "variants",
         run: () => {
           dialog.replace(() => <DialogVariant />)
+        },
+      },
+      {
+        name: "acp.config",
+        title: "ACP options",
+        category: "Agent",
+        slashName: "acp-options",
+        hidden:
+          route.data.type !== "session" || (sync.data.acp[route.data.sessionID]?.configOptions?.length ?? 0) === 0,
+        run: () => {
+          dialog.replace(() => <DialogAcpConfig />)
         },
       },
       {

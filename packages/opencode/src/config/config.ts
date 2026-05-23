@@ -31,6 +31,7 @@ import { ConfigLayout } from "./layout"
 import { ConfigLSP } from "./lsp"
 import { ConfigManaged } from "./managed"
 import { ConfigMCP } from "./mcp"
+import { ConfigACP } from "./acp"
 import { ConfigModelID } from "./model-id"
 import { ConfigParse } from "./parse"
 import { ConfigPaths } from "./paths"
@@ -220,6 +221,16 @@ export const Info = Schema.Struct({
   provider: Schema.optional(Schema.Record(Schema.String, ConfigProvider.Info)).annotate({
     description: "Custom provider configurations and model overrides",
   }),
+  acp: Schema.optional(
+    Schema.Record(
+      Schema.String,
+      Schema.Union([
+        ConfigACP.Info,
+        // Matches the `{ enabled: false }` form used to disable a server.
+        Schema.Struct({ enabled: Schema.Boolean }),
+      ]),
+    ),
+  ).annotate({ description: "ACP (Agent Client Protocol) server configurations" }),
   mcp: Schema.optional(
     Schema.Record(
       Schema.String,
