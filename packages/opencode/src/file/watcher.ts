@@ -32,9 +32,10 @@ export const Event = {
 }
 
 const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
+  if (process.platform === "linux" && typeof OPENCODE_LIBC !== "string") return
   try {
     const binding = require(
-      `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? `-${OPENCODE_LIBC || "glibc"}` : ""}`,
+      `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? `-${OPENCODE_LIBC}` : ""}`,
     )
     return createWrapper(binding) as typeof import("@parcel/watcher")
   } catch (error) {
@@ -106,11 +107,16 @@ export const layer = Layer.effect(
 
           const subscribe = (dir: string, ignore: string[]) => {
             const pending = w.subscribe(dir, cb, { ignore, backend })
+            const withTimeout = Promise.race([
+              pending,
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error(`subscribe timed out after ${SUBSCRIBE_TIMEOUT_MS}ms`)), SUBSCRIBE_TIMEOUT_MS),
+              ),
+            ])
             return Effect.gen(function* () {
-              const sub = yield* Effect.promise(() => pending)
+              const sub = yield* Effect.promise(() => withTimeout)
               subs.push(sub)
             }).pipe(
-              Effect.timeout(SUBSCRIBE_TIMEOUT_MS),
               Effect.catchCause((cause) => {
                 log.error("failed to subscribe", { dir, cause: Cause.pretty(cause) })
                 pending.then((s) => s.unsubscribe()).catch(() => {})
