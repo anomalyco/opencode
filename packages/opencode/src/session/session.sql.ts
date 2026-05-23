@@ -7,6 +7,7 @@ import type { Permission } from "../permission"
 import type { ProjectID } from "../project/schema"
 import type { SessionID, MessageID, PartID } from "./schema"
 import type { WorkspaceID } from "../control-plane/schema"
+import type { ConfigPlugin } from "../config/plugin"
 import { Timestamps } from "../storage/schema.sql"
 
 type PartData = Omit<MessageV2.Part, "id" | "sessionID" | "messageID">
@@ -47,6 +48,7 @@ export const SessionTable = sqliteTable(
       providerID: string
       variant?: string
     }>(),
+    plugin: text({ mode: "json" }).$type<ConfigPlugin.MutableSpec[]>(),
     ...Timestamps,
     time_compacting: integer(),
     time_archived: integer(),

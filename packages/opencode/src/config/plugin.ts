@@ -1,16 +1,17 @@
 import { Glob } from "@opencode-ai/core/util/glob"
-import { Schema } from "effect"
+import { Schema, Types } from "effect"
 import { pathToFileURL } from "url"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
 import path from "path"
 
-export const Options = Schema.Record(Schema.String, Schema.Unknown)
+export const Options = Schema.Record(Schema.String, Schema.Any)
 export type Options = Schema.Schema.Type<typeof Options>
 
 // Spec is the user-config value: either just a plugin identifier, or the identifier plus inline options.
 // It answers "what should we load?" but says nothing about where that value came from.
 export const Spec = Schema.Union([Schema.String, Schema.mutable(Schema.Tuple([Schema.String, Options]))])
 export type Spec = Schema.Schema.Type<typeof Spec>
+export type MutableSpec = Types.DeepMutable<Spec>
 
 export type Scope = "global" | "local"
 
@@ -61,6 +62,12 @@ export async function resolvePluginSpec(plugin: Spec, configFilepath: string): P
   const resolved = await resolvePathPluginTarget(file).catch(() => file)
 
   if (Array.isArray(plugin)) return [resolved, plugin[1]]
+  return resolved
+}
+
+export async function resolvePluginSpecFromDirectory(plugin: MutableSpec, directory: string): Promise<MutableSpec> {
+  const resolved = await resolvePluginSpec(plugin, path.join(directory, "opencode.json"))
+  if (Array.isArray(resolved)) return [resolved[0], resolved[1]]
   return resolved
 }
 

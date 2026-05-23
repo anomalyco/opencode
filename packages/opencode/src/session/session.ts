@@ -33,6 +33,7 @@ import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { ConfigPlugin } from "@/config/plugin"
 
 import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
@@ -102,6 +103,7 @@ export function fromRow(row: SessionRow): Info {
     share,
     revert,
     permission: row.permission ? [...row.permission] : undefined,
+    plugin: row.plugin ? [...row.plugin] : undefined,
     time: {
       created: row.time_created,
       updated: row.time_updated,
@@ -137,6 +139,7 @@ export function toRow(info: Info) {
     tokens_cache_write: (info.tokens ?? EmptyTokens).cache.write,
     revert: info.revert ?? null,
     permission: info.permission,
+    plugin: info.plugin,
     time_created: info.time.created,
     time_updated: info.time.updated,
     time_compacting: info.time.compacting,
@@ -223,6 +226,7 @@ export const Info = Schema.Struct({
   version: Schema.String,
   time: Time,
   permission: optionalOmitUndefined(Permission.Ruleset),
+  plugin: optionalOmitUndefined(Schema.Array(ConfigPlugin.Spec)),
   revert: optionalOmitUndefined(Revert),
 }).annotate({ identifier: "Session" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
@@ -247,6 +251,7 @@ export const CreateInput = Schema.optional(
     agent: Schema.optional(Schema.String),
     model: Schema.optional(Model),
     permission: Schema.optional(Permission.Ruleset),
+    plugin: Schema.optional(Schema.Array(ConfigPlugin.Spec)),
     workspaceID: Schema.optional(WorkspaceID),
   }),
 )
@@ -456,6 +461,7 @@ export interface Interface {
     agent?: string
     model?: Schema.Schema.Type<typeof Model>
     permission?: Permission.Ruleset
+    plugin?: ConfigPlugin.MutableSpec[]
     workspaceID?: WorkspaceID
   }) => Effect.Effect<Info>
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
@@ -530,6 +536,7 @@ export const layer: Layer.Layer<
       directory: string
       path?: string
       permission?: Permission.Ruleset
+      plugin?: ConfigPlugin.MutableSpec[]
     }) {
       const ctx = yield* InstanceState.context
       const result: Info = {
@@ -545,6 +552,7 @@ export const layer: Layer.Layer<
         agent: input.agent,
         model: input.model,
         permission: input.permission ? [...input.permission] : undefined,
+        plugin: input.plugin ? [...input.plugin] : undefined,
         cost: 0,
         tokens: EmptyTokens,
         time: {
@@ -660,10 +668,17 @@ export const layer: Layer.Layer<
       agent?: string
       model?: Schema.Schema.Type<typeof Model>
       permission?: Permission.Ruleset
+      plugin?: ConfigPlugin.MutableSpec[]
       workspaceID?: WorkspaceID
     }) {
       const ctx = yield* InstanceState.context
       const workspace = yield* InstanceState.workspaceID
+      const inputPlugin = input?.plugin
+      const plugin = inputPlugin?.length
+        ? yield* Effect.promise(() =>
+            Promise.all(inputPlugin.map((item) => ConfigPlugin.resolvePluginSpecFromDirectory(item, ctx.directory))),
+          )
+        : undefined
       return yield* createNext({
         parentID: input?.parentID,
         directory: ctx.directory,
@@ -672,6 +687,7 @@ export const layer: Layer.Layer<
         agent: input?.agent,
         model: input?.model,
         permission: input?.permission,
+        plugin,
         workspaceID: input?.workspaceID ?? workspace,
       })
     })

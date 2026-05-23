@@ -167,6 +167,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         ? {
             ...decoded,
             permission: decoded.permission ? [...decoded.permission] : undefined,
+            plugin: decoded.plugin ? [...decoded.plugin] : undefined,
           }
         : decoded
       return yield* create({ payload })

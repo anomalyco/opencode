@@ -4,6 +4,7 @@ import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance as runDisposers } from "@/effect/instance-registry"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import type { ConfigPlugin } from "@/config/plugin"
 import { Context, Deferred, Duration, Effect, Exit, Layer, Scope } from "effect"
 import { type InstanceContext } from "./instance-context"
 import { InstanceBootstrap } from "./bootstrap-service"
@@ -13,6 +14,7 @@ export interface LoadInput {
   directory: string
   worktree?: string
   project?: Project.Info
+  plugin?: ConfigPlugin.MutableSpec[]
 }
 
 export interface Interface {
@@ -47,12 +49,14 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
                 directory: input.directory,
                 worktree: input.worktree,
                 project: input.project,
+                plugin: input.plugin,
               }
             : yield* project.fromDirectory(input.directory).pipe(
                 Effect.map((result) => ({
                   directory: input.directory,
                   worktree: result.sandbox,
                   project: result.project,
+                  plugin: input.plugin,
                 })),
               )
         yield* bootstrap.run.pipe(Effect.provideService(InstanceRef, ctx))
@@ -102,18 +106,22 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
       return true
     })
 
+    const cacheKey = (directory: string, plugin?: ConfigPlugin.MutableSpec[]) =>
+      plugin?.length ? `${directory}\0${JSON.stringify(plugin)}` : directory
+
     const load = (input: LoadInput): Effect.Effect<InstanceContext> => {
       const directory = AppFileSystem.resolve(input.directory)
+      const key = cacheKey(directory, input.plugin)
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          const existing = cache.get(directory)
+          const existing = cache.get(key)
           if (existing) return yield* restore(Deferred.await(existing.deferred))
 
           const entry: Entry = { deferred: Deferred.makeUnsafe<InstanceContext>() }
-          cache.set(directory, entry)
+          cache.set(key, entry)
           yield* Effect.gen(function* () {
             yield* Effect.logInfo("creating instance").pipe(Effect.annotateLogs("directory", directory))
-            yield* completeLoad(directory, input, entry)
+            yield* completeLoad(key, { ...input, directory }, entry)
           }).pipe(Effect.forkIn(scope, { startImmediately: true }))
           return yield* restore(Deferred.await(entry.deferred))
         }),
@@ -122,11 +130,12 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
 
     const reload = (input: LoadInput): Effect.Effect<InstanceContext> => {
       const directory = AppFileSystem.resolve(input.directory)
+      const key = cacheKey(directory, input.plugin)
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          const previous = cache.get(directory)
+          const previous = cache.get(key)
           const entry: Entry = { deferred: Deferred.makeUnsafe<InstanceContext>() }
-          cache.set(directory, entry)
+          cache.set(key, entry)
           yield* Effect.gen(function* () {
             yield* Effect.logInfo("reloading instance").pipe(Effect.annotateLogs("directory", directory))
             if (previous) {
@@ -134,7 +143,7 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
               yield* Effect.promise(() => runDisposers(directory))
               yield* emitDisposed({ directory, project: input.project?.id })
             }
-            yield* completeLoad(directory, input, entry)
+            yield* completeLoad(key, { ...input, directory }, entry)
           }).pipe(Effect.forkIn(scope, { startImmediately: true }))
           return yield* restore(Deferred.await(entry.deferred))
         }),
@@ -142,13 +151,14 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
     }
 
     const dispose = Effect.fn("InstanceStore.dispose")(function* (ctx: InstanceContext) {
-      const entry = cache.get(ctx.directory)
+      const key = cacheKey(ctx.directory, ctx.plugin)
+      const entry = cache.get(key)
       if (!entry) return yield* disposeContext(ctx)
 
       const exit = yield* Deferred.await(entry.deferred).pipe(Effect.exit)
-      if (Exit.isFailure(exit)) return yield* removeEntry(ctx.directory, entry).pipe(Effect.asVoid)
+      if (Exit.isFailure(exit)) return yield* removeEntry(key, entry).pipe(Effect.asVoid)
       if (exit.value !== ctx) return
-      yield* disposeEntry(ctx.directory, entry, ctx).pipe(Effect.asVoid)
+      yield* disposeEntry(key, entry, ctx).pipe(Effect.asVoid)
     })
 
     const disposeAllOnce = Effect.fnUntraced(function* () {

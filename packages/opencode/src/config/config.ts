@@ -663,6 +663,8 @@ export const layer = Layer.effect(
           yield* mergePluginOrigins(dir, list)
         }
 
+        yield* mergePluginOrigins(ctx.directory, ctx.plugin, "local")
+
         if (process.env.OPENCODE_CONFIG_CONTENT) {
           const source = "OPENCODE_CONFIG_CONTENT"
           const next = yield* loadConfig(process.env.OPENCODE_CONFIG_CONTENT, {

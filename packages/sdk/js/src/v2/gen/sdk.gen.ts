@@ -3097,6 +3097,15 @@ export class Session2 extends HeyApiClient {
         variant?: string
       }
       permission?: PermissionRuleset
+      plugin?: Array<
+        | string
+        | [
+            string,
+            {
+              [key: string]: unknown
+            },
+          ]
+      >
       workspaceID?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -3113,6 +3122,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "agent" },
             { in: "body", key: "model" },
             { in: "body", key: "permission" },
+            { in: "body", key: "plugin" },
             { in: "body", key: "workspaceID" },
           ],
         },

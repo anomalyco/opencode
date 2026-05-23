@@ -1,11 +1,13 @@
 import { LocalContext } from "@/util/local-context"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import type { ConfigPlugin } from "@/config/plugin"
 import type * as Project from "./project"
 
 export interface InstanceContext {
   directory: string
   worktree: string
   project: Project.Info
+  plugin?: ConfigPlugin.MutableSpec[]
 }
 
 export const context = LocalContext.create<InstanceContext>("instance")

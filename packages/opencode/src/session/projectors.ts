@@ -87,6 +87,7 @@ export function toPartialRow(info: DeepPartial<Session.Info>) {
     tokens_cache_write: grab(info, "tokens", (v) => grab(v, "cache", (cache) => grab(cache, "write"))),
     revert: grab(info, "revert"),
     permission: grab(info, "permission"),
+    plugin: grab(info, "plugin"),
     time_created: grab(info, "time", (v) => grab(v, "created")),
     time_updated: grab(info, "time", (v) => grab(v, "updated")),
     time_compacting: grab(info, "time", (v) => grab(v, "compacting")),

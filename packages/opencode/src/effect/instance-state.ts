@@ -24,20 +24,32 @@ export const workspaceID = Effect.gen(function* () {
 
 export const directory = Effect.map(context, (ctx) => ctx.directory)
 
+export const key = (ctx: InstanceContext) =>
+  ctx.plugin?.length ? `${ctx.directory}\0${JSON.stringify(ctx.plugin)}` : ctx.directory
+
 export const make = <A, E = never, R = never>(
   init: (ctx: InstanceContext) => Effect.Effect<A, E, R | Scope.Scope>,
 ): Effect.Effect<InstanceState<A, E, Exclude<R, Scope.Scope>>, never, R | Scope.Scope> =>
   Effect.gen(function* () {
+    const keys = new Set<string>()
     const cache = yield* ScopedCache.make<string, A, E, R>({
       capacity: Number.POSITIVE_INFINITY,
-      lookup: () =>
+      lookup: (cacheKey) =>
         Effect.gen(function* () {
+          keys.add(cacheKey)
           return yield* init(yield* context)
         }),
     })
 
     const off = registerDisposer((directory) =>
-      Effect.runPromise(ScopedCache.invalidate(cache, directory).pipe(Effect.provide(EffectLogger.layer))),
+      Effect.runPromise(
+        Effect.forEach(
+          [...keys].filter((cacheKey) => cacheKey === directory || cacheKey.startsWith(`${directory}\0`)),
+          (cacheKey) =>
+            ScopedCache.invalidate(cache, cacheKey).pipe(Effect.tap(() => Effect.sync(() => keys.delete(cacheKey)))),
+          { discard: true },
+        ).pipe(Effect.provide(EffectLogger.layer)),
+      ),
     )
     yield* Effect.addFinalizer(() => Effect.sync(off))
 
@@ -49,7 +61,7 @@ export const make = <A, E = never, R = never>(
 
 export const get = <A, E, R>(self: InstanceState<A, E, R>) =>
   Effect.gen(function* () {
-    return yield* ScopedCache.get(self.cache, yield* directory)
+    return yield* ScopedCache.get(self.cache, key(yield* context))
   })
 
 export const use = <A, E, R, B>(self: InstanceState<A, E, R>, select: (value: A) => B) => Effect.map(get(self), select)
@@ -61,12 +73,12 @@ export const useEffect = <A, E, R, B, E2, R2>(
 
 export const has = <A, E, R>(self: InstanceState<A, E, R>) =>
   Effect.gen(function* () {
-    return yield* ScopedCache.has(self.cache, yield* directory)
+    return yield* ScopedCache.has(self.cache, key(yield* context))
   })
 
 export const invalidate = <A, E, R>(self: InstanceState<A, E, R>) =>
   Effect.gen(function* () {
-    return yield* ScopedCache.invalidate(self.cache, yield* directory)
+    return yield* ScopedCache.invalidate(self.cache, key(yield* context))
   })
 
 export * as InstanceState from "./instance-state"

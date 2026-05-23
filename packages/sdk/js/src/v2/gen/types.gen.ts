@@ -786,6 +786,15 @@ export type Session = {
     archived?: number
   }
   permission?: PermissionRuleset
+  plugin?: Array<
+    | string
+    | [
+        string,
+        {
+          [key: string]: unknown
+        },
+      ]
+  >
   revert?: {
     messageID: string
     partID?: string
@@ -6064,6 +6073,15 @@ export type SessionCreateData = {
       variant?: string
     }
     permission?: PermissionRuleset
+    plugin?: Array<
+      | string
+      | [
+          string,
+          {
+            [key: string]: unknown
+          },
+        ]
+    >
     workspaceID?: string
   }
   path?: never
