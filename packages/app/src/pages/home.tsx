@@ -32,6 +32,7 @@ import { sessionPermissionRequest } from "@/pages/session/composer/session-reque
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { useServers } from "@/context/servers"
 import { useSettings } from "@/context/settings"
+import { shouldUseV2Settings } from "@/components/settings-layout"
 
 const HOME_SESSION_LIMIT = 15
 const HOME_ROW =
@@ -193,7 +194,10 @@ function HomeDesign() {
   }
 
   function openSettings() {
-    void import("@/components/dialog-settings").then((x) => {
+    const module = shouldUseV2Settings()
+      ? import("@/components/settings-v2")
+      : import("@/components/dialog-settings")
+    void module.then((x) => {
       dialog.show(() => <x.DialogSettings />)
     })
   }
