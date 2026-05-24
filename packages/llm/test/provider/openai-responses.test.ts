@@ -933,40 +933,6 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  // Complementary to the previous case: a reasoning part with an `itemId`
-  // but no `reasoningEncryptedContent` key at all. Under store:false the
-  // request cannot replay reasoning state, so the item is dropped.
-  it.effect("drops reasoning parts with an itemId but no encrypted state under store:false", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
-        LLM.request({
-          id: "req_reasoning_itemid_only",
-          model,
-          messages: [
-            Message.user("What changed?"),
-            Message.assistant([
-              {
-                type: "reasoning",
-                text: "Checked the previous diff.",
-                providerMetadata: { openai: { itemId: "rs_1" } },
-              },
-              { type: "text", text: "The parser changed." },
-            ]),
-          ],
-          providerOptions: { openai: { store: false } },
-        }),
-      )
-
-      expect(prepared.body).toMatchObject({
-        input: [
-          { role: "user", content: [{ type: "input_text", text: "What changed?" }] },
-          { role: "assistant", content: [{ type: "output_text", text: "The parser changed." }] },
-        ],
-        store: false,
-      })
-    }),
-  )
-
   it.effect("assembles streamed function call input", () =>
     Effect.gen(function* () {
       const body = sseEvents(

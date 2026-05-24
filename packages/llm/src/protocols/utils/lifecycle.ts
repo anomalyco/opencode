@@ -30,11 +30,8 @@ export const reasoningStart = (
   id: string,
   providerMetadata?: ProviderMetadata,
 ): State => {
-  // Call stepStart unconditionally so the very first event of a response
-  // can be a reasoningDelta and still produce a step-start, matching
-  // textDelta/textEnd/reasoningEnd parity.
+  if (state.reasoning.has(id)) return state
   const stepped = stepStart(state, events)
-  if (stepped.reasoning.has(id)) return stepped
   events.push(LLMEvent.reasoningStart({ id, providerMetadata }))
   return { ...stepped, reasoning: new Set([...stepped.reasoning, id]) }
 }
