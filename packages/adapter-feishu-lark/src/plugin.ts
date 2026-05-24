@@ -235,26 +235,42 @@ async function syncAccounts(): Promise<void> {
           console.error(`[feishu-plugin] pipeline error:`, err)
         }
       },
-      // onCardAction:user 在飞书点交互卡片按钮(本期 permission 卡片)→ 路由到 pipeline
+      // onCardAction:user 在飞书点交互卡片按钮 → 路由到 pipeline
+      // 当前两类卡片:permission(opencode permission.asked)/ confirm(feishu-bridge-light 自动建群等)
       async (accountId, cardEvent) => {
         const pipeline = pipelines.get(accountId)
         if (!pipeline) {
           console.warn(`[feishu-plugin] card action for unknown account ${accountId}`)
           return
         }
-        // 解码 action.value → 看是不是 permission_reply
-        const { parseCardAction } = await import("./feishu/permission-card")
-        const parsed = parseCardAction({
+        const rawEvent = {
           action: { value: cardEvent.actionValue, tag: cardEvent.actionTag },
           open_id: cardEvent.openId,
           open_message_id: cardEvent.cardMessageId,
-        })
-        if (!parsed) return // 不是我们的 permission 卡片,忽略
-        try {
-          await pipeline.handleCardActionReply(parsed)
-        } catch (err) {
-          console.error(`[feishu-plugin] handleCardActionReply error:`, err)
         }
+        // 先尝试 permission 卡片
+        const { parseCardAction } = await import("./feishu/permission-card")
+        const permParsed = parseCardAction(rawEvent)
+        if (permParsed) {
+          try {
+            await pipeline.handleCardActionReply(permParsed)
+          } catch (err) {
+            console.error(`[feishu-plugin] handleCardActionReply error:`, err)
+          }
+          return
+        }
+        // 再尝试 confirm 卡片(feishu-bridge-light)
+        const { parseConfirmAction } = await import("./feishu/confirm-card")
+        const confirmParsed = parseConfirmAction(rawEvent)
+        if (confirmParsed) {
+          try {
+            await pipeline.handleConfirmCardReply(confirmParsed)
+          } catch (err) {
+            console.error(`[feishu-plugin] handleConfirmCardReply error:`, err)
+          }
+          return
+        }
+        // 不属于我们任何卡片类型,静默忽略
       },
     )
   }

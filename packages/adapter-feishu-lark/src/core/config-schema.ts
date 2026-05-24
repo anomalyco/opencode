@@ -128,6 +128,12 @@ export const FeishuAccountSchema = z.object({
   tables: TableStrategySchema.default("bullets"),
   /** 短 token 流式聚合阈值(ms)(spec G3),默认 50 */
   blockStreamingCoalesce: z.number().int().min(0).max(1000).default(50),
+  /**
+   * [feat: feishu-bridge-light] AI 自动建群 opt-in。
+   * true 时 system prompt 教 LLM 用 `[CREATE_GROUP:群名]` marker,触发会发飞书 permission-card
+   * 让 user 二次确认才真创建。默认 false 安全(prompt injection 防护)。
+   */
+  enableAutoGroupCreate: z.boolean().default(false),
 })
 
 export type FeishuAccount = z.infer<typeof FeishuAccountSchema>
