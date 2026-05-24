@@ -449,6 +449,111 @@ describe("/new slash command (feat: feishu-bridge-light)", () => {
 })
 
 // ============================================================
+// 建群意图硬拦截 (feat: feishu-create-group-hard-block) 2026-05-24
+// ============================================================
+
+describe("CREATE_GROUP hard-block (feat: feishu-create-group-hard-block)", () => {
+  let tmpDir: string
+  let store: ChatSessionStore
+  let dispatcher: PromptDispatcher
+  let fakes: ReturnType<typeof makeNewCmdFakes>
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "hard-block-test-"))
+    store = new ChatSessionStore(join(tmpDir, "sessions.json"))
+    dispatcher = new PromptDispatcher()
+    fakes = makeNewCmdFakes()
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  function makePipeline(opts: { enable: boolean }): MessagePipeline {
+    return new MessagePipeline({
+      account: makeAccount({ enableAutoGroupCreate: opts.enable } as any),
+      accountId: "acc1",
+      opencodeClient: fakes.opencodeClient,
+      dispatcher,
+      chatSessionStore: store,
+      larkClient: fakes.larkClient,
+    })
+  }
+
+  test("disabled + p2p + '帮我建群' → 硬拦截,不调 promptAsync,直接发 GUI 引导", async () => {
+    const pipeline = makePipeline({ enable: false })
+    // spy 一下 promptAsync 看是否被调
+    let promptAsyncCalled = false
+    fakes.opencodeClient.session.promptAsync = async () => {
+      promptAsyncCalled = true
+      return { data: {} } as any
+    }
+
+    await pipeline.testHandle(makeEvent({ content: JSON.stringify({ text: "帮我建群" }) }))
+
+    expect(promptAsyncCalled).toBe(false)
+    expect(fakes.sentTexts).toHaveLength(1)
+    expect(fakes.sentTexts[0]!.text).toContain("此账号未启用自动建群能力")
+    expect(fakes.sentTexts[0]!.text).toContain("DeskFox 设置")
+    expect(fakes.sentTexts[0]!.text).toContain("高级能力")
+    // 硬拦截早退,不应触发 ack(ackMessage 在 hard-block 之后才执行)
+    expect(fakes.ackedMessages).toHaveLength(0)
+  })
+
+  test("disabled + p2p + '今天天气真好' → 不拦截,走正常流程(触发 ack)", async () => {
+    const pipeline = makePipeline({ enable: false })
+    void pipeline.testHandle(makeEvent({ content: JSON.stringify({ text: "今天天气真好" }) }))
+    await new Promise((r) => setTimeout(r, 50))
+    // 不命中关键字 → 不拦截 → 走正常流程 → ack 触发
+    expect(fakes.ackedMessages).toEqual(["om_test_1"])
+    // 不应发 GUI 引导文字
+    expect(fakes.sentTexts.find((s) => s.text.includes("未启用自动建群"))).toBeUndefined()
+  })
+
+  test("disabled + 群聊 + '帮我建群' → 不拦截(p2p gate),走正常流程", async () => {
+    const pipeline = makePipeline({ enable: false })
+    void pipeline.testHandle(
+      makeEvent({
+        chatType: "group",
+        content: JSON.stringify({ text: "帮我建群" }),
+      }),
+    )
+    await new Promise((r) => setTimeout(r, 50))
+    expect(fakes.ackedMessages).toEqual(["om_test_1"])
+    expect(fakes.sentTexts.find((s) => s.text.includes("未启用自动建群"))).toBeUndefined()
+  })
+
+  test("enabled + p2p + '帮我建群' → 不拦截(flag gate,让 LLM 走 marker 路径)", async () => {
+    const pipeline = makePipeline({ enable: true })
+    void pipeline.testHandle(makeEvent({ content: JSON.stringify({ text: "帮我建群" }) }))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(fakes.ackedMessages).toEqual(["om_test_1"])
+    expect(fakes.sentTexts.find((s) => s.text.includes("未启用自动建群"))).toBeUndefined()
+  })
+
+  test("disabled + p2p + '@bot 帮我建群' → strip mention 后命中,硬拦截", async () => {
+    const pipeline = makePipeline({ enable: false })
+    await pipeline.testHandle(
+      makeEvent({
+        content: JSON.stringify({ text: "@_user_1 帮我建一个项目讨论群" }),
+        mentions: [{ key: "_user_1", name: "bot", openId: "ou_bot" }],
+      }),
+    )
+    expect(fakes.sentTexts).toHaveLength(1)
+    expect(fakes.sentTexts[0]!.text).toContain("此账号未启用自动建群能力")
+  })
+
+  test("disabled + p2p + 'create a group for us' → 英文命中,硬拦截", async () => {
+    const pipeline = makePipeline({ enable: false })
+    await pipeline.testHandle(
+      makeEvent({ content: JSON.stringify({ text: "create a group for us" }) }),
+    )
+    expect(fakes.sentTexts).toHaveLength(1)
+    expect(fakes.sentTexts[0]!.text).toContain("此账号未启用自动建群能力")
+  })
+})
+
+// ============================================================
 // [ATTACH:path] processAttachments 集成测 (feat: feishu-bridge-light Phase 2)
 // ============================================================
 

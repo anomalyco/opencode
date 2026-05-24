@@ -41,6 +41,7 @@ import {
 import type { PromptDispatcher } from "./prompt-dispatcher"
 import {
   classifyAttachment,
+  isGroupCreationIntent,
   parseAttachMarkers,
   parseCreateGroupMarkers,
   stripMentions,
@@ -328,6 +329,28 @@ export class MessagePipeline {
       await this.sendFeishuText(event.chatId, "✅ 已开启新对话")
       console.log(
         `[pipeline ${this.opts.accountId}] /new cleared session for chat=${event.chatId} (sessionID=${sessionID ?? "none"})`,
+      )
+      return
+    }
+
+    // [feat: feishu-create-group-hard-block] 2026-05-24
+    // 硬拦截:flag=false + p2p + 含建群关键字 → 不调 LLM,直接系统回复 GUI 引导。
+    // 起因:claude-code 等 spawn-based provider 跳过 role=system 消息,
+    // system prompt 软约束失效(详 feishu-create-group-hard-block/1-spec.md 漏洞分析)。
+    // 硬拦截是 provider-agnostic 兜底,任何 provider 表现一致;flag=true 时跳过让
+    // LLM 走 marker 路径;群聊跳过避免误拦"群是怎么建的"等学术问题。
+    if (
+      !this.opts.account.enableAutoGroupCreate &&
+      event.chatType === "p2p" &&
+      isGroupCreationIntent(cleaned)
+    ) {
+      console.log(
+        `[pipeline ${this.opts.accountId}] hard-block CREATE_GROUP intent ` +
+          `(text="${cleaned.slice(0, 50)}", flag=false, p2p) — skip LLM, send GUI guidance`,
+      )
+      await this.sendFeishuText(
+        event.chatId,
+        "此账号未启用自动建群能力。如需启用请在 DeskFox 设置 → 飞书桥接 → 选此账号点【编辑】→ 高级能力 → 勾选「允许 AI 自动创建新群」后重试。",
       )
       return
     }
