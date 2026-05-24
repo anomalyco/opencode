@@ -1,7 +1,11 @@
 # ADR-0008: Dedicated `/healthz`; add rate limits and request-body caps
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-05-21
+- Implemented: 2026-05-22.  `/healthz` endpoint in PR #2
+  (commit `ed22169b0`); rate limits, body caps, expiresInHours cap,
+  and github reachability check in commit `7a9949154` on branch
+  `deploy/auth-fix`.
 
 ## Context
 

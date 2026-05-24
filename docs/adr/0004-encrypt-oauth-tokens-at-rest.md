@@ -1,7 +1,11 @@
 # ADR-0004: Encrypt OAuth access tokens at rest using `SESSION_SECRET`
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-05-21
+- Implemented: 2026-05-22 in commit `87e675e74` on branch
+  `deploy/auth-fix`.  Decrypt-failure policy = "treat as session not
+  found, delete row, WARN-log" — see CONTEXT.md → Cookie
+  Authorization Scope.
 
 ## Context
 

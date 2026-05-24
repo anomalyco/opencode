@@ -1,7 +1,10 @@
 # ADR-0003: Run the container as a non-root user with dropped capabilities
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-05-21
+- Implemented: 2026-05-22 in commit `d3f413e87` on branch
+  `deploy/auth-fix`.  EFS chown migration documented in DEPLOYMENT.md
+  Step 5 (one-time aws ecs run-task with --overrides chown command).
 
 ## Context
 

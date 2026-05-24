@@ -1,7 +1,10 @@
 # ADR-0001: Refuse to start without `OPENCODE_SERVER_PASSWORD`; authenticate `/preview/*`
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-05-21
+- Implemented: 2026-05-22 (password enforcement in commit `ed22169b0`;
+  preview proxy auth + cookie-or-basic auth gate in commit
+  `97637896b` on branch `deploy/auth-fix`)
 
 ## Context
 
