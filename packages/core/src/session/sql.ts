@@ -4,7 +4,7 @@ import type { SessionMessage } from "./message"
 import type { Snapshot } from "../snapshot"
 import { PermissionV2 } from "../permission"
 import { Project } from "../project"
-import type { ID } from "../session"
+import type { SessionSchema } from "./schema"
 import type { MessageID, PartID } from "./legacy"
 import { WorkspaceV2 } from "../workspace"
 import { Timestamps } from "../database/schema.sql"
@@ -14,13 +14,13 @@ type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type
 export const SessionTable = sqliteTable(
   "session",
   {
-    id: text().$type<ID>().primaryKey(),
+    id: text().$type<SessionSchema.ID>().primaryKey(),
     project_id: text()
       .$type<Project.ID>()
       .notNull()
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
     workspace_id: text().$type<WorkspaceV2.ID>(),
-    parent_id: text().$type<ID>(),
+    parent_id: text().$type<SessionSchema.ID>(),
     slug: text().notNull(),
     directory: text().notNull(),
     path: text(),
@@ -61,7 +61,7 @@ export const MessageTable = sqliteTable(
   {
     id: text().$type<MessageID>().primaryKey(),
     session_id: text()
-      .$type<ID>()
+      .$type<SessionSchema.ID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     ...Timestamps,
@@ -78,7 +78,7 @@ export const PartTable = sqliteTable(
       .$type<MessageID>()
       .notNull()
       .references(() => MessageTable.id, { onDelete: "cascade" }),
-    session_id: text().$type<ID>().notNull(),
+    session_id: text().$type<SessionSchema.ID>().notNull(),
     ...Timestamps,
     data: text({ mode: "json" }).notNull(),
   },
@@ -92,7 +92,7 @@ export const TodoTable = sqliteTable(
   "todo",
   {
     session_id: text()
-      .$type<ID>()
+      .$type<SessionSchema.ID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     content: text().notNull(),
@@ -112,7 +112,7 @@ export const SessionMessageTable = sqliteTable(
   {
     id: text().$type<SessionMessage.ID>().primaryKey(),
     session_id: text()
-      .$type<ID>()
+      .$type<SessionSchema.ID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     type: text().$type<SessionMessage.Type>().notNull(),

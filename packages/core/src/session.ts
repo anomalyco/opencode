@@ -1,9 +1,8 @@
 export * as SessionV2 from "./session"
+export * from "./session/schema"
 
 import { DateTime, Effect, Layer, Schema, Context } from "effect"
 import { and, asc, desc, eq, gt, gte, isNull, like, lt, or, type SQL } from "drizzle-orm"
-import { AbsolutePath, RelativePath, withStatics } from "./schema"
-import { Identifier } from "./util/identifier"
 import { Project } from "./project"
 import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
@@ -11,60 +10,10 @@ import { Location } from "./location"
 import { SessionMessage } from "./session/message"
 import type { Prompt } from "./session/prompt"
 import { EventV2 } from "./event"
-import { optionalOmitUndefined } from "./schema"
-import { V2Schema } from "./v2-schema"
 import { ProviderV2 } from "./provider"
 import { Database } from "./database/database"
 import { SessionMessageTable, SessionTable } from "./session/sql"
-
-export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({
-  identifier: "Session.Delivery",
-})
-export type Delivery = Schema.Schema.Type<typeof Delivery>
-
-export const DefaultDelivery = "immediate" satisfies Delivery
-
-export const ID = Schema.String.check(Schema.isStartsWith("ses")).pipe(
-  Schema.brand("SessionID"),
-  withStatics((schema) => ({
-    descending: (id?: string) => schema.make(id ?? "ses_" + Identifier.descending()),
-  })),
-)
-export type ID = typeof ID.Type
-
-export const LegacyInfo = Schema.Struct({
-  id: ID,
-  location: Location.Ref,
-  subpath: RelativePath, // derived from location
-  project: Project.ID, // derived from location
-})
-export type LegacyInfo = typeof LegacyInfo.Type
-
-export class Info extends Schema.Class<Info>("Session.Info")({
-  id: ID,
-  parentID: optionalOmitUndefined(ID),
-  projectID: Project.ID,
-  workspaceID: optionalOmitUndefined(WorkspaceV2.ID),
-  path: optionalOmitUndefined(Schema.String),
-  agent: optionalOmitUndefined(Schema.String),
-  model: ModelV2.Ref.pipe(optionalOmitUndefined),
-  cost: Schema.Finite,
-  tokens: Schema.Struct({
-    input: Schema.Finite,
-    output: Schema.Finite,
-    reasoning: Schema.Finite,
-    cache: Schema.Struct({
-      read: Schema.Finite,
-      write: Schema.Finite,
-    }),
-  }),
-  time: Schema.Struct({
-    created: V2Schema.DateTimeUtcFromMillis,
-    updated: V2Schema.DateTimeUtcFromMillis,
-    archived: optionalOmitUndefined(V2Schema.DateTimeUtcFromMillis),
-  }),
-  title: Schema.String,
-}) {}
+import { SessionSchema } from "./session/schema"
 
 // get project -> project.locations
 //
@@ -76,7 +25,7 @@ export class Info extends Schema.Class<Info>("Session.Info")({
 // - by workspace (home is special)
 
 type Cursor = {
-  id: ID
+  id: SessionSchema.ID
   time: number
   direction: "previous" | "next"
 }
@@ -95,26 +44,26 @@ type ListInput = {
 }
 
 type CreateInput = {
-  id?: ID
+  id?: SessionSchema.ID
   agent?: string
   model?: ModelV2.Ref
   location?: Location.Ref
-  parentID?: ID
+  parentID?: SessionSchema.ID
   workspaceID?: WorkspaceV2.ID
 }
 
 type MoveInput = {
-  sessionID: ID
+  sessionID: SessionSchema.ID
   location: Location.Ref
 }
 
 type CompactInput = {
-  sessionID: ID
+  sessionID: SessionSchema.ID
   prompt?: Prompt
 }
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Session.NotFoundError", {
-  sessionID: ID,
+  sessionID: SessionSchema.ID,
 }) {}
 
 export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
@@ -125,19 +74,19 @@ export class OperationUnavailableError extends Schema.TaggedErrorClass<Operation
 ) {}
 
 export class MessageDecodeError extends Schema.TaggedErrorClass<MessageDecodeError>()("Session.MessageDecodeError", {
-  sessionID: ID,
+  sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
 
 export type Error = NotFoundError | OperationUnavailableError | MessageDecodeError
 
 export interface Interface {
-  readonly list: (input?: ListInput) => Effect.Effect<Info[]>
-  readonly create: (input?: CreateInput) => Effect.Effect<Info>
+  readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
+  readonly create: (input?: CreateInput) => Effect.Effect<SessionSchema.Info>
   readonly move: (input: MoveInput) => Effect.Effect<void, NotFoundError>
-  readonly get: (sessionID: ID) => Effect.Effect<Info, NotFoundError>
+  readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
   readonly messages: (input: {
-    sessionID: ID
+    sessionID: SessionSchema.ID
     limit?: number
     order?: "asc" | "desc"
     cursor?: {
@@ -146,52 +95,52 @@ export interface Interface {
       direction: "previous" | "next"
     }
   }) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
-  readonly context: (sessionID: ID) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
+  readonly context: (sessionID: SessionSchema.ID) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
   readonly subagent: (input: {
     id?: EventV2.ID
-    parentID: ID
+    parentID: SessionSchema.ID
     prompt: Prompt
     agent: string
     model?: ModelV2.Ref
     resume?: boolean
   }) => Effect.Effect<void, NotFoundError | OperationUnavailableError | MessageDecodeError>
-  readonly switchAgent: (input: { sessionID: ID; agent: string }) => Effect.Effect<void, never>
-  readonly switchModel: (input: { sessionID: ID; model: ModelV2.Ref }) => Effect.Effect<void, never>
+  readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, never>
+  readonly switchModel: (input: { sessionID: SessionSchema.ID; model: ModelV2.Ref }) => Effect.Effect<void, never>
   readonly prompt: (input: {
     id?: EventV2.ID
-    sessionID: ID
+    sessionID: SessionSchema.ID
     prompt: Prompt
-    delivery?: Delivery
+    delivery?: SessionSchema.Delivery
     resume?: boolean
   }) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly shell: (input: {
     id?: EventV2.ID
-    sessionID: ID
+    sessionID: SessionSchema.ID
     command: string
-    delivery?: Delivery
+    delivery?: SessionSchema.Delivery
     resume?: boolean
   }) => Effect.Effect<void, never>
   readonly skill: (input: {
     id?: EventV2.ID
-    sessionID: ID
+    sessionID: SessionSchema.ID
     skill: string
-    delivery?: Delivery
+    delivery?: SessionSchema.Delivery
     resume?: boolean
   }) => Effect.Effect<void, never>
-  readonly compact: (input: CompactInput | ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
-  readonly wait: (id: ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
-  readonly resume: (sessionID: ID) => Effect.Effect<void>
+  readonly compact: (input: CompactInput | SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
+  readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
+  readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
 
-function fromRow(row: typeof SessionTable.$inferSelect): Info {
-  return new Info({
-    id: ID.make(row.id),
+function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Info {
+  return new SessionSchema.Info({
+    id: SessionSchema.ID.make(row.id),
     projectID: Project.ID.make(row.project_id),
     workspaceID: row.workspace_id ? WorkspaceV2.ID.make(row.workspace_id) : undefined,
     title: row.title,
-    parentID: row.parent_id ? ID.make(row.parent_id) : undefined,
+    parentID: row.parent_id ? SessionSchema.ID.make(row.parent_id) : undefined,
     path: row.path ?? "",
     agent: row.agent ?? undefined,
     model: row.model
@@ -230,7 +179,7 @@ export const layer = Layer.effect(
         Effect.mapError(
           () =>
             new MessageDecodeError({
-              sessionID: ID.make(row.session_id),
+              sessionID: SessionSchema.ID.make(row.session_id),
               messageID: SessionMessage.ID.make(row.id),
             }),
         ),
@@ -238,7 +187,7 @@ export const layer = Layer.effect(
 
     const result = Service.of({
       create: Effect.fn("V2Session.create")(function* () {
-        return {} as Info
+        return {} as SessionSchema.Info
       }),
       get: Effect.fn("V2Session.get")(function* (sessionID) {
         const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)

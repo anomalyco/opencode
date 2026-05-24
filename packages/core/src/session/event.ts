@@ -4,8 +4,8 @@ import { ModelV2 } from "../model"
 import { NonNegativeInt } from "../schema"
 import { ToolOutput } from "../tool-output"
 import { V2Schema } from "../v2-schema"
-import { SessionV2 } from "../session"
 import { FileAttachment, Prompt } from "./prompt"
+import { SessionSchema } from "./schema"
 
 export { FileAttachment }
 
@@ -20,7 +20,7 @@ export type Source = typeof Source.Type
 
 const Base = {
   timestamp: V2Schema.DateTimeUtcFromMillis,
-  sessionID: SessionV2.ID,
+  sessionID: SessionSchema.ID,
 }
 
 const options = {
