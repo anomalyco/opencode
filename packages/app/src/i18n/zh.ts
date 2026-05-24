@@ -997,6 +997,8 @@ export const dict = {
   "fileViewer.menu.input.placeholder": "想怎么改 / 想问什么...",
   "fileViewer.menu.input.shortcutHint": "{{shortcut}} 提交 · Esc 取消",
   "fileViewer.menu.input.submit": "加入聊天",
+  // FORK: 跨页选区提示 [feat: office-选中加聊天] 2026-05-24
+  "fileViewer.menu.crossPageHint": "跨页选区暂不支持,请分段选中后再加入聊天",
   // FORK-END
 
   // upstream-sync drift backfill — 上游 sync 累积漏补的翻译,2026-05-07 一次性补齐(23 key)

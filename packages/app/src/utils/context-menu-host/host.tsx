@@ -226,10 +226,18 @@ export function ContextMenuHost(props: {
                 <button
                   class="w-full text-left px-3 py-1.5 hover:bg-surface-base-hover disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
                   disabled={!canAddToChat()}
+                  title={menu().partial ? language.t("fileViewer.menu.crossPageHint") : undefined}
                   onClick={openInputPanel}
                 >
                   {language.t("fileViewer.menu.addToChat")}
                 </button>
+                {/* 跨页选区提示 — partial 选区(PDF 跨页 textLayer 懒加载导致内容不全)
+                    内联文字比 toast 不打扰,user 看到 disabled 按钮自然知道原因 */}
+                <Show when={menu().partial}>
+                  <div class="px-3 pb-1 pt-0.5 text-[11px] text-text-weak max-w-[260px]">
+                    {language.t("fileViewer.menu.crossPageHint")}
+                  </div>
+                </Show>
                 <div class="my-1 border-t border-border-base" />
                 <button
                   class="w-full px-3 py-1.5 hover:bg-surface-base-hover flex justify-between items-center gap-6 disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"

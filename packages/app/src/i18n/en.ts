@@ -1040,6 +1040,8 @@ export const dict = {
   "fileViewer.menu.input.placeholder": "How would you change it / What would you ask...",
   "fileViewer.menu.input.shortcutHint": "{{shortcut}} to submit · Esc to cancel",
   "fileViewer.menu.input.submit": "Add to Chat",
+  // FORK: cross-page selection hint [feat: office-选中加聊天] 2026-05-24
+  "fileViewer.menu.crossPageHint": "Cross-page selection is not supported. Please select within a single page.",
   // FORK-END
   // FORK-BEGIN: feishu-bridge Settings Tab + bind dialog 2026-05-08 [feat: feishu-bridge]
   "settings.tab.feishu": "Lark Bridge",
