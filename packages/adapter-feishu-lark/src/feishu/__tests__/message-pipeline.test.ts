@@ -938,7 +938,9 @@ describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
   })
 
   test("上传抛错 → 不阻断,append warning", async () => {
-    fakes = makeAttachFakes({ imageError: new Error("lark 502") })
+    // [feat: feishu-attach-upload-robustness] 2026-05-24
+    // 用 non-recoverable 错(401)避免 retry 3 次拖慢测试(1s+3s prod delay)
+    fakes = makeAttachFakes({ imageError: new Error("401 Unauthorized") })
     pipeline = new MessagePipeline({
       account: makeAccount(),
       accountId: "acc1",
@@ -953,7 +955,7 @@ describe("processAttachments (feat: feishu-bridge-light Phase 2)", () => {
     expect(fakes.imageCalls).toHaveLength(0) // image.create 抛了,不计 push
     expect(fakes.messageCalls).toHaveLength(0)
     expect(out).toContain("⚠️ 发送")
-    expect(out).toContain("lark 502")
+    expect(out).toContain("401 Unauthorized")
   })
 
   test("仅 ATTACH 无其它文字 → cleanText 空,只发附件", async () => {
