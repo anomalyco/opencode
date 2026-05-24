@@ -113,9 +113,19 @@ const collabMiddleware: HttpMiddleware.HttpMiddleware = (app) =>
 const serveHealthz = () =>
   Effect.sync(() => {
     const dbOk = pingDatabase()
+    const githubStatus = cachedGitHubStatus()
+    // db is the only check that can flip overall ok; github + native_api are
+    // informational so a degraded external dep doesn't pull the ALB out from
+    // under us (we'd be DoS-ing ourselves if GitHub's HEAD ever 5xx'd).
     const body = {
       ok: dbOk,
-      checks: { db: dbOk ? "ok" : "fail" },
+      checks: {
+        db: dbOk ? "ok" : "fail",
+        github: githubStatus,
+        // native_api is the server itself; if Bun is up enough to answer /healthz
+        // then the native API is up too — we just record it for the dashboard.
+        native_api: "ok",
+      },
       version: process.env["OPENCODE_VERSION"] ?? "unknown",
       uptime_s: Math.floor((Date.now() - serverStartedAt) / 1000),
     }
@@ -132,6 +142,34 @@ function pingDatabase(): boolean {
   } catch (err) {
     log.error("/healthz db ping failed", { error: err instanceof Error ? err.message : String(err) })
     return false
+  }
+}
+
+// GitHub status — cached for 5 minutes so /healthz doesn't HEAD api.github.com
+// on every probe (ECS hits this every 15 s).  Async probe runs lazily; the
+// healthz call returns whatever the last sample said.  A first-call result of
+// "unknown" is acceptable for a brand-new task — by the time the ALB has
+// looked twice it's settled.
+let githubProbe: { ts: number; status: "ok" | "degraded" | "unknown" } = { ts: 0, status: "unknown" }
+const GITHUB_PROBE_TTL_MS = 5 * 60 * 1000
+
+function cachedGitHubStatus(): "ok" | "degraded" | "unknown" {
+  const now = Date.now()
+  if (now - githubProbe.ts > GITHUB_PROBE_TTL_MS) {
+    // Fire-and-forget; the next /healthz picks up the result.
+    void refreshGitHubProbe().catch(() => {
+      githubProbe = { ts: now, status: "degraded" }
+    })
+  }
+  return githubProbe.status
+}
+
+async function refreshGitHubProbe(): Promise<void> {
+  try {
+    const res = await fetch("https://api.github.com/", { method: "HEAD", signal: AbortSignal.timeout(3000) })
+    githubProbe = { ts: Date.now(), status: res.ok ? "ok" : "degraded" }
+  } catch {
+    githubProbe = { ts: Date.now(), status: "degraded" }
   }
 }
 

@@ -50,6 +50,12 @@ import { mentionsToEvents } from "./mentions"
 import { insertNote, listRecentNotes } from "./notes"
 import { nativeFetch } from "./native-api"
 import { encryptToken, decryptToken, isEncrypted } from "./crypto"
+import { checkRateLimit, callerIp, rateLimitedResponse } from "./rate-limit"
+
+// Body cap shared by /prompt and /suggest (ADR-0008).  32 KB is well above
+// any sane prompt — guards the LLM token-spend column against accidental
+// megabyte payloads and bounds the SSE event size.
+const PROMPT_BODY_MAX_BYTES = 32 * 1024
 
 /**
  * Read TCP ports the container is currently LISTENING on, by parsing
@@ -496,6 +502,11 @@ function handleCollabRequestInner(req: Request): Promise<Response> | Response {
 
   // OAuth start
   if (req.method === "GET" && path === "/collab/auth/github") {
+    // Rate limit: 10 OAuth starts / min / IP (ADR-0008).  Caller has no
+    // cookie yet, so we key by IP.  This bounds brute-force / scraping
+    // attempts against the OAuth state machine.
+    const rl = checkRateLimit(`oauth:${callerIp(req)}`, 10, 60 * 1000)
+    if (!rl.ok) return rateLimitedResponse(rl.retryAfter)
     const c = cfg()
     const next = url.searchParams.get("next") ?? ""
     // Encode `next` directly into the state so we don't depend on a
@@ -990,6 +1001,10 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
   // POST /collab/session/:id/invite — Driver only
   if (req.method === "POST" && parts[3] === "invite") {
     if (caller.role !== "driver") return json({ error: "Forbidden — Drivers only" }, 403)
+    // Rate limit: 30 invite creations / hour / user (ADR-0008).  Prevents
+    // a compromised Driver token from minting unlimited join links.
+    const rl = checkRateLimit(`invite:${sess.githubId}`, 30, 60 * 60 * 1000)
+    if (!rl.ok) return rateLimitedResponse(rl.retryAfter)
     const body = (await req.json()) as { role: string; expiresInHours?: number }
     const invite = Invite.createInvite(
       sessionId,
@@ -1032,7 +1047,13 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
   //                          unilaterally bypass voting in vote mode.
   if (req.method === "POST" && parts[3] === "prompt") {
     if (caller.role === "viewer") return json({ error: "Forbidden — Viewers cannot submit prompts" }, 403)
+    // Rate limit: 60 prompts / minute / user (ADR-0008).  Body cap 32 KB.
+    const rl = checkRateLimit(`prompt:${sess.githubId}`, 60, 60 * 1000)
+    if (!rl.ok) return rateLimitedResponse(rl.retryAfter)
     const body = (await req.json()) as { content: string }
+    if (typeof body.content === "string" && body.content.length > PROMPT_BODY_MAX_BYTES) {
+      return json({ error: `Prompt too long (max ${PROMPT_BODY_MAX_BYTES} bytes)` }, 413)
+    }
     ensureQueueRegistered(sessionId)
 
     if (collabSession.queueMode === "fifo" && caller.role === "driver") {
@@ -1070,7 +1091,13 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
   // POST /collab/session/:id/suggest — Contributor submits suggestion
   if (req.method === "POST" && parts[3] === "suggest") {
     if (caller.role === "viewer") return json({ error: "Forbidden — Viewers cannot suggest" }, 403)
+    // Rate limit: 60 suggestions / minute / user (ADR-0008).  Body cap 32 KB.
+    const rl = checkRateLimit(`suggest:${sess.githubId}`, 60, 60 * 1000)
+    if (!rl.ok) return rateLimitedResponse(rl.retryAfter)
     const body = (await req.json()) as { content: string }
+    if (typeof body.content === "string" && body.content.length > PROMPT_BODY_MAX_BYTES) {
+      return json({ error: `Suggestion too long (max ${PROMPT_BODY_MAX_BYTES} bytes)` }, 413)
+    }
     const suggestion = Queue.submitToPool(sessionId, body.content, sess.githubId, sess.githubLogin)
     broadcastSse(sessionId, { type: "collab:prompt_suggestion", suggestion })
     for (const event of mentionsToEvents({
@@ -1122,6 +1149,10 @@ async function handleSessionRoutes(req: Request, url: URL, path: string): Promis
   // indicator look broken even though everything else was wired up.
   if (req.method === "POST" && parts[3] === "typing") {
     if (caller.role === "viewer") return json({ ok: true })
+    // Rate limit: 30 typing pings / 10s / user (ADR-0008).  Chatty endpoint
+    // but well-bounded — the iframe debounces locally.
+    const rl = checkRateLimit(`typing:${sess.githubId}`, 30, 10 * 1000)
+    if (!rl.ok) return rateLimitedResponse(rl.retryAfter)
     const body = (await req.json().catch(() => ({}))) as { typing?: boolean }
     const isTyping = Boolean(body.typing)
     const clientCount = sseClients.get(sessionId)?.size ?? 0

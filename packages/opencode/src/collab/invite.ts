@@ -4,6 +4,10 @@ import { CollabInviteTable } from "./schema.sql"
 import type { CollabRole, InviteToken } from "@opencode-ai/collab"
 
 const EXPIRY_HOURS = 72
+/** Hard cap on caller-supplied `expiresInHours` (ADR-0008).  A Driver could
+ *  otherwise pass an arbitrarily large value and create a permanent join
+ *  token; cap at the default expiry. */
+export const MAX_EXPIRY_HOURS = 72
 
 export function createInvite(
   collabSessionId: string,
@@ -12,7 +16,10 @@ export function createInvite(
   expiresInHours = EXPIRY_HOURS,
 ): InviteToken {
   const token = randomUUID()
-  const expiresAt = Date.now() + expiresInHours * 60 * 60 * 1000
+  // Coerce to a sane range — reject 0/negative (would expire immediately)
+  // and anything beyond the cap (would create a near-permanent invite).
+  const hours = Math.min(MAX_EXPIRY_HOURS, Math.max(1, Math.floor(expiresInHours)))
+  const expiresAt = Date.now() + hours * 60 * 60 * 1000
 
   Database.use((db) => {
     db.insert(CollabInviteTable)
