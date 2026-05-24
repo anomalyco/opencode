@@ -225,6 +225,7 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [userScrolledUp, setUserScrolledUp] = createSignal(false)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -270,7 +271,10 @@ export function Session() {
       }
       editor.reconnect(result.data.directory)
       await sync.session.sync(sessionID)
-      if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
+      if (route.sessionID === sessionID && scroll) {
+        scroll.scrollBy(100_000)
+        setUserScrolledUp(false)
+      }
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
       toast.show({
@@ -404,6 +408,7 @@ export function Session() {
     setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
       scroll.scrollTo(scroll.scrollHeight)
+      setUserScrolledUp(false)
     }, 50)
   }
 
@@ -736,6 +741,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollBy(-scroll.height / 2)
+        setUserScrolledUp(true)
         dialog.clear()
       },
     },
@@ -756,6 +762,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollBy(-1)
+        setUserScrolledUp(true)
         dialog.clear()
       },
     },
@@ -776,6 +783,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollBy(-scroll.height / 4)
+        setUserScrolledUp(true)
         dialog.clear()
       },
     },
@@ -796,6 +804,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollTo(0)
+        setUserScrolledUp(true)
         dialog.clear()
       },
     },
@@ -806,6 +815,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollTo(scroll.scrollHeight)
+        setUserScrolledUp(false)
         dialog.clear()
       },
     },
@@ -1120,7 +1130,7 @@ export function Session() {
                     foregroundColor: theme.border,
                   },
                 }}
-                stickyScroll={true}
+                stickyScroll={!userScrolledUp()}
                 stickyStart="bottom"
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
