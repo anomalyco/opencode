@@ -412,6 +412,52 @@ describe("updateAccountSettings", () => {
     updateAccountSettings("acc6", { enableAutoGroupCreate: false }, configPath())
     expect(loadConfig(configPath()).accounts["acc6"].enableAutoGroupCreate).toBe(false)
   })
+
+  // [feat: feishu-group-mention-policy] 2026-05-24
+  test("只 patch requireMention → flag 更新,其他字段不动", () => {
+    seedAccount("acc_rm1")
+    const before = loadConfig(configPath()).accounts["acc_rm1"]
+    expect(before.requireMention).toBe(true) // default
+
+    const r = updateAccountSettings("acc_rm1", { requireMention: false }, configPath())
+    expect(r).toBe(true)
+
+    const after = loadConfig(configPath()).accounts["acc_rm1"]
+    expect(after.requireMention).toBe(false)
+    expect(after.enableAutoGroupCreate).toBe(false) // 不动
+    expect(after.appSecret).toEqual(before.appSecret) // 不动
+    expect(after.agent).toEqual(before.agent) // 不动
+  })
+
+  test("model + flag + requireMention 三方同时改 → 都更新", () => {
+    seedAccount("acc_rm2")
+    const r = updateAccountSettings(
+      "acc_rm2",
+      {
+        model: { providerID: "anthropic", modelID: "claude-sonnet-4-6" },
+        enableAutoGroupCreate: true,
+        requireMention: false,
+      },
+      configPath(),
+    )
+    expect(r).toBe(true)
+
+    const after = loadConfig(configPath()).accounts["acc_rm2"]
+    expect(after.model).toEqual({ providerID: "anthropic", modelID: "claude-sonnet-4-6" })
+    expect(after.enableAutoGroupCreate).toBe(true)
+    expect(after.requireMention).toBe(false)
+  })
+
+  test("toggle requireMention true → false → true 持久化", () => {
+    seedAccount("acc_rm3")
+    expect(loadConfig(configPath()).accounts["acc_rm3"].requireMention).toBe(true)
+
+    updateAccountSettings("acc_rm3", { requireMention: false }, configPath())
+    expect(loadConfig(configPath()).accounts["acc_rm3"].requireMention).toBe(false)
+
+    updateAccountSettings("acc_rm3", { requireMention: true }, configPath())
+    expect(loadConfig(configPath()).accounts["acc_rm3"].requireMention).toBe(true)
+  })
 })
 
 // ============================================================

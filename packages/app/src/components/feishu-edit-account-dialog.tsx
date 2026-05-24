@@ -20,6 +20,8 @@ export const FeishuEditAccountDialog: Component<{
   currentModel: ModelRef | null | undefined
   /** [feat: feishu-create-group-toggle-gui] 2026-05-24 */
   currentEnableAutoGroupCreate?: boolean
+  /** [feat: feishu-group-mention-policy] 2026-05-24 */
+  currentRequireMention?: boolean
   onSaved?: () => void
 }> = (props) => {
   const dialog = useDialog()
@@ -30,6 +32,10 @@ export const FeishuEditAccountDialog: Component<{
   // [feat: feishu-create-group-toggle-gui] 2026-05-24
   const [enableGroupCreate, setEnableGroupCreate] = createSignal(
     props.currentEnableAutoGroupCreate ?? false,
+  )
+  // [feat: feishu-group-mention-policy] 2026-05-24 默认 true(保守 — 大群只 @ 才响应)
+  const [requireMention, setRequireMention] = createSignal(
+    props.currentRequireMention ?? true,
   )
   const [saving, setSaving] = createSignal(false)
   const [saveError, setSaveError] = createSignal<string | null>(null)
@@ -101,6 +107,8 @@ export const FeishuEditAccountDialog: Component<{
       await feishuUpdateAccountSettings(props.accountId, {
         model: modelPayload,
         enableAutoGroupCreate: enableGroupCreate(),
+        // [feat: feishu-group-mention-policy] 2026-05-24
+        requireMention: requireMention(),
       })
       props.onSaved?.()
       dialog.close()
@@ -255,6 +263,23 @@ export const FeishuEditAccountDialog: Component<{
                 </label>
                 <p class="text-13-regular text-text-weak pl-6">
                   {language.t("settings.feishu.edit.enableAutoGroupCreate.hint")}
+                </p>
+              </div>
+
+              {/* 群里需要 @ 才响应 [feat: feishu-group-mention-policy] 2026-05-24 */}
+              <div class="flex flex-col gap-1 self-stretch">
+                <label class="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={requireMention()}
+                    onChange={(e) => setRequireMention(e.currentTarget.checked)}
+                  />
+                  <span class="text-14-medium">
+                    {language.t("settings.feishu.edit.requireMention.label")}
+                  </span>
+                </label>
+                <p class="text-13-regular text-text-weak pl-6">
+                  {language.t("settings.feishu.edit.requireMention.hint")}
                 </p>
               </div>
 

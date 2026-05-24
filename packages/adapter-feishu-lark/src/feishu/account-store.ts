@@ -213,6 +213,8 @@ export function updateAccountSettings(
   patch: {
     model?: { providerID: string; modelID: string } | null
     enableAutoGroupCreate?: boolean
+    /** [feat: feishu-group-mention-policy] 2026-05-24 */
+    requireMention?: boolean
   },
   configPath: string = defaultConfigPath(),
 ): boolean {
@@ -229,6 +231,9 @@ export function updateAccountSettings(
   }
   if (patch.enableAutoGroupCreate !== undefined) {
     account.enableAutoGroupCreate = patch.enableAutoGroupCreate
+  }
+  if (patch.requireMention !== undefined) {
+    account.requireMention = patch.requireMention
   }
   saveConfig(config, configPath)
   return true

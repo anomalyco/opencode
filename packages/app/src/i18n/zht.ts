@@ -1061,6 +1061,10 @@ export const dict = {
   "settings.feishu.edit.enableAutoGroupCreate.label": "允許 AI 自動建立新群組",
   "settings.feishu.edit.enableAutoGroupCreate.hint":
     "開啟後私訊說「幫我建群」AI 會發確認卡片,你點准才真建。預設關閉 防 prompt injection 誘導 AI 建群。",
+  // FORK: [feat: feishu-group-mention-policy] 2026-05-24
+  "settings.feishu.edit.requireMention.label": "群組裡需要 @ 後再回應",
+  "settings.feishu.edit.requireMention.hint":
+    "預設開啟:bot 在群組裡只回覆 @ 自己的訊息(避免搶話刷屏)。\n⚠️ 關閉前請先在 Lark 開放平台改訂閱模式為「全量群組訊息」,否則 Lark server 不會推送非 @ 訊息,本開關無效。",
   "settings.feishu.edit.saving": "儲存中...",
   "settings.feishu.edit.providerLabel": "提供商",
   "settings.feishu.edit.modelLabel": "模型",
