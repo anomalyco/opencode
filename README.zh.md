@@ -17,7 +17,7 @@
 <p align="center">
   <a href="https://github.com/zoulukuang/deskfox/releases"><img src="https://img.shields.io/github/v/release/zoulukuang/deskfox?display_name=tag&label=latest&style=flat-square" alt="latest release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT" /></a>
-  <a href="https://github.com/sst/opencode"><img src="https://img.shields.io/badge/forked%20from-sst%2Fopencode-black?style=flat-square" alt="forked from sst/opencode" /></a>
+  <a href="https://github.com/anomalyco/opencode"><img src="https://img.shields.io/badge/forked%20from-sst%2Fopencode-black?style=flat-square" alt="forked from anomalyco/opencode" /></a>
 </p>
 
 ---
@@ -31,7 +31,7 @@
 ## ✨ 为什么选 DeskFox
 
 - 🔓 **开源透明** — 代码全公开,本地优先,你的数据始终是你的
-- 🌍 **来自 sst/opencode 社区** — fork 自全球开发者每天审视的开源项目,工程基础稳定;我们的工作是把它"翻译"成办公人也能用
+- 🌍 **来自 anomalyco/opencode 社区** — fork 自全球开发者每天审视的开源项目,工程基础稳定;我们的工作是把它"翻译"成办公人也能用
 - 🎁 **零门槛上手** — 内置 OpenCode Zen 免费模型(MiniMax / Hy3 / Nemotron 等),装上就能聊,不用充值不用申请 API
 - 🤖 **多模型一键切换** — Claude / GPT / Gemini / 国产模型 + Zen 免费网关,统一界面,API key 始终在你机器上
 
@@ -116,7 +116,7 @@
 
 ## 🌱 项目透明
 
-**DeskFox.Ai** 是 [`sst/opencode`](https://github.com/sst/opencode) 的 fork 项目。原项目是给程序员用的 AI 编码工具,我们 fork 出来,**定位调整为面向办公人群的日常 AI 工作伴侣**。具体做了:
+**DeskFox.Ai** 是 [`anomalyco/opencode`](https://github.com/anomalyco/opencode) 的 fork 项目。原项目是给程序员用的 AI 编码工具,我们 fork 出来,**定位调整为面向办公人群的日常 AI 工作伴侣**。具体做了:
 
 - 🎨 **界面精简** — 去掉编程专属 UI,重新组织对话流和文件操作
 - 🦊 **品牌重塑** — DeskFox 视觉系统(Bundle ID / 图标 / 文案),与上游 0 命名空间共享
@@ -134,12 +134,12 @@
 | 🇨🇳 Gitee 镜像 | [zoulukuang/deskfox](https://gitee.com/zoulukuang/deskfox) |
 | 🐛 问题反馈 | [Issues](https://github.com/zoulukuang/deskfox/issues) |
 | 🔒 隐私协议 | [中文](docs/legal/隐私协议.md) · [English](docs/legal/PRIVACY.md) |
-| ⬆️ 上游 | [sst/opencode](https://github.com/sst/opencode) |
+| ⬆️ 上游 | [anomalyco/opencode](https://github.com/anomalyco/opencode) |
 
 ## 📄 协议
 
-[MIT](LICENSE) — 与上游 [`sst/opencode`](https://github.com/sst/opencode) 保持一致。所有改动公开在 GitHub,跟随上游升级。
+[MIT](LICENSE) — 与上游 [`anomalyco/opencode`](https://github.com/anomalyco/opencode) 保持一致。所有改动公开在 GitHub,跟随上游升级。
 
 ---
 
-<p align="center"><sub>© 2026 DeskFox.Ai · 基于 MIT 协议开源 · fork from sst/opencode</sub></p>
+<p align="center"><sub>© 2026 DeskFox.Ai · 基于 MIT 协议开源 · fork from anomalyco/opencode</sub></p>

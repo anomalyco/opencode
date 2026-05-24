@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "description": "[fork-only] DeskFox 品牌层 — logo / theme overlay / icon assets / build hook,不与 sst/opencode 上游同步",
+  "description": "[fork-only] DeskFox 品牌层 — logo / theme overlay / icon assets / build hook,不与 anomalyco/opencode 上游同步",
   "exports": {
     "./package.json": "./package.json",
     "./logo": "./src/logo.tsx",

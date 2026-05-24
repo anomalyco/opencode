@@ -1,4 +1,4 @@
-/* [fork-only] DeskFox 主题色覆盖 + logo 专用 var,不与 sst/opencode 上游同步 */
+/* [fork-only] DeskFox 主题色覆盖 + logo 专用 var,不与 anomalyco/opencode 上游同步 */
 /* 在 packages/app/src/index.css 里 @import "@opencode-ai/ui/styles/tailwind" 之后再 @import 本文件 */
 /* 级联让本文件的 var 值赢,覆盖上游 packages/ui/src/styles/theme.css */
 /* 色值依据:D:\Kbase\奇思妙想\opencode\品牌设计\品牌设计.md 第三节(主色板)+ 第十节(深色映射) */

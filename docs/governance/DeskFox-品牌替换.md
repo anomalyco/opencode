@@ -2,7 +2,7 @@
 
 ## Context
 
-opencode-fork 一直叫 "OpenCode"(继承自 sst/opencode 上游)。User 已为本项目定名 **DeskFox** 并产出完整品牌设计手册(Tangram 几何风格,8 个 light SVG + 5 个 dark SVG + 多尺寸 PNG + 8 色板 + 双主题色映射 + 字体 + slogan,在 `D:\Kbase\奇思妙想\opencode\品牌设计\`)。本次目标:**让 user 双击启动后第一眼看到的视觉就是 DeskFox**,且**正确支持 light / dark 双主题**(按 user 第十节色映射精确实现,**严禁 `filter: invert(1)`**),但**不动**底层 identifier / CLI / deep-link / Rust 路径(全量替换 ~5-6 小时,有 settings 数据迁移风险,等品牌走稳再做)。
+opencode-fork 一直叫 "OpenCode"(继承自 anomalyco/opencode 上游)。User 已为本项目定名 **DeskFox** 并产出完整品牌设计手册(Tangram 几何风格,8 个 light SVG + 5 个 dark SVG + 多尺寸 PNG + 8 色板 + 双主题色映射 + 字体 + slogan,在 `D:\Kbase\奇思妙想\opencode\品牌设计\`)。本次目标:**让 user 双击启动后第一眼看到的视觉就是 DeskFox**,且**正确支持 light / dark 双主题**(按 user 第十节色映射精确实现,**严禁 `filter: invert(1)`**),但**不动**底层 identifier / CLI / deep-link / Rust 路径(全量替换 ~5-6 小时,有 settings 数据迁移风险,等品牌走稳再做)。
 
 User 明确要求:**最小可见改动**,不展开 i18n / 全平台 icon / Rust 内部命名 / 字体替换。
 
@@ -319,7 +319,7 @@ import "@opencode-ai/ui/styles/theme-deskfox.css"  // [fork-only] DeskFox 品牌
 - `packages/branding/src/theme.css` — 主题色覆盖 + logo 专用 var
 - `packages/branding/src/assets/icon-primary-{32,128,256}.png` + `icon-favicon-{16,32,48}.png` — in-tree 素材副本
 - `packages/branding/scripts/apply-icons.ps1` — 一键覆盖 icon 脚本
-- 文件头都加注释 `/* [fork-only] DeskFox 品牌层,不与 sst/opencode 上游同步,rebase 时保留 */`
+- 文件头都加注释 `/* [fork-only] DeskFox 品牌层,不与 anomalyco/opencode 上游同步,rebase 时保留 */`
 
 ## 本次 edit 的上游文件清单(都加 FORK marker,符合 12 号规范 R2)
 

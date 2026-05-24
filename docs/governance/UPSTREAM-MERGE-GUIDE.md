@@ -1,6 +1,6 @@
-# 与上游 sst/opencode 合并 SOP
+# 与上游 anomalyco/opencode 合并 SOP
 
-> **目的**:让 fork(DeskFox)能持续吃 sst/opencode 的更新,且每次合并风险可控、自动化护栏到位、回退路径明确。
+> **目的**:让 fork(DeskFox)能持续吃 anomalyco/opencode 的更新,且每次合并风险可控、自动化护栏到位、回退路径明确。
 > **配套文档**:
 > - [改动规则.md](./改动规则.md) — 白黑名单 / hook / FORK marker 体系
 > - [fork-跟随升级与协作规范.md](./fork-跟随升级与协作规范.md) — R1-R4 / P1-P5 / 健康指标(治理总纲)
@@ -24,7 +24,7 @@
 
 ## 2. 上游路径上的 fork 改动 — 必有 FORK marker
 
-任何动了 sst/opencode 既有文件的 commit,必须遵循:
+任何动了 anomalyco/opencode 既有文件的 commit,必须遵循:
 
 - **R2** — 单点改 `// FORK: <reason> <YYYY-MM-DD>`,多行改 `// FORK-BEGIN: <reason>` ... `// FORK-END`
 - **R3** — 三类 hardcode 禁令(品牌字符串 / 主题色 / icon 资源)走 fork 路径,不直接改上游
@@ -73,7 +73,7 @@ git diff --name-only HEAD...upstream/dev | grep -v "^docs/\|^packages/branding/\
 ```bash
 git fetch upstream
 git checkout main
-git rebase upstream/dev    # 注:本仓主分支是 main,上游 sst/opencode 主分支仍是 dev
+git rebase upstream/dev    # 注:本仓主分支是 main,上游 anomalyco/opencode 主分支仍是 dev
 
 # 冲突时:
 #   优先级:① 上游新增的 → 接收 ② fork 改动(带 FORK marker)→ 保留 ③ 都改了同一行 → 手解

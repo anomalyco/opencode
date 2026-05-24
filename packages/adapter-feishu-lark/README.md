@@ -2,7 +2,7 @@
 
 [fork-only] DeskFox 飞书 / Lark IM 桥接 adapter。
 
-> **不与 sst/opencode 上游同步** — fork 自加 workspace,完全外挂在 fork 仓内。
+> **不与 anomalyco/opencode 上游同步** — fork 自加 workspace,完全外挂在 fork 仓内。
 > 跟随 spec [`docs/features/feishu-bridge/1-spec.md`](../../docs/features/feishu-bridge/1-spec.md) 实施。
 
 ## 这是什么

@@ -320,7 +320,7 @@ git push origin main
 | [`docs/features/分支策略-v2/1-spec.md`](../features/分支策略-v2/1-spec.md) | v2 模型本身的设计与决策(为什么稳定主干 / sync 分支 / 三档环境)。本 SOP 是 v2 模型的**操作落地**。注:v2 spec 写作时主分支叫 `dev`,2026-05-21 起改名 `main`(详 `feat/rename-dev-to-main` changelog),spec 文档作为历史快照不回填 |
 | [`docs/governance/改动规则.md`](./改动规则.md) | 白黑名单 / hook / diff 阈值 — 是"哪些文件能改"的层级。本 SOP 是"分支怎么走"的层级,两者正交 |
 | [`docs/governance/fork-跟随升级与协作规范.md`](./fork-跟随升级与协作规范.md) | 治理总纲 — 五条设计原则(P1-P5)+ 四条规范(R1-R4)。本 SOP 是其中"协作流程"维度的展开 |
-| [`docs/governance/UPSTREAM-MERGE-GUIDE.md`](./UPSTREAM-MERGE-GUIDE.md) | 与上游 sst/opencode 合并(`sync/upstream-<日期>` 分支)。本 SOP 不覆盖 upstream 同步,那是另一个流程 |
+| [`docs/governance/UPSTREAM-MERGE-GUIDE.md`](./UPSTREAM-MERGE-GUIDE.md) | 与上游 anomalyco/opencode 合并(`sync/upstream-<日期>` 分支)。本 SOP 不覆盖 upstream 同步,那是另一个流程 |
 | [`CLAUDE.md`](../../CLAUDE.md) | agent 启动必读 — "默认仓库约定"段会指向本 SOP |
 
 ---

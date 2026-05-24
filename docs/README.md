@@ -1,6 +1,6 @@
 # DeskFox / opencode-fork 文档导航
 
-> **本目录全部 fork-only**(上游 sst/opencode 没有 `docs/` 目录,与上游 merge 0 路径冲突)。
+> **本目录全部 fork-only**(上游 anomalyco/opencode 没有 `docs/` 目录,与上游 merge 0 路径冲突)。
 > 一切关于本 fork 的需求 / 规划 / 治理 / 历史档案 / 功能文档统一收口于此。
 
 ## 目录结构
@@ -23,7 +23,7 @@ docs/
 │   ├── 双端协作-SOP.md             # ⭐ feat 分支生命周期 + Win/Mac 双端流程
 │   ├── DeskFox-品牌替换.md         # 品牌注入策略(productName / icon / 资源)
 │   ├── 数字签名问题.md             # installer 不签名决策 + SmartScreen 应对
-│   └── UPSTREAM-MERGE-GUIDE.md     # ⭐ 与 sst/opencode 合并的 SOP
+│   └── UPSTREAM-MERGE-GUIDE.md     # ⭐ 与 anomalyco/opencode 合并的 SOP
 │
 └── history/                        # 历史档案(快照,非维护态;改动会破坏历史)
     ├── 沟通记录.md                 # 关键决策时刻的对话日志
@@ -38,7 +38,7 @@ docs/
 | 第一次接手项目,想理解全貌 | [PLANNING-OVERVIEW.md](./PLANNING-OVERVIEW.md) → [STATUS.md](./STATUS.md) |
 | 上手开发,要知道改什么文件能 commit | [governance/改动规则.md](./governance/改动规则.md) |
 | 双端(Win+Mac)同时开发,要知道分支怎么走 | ⭐ [governance/双端协作-SOP.md](./governance/双端协作-SOP.md) |
-| 准备从上游 sst/opencode 拉新版合并 | ⭐ [governance/UPSTREAM-MERGE-GUIDE.md](./governance/UPSTREAM-MERGE-GUIDE.md) |
+| 准备从上游 anomalyco/opencode 拉新版合并 | ⭐ [governance/UPSTREAM-MERGE-GUIDE.md](./governance/UPSTREAM-MERGE-GUIDE.md) |
 | 改东西不知道走 fork 路径还是上游路径 | [governance/fork-跟随升级与协作规范.md](./governance/fork-跟随升级与协作规范.md) — R1 三级跳决策 |
 | 改品牌相关(name / icon / 主题色) | [governance/DeskFox-品牌替换.md](./governance/DeskFox-品牌替换.md) + [governance/改动规则.md](./governance/改动规则.md) R3 |
 | 想看某个 feature 的完整来龙去脉 | [features/INDEX.md](./features/INDEX.md) → 对应 feat-id 目录 |
@@ -54,6 +54,6 @@ docs/
 4. **history/ 锁死**:只追加不修改;如果历史结论被推翻,在新 governance 文档里写,history 留作时光胶囊
 5. **`改动日志.md`(根目录)是 commit 索引表**:每 feature 一行,详细内容在 `features/<feat-id>/3-changelog.md`
 
-## 与上游(sst/opencode)合并的关键
+## 与上游(anomalyco/opencode)合并的关键
 
 详见 [governance/UPSTREAM-MERGE-GUIDE.md](./governance/UPSTREAM-MERGE-GUIDE.md)。一句话总结:**fork 改动尽量不踩上游路径,新 feature 走 `docs/` + `packages/branding/` + 新文件;上游路径上的改动必须有 FORK marker**。
