@@ -7,6 +7,7 @@ import { describe, expect, test } from "bun:test"
 import {
   classifyAttachment,
   FEISHU_WORKSPACE_ROOT,
+  isGroupCreationIntent,
   parseAttachMarkers,
   parseCreateGroupMarkers,
   stripMentions,
@@ -236,5 +237,104 @@ describe("parseCreateGroupMarkers", () => {
     expect(groupParse.names).toEqual(["讨论"])
     expect(attachParse.paths).toEqual(["/a.png"])
     expect(attachParse.cleanText).toBe("")
+  })
+})
+
+// ============================================================
+// isGroupCreationIntent (Phase 2 hard block)
+// [feat: feishu-create-group-hard-block] 2026-05-24
+// ============================================================
+
+describe("isGroupCreationIntent", () => {
+  // 中文命中 case
+  test("'帮我建群' → true", () => {
+    expect(isGroupCreationIntent("帮我建群")).toBe(true)
+  })
+
+  test("'帮我建一个 X 项目讨论群' → true(建一个群 substring)", () => {
+    expect(isGroupCreationIntent("帮我建一个 X 项目讨论群")).toBe(true)
+  })
+
+  test("'拉个群讨论吧' → true", () => {
+    expect(isGroupCreationIntent("拉个群讨论吧")).toBe(true)
+  })
+
+  test("'我想新建群' → true(新建群)", () => {
+    expect(isGroupCreationIntent("我想新建群")).toBe(true)
+  })
+
+  test("'再帮我创建一个新群,名字叫 test 002' → true(创建群 substring)", () => {
+    expect(isGroupCreationIntent("再帮我创建一个新群,名字叫 test 002")).toBe(true)
+  })
+
+  // 英文命中 case
+  test("'create a group for us' → true", () => {
+    expect(isGroupCreationIntent("create a group for us")).toBe(true)
+  })
+
+  test("'CREATE GROUP test' → true(大小写不敏感)", () => {
+    expect(isGroupCreationIntent("CREATE GROUP test")).toBe(true)
+  })
+
+  test("'please make group called dev-talk' → true", () => {
+    expect(isGroupCreationIntent("please make group called dev-talk")).toBe(true)
+  })
+
+  // 不命中 case
+  test("'群是怎么建的?' → false(含'建'但不含'建群')", () => {
+    expect(isGroupCreationIntent("群是怎么建的?")).toBe(false)
+  })
+
+  test("'今天天气真好' → false", () => {
+    expect(isGroupCreationIntent("今天天气真好")).toBe(false)
+  })
+
+  test("'how do I create a new project' → false(含 create + new 但不组成关键字)", () => {
+    expect(isGroupCreationIntent("how do I create a new project")).toBe(false)
+  })
+
+  // edge case
+  test("空串 → false", () => {
+    expect(isGroupCreationIntent("")).toBe(false)
+  })
+
+  test("null / undefined → false(防御性,实际上 TypeScript 不会传)", () => {
+    expect(isGroupCreationIntent(undefined as unknown as string)).toBe(false)
+    expect(isGroupCreationIntent(null as unknown as string)).toBe(false)
+  })
+
+  test("number 类型 → false", () => {
+    expect(isGroupCreationIntent(123 as unknown as string)).toBe(false)
+  })
+
+  // 1-spec 已知误拦 — 接受
+  test("'如何创建一个群?' → true(已知误拦,user 问知识但命中'创建...群'模式)", () => {
+    expect(isGroupCreationIntent("如何创建一个群?")).toBe(true)
+  })
+
+  // regex 比 substring 精准:动词 + 群 才命中,'新群规'里'新'不是动词,正确不拦
+  test("'新群规是什么?' → false(regex 比 substring 精准,'新'非动词不命中)", () => {
+    expect(isGroupCreationIntent("新群规是什么?")).toBe(false)
+  })
+
+  // 更多 regex 边界测
+  test("'帮我建一个项目讨论群' → true(动词'建' + 字符 + '群')", () => {
+    expect(isGroupCreationIntent("帮我建一个项目讨论群")).toBe(true)
+  })
+
+  test("'拉个群讨论这个 bug' → true", () => {
+    expect(isGroupCreationIntent("拉个群讨论这个 bug")).toBe(true)
+  })
+
+  test("'群讨论是什么意思' → false('群'在动词前)", () => {
+    expect(isGroupCreationIntent("群讨论是什么意思")).toBe(false)
+  })
+
+  test("'建立公司' → false(无'群')", () => {
+    expect(isGroupCreationIntent("建立公司")).toBe(false)
+  })
+
+  test("'set up a group for the team' → true(英文 'set up a group')", () => {
+    expect(isGroupCreationIntent("set up a group for the team")).toBe(true)
   })
 })

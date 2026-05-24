@@ -148,3 +148,62 @@ export function classifyAttachment(
   }
   return { kind: "file", fileType: FILE_TYPE_MAP[ext] ?? "stream" }
 }
+
+// ============================================================
+// 建群意图关键字检测 — provider-agnostic 硬拦截
+// [feat: feishu-create-group-hard-block] 2026-05-24
+// ============================================================
+//
+// 起因:claude-code 等 spawn-based opencode provider 跳过 role=system 消息,
+// pipeline 通过 promptAsync({ system }) 设的 disabled-prompt 软约束失效,LLM
+// 尝试翻 fork 源码 / 让 user 给凭证等替代路径帮 user 建群,撞 imbot read
+// permission 卡。硬拦截在 pipeline 入口层判断,不依赖 LLM 听话,任何 provider
+// 都生效。
+//
+// 关键字列表锁版(改之前 user 双签),substring 简单匹配,不做 NLP。误拦权衡
+// 接受度高(详 1-spec.md 误拦风险评估段)。
+
+/**
+ * 中文建群意图正则 — 动词 + [可选 0-20 字符,不含'群'] + '群'
+ *
+ * 命中:"建群" / "创建群" / "拉个群" / "新建...讨论群" / "建一个项目群" / "开新群"
+ * 不命中:"群是怎么建的"(动词在'群'后面)/ "建立公司"(无'群')/ "群讨论"(无动词)
+ *
+ * 误拦 case 接受(详 1-spec):"如何创建群" / "新群规" / "建立群体精神" — flag=false
+ * 时 user 主动选择不允许,误拦后回复 GUI 引导成本低。
+ */
+const GROUP_CREATION_INTENT_ZH = /(?:开|建|创建|新建|拉|搞|做)[^群]{0,20}群/
+
+/** 英文建群关键字 — text 转 lowercase 后 substring 命中即拦 */
+const GROUP_CREATION_KEYWORDS_EN = [
+  "create group",
+  "new group",
+  "make group",
+  "create a group",
+  "new chat group",
+  "create chat",
+  "set up a group",
+  "set up group",
+]
+
+/**
+ * 判断 user message 是否含建群意图。
+ *
+ * 输入约定:调用方负责先 strip mentions(此 helper 不再 strip),输入是
+ * 已 clean 的 text 内容。空 / 非字符串返 false。
+ *
+ * 实现:中文走正则(动词 + 可选 0-20 字符不含'群' + '群'),英文走 lowercase
+ * + substring 命中。中文 NLP 不做,误拦权衡接受。
+ *
+ * 调用方应同时检查 `account.enableAutoGroupCreate=false` + `chatType==="p2p"`
+ * 两道门控,本 helper 只负责文本意图判断。
+ */
+export function isGroupCreationIntent(text: string): boolean {
+  if (!text || typeof text !== "string") return false
+  if (GROUP_CREATION_INTENT_ZH.test(text)) return true
+  const lower = text.toLowerCase()
+  for (const kw of GROUP_CREATION_KEYWORDS_EN) {
+    if (lower.includes(kw)) return true
+  }
+  return false
+}
