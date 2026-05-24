@@ -1166,6 +1166,7 @@ describe("session.llm.stream", () => {
         expect(capture.body.model).toBe(model.id)
         expect(capture.body.stream).toBe(true)
         expect((capture.body.reasoning as { effort?: string } | undefined)?.effort).toBe("high")
+        expect(capture.body.include).toEqual(["reasoning.encrypted_content"])
         expect(JSON.stringify(capture.body.input)).toContain("You are a helpful assistant.")
         expect(capture.body.input).toContainEqual({ role: "user", content: [{ type: "input_text", text: "Hello" }] })
       }),
