@@ -1580,9 +1580,14 @@ export function FileTabContent(props: {
     if (isPdfLikePath(path())) {
       // FORK: PDF/office 顶栏常驻"用本机软件打开"按钮 — soffice 转的 PDF 是只读栅格化输出,
       // 公式/图表/艺术字光栅化后选不到。给"我就要编辑原始格式"的 user 永久兜底入口。
-      // [feat: office-选中加聊天] 2026-05-24
+      //
+      // FORK: select-text 必加 — root layout.tsx 全局 `select-none` 只白名单 input/textarea/contenteditable;
+      // PDF.js textLayer 的 spans 是普通 <span> 继承 select-none → 文字无法选中。在 wrap 这层
+      // 重新启用 user-select:text,CSS 继承传到 .pdf-page-wrapper → .textLayer → span。
+      // 跟 message-part.css:709-710 chat 区开 user-select:text 同套路。
+      // [feat: office-选中加聊天] 2026-05-24 hot-fix(user 实测 textLayer 选不中复现)
       return (
-        <div data-slot="pdf-viewer" class="flex flex-col h-full">
+        <div data-slot="pdf-viewer" class="flex flex-col h-full select-text">
           <div class="flex items-center justify-end gap-2 px-3 py-1 border-b border-border-base bg-surface-raised-stronger-non-alpha text-xs">
             <button
               type="button"
