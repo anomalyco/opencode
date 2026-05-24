@@ -1374,6 +1374,38 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     </Show>
   )
 
+  const variantControl = () => (
+    <Show when={variants().length > 2}>
+      <div
+        data-component="prompt-variant-control"
+        style={providersShouldFadeIn() ? { animation: "fade-in 0.3s" } : undefined}
+      >
+        <TooltipKeybind
+          placement="top"
+          gutter={4}
+          title={language.t("command.model.variant.cycle")}
+          keybind={command.keybind("model.variant.cycle")}
+        >
+          <Select
+            size="normal"
+            options={variants()}
+            current={local.model.variant.current() ?? "default"}
+            label={(x) => (x === "default" ? language.t("common.default") : x)}
+            onSelect={(value) => {
+              local.model.variant.set(value === "default" ? undefined : value)
+              restoreFocus()
+            }}
+            class="capitalize max-w-[160px] text-v2-text-text-faint"
+            valueClass="truncate text-[13px] font-[440] leading-4 text-v2-text-text-faint"
+            triggerStyle={control()}
+            triggerProps={{ "data-action": "prompt-model-variant" }}
+            variant="ghost"
+          />
+        </TooltipKeybind>
+      </div>
+    </Show>
+  )
+
   const newSession = () => props.variant === "new-session"
   const worktrees = createMemo(() => [MAIN_WORKTREE, ...(sync.project?.sandboxes ?? []), CREATE_WORKTREE])
   const currentWorktree = createMemo(() => {
@@ -1538,6 +1570,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </div>
                 </Show>
                 {modelControl()}
+                {variantControl()}
               </div>
               <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                 <IconButton
