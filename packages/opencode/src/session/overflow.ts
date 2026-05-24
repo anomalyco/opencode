@@ -26,7 +26,23 @@ export function isOverflow(input: {
   if (input.cfg.compaction?.auto === false) return false
   if (input.model.limit.context === 0) return false
 
-  const count =
-    input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
-  return count >= usable(input)
+  return tokenCount(input.tokens) >= usable(input)
+}
+
+export function tokenCount(tokens: MessageV2.Assistant["tokens"]) {
+  return tokens.total || tokens.input + tokens.output + tokens.cache.read + tokens.cache.write
+}
+
+// Returns true if a previous auto-compaction triggered at `previousTokens` did
+// not reduce reported token usage by at least (1 - threshold). Defaults to a
+// 5% reduction; less than that signals compaction is not making progress —
+// typically because the configured context window is smaller than what the
+// provider actually serves, so auto-compaction would loop indefinitely.
+export function autoCompactStalled(input: {
+  previousTokens: number | undefined
+  currentTokens: number
+  threshold?: number
+}) {
+  if (input.previousTokens === undefined) return false
+  return input.currentTokens >= input.previousTokens * (input.threshold ?? 0.95)
 }

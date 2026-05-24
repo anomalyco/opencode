@@ -11,6 +11,7 @@ import { ModelID, ProviderID } from "../provider/schema"
 import { type Tool as AITool, tool, jsonSchema } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import { SessionCompaction } from "./compaction"
+import { autoCompactStalled, tokenCount } from "./overflow"
 import { Bus } from "../bus"
 import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
@@ -1242,6 +1243,12 @@ export const layer = Layer.effect(
         const slog = elog.with({ sessionID })
         let structured: unknown
         let step = 0
+        // Token count reported when the previous auto-compaction was triggered
+        // in this run. Used to detect a stalled compaction loop — e.g. when the
+        // model's configured context window is smaller than what the provider
+        // actually serves, so isOverflow stays true after every compaction and
+        // we'd otherwise spin forever. See autoCompactStalled in overflow.ts.
+        let prevAutoCompactTokens: number | undefined
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1303,13 +1310,33 @@ export const layer = Layer.effect(
             continue
           }
 
-          if (
-            lastFinished &&
-            lastFinished.summary !== true &&
-            (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
-          ) {
-            yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
-            continue
+          if (lastFinished && lastFinished.summary !== true) {
+            const overflowing = yield* compaction.isOverflow({ tokens: lastFinished.tokens, model })
+            if (overflowing) {
+              const current = tokenCount(lastFinished.tokens)
+              if (autoCompactStalled({ previousTokens: prevAutoCompactTokens, currentTokens: current })) {
+                const error = new MessageV2.ContextOverflowError({
+                  message:
+                    `Auto-compaction made no meaningful progress ` +
+                    `(${prevAutoCompactTokens} → ${current} tokens reported). ` +
+                    `Aborting to prevent an infinite loop. The model's configured context window ` +
+                    `may be smaller than what the provider actually serves — consider disabling ` +
+                    `auto-compaction in your config, or update the model's context limit.`,
+                })
+                yield* slog.warn("auto-compact loop guard tripped", {
+                  previousTokens: prevAutoCompactTokens,
+                  currentTokens: current,
+                  modelID: model.id,
+                  providerID: model.providerID,
+                })
+                yield* bus.publish(Session.Event.Error, { sessionID, error: error.toObject() })
+                throw error
+              }
+              prevAutoCompactTokens = current
+              yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+              continue
+            }
+            prevAutoCompactTokens = undefined
           }
 
           const agent = yield* agents.get(lastUser.agent)
@@ -1459,6 +1486,26 @@ export const layer = Layer.effect(
 
             if (result === "stop") return "break" as const
             if (result === "compact") {
+              const current = tokenCount(handle.message.tokens)
+              if (autoCompactStalled({ previousTokens: prevAutoCompactTokens, currentTokens: current })) {
+                const error = new MessageV2.ContextOverflowError({
+                  message:
+                    `Auto-compaction made no meaningful progress ` +
+                    `(${prevAutoCompactTokens} → ${current} tokens reported). ` +
+                    `Aborting to prevent an infinite loop. The model's configured context window ` +
+                    `may be smaller than what the provider actually serves — consider disabling ` +
+                    `auto-compaction in your config, or update the model's context limit.`,
+                })
+                yield* slog.warn("auto-compact loop guard tripped (post-call)", {
+                  previousTokens: prevAutoCompactTokens,
+                  currentTokens: current,
+                  modelID: model.id,
+                  providerID: model.providerID,
+                })
+                yield* bus.publish(Session.Event.Error, { sessionID, error: error.toObject() })
+                throw error
+              }
+              prevAutoCompactTokens = current
               yield* compaction.create({
                 sessionID,
                 agent: lastUser.agent,

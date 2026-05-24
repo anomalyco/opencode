@@ -8,6 +8,7 @@ import { Image } from "@/image/image"
 import { Agent } from "../../src/agent/agent"
 import { LLM } from "../../src/session/llm"
 import { SessionCompaction } from "../../src/session/compaction"
+import { autoCompactStalled, tokenCount } from "../../src/session/overflow"
 import { Token } from "@/util/token"
 import * as Log from "@opencode-ai/core/util/log"
 import { Permission } from "../../src/permission"
@@ -556,6 +557,61 @@ describe("session.compaction.isOverflow", () => {
       },
     ),
   )
+})
+
+describe("session.overflow.tokenCount", () => {
+  test("prefers tokens.total when provided", () => {
+    const tokens = { total: 12_345, input: 1, output: 2, reasoning: 3, cache: { read: 4, write: 5 } }
+    expect(tokenCount(tokens)).toBe(12_345)
+  })
+
+  test("sums input + output + cache.read + cache.write when total is missing", () => {
+    // reasoning is intentionally not summed — preserves the existing isOverflow accounting.
+    const tokens = { input: 100, output: 50, reasoning: 25, cache: { read: 30, write: 20 } }
+    expect(tokenCount(tokens)).toBe(200)
+  })
+
+  test("sums when total is 0 (falsy)", () => {
+    const tokens = { total: 0, input: 10, output: 20, reasoning: 5, cache: { read: 3, write: 2 } }
+    expect(tokenCount(tokens)).toBe(35)
+  })
+})
+
+describe("session.overflow.autoCompactStalled", () => {
+  test("returns false on the first auto-compaction (no prior token count)", () => {
+    expect(autoCompactStalled({ previousTokens: undefined, currentTokens: 200_000 })).toBe(false)
+  })
+
+  test("returns true when token count did not drop (bug #28543 repro)", () => {
+    expect(autoCompactStalled({ previousTokens: 236_900, currentTokens: 236_900 })).toBe(true)
+  })
+
+  test("returns true when reduction is below the 5% default threshold", () => {
+    // previous=200K, after compaction current=195K, reduction=2.5% → still stalled
+    expect(autoCompactStalled({ previousTokens: 200_000, currentTokens: 195_000 })).toBe(true)
+  })
+
+  test("returns false when reduction is at or above the 5% default threshold", () => {
+    // previous=200K, after compaction current=180K, reduction=10% → healthy
+    expect(autoCompactStalled({ previousTokens: 200_000, currentTokens: 180_000 })).toBe(false)
+  })
+
+  test("returns false right at the 5% boundary", () => {
+    // previous=200K, current=190K = exactly 95% → stalled (>=)
+    expect(autoCompactStalled({ previousTokens: 200_000, currentTokens: 190_000 })).toBe(true)
+    // current=189_999 → just below 95% → progress
+    expect(autoCompactStalled({ previousTokens: 200_000, currentTokens: 189_999 })).toBe(false)
+  })
+
+  test("honors a custom threshold override", () => {
+    // With threshold=0.5 we require a 50% reduction
+    expect(autoCompactStalled({ previousTokens: 100_000, currentTokens: 60_000, threshold: 0.5 })).toBe(true)
+    expect(autoCompactStalled({ previousTokens: 100_000, currentTokens: 40_000, threshold: 0.5 })).toBe(false)
+  })
+
+  test("returns true when current somehow exceeds previous", () => {
+    expect(autoCompactStalled({ previousTokens: 200_000, currentTokens: 240_000 })).toBe(true)
+  })
 })
 
 describe("session.compaction.create", () => {

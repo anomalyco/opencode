@@ -2314,3 +2314,82 @@ noLLMServer.instance(
     }),
   30_000,
 )
+
+// Regression test for #28543: when the model's configured context window is
+// smaller than what the provider actually serves, every successful model call
+// keeps reporting "overflowing" token counts. Without a loop guard the runner
+// keeps re-triggering auto-compaction even though it cannot reduce usage; with
+// the guard it bails with a typed ContextOverflowError after the second stalled
+// attempt.
+it.instance(
+  "auto-compact loop guard breaks when compaction makes no progress",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const sessionSvc = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Loop guard repro",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      // Test model: context=100K, output=10K → usable = 90K. A reported
+      // count of 90_001 tokens is just over the overflow bar.
+      const overflow = { input: 80_000, output: 10_001 }
+
+      // Seed a prior finished assistant whose reported tokens already
+      // overflow. This mimics the real-world pattern where the previous turn
+      // already consumed more "tokens" than the model's misconfigured limit.
+      const seedUser = yield* user(session.id, "earlier prompt")
+      yield* sessionSvc.updateMessage({
+        id: MessageID.ascending(),
+        role: "assistant",
+        parentID: seedUser.id,
+        sessionID: session.id,
+        mode: "build",
+        agent: "build",
+        cost: 0,
+        path: { cwd: "/tmp", root: "/tmp" },
+        tokens: {
+          input: overflow.input,
+          output: overflow.output,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+          total: overflow.input + overflow.output,
+        },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: Date.now() },
+        finish: "stop",
+      })
+
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "next prompt" }],
+      })
+
+      // 1) compaction summary call — small response so the summary itself
+      //    finishes cleanly. summary=true marks this message so it never
+      //    triggers the pre-call overflow check.
+      yield* llm.text("compaction summary", { usage: { input: 1, output: 1 } })
+      // 2) post-compact continue turn — STILL reports overflow → the
+      //    processor sets needsCompaction=true → the post-call guard trips.
+      yield* llm.text("second response (still overflowing)", { usage: overflow })
+
+      const exit = yield* prompt.loop({ sessionID: session.id }).pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause)
+        expect(MessageV2.ContextOverflowError.isInstance(err)).toBe(true)
+        if (MessageV2.ContextOverflowError.isInstance(err)) {
+          expect(err.data.message).toContain("Auto-compaction made no meaningful progress")
+        }
+      }
+    }),
+  30_000,
+)
+
