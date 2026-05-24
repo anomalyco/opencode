@@ -20,7 +20,9 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 | `1df6c0392` | feat: isGroupCreationIntent helper(中文 regex + 英文 substring)+ 14 单测 |
 | `74e4a5860` | feat: pipeline 集成硬拦截路径 + 6 集成测 |
 | `d6c6e13b9` | docs: 3-changelog + INDEX + 改动日志(原始版本)|
-| `383933973` | **follow-up**: direct dispatch — flag=true 时也 bypass LLM 走 confirm card(2026-05-24 user 实测 New-name claude-code flag=true 仍不工作)|
+| `383933973` | **follow-up 1**: direct dispatch — flag=true 时也 bypass LLM 走 confirm card(2026-05-24 user 实测 New-name claude-code flag=true 仍不工作)|
+| `fed751033` | docs: 3-changelog 加 follow-up 段(direct dispatch + commit 链补)|
+| `1f1eede26` | **follow-up 2**: 扩 extractGroupName 覆盖 15 引导词 + 短形式 + ask-name 完整口令表(2026-05-24 user 实测 "群名是 012" 等自然表达不识别)|
 
 ## 改动文件
 
@@ -150,6 +152,33 @@ build dev .app 后:
 **测试**:helper 18 单测 + pipeline 集成测更新(原 `enabled + p2p + '帮我建群'` 测试改成验 ask-name 行为)+ 新加 direct-dispatch confirm card 测试 → 全 adapter 套件 448/448 通过 + 16/16 typecheck。
 
 **flag=true 时 marker 路径还在不在**?— 仍在(`processGroupMarkers` 既有逻辑),但实际只有 native provider(LLM 看得到 `CREATE_GROUP_MARKER_PROMPT`)才能输出 marker 触发它。direct dispatch 覆盖了绝大多数显式建群表达,marker 路径作为 LLM 隐式提取(如"咱们建个项目讨论组吧,叫 X")的 backup。
+
+## extractGroupName 扩展 follow-up 2 — 2026-05-24(commit `1f1eede26`)
+
+**测试又一轮发现**:user 实测发"建个群 群名是012" / "帮我建个群,群名是012" / "帮我建群 012" → 全部走到 "请告诉我群叫什么名字?" → user 困惑"正确的口令到底是什么?"
+
+**根因**:第一版 extractGroupName regex 引导词只覆盖 7 个(`命名为 / 命名 / 名字叫 / 名字为 / 名为 / 叫做 / 叫`),没覆盖 user 自然说法 `群名是 / 群名叫 / 群名为 / 名字是 / 名字为(已有)/ 名是 / 名叫 / 名称是 / 名称叫 / 名称为 / 起名 / 起名叫`;且无短形式(`建群 X` 直接空格分隔)。
+
+**修法**:
+1. 扩 introducer regex 引导词从 7 → 15:`群名(是|叫|为)` 3 + `名字(叫|是|为)` 3 + `名(为|是|叫)` 3 + `名称(是|叫|为)` 3 + `命名(为)?` 2 + `起名(叫|为)?` 3 + `叫做 / 叫` 2(实际 19 alternation,部分有 shared root)
+2. 加 ZH_NAME_PATTERN_SHORT_FORM 短形式 fallback:`(动词)[^群]{0,20}群\s+(名字)` — **必须空格分隔**防误吞("建群讨论" 不识别,"讨论" 是延续)
+3. ask-name 提示文案给完整口令表(5 个例子,覆盖 introducer / short form / 英文)
+
+**支持的"建群口令"完整列表**(2026-05-24 锁版):
+
+| 形式 | 例子 |
+|---|---|
+| 群名 是/叫/为 | "群名是 X" / "群名叫 X" / "群名为 X" |
+| 名字 叫/是/为 | "名字叫 X" / "名字是 X" / "名字为 X" |
+| 名 叫/是/为 | "名叫 X" / "名是 X" / "名为 X" |
+| 名称 是/叫/为 | "名称是 X" / "名称叫 X" / "名称为 X" |
+| 命名 / 命名为 | "命名 X" / "命名为 X" |
+| 起名 / 起名叫 / 起名为 | "起名 X" / "起名叫 X" / "起名为 X" |
+| 叫做 / 叫 | "叫做 X" / "叫 X"(注:"叫" 容易跟"是 X 叫 Y"等场景碰撞,但通常作建群场景下纯名字)|
+| 短形式(动词+群+空格)| "建群 X" / "帮我建群 X" / "拉个群 X" / "创建讨论群 X" |
+| 英文 | "create group called X" / "create group named X" |
+
+**测试**:helper +17 case(新引导词 8 + 短形式 4 + 短形式误吞防御 2 + 既有更新 3)→ 90/90 / pipeline ask-name expect 同步新文案 / 全 adapter 465/465 全过。
 
 ## 回退方法
 
