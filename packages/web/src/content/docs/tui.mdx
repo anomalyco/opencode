@@ -370,6 +370,18 @@ You can customize TUI behavior through `tui.json` (or `tui.jsonc`).
   },
   "diff_style": "auto",
   "mouse": true,
+  "permission_prompt": {
+    "default_response": "always",
+    "confirmation": {
+      "default": "never",
+      "permission": {
+        "bash": {
+          "rm *": "always",
+          "git push*": "always"
+        }
+      }
+    }
+  },
   "attention": {
     "enabled": true,
     "notifications": true,
@@ -396,9 +408,39 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `0.001`, supports decimal values). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
+- `permission_prompt.default_response` - Controls the response selected by default in permission prompts. Can be `"once"`, `"always"`, or `"reject"`. Defaults to `"once"`.
+- `permission_prompt.confirmation` - Controls whether a second confirmation dialog is shown after selecting a permission response. If omitted, OpenCode keeps the built-in behavior of confirming `"always"` responses.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
+
+### Permission prompt
+
+Use `permission_prompt` to customize permission prompt defaults. This only changes the TUI prompt behavior; permission rules are still controlled by `permission` in `opencode.json`.
+
+```json title="tui.json"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "permission_prompt": {
+    "default_response": "always",
+    "confirmation": {
+      "default": "never",
+      "permission": {
+        "bash": {
+          "rm *": "always",
+          "git push*": "always"
+        }
+      }
+    }
+  }
+}
+```
+
+- `default_response` - Selects which response is highlighted by default: `"once"`, `"always"`, or `"reject"`.
+- `confirmation.default` - Sets the default second-confirmation behavior. Use `"never"` to skip confirmations by default, or `"always"` to require them.
+- `confirmation.response` - Overrides confirmation behavior by response, for example `{ "always": "never", "reject": "always" }`.
+- `confirmation.permission` - Overrides confirmation behavior by permission name. Values can be `"never"`, `"always"`, or pattern rules such as `{ "rm *": "always" }`.
+- Pattern rules use the same wildcard matching style as permissions, and the last matching rule wins.
 
 ### Attention
 

@@ -5,10 +5,11 @@ import { TuiConfig } from "../../src/cli/cmd/tui/config/tui"
 import { TuiKeybind } from "../../src/cli/cmd/tui/config/keybind"
 
 type PluginSpec = string | [string, Record<string, unknown>]
-type ResolvedInput = Omit<TuiConfig.Resolved, "attention" | "keybinds" | "leader_timeout"> & {
+type ResolvedInput = Omit<TuiConfig.Resolved, "attention" | "keybinds" | "leader_timeout" | "permission_prompt"> & {
   attention?: Partial<TuiConfig.Resolved["attention"]>
   keybinds?: Partial<TuiKeybind.Keybinds>
   leader_timeout?: number
+  permission_prompt?: Partial<TuiConfig.Resolved["permission_prompt"]>
 }
 
 export function createTuiResolvedKeybinds(input: Partial<TuiKeybind.Keybinds> = {}): TuiConfig.Resolved["keybinds"] {
@@ -31,6 +32,10 @@ export function createTuiResolvedConfig(input: ResolvedInput = {}): TuiConfig.Re
       sound_pack: "opencode.default",
       sounds: {},
       ...input.attention,
+    },
+    permission_prompt: {
+      default_response: "once",
+      ...input.permission_prompt,
     },
     keybinds: createTuiResolvedKeybinds(keybinds),
     leader_timeout: input.leader_timeout ?? 2000,

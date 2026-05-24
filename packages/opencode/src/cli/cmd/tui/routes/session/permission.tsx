@@ -17,8 +17,12 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../context/tui-config"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
+import { Wildcard } from "@opencode-ai/core/util/wildcard"
+import type { TuiConfig } from "../../config/tui"
 
-type PermissionStage = "permission" | "always" | "reject"
+type PermissionResponse = "once" | "always" | "reject"
+type PermissionStage = "permission" | "confirm" | "reject"
+type ConfirmationAction = "never" | "always"
 
 function filetype(input?: string) {
   if (!input) return "none"
@@ -117,8 +121,10 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
   const sync = useSync()
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
+    response: "once" as PermissionResponse,
   })
   const pathFormatter = usePathFormatter()
+  const tuiConfig = useTuiConfig()
 
   const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
 
@@ -136,15 +142,34 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
 
   const { theme } = useTheme()
 
+  const reply = (response: PermissionResponse) => {
+    void sdk.client.permission.reply({
+      reply: response,
+      requestID: props.request.id,
+      workspace: project.workspace.current(),
+    })
+  }
+
+  const shouldConfirm = (response: PermissionResponse) =>
+    confirmationAction(tuiConfig.permission_prompt.confirmation, props.request, response) === "always"
+
   return (
     <Switch>
-      <Match when={store.stage === "always"}>
+      <Match when={store.stage === "confirm"}>
         <Prompt
-          title="Always allow"
+          title={confirmationTitle(store.response)}
           body={
             <Switch>
-              <Match when={props.request.always.length === 1 && props.request.always[0] === "*"}>
+              <Match
+                when={store.response === "always" && props.request.always.length === 1 && props.request.always[0] === "*"}
+              >
                 <TextBody title={"This will allow " + props.request.permission + " until OpenCode is restarted."} />
+              </Match>
+              <Match when={store.response === "once"}>
+                <TextBody title="This will allow this request once." />
+              </Match>
+              <Match when={store.response === "reject"}>
+                <TextBody title="This will reject this request." />
               </Match>
               <Match when={true}>
                 <box paddingLeft={1} gap={1}>
@@ -168,11 +193,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
           onSelect={(option) => {
             setStore("stage", "permission")
             if (option === "cancel") return
-            void sdk.client.permission.reply({
-              reply: "always",
-              requestID: props.request.id,
-              workspace: project.workspace.current(),
-            })
+            reply(store.response)
           }}
         />
       </Match>
@@ -406,11 +427,16 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               header={header()}
               body={current.body}
               options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
+              defaultOption={tuiConfig.permission_prompt.default_response}
               escapeKey="reject"
               fullscreen
               onSelect={(option) => {
                 if (option === "always") {
-                  setStore("stage", "always")
+                  if (shouldConfirm(option)) {
+                    setStore({ stage: "confirm", response: option })
+                    return
+                  }
+                  reply(option)
                   return
                 }
                 if (option === "reject") {
@@ -418,18 +444,18 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                     setStore("stage", "reject")
                     return
                   }
-                  void sdk.client.permission.reply({
-                    reply: "reject",
-                    requestID: props.request.id,
-                    workspace: project.workspace.current(),
-                  })
+                  if (shouldConfirm(option)) {
+                    setStore({ stage: "confirm", response: option })
+                    return
+                  }
+                  reply(option)
                   return
                 }
-                void sdk.client.permission.reply({
-                  reply: "once",
-                  requestID: props.request.id,
-                  workspace: project.workspace.current(),
-                })
+                if (shouldConfirm(option)) {
+                  setStore({ stage: "confirm", response: option })
+                  return
+                }
+                reply(option)
               }}
             />
           )
@@ -438,6 +464,29 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
         })()}
       </Match>
     </Switch>
+  )
+}
+
+function confirmationTitle(response: PermissionResponse) {
+  if (response === "always") return "Always allow"
+  if (response === "reject") return "Reject permission"
+  return "Allow once"
+}
+
+export function confirmationAction(
+  confirmation: TuiConfig.Resolved["permission_prompt"]["confirmation"],
+  request: PermissionRequest,
+  response: PermissionResponse,
+): ConfirmationAction {
+  if (!confirmation) return response === "always" ? "always" : "never"
+
+  const rule = confirmation.permission?.[request.permission]
+  if (!rule) return confirmation.response?.[response] ?? confirmation.default ?? "never"
+  if (typeof rule === "string") return rule
+
+  return Object.entries(rule).reduce(
+    (result, [pattern, value]) => (request.patterns.some((item) => Wildcard.match(item, pattern)) ? value : result),
+    confirmation.response?.[response] ?? confirmation.default ?? "never",
   )
 }
 
@@ -527,6 +576,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   header?: JSX.Element
   body: JSX.Element
   options: T
+  defaultOption?: keyof T
   escapeKey?: keyof T
   fullscreen?: boolean
   onSelect: (option: keyof T) => void
@@ -536,7 +586,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   const dimensions = useTerminalDimensions()
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
-    selected: keys[0],
+    selected: props.defaultOption && keys.includes(props.defaultOption) ? props.defaultOption : keys[0],
     expanded: false,
   })
   const narrow = createMemo(() => dimensions().width < 80)

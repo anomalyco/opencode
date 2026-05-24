@@ -52,6 +52,36 @@ export const DiffStyle = Schema.Literals(["auto", "stacked"]).annotate({
   description: "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
 })
 
+const PermissionPromptResponse = Schema.Literals(["once", "always", "reject"]).annotate({
+  description: "Default response selected in permission prompts",
+})
+
+const PermissionPromptConfirmationAction = Schema.Literals(["never", "always"]).annotate({
+  description: "Whether to show an extra confirmation dialog after selecting a permission response",
+})
+
+const PermissionPromptConfirmationResponse = Schema.Struct({
+  once: Schema.optional(PermissionPromptConfirmationAction),
+  always: Schema.optional(PermissionPromptConfirmationAction),
+  reject: Schema.optional(PermissionPromptConfirmationAction),
+})
+
+const PermissionPromptConfirmationRule = Schema.Union([
+  PermissionPromptConfirmationAction,
+  Schema.Record(Schema.String, PermissionPromptConfirmationAction),
+])
+
+const PermissionPromptConfirmation = Schema.Struct({
+  default: Schema.optional(PermissionPromptConfirmationAction),
+  response: Schema.optional(PermissionPromptConfirmationResponse),
+  permission: Schema.optional(Schema.Record(Schema.String, PermissionPromptConfirmationRule)),
+}).annotate({ description: "Permission prompt confirmation settings" })
+
+export const PermissionPrompt = Schema.Struct({
+  default_response: Schema.optional(PermissionPromptResponse),
+  confirmation: Schema.optional(PermissionPromptConfirmation),
+}).annotate({ description: "Permission prompt behavior settings" })
+
 export const Attention = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
   notifications: Schema.optional(Schema.Boolean),
@@ -75,4 +105,5 @@ export const TuiInfo = Schema.Struct({
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  permission_prompt: Schema.optional(PermissionPrompt),
 })

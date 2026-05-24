@@ -29,13 +29,14 @@ const log = Log.create({ service: "tui.config" })
 
 export const Info = TuiInfo
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
+type PermissionPromptInfo = NonNullable<Info["permission_prompt"]>
 
 type Acc = {
   result: Info
   plugin_origins: ConfigPlugin.Origin[]
 }
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout"> & {
+export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "permission_prompt"> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -43,6 +44,9 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout"> &
     volume: number
     sound_pack: string
     sounds: Partial<Record<TuiAttentionSoundName, string>>
+  }
+  permission_prompt: PermissionPromptInfo & {
+    default_response: NonNullable<PermissionPromptInfo["default_response"]>
   }
   keybinds: TuiKeybind.BindingLookupView
   leader_timeout: number
@@ -253,6 +257,10 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       bindingDefaults: TuiKeybind.bindingDefaults(),
     }),
     leader_timeout: acc.result.leader_timeout ?? KeymapLeaderTimeoutDefault,
+    permission_prompt: {
+      ...acc.result.permission_prompt,
+      default_response: acc.result.permission_prompt?.default_response ?? "once",
+    },
     plugin_origins: acc.plugin_origins.length ? acc.plugin_origins : undefined,
   }
 
