@@ -55,7 +55,8 @@ describe("createGroup", () => {
     expect(r.name).toBe("需求讨论")
     expect(createCalls).toHaveLength(1)
     expect(createCalls[0]!.data.name).toBe("需求讨论")
-    expect(createCalls[0]!.data.chat_type).toBe("public")
+    // [feat: feishu-group-mention-policy] 2026-05-24 — chat_type 默认改 private
+    expect(createCalls[0]!.data.chat_type).toBe("private")
     expect(createCalls[0]!.data.user_id_list).toEqual(["ou_user_1"])
     expect(createCalls[0]!.params.user_id_type).toBe("open_id")
   })
