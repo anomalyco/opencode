@@ -12,6 +12,8 @@ import {
   loadConfig,
   saveAccount,
   saveConfig,
+  updateAccountModel,
+  updateAccountSettings,
 } from "../account-store"
 import { readSecret } from "../../core/secret-ref"
 
@@ -297,5 +299,172 @@ describe("deleteAccount", () => {
 
   test("删不存在 → false(idempotent)", () => {
     expect(deleteAccount("never-existed", configPath())).toBe(false)
+  })
+})
+
+// ============================================================
+// updateAccountSettings (Partial settings)
+// [feat: feishu-create-group-toggle-gui] 2026-05-24
+// ============================================================
+
+describe("updateAccountSettings", () => {
+  function seedAccount(id: string) {
+    saveAccount({
+      accountId: id,
+      domain: "feishu",
+      appId: id,
+      appSecret: "s",
+      openId: "o",
+      configPath: configPath(),
+    })
+  }
+
+  test("只 patch enableAutoGroupCreate → flag 更新,其他字段不动", () => {
+    seedAccount("acc1")
+    const before = loadConfig(configPath()).accounts["acc1"]
+    expect(before.enableAutoGroupCreate).toBe(false)
+    expect(before.model).toBeUndefined()
+    expect(before.appSecret).toBeDefined()
+
+    const r = updateAccountSettings("acc1", { enableAutoGroupCreate: true }, configPath())
+    expect(r).toBe(true)
+
+    const after = loadConfig(configPath()).accounts["acc1"]
+    expect(after.enableAutoGroupCreate).toBe(true)
+    expect(after.model).toBeUndefined()
+    expect(after.appSecret).toEqual(before.appSecret)
+    expect(after.agent).toEqual(before.agent)
+    expect(after.threadSession).toEqual(before.threadSession)
+  })
+
+  test("只 patch model → model 更新,flag 不动(向后兼容 updateAccountModel)", () => {
+    seedAccount("acc2")
+    updateAccountSettings("acc2", { enableAutoGroupCreate: true }, configPath())
+
+    const r = updateAccountSettings(
+      "acc2",
+      { model: { providerID: "anthropic", modelID: "claude-sonnet-4-6" } },
+      configPath(),
+    )
+    expect(r).toBe(true)
+
+    const after = loadConfig(configPath()).accounts["acc2"]
+    expect(after.model).toEqual({ providerID: "anthropic", modelID: "claude-sonnet-4-6" })
+    expect(after.enableAutoGroupCreate).toBe(true) // 先前 true 保留
+  })
+
+  test("同时 patch model + flag → 两者都更新", () => {
+    seedAccount("acc3")
+    const r = updateAccountSettings(
+      "acc3",
+      {
+        model: { providerID: "openai", modelID: "gpt-4" },
+        enableAutoGroupCreate: true,
+      },
+      configPath(),
+    )
+    expect(r).toBe(true)
+
+    const after = loadConfig(configPath()).accounts["acc3"]
+    expect(after.model).toEqual({ providerID: "openai", modelID: "gpt-4" })
+    expect(after.enableAutoGroupCreate).toBe(true)
+  })
+
+  test("model: null → 清除 model 字段(走 user default)", () => {
+    seedAccount("acc4")
+    updateAccountSettings(
+      "acc4",
+      { model: { providerID: "anthropic", modelID: "claude-sonnet-4-6" } },
+      configPath(),
+    )
+    expect(loadConfig(configPath()).accounts["acc4"].model).toBeDefined()
+
+    const r = updateAccountSettings("acc4", { model: null }, configPath())
+    expect(r).toBe(true)
+    expect(loadConfig(configPath()).accounts["acc4"].model).toBeUndefined()
+  })
+
+  test("空 patch ({}) → 仍 true(noop 不挂,跟旧 updateAccountModel(null) 行为对齐)", () => {
+    seedAccount("acc5")
+    const before = loadConfig(configPath()).accounts["acc5"]
+    const r = updateAccountSettings("acc5", {}, configPath())
+    expect(r).toBe(true)
+    const after = loadConfig(configPath()).accounts["acc5"]
+    expect(after).toEqual(before)
+  })
+
+  test("account 不存在 → false", () => {
+    const r = updateAccountSettings(
+      "never-existed",
+      { enableAutoGroupCreate: true },
+      configPath(),
+    )
+    expect(r).toBe(false)
+  })
+
+  test("toggle flag false → true → false 持久化", () => {
+    seedAccount("acc6")
+    expect(loadConfig(configPath()).accounts["acc6"].enableAutoGroupCreate).toBe(false)
+
+    updateAccountSettings("acc6", { enableAutoGroupCreate: true }, configPath())
+    expect(loadConfig(configPath()).accounts["acc6"].enableAutoGroupCreate).toBe(true)
+
+    updateAccountSettings("acc6", { enableAutoGroupCreate: false }, configPath())
+    expect(loadConfig(configPath()).accounts["acc6"].enableAutoGroupCreate).toBe(false)
+  })
+})
+
+// ============================================================
+// updateAccountModel (向后兼容 thin wrapper)
+// ============================================================
+
+describe("updateAccountModel(向后兼容)", () => {
+  test("传 model 对象 → 走 updateAccountSettings,model 更新", () => {
+    saveAccount({
+      accountId: "compat1",
+      domain: "feishu",
+      appId: "a",
+      appSecret: "s",
+      openId: "o",
+      configPath: configPath(),
+    })
+    const r = updateAccountModel(
+      "compat1",
+      { providerID: "anthropic", modelID: "claude-sonnet-4-6" },
+      configPath(),
+    )
+    expect(r).toBe(true)
+    expect(loadConfig(configPath()).accounts["compat1"].model).toEqual({
+      providerID: "anthropic",
+      modelID: "claude-sonnet-4-6",
+    })
+  })
+
+  test("传 null → 清 model", () => {
+    saveAccount({
+      accountId: "compat2",
+      domain: "feishu",
+      appId: "a",
+      appSecret: "s",
+      openId: "o",
+      configPath: configPath(),
+    })
+    updateAccountModel(
+      "compat2",
+      { providerID: "anthropic", modelID: "claude-sonnet-4-6" },
+      configPath(),
+    )
+    const r = updateAccountModel("compat2", null, configPath())
+    expect(r).toBe(true)
+    expect(loadConfig(configPath()).accounts["compat2"].model).toBeUndefined()
+  })
+
+  test("account 不存在 → false", () => {
+    const r = updateAccountModel(
+      "never-existed",
+      { providerID: "p", modelID: "m" },
+      configPath(),
+    )
+    expect(r).toBe(false)
   })
 })

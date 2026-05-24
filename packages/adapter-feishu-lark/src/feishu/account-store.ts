@@ -180,7 +180,7 @@ export function deleteAccount(
 }
 
 /**
- * 更新指定账号的 model 字段。
+ * 更新指定账号的 model 字段(向后兼容,thin wrapper 委派给 updateAccountSettings)。
  *
  * @param model {providerID, modelID} 设 model;`null` 清除(走 user default)
  * @returns 是否更新成功(account 不存在返 false)
@@ -190,13 +190,45 @@ export function updateAccountModel(
   model: { providerID: string; modelID: string } | null,
   configPath: string = defaultConfigPath(),
 ): boolean {
+  // FORK: feishu-create-group-toggle-gui(2026-05-24)— thin wrapper,实现迁移到 updateAccountSettings
+  return updateAccountSettings(accountId, { model }, configPath)
+}
+
+/**
+ * Partial 更新账号 settings — 当前支持 model + enableAutoGroupCreate 两个字段。
+ *
+ * **严格白名单**:只接受 patch 列出的字段;其他 schema 字段(appId/appSecret/openId/
+ * tokenStore/agent/threadSession/tables/blockStreamingCoalesce 等)0 影响。
+ * 未来扩 GUI 暴露新 flag 时,**只需扩这个函数的 patch 类型 + 增加对应处理分支**,
+ * server endpoint 自动复用。
+ *
+ * @param patch model: 设/清(null = 清除走 default,undefined = 不动);
+ *              enableAutoGroupCreate: true/false 都更新,undefined = 不动
+ * @returns 是否更新成功(account 不存在返 false)
+ *
+ * [feat: feishu-create-group-toggle-gui] 2026-05-24
+ */
+export function updateAccountSettings(
+  accountId: string,
+  patch: {
+    model?: { providerID: string; modelID: string } | null
+    enableAutoGroupCreate?: boolean
+  },
+  configPath: string = defaultConfigPath(),
+): boolean {
   const config = loadConfig(configPath)
   const account = config.accounts[accountId]
   if (!account) return false
-  if (model) {
-    account.model = { providerID: model.providerID, modelID: model.modelID }
-  } else {
-    delete account.model
+  // 严格只 patch 白名单字段;undefined 表示不动
+  if (patch.model !== undefined) {
+    if (patch.model) {
+      account.model = { providerID: patch.model.providerID, modelID: patch.model.modelID }
+    } else {
+      delete account.model
+    }
+  }
+  if (patch.enableAutoGroupCreate !== undefined) {
+    account.enableAutoGroupCreate = patch.enableAutoGroupCreate
   }
   saveConfig(config, configPath)
   return true
