@@ -1578,7 +1578,36 @@ export function FileTabContent(props: {
     </div>
     )
     if (isPdfLikePath(path())) {
-      return <div data-slot="pdf-viewer" class="contents">{inner}</div>
+      // FORK: PDF/office 顶栏常驻"用本机软件打开"按钮 — soffice 转的 PDF 是只读栅格化输出,
+      // 公式/图表/艺术字光栅化后选不到。给"我就要编辑原始格式"的 user 永久兜底入口。
+      // [feat: office-选中加聊天] 2026-05-24
+      return (
+        <div data-slot="pdf-viewer" class="flex flex-col h-full">
+          <div class="flex items-center justify-end gap-2 px-3 py-1 border-b border-border-base bg-surface-raised-stronger-non-alpha text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                const root = sdk.directory
+                const p = path()
+                if (!root || !p) return
+                const absPath = `${root}/${p}`.replace(/\\/g, "/")
+                invoke("open_path", { path: absPath, appName: null }).catch((e) => {
+                  showToast({
+                    variant: "error",
+                    title: "无法用本机软件打开",
+                    description: String(e),
+                  })
+                })
+              }}
+              class="px-2 py-1 rounded border border-border-base hover:bg-surface-base-hover"
+              title="用系统默认应用打开此文件(Word / Excel / PowerPoint / PDF Reader)"
+            >
+              用本机软件打开
+            </button>
+          </div>
+          <div class="flex-1 min-h-0 overflow-hidden">{inner}</div>
+        </div>
+      )
     }
     return inner
   }
