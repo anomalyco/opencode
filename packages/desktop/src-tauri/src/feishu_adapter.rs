@@ -334,6 +334,9 @@ pub struct AccountSummary {
     pub enabled: Option<bool>,
     pub model: Option<ModelRef>,
     pub bot_name: Option<String>,
+    /// [feat: feishu-create-group-toggle-gui] 2026-05-24 — 当前 enableAutoGroupCreate
+    #[serde(default)]
+    pub enable_auto_group_create: Option<bool>,
 }
 
 /// adapter wire request 转 camelCase
@@ -388,6 +391,8 @@ pub async fn feishu_save_account(
         enabled: None,
         model: None,
         bot_name: r.bot_name,
+        // 新绑账号默认 false(saveAccount normalizeAccount 已落,这里不必查询再传)
+        enable_auto_group_create: Some(false),
     })
 }
 
@@ -536,6 +541,9 @@ struct ListAccountWireItem {
     model: Option<ListAccountModelWire>,
     #[serde(rename = "botName", default)]
     bot_name: Option<String>,
+    /// [feat: feishu-create-group-toggle-gui] 2026-05-24
+    #[serde(rename = "enableAutoGroupCreate", default)]
+    enable_auto_group_create: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -590,6 +598,7 @@ pub async fn feishu_list_accounts(
                 model_id: m.model_id,
             }),
             bot_name: w.bot_name,
+            enable_auto_group_create: w.enable_auto_group_create,
         })
         .collect())
 }

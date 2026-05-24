@@ -1057,8 +1057,14 @@ export const dict = {
   "settings.feishu.account.edit": "编辑",
   "settings.feishu.account.modelLabel": "model",
   "settings.feishu.account.modelDefault": "(跟随默认)",
-  "settings.feishu.edit.title": "编辑账号模型",
-  "settings.feishu.edit.description": "为飞书账号 {{account}} 选择对话使用的提供商和模型,留空跟随 DeskFox 全局默认。",
+  "settings.feishu.edit.title": "编辑账号设置",
+  "settings.feishu.edit.description": "为飞书账号 {{account}} 设置对话模型 + 高级能力。",
+  // FORK: [feat: feishu-create-group-toggle-gui] 2026-05-24
+  "settings.feishu.edit.modelSectionTitle": "模型",
+  "settings.feishu.edit.advancedSectionTitle": "高级能力",
+  "settings.feishu.edit.enableAutoGroupCreate.label": "允许 AI 自动创建新群",
+  "settings.feishu.edit.enableAutoGroupCreate.hint":
+    "开后私聊说「帮我建群」AI 会发飞书确认卡片,你点准才真建。默认关 防 prompt injection 诱导 AI 建群。",
   "settings.feishu.edit.saving": "保存中...",
   "settings.feishu.edit.providerLabel": "提供商",
   "settings.feishu.edit.modelLabel": "模型",

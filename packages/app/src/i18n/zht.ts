@@ -1053,8 +1053,14 @@ export const dict = {
   "settings.feishu.account.edit": "編輯",
   "settings.feishu.account.modelLabel": "model",
   "settings.feishu.account.modelDefault": "(跟隨預設)",
-  "settings.feishu.edit.title": "編輯帳號模型",
-  "settings.feishu.edit.description": "為 Lark 帳號 {{account}} 選擇對話使用的提供商和模型,留空跟隨 DeskFox 全域預設。",
+  "settings.feishu.edit.title": "編輯帳號設定",
+  "settings.feishu.edit.description": "為 Lark 帳號 {{account}} 設定對話模型 + 進階功能。",
+  // FORK: [feat: feishu-create-group-toggle-gui] 2026-05-24
+  "settings.feishu.edit.modelSectionTitle": "模型",
+  "settings.feishu.edit.advancedSectionTitle": "進階功能",
+  "settings.feishu.edit.enableAutoGroupCreate.label": "允許 AI 自動建立新群組",
+  "settings.feishu.edit.enableAutoGroupCreate.hint":
+    "開啟後私訊說「幫我建群」AI 會發確認卡片,你點准才真建。預設關閉 防 prompt injection 誘導 AI 建群。",
   "settings.feishu.edit.saving": "儲存中...",
   "settings.feishu.edit.providerLabel": "提供商",
   "settings.feishu.edit.modelLabel": "模型",

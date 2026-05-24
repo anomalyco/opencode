@@ -295,6 +295,8 @@ export function startServer(options: ServerOptions = {}): ServerHandle {
           enabled: account.enabled,
           model: account.model ?? null,
           botName: account.botName ?? "",
+          // [feat: feishu-create-group-toggle-gui] 2026-05-24 暴露当前 flag 给 GUI 显示
+          enableAutoGroupCreate: account.enableAutoGroupCreate,
         }))
         return jsonResponse({ accounts: list }, 200)
       } catch (err) {
