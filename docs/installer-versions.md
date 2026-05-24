@@ -16,6 +16,18 @@
 
 
 
+
+## [macOS] 2026.5.24.1-dev — 2026-05-24
+
+**包含**:feishu-bridge-light 三件套全套(`/new` 私聊清话题 / `[ATTACH:path]` 文件回传 / `[CREATE_GROUP:name]` opt-in 自动建群) + e2e-pre-push-gate + e2e-vite-warmup 等 main 上 commits。
+
+- main HEAD ship 节点:`3842689c2`(Merge 'main' of github)
+- feishu-bridge-light merge commit:`433a7557b`
+- 测试基线:adapter-feishu-lark 391 pass / 0 fail / 803 expect
+- 范围:仅本机自测,**未公开 ship**(不发 GitHub / Gitee Release)
+- 用途:user 真机飞书 IM 实测 Phase 2/3 marker 协议(`[ATTACH:]` / `[CREATE_GROUP:]`),回归 OK 后再补完整 Tier 2 公开发布
+
+---
 ## [macOS] 2026.5.21.1-dev — 2026-05-21 22:43
 
 **主题**:Mac 端首次 Tier 2 预览版(`-dev` 后缀)— 自 [macOS] `2026.5.12.1`(2026-05-12 prod)以来主线 21 笔 commit 全部治理 / 工具改进,**无新增用户可见功能**。本笔 ship 重点是验证 Tier 2 流程闭环 + 把两笔 ship 翻车 fix 合入产品。
