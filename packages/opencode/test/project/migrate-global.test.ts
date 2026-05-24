@@ -104,6 +104,14 @@ describe("migrateFromGlobal", () => {
       const id = legacySessionID()
       yield* Effect.sync(() => seed({ id, dir: tmp, project: ProjectID.global }))
 
+      // Capture the original time_updated so we can verify migration
+      // does not corrupt it. Regression test for #25392 — without the
+      // preserve clause, Drizzle's $onUpdate hook bumps time_updated to
+      // Date.now() on every startup, scrambling the /sessions timeline.
+      const before = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
+      expect(before).toBeDefined()
+      const originalTimeUpdated = before!.time_updated
+
       // 4. Call fromDirectory again — project row already exists,
       //    so the current code skips migration entirely. This is the bug.
       yield* projects.fromDirectory(tmp)
@@ -111,6 +119,8 @@ describe("migrateFromGlobal", () => {
       const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
       expect(row).toBeDefined()
       expect(row!.project_id).toBe(project.id)
+      // time_updated must be preserved across the project_id rewrite.
+      expect(row!.time_updated).toBe(originalTimeUpdated)
     }),
   )
 

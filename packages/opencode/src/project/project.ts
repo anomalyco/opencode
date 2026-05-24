@@ -315,7 +315,7 @@ export const layer = Layer.effect(
         yield* db((d) =>
           d
             .update(SessionTable)
-            .set({ project_id: projectID })
+            .set({ project_id: projectID, time_updated: sql`${SessionTable.time_updated}` })
             .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.directory)))
             .run(),
         )
