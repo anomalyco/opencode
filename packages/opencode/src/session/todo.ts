@@ -5,7 +5,7 @@ import { Effect, Layer, Context, Schema } from "effect"
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
 import { asc } from "drizzle-orm"
-import { TodoTable } from "./session.sql"
+import { TodoTable } from "@opencode-ai/core/session/sql"
 
 export const Info = Schema.Struct({
   content: Schema.String.annotate({ description: "Brief description of the task" }),

@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm"
 import { GlobalBus } from "@/bus/global"
 import { Bus as ProjectBus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import { EventSequenceTable, EventTable } from "./event.sql"
+import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
 import { EventID } from "./schema"
 import { Context, Effect, Layer, Schema as EffectSchema } from "effect"
 import type { DeepMutable } from "@opencode-ai/core/schema"
@@ -328,11 +328,11 @@ function process<Def extends Definition>(
         .run()
       tx.insert(EventTable)
         .values({
-          id: event.id,
+          id: event.id as never,
           seq: event.seq,
           aggregate_id: event.aggregateID,
           type: versionedType(def.type, def.version),
-          data: event.data as Record<string, unknown>,
+          data: event.data as never,
         })
         .run()
     }

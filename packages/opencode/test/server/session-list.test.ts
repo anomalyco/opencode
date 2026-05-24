@@ -6,7 +6,7 @@ import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/f
 import { mkdir } from "fs/promises"
 import path from "path"
 import { Database } from "@/storage/db"
-import { SessionTable } from "@/session/session.sql"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { eq } from "drizzle-orm"
 import { testEffect } from "../lib/effect"
 import { Bus } from "@/bus"

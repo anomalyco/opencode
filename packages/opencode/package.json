@@ -15,8 +15,7 @@
     "build": "bun run script/build.ts",
     "fix-node-pty": "bun run script/fix-node-pty.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
-    "dev:temporary": "bun run --conditions=browser ./src/temporary.ts",
-    "db": "bun drizzle-kit"
+    "dev:temporary": "bun run --conditions=browser ./src/temporary.ts"
   },
   "bin": {
     "opencode": "./bin/opencode"
@@ -62,7 +61,6 @@
     "@types/which": "3.0.4",
     "@types/yargs": "17.0.33",
     "@typescript/native-preview": "catalog:",
-    "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "prettier": "3.6.2",
     "typescript": "catalog:",

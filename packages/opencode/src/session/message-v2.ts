@@ -13,7 +13,7 @@ import { eq } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
-import { MessageTable, PartTable, SessionTable } from "./session.sql"
+import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import * as ProviderError from "@/provider/error"
 import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"
@@ -579,14 +579,14 @@ export const cursor = {
 
 const info = (row: typeof MessageTable.$inferSelect) =>
   ({
-    ...row.data,
+    ...(row.data as object),
     id: row.id,
     sessionID: row.session_id,
   }) as Info
 
 const part = (row: typeof PartTable.$inferSelect) =>
   ({
-    ...row.data,
+    ...(row.data as object),
     id: row.id,
     sessionID: row.session_id,
     messageID: row.message_id,
@@ -988,7 +988,7 @@ export function parts(message_id: MessageID) {
   return rows.map(
     (row) =>
       ({
-        ...row.data,
+        ...(row.data as object),
         id: row.id,
         sessionID: row.session_id,
         messageID: row.message_id,

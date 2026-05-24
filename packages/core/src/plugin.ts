@@ -17,9 +17,9 @@ type HookSpec = {
   }
   "account.switched": {
     input: {
-      serviceID: import("./account").AccountV2.ServiceID
-      from?: import("./account").AccountV2.ID
-      to?: import("./account").AccountV2.ID
+      serviceID: import("./auth").Auth.ServiceID
+      from?: import("./auth").Auth.ID
+      to?: import("./auth").Auth.ID
     }
     output: {}
   }

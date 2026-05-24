@@ -21,8 +21,8 @@ import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
 import { SyncEvent } from "../sync"
 import type { SQL } from "drizzle-orm"
-import { PartTable, SessionTable } from "./session.sql"
-import { ProjectTable } from "../project/project.sql"
+import { PartTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { Storage } from "@/storage/storage"
 import * as Log from "@opencode-ai/core/util/log"
 import { MessageV2 } from "./message-v2"
@@ -647,7 +647,7 @@ export const layer: Layer.Layer<
       )
       if (!row) return
       return {
-        ...row.data,
+        ...(row.data as object),
         id: row.id,
         sessionID: row.session_id,
         messageID: row.message_id,

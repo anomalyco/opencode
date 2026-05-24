@@ -6,7 +6,8 @@ import { Bus } from "../../src/bus"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { SyncEvent } from "../../src/sync"
 import { Database, eq } from "@/storage/db"
-import { EventSequenceTable, EventTable } from "../../src/sync/event.sql"
+import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
+import { EventV2 } from "@opencode-ai/core/event"
 import { MessageID } from "../../src/session/schema"
 import { initProjectors } from "../../src/server/projectors"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
@@ -358,7 +359,7 @@ describe("SyncEvent", () => {
               .get(),
           )
           expect(events).toHaveLength(1)
-          expect(events[0].id).toBe("evt_1")
+          expect(events[0]?.id).toBe(EventV2.ID.make("evt_1"))
           expect(sequence).toEqual({ seq: 0, ownerID: "owner-1" })
         }),
       ),

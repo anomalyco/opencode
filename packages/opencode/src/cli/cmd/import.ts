@@ -3,7 +3,7 @@ import { Session } from "@/session/session"
 import { MessageV2 } from "../../session/message-v2"
 import { CliError, effectCmd } from "../effect-cmd"
 import { Database } from "@/storage/db"
-import { SessionTable, MessageTable, PartTable } from "../../session/session.sql"
+import { SessionTable, MessageTable, PartTable } from "@opencode-ai/core/session/sql"
 import { InstanceRef } from "@/effect/instance-ref"
 import { ShareNext } from "@/share/share-next"
 import { EOL } from "os"
@@ -196,7 +196,7 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
           id,
           session_id: row.id,
           time_created: msgInfo.time?.created ?? Date.now(),
-          data: msgData,
+          data: msgData as never,
         })
         .onConflictDoNothing()
         .run(),

@@ -7,10 +7,10 @@ import fs from "fs/promises"
 import { readFileSync, readdirSync } from "fs"
 import { JsonMigration } from "@/storage/json-migration"
 import { Global } from "@opencode-ai/core/global"
-import { ProjectTable } from "../../src/project/project.sql"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectID } from "../../src/project/schema"
-import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "../../src/session/session.sql"
-import { SessionShareTable } from "../../src/share/share.sql"
+import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "@opencode-ai/core/session/sql"
+import { SessionShareTable } from "@opencode-ai/core/share/sql"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
 // Test fixtures
@@ -79,7 +79,7 @@ function createTestDb() {
   sqlite.exec("PRAGMA foreign_keys = ON")
 
   // Apply schema migrations using drizzle migrate
-  const dir = path.join(import.meta.dirname, "../../migration")
+  const dir = path.join(import.meta.dirname, "../../../core/migration")
   const entries = readdirSync(dir, { withFileTypes: true })
   const migrations = entries
     .filter((entry) => entry.isDirectory())

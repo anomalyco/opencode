@@ -1,20 +1,28 @@
-export * as Session from "."
+export * as SessionV2 from "."
 
-import { Effect, Schema } from "effect"
+import { DateTime, Effect, Layer, Schema, Context } from "effect"
+import { and, asc, desc, eq, gt, gte, isNull, like, lt, or, type SQL } from "drizzle-orm"
 import { AbsolutePath, RelativePath, withStatics } from "../schema"
 import { Identifier } from "../util/identifier"
 import { Project } from "../project"
-import { Workspace } from "../workspace"
-import type { ModelV2 } from "../model"
+import { WorkspaceV2 } from "../workspace"
+import { ModelV2 } from "../model"
 import { Location } from "../location"
-import type { SessionMessage } from "./message"
+import { SessionMessage } from "./message"
 import type { Prompt } from "./prompt"
-import type { EventV2 } from "../event"
+import { EventV2 } from "../event"
+import { optionalOmitUndefined } from "../schema"
+import { V2Schema } from "../v2-schema"
+import { ProviderV2 } from "../provider"
+import { Database } from "../database/database"
+import { SessionMessageTable, SessionTable } from "./sql"
 
 export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({
   identifier: "Session.Delivery",
 })
 export type Delivery = Schema.Schema.Type<typeof Delivery>
+
+export const DefaultDelivery = "immediate" satisfies Delivery
 
 export const ID = Schema.String.check(Schema.isStartsWith("ses")).pipe(
   Schema.brand("SessionID"),
@@ -24,13 +32,39 @@ export const ID = Schema.String.check(Schema.isStartsWith("ses")).pipe(
 )
 export type ID = typeof ID.Type
 
-export const Info = Schema.Struct({
+export const LegacyInfo = Schema.Struct({
   id: ID,
   location: Location.Ref,
   subpath: RelativePath, // derived from location
   project: Project.ID, // derived from location
 })
-export type Info = typeof Info.Type
+export type LegacyInfo = typeof LegacyInfo.Type
+
+export class Info extends Schema.Class<Info>("Session.Info")({
+  id: ID,
+  parentID: optionalOmitUndefined(ID),
+  projectID: Project.ID,
+  workspaceID: optionalOmitUndefined(WorkspaceV2.ID),
+  path: optionalOmitUndefined(Schema.String),
+  agent: optionalOmitUndefined(Schema.String),
+  model: ModelV2.Ref.pipe(optionalOmitUndefined),
+  cost: Schema.Finite,
+  tokens: Schema.Struct({
+    input: Schema.Finite,
+    output: Schema.Finite,
+    reasoning: Schema.Finite,
+    cache: Schema.Struct({
+      read: Schema.Finite,
+      write: Schema.Finite,
+    }),
+  }),
+  time: Schema.Struct({
+    created: V2Schema.DateTimeUtcFromMillis,
+    updated: V2Schema.DateTimeUtcFromMillis,
+    archived: optionalOmitUndefined(V2Schema.DateTimeUtcFromMillis),
+  }),
+  title: Schema.String,
+}) {}
 
 // get project -> project.locations
 //
@@ -41,29 +75,32 @@ export type Info = typeof Info.Type
 //   - by subpath
 // - by workspace (home is special)
 
-type Cursor = {}
+type Cursor = {
+  id: ID
+  time: number
+  direction: "previous" | "next"
+}
 
 type ListInput = {
-  workspaceID?: Workspace.ID
+  workspaceID?: WorkspaceV2.ID
+  projectID?: Project.ID
+  path?: string
+  roots?: boolean
+  start?: number
   search?: string
   cursor?: Cursor
   limit?: number
   order?: "asc" | "desc"
-} & (
-  | {
-      project: Project.ID
-      subpath?: RelativePath
-    }
-  | {
-      directory?: AbsolutePath
-    }
-)
+  directory?: string
+}
 
 type CreateInput = {
   id?: ID
   agent?: string
   model?: ModelV2.Ref
-  location: Location.Ref
+  location?: Location.Ref
+  parentID?: ID
+  workspaceID?: WorkspaceV2.ID
 }
 
 type MoveInput = {
@@ -80,7 +117,19 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ses
   sessionID: ID,
 }) {}
 
-export type Error = NotFoundError
+export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
+  "Session.OperationUnavailableError",
+  {
+    operation: Schema.Literals(["prompt", "compact", "wait"]),
+  },
+) {}
+
+export class MessageDecodeError extends Schema.TaggedErrorClass<MessageDecodeError>()("Session.MessageDecodeError", {
+  sessionID: ID,
+  messageID: SessionMessage.ID,
+}) {}
+
+export type Error = NotFoundError | OperationUnavailableError | MessageDecodeError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
@@ -96,8 +145,16 @@ export interface Interface {
       time: number
       direction: "previous" | "next"
     }
-  }) => Effect.Effect<SessionMessage.Message[], NotFoundError>
-  readonly context: (sessionID: ID) => Effect.Effect<SessionMessage.Message[], NotFoundError>
+  }) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
+  readonly context: (sessionID: ID) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
+  readonly subagent: (input: {
+    id?: EventV2.ID
+    parentID: ID
+    prompt: Prompt
+    agent: string
+    model?: ModelV2.Ref
+    resume?: boolean
+  }) => Effect.Effect<void, NotFoundError | OperationUnavailableError | MessageDecodeError>
   readonly switchAgent: (input: { sessionID: ID; agent: string }) => Effect.Effect<void, never>
   readonly switchModel: (input: { sessionID: ID; model: ModelV2.Ref }) => Effect.Effect<void, never>
   readonly prompt: (input: {
@@ -106,7 +163,7 @@ export interface Interface {
     prompt: Prompt
     delivery?: Delivery
     resume?: boolean
-  }) => Effect.Effect<void, NotFoundError>
+  }) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: ID
@@ -121,7 +178,191 @@ export interface Interface {
     delivery?: Delivery
     resume?: boolean
   }) => Effect.Effect<void, never>
-  readonly compact: (input: CompactInput) => Effect.Effect<void, NotFoundError>
-  readonly wait: (id: ID) => Effect.Effect<void, NotFoundError>
+  readonly compact: (input: CompactInput | ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
+  readonly wait: (id: ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly resume: (sessionID: ID) => Effect.Effect<void>
 }
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
+
+function fromRow(row: typeof SessionTable.$inferSelect): Info {
+  return new Info({
+    id: ID.make(row.id),
+    projectID: Project.ID.make(row.project_id),
+    workspaceID: row.workspace_id ? WorkspaceV2.ID.make(row.workspace_id) : undefined,
+    title: row.title,
+    parentID: row.parent_id ? ID.make(row.parent_id) : undefined,
+    path: row.path ?? "",
+    agent: row.agent ?? undefined,
+    model: row.model
+      ? {
+          id: ModelV2.ID.make(row.model.id),
+          providerID: ProviderV2.ID.make(row.model.providerID),
+          variant: ModelV2.VariantID.make(row.model.variant ?? "default"),
+        }
+      : undefined,
+    cost: row.cost,
+    tokens: {
+      input: row.tokens_input,
+      output: row.tokens_output,
+      reasoning: row.tokens_reasoning,
+      cache: {
+        read: row.tokens_cache_read,
+        write: row.tokens_cache_write,
+      },
+    },
+    time: {
+      created: DateTime.makeUnsafe(row.time_created),
+      updated: DateTime.makeUnsafe(row.time_updated),
+      archived: row.time_archived ? DateTime.makeUnsafe(row.time_archived) : undefined,
+    },
+  })
+}
+
+export const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const db = yield* Database.Service
+    const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
+
+    const decode = (row: typeof SessionMessageTable.$inferSelect) =>
+      decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
+        Effect.mapError(
+          () =>
+            new MessageDecodeError({
+              sessionID: ID.make(row.session_id),
+              messageID: SessionMessage.ID.make(row.id),
+            }),
+        ),
+      )
+
+    const result = Service.of({
+      create: Effect.fn("V2Session.create")(function* () {
+        return {} as Info
+      }),
+      get: Effect.fn("V2Session.get")(function* (sessionID) {
+        const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
+        if (!row) return yield* new NotFoundError({ sessionID })
+        return fromRow(row)
+      }),
+      list: Effect.fn("V2Session.list")(function* (input = {}) {
+        const direction = input.cursor?.direction ?? "next"
+        const requestedOrder = input.order ?? "desc"
+        const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
+        const sortColumn = SessionTable.time_updated
+        const conditions: SQL[] = []
+        if (input.directory) conditions.push(eq(SessionTable.directory, input.directory))
+        if (input.path)
+          conditions.push(or(eq(SessionTable.path, input.path), like(SessionTable.path, `${input.path}/%`))!)
+        if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
+        if (input.projectID) conditions.push(eq(SessionTable.project_id, input.projectID))
+        if (input.roots) conditions.push(isNull(SessionTable.parent_id))
+        if (input.start) conditions.push(gte(sortColumn, input.start))
+        if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
+        if (input.cursor) {
+          conditions.push(
+            order === "asc"
+              ? or(gt(sortColumn, input.cursor.time), and(eq(sortColumn, input.cursor.time), gt(SessionTable.id, input.cursor.id)))!
+              : or(lt(sortColumn, input.cursor.time), and(eq(sortColumn, input.cursor.time), lt(SessionTable.id, input.cursor.id)))!,
+          )
+        }
+        const query = db
+          .select()
+          .from(SessionTable)
+          .where(conditions.length > 0 ? and(...conditions) : undefined)
+          .orderBy(
+            order === "asc" ? asc(sortColumn) : desc(sortColumn),
+            order === "asc" ? asc(SessionTable.id) : desc(SessionTable.id),
+          )
+        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(Effect.orDie)
+        return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
+      }),
+      messages: Effect.fn("V2Session.messages")(function* (input) {
+        yield* result.get(input.sessionID)
+        const direction = input.cursor?.direction ?? "next"
+        const requestedOrder = input.order ?? "desc"
+        const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
+        const boundary = input.cursor
+          ? order === "asc"
+            ? or(
+                gt(SessionMessageTable.time_created, input.cursor.time),
+                and(eq(SessionMessageTable.time_created, input.cursor.time), gt(SessionMessageTable.id, input.cursor.id)),
+              )
+            : or(
+                lt(SessionMessageTable.time_created, input.cursor.time),
+                and(eq(SessionMessageTable.time_created, input.cursor.time), lt(SessionMessageTable.id, input.cursor.id)),
+              )
+          : undefined
+        const where = boundary
+          ? and(eq(SessionMessageTable.session_id, input.sessionID), boundary)
+          : eq(SessionMessageTable.session_id, input.sessionID)
+        const query = db
+          .select()
+          .from(SessionMessageTable)
+          .where(where)
+          .orderBy(
+            order === "asc" ? asc(SessionMessageTable.time_created) : desc(SessionMessageTable.time_created),
+            order === "asc" ? asc(SessionMessageTable.id) : desc(SessionMessageTable.id),
+          )
+        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(Effect.orDie)
+        return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, (row) => decode(row))
+      }),
+      context: Effect.fn("V2Session.context")(function* (sessionID) {
+        yield* result.get(sessionID)
+        const compaction = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "compaction")))
+          .orderBy(desc(SessionMessageTable.time_created), desc(SessionMessageTable.id))
+          .limit(1)
+          .get()
+          .pipe(Effect.orDie)
+        const rows = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(
+            and(
+              eq(SessionMessageTable.session_id, sessionID),
+              compaction
+                ? or(
+                    gt(SessionMessageTable.time_created, compaction.time_created),
+                    and(eq(SessionMessageTable.time_created, compaction.time_created), gte(SessionMessageTable.id, compaction.id)),
+                  )
+                : undefined,
+            ),
+          )
+          .orderBy(asc(SessionMessageTable.time_created), asc(SessionMessageTable.id))
+          .all()
+          .pipe(Effect.orDie)
+        return yield* Effect.forEach(rows, (row) => decode(row))
+      }),
+      prompt: Effect.fn("V2Session.prompt")(function* (input) {
+        yield* result.get(input.sessionID)
+        return yield* new OperationUnavailableError({ operation: "prompt" })
+      }),
+      shell: Effect.fn("V2Session.shell")(function* () {}),
+      skill: Effect.fn("V2Session.skill")(function* () {}),
+      switchAgent: Effect.fn("V2Session.switchAgent")(function* () {}),
+      switchModel: Effect.fn("V2Session.switchModel")(function* () {}),
+      subagent: Effect.fn("V2Session.subagent")(function* (input) {
+        yield* result.get(input.parentID)
+        return yield* new OperationUnavailableError({ operation: "prompt" })
+      }),
+      compact: Effect.fn("V2Session.compact")(function* (input) {
+        const sessionID = typeof input === "string" ? input : input.sessionID
+        yield* result.get(sessionID)
+        return yield* new OperationUnavailableError({ operation: "compact" })
+      }),
+      wait: Effect.fn("V2Session.wait")(function* (sessionID) {
+        yield* result.get(sessionID)
+        return yield* new OperationUnavailableError({ operation: "wait" })
+      }),
+      resume: Effect.fn("V2Session.resume")(function* () {}),
+      move: Effect.fn("V2Session.move")(function* () {}),
+    })
+
+    return result
+  }),
+)
+
+export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer), Layer.orDie)

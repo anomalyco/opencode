@@ -1,158 +1,94 @@
 import { describe, expect, test } from "bun:test"
+import { SqliteClient } from "@effect/sql-sqlite-bun"
+import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
+import { Effect } from "effect"
+import { sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
+import sessionUsageMigration from "@opencode-ai/core/database/migration/20260510033149_session_usage"
+import type { SqlClient as SqlClientService } from "effect/unstable/sql/SqlClient"
 
-const rand = (seed: number) => () => {
-  seed = (seed * 1664525 + 1013904223) >>> 0
-  return seed / 0x100000000
-}
+const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
+  Effect.runPromise(effect.pipe(Effect.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })), Effect.scoped))
+
+const makeDb = EffectDrizzleSqlite.makeWithDefaults()
 
 describe("DatabaseMigration", () => {
-  test("diff creates missing tables before indexes", () => {
-    const table = makeTable(
-      "session",
-      [makeColumn("id", { primaryKey: true })],
-      [makeIndex("session_id_idx", "session", ["id"])],
-    )
+  test("applies tracked migrations to an empty database", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
 
-    expect(DatabaseMigration.diff(emptySchema(), schema(table))).toEqual([
-      { type: "create_table", table },
-      { type: "create_index", index: table.indexes.session_id_idx },
-    ])
+        expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session'`)).toEqual({
+          name: "session",
+        })
+        expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: 20 })
+      }),
+    )
   })
 
-  test("diff adds missing columns and indexes without recreating existing tables", () => {
-    const actual = makeTable("session", [makeColumn("id", { primaryKey: true })], [])
-    const desired = makeTable(
-      "session",
-      [makeColumn("id", { primaryKey: true }), makeColumn("title", { notNull: true })],
-      [makeIndex("session_title_idx", "session", ["title"])],
-    )
-
-    expect(DatabaseMigration.diff(schema(actual), schema(desired))).toEqual([
-      { type: "add_column", table: "session", column: desired.columns.title },
-      { type: "create_index", index: desired.indexes.session_title_idx },
-    ])
-  })
-
-  test("diff is empty when actual already satisfies desired", () => {
-    const table = makeTable(
-      "session",
-      [makeColumn("id", { primaryKey: true }), makeColumn("title")],
-      [makeIndex("session_title_idx", "session", ["title"])],
-    )
-
-    expect(DatabaseMigration.diff(schema(table), schema(table))).toEqual([])
-  })
-
-  test("random desired schemas generate exactly missing additive operations", () => {
-    for (let seed = 1; seed <= 200; seed++) {
-      const random = rand(seed)
-      const desiredTables = Array.from({ length: 1 + Math.floor(random() * 5) }, (_, i) =>
-        makeRandomTable(random, `table_${i}`),
-      )
-      const actualTables = desiredTables
-        .filter(() => random() > 0.25)
-        .map((table) =>
-          makeTable(
-            table.name,
-            Object.values(table.columns).filter((column) => column.primaryKey || random() > 0.35),
-            Object.values(table.indexes).filter(() => random() > 0.5),
-          ),
+  test("runs session usage backfill in order with schema changes", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, time_updated integer NOT NULL)`)
+        yield* db.run(sql`CREATE TABLE message (id text PRIMARY KEY, session_id text NOT NULL, data text NOT NULL)`)
+        yield* db.run(sql`INSERT INTO session (id, time_updated) VALUES ('session_1', 1)`)
+        yield* db.run(
+          sql`INSERT INTO message (id, session_id, data) VALUES ('message_1', 'session_1', '{"role":"assistant","cost":1.25,"tokens":{"input":2,"output":3,"reasoning":4,"cache":{"read":5,"write":6}}}')`,
         )
-      const operations = DatabaseMigration.diff(schema(...actualTables), schema(...desiredTables))
-      const expected = desiredTables.flatMap<DatabaseMigration.Operation>((table) => {
-        const actual = actualTables.find((item) => item.name === table.name)
-        if (!actual) {
-          return [createTableOperation(table), ...Object.values(table.indexes).map(createIndexOperation)]
-        }
-        return [
-          ...Object.values(table.columns)
-            .filter((column) => actual.columns[column.name] === undefined)
-            .map((column) => addColumnOperation(table.name, column)),
-          ...Object.values(table.indexes)
-            .filter((index) => actual.indexes[index.name] === undefined)
-            .map(createIndexOperation),
-        ]
-      })
 
-      expect(operations).toEqual(expected)
-    }
+        yield* DatabaseMigration.applyOnly(db, [sessionUsageMigration])
+
+        expect(
+          yield* db.get(
+            sql`SELECT cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write FROM session WHERE id = 'session_1'`,
+          ),
+        ).toEqual({
+          cost: 1.25,
+          tokens_input: 2,
+          tokens_output: 3,
+          tokens_reasoning: 4,
+          tokens_cache_read: 5,
+          tokens_cache_write: 6,
+        })
+      }),
+    )
   })
 
-  test("random operations render quoted SQL", () => {
-    for (let seed = 1; seed <= 200; seed++) {
-      const random = rand(seed)
-      const table = makeRandomTable(random, `table_"${seed}`)
-      const operations = DatabaseMigration.diff(emptySchema(), schema(table))
+  test("imports existing drizzle migration state", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash text NOT NULL, created_at numeric, name text, applied_at TEXT)`)
+        yield* db.run(sql`
+          INSERT INTO __drizzle_migrations (hash, created_at, name, applied_at)
+          VALUES ('hash', 1, '20260127222353_familiar_lady_ursula', ${new Date().toISOString()})
+        `)
 
-      for (const operation of operations) {
-        const rendered = DatabaseMigration.toSql(operation)
-        expect(rendered).not.toContain("undefined")
-        expect(rendered).toContain('"')
-      }
-    }
+        yield* DatabaseMigration.applyOnly(db, [])
+
+        expect(yield* db.get(sql`SELECT id FROM migration`)).toEqual({ id: "20260127222353_familiar_lady_ursula" })
+      }),
+    )
+  })
+
+  test("skips drizzle import when migration table already has state", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE migration (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`)
+        yield* db.run(sql`INSERT INTO migration (id, time_completed) VALUES ('existing', 1)`)
+        yield* db.run(sql`CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash text NOT NULL, created_at numeric, name text, applied_at TEXT)`)
+        yield* db.run(sql`
+          INSERT INTO __drizzle_migrations (hash, created_at, name, applied_at)
+          VALUES ('hash', 1, '20260127222353_familiar_lady_ursula', ${new Date().toISOString()})
+        `)
+
+        yield* DatabaseMigration.applyOnly(db, [])
+
+        expect(yield* db.all(sql`SELECT id FROM migration ORDER BY id`)).toEqual([{ id: "existing" }])
+      }),
+    )
   })
 })
-
-function emptySchema(): DatabaseMigration.SchemaAst {
-  return { tables: {} }
-}
-
-function schema(...tables: DatabaseMigration.TableAst[]): DatabaseMigration.SchemaAst {
-  return { tables: Object.fromEntries(tables.map((table) => [table.name, table])) }
-}
-
-function makeTable(
-  name: string,
-  columns: DatabaseMigration.ColumnAst[],
-  indexes: DatabaseMigration.IndexAst[],
-): DatabaseMigration.TableAst {
-  return {
-    name,
-    columns: Object.fromEntries(columns.map((column) => [column.name, column])),
-    indexes: Object.fromEntries(indexes.map((index) => [index.name, index])),
-  }
-}
-
-function createTableOperation(table: DatabaseMigration.TableAst): DatabaseMigration.Operation {
-  return { type: "create_table", table }
-}
-
-function addColumnOperation(table: string, column: DatabaseMigration.ColumnAst): DatabaseMigration.Operation {
-  return { type: "add_column", table, column }
-}
-
-function createIndexOperation(index: DatabaseMigration.IndexAst): DatabaseMigration.Operation {
-  return { type: "create_index", index }
-}
-
-function makeColumn(
-  name: string,
-  options: Partial<Omit<DatabaseMigration.ColumnAst, "name" | "type">> = {},
-): DatabaseMigration.ColumnAst {
-  return {
-    name,
-    type: "text",
-    notNull: options.notNull ?? false,
-    primaryKey: options.primaryKey ?? false,
-    ...(options.default === undefined ? {} : { default: options.default }),
-  }
-}
-
-function makeIndex(name: string, table: string, columns: string[], unique = false): DatabaseMigration.IndexAst {
-  return { name, table, columns, unique }
-}
-
-function makeRandomTable(random: () => number, name: string) {
-  const columns = Array.from({ length: 1 + Math.floor(random() * 8) }, (_, i) =>
-    makeColumn(`column_${i}`, {
-      primaryKey: i === 0,
-      notNull: i === 0 || random() > 0.5,
-      default: random() > 0.7 ? String(Math.floor(random() * 100)) : undefined,
-    }),
-  )
-  const indexes = columns
-    .filter((column) => !column.primaryKey && random() > 0.5)
-    .map((column) => makeIndex(`${name}_${column.name}_idx`, name, [column.name], random() > 0.75))
-  return makeTable(name, columns, indexes)
-}

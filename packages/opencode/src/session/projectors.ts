@@ -6,8 +6,8 @@ import type { TxOrDb } from "@/storage/db"
 import { SyncEvent } from "@/sync"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
-import { SessionTable, MessageTable, PartTable } from "./session.sql"
-import { WorkspaceTable } from "@/control-plane/workspace.sql"
+import { SessionTable, MessageTable, PartTable } from "@opencode-ai/core/session/sql"
+import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { Log } from "@opencode-ai/core/util/log"
 import nextProjectors from "./projectors-next"
 
@@ -23,10 +23,12 @@ export type DeepPartial<T> = T extends object ? { [K in keyof T]?: DeepPartial<T
 
 type Usage = Pick<MessageV2.StepFinishPart, "cost" | "tokens">
 
-function usage(part: MessageV2.Part | (typeof PartTable.$inferSelect)["data"]): Usage | undefined {
-  if (part.type !== "step-finish") return undefined
-  if (!("cost" in part) || !("tokens" in part)) return undefined
-  return { cost: part.cost, tokens: part.tokens }
+function usage(part: MessageV2.Part | unknown): Usage | undefined {
+  if (typeof part !== "object" || part === null) return undefined
+  const value = part as Record<string, unknown>
+  if (value.type !== "step-finish") return undefined
+  if (!("cost" in value) || !("tokens" in value)) return undefined
+  return { cost: value.cost as Usage["cost"], tokens: value.tokens as Usage["tokens"] }
 }
 
 function applyUsage(db: TxOrDb, sessionID: Session.Info["id"], value: Usage, sign = 1) {
@@ -132,9 +134,9 @@ export default [
           id,
           session_id: sessionID,
           time_created,
-          data: rest,
+          data: rest as never,
         })
-        .onConflictDoUpdate({ target: MessageTable.id, set: { data: rest } })
+        .onConflictDoUpdate({ target: MessageTable.id, set: { data: rest as never } })
         .run()
     } catch (err) {
       if (!foreign(err)) throw err

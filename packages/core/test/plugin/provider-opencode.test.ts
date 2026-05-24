@@ -6,10 +6,11 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { OpencodePlugin } from "@opencode-ai/core/plugin/provider/opencode"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { it, model, provider, withEnv } from "./provider-helper"
 
 const cost = (input: number, output = 0) => [{ input, output, cache: { read: 0, write: 0 } }]
-const locationLayer = Layer.succeed(Location.Service, Location.Service.of({ directory: "test" }))
+const locationLayer = Layer.succeed(Location.Service, Location.Service.of({ directory: AbsolutePath.make("test") }))
 
 describe("OpencodePlugin", () => {
   it.effect("uses a public key and disables paid models without credentials", () =>

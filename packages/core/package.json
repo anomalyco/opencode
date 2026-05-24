@@ -6,6 +6,8 @@
   "license": "MIT",
   "private": true,
   "scripts": {
+    "db": "bun drizzle-kit",
+    "migration": "bun run script/migration.ts",
     "test": "bun test",
     "test:ci": "mkdir -p .artifacts/unit && bun test --timeout 30000 --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
     "typecheck": "tsgo --noEmit"
@@ -23,7 +25,8 @@
     "@types/cross-spawn": "catalog:",
     "@types/npm-package-arg": "6.1.4",
     "@types/npmcli__arborist": "6.3.3",
-    "@types/semver": "catalog:"
+    "@types/semver": "catalog:",
+    "drizzle-kit": "catalog:"
   },
   "dependencies": {
     "@ai-sdk/alibaba": "1.0.17",

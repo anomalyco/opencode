@@ -1,5 +1,5 @@
 import { WorkspaceID } from "@/control-plane/schema"
-import { SessionV2 } from "@/v2/session"
+import { SessionV2 } from "@opencode-ai/core/session/index"
 import { DateTime, Effect, Option, Schema } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
@@ -134,35 +134,6 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.session
               next: last ? sessionCursor.encode(last, order, "next", filters) : undefined,
             },
           }
-        }),
-      )
-      .handle(
-        "prompt",
-        Effect.fn(function* (ctx) {
-          return yield* session
-            .prompt({
-              sessionID: ctx.params.sessionID,
-              prompt: ctx.payload.prompt,
-              delivery: ctx.payload.delivery ?? SessionV2.DefaultDelivery,
-            })
-            .pipe(
-              Effect.catchTag("Session.NotFoundError", (error) =>
-                Effect.fail(
-                  new SessionNotFoundError({
-                    sessionID: error.sessionID,
-                    message: `Session not found: ${error.sessionID}`,
-                  }),
-                ),
-              ),
-              Effect.catchTag("Session.OperationUnavailableError", (error) =>
-                Effect.fail(
-                  new ServiceUnavailableError({
-                    message: `V2 session ${error.operation} is not available yet`,
-                    service: `v2.session.${error.operation}`,
-                  }),
-                ),
-              ),
-            )
         }),
       )
       .handle(

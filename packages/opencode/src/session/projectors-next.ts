@@ -6,7 +6,7 @@ import { SessionEvent } from "@opencode-ai/core/session/event"
 import * as DateTime from "effect/DateTime"
 import { SyncEvent } from "@/sync"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { SessionMessageTable, SessionTable } from "./session.sql"
+import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import type { SessionID } from "./schema"
 import { Schema } from "effect"
 
@@ -35,7 +35,7 @@ function sqlite(db: Database.TxOrDb, sessionID: SessionID): SessionMessageUpdate
         .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "assistant")))
         .orderBy(desc(SessionMessageTable.id))
         .all()
-        .map((row) => decodeMessage({ ...row.data, id: row.id, type: row.type }))
+        .map((row) => decodeMessage({ ...(row.data as object), id: row.id, type: row.type }))
         .find((message): message is SessionMessage.Assistant => message.type === "assistant" && !message.time.completed)
     },
     getCurrentCompaction() {
@@ -45,7 +45,7 @@ function sqlite(db: Database.TxOrDb, sessionID: SessionID): SessionMessageUpdate
         .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "compaction")))
         .orderBy(desc(SessionMessageTable.id))
         .all()
-        .map((row) => decodeMessage({ ...row.data, id: row.id, type: row.type }))
+        .map((row) => decodeMessage({ ...(row.data as object), id: row.id, type: row.type }))
         .find((message): message is SessionMessage.Compaction => message.type === "compaction")
     },
     getCurrentShell(callID) {
@@ -55,7 +55,7 @@ function sqlite(db: Database.TxOrDb, sessionID: SessionID): SessionMessageUpdate
         .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "shell")))
         .orderBy(desc(SessionMessageTable.id))
         .all()
-        .map((row) => decodeMessage({ ...row.data, id: row.id, type: row.type }))
+        .map((row) => decodeMessage({ ...(row.data as object), id: row.id, type: row.type }))
         .find((message): message is SessionMessage.Shell => message.type === "shell" && message.callID === callID)
     },
     updateAssistant(assistant) {

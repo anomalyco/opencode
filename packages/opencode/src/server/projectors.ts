@@ -1,7 +1,7 @@
 import sessionProjectors from "../session/projectors"
 import { SyncEvent } from "@/sync"
 import { Session } from "@/session/session"
-import { SessionTable } from "@/session/session.sql"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
 

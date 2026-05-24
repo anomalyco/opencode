@@ -1,3 +1,5 @@
+export * as SessionMessage from "./message"
+
 import { Schema } from "effect"
 import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
@@ -169,5 +171,3 @@ export const Message = Schema.Union([AgentSwitched, ModelSwitched, User, Synthet
 export type Message = Schema.Schema.Type<typeof Message>
 
 export type Type = Message["type"]
-
-export * as SessionMessage from "./message"

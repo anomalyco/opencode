@@ -1,7 +1,6 @@
 import { SessionID } from "@/session/schema"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { Prompt } from "@opencode-ai/core/session/prompt"
-import { SessionV2 } from "@/v2/session"
+import { SessionV2 } from "@opencode-ai/core/session/index"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
@@ -55,24 +54,6 @@ export const SessionGroup = HttpApiGroup.make("v2.session")
         summary: "List v2 sessions",
         description:
           "Retrieve sessions in the requested order. Items keep that order across pages; use cursor.next or cursor.previous to move through the ordered list.",
-      }),
-    ),
-  )
-  .add(
-    HttpApiEndpoint.post("prompt", "/api/session/:sessionID/prompt", {
-      params: { sessionID: SessionID },
-      query: WorkspaceRoutingQuery,
-      payload: Schema.Struct({
-        prompt: Prompt,
-        delivery: SessionV2.Delivery.pipe(Schema.optional),
-      }),
-      success: SessionMessage.Message,
-      error: [SessionNotFoundError, ServiceUnavailableError],
-    }).annotateMerge(
-      OpenApi.annotations({
-        identifier: "v2.session.prompt",
-        summary: "Send v2 message",
-        description: "Create a v2 session message and queue it for the agent loop.",
       }),
     ),
   )

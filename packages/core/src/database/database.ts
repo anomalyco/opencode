@@ -24,9 +24,7 @@ const layer = Layer.effect(
     yield* db.run("PRAGMA cache_size = -64000")
     yield* db.run("PRAGMA foreign_keys = ON")
     yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
-
-    console.log(DatabaseMigration.ensure
-
+    yield* DatabaseMigration.apply(db)
 
     return db
   }),

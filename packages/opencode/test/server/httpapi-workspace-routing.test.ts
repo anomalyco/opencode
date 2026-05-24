@@ -18,7 +18,7 @@ import { registerAdapter } from "../../src/control-plane/adapters"
 import { WorkspaceID } from "../../src/control-plane/schema"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
-import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
+import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { Project } from "../../src/project/project"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import {

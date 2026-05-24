@@ -8,10 +8,11 @@ import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { testEffect } from "../lib/effect"
 
 export const fixtureProvider = new URL("./fixtures/provider-factory.ts", import.meta.url).href
-const locationLayer = Layer.succeed(Location.Service, Location.Service.of({ directory: "test" }))
+const locationLayer = Layer.succeed(Location.Service, Location.Service.of({ directory: AbsolutePath.make("test") }))
 
 export const npmLayer = Layer.succeed(
   Npm.Service,

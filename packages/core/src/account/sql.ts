@@ -1,14 +1,14 @@
 import { sqliteTable, text, integer, primaryKey } from "drizzle-orm/sqlite-core"
 
-import { type AccessToken, type AccountID, type OrgID, type RefreshToken } from "./schema"
-import { Timestamps } from "../storage/schema.sql"
+import { AccountV2 } from "."
+import { Timestamps } from "../database/schema.sql"
 
 export const AccountTable = sqliteTable("account", {
-  id: text().$type<AccountID>().primaryKey(),
+  id: text().$type<AccountV2.ID>().primaryKey(),
   email: text().notNull(),
   url: text().notNull(),
-  access_token: text().$type<AccessToken>().notNull(),
-  refresh_token: text().$type<RefreshToken>().notNull(),
+  access_token: text().$type<AccountV2.AccessToken>().notNull(),
+  refresh_token: text().$type<AccountV2.RefreshToken>().notNull(),
   token_expiry: integer(),
   ...Timestamps,
 })
@@ -16,9 +16,9 @@ export const AccountTable = sqliteTable("account", {
 export const AccountStateTable = sqliteTable("account_state", {
   id: integer().primaryKey(),
   active_account_id: text()
-    .$type<AccountID>()
+    .$type<AccountV2.ID>()
     .references(() => AccountTable.id, { onDelete: "set null" }),
-  active_org_id: text().$type<OrgID>(),
+  active_org_id: text().$type<AccountV2.OrgID>(),
 })
 
 // LEGACY
@@ -27,8 +27,8 @@ export const ControlAccountTable = sqliteTable(
   {
     email: text().notNull(),
     url: text().notNull(),
-    access_token: text().$type<AccessToken>().notNull(),
-    refresh_token: text().$type<RefreshToken>().notNull(),
+    access_token: text().$type<AccountV2.AccessToken>().notNull(),
+    refresh_token: text().$type<AccountV2.RefreshToken>().notNull(),
     token_expiry: integer(),
     active: integer({ mode: "boolean" })
       .notNull()
