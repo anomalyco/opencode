@@ -8,6 +8,7 @@ import {
   classifyAttachment,
   extractGroupName,
   FEISHU_WORKSPACE_ROOT,
+  isBotMentioned,
   isGroupCreationIntent,
   parseAttachMarkers,
   parseCreateGroupMarkers,
@@ -495,5 +496,50 @@ describe("extractGroupName", () => {
 
   test("'建群讨论这个 bug' → null(无空格分隔)", () => {
     expect(extractGroupName("建群讨论这个 bug")).toBeNull()
+  })
+})
+
+// ============================================================
+// isBotMentioned — bot @ 检测
+// [feat: feishu-group-mention-policy] 2026-05-24
+// ============================================================
+
+describe("isBotMentioned", () => {
+  function m(openId: string, key = "_user_1"): MentionRef {
+    return { key, name: "bot", openId }
+  }
+
+  test("mentions 含 bot openId → true", () => {
+    expect(isBotMentioned([m("ou_bot_xyz")], "ou_bot_xyz")).toBe(true)
+  })
+
+  test("mentions 不含 bot openId(只 @ 其他人)→ false", () => {
+    expect(isBotMentioned([m("ou_other_user")], "ou_bot_xyz")).toBe(false)
+  })
+
+  test("多 mention 含 bot → true", () => {
+    expect(
+      isBotMentioned(
+        [m("ou_user_1", "_user_1"), m("ou_bot_xyz", "_user_2"), m("ou_user_3", "_user_3")],
+        "ou_bot_xyz",
+      ),
+    ).toBe(true)
+  })
+
+  test("空 mentions → false", () => {
+    expect(isBotMentioned([], "ou_bot_xyz")).toBe(false)
+  })
+
+  test("botOpenId 空串 → false(防御性,OAuth 数据异常时保守拒响应)", () => {
+    expect(isBotMentioned([m("ou_anything")], "")).toBe(false)
+  })
+
+  test("mentions 含 openId 但跟 bot 不同 → false(防 false-positive)", () => {
+    expect(isBotMentioned([m("ou_bot_xyz")], "ou_bot_OTHER")).toBe(false)
+  })
+
+  test("mention 缺 openId(老 schema 数据)→ false(逐条 some 不命中)", () => {
+    const noOpenId: MentionRef = { key: "_user_1", name: "bot" } // openId undefined
+    expect(isBotMentioned([noOpenId], "ou_bot_xyz")).toBe(false)
   })
 })

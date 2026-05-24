@@ -273,3 +273,28 @@ export function extractGroupName(text: string): string | null {
   }
   return null
 }
+
+// ============================================================
+// 群消息 @ bot 检测 — requireMention enforcement
+// [feat: feishu-group-mention-policy] 2026-05-24
+// ============================================================
+
+/**
+ * 判断 user 消息的 mentions 是否含 bot 本人。
+ *
+ * 输入:event.mentions[] 数组、bot 自己的 openId(来自 account.openId)
+ * 输出:true = bot 被 @,false = 没被 @ / mentions 空 / botOpenId 缺失
+ *
+ * 用法:pipeline 群消息处理 `requireMention=true`(默认)时,验证 bot 是否被 @
+ * 决定是否走 LLM 响应。p2p 私聊不调用此 helper(私聊总是响应)。
+ *
+ * 防御性:botOpenId 空串 / undefined → 返 false(保守拒响应,避免 OAuth 数据
+ * 异常时误响应非自己的群消息)。
+ */
+export function isBotMentioned(
+  mentions: ReadonlyArray<MentionRef>,
+  botOpenId: string,
+): boolean {
+  if (!botOpenId) return false
+  return mentions.some((m) => m.openId === botOpenId)
+}

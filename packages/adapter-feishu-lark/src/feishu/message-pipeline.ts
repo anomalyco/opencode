@@ -42,6 +42,7 @@ import type { PromptDispatcher } from "./prompt-dispatcher"
 import {
   classifyAttachment,
   extractGroupName,
+  isBotMentioned,
   isGroupCreationIntent,
   parseAttachMarkers,
   parseCreateGroupMarkers,
@@ -401,6 +402,26 @@ export class MessagePipeline {
           "• 建群 **项目讨论**(动词后空格 + 群名)",
           "• create group called **project-talk**",
         ].join("\n"),
+      )
+      return
+    }
+
+    // [feat: feishu-group-mention-policy] 2026-05-24
+    // 群消息 + requireMention=true(默认)+ bot 没被 @ → 早退,不调 LLM
+    //
+    // 前置条件:requireMention=false 实际生效需要 user 先在飞书开放平台改订阅
+    // 模式为"全量群消息";否则飞书 server 不推非 @ 消息,本检查根本不会执行。
+    //
+    // 设计:p2p 私聊一律响应 / 群聊但 bot 被 @ 响应 / 群聊且 requireMention=false 响应。
+    // 防御性 isBotMentioned 在 botOpenId 缺失时返 false,保守拒响应。
+    if (
+      event.chatType !== "p2p" &&
+      this.opts.account.requireMention &&
+      !isBotMentioned(event.mentions, this.opts.account.openId)
+    ) {
+      console.log(
+        `[pipeline ${this.opts.accountId}] group msg without bot @ ` +
+          `(chat=${event.chatId.slice(-8)}, requireMention=true) — skip LLM`,
       )
       return
     }
