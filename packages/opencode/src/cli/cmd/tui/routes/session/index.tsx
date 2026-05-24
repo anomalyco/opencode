@@ -90,6 +90,7 @@ import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { PathFormatterProvider, usePathFormatter } from "../../context/path-format"
+import { StickyUserPrompt } from "./sticky-prompt"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1086,6 +1087,7 @@ export function Session() {
 
   const [stickyUserID, setStickyUserID] = createSignal<string>()
   const [stickyExpanded, setStickyExpanded] = createSignal(false)
+  const stickyPromptEnabled = createMemo(() => kv.get("sticky_prompt_enabled", true))
   const userMessageIDs = createMemo(
     () =>
       new Set(
@@ -1125,6 +1127,10 @@ export function Session() {
   }
 
   function syncStickyUser() {
+    if (!stickyPromptEnabled()) {
+      if (stickyUserID()) setStickyUserID(undefined)
+      return
+    }
     if (!scroll || scroll.isDestroyed) return
     const users = scroll
       .getChildren()
@@ -1159,6 +1165,16 @@ export function Session() {
     })
   }
 
+  let stickySyncScheduled = false
+  function scheduleStickyUserSync() {
+    if (stickySyncScheduled) return
+    stickySyncScheduled = true
+    requestAnimationFrame(() => {
+      stickySyncScheduled = false
+      syncStickyUser()
+    })
+  }
+
   return (
     <PathFormatterProvider path={session()?.directory}>
       <context.Provider
@@ -1182,11 +1198,14 @@ export function Session() {
         <box flexDirection="row" flexGrow={1} minHeight={0}>
           <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
             <Show when={session()}>
-              <Show when={stickyTurn()}>
+              <Show when={stickyPromptEnabled() && stickyTurn()}>
                 {(turn) => (
                   <StickyUserPrompt
                     turn={turn()}
                     expanded={stickyExpanded()}
+                    width={contentWidth()}
+                    showTimestamps={showTimestamps()}
+                    color={local.agent.color(turn().user.agent)}
                     onExpand={() => setStickyExpanded((prev) => !prev)}
                     onJump={() => scrollToAssistantStart(turn())}
                   />
@@ -1209,7 +1228,7 @@ export function Session() {
                 stickyStart="bottom"
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
-                renderBefore={syncStickyUser}
+                renderBefore={scheduleStickyUserSync}
               >
                 <box height={1} />
                 <For each={messages()}>
@@ -1482,153 +1501,6 @@ function UserMessage(props: {
         />
       </Show>
     </>
-  )
-}
-
-function stickyPromptCharWidth(char: string) {
-  if (/[\u0300-\u036f]/.test(char)) return 0
-  if (
-    /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6]/.test(
-      char,
-    )
-  )
-    return 2
-  return 1
-}
-
-function wrapStickyPromptText(text: string, width: number) {
-  return text.split(/\r?\n/).flatMap((line) => {
-    const lines: string[] = []
-    let current = ""
-    let currentWidth = 0
-    for (const char of line) {
-      const charWidth = stickyPromptCharWidth(char)
-      if (current && currentWidth + charWidth > width) {
-        lines.push(current)
-        current = char
-        currentWidth = charWidth
-        continue
-      }
-      current += char
-      currentWidth += charWidth
-    }
-    return current ? [...lines, current] : lines
-  })
-}
-
-function StickyUserPrompt(props: {
-  turn: {
-    user: UserMessage
-    parts: Part[]
-    target: AssistantMessage
-  }
-  expanded: boolean
-  onExpand: () => void
-  onJump: () => void
-}) {
-  const ctx = use()
-  const local = useLocal()
-  const renderer = useRenderer()
-  const { theme } = useTheme()
-  const [hoverJump, setHoverJump] = createSignal(false)
-  const [hoverExpand, setHoverExpand] = createSignal(false)
-  const text = createMemo(() =>
-    props.turn.parts
-      .map((part) => {
-        if (part.type !== "text") return
-        if (part.synthetic) return
-        return part.text
-      })
-      .filter(Boolean)
-      .join("\n\n")
-      .trim(),
-  )
-  const files = createMemo(() => props.turn.parts.flatMap((part) => (part.type === "file" ? [part] : [])))
-  const lines = createMemo(() => wrapStickyPromptText(text(), Math.max(20, ctx.width - 24)))
-  const overflow = createMemo(() => lines().length > 2)
-  const shown = createMemo(() => lines().slice(0, props.expanded ? 8 : 2))
-  const color = createMemo(() => local.agent.color(props.turn.user.agent))
-  const buttonBg = createMemo(() => (hoverJump() ? theme.backgroundMenu : theme.backgroundElement))
-  const expandBg = createMemo(() => (hoverExpand() ? theme.backgroundMenu : theme.backgroundElement))
-
-  return (
-    <Show when={text()}>
-      <box
-        border={["left"]}
-        borderColor={color()}
-        customBorderChars={SplitBorder.customBorderChars}
-        backgroundColor={theme.backgroundPanel}
-        paddingTop={1}
-        paddingBottom={1}
-        paddingLeft={2}
-        marginTop={1}
-        marginBottom={1}
-        flexShrink={0}
-        zIndex={10}
-      >
-        <box flexDirection="row" gap={1}>
-          <box flexGrow={1} minWidth={0}>
-            <For each={shown()}>
-              {(line) => (
-                <text fg={theme.text} wrapMode="none" truncate>
-                  {line}
-                </text>
-              )}
-            </For>
-            <Show when={props.expanded && files().length}>
-              <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
-                <For each={files()}>
-                  {(file) => (
-                    <text fg={theme.text}>
-                      <span style={{ bg: theme.secondary, fg: theme.background }}>
-                        {" "}
-                        {MIME_BADGE[file.mime] ?? file.mime}{" "}
-                      </span>
-                      <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
-                    </text>
-                  )}
-                </For>
-              </box>
-            </Show>
-            <Show when={props.expanded && ctx.showTimestamps()}>
-              <text fg={theme.textMuted}>{Locale.todayTimeOrDateTime(props.turn.user.time.created)}</text>
-            </Show>
-          </box>
-          <box flexShrink={0} flexDirection="row" gap={1}>
-            <Show when={overflow() || props.expanded}>
-              <text
-                fg={theme.textMuted}
-                bg={expandBg()}
-                paddingLeft={1}
-                paddingRight={1}
-                onMouseOver={() => setHoverExpand(true)}
-                onMouseOut={() => setHoverExpand(false)}
-                onMouseUp={() => {
-                  if (renderer.getSelection()?.getSelectedText()) return
-                  props.onExpand()
-                }}
-              >
-                {props.expanded ? "[-]" : "[+]"}
-              </text>
-            </Show>
-            <text
-              fg={theme.text}
-              bg={buttonBg()}
-              paddingLeft={1}
-              paddingRight={1}
-              onMouseOver={() => setHoverJump(true)}
-              onMouseOut={() => setHoverJump(false)}
-              onMouseUp={() => {
-                if (renderer.getSelection()?.getSelectedText()) return
-                props.onJump()
-              }}
-            >
-              [^]
-            </text>
-          </box>
-        </box>
-      </box>
-    </Show>
   )
 }
 
