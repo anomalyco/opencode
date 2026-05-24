@@ -3,7 +3,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect } from "effect"
-import { testEffect } from "../lib/effect"
+import { pollWithTimeout, testEffect } from "../lib/effect"
 import { requireInstance, TestInstance } from "../fixture/fixture"
 import { LSPClient } from "@/lsp/client"
 import * as LSPServer from "@/lsp/server"
@@ -36,9 +36,14 @@ const createClient = (handle: LSPServer.Handle, initialization?: LSPServer.Handl
     )
   })
 
-const writeFile = (file: string, content: string) => AppFileSystem.use.writeWithDirs(file, content)
+const createScopedClient = (handle: LSPServer.Handle, initialization?: LSPServer.Handle["initialization"]) =>
+  Effect.gen(function* () {
+    const client = yield* createClient(handle, initialization)
+    yield* Effect.addFinalizer(() => Effect.promise(() => client.shutdown()).pipe(Effect.ignore))
+    return client
+  })
 
-const waitForClient = Effect.sleep("100 millis")
+const writeFile = (file: string, content: string) => AppFileSystem.use.writeWithDirs(file, content)
 
 describe("LSPClient interop", () => {
   beforeEach(async () => {
@@ -47,7 +52,7 @@ describe("LSPClient interop", () => {
 
   it.instance("handles workspace/workspaceFolders request", () =>
     Effect.gen(function* () {
-      const client = yield* createClient(spawnFakeServer())
+      const client = yield* createScopedClient(spawnFakeServer())
 
       yield* Effect.promise(() =>
         client.connection.sendNotification("test/trigger", {
@@ -55,15 +60,14 @@ describe("LSPClient interop", () => {
         }),
       )
 
-      yield* waitForClient
+      yield* Effect.promise(() => client.connection.sendRequest("test/get-diagnostic-request-count", {}))
       expect(client.connection).toBeDefined()
-      yield* Effect.promise(() => client.shutdown())
     }),
   )
 
   it.instance("handles client/registerCapability request", () =>
     Effect.gen(function* () {
-      const client = yield* createClient(spawnFakeServer())
+      const client = yield* createScopedClient(spawnFakeServer())
 
       yield* Effect.promise(() =>
         client.connection.sendNotification("test/trigger", {
@@ -71,15 +75,14 @@ describe("LSPClient interop", () => {
         }),
       )
 
-      yield* waitForClient
+      yield* Effect.promise(() => client.connection.sendRequest("test/get-diagnostic-request-count", {}))
       expect(client.connection).toBeDefined()
-      yield* Effect.promise(() => client.shutdown())
     }),
   )
 
   it.instance("handles client/unregisterCapability request", () =>
     Effect.gen(function* () {
-      const client = yield* createClient(spawnFakeServer())
+      const client = yield* createScopedClient(spawnFakeServer())
 
       yield* Effect.promise(() =>
         client.connection.sendNotification("test/trigger", {
@@ -87,15 +90,14 @@ describe("LSPClient interop", () => {
         }),
       )
 
-      yield* waitForClient
+      yield* Effect.promise(() => client.connection.sendRequest("test/get-diagnostic-request-count", {}))
       expect(client.connection).toBeDefined()
-      yield* Effect.promise(() => client.shutdown())
     }),
   )
 
   it.instance("initialize does not overclaim unsupported diagnostics capabilities", () =>
     Effect.gen(function* () {
-      const client = yield* createClient(spawnFakeServer())
+      const client = yield* createScopedClient(spawnFakeServer())
 
       const params = yield* Effect.promise(() =>
         client.connection.sendRequest<{
@@ -107,8 +109,6 @@ describe("LSPClient interop", () => {
       )
       expect(params.capabilities.workspace.diagnostics.refreshSupport).toBe(false)
       expect(params.capabilities.textDocument.publishDiagnostics.versionSupport).toBe(false)
-
-      yield* Effect.promise(() => client.shutdown())
     }),
   )
 
@@ -121,7 +121,7 @@ describe("LSPClient interop", () => {
         gamma: true,
       }
 
-      const client = yield* createClient(spawnFakeServer(), initialization)
+      const client = yield* createScopedClient(spawnFakeServer(), initialization)
 
       const response = yield* Effect.promise(() =>
         client.connection.sendRequest<unknown[]>("test/request-configuration", {
@@ -130,8 +130,6 @@ describe("LSPClient interop", () => {
       )
 
       expect(response).toEqual([{ beta: 1 }, 1, null, initialization])
-
-      yield* Effect.promise(() => client.shutdown())
     }),
   )
 
@@ -141,7 +139,7 @@ describe("LSPClient interop", () => {
       const file = path.join(test.directory, "client.ts")
       yield* writeFile(file, "first\n")
 
-      const client = yield* createClient(spawnFakeServer())
+      const client = yield* createScopedClient(spawnFakeServer())
 
       yield* Effect.promise(() => client.notify.open({ path: file }))
       yield* writeFile(file, "second\nthird\n")
@@ -166,8 +164,6 @@ describe("LSPClient interop", () => {
           text: "second\nthird\n",
         },
       ])
-
-      yield* Effect.promise(() => client.shutdown())
     }),
   )
 
@@ -177,7 +173,7 @@ describe("LSPClient interop", () => {
       const file = path.join(test.directory, "client.ts")
       yield* writeFile(file, "const x = 1\n")
 
-      const client = yield* createClient(spawnFakeServer())
+      const client = yield* createScopedClient(spawnFakeServer())
 
       const version = yield* Effect.promise(() => client.notify.open({ path: file }))
       const wait = client.waitForDiagnostics({ path: file, version, mode: "document" })
@@ -205,8 +201,6 @@ describe("LSPClient interop", () => {
 
       const count = yield* Effect.promise(() => client.connection.sendRequest("test/get-diagnostic-request-count", {}))
       expect(count).toBe(0)
-
-      yield* Effect.promise(() => client.shutdown())
     }),
   )
 
@@ -216,7 +210,7 @@ describe("LSPClient interop", () => {
       const file = path.join(test.directory, "client.ts")
       yield* writeFile(file, "const x = 1\n")
 
-      const client = yield* createClient(spawnFakeServer())
+      const client = yield* createScopedClient(spawnFakeServer())
 
       const version = yield* Effect.promise(() => client.notify.open({ path: file }))
       yield* Effect.promise(() =>
@@ -236,17 +230,15 @@ describe("LSPClient interop", () => {
         }),
       )
 
-      for (let i = 0; i < 20 && (client.diagnostics.get(file)?.length ?? 0) === 0; i++) {
-        yield* Effect.sleep("25 millis")
-      }
-
-      expect(client.diagnostics.get(file)?.[0]?.message).toBe("push diagnostic")
+      const diagnostic = yield* pollWithTimeout(
+        Effect.sync(() => client.diagnostics.get(file)?.[0]),
+        "push diagnostic was not published",
+      )
+      expect(diagnostic.message).toBe("push diagnostic")
 
       const started = Date.now()
       yield* Effect.promise(() => client.waitForDiagnostics({ path: file, version, mode: "document" }))
       expect(Date.now() - started).toBeLessThan(1_000)
-
-      yield* Effect.promise(() => client.shutdown())
     }),
   )
 
@@ -256,7 +248,7 @@ describe("LSPClient interop", () => {
       const file = path.join(test.directory, "client.cs")
       yield* writeFile(file, "class C {}\n")
 
-      const client = yield* createClient(spawnFakeServer())
+      const client = yield* createScopedClient(spawnFakeServer())
 
       yield* Effect.promise(() =>
         client.connection.sendRequest("test/configure-pull-diagnostics", {
@@ -286,8 +278,6 @@ describe("LSPClient interop", () => {
 
       const count = yield* Effect.promise(() => client.connection.sendRequest("test/get-diagnostic-request-count", {}))
       expect(count).toBeGreaterThan(0)
-
-      yield* Effect.promise(() => client.shutdown())
     }),
   )
 
@@ -297,7 +287,7 @@ describe("LSPClient interop", () => {
       const file = path.join(test.directory, "client.cs")
       yield* writeFile(file, "class C {}\n")
 
-      const client = yield* createClient(spawnFakeServer())
+      const client = yield* createScopedClient(spawnFakeServer())
 
       yield* Effect.promise(() =>
         client.connection.sendRequest("test/configure-pull-diagnostics", {
@@ -323,7 +313,6 @@ describe("LSPClient interop", () => {
 
       const version = yield* Effect.promise(() => client.notify.open({ path: file }))
       yield* Effect.promise(() => client.connection.sendRequest("test/register-configured-pull-diagnostics", {}))
-      yield* waitForClient
       const started = Date.now()
       yield* Effect.promise(() => client.waitForDiagnostics({ path: file, version, mode: "document" }))
 
@@ -332,8 +321,6 @@ describe("LSPClient interop", () => {
       expect(
         yield* Effect.promise(() => client.connection.sendRequest("test/get-diagnostic-request-count", {})),
       ).toBeGreaterThan(1)
-
-      yield* Effect.promise(() => client.shutdown())
     }),
   )
 
@@ -345,7 +332,7 @@ describe("LSPClient interop", () => {
       yield* writeFile(file, "class C {}\n")
       yield* writeFile(related, "class D {}\n")
 
-      const client = yield* createClient(spawnFakeServer())
+      const client = yield* createScopedClient(spawnFakeServer())
 
       yield* Effect.promise(() =>
         client.connection.sendRequest("test/configure-pull-diagnostics", {
@@ -391,8 +378,6 @@ describe("LSPClient interop", () => {
 
       expect(client.diagnostics.get(file)?.[0]?.message).toBe("current file")
       expect(client.diagnostics.get(related)?.[0]?.message).toBe("workspace file")
-
-      yield* Effect.promise(() => client.shutdown())
     }),
   )
 
@@ -402,7 +387,7 @@ describe("LSPClient interop", () => {
       const file = path.join(test.directory, "client.cs")
       yield* writeFile(file, "class C {}\n")
 
-      const client = yield* createClient(spawnFakeServer())
+      const client = yield* createScopedClient(spawnFakeServer())
 
       yield* Effect.promise(() =>
         client.connection.sendRequest("test/configure-pull-diagnostics", {
@@ -419,8 +404,6 @@ describe("LSPClient interop", () => {
       yield* Effect.promise(() => client.waitForDiagnostics({ path: file, version, mode: "full" }))
 
       expect(Date.now() - started).toBeLessThan(1_000)
-
-      yield* Effect.promise(() => client.shutdown())
     }),
   )
 })
