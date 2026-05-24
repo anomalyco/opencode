@@ -1,0 +1,30 @@
+name: OpenCode PR Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issues:
+    types: [opened]
+jobs:
+  opencode:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Restore OpenCode auth
+        run: |
+          mkdir -p ~/.local/share/opencode
+          echo "${{ secrets.OPENCODE_AUTH }}" | base64 -d > ~/.local/share/opencode/auth.json
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        with:
+          model: opencode/deepseek-v4-flash
+          prompt: |
+            If this is a pull request: review it thoroughly, check for bugs, security issues, performance problems, style violations. Be specific with line numbers.
+            If this is an issue: read it carefully and post a helpful response with setup instructions, code examples, or troubleshooting steps to resolve it.
