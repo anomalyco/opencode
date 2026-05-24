@@ -1,6 +1,24 @@
 import { createEffect, createSignal, on, onCleanup, Show, type JSX } from "solid-js"
 import { arrayBufferFromMediaValue } from "../../pierre/media"
 
+// FORK-BEGIN: textLayer 选区边界机制(endOfContent + .selecting class)
+// pdfjs-dist 5.6.205 不导出 TextLayerBuilder,raw TextLayer class 不带这层处理。
+// 不修就会 ① 选两行变选一页(浏览器沿 DOM order 扩展,跨整页 spans) ② 选区中间字"没底色"
+// (DOM 顺序 ≠ 视觉顺序,部分 span 在 range 外)。
+// 配套 CSS 在 pdfjs-dist/web/pdf_viewer.css `.textLayer .endOfContent` + `.textLayer.selecting`。
+// 详 docs/features/office-选中加聊天/3-changelog.md § R4 override 论证。
+// [override-blacklist] [feat: office-选中加聊天] 2026-05-25
+let pdfTextSelectionMouseupHandlerInstalled = false
+function ensurePdfTextSelectionMouseupHandler() {
+  if (pdfTextSelectionMouseupHandlerInstalled) return
+  if (typeof document === "undefined") return
+  pdfTextSelectionMouseupHandlerInstalled = true
+  document.addEventListener("mouseup", () => {
+    document.querySelectorAll(".textLayer.selecting").forEach((el) => el.classList.remove("selecting"))
+  })
+}
+// FORK-END
+
 type Status = "loading" | "rendering" | "ready" | "error"
 
 let pdfjsLoader:
@@ -130,6 +148,18 @@ export function PdfViewer(props: {
             viewport,
           })
           await textLayer.render()
+          // FORK-BEGIN: 选区边界 — 加 .endOfContent 哨兵 + .selecting class 切换
+          // 详模块顶部 ensurePdfTextSelectionMouseupHandler 注释。
+          // [override-blacklist] [feat: office-选中加聊天] 2026-05-25
+          const endOfContent = document.createElement("div")
+          endOfContent.className = "endOfContent"
+          textLayerDiv.appendChild(endOfContent)
+          textLayerDiv.addEventListener("mousedown", (e) => {
+            if ((e as MouseEvent).button !== 0) return
+            textLayerDiv.classList.add("selecting")
+          })
+          ensurePdfTextSelectionMouseupHandler()
+          // FORK-END
         }
         state.wrap.appendChild(textLayerDiv)
       } catch {

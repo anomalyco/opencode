@@ -116,6 +116,63 @@ backlog 项:
 | v3 | `IframeSelectionProvider`,HTML 预览 iframe 选区(postMessage 协议) | user 真反馈"HTML 预览选不到字"再启动 |
 | v∞ | `OcrSelectionProvider`,图片框选 → OCR | 等 OCR feat 立项时一起 |
 
+## Follow-up — 2026-05-25 第 2 轮真桌面 QA 暴露的 3 个 bug + R4 override
+
+### 第 1 轮 QA 暴露 bug(已修)
+
+- **PDF/office 预览右键菜单全灰显**(2026-05-25 user 实测):root layout.tsx:2371 全局 `select-none` Tailwind class 只白名单 input/textarea/contenteditable → textLayer 的普通 `<span>` 继承到 select-none → 文字无法选中。chat 能选靠 message-part.css:709-710 单独 user-select:text override。
+  - **修法**:file-tabs.tsx 的 pdf-viewer wrap class 加 `select-text`,user-select CSS 继承传到 textLayer → span。`52734f9d9` 1 笔 hot-fix commit。
+
+### 第 2 轮 QA 暴露 bug(R4 override 修)
+
+第 1 轮修完文字能选了,但暴露 3 个新问题:
+
+| # | 现象 | 根因 | 性质 |
+|---|---|---|---|
+| 1 | 选两行 → 选区扩到整页 | pdfjs-dist 5.6.205 不导出 TextLayerBuilder,我们用 raw `TextLayer` class 渲染。raw class 不带 `.endOfContent` 哨兵元素 + `.selecting` class 切换机制 — 浏览器 native selection 沿 DOM order 扩展到整页 spans | 缺机制 |
+| 2 | 选区中间多字"没底色" | textLayer span 绝对定位 + DOM 顺序 ≠ 视觉顺序 — 部分视觉中间的 span 落在 range start-end 之外,没 selection highlight | bug 1 视觉副产物 |
+| 3 | pptx 完全选不到 | 验证 pptx → PDF 有 `/Type/Font` + `/ToUnicode` + BT...ET text block,理论可选。但 PowerPoint 幻灯片每段文字独立 span + 视觉/DOM 顺序撞得更严重 → 视觉上看像"完全选不到字" | bug 1/2 在 pptx 上的恶化形态 |
+
+### R4 override 论证(单 person 场景复核报告)
+
+**override 对象**:`packages/ui/src/components/document-viewer/pdf.tsx`(R4 黑名单 `packages/ui/`)
+
+**改动**:
+- 文件顶部加模块级 singleton `ensurePdfTextSelectionMouseupHandler()` — 一次性安装 document.mouseup listener,释放任意 textLayer 上的 `.selecting` class
+- textLayer.render() 完成后追加 `<div class="endOfContent">` 哨兵 + textLayer mousedown listener 加 `.selecting` class
+- 配套 CSS 已在 `pdfjs-dist/web/pdf_viewer.css` 内置(`.textLayer .endOfContent` + `.textLayer.selecting .endOfContent`)无需新加
+
+**wrapper 不可行性论证**:
+
+| 替代方案 | 不可行理由 |
+|---|---|
+| file-tabs.tsx wrap 层 MutationObserver 注入 endOfContent | ① textLayer render 异步,observer 触发时机难判定(spans 还在追加)。② 跨 page 切换 / unmount / resize 需手动 cleanup,observer 生命周期跟 PdfViewer 解耦,**fragility 远超改 pdf.tsx 10 行** |
+| 用 pdfjs-dist PageView 替换 raw TextLayer 调用 | pdfjs-dist 5.6.205 NPM 包不导出 PageViewBuilder / TextLayerBuilder 等高层类(grep build/pdf.mjs 验证)。要拿这些类必须直接 import 内部模块路径或自己实现,**比改 pdf.tsx 大 10 倍** |
+| 在外层加 document-level 选区监听 + 自己实现边界 | 等于在 SolidJS 组件外重写浏览器 native selection 行为,**与 PDF.js 现有 textLayer 渲染解耦失败**。endOfContent 必须挂在 textLayer 容器内 |
+
+→ wrapper 替代均不可行,R4 override 是合理路径。
+
+**风险评估**:
+
+- ✅ **跟随上游升级 0 冲突**:改动是 textLayer.render() 完成后**追加** DOM + listener,不动 pdf.tsx 既有逻辑结构。上游升级 textLayer API 时,FORK-BEGIN/END 块容易 spot + 适配
+- ✅ **改动范围最小**:总 ~25 行(模块顶 11 行 helper + render 后追加 ~14 行),全包在 FORK 标记内
+- ✅ **复用 pdfjs CSS**:`.textLayer .endOfContent` / `.textLayer.selecting` 是 pdf_viewer.css 原生 class,我们只是补 DOM + class 切换 — pdfjs 升级 CSS class 改名时跟其他 pdfjs 使用方一起踩坑,不是 fork 独有风险
+- ✅ **mouseup 全局 singleton**:用 `pdfTextSelectionMouseupHandlerInstalled` flag 保证只 install 一次,SSR 安全(`typeof document === "undefined"` 检查)
+- ⚠️ **per-textLayer mousedown listener**:100 页 PDF = 100 个 mousedown listener。listener 跟 textLayerDiv 一起 GC(textLayerDiv 在 cleanup 时 replaceChildren 移除)— 无 leak,但大文件略增内存
+- ⚠️ **touch 事件未处理**:pdf.js viewer 还处理 touchstart/touchend,v1 mouse-only。移动端不在 DeskFox 桌面范围,留 backlog
+
+**配额消耗**:1 笔(R4 当季 2 笔配额,本次第 1 笔)。
+
+**user 二次确认**:2026-05-25 user 在 office-选中加聊天 第 2 轮 QA 后看完三个方案(A/B/C)+ 我推荐 + wrapper 不可行性,回复"A" → 点头 commit。
+
+### override commit
+
+- `<待填>` fix(office-选中加聊天): pdf.tsx 加 endOfContent + .selecting class 修选区越界 `[override-blacklist]` `[feat: office-选中加聊天]` `[bug-repro: 选两行变选一页 + 字跳过没底色 + pptx 选不到]`
+
+(commit hash 落地后回填)
+
+---
+
 ## 已知 limitation(spec 已写明)
 
 1. ❌ office 公式 / 艺术字 / SmartArt / 图表 / 嵌入图片中的文字(soffice 光栅化)→ UI 灰显 + 用本机软件打开兜底
