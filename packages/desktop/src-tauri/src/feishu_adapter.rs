@@ -334,6 +334,9 @@ pub struct AccountSummary {
     pub enabled: Option<bool>,
     pub model: Option<ModelRef>,
     pub bot_name: Option<String>,
+    /// [feat: feishu-create-group-toggle-gui] 2026-05-24 — 当前 enableAutoGroupCreate
+    #[serde(default)]
+    pub enable_auto_group_create: Option<bool>,
 }
 
 /// adapter wire request 转 camelCase
@@ -388,6 +391,8 @@ pub async fn feishu_save_account(
         enabled: None,
         model: None,
         bot_name: r.bot_name,
+        // 新绑账号默认 false(saveAccount normalizeAccount 已落,这里不必查询再传)
+        enable_auto_group_create: Some(false),
     })
 }
 
@@ -441,6 +446,66 @@ pub async fn feishu_update_account_model(
     Ok(r.updated)
 }
 
+// ============================================================
+// FORK: per-account settings partial update
+// [feat: feishu-create-group-toggle-gui] 2026-05-24
+// ============================================================
+
+/// Tauri 命令请求 — partial settings 更新(model + enableAutoGroupCreate 任一子集)。
+/// 字段都 Option:`None` = 不动,`Some(value)` = 改;model 的 `Some(None)` 用 nested Option
+/// 区分(Some(Some(m))=设 model,Some(None)=清,None=不动)。
+#[derive(Debug, Serialize, Deserialize, specta::Type)]
+pub struct UpdateAccountSettingsRequest {
+    pub account_id: String,
+    /// Some(Some(m)) = 设 model;Some(None) = 清除走 default;None = 不动
+    #[serde(default)]
+    pub model: Option<Option<ModelRef>>,
+    /// Some(true/false) = 改 flag;None = 不动
+    #[serde(default)]
+    pub enable_auto_group_create: Option<bool>,
+}
+
+#[derive(Serialize)]
+struct UpdateAccountSettingsWire<'a> {
+    #[serde(rename = "accountId")]
+    account_id: &'a str,
+    /// 仅当 Outer Some 时序列化(serde_json::Value::Null = nested None 表"清",省略 = 不动)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model: Option<Option<ModelRefWire<'a>>>,
+    #[serde(
+        rename = "enableAutoGroupCreate",
+        skip_serializing_if = "Option::is_none"
+    )]
+    enable_auto_group_create: Option<bool>,
+}
+
+#[derive(Deserialize)]
+struct UpdateAccountSettingsWireResponse {
+    updated: bool,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn feishu_update_account_settings(
+    state: State<'_, AdapterState>,
+    request: UpdateAccountSettingsRequest,
+) -> Result<bool, String> {
+    let ready = current_ready(&state)?;
+    let wire = UpdateAccountSettingsWire {
+        account_id: &request.account_id,
+        model: request.model.as_ref().map(|inner| {
+            inner.as_ref().map(|m| ModelRefWire {
+                provider_id: &m.provider_id,
+                model_id: &m.model_id,
+            })
+        }),
+        enable_auto_group_create: request.enable_auto_group_create,
+    };
+    let r: UpdateAccountSettingsWireResponse =
+        post_json(&ready, "/accounts/update-settings", &wire).await?;
+    Ok(r.updated)
+}
+
 /// 列 opencode 已配 providers + models(给 GUI 选 per-account model)
 ///
 /// 返回 JSON 字符串(specta 不支持 serde_json::Value),前端 JSON.parse。
@@ -476,6 +541,9 @@ struct ListAccountWireItem {
     model: Option<ListAccountModelWire>,
     #[serde(rename = "botName", default)]
     bot_name: Option<String>,
+    /// [feat: feishu-create-group-toggle-gui] 2026-05-24
+    #[serde(rename = "enableAutoGroupCreate", default)]
+    enable_auto_group_create: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -530,6 +598,7 @@ pub async fn feishu_list_accounts(
                 model_id: m.model_id,
             }),
             bot_name: w.bot_name,
+            enable_auto_group_create: w.enable_auto_group_create,
         })
         .collect())
 }

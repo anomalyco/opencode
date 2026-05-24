@@ -10,7 +10,7 @@ import "./feishu-edit-account-dialog.css"
 import { useLanguage } from "@/context/language"
 import {
   feishuListProviders,
-  feishuUpdateAccountModel,
+  feishuUpdateAccountSettings,
   type ModelRef,
   type ProvidersResponse,
 } from "@/utils/feishu-config"
@@ -18,6 +18,8 @@ import {
 export const FeishuEditAccountDialog: Component<{
   accountId: string
   currentModel: ModelRef | null | undefined
+  /** [feat: feishu-create-group-toggle-gui] 2026-05-24 */
+  currentEnableAutoGroupCreate?: boolean
   onSaved?: () => void
 }> = (props) => {
   const dialog = useDialog()
@@ -25,6 +27,10 @@ export const FeishuEditAccountDialog: Component<{
   const [useDefault, setUseDefault] = createSignal(!props.currentModel)
   const [providerID, setProviderID] = createSignal(props.currentModel?.provider_id ?? "")
   const [modelID, setModelID] = createSignal(props.currentModel?.model_id ?? "")
+  // [feat: feishu-create-group-toggle-gui] 2026-05-24
+  const [enableGroupCreate, setEnableGroupCreate] = createSignal(
+    props.currentEnableAutoGroupCreate ?? false,
+  )
   const [saving, setSaving] = createSignal(false)
   const [saveError, setSaveError] = createSignal<string | null>(null)
 
@@ -87,10 +93,15 @@ export const FeishuEditAccountDialog: Component<{
     setSaving(true)
     setSaveError(null)
     try {
-      const payload: ModelRef | null = useDefault()
+      // [feat: feishu-create-group-toggle-gui] 2026-05-24
+      // 一次 partial update 提交 model + flag(只发生变化的字段)
+      const modelPayload: ModelRef | null = useDefault()
         ? null
         : { provider_id: providerID(), model_id: modelID() }
-      await feishuUpdateAccountModel(props.accountId, payload)
+      await feishuUpdateAccountSettings(props.accountId, {
+        model: modelPayload,
+        enableAutoGroupCreate: enableGroupCreate(),
+      })
       props.onSaved?.()
       dialog.close()
     } catch (err) {
@@ -136,6 +147,14 @@ export const FeishuEditAccountDialog: Component<{
                 void handleSave()
               }}
             >
+              {/* 模型 分隔块标题 [feat: feishu-create-group-toggle-gui] 2026-05-24 */}
+              <div class="flex items-center gap-2 self-stretch">
+                <span class="text-13-medium text-text-weak">
+                  {language.t("settings.feishu.edit.modelSectionTitle")}
+                </span>
+                <div class="flex-1 h-px bg-border-weak" />
+              </div>
+
               {/* 模式选择 — checkbox + 动态 hint */}
               <div class="flex flex-col gap-1 self-stretch">
                 <label class="flex items-center gap-2 cursor-pointer select-none">
@@ -213,6 +232,30 @@ export const FeishuEditAccountDialog: Component<{
                     disabled={useDefault() || !providerID()}
                   />
                 </div>
+              </div>
+
+              {/* 高级能力 分隔块 [feat: feishu-create-group-toggle-gui] 2026-05-24 */}
+              <div class="flex items-center gap-2 self-stretch">
+                <span class="text-13-medium text-text-weak">
+                  {language.t("settings.feishu.edit.advancedSectionTitle")}
+                </span>
+                <div class="flex-1 h-px bg-border-weak" />
+              </div>
+
+              <div class="flex flex-col gap-1 self-stretch">
+                <label class="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={enableGroupCreate()}
+                    onChange={(e) => setEnableGroupCreate(e.currentTarget.checked)}
+                  />
+                  <span class="text-14-medium">
+                    {language.t("settings.feishu.edit.enableAutoGroupCreate.label")}
+                  </span>
+                </label>
+                <p class="text-13-regular text-text-weak pl-6">
+                  {language.t("settings.feishu.edit.enableAutoGroupCreate.hint")}
+                </p>
               </div>
 
               {/* error */}

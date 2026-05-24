@@ -1,7 +1,7 @@
 // [fork-only] localhost server 单测
 // [feat: feishu-bridge] 2026-05-08
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import { startServer } from "../server"
 
 // ============================================================
@@ -369,6 +369,7 @@ describe("onReady callback", () => {
     }
   })
 })
+
 
 // ============================================================
 // 随机端口 + 默认随机 password

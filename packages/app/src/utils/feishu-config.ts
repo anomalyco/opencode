@@ -76,6 +76,8 @@ export interface AccountSummary {
   enabled?: boolean
   model?: ModelRef | null
   bot_name?: string | null
+  /** [feat: feishu-create-group-toggle-gui] 2026-05-24 当前 enableAutoGroupCreate flag */
+  enable_auto_group_create?: boolean | null
 }
 
 /** opencode `/config/providers` 响应形状(Rust JSON value 直传) */
@@ -115,7 +117,11 @@ export async function feishuDeleteAccount(accountId: string): Promise<boolean> {
   })
 }
 
-/** 更新指定账号的 model(model=null 清除,走全局 default) */
+/** 更新指定账号的 model(model=null 清除,走全局 default)
+ *
+ * @deprecated 用 `feishuUpdateAccountSettings` 取代 — 同 endpoint 也能改 model。
+ * 旧函数保留是为了向后兼容已有 callsite,新代码请用 settings 形式。
+ */
 export async function feishuUpdateAccountModel(
   accountId: string,
   model: ModelRef | null,
@@ -123,6 +129,39 @@ export async function feishuUpdateAccountModel(
   return await invoke<boolean>("feishu_update_account_model", {
     request: { account_id: accountId, model },
   })
+}
+
+/** Partial 更新账号 settings — 当前支持 model + enableAutoGroupCreate。
+ *
+ * 字段语义(对齐 Rust Option<Option<T>> 编码):
+ *   - model: undefined = 不动;null = 清除走 default;ModelRef = 设置
+ *   - enableAutoGroupCreate: undefined = 不动;true / false = 改
+ *
+ * [feat: feishu-create-group-toggle-gui] 2026-05-24
+ */
+export interface UpdateAccountSettingsPatch {
+  /** undefined 不动 / null 清除 / ModelRef 设置 */
+  model?: ModelRef | null
+  /** undefined 不动 / true|false 改 */
+  enableAutoGroupCreate?: boolean
+}
+
+export async function feishuUpdateAccountSettings(
+  accountId: string,
+  patch: UpdateAccountSettingsPatch,
+): Promise<boolean> {
+  // Rust 端 Option<Option<ModelRef>>:
+  //   undefined → 不传字段 → Rust 视为 None(不动)
+  //   null → 传 null → Rust 视为 Some(None)(清)
+  //   object → 传 object → Rust 视为 Some(Some(m))(设)
+  const request: Record<string, unknown> = { account_id: accountId }
+  if (patch.model !== undefined) {
+    request.model = patch.model
+  }
+  if (patch.enableAutoGroupCreate !== undefined) {
+    request.enable_auto_group_create = patch.enableAutoGroupCreate
+  }
+  return await invoke<boolean>("feishu_update_account_settings", { request })
 }
 
 /** 拉 opencode 已配的 providers + models 列表(选 model 用) */

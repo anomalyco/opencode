@@ -1074,8 +1074,14 @@ export const dict = {
   "settings.feishu.account.edit": "Edit",
   "settings.feishu.account.modelLabel": "model",
   "settings.feishu.account.modelDefault": "(use default)",
-  "settings.feishu.edit.title": "Edit account model",
-  "settings.feishu.edit.description": "Pick the provider and model used for chats with Lark account {{account}}. Leave empty to use the DeskFox global default.",
+  "settings.feishu.edit.title": "Edit account settings",
+  "settings.feishu.edit.description": "Configure model and advanced capabilities for Lark account {{account}}.",
+  // FORK: [feat: feishu-create-group-toggle-gui] 2026-05-24
+  "settings.feishu.edit.modelSectionTitle": "Model",
+  "settings.feishu.edit.advancedSectionTitle": "Advanced",
+  "settings.feishu.edit.enableAutoGroupCreate.label": "Allow AI to auto-create groups",
+  "settings.feishu.edit.enableAutoGroupCreate.hint":
+    "When on, saying \"create a group\" in DM makes AI send a confirmation card — group is only created after you tap confirm. Off by default to prevent prompt-injection-induced group creation.",
   "settings.feishu.edit.saving": "Saving...",
   "settings.feishu.edit.providerLabel": "Provider",
   "settings.feishu.edit.modelLabel": "Model",
