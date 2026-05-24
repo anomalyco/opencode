@@ -162,7 +162,6 @@ description: Second test skill.
 `,
           ),
         ],
-        { concurrency: "unbounded" },
       )
 
       const list = (yield* Skill.use.all()).filter((s) => s.location !== "<built-in>")
@@ -385,7 +384,6 @@ description: A skill in the .agents/skills directory.
 `,
           ),
         ],
-        { concurrency: "unbounded" },
       )
 
       const list = (yield* Skill.use.all()).filter((s) => s.location !== "<built-in>")
@@ -425,7 +423,6 @@ description: A skill in the .agents/skills directory.
 `,
           ),
         ],
-        { concurrency: "unbounded" },
       )
 
       const list = (yield* Skill.use.all()).filter((s) => s.location !== "<built-in>")
@@ -474,7 +471,6 @@ description: A skill in the .opencode/skill directory.
 `,
           ),
         ],
-        { concurrency: "unbounded" },
       )
 
       const list = (yield* Skill.use.all()).filter((s) => s.location !== "<built-in>")
@@ -534,7 +530,6 @@ description: A skill in the .opencode/skills directory.
 `,
           ),
         ],
-        { concurrency: "unbounded" },
       )
 
       expect((yield* Skill.use.dirs()).length).toBe(4)
