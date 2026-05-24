@@ -46,13 +46,18 @@ const log = Log.create({ service: "session" })
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
 
+function localTimestamp(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${date.getMilliseconds().toString().padStart(3, '0')}`
+}
+
 function createDefaultTitle(isChild = false) {
-  return (isChild ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString()
+  return (isChild ? childTitlePrefix : parentTitlePrefix) + localTimestamp(new Date())
 }
 
 export function isDefaultTitle(title: string) {
   return new RegExp(
-    `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$`,
+    `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}$`,
   ).test(title)
 }
 

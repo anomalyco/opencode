@@ -19,6 +19,11 @@ const levelPriority: Record<Level, number> = {
   WARN: 2,
   ERROR: 3,
 }
+function localISOString(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
 const keep = 10
 const initializedRunID = "OPENCODE_LOG_INITIALIZED_RUN_ID"
 
@@ -69,7 +74,7 @@ export async function init(options: Options) {
   if (options.print) return
   logpath = path.join(
     Global.Path.log,
-    options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
+    options.dev ? "dev.log" : localISOString(new Date()).replace(/:/g, "") + ".log",
   )
   const runID = process.env.OPENCODE_RUN_ID
   const shouldTruncate = !options.dev || !runID || process.env[initializedRunID] !== runID
@@ -137,7 +142,7 @@ export function create(tags?: Record<string, any>) {
     const next = new Date()
     const diff = next.getTime() - last
     last = next.getTime()
-    return [next.toISOString().split(".")[0], "+" + diff + "ms", prefix, message].filter(Boolean).join(" ") + "\n"
+    return [localISOString(next), "+" + diff + "ms", prefix, message].filter(Boolean).join(" ") + "\n"
   }
   const result: Logger = {
     debug(message?: any, extra?: Record<string, any>) {
