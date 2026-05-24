@@ -196,8 +196,13 @@ export function Titlebar() {
 
   return (
     <header
-      class="h-10 shrink-0 bg-background-base relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
-      style={{ "min-height": minHeight() }}
+      class="h-10 shrink-0 relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
+      style={{
+        "min-height": minHeight(),
+        "background-color": "color-mix(in srgb, var(--background-base) 75%, transparent)",
+        "backdrop-filter": "blur(24px)",
+        "border-bottom": "1px solid var(--border-weak-base)",
+      }}
       data-tauri-drag-region
       onMouseDown={drag}
       onDblClick={maximize}
@@ -262,6 +267,34 @@ export function Titlebar() {
               </div>
             </Button>
           </TooltipKeybind>
+
+          <Show when={params.dir}>
+            <TooltipKeybind
+              class="hidden md:flex shrink-0"
+              placement="bottom"
+              title={language.t("command.session.toggle") || "Toggle Chat"}
+              keybind={command.keybind("session.toggle")}
+            >
+              <Button
+                variant="ghost"
+                class="group/session-toggle titlebar-icon w-8 h-6 p-0 box-border"
+                onClick={() => layout.session.toggle()}
+                aria-label={language.t("command.session.toggle") || "Toggle Chat"}
+                aria-expanded={layout.session.opened()}
+              >
+                <div class="relative flex items-center justify-center size-4">
+                  <Icon
+                    size="small"
+                    name="speech-bubble"
+                    classList={{
+                      "text-icon-strong": layout.session.opened(),
+                      "text-icon-weak": !layout.session.opened(),
+                    }}
+                  />
+                </div>
+              </Button>
+            </TooltipKeybind>
+          </Show>
           <div class="hidden xl:flex items-center shrink-0">
             <Show when={params.dir}>
               <TooltipKeybind

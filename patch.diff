@@ -1,0 +1,43 @@
+--- packages/app/src/components/spreadsheet-viewer.tsx
++++ packages/app/src/components/spreadsheet-viewer.tsx
+@@ -254,6 +254,15 @@
+     // Apply initial dark mode immediately
+     veritlySdk(instance).toggleDarkMode(untrack(() => theme.mode()) === "dark")
+   })
+ 
+   // Reactively inject HTML UI colors when theme changes
+   createEffect(() => {
+@@ -326,6 +335,14 @@
+         ${cssVars.join('\n        ')}
+       }
+     `
++
++    // Update Canvas gridlines dynamically if workbook is loaded
++    try {
++      const fWorkbook = instance.univerAPI.getActiveWorkbook()
++      if (fWorkbook) {
++        fWorkbook.getSheets().forEach(s => s.setGridLinesColor(getModeBase('border-base', '#dbdbdb')))
++      }
++    } catch (e) {}
+   })
+ 
+   createEffect(() => {
+@@ -334,6 +351,18 @@
+ 
+     veritlySdk(instance)
+       .setSessionId(params.id, cur)
++      .then(() => {
++        const activeTheme = theme.themes()[theme.themeId()]
++        if (!activeTheme) return
++        const isDark = theme.mode() === "dark"
++        const tokens = resolveThemeVariant(isDark ? activeTheme.dark : activeTheme.light, isDark)
++        const borderBase = (tokens?.['border-base'] as string) || '#dbdbdb'
++        
++        const fWorkbook = instance.univerAPI.getActiveWorkbook()
++        if (fWorkbook) {
++          fWorkbook.getSheets().forEach(s => s.setGridLinesColor(borderBase))
++        }
++      })
+       .catch((err) => {
+         console.error("[Univer] Failed to attach session to Univer instance:", err)
+       })

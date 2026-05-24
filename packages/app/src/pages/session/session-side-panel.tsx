@@ -7,6 +7,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Mark } from "@opencode-ai/ui/logo"
+import { Icon } from "@opencode-ai/ui/icon"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
@@ -56,7 +57,7 @@ export function SessionSidePanel(props: {
   const reviewTab = createMemo(() => isDesktop())
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
-    if (reviewOpen()) return `calc(100% - ${layout.session.width()}px)`
+    if (reviewOpen()) return layout.session.opened() ? `calc(100% - ${layout.session.width()}px)` : "100%"
     return `${layout.fileTree.width()}px`
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
@@ -167,8 +168,8 @@ export function SessionSidePanel(props: {
   const fileTreeTab = () => layout.fileTree.tab()
 
   const setFileTreeTabValue = (value: string) => {
-    if (value !== "changes" && value !== "all") return
-    layout.fileTree.setTab(value)
+    if (value !== "changes" && value !== "all" && value !== "dashboards" && value !== "workflows") return
+    layout.fileTree.setTab(value as any)
   }
 
   const showAllFiles = () => {
@@ -364,7 +365,7 @@ export function SessionSidePanel(props: {
                 <DragDropSensors />
                 <ConstrainDragYAxis />
                 <Tabs value={activeTab()} onChange={openTab} class="flex h-full min-h-0 flex-col">
-                  <div class="sticky top-0 shrink-0 flex">
+                  <div class="sticky top-0 shrink-0 flex border-b border-border-weak-base">
                     <Tabs.List
                       ref={(el: HTMLDivElement) => {
                         const stop = createFileTabListSync({ el, contextOpen })
@@ -501,24 +502,56 @@ export function SessionSidePanel(props: {
             />
             <div
               class="h-full flex flex-col overflow-hidden group/filetree"
-              classList={{ "border-l border-border-weaker-base": reviewOpen() }}
+              classList={{ "border-l border-border-weak-base": reviewOpen() }}
             >
               <Tabs
-                variant="pill"
                 value={fileTreeTab()}
                 onChange={setFileTreeTabValue}
                 class="h-full"
                 data-scope="filetree"
+                style={{
+                  "--tabs-compact-pill-height": "40px",
+                  "--tabs-bar-height": "48px",
+                  "--tabs-compact-pill-padding-x": "4px",
+                }}
               >
-                <Tabs.List>
-                  <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
-                    {reviewCount()}{" "}
-                    {language.t(reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
-                  </Tabs.Trigger>
-                  <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
-                    {language.t("session.files.all")}
-                  </Tabs.Trigger>
-                </Tabs.List>
+                <div class="border-b border-border-weak-base">
+                  <Tabs.List class="flex w-full h-[48px]">
+                    <Tabs.Trigger value="all" class="flex-1" classes={{ button: "group w-full h-full" }}>
+                      <div class="flex flex-col items-center justify-center gap-1 text-text-weak group-hover:text-text-base group-data-[selected]:text-text-strong group-data-[selected]:font-semibold transition-colors h-full w-full">
+                        <Icon name="code-lines" class="w-[16px] h-[16px] text-icon-weak group-hover:text-icon-interactive-base group-data-[selected]:text-icon-interactive-base transition-colors" />
+                        <span class="text-[10px] leading-none">Files</span>
+                      </div>
+                    </Tabs.Trigger>
+                    <Tabs.Trigger value="dashboards" class="flex-1" classes={{ button: "group w-full h-full" }}>
+                      <div class="flex flex-col items-center justify-center gap-1 text-text-weak group-hover:text-text-base group-data-[selected]:text-text-strong group-data-[selected]:font-semibold transition-colors h-full w-full">
+                        <Icon name="layout-bottom" class="w-[16px] h-[16px] text-icon-weak group-hover:text-icon-agent-plan-base group-data-[selected]:text-icon-agent-plan-base transition-colors" />
+                        <span class="text-[10px] leading-none">Dashboards</span>
+                      </div>
+                    </Tabs.Trigger>
+                    <Tabs.Trigger value="workflows" class="flex-1" classes={{ button: "group w-full h-full" }}>
+                      <div class="flex flex-col items-center justify-center gap-1 text-text-weak group-hover:text-text-base group-data-[selected]:text-text-strong group-data-[selected]:font-semibold transition-colors h-full w-full">
+                        <Icon name="branch" class="w-[16px] h-[16px] text-icon-weak group-hover:text-icon-agent-docs-base group-data-[selected]:text-icon-agent-docs-base transition-colors" />
+                        <span class="text-[10px] leading-none">Workflows</span>
+                      </div>
+                    </Tabs.Trigger>
+                    <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "group w-full h-full" }}>
+                      <div class="flex flex-col items-center justify-center gap-1 text-text-weak group-hover:text-text-base group-data-[selected]:text-text-strong group-data-[selected]:font-semibold transition-colors h-full w-full">
+                        <div class="relative">
+                          <Icon name="circle-check" class="w-[16px] h-[16px] text-icon-weak group-hover:text-icon-success-base group-data-[selected]:text-icon-success-base transition-colors" />
+                          <Show when={hasReview()}>
+                            <div class="absolute -top-1.5 -right-2.5 flex h-[12px] min-w-[12px] items-center justify-center rounded-full bg-border-stronger-base px-1 text-[8px] font-medium text-text-weak tabular-nums">
+                              {reviewCount()}
+                            </div>
+                          </Show>
+                        </div>
+                        <span class="text-[10px] leading-none flex items-center gap-1">
+                          Audit
+                        </span>
+                      </div>
+                    </Tabs.Trigger>
+                  </Tabs.List>
+                </div>
                 <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
                   <Switch>
                     <Match when={hasReview()}>
@@ -586,6 +619,12 @@ export function SessionSidePanel(props: {
                       />
                     </Match>
                   </Switch>
+                </Tabs.Content>
+                <Tabs.Content value="dashboards" class="bg-background-stronger px-3 py-0 flex-1 flex flex-col items-center justify-center text-text-weak">
+                  <div class="text-12-regular text-center">Dashboards coming soon</div>
+                </Tabs.Content>
+                <Tabs.Content value="workflows" class="bg-background-stronger px-3 py-0 flex-1 flex flex-col items-center justify-center text-text-weak">
+                  <div class="text-12-regular text-center">Workflows coming soon</div>
                 </Tabs.Content>
               </Tabs>
             </div>

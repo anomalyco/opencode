@@ -1,6 +1,6 @@
 ;(function () {
   var key = "opencode-theme-id"
-  var themeId = localStorage.getItem(key) || "oc-2"
+  var themeId = localStorage.getItem(key) || "default"
 
   if (themeId === "oc-1") {
     themeId = "oc-2"
@@ -16,7 +16,7 @@
   document.documentElement.dataset.theme = themeId
   document.documentElement.dataset.colorScheme = mode
 
-  if (themeId === "oc-2") return
+  if (themeId === "default") return
 
   var css = localStorage.getItem("opencode-theme-css-" + mode)
   if (css) {

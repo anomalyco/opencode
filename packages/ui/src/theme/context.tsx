@@ -17,7 +17,8 @@ const STORAGE_KEYS = {
 const THEME_STYLE_ID = "oc-theme"
 
 function normalize(id: string | null | undefined) {
-  return id === "oc-1" ? "oc-2" : id
+  if (id === "oc-1") return "oc-2"
+  return id || "default"
 }
 
 function clear() {
@@ -44,7 +45,7 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
   const tokens = resolveThemeVariant(variant, isDark)
   const css = themeToCss(tokens)
 
-  if (themeId !== "oc-2") {
+  if (themeId !== "default") {
     try {
       localStorage.setItem(isDark ? STORAGE_KEYS.THEME_CSS_DARK : STORAGE_KEYS.THEME_CSS_LIGHT, css)
     } catch {}
@@ -63,7 +64,7 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
 }
 
 function cacheThemeVariants(theme: DesktopTheme, themeId: string) {
-  if (themeId === "oc-2") return
+  if (themeId === "default") return
   for (const mode of ["light", "dark"] as const) {
     const isDark = mode === "dark"
     const variant = isDark ? theme.dark : theme.light
@@ -80,7 +81,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   init: (props: { defaultTheme?: string; onThemeApplied?: (theme: DesktopTheme, mode: "light" | "dark") => void }) => {
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES as Record<string, DesktopTheme>,
-      themeId: normalize(props.defaultTheme) ?? "oc-2",
+      themeId: normalize(props.defaultTheme) ?? "default",
       colorScheme: "system" as ColorScheme,
       mode: getSystemMode(),
       previewThemeId: null as string | null,
@@ -144,7 +145,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       }
       setStore("themeId", next)
       localStorage.setItem(STORAGE_KEYS.THEME_ID, next)
-      if (next === "oc-2") {
+      if (next === "default") {
         clear()
         return
       }

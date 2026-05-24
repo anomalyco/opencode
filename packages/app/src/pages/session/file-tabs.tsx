@@ -503,10 +503,10 @@ export function FileTabContent(props: { tab: string }) {
   )
 
   return (
-    <Tabs.Content value={props.tab} class="relative mt-3 flex min-h-0 flex-1 flex-col overflow-hidden">
+    <Tabs.Content value={props.tab} class="relative flex min-h-0 flex-1 flex-col overflow-hidden" classList={{ "mt-3": !spreadsheet() }}>
       <Switch>
         <Match when={spreadsheet() && state()?.loaded && Boolean(path())}>
-          <div class="flex min-h-0 flex-1 flex-col px-6 py-4">
+          <div class="flex min-h-0 flex-1 flex-col">
             <Show
               when={spreadsheetUnit()}
               fallback={

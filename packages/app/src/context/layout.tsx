@@ -122,7 +122,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const fileTree = value.fileTree
       const migratedFileTree = (() => {
         if (!isRecord(fileTree)) return fileTree
-        if (fileTree.tab === "changes" || fileTree.tab === "all") return fileTree
+        if (fileTree.tab === "changes" || fileTree.tab === "all" || fileTree.tab === "dashboards" || fileTree.tab === "workflows") return fileTree
 
         const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_PANEL_WIDTH
         return {
@@ -169,7 +169,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         return next
       })()
 
-      if (migratedReview === review && migratedFileTree === fileTree && migratedSessionTabs === sessionTabs) {
+      const session = value.session
+      const migratedSession = (() => {
+        if (!isRecord(session)) return session
+        
+        return {
+          ...session,
+          opened: typeof session.opened === "boolean" ? session.opened : true,
+        }
+      })()
+
+      if (migratedReview === review && migratedFileTree === fileTree && migratedSessionTabs === sessionTabs && migratedSession === session) {
         return value
       }
 
@@ -178,6 +188,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         review: migratedReview,
         fileTree: migratedFileTree,
         sessionTabs: migratedSessionTabs,
+        session: migratedSession,
       }
     }
 
@@ -196,9 +207,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         fileTree: {
           opened: true,
           width: DEFAULT_PANEL_WIDTH,
-          tab: "changes" as "changes" | "all",
+          tab: "changes" as "changes" | "all" | "dashboards" | "workflows",
         },
         session: {
+          opened: true,
           width: DEFAULT_SESSION_WIDTH,
         },
         mobileSidebar: {
@@ -367,7 +379,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         opened: createMemo(() => store.fileTree?.opened ?? true),
         width: createMemo(() => store.fileTree?.width ?? DEFAULT_PANEL_WIDTH),
         tab: createMemo(() => store.fileTree?.tab ?? "changes"),
-        setTab(tab: "changes" | "all") {
+        setTab(tab: "changes" | "all" | "dashboards" | "workflows") {
           if (!store.fileTree) {
             setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab })
             return
@@ -404,10 +416,32 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       },
       session: {
+        opened: createMemo(() => store.session?.opened ?? true),
+        open() {
+          if (!store.session) {
+            setStore("session", { opened: true, width: DEFAULT_SESSION_WIDTH })
+            return
+          }
+          setStore("session", "opened", true)
+        },
+        close() {
+          if (!store.session) {
+            setStore("session", { opened: false, width: DEFAULT_SESSION_WIDTH })
+            return
+          }
+          setStore("session", "opened", false)
+        },
+        toggle() {
+          if (!store.session) {
+            setStore("session", { opened: false, width: DEFAULT_SESSION_WIDTH })
+            return
+          }
+          setStore("session", "opened", (x) => !x)
+        },
         width: createMemo(() => store.session?.width ?? DEFAULT_SESSION_WIDTH),
         resize(width: number) {
           if (!store.session) {
-            setStore("session", { width })
+            setStore("session", { opened: true, width })
             return
           }
           setStore("session", "width", width)

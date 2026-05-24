@@ -60,10 +60,24 @@
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
-  --radius-xl: 0.625rem;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-md-xs: 8px;
+  --radius-md-s: 12px;
+  --radius-md-m: 16px;
+  --radius-md-l: 24px;
+  --radius-md-xl: 28px;
+  --radius-md-2xl: 32px;
+  --radius-md-3xl: 48px;
 
   --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-accent: var(--shadow-accent);
+  --shadow-accent-lg: var(--shadow-accent-lg);
+  --shadow-premium: var(--shadow-premium);
   --shadow-xs-border: var(--shadow-xs-border);
   --shadow-xs-border-base: var(--shadow-xs-border-base);
   --shadow-xs-border-select: var(--shadow-xs-border-select);

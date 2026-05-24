@@ -96,7 +96,7 @@ function Sidebar() {
         class="w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden"
       >
         <div class="flex-1 min-h-0 w-full">
-          <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-3 overflow-y-auto no-scrollbar">
+          <div class="h-full w-full flex flex-col items-center gap-4 px-4 py-4 overflow-y-auto no-scrollbar">
             <For each={projects()}>
               {(project) => (
                 <button
@@ -105,7 +105,7 @@ function Sidebar() {
                   aria-current={project.id === current() ? "page" : undefined}
                   data-action="project-switch"
                   data-project={project.id}
-                  class="flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default"
+                  class="flex items-center justify-center size-12 p-1 rounded-lg overflow-hidden transition-all duration-200 ease-out cursor-default hover:scale-105 active:scale-95"
                   classList={{
                     "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover":
                       project.id === current(),
@@ -146,7 +146,7 @@ function Sidebar() {
 
       <Show when={layout.sidebar.opened() && current()}>
         <div class="w-72 border-r border-border-weak-base flex h-full min-h-0 min-w-0 flex-col bg-background-base">
-          <div class="px-4 py-3 border-b border-border-weak-base flex items-center justify-between">
+          <div class="px-6 py-5 border-b border-border-weak-base flex items-center justify-between">
             <div class="min-w-0">
               <div class="text-12-medium text-text-weak">Project</div>
               <div class="text-14-medium text-text-strong truncate">
@@ -163,21 +163,21 @@ function Sidebar() {
             </button>
           </div>
 
-          <div class="px-2 pb-3 flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-1">
-            <div class="px-2 pt-3 pb-2 text-12-medium text-text-weak">Sessions</div>
+          <div class="px-4 pb-4 flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-2">
+            <div class="px-2 pt-4 pb-3 text-12-medium text-text-weak">Sessions</div>
             <For each={sessions()}>
               {(session) => (
                 <button
                   type="button"
                   data-session-id={session.id}
-                  class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3 hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover"
+                  class="group/session relative w-full rounded-md cursor-default transition-all duration-200 ease-out px-3 hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover hover:scale-[1.02] active:scale-[0.98]"
                   classList={{
                     "bg-surface-base-active text-text-strong": session.id === params.id,
                     "text-text-base": session.id !== params.id,
                   }}
                   onClick={() => openSession(session.id)}
                 >
-                  <div class="flex items-center gap-1 w-full py-1">
+                  <div class="flex items-center gap-2 w-full py-2">
                     <div class="shrink-0 size-6 flex items-center justify-center">
                       <Icon name="dash" size="small" class="text-icon-weak" />
                     </div>

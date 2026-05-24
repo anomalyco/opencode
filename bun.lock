@@ -61,6 +61,7 @@
         "@thisbeyond/solid-dnd": "0.7.5",
         "@univerjs/core": "0.18.0",
         "@univerjs/design": "0.18.0",
+        "@univerjs/engine-render": "0.18.0",
         "@univerjs/preset-sheets-core": "0.18.0",
         "@univerjs/presets": "0.18.0",
         "@univerjs/sheets": "0.18.0",

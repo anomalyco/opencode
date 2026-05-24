@@ -1,0 +1,87 @@
+--- packages/app/src/components/spreadsheet-viewer.tsx
++++ packages/app/src/components/spreadsheet-viewer.tsx
+@@ -1,5 +1,5 @@
+-import { Show, createEffect, createSignal, on, onCleanup } from "solid-js"
+-import { useTheme } from "@opencode-ai/ui/theme"
++import { Show, createEffect, createSignal, on, onCleanup, untrack } from "solid-js"
++import { useTheme, resolveThemeVariant } from "@opencode-ai/ui/theme"
+ import { createUniver, defaultTheme, LocaleType, LogLevel, mergeLocales } from "@univerjs/presets"
+ import { UniverSheetsCorePreset } from "@univerjs/presets/preset-sheets-core"
+ import sheetsCoreEnUs from "@univerjs/presets/preset-sheets-core/locales/en-US"
+@@ -90,6 +90,56 @@
+     // No `UniverSheetsCollaborationPreset`: `@univerjs/presets/preset-sheets-collaboration` re-exports Univer Pro
+     // (`@univerjs-pro/collaboration`, edit-history, …). Multiplayer / universer comb must be built as Veritly-owned
+     // primitives against `@opencode-ai/univer-compat` (or similar), not this preset.
++    const themeId = untrack(() => theme.themeId())
++    const activeTheme = untrack(() => theme.themes()[themeId])
++    const lightTokens = activeTheme ? resolveThemeVariant(activeTheme.light, false) : null
++    const darkTokens = activeTheme ? resolveThemeVariant(activeTheme.dark, true) : null
++
++    const getLight = (v: string, fb: string) => (lightTokens?.[v as keyof typeof lightTokens] as string) || fb
++    const getDark = (v: string, fb: string) => (darkTokens?.[v as keyof typeof darkTokens] as string) || fb
++
++    const buildRamp = (baseKey: string, fallback: Record<string, string>) => {
++      return {
++        50: getLight(`surface-${baseKey}-weak`, fallback["50"]),
++        100: getLight(`surface-${baseKey}-weak`, fallback["100"]),
++        200: getLight(`surface-${baseKey}-base`, fallback["200"]),
++        300: getLight(`border-${baseKey}-base`, fallback["300"]),
++        400: getLight(`border-${baseKey}-base`, fallback["400"]),
++        500: getLight(`surface-${baseKey}-strong`, fallback["500"]),
++        600: getDark(`surface-${baseKey}-strong`, fallback["600"]),
++        700: getDark(`border-${baseKey}-base`, fallback["700"]),
++        800: getDark(`surface-${baseKey}-base`, fallback["800"]),
++        900: getDark(`surface-${baseKey}-weak`, fallback["900"]),
++      }
++    }
++
++    const veritlyTheme = {
++      ...defaultTheme,
++      primary: buildRamp('brand', defaultTheme.primary),
++      gray: {
++        50: getLight('background-weak', '#f8f8f8'),
++        100: getLight('background-base', '#f3f3f3'),
++        200: getLight('border-weaker-base', '#e8e8e8'),
++        300: getLight('border-weak-base', '#dbdbdb'),
++        400: getLight('border-base', '#c7c7c7'),
++        500: getLight('icon-base', '#8f8f8f'),
++        600: getDark('icon-base', '#52525b'),
++        700: getDark('border-base', '#475569'),
++        800: getDark('background-weak', '#334155'),
++        900: getDark('background-base', '#1e293b'),
++      },
++      white: getLight('background-strong', '#ffffff'),
++      black: getDark('background-strong', '#111827'),
++      green: buildRamp('success', defaultTheme.green),
++      red: buildRamp('critical', defaultTheme.red),
++      yellow: buildRamp('warning', defaultTheme.yellow),
++      orange: buildRamp('warning', defaultTheme.orange),
++      blue: buildRamp('interactive', defaultTheme.blue),
++      indigo: buildRamp('interactive', defaultTheme.indigo),
++      jiqing: buildRamp('interactive', defaultTheme.jiqing),
++      purple: buildRamp('info', defaultTheme.purple),
++      pink: buildRamp('info', defaultTheme.pink),
++    }
+ 
+     const instance = createUniver({
+       locale: LocaleType.EN_US,
+@@ -97,7 +147,7 @@
+         [LocaleType.EN_US]: mergeLocales(sheetsCoreEnUs, sheetsDrawingEnUs),
+       },
+       logLevel: LogLevel.WARN,
+-      theme: defaultTheme,
++      theme: veritlyTheme,
+       presets: [
+         UniverSheetsCorePreset({
+           container: el,
+@@ -129,7 +179,9 @@
+     })
+ 
+     runtime = instance
+-    // Apply initial dark mode immediately — the reactive effect below won't fire
+-    // on mount because `runtime` is a plain let (non-reactive signal).
+-    veritlySdk(instance).toggleDarkMode(theme.mode() === "dark")
++    // Apply initial dark mode immediately
++    veritlySdk(instance).toggleDarkMode(untrack(() => theme.mode()) === "dark")
+     const sdkRuntime = {
+       univerAPI: instance.univerAPI,
