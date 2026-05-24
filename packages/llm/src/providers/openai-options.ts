@@ -32,7 +32,6 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
       reasoningEffort: options?.reasoningEffort,
       reasoningSummary: options?.reasoningSummary,
       include: options?.include,
-      includeEncryptedReasoning: options?.includeEncryptedReasoning,
       textVerbosity: options?.textVerbosity,
     }),
   )

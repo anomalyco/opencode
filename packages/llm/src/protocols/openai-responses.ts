@@ -240,7 +240,10 @@ type ReasoningSummaryStatus = "active" | "can-conclude" | "concluded"
 
 interface ReasoningStreamItem {
   readonly encryptedContent: string | null | undefined
-  readonly summaryParts: Readonly<Record<string, ReasoningSummaryStatus>>
+  // Keyed by OpenAI's numeric `summary_index`. JS object keys coerce to
+  // strings, but typing the map as `Record<number, ...>` documents intent
+  // and matches the wire field.
+  readonly summaryParts: Readonly<Record<number, ReasoningSummaryStatus>>
 }
 
 const invalid = ProviderShared.invalidRequest
