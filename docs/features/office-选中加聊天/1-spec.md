@@ -1,6 +1,6 @@
 ---
 feat-id: office-选中加聊天
-status: spec
+status: done
 related: ./1-spec.md ./2-plan.md ./3-changelog.md
 ---
 
