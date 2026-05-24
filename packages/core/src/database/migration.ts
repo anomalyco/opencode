@@ -19,19 +19,27 @@ export function apply(db: Database) {
 
 export function applyOnly(db: Database, input: Migration[]) {
   return Effect.gen(function* () {
-    yield* db.run(sql`CREATE TABLE IF NOT EXISTS ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`)
-    let completed = new Set((yield* db.all<{ id: string }>(sql`SELECT id FROM ${sql.identifier("migration")}`)).map((row) => row.id))
+    yield* db.run(
+      sql`CREATE TABLE IF NOT EXISTS ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
+    )
+    let completed = new Set(
+      (yield* db.all<{ id: string }>(sql`SELECT id FROM ${sql.identifier("migration")}`)).map((row) => row.id),
+    )
     if (completed.size === 0) {
       // Existing installs used Drizzle's migration journal. Seed the new
       // journal once so TypeScript migrations don't replay old SQL.
-      if (yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ${"__drizzle_migrations"}`)) {
+      if (
+        yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ${"__drizzle_migrations"}`)
+      ) {
         yield* db.run(sql`
           INSERT OR IGNORE INTO ${sql.identifier("migration")} (id, time_completed)
           SELECT name, ${Date.now()}
           FROM ${sql.identifier("__drizzle_migrations")}
           WHERE name IS NOT NULL
         `)
-        completed = new Set((yield* db.all<{ id: string }>(sql`SELECT id FROM ${sql.identifier("migration")}`)).map((row) => row.id))
+        completed = new Set(
+          (yield* db.all<{ id: string }>(sql`SELECT id FROM ${sql.identifier("migration")}`)).map((row) => row.id),
+        )
       }
     }
 
@@ -40,7 +48,9 @@ export function applyOnly(db: Database, input: Migration[]) {
       yield* db.transaction((tx) =>
         Effect.gen(function* () {
           yield* migration.up(tx)
-          yield* tx.run(sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`)
+          yield* tx.run(
+            sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
+          )
         }),
       )
     }

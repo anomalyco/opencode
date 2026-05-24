@@ -3,7 +3,7 @@ export * as SessionSchema from "./schema"
 import { Schema } from "effect"
 import { Location } from "../location"
 import { ModelV2 } from "../model"
-import { Project } from "../project"
+import { ProjectV2 } from "../project"
 import { RelativePath, optionalOmitUndefined, withStatics } from "../schema"
 import { WorkspaceV2 } from "../workspace"
 import { Identifier } from "../util/identifier"
@@ -28,14 +28,14 @@ export const LegacyInfo = Schema.Struct({
   id: ID,
   location: Location.Ref,
   subpath: RelativePath, // derived from location
-  project: Project.ID, // derived from location
+  project: ProjectV2.ID, // derived from location
 })
 export type LegacyInfo = typeof LegacyInfo.Type
 
 export class Info extends Schema.Class<Info>("Session.Info")({
   id: ID,
   parentID: optionalOmitUndefined(ID),
-  projectID: Project.ID,
+  projectID: ProjectV2.ID,
   workspaceID: optionalOmitUndefined(WorkspaceV2.ID),
   path: optionalOmitUndefined(Schema.String),
   agent: optionalOmitUndefined(Schema.String),

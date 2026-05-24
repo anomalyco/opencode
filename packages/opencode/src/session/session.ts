@@ -29,8 +29,8 @@ import { MessageV2 } from "./message-v2"
 import type { InstanceContext } from "../project/instance-context"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
-import { ProjectID } from "../project/schema"
-import { WorkspaceID } from "../control-plane/schema"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { SessionID, MessageID, PartID } from "./schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 
@@ -208,8 +208,8 @@ const Model = Schema.Struct({
 export const Info = Schema.Struct({
   id: SessionID,
   slug: Schema.String,
-  projectID: ProjectID,
-  workspaceID: optionalOmitUndefined(WorkspaceID),
+  projectID: ProjectV2.ID,
+  workspaceID: optionalOmitUndefined(WorkspaceV2.ID),
   directory: Schema.String,
   path: optionalOmitUndefined(Schema.String),
   parentID: optionalOmitUndefined(SessionID),
@@ -228,7 +228,7 @@ export const Info = Schema.Struct({
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const ProjectInfo = Schema.Struct({
-  id: ProjectID,
+  id: ProjectV2.ID,
   name: optionalOmitUndefined(Schema.String),
   worktree: Schema.String,
 }).annotate({ identifier: "ProjectSummary" })
@@ -247,7 +247,7 @@ export const CreateInput = Schema.optional(
     agent: Schema.optional(Schema.String),
     model: Schema.optional(Model),
     permission: Schema.optional(Permission.Ruleset),
-    workspaceID: Schema.optional(WorkspaceID),
+    workspaceID: Schema.optional(WorkspaceV2.ID),
   }),
 )
 export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
@@ -281,7 +281,7 @@ export type ListInput = {
   directory?: string
   scope?: "project"
   path?: string
-  workspaceID?: WorkspaceID
+  workspaceID?: WorkspaceV2.ID
   roots?: boolean
   start?: number
   search?: string
@@ -307,8 +307,8 @@ const UpdatedTime = Schema.Struct({
 const UpdatedInfo = Schema.Struct({
   id: Schema.optional(Schema.NullOr(SessionID)),
   slug: Schema.optional(Schema.NullOr(Schema.String)),
-  projectID: Schema.optional(Schema.NullOr(ProjectID)),
-  workspaceID: Schema.optional(Schema.NullOr(WorkspaceID)),
+  projectID: Schema.optional(Schema.NullOr(ProjectV2.ID)),
+  workspaceID: Schema.optional(Schema.NullOr(WorkspaceV2.ID)),
   directory: Schema.optional(Schema.NullOr(Schema.String)),
   path: Schema.optional(Schema.NullOr(Schema.String)),
   parentID: Schema.optional(Schema.NullOr(SessionID)),
@@ -456,7 +456,7 @@ export interface Interface {
     agent?: string
     model?: Schema.Schema.Type<typeof Model>
     permission?: Permission.Ruleset
-    workspaceID?: WorkspaceID
+    workspaceID?: WorkspaceV2.ID
   }) => Effect.Effect<Info>
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
@@ -526,7 +526,7 @@ export const layer: Layer.Layer<
       agent?: string
       model?: Schema.Schema.Type<typeof Model>
       parentID?: SessionID
-      workspaceID?: WorkspaceID
+      workspaceID?: WorkspaceV2.ID
       directory: string
       path?: string
       permission?: Permission.Ruleset
@@ -660,7 +660,7 @@ export const layer: Layer.Layer<
       agent?: string
       model?: Schema.Schema.Type<typeof Model>
       permission?: Permission.Ruleset
-      workspaceID?: WorkspaceID
+      workspaceID?: WorkspaceV2.ID
     }) {
       const ctx = yield* InstanceState.context
       const workspace = yield* InstanceState.workspaceID
@@ -890,7 +890,7 @@ const cancelBackgroundJobs = Effect.fn("Session.cancelBackgroundJobs")(function*
 
 function* listByProject(
   input: ListInput & {
-    projectID: ProjectID
+    projectID: ProjectV2.ID
     experimentalWorkspaces: boolean
   },
 ) {

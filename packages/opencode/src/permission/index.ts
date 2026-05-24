@@ -2,7 +2,7 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { ConfigPermission } from "@/config/permission"
 import { InstanceState } from "@/effect/instance-state"
-import { ProjectID } from "@/project/schema"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { MessageID, SessionID } from "@/session/schema"
 import { PermissionTable } from "@opencode-ai/core/session/sql"
 import { Database } from "@/storage/db"
@@ -61,7 +61,7 @@ export const ReplyBody = Schema.Struct(reply).annotate({ identifier: "Permission
 export type ReplyBody = Schema.Schema.Type<typeof ReplyBody>
 
 export const Approval = Schema.Struct({
-  projectID: ProjectID,
+  projectID: ProjectV2.ID,
   patterns: Schema.Array(Schema.String),
 }).annotate({ identifier: "PermissionApproval" })
 export type Approval = Schema.Schema.Type<typeof Approval>

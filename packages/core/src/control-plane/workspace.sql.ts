@@ -1,6 +1,6 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core"
 import { ProjectTable } from "../project/sql"
-import { Project } from "../project"
+import { ProjectV2 } from "../project"
 import { WorkspaceV2 } from "../workspace"
 
 export const WorkspaceTable = sqliteTable("workspace", {
@@ -11,7 +11,7 @@ export const WorkspaceTable = sqliteTable("workspace", {
   directory: text(),
   extra: text({ mode: "json" }),
   project_id: text()
-    .$type<Project.ID>()
+    .$type<ProjectV2.ID>()
     .notNull()
     .references(() => ProjectTable.id, { onDelete: "cascade" }),
   time_used: integer()

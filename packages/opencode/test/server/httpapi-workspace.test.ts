@@ -5,7 +5,7 @@ import path from "node:path"
 import { Effect, Layer } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { registerAdapter } from "../../src/control-plane/adapters"
-import { WorkspaceID } from "../../src/control-plane/schema"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
@@ -255,7 +255,7 @@ describe("workspace HttpApi", () => {
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
       const session = yield* Session.use.create({}).pipe(provideInstance(dir))
-      const workspaceID = WorkspaceID.ascending("wrk_missing_warp")
+      const workspaceID = WorkspaceV2.ID.ascending("wrk_missing_warp")
 
       const response = yield* request(WorkspacePaths.warp, dir, {
         method: "POST",

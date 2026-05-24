@@ -6,7 +6,6 @@ import { $ } from "bun"
 import path from "path"
 import { tmpdirScoped } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
-import { ProjectID } from "../../src/project/schema"
 import { Database } from "@/storage/db"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { PermissionTable, SessionTable } from "@opencode-ai/core/session/sql"
@@ -14,13 +13,13 @@ import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { eq } from "drizzle-orm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { SessionID } from "@/session/schema"
-import { WorkspaceID } from "@/control-plane/schema"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { AppProcess } from "@opencode-ai/core/process"
-import { Project as ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -40,7 +39,7 @@ function run<A, E>(fn: (svc: Project.Interface) => Effect.Effect<A, E>) {
 }
 
 function remoteProjectID(remote: string) {
-  return ProjectID.make(Hash.fast(`git-remote:${remote}`))
+  return ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`))
 }
 
 /**
@@ -108,7 +107,7 @@ const iconDiscoveryIt = testEffect(
   Layer.provideMerge(projectLayerWithRuntimeFlags({ experimentalIconDiscovery: true }), CrossSpawnSpawner.defaultLayer),
 )
 
-function waitForProjectIcon(id: ProjectID, attempts = 50): Effect.Effect<Project.Info> {
+function waitForProjectIcon(id: ProjectV2.ID, attempts = 50): Effect.Effect<Project.Info> {
   return Effect.gen(function* () {
     const project = Project.get(id)
     if (project?.icon?.url) return project
@@ -127,7 +126,7 @@ describe("Project.fromDirectory", () => {
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
       expect(project).toBeDefined()
-      expect(project.id).toBe(ProjectID.global)
+      expect(project.id).toBe(ProjectV2.ID.global)
       expect(project.vcs).toBe("git")
       expect(project.worktree).toBe(tmp)
 
@@ -143,7 +142,7 @@ describe("Project.fromDirectory", () => {
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
 
       expect(project).toBeDefined()
-      expect(project.id).not.toBe(ProjectID.global)
+      expect(project.id).not.toBe(ProjectV2.ID.global)
       expect(project.vcs).toBe("git")
       expect(project.worktree).toBe(tmp)
     }),
@@ -153,7 +152,7 @@ describe("Project.fromDirectory", () => {
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
-      expect(project.id).toBe(ProjectID.global)
+      expect(project.id).toBe(ProjectV2.ID.global)
     }),
   )
 
@@ -199,7 +198,7 @@ describe("Project.fromDirectory", () => {
       const { project: rootProject } = yield* projects.fromDirectory(tmp)
       const remoteID = remoteProjectID("github.com/acme/app")
       const sessionID = crypto.randomUUID() as SessionID
-      const workspaceID = WorkspaceID.ascending()
+      const workspaceID = WorkspaceV2.ID.ascending()
 
       yield* Effect.sync(() => {
         Database.use((db) => {
@@ -264,7 +263,7 @@ describe("Project.fromDirectory git failure paths", () => {
       // rev-list fails because HEAD doesn't exist yet: this is the natural scenario.
       const { project } = yield* run((svc) => svc.fromDirectory(tmp))
       expect(project.vcs).toBe("git")
-      expect(project.id).toBe(ProjectID.global)
+      expect(project.id).toBe(ProjectV2.ID.global)
       expect(project.worktree).toBe(tmp)
     }),
   )
@@ -586,7 +585,7 @@ describe("Project.update", () => {
     Effect.gen(function* () {
       const exit = yield* run((svc) =>
         svc.update({
-          projectID: ProjectID.make("nonexistent-project-id"),
+          projectID: ProjectV2.ID.make("nonexistent-project-id"),
           name: "Should Fail",
         }),
       ).pipe(Effect.exit)
@@ -665,7 +664,7 @@ describe("Project.list and Project.get", () => {
   )
 
   test("get returns undefined for unknown id", () => {
-    const found = Project.get(ProjectID.make("nonexistent"))
+    const found = Project.get(ProjectV2.ID.make("nonexistent"))
     expect(found).toBeUndefined()
   })
 })
@@ -740,7 +739,7 @@ describe("Project.fromDirectory with bare repos", () => {
 
       const { project } = yield* run((svc) => svc.fromDirectory(worktreePath))
 
-      expect(project.id).not.toBe(ProjectID.global)
+      expect(project.id).not.toBe(ProjectV2.ID.global)
       expect(project.worktree).toBe(worktreePath)
 
       const correctCache = path.join(barePath, "opencode")
@@ -803,7 +802,7 @@ describe("Project.fromDirectory with bare repos", () => {
 
       const { project } = yield* run((svc) => svc.fromDirectory(worktreePath))
 
-      expect(project.id).not.toBe(ProjectID.global)
+      expect(project.id).not.toBe(ProjectV2.ID.global)
       expect(project.worktree).toBe(worktreePath)
 
       const correctCache = path.join(barePath, "opencode")

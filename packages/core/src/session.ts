@@ -3,7 +3,7 @@ export * from "./session/schema"
 
 import { DateTime, Effect, Layer, Schema, Context } from "effect"
 import { and, asc, desc, eq, gt, gte, isNull, like, lt, or, type SQL } from "drizzle-orm"
-import { Project } from "./project"
+import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
 import { Location } from "./location"
@@ -32,7 +32,7 @@ type Cursor = {
 
 type ListInput = {
   workspaceID?: WorkspaceV2.ID
-  projectID?: Project.ID
+  projectID?: ProjectV2.ID
   path?: string
   roots?: boolean
   start?: number
@@ -137,7 +137,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.Info {
   return new SessionSchema.Info({
     id: SessionSchema.ID.make(row.id),
-    projectID: Project.ID.make(row.project_id),
+    projectID: ProjectV2.ID.make(row.project_id),
     workspaceID: row.workspace_id ? WorkspaceV2.ID.make(row.workspace_id) : undefined,
     title: row.title,
     parentID: row.parent_id ? SessionSchema.ID.make(row.parent_id) : undefined,

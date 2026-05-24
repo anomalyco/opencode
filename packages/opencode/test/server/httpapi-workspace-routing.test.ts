@@ -15,7 +15,7 @@ import Http from "node:http"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { registerAdapter } from "../../src/control-plane/adapters"
-import { WorkspaceID } from "../../src/control-plane/schema"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
@@ -161,7 +161,7 @@ const insertRemoteWorkspaceWithoutSync = (input: {
   url: string
 }) =>
   Effect.sync(() => {
-    const id = WorkspaceID.ascending()
+    const id = WorkspaceV2.ID.ascending()
     registerAdapter(input.projectID, input.type, remoteAdapter(path.join(input.dir, `.${input.type}`), input.url))
     Database.use((db) => db.insert(WorkspaceTable).values({ id, type: input.type, project_id: input.projectID }).run())
     return id
@@ -286,9 +286,9 @@ describe("HttpApi workspace routing middleware", () => {
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
       const project = yield* Project.use.fromDirectory(dir)
-      const workspaceID = WorkspaceID.ascending()
+      const workspaceID = WorkspaceV2.ID.ascending()
       const type = "remote-http-fence-target"
-      const waited = yield* Ref.make<{ workspaceID: WorkspaceID; state: Record<string, number> } | undefined>(undefined)
+      const waited = yield* Ref.make<{ workspaceID: WorkspaceV2.ID; state: Record<string, number> } | undefined>(undefined)
 
       const remoteUrl = yield* startRemoteWorkspaceHttpServer(() =>
         HttpServerResponse.json(
@@ -403,7 +403,7 @@ describe("HttpApi workspace routing middleware", () => {
 
   it.live("returns a missing workspace response for unknown workspace ids", () =>
     Effect.gen(function* () {
-      const workspaceID = WorkspaceID.ascending("wrk_missing")
+      const workspaceID = WorkspaceV2.ID.ascending("wrk_missing")
       // If the middleware resolves the workspace first, this handler is never
       // reached and the response should be the middleware error response.
       yield* HttpRouter.add("GET", "/probe", HttpServerResponse.text("route called")).pipe(

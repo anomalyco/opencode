@@ -5,7 +5,7 @@ import { Project } from "@/project/project"
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import type { ProjectID } from "../project/schema"
+import type { ProjectV2 } from "@opencode-ai/core/project"
 import * as Log from "@opencode-ai/core/util/log"
 import { Slug } from "@opencode-ai/core/util/slug"
 import { errorMessage } from "../util/error"
@@ -476,7 +476,7 @@ export const layer: Layer.Layer<
 
     const runStartScripts = Effect.fnUntraced(function* (
       directory: string,
-      input: { projectID: ProjectID; extra?: string },
+      input: { projectID: ProjectV2.ID; extra?: string },
     ) {
       const row = yield* Effect.sync(() =>
         Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, input.projectID)).get()),

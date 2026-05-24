@@ -2,7 +2,7 @@ import { Database } from "@/storage/db"
 import { inArray } from "drizzle-orm"
 import { EventSequenceTable } from "@opencode-ai/core/event/sql"
 import { Workspace } from "@/control-plane/workspace"
-import type { WorkspaceID } from "@/control-plane/schema"
+import type { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import * as Log from "@opencode-ai/core/util/log"
 import { Effect } from "effect"
 
@@ -53,7 +53,7 @@ export function parse(headers: Headers): State | undefined {
   )
 }
 
-export function wait(workspaceID: WorkspaceID, state: State, signal?: AbortSignal) {
+export function wait(workspaceID: WorkspaceV2.ID, state: State, signal?: AbortSignal) {
   return Effect.gen(function* () {
     log.info("waiting for state", {
       workspaceID,

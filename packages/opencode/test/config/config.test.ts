@@ -30,7 +30,7 @@ import path from "path"
 import fs from "fs/promises"
 import { pathToFileURL } from "url"
 import { Global } from "@opencode-ai/core/global"
-import { ProjectID } from "../../src/project/schema"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { Filesystem } from "@/util/filesystem"
 import { ConfigPlugin } from "@/config/plugin"
 import { AccountTest } from "../fake/account"
@@ -274,7 +274,7 @@ async function check(map: (dir: string) => string) {
         const cfg = await load(ctx)
         expect(cfg.snapshot).toBe(true)
         expect(ctx.directory).toBe(Filesystem.resolve(tmp.path))
-        expect(ctx.project.id).not.toBe(ProjectID.global)
+        expect(ctx.project.id).not.toBe(ProjectV2.ID.global)
       },
     })
   } finally {

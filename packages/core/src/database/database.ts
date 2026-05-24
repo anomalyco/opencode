@@ -5,8 +5,9 @@ import { layer as sqliteLayer } from "#sqlite"
 import { Context, Effect, Layer } from "effect"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
-import path from "path"
+import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration"
+import { InstallationChannel } from "../installation/version"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
 type DatabaseShape = Effect.Success<typeof makeDatabase>
@@ -24,24 +25,40 @@ const layer = Layer.effect(
     yield* db.run("PRAGMA cache_size = -64000")
     yield* db.run("PRAGMA foreign_keys = ON")
     yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
+    yield* Effect.log("Applying database migrations")
     yield* DatabaseMigration.apply(db)
 
     return db
-  }),
+  }).pipe(Effect.orDie),
 )
 
 export function layerFromPath(filename: string) {
-  return layer.pipe(Layer.provide(sqliteLayer({ filename })))
+  return layer.pipe(Layer.provide(sqliteLayer({ filename })), Layer.orDie)
+}
+
+export const memoryLayer = layerFromPath(":memory:")
+
+export function path() {
+  if (Flag.OPENCODE_DB) {
+    if (Flag.OPENCODE_DB === ":memory:" || isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
+    return join(Global.Path.data, Flag.OPENCODE_DB)
+  }
+  if (
+    ["latest", "beta", "prod"].includes(InstallationChannel) ||
+    process.env.OPENCODE_DISABLE_CHANNEL_DB === "1" ||
+    process.env.OPENCODE_DISABLE_CHANNEL_DB === "true"
+  )
+    return join(Global.Path.data, "opencode.db")
+  return join(Global.Path.data, `opencode-${InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`)
 }
 
 export const defaultLayer = Layer.unwrap(
   Effect.gen(function* () {
-    return layerFromPath(
-      !Flag.OPENCODE_DB
-        ? path.join(Global.Path.data, "opencode.db")
-        : Flag.OPENCODE_DB === ":memory:" || path.isAbsolute(Flag.OPENCODE_DB)
-          ? Flag.OPENCODE_DB
-          : path.join(Global.Path.data, Flag.OPENCODE_DB),
-    )
+    return layerFromPath(path())
   }),
 ).pipe(Layer.provide(Global.defaultLayer))
+
+export function init(options: { path?: string } = {}) {
+  const filename = options.path ?? path()
+  return Effect.runSync(Service.use(() => Effect.void).pipe(Effect.provide(layerFromPath(filename))))
+}
