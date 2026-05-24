@@ -2,13 +2,33 @@ import { ProviderAuth } from "@/provider/auth"
 import { Provider } from "@/provider/provider"
 import { ProviderID } from "@/provider/schema"
 import { Schema } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 const root = "/provider"
+
+const ProviderAuthErrorName = Schema.Union([
+  Schema.Literal("BadRequest"),
+  Schema.Literal("ProviderAuthOauthMissing"),
+  Schema.Literal("ProviderAuthOauthCodeMissing"),
+  Schema.Literal("ProviderAuthOauthCallbackFailed"),
+  Schema.Literal("ProviderAuthValidationFailed"),
+])
+export class ProviderAuthApiError extends Schema.ErrorClass<ProviderAuthApiError>("ProviderAuthError")(
+  {
+    name: ProviderAuthErrorName,
+    data: Schema.Struct({
+      providerID: Schema.optional(ProviderID),
+      field: Schema.optional(Schema.String),
+      message: Schema.optional(Schema.String),
+      kind: Schema.optional(Schema.String),
+    }),
+  },
+  { httpApiStatus: 400 },
+) {}
 
 export const ProviderApi = HttpApi.make("provider")
   .add(
@@ -39,7 +59,7 @@ export const ProviderApi = HttpApi.make("provider")
           query: WorkspaceRoutingQuery,
           payload: ProviderAuth.AuthorizeInput,
           success: described(Schema.UndefinedOr(ProviderAuth.Authorization), "Authorization URL and method"),
-          error: HttpApiError.BadRequest,
+          error: ProviderAuthApiError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "provider.oauth.authorize",
@@ -52,7 +72,7 @@ export const ProviderApi = HttpApi.make("provider")
           query: WorkspaceRoutingQuery,
           payload: ProviderAuth.CallbackInput,
           success: described(Schema.Boolean, "OAuth callback processed successfully"),
-          error: HttpApiError.BadRequest,
+          error: ProviderAuthApiError,
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "provider.oauth.callback",

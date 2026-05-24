@@ -3,15 +3,13 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { batch, onCleanup, onMount } from "solid-js"
-import z from "zod"
 import { createSdkForServer } from "@/utils/server"
 import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
 import { useServer } from "./server"
 
-const abortError = z.object({
-  name: z.literal("AbortError"),
-})
+const isAbortError = (error: unknown) =>
+  error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
 
 export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleContext({
   name: "GlobalSDK",
@@ -103,7 +101,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
 
     let streamErrorLogged = false
     const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
-    const aborted = (error: unknown) => abortError.safeParse(error).success
+    const aborted = isAbortError
 
     let attempt: AbortController | undefined
     let run: Promise<void> | undefined
@@ -234,6 +232,9 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       throwOnError: true,
     })
 
+    const dirSyncContexts = new Map<string, ReturnType<typeof createDirSdkContext>>()
+    const dirSdkContextRefCounts = new Map<string, number>()
+
     return {
       url: currentServer.http.url,
       client: sdk,
@@ -251,6 +252,58 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
           ...opts,
         })
       },
+      createDirSyncContext: (directory: string) => {
+        onCleanup(() => {
+          dirSdkContextRefCounts.set(directory, (dirSdkContextRefCounts.get(directory) ?? 0) - 1)
+          if (dirSdkContextRefCounts.get(directory) === 0) {
+            dirSyncContexts.delete(directory)
+            dirSdkContextRefCounts.delete(directory)
+          }
+        })
+
+        const cached = dirSyncContexts.get(directory)
+        if (cached) {
+          dirSdkContextRefCounts.set(directory, (dirSdkContextRefCounts.get(directory) ?? 0) + 1)
+          return cached
+        }
+        const ctx = createDirSdkContext(directory)
+        dirSyncContexts.set(directory, ctx)
+        dirSdkContextRefCounts.set(directory, 1)
+
+        return ctx
+      },
     }
   },
 })
+
+type SDKEventMap = {
+  [key in Event["type"]]: Extract<Event, { type: key }>
+}
+
+function createDirSdkContext(directory: string) {
+  const globalSDK = useGlobalSDK()
+
+  const client = globalSDK.createClient({
+    directory,
+    throwOnError: true,
+  })
+
+  const emitter = createGlobalEmitter<SDKEventMap>()
+
+  const unsub = globalSDK.event.on(directory, (event) => {
+    emitter.emit(event.type, event)
+  })
+  onCleanup(unsub)
+
+  return {
+    directory,
+    client,
+    event: emitter,
+    get url() {
+      return globalSDK.url
+    },
+    createClient(opts: Parameters<typeof globalSDK.createClient>[0]) {
+      return globalSDK.createClient(opts)
+    },
+  }
+}

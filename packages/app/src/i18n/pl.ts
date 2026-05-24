@@ -277,6 +277,7 @@ export const dict = {
   "mcp.status.connected": "połączono",
   "mcp.status.failed": "niepowodzenie",
   "mcp.status.needs_auth": "wymaga autoryzacji",
+  "mcp.auth.clickToAuthenticate": "Kliknij, aby się uwierzytelnić",
   "mcp.status.disabled": "wyłączone",
   "dialog.fork.empty": "Brak wiadomości do rozwidlenia",
   "dialog.directory.search.placeholder": "Szukaj folderów",

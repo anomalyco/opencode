@@ -223,8 +223,6 @@ const STRIPE_WEBHOOK_SECRET = new sst.Linkable("STRIPE_WEBHOOK_SECRET", {
   properties: { value: stripeWebhook.secret },
 })
 
-const gatewayKv = new sst.cloudflare.Kv("GatewayKv")
-
 ////////////////
 // CONSOLE
 ////////////////
@@ -274,7 +272,6 @@ new sst.cloudflare.x.SolidStart("Console", {
           new sst.Secret("CLOUDFLARE_API_TOKEN", process.env.CLOUDFLARE_API_TOKEN!),
         ]
       : []),
-    gatewayKv,
   ],
   environment: {
     //VITE_DOCS_URL: web.url.apply((url) => url!),
@@ -292,4 +289,14 @@ new sst.cloudflare.x.SolidStart("Console", {
       },
     },
   },
+})
+
+////////////////
+// HELPERS
+////////////////
+
+export const stat = new sst.cloudflare.Worker("Stat", {
+  handler: "packages/console/function/src/stat.ts",
+  link: [database],
+  url: true,
 })

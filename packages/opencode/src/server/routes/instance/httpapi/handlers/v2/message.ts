@@ -1,9 +1,10 @@
-import { SessionMessage } from "@/v2/session-message"
+import { SessionMessage } from "@opencode-ai/core/session-message"
 import { SessionV2 } from "@/v2/session"
 import { Effect, Schema } from "effect"
 import * as DateTime from "effect/DateTime"
-import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../../api"
+import { InvalidCursorError, SessionNotFoundError, UnknownError } from "../../errors"
 
 const DefaultMessagesLimit = 50
 
@@ -34,18 +35,44 @@ export const messageHandlers = HttpApiBuilder.group(InstanceHttpApi, "v2.message
     return handlers.handle(
       "messages",
       Effect.fn(function* (ctx) {
-        if (ctx.query.cursor && ctx.query.order !== undefined) return yield* new HttpApiError.BadRequest({})
+        if (ctx.query.cursor && ctx.query.order !== undefined)
+          return yield* new InvalidCursorError({ message: "Cursor cannot be combined with order" })
         const decoded = yield* Effect.try({
           try: () => (ctx.query.cursor ? cursor.decode(ctx.query.cursor) : undefined),
-          catch: () => new HttpApiError.BadRequest({}),
+          catch: () => new InvalidCursorError({ message: "Invalid cursor" }),
         })
         const order = decoded?.order ?? ctx.query.order ?? "desc"
-        const messages = yield* session.messages({
-          sessionID: ctx.params.sessionID,
-          limit: ctx.query.limit ?? DefaultMessagesLimit,
-          order,
-          cursor: decoded ? { id: decoded.id, time: decoded.time, direction: decoded.direction } : undefined,
-        })
+        const messages = yield* session
+          .messages({
+            sessionID: ctx.params.sessionID,
+            limit: ctx.query.limit ?? DefaultMessagesLimit,
+            order,
+            cursor: decoded ? { id: decoded.id, time: decoded.time, direction: decoded.direction } : undefined,
+          })
+          .pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+            Effect.catchTag("Session.MessageDecodeError", (error) => {
+              const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+              return Effect.logError("failed to decode v2 session message").pipe(
+                Effect.annotateLogs({ ref, sessionID: error.sessionID, messageID: error.messageID }),
+                Effect.andThen(
+                  Effect.fail(
+                    new UnknownError({
+                      message: "Unexpected server error. Check server logs for details.",
+                      ref,
+                    }),
+                  ),
+                ),
+              )
+            }),
+          )
         const first = messages[0]
         const last = messages.at(-1)
         return {

@@ -1,25 +1,41 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, LLMError } from "../../src"
-import { LLMClient } from "../../src/route"
+import { HttpClientRequest } from "effect/unstable/http"
+import { CacheHint, LLM, LLMError, Message, ToolCallPart, Usage } from "../../src"
+import { Auth, LLMClient } from "../../src/route"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
+import { continuationRequest, nativeAnthropicMessagesContinuation } from "../continuation-scenarios"
 import { it } from "../lib/effect"
-import { fixedResponse } from "../lib/http"
+import { dynamicResponse, fixedResponse } from "../lib/http"
 import { sseEvents } from "../lib/sse"
 
-const model = AnthropicMessages.model({
-  id: "claude-sonnet-4-5",
-  baseURL: "https://api.anthropic.test/v1/",
-  headers: { "x-api-key": "test" },
-})
+const model = AnthropicMessages.route
+  .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
+  .model({ id: "claude-sonnet-4-5" })
 
 const request = LLM.request({
   id: "req_1",
   model,
   system: { type: "text", text: "You are concise.", cache: new CacheHint({ type: "ephemeral" }) },
   prompt: "Say hello.",
+  // This fixture predates the `cache: "auto"` default; pin the policy off so
+  // existing wire-shape assertions only see the manual hint on the system part.
+  cache: "none",
   generation: { maxTokens: 20, temperature: 0 },
 })
+
+type AnthropicToolResult = Extract<
+  AnthropicMessages.AnthropicMessagesBody["messages"][number]["content"][number],
+  { readonly type: "tool_result" }
+>
+
+const expectToolResult = (body: AnthropicMessages.AnthropicMessagesBody): AnthropicToolResult => {
+  const result = body.messages
+    .flatMap((message) => (message.role === "user" ? message.content : []))
+    .find((block): block is AnthropicToolResult => block.type === "tool_result")
+  expect(result).toBeDefined()
+  return result!
+}
 
 describe("Anthropic Messages route", () => {
   it.effect("prepares Anthropic Messages target", () =>
@@ -39,15 +55,16 @@ describe("Anthropic Messages route", () => {
 
   it.effect("prepares tool call and tool result messages", () =>
     Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare(
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
         LLM.request({
           id: "req_tool_result",
           model,
           messages: [
-            LLM.user("What is the weather?"),
-            LLM.assistant([LLM.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
-            LLM.toolMessage({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
           ],
+          cache: "none",
         }),
       )
 
@@ -67,13 +84,138 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  // Regression: screenshot/read tool results must stay structured so base64
+  // image data is not JSON-stringified into `tool_result.content`.
+  it.effect("lowers image tool-result content as structured image blocks", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          id: "req_tool_result_image",
+          model,
+          messages: [
+            Message.user("Show me the screenshot."),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "read", input: { filePath: "shot.png" } })]),
+            Message.tool({
+              id: "call_1",
+              name: "read",
+              resultType: "content",
+              result: [
+                { type: "text", text: "Image read successfully" },
+                { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              ],
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(expectToolResult(prepared.body).content).toEqual([
+        { type: "text", text: "Image read successfully" },
+        { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
+      ])
+    }),
+  )
+
+  it.effect("lowers single-image tool-result content as a structured image block", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.request({
+          id: "req_tool_result_image_only",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "screenshot", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "screenshot",
+              resultType: "content",
+              result: [{ type: "media", mediaType: "image/jpeg", data: "/9j/AA==" }],
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(expectToolResult(prepared.body).content).toEqual([
+        { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "/9j/AA==" } },
+      ])
+    }),
+  )
+
+  it.effect("rejects non-image media in tool-result content with a clear error", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_tool_result_unsupported_media",
+          model,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "fetch", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "fetch",
+              resultType: "content",
+              result: [{ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" }],
+            }),
+          ],
+          cache: "none",
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("Anthropic Messages")
+      expect(error.message).toContain("audio/mpeg")
+    }),
+  )
+
+  it.effect("prepares the composed native continuation request", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        continuationRequest({
+          id: "req_native_continuation_anthropic",
+          model,
+          features: nativeAnthropicMessagesContinuation,
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        system: [{ type: "text", text: "You are concise. Continue from the provided history." }],
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "What is shown here?" },
+              { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
+            ],
+          },
+          {
+            role: "assistant",
+            content: [
+              { type: "thinking", thinking: "I inspected the previous turn.", signature: "sig_continuation_1" },
+              { type: "text", text: "It shows a small test image." },
+            ],
+          },
+          { role: "user", content: [{ type: "text", text: "Check the weather in Paris before continuing." }] },
+          {
+            role: "assistant",
+            content: [{ type: "tool_use", id: "call_weather_1", name: "get_weather", input: { city: "Paris" } }],
+          },
+          {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: "call_weather_1", content: '{"temperature":22}' }],
+          },
+          { role: "assistant", content: [{ type: "text", text: "Paris is 22 degrees." }] },
+          { role: "user", content: [{ type: "text", text: "Continue from this conversation in one short sentence." }] },
+        ],
+      })
+      expect(prepared.body.tools).toEqual([expect.objectContaining({ name: "get_weather" })])
+    }),
+  )
+
   it.effect("lowers preserved Anthropic reasoning signature metadata", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
         LLM.request({
           model,
           messages: [
-            LLM.assistant([
+            Message.assistant([
               { type: "reasoning", text: "thinking", providerMetadata: { anthropic: { signature: "sig_1" } } },
             ]),
           ],
@@ -110,16 +252,17 @@ describe("Anthropic Messages route", () => {
       expect(response.text).toBe("Hello!")
       expect(response.reasoning).toBe("thinking")
       expect(response.usage).toMatchObject({
-        inputTokens: 5,
+        inputTokens: 6,
         outputTokens: 2,
+        nonCachedInputTokens: 5,
         cacheReadInputTokens: 1,
-        totalTokens: 7,
+        totalTokens: 8,
       })
-      expect(response.events.find((event) => event.type === "reasoning-delta" && event.text === "")).toMatchObject({
+      expect(response.events.find((event) => event.type === "reasoning-end")).toMatchObject({
         providerMetadata: { anthropic: { signature: "sig_1" } },
       })
       expect(response.events.at(-1)).toMatchObject({
-        type: "request-finish",
+        type: "finish",
         reason: "stop",
         providerMetadata: { anthropic: { stopSequence: "\n\nHuman:" } },
       })
@@ -141,18 +284,46 @@ describe("Anthropic Messages route", () => {
           tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
+      const usage = new Usage({
+        inputTokens: 5,
+        outputTokens: 1,
+        nonCachedInputTokens: 5,
+        cacheReadInputTokens: undefined,
+        cacheWriteInputTokens: undefined,
+        totalTokens: 6,
+        providerMetadata: { anthropic: { input_tokens: 5, output_tokens: 1 } },
+      })
 
       expect(response.toolCalls).toEqual([
-        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { query: "weather" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
       ])
       expect(response.events).toEqual([
+        { type: "step-start", index: 0 },
+        { type: "tool-input-start", id: "call_1", name: "lookup" },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
-        { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata: undefined },
         {
-          type: "request-finish",
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { query: "weather" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+        { type: "step-finish", index: 0, reason: "tool-calls", usage, providerMetadata: undefined },
+        {
+          type: "finish",
           reason: "tool-calls",
-          usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6, native: { input_tokens: 5, output_tokens: 1 } },
+          providerMetadata: undefined,
+          usage,
         },
       ])
     }),
@@ -166,7 +337,29 @@ describe("Anthropic Messages route", () => {
         ),
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "Overloaded" }])
+      // Prefix the error type so consumers can distinguish overloads, rate
+      // limits, and quota errors without parsing the message string.
+      expect(response.events).toEqual([{ type: "provider-error", message: "overloaded_error: Overloaded" }])
+    }),
+  )
+
+  it.effect("falls back to error type when no message is present", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error", error: { type: "overloaded_error", message: "" } }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "overloaded_error" }])
+    }),
+  )
+
+  it.effect("falls back to a stable default when error payload is absent", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ type: "error" }))),
+      )
+
+      expect(response.events).toEqual([{ type: "provider-error", message: "Anthropic Messages stream error" }])
     }),
   )
 
@@ -242,7 +435,7 @@ describe("Anthropic Messages route", () => {
         providerMetadata: { anthropic: { blockType: "web_search_tool_result" } },
       })
       expect(response.text).toBe("Found it.")
-      expect(response.events.at(-1)).toMatchObject({ type: "request-finish", reason: "stop" })
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
     }),
   )
 
@@ -293,8 +486,8 @@ describe("Anthropic Messages route", () => {
           id: "req_round_trip",
           model,
           messages: [
-            LLM.user("Search for something."),
-            LLM.assistant([
+            Message.user("Search for something."),
+            Message.assistant([
               {
                 type: "tool-call",
                 id: "srvtoolu_abc",
@@ -311,7 +504,7 @@ describe("Anthropic Messages route", () => {
               },
               { type: "text", text: "Found it." },
             ]),
-            LLM.user("Thanks."),
+            Message.user("Thanks."),
           ],
         }),
       )
@@ -344,7 +537,7 @@ describe("Anthropic Messages route", () => {
           id: "req_unknown_server_tool",
           model,
           messages: [
-            LLM.assistant([
+            Message.assistant([
               {
                 type: "tool-result",
                 id: "srvtoolu_abc",
@@ -361,17 +554,181 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects unsupported user media content", () =>
+  it.effect("continues a conversation with user image content", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const response = yield* LLMClient.generate(
         LLM.request({
           id: "req_media",
           model,
-          messages: [LLM.user({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [
+            Message.user([
+              { type: "text", text: "What is in this image?" },
+              { type: "media", mediaType: "image/png", data: "AAECAw==" },
+            ]),
+          ],
         }),
-      ).pipe(Effect.flip)
+      ).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+              expect(yield* Effect.promise(() => web.json())).toMatchObject({
+                messages: [
+                  {
+                    role: "user",
+                    content: [
+                      { type: "text", text: "What is in this image?" },
+                      { type: "image", source: { type: "base64", media_type: "image/png", data: "AAECAw==" } },
+                    ],
+                  },
+                ],
+              })
+              return input.respond(
+                sseEvents(
+                  { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+                  { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "An image." } },
+                  { type: "content_block_stop", index: 0 },
+                  { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 3 } },
+                  { type: "message_stop" },
+                ),
+                { headers: { "content-type": "text/event-stream" } },
+              )
+            }),
+          ),
+        ),
+      )
 
-      expect(error.message).toContain("Anthropic Messages user messages only support text content for now")
+      expect(response.text).toBe("An image.")
+    }),
+  )
+
+  it.effect("maps ttlSeconds >= 3600 to cache_control ttl: '1h'", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          system: { type: "text", text: "system", cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3600 }) },
+          prompt: "hi",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        system: [{ type: "text", text: "system", cache_control: { type: "ephemeral", ttl: "1h" } }],
+      })
+    }),
+  )
+
+  it.effect("emits cache_control on tool definitions and tool-result blocks", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          tools: [
+            {
+              name: "lookup",
+              description: "lookup tool",
+              inputSchema: { type: "object", properties: {} },
+              cache: new CacheHint({ type: "ephemeral" }),
+            },
+          ],
+          messages: [
+            Message.user("What's the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+            Message.tool({
+              id: "call_1",
+              name: "lookup",
+              result: { temp: 72 },
+              cache: new CacheHint({ type: "ephemeral" }),
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        tools: [{ name: "lookup", cache_control: { type: "ephemeral" } }],
+        messages: [
+          { role: "user", content: [{ type: "text", text: "What's the weather?" }] },
+          { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup" }] },
+          {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: "call_1", cache_control: { type: "ephemeral" } }],
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("drops cache_control breakpoints past the 4-per-request cap", () =>
+    Effect.gen(function* () {
+      const hint = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          system: [
+            { type: "text", text: "a", cache: hint },
+            { type: "text", text: "b", cache: hint },
+            { type: "text", text: "c", cache: hint },
+            { type: "text", text: "d", cache: hint },
+            { type: "text", text: "e", cache: hint },
+            { type: "text", text: "f", cache: hint },
+          ],
+          prompt: "hi",
+        }),
+      )
+
+      const system = (prepared.body as { system: Array<{ cache_control?: unknown }> }).system
+      const marked = system.filter((part) => part.cache_control !== undefined)
+      expect(marked).toHaveLength(4)
+      expect(system[4]?.cache_control).toBeUndefined()
+      expect(system[5]?.cache_control).toBeUndefined()
+    }),
+  )
+
+  it.effect("spends breakpoint budget on tools before system before messages", () =>
+    Effect.gen(function* () {
+      const hint = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          tools: [
+            {
+              name: "t1",
+              description: "t1",
+              inputSchema: { type: "object", properties: {} },
+              cache: hint,
+            },
+            {
+              name: "t2",
+              description: "t2",
+              inputSchema: { type: "object", properties: {} },
+              cache: hint,
+            },
+            {
+              name: "t3",
+              description: "t3",
+              inputSchema: { type: "object", properties: {} },
+              cache: hint,
+            },
+            {
+              name: "t4",
+              description: "t4",
+              inputSchema: { type: "object", properties: {} },
+              cache: hint,
+            },
+          ],
+          system: [{ type: "text", text: "system-tail", cache: hint }],
+          messages: [Message.user([{ type: "text", text: "message-tail", cache: hint }])],
+        }),
+      )
+
+      const body = prepared.body as {
+        tools: Array<{ cache_control?: unknown }>
+        system: Array<{ cache_control?: unknown }>
+        messages: Array<{ content: Array<{ cache_control?: unknown }> }>
+      }
+      expect(body.tools.every((t) => t.cache_control !== undefined)).toBe(true)
+      expect(body.system[0]?.cache_control).toBeUndefined()
+      expect(body.messages[0]?.content[0]?.cache_control).toBeUndefined()
     }),
   )
 })

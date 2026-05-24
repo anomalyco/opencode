@@ -39,7 +39,6 @@ import { openaiHelper } from "./provider/openai"
 import { oaCompatHelper } from "./provider/openai-compatible"
 import { createRateLimiter as createIpRateLimiter } from "./ipRateLimiter"
 import { createRateLimiter as createKeyRateLimiter } from "./keyRateLimiter"
-import { createDataDumper } from "./dataDumper"
 import { createTrialLimiter } from "./trialLimiter"
 import { createStickyTracker } from "./stickyProviderTracker"
 import { LiteData } from "@opencode-ai/console-core/lite.js"
@@ -47,6 +46,7 @@ import { Resource } from "@opencode-ai/console-resource"
 import { i18n, type Key } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
 import { createModelTpmLimiter } from "./modelTpmLimiter"
+import { createModelTpsLimiter } from "./modelTpsLimiter"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type RetryOptions = {
@@ -102,7 +102,6 @@ export async function handler(
     const zenApiKey = rawZenApiKey === "public" ? undefined : rawZenApiKey
     const sessionId = input.request.headers.get("x-opencode-session") ?? ""
     const requestId = input.request.headers.get("x-opencode-request") ?? ""
-    const projectId = input.request.headers.get("x-opencode-project") ?? ""
     const ocClient = input.request.headers.get("x-opencode-client") ?? ""
     const userAgent = input.request.headers.get("user-agent") ?? ""
     logger.metric({
@@ -115,20 +114,22 @@ export async function handler(
     })
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
-    const dataDumper = createDataDumper(sessionId, requestId, projectId)
     const trialLimiter = createTrialLimiter(modelInfo.trialProvider, ip)
     const trialProviders = await trialLimiter?.check()
     const rateLimiter = modelInfo.allowAnonymous
       ? createIpRateLimiter(modelInfo.id, modelInfo.rateLimit, ip, input.request)
       : createKeyRateLimiter(modelInfo.id, modelInfo.rateLimit, zenApiKey, input.request)
     await rateLimiter?.check()
-    const stickyTracker = createStickyTracker(modelInfo.stickyProvider, sessionId)
-    const stickyProvider = await stickyTracker?.get()
     const authInfo = await authenticate(modelInfo, zenApiKey)
+    const stickyId = sessionId ? sessionId : (authInfo?.workspaceID ?? ip)
+    const stickyTracker = createStickyTracker(modelInfo.id, modelInfo.stickyProvider, stickyId)
+    const stickyProvider = await stickyTracker?.get()
     const billingSource = validateBilling(authInfo, modelInfo)
     logger.metric({ source: billingSource })
     const modelTpmLimiter = createModelTpmLimiter(modelInfo.providers)
     const modelTpmLimits = await modelTpmLimiter?.check()
+    const modelTpsLimiter = createModelTpsLimiter(modelInfo.providers)
+    const modelTpsLimits = await modelTpsLimiter?.check()
 
     const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
       const providerInfo = selectProvider(
@@ -136,12 +137,12 @@ export async function handler(
         zenData,
         authInfo,
         modelInfo,
-        ip,
-        sessionId,
+        stickyId,
         trialProviders,
         retry,
         stickyProvider,
         modelTpmLimits,
+        modelTpsLimits,
       )
       validateModelSettings(billingSource, authInfo)
       updateProviderKey(authInfo, providerInfo)
@@ -163,9 +164,8 @@ export async function handler(
                   if (Array.isArray(v)) return [[k, v]]
                   if (typeof v === "object") return [[k, replacer(v)]]
                   if (typeof v === "string") {
-                    if (v === "$ip") return [[k, ip]]
                     if (v === "$workspace") return authInfo?.workspaceID ? [[k, authInfo?.workspaceID]] : []
-                    if (v === "$session") return sessionId ? [[k, sessionId]] : []
+                    if (v === "$user") return stickyId ? [[k, stickyId]] : []
                     if (v.startsWith("$header.")) {
                       const headerValue = input.request.headers.get(v.slice(8))
                       return headerValue ? [[k, headerValue]] : []
@@ -184,7 +184,7 @@ export async function handler(
         method: "POST",
         headers: (() => {
           const headers = new Headers(input.request.headers)
-          providerInfo.modifyHeaders(headers, body, providerInfo.apiKey)
+          providerInfo.modifyHeaders(headers, providerInfo.apiKey, stickyId)
           Object.entries(providerInfo.headerMappings ?? {}).forEach(([k, v]) => {
             headers.set(k, headers.get(v)!)
           })
@@ -212,7 +212,7 @@ export async function handler(
         // ie. 400 error is usually provider error like malformed request
         res.status !== 400 &&
         // ie. openai 404 error: Item with id 'msg_0ead8b004a3b165d0069436a6b6834819896da85b63b196a3f' not found.
-        res.status !== 404 &&
+        !(modelInfo.id.startsWith("gpt-") && res.status === 404) &&
         // ie. cannot change codex model providers mid-session
         modelInfo.stickyProvider !== "strict" &&
         modelInfo.fallbackProvider &&
@@ -229,12 +229,8 @@ export async function handler(
 
     const { providerInfo, reqBody, res, startTimestamp } = await retriableRequest()
 
-    // Store model request
-    dataDumper?.provideModel(providerInfo.storeModel)
-    dataDumper?.provideRequest(reqBody)
-
     // Store sticky provider
-    await stickyTracker?.set(providerInfo.id)
+    if (res.status === 200) await stickyTracker?.set(providerInfo.id)
 
     // Temporarily change 404 to 400 status code b/c solid start automatically override 404 response
     const resStatus = res.status === 404 ? 400 : res.status
@@ -273,8 +269,6 @@ export async function handler(
       const body = JSON.stringify(responseConverter(json))
       logger.metric({ response_length: body.length })
       logger.debug("RESPONSE: " + body)
-      dataDumper?.provideResponse(body)
-      dataDumper?.flush()
       return new Response(body, {
         status: resStatus,
         statusText: res.statusText,
@@ -294,16 +288,17 @@ export async function handler(
 
         let buffer = ""
         let responseLength = 0
+        let timestampFirstByte = 0
 
         function pump(): Promise<void> {
           return (
             reader?.read().then(async ({ done, value: rawValue }) => {
               if (done) {
+                const timestampLastByte = Date.now()
                 logger.metric({
                   response_length: responseLength,
-                  "timestamp.last_byte": Date.now(),
+                  "timestamp.last_byte": timestampLastByte,
                 })
-                dataDumper?.flush()
                 await rateLimiter?.track()
                 const usage = usageParser.retrieve()
                 if (usage) {
@@ -311,6 +306,14 @@ export async function handler(
                   const costInfo = calculateCost(modelInfo, usageInfo)
                   await trialLimiter?.track(usageInfo)
                   await modelTpmLimiter?.track(providerInfo.id, providerInfo.model, usageInfo)
+                  await modelTpsLimiter?.track(
+                    providerInfo.id,
+                    providerInfo.model,
+                    providerInfo.tpsGoal,
+                    timestampFirstByte,
+                    timestampLastByte,
+                    usageInfo,
+                  )
                   await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
                   await reload(billingSource, authInfo, costInfo)
                   const cost = calculateOccurredCost(billingSource, costInfo)
@@ -321,10 +324,10 @@ export async function handler(
               }
 
               if (responseLength === 0) {
-                const now = Date.now()
+                timestampFirstByte = Date.now()
                 logger.metric({
-                  time_to_first_byte: now - startTimestamp,
-                  "timestamp.first_byte": now,
+                  time_to_first_byte: timestampFirstByte - startTimestamp,
+                  "timestamp.first_byte": timestampFirstByte,
                 })
               }
 
@@ -333,7 +336,6 @@ export async function handler(
 
               responseLength += value.length
               buffer += decoder.decode(value, { stream: true })
-              dataDumper?.provideStream(buffer)
 
               const parts = buffer.split(providerInfo.streamSeparator)
               buffer = parts.pop() ?? ""
@@ -472,12 +474,12 @@ export async function handler(
     zenData: ZenData,
     authInfo: AuthInfo,
     modelInfo: ModelInfo,
-    ip: string,
-    sessionId: string,
+    stickyId: string,
     trialProviders: string[] | undefined,
     retry: RetryOptions,
     stickyProvider: string | undefined,
     modelTpmLimits: Record<string, number> | undefined,
+    modelTpsLimits: Record<string, boolean> | undefined,
   ) {
     const modelProvider = (() => {
       // Byok is top priority b/c if user set their own API key, we should use it
@@ -509,6 +511,11 @@ export async function handler(
             const usage = modelTpmLimits?.[`${provider.id}/${provider.model}`] ?? 0
             return usage < provider.tpmLimit * 1_000_000
           })
+          .filter((provider) => {
+            if (!provider.tpsGoal) return true
+            const isLowTps = modelTpsLimits?.[`${provider.id}/${provider.model}/${provider.tpsGoal}`] ?? false
+            return !isLowTps
+          })
           .map((provider) => {
             topPriority = Math.min(topPriority, provider.priority)
             return provider
@@ -517,11 +524,10 @@ export async function handler(
           .flatMap((provider) => Array<typeof provider>(provider.weight).fill(provider))
 
         // Use the last 4 characters of session ID to select a provider
-        const identifier = sessionId.length ? sessionId : ip
         let h = 0
-        const l = identifier.length
+        const l = stickyId.length
         for (let i = l - 4; i < l; i++) {
-          h = (h * 31 + identifier.charCodeAt(i)) | 0 // 32-bit int
+          h = (h * 31 + stickyId.charCodeAt(i)) | 0 // 32-bit int
         }
         const index = (h >>> 0) % providers.length // make unsigned + range 0..length-1
         const provider = providers[index || 0]
@@ -889,10 +895,6 @@ export async function handler(
 
     const inputCost = modelCost.input * inputTokens * 100
     const outputCost = modelCost.output * outputTokens * 100
-    const reasoningCost = (() => {
-      if (!reasoningTokens) return undefined
-      return modelCost.output * reasoningTokens * 100
-    })()
     const cacheReadCost = (() => {
       if (!cacheReadTokens) return undefined
       if (!modelCost.cacheRead) return undefined
@@ -909,17 +911,11 @@ export async function handler(
       return modelCost.cacheWrite1h * cacheWrite1hTokens * 100
     })()
     const totalCostInCent =
-      inputCost +
-      outputCost +
-      (reasoningCost ?? 0) +
-      (cacheReadCost ?? 0) +
-      (cacheWrite5mCost ?? 0) +
-      (cacheWrite1hCost ?? 0)
+      inputCost + outputCost + (cacheReadCost ?? 0) + (cacheWrite5mCost ?? 0) + (cacheWrite1hCost ?? 0)
     return {
       totalCostInCent,
       inputCost,
       outputCost,
-      reasoningCost,
       cacheReadCost,
       cacheWrite5mCost,
       cacheWrite1hCost,
@@ -941,8 +937,7 @@ export async function handler(
   ) {
     const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
       usageInfo
-    const { totalCostInCent, inputCost, outputCost, reasoningCost, cacheReadCost, cacheWrite5mCost, cacheWrite1hCost } =
-      costInfo
+    const { totalCostInCent, inputCost, outputCost, cacheReadCost, cacheWrite5mCost, cacheWrite1hCost } = costInfo
 
     logger.metric({
       "tokens.input": inputTokens,
@@ -953,14 +948,12 @@ export async function handler(
       "tokens.cache_write_1h": cacheWrite1hTokens,
       "cost.input.microcents": centsToMicroCents(inputCost),
       "cost.output.microcents": centsToMicroCents(outputCost),
-      "cost.reasoning.microcents": reasoningCost ? centsToMicroCents(reasoningCost) : undefined,
       "cost.cache_read.microcents": cacheReadCost ? centsToMicroCents(cacheReadCost) : undefined,
       "cost.cache_write.microcents": cacheWrite5mCost ? centsToMicroCents(cacheWrite5mCost) : undefined,
       "cost.total.microcents": centsToMicroCents(totalCostInCent),
       // deprecated - remove after May 20, 2026
       "cost.input": Math.round(inputCost),
       "cost.output": Math.round(outputCost),
-      "cost.reasoning": reasoningCost ? Math.round(reasoningCost) : undefined,
       "cost.cache_read": cacheReadCost ? Math.round(cacheReadCost) : undefined,
       "cost.cache_write_5m": cacheWrite5mCost ? Math.round(cacheWrite5mCost) : undefined,
       "cost.cache_write_1h": cacheWrite1hCost ? Math.round(cacheWrite1hCost) : undefined,

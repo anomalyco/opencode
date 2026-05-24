@@ -57,14 +57,7 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     () => todos().length > 0 && todos().every((todo) => todo.status === "completed" || todo.status === "cancelled"),
   )
 
-  const status = createMemo(() => {
-    const id = params.id
-    if (!id) return idle
-    return sync.data.session_status[id] ?? idle
-  })
-
-  const busy = createMemo(() => status().type !== "idle")
-  const live = createMemo(() => busy() || blocked())
+  const live = createMemo(() => sync.data.session_working(params.id ?? "") || blocked())
 
   const [store, setStore] = createStore({
     responding: undefined as string | undefined,

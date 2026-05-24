@@ -1,17 +1,13 @@
 export * as ConfigFormatter from "./formatter"
 
 import { Schema } from "effect"
-import { zod } from "@opencode-ai/core/effect-zod"
-import { withStatics } from "@opencode-ai/core/schema"
 
 export const Entry = Schema.Struct({
   disabled: Schema.optional(Schema.Boolean),
   command: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
   environment: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   extensions: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
-}).pipe(withStatics((s) => ({ zod: zod(s) })))
+})
 
-export const Info = Schema.Union([Schema.Boolean, Schema.Record(Schema.String, Entry)]).pipe(
-  withStatics((s) => ({ zod: zod(s) })),
-)
+export const Info = Schema.Union([Schema.Boolean, Schema.Record(Schema.String, Entry)])
 export type Info = Schema.Schema.Type<typeof Info>

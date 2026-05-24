@@ -11,7 +11,7 @@ import { lte } from "drizzle-orm"
 import { not } from "drizzle-orm"
 import { or } from "drizzle-orm"
 import { Effect, Scope } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { HistoryPayload, ReplayPayload, SessionPayload } from "../groups/sync"
 import * as Log from "@opencode-ai/core/util/log"
@@ -59,7 +59,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
 
     const steal = Effect.fn("SyncHttpApi.steal")(function* (ctx: { payload: typeof SessionPayload.Type }) {
       const workspaceID = yield* InstanceState.workspaceID
-      if (!workspaceID) throw new Error("Cannot steal session without workspace context")
+      if (!workspaceID) return yield* new HttpApiError.BadRequest({})
 
       yield* sync.run(Session.Event.Updated, {
         sessionID: ctx.payload.sessionID,

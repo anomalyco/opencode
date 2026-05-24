@@ -1,4 +1,4 @@
-import { parseDiffFromFile, type FileDiffMetadata } from "@pierre/diffs"
+import { parseDiffFromFile, parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs"
 import { formatPatch, parsePatch, structuredPatch } from "diff"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 
@@ -34,6 +34,8 @@ function patch(diff: ReviewDiff) {
       const afterLines: Array<{ text: string; newline: boolean }> = []
       let previous: "-" | "+" | " " | undefined
 
+      const patchIsPartial = patch.hunks.every((h) => h.oldStart > 1)
+
       for (const hunk of patch.hunks) {
         for (const line of hunk.lines) {
           if (line.startsWith("\\")) {
@@ -67,9 +69,10 @@ function patch(diff: ReviewDiff) {
         before: beforeLines.map((line) => line.text + (line.newline ? "\n" : "")).join(""),
         after: afterLines.map((line) => line.text + (line.newline ? "\n" : "")).join(""),
         patch: diff.patch,
+        patchIsPartial,
       }
     } catch {
-      return { before: "", after: "", patch: diff.patch }
+      return { before: "", after: "", patch: diff.patch, patchIsPartial: false }
     }
   }
   return {
@@ -86,27 +89,32 @@ function patch(diff: ReviewDiff) {
         { context: Number.MAX_SAFE_INTEGER },
       ),
     ),
+    patchIsPartial: false,
   }
 }
 
-function file(file: string, patch: string, before: string, after: string) {
+function file(file: string, patch: string, before: string, after: string, partial = false) {
   const hit = cache.get(patch)
   if (hit) return hit
 
-  const value = parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after })
+  let value: FileDiffMetadata | undefined
+  if (partial) value = parsePatchFiles(patch)[0]?.files[0]
+  if (value === undefined) value = parseDiffFromFile({ name: file, contents: before }, { name: file, contents: after })
+
   cache.set(patch, value)
   return value
 }
 
 export function normalize(diff: ReviewDiff): ViewDiff {
   const next = patch(diff)
+  const fileDiff = file(diff.file, next.patch, next.before, next.after, next.patchIsPartial)
   return {
     file: diff.file,
     patch: next.patch,
     additions: diff.additions,
     deletions: diff.deletions,
     status: diff.status,
-    fileDiff: file(diff.file, next.patch, next.before, next.after),
+    fileDiff,
   }
 }
 

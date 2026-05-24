@@ -49,6 +49,7 @@ type Theme = TuiThemeCurrent & {
   _hasSelectedListItemText: boolean
 }
 type ThemeColor = Exclude<keyof TuiThemeCurrent, "thinkingOpacity">
+type SyntaxStyleOverrides = Record<string, { italic?: boolean }>
 
 export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
   // If theme explicitly defines selectedListItemText, use it
@@ -718,16 +719,18 @@ export function generateSyntax(theme: Theme) {
   return SyntaxStyle.fromTheme(getSyntaxRules(theme))
 }
 
-export function generateSubtleSyntax(theme: Theme) {
+export function generateSubtleSyntax(theme: Theme, overrides?: SyntaxStyleOverrides) {
   const rules = getSyntaxRules(theme)
   return SyntaxStyle.fromTheme(
     rules.map((rule) => {
+      const override = rule.scope.reduce((acc, scope) => ({ ...acc, ...overrides?.[scope] }), {})
       if (rule.style.foreground) {
         const fg = rule.style.foreground
         return {
           ...rule,
           style: {
             ...rule.style,
+            ...override,
             foreground: RGBA.fromInts(
               Math.round(fg.r * 255),
               Math.round(fg.g * 255),
@@ -773,7 +776,7 @@ function getSyntaxRules(theme: Theme) {
     {
       scope: ["extmark.paste"],
       style: {
-        foreground: theme.background,
+        foreground: selectedForeground(theme, theme.warning),
         background: theme.warning,
         bold: true,
       },
@@ -962,6 +965,7 @@ function getSyntaxRules(theme: Theme) {
       style: {
         foreground: theme.markdownHeading,
         bold: true,
+        underline: true,
       },
     },
     {

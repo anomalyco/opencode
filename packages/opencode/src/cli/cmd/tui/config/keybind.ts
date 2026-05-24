@@ -2,34 +2,40 @@ export * as TuiKeybind from "./keybind"
 
 import type { KeyEvent, Renderable } from "@opentui/core"
 import type { Binding } from "@opentui/keymap"
-import type { BindingCommandMap, BindingConfig, BindingDefaults, BindingValue } from "@opentui/keymap/extras"
-import z from "zod"
+import type { BindingCommandMap, BindingConfig, BindingDefaults } from "@opentui/keymap/extras"
+import type { DeepMutable } from "@opencode-ai/core/schema"
+import { Schema } from "effect"
 
-const KeyStroke = z
-  .object({
-    name: z.string(),
-    ctrl: z.boolean().optional(),
-    shift: z.boolean().optional(),
-    meta: z.boolean().optional(),
-    super: z.boolean().optional(),
-    hyper: z.boolean().optional(),
-  })
-  .strict()
+const KeyStroke = Schema.Struct({
+  name: Schema.String,
+  ctrl: Schema.optional(Schema.Boolean),
+  shift: Schema.optional(Schema.Boolean),
+  meta: Schema.optional(Schema.Boolean),
+  super: Schema.optional(Schema.Boolean),
+  hyper: Schema.optional(Schema.Boolean),
+})
 
-const BindingObject = z
-  .object({
-    key: z.union([z.string(), KeyStroke]),
-    event: z.enum(["press", "release"]).optional(),
-    preventDefault: z.boolean().optional(),
-    fallthrough: z.boolean().optional(),
-  })
-  .passthrough()
+const BindingObject = Schema.StructWithRest(
+  Schema.Struct({
+    key: Schema.Union([Schema.String, KeyStroke]),
+    event: Schema.optional(Schema.Literals(["press", "release"])),
+    preventDefault: Schema.optional(Schema.Boolean),
+    fallthrough: Schema.optional(Schema.Boolean),
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+)
 
-const BindingItem = z.union([z.string(), KeyStroke, BindingObject])
-export const BindingValueSchema = z.union([z.literal(false), z.literal("none"), BindingItem, z.array(BindingItem)])
+const BindingItem = Schema.Union([Schema.String, KeyStroke, BindingObject])
+export const BindingValueSchema = Schema.Union([
+  Schema.Literal(false),
+  Schema.Literal("none"),
+  BindingItem,
+  Schema.Array(BindingItem),
+])
+export type BindingValueSchema = DeepMutable<Schema.Schema.Type<typeof BindingValueSchema>>
 
 type Definition = {
-  default: z.input<typeof BindingValueSchema>
+  default: BindingValueSchema
   description: string
 }
 
@@ -38,7 +44,7 @@ export const LeaderDefault = "ctrl+x"
 
 const keybind = (value: Definition["default"], description: string): Definition => ({ default: value, description })
 
-const Definitions = {
+export const Definitions = {
   leader: keybind(LeaderDefault, "Leader key for keybind combinations"),
 
   app_exit: keybind("ctrl+c,ctrl+d,<leader>q", "Exit the application"),
@@ -53,6 +59,19 @@ const Definitions = {
   command_list: keybind("ctrl+p", "List available commands"),
   help_show: keybind("none", "Open help dialog"),
   docs_open: keybind("none", "Open documentation"),
+  diff_close: keybind("escape,q", "Close diff viewer"),
+  diff_toggle: keybind("enter,space", "Toggle diff viewer item"),
+  diff_expand: keybind("right", "Expand diff viewer item"),
+  diff_expand_all: keybind("E", "Expand all diff viewer folders"),
+  diff_collapse: keybind("left", "Collapse diff viewer item"),
+  diff_switch_focus: keybind("tab", "Switch diff viewer focus"),
+  diff_next_file: keybind("n", "Jump to next diff file"),
+  diff_previous_file: keybind("p", "Jump to previous diff file"),
+  diff_toggle_file_tree: keybind("b", "Toggle diff viewer file tree"),
+  diff_single_patch: keybind("s", "Toggle single patch view"),
+  diff_switch_source: keybind("d", "Switch diff viewer source"),
+  diff_toggle_view: keybind("v", "Toggle diff viewer split or unified view"),
+  diff_help: keybind("?", "Show more diff viewer shortcuts"),
 
   editor_open: keybind("<leader>e", "Open external editor"),
   theme_list: keybind("<leader>t", "List available themes"),
@@ -80,6 +99,16 @@ const Definitions = {
   session_child_cycle: keybind("right", "Go to next child session"),
   session_child_cycle_reverse: keybind("left", "Go to previous child session"),
   session_parent: keybind("up", "Go to parent session"),
+  session_pin_toggle: keybind("ctrl+f", "Pin or unpin session in the session list"),
+  session_quick_switch_1: keybind("<leader>1", "Switch to session in quick slot 1"),
+  session_quick_switch_2: keybind("<leader>2", "Switch to session in quick slot 2"),
+  session_quick_switch_3: keybind("<leader>3", "Switch to session in quick slot 3"),
+  session_quick_switch_4: keybind("<leader>4", "Switch to session in quick slot 4"),
+  session_quick_switch_5: keybind("<leader>5", "Switch to session in quick slot 5"),
+  session_quick_switch_6: keybind("<leader>6", "Switch to session in quick slot 6"),
+  session_quick_switch_7: keybind("<leader>7", "Switch to session in quick slot 7"),
+  session_quick_switch_8: keybind("<leader>8", "Switch to session in quick slot 8"),
+  session_quick_switch_9: keybind("<leader>9", "Switch to session in quick slot 9"),
 
   stash_delete: keybind("ctrl+d", "Delete stash entry"),
   model_provider_list: keybind("ctrl+a", "Open provider list from model dialog"),
@@ -172,6 +201,7 @@ const Definitions = {
   "dialog.select.home": keybind("home", "Move to first dialog item"),
   "dialog.select.end": keybind("end", "Move to last dialog item"),
   "dialog.select.submit": keybind("return", "Submit selected dialog item"),
+  "dialog.prompt.submit": keybind("return", "Submit dialog prompt"),
   "dialog.mcp.toggle": keybind("space", "Toggle MCP in MCP dialog"),
   "prompt.autocomplete.prev": keybind("up,ctrl+p", "Move to previous autocomplete item"),
   "prompt.autocomplete.next": keybind("down,ctrl+n", "Move to next autocomplete item"),
@@ -201,21 +231,17 @@ const Definitions = {
   which_key_end: keybind("ctrl+alt+end", "Jump to last which-key binding"),
 } satisfies Record<string, Definition>
 
-type KeybindName = keyof typeof Definitions & string
+type KeybindName = keyof typeof Definitions
+const KeybindNames = new Set<string>(Object.keys(Definitions))
 
-const KeybindShape = Object.fromEntries(
-  Object.entries(Definitions).map(([name, item]) => [
-    name,
-    BindingValueSchema.optional().default(item.default).describe(item.description),
-  ]),
-) as Record<KeybindName, z.ZodDefault<z.ZodOptional<typeof BindingValueSchema>>>
-
-const KeybindOverrideShape = Object.fromEntries(
-  Object.entries(Definitions).map(([name, item]) => [name, BindingValueSchema.optional().describe(item.description)]),
-) as Record<KeybindName, z.ZodOptional<typeof BindingValueSchema>>
-
-export const Keybinds = z.strictObject(KeybindShape).describe("TUI keybinding configuration")
-export const KeybindOverrides = z.strictObject(KeybindOverrideShape).describe("TUI keybinding overrides")
+export const KeybindOverrides = Schema.Struct(
+  Object.fromEntries(
+    Object.entries(Definitions).map(([name, item]) => [
+      name,
+      Schema.optional(BindingValueSchema).annotate({ description: item.description }),
+    ]),
+  ),
+).annotate({ description: "TUI keybinding overrides" })
 export const Descriptions = Object.fromEntries(
   Object.entries(Definitions).map(([name, item]) => [name, item.description]),
 ) as Record<KeybindName, string>
@@ -232,6 +258,19 @@ export const CommandMap = {
   command_list: "command.palette.show",
   help_show: "help.show",
   docs_open: "docs.open",
+  diff_close: "diff.close",
+  diff_toggle: "diff.toggle",
+  diff_expand: "diff.expand",
+  diff_expand_all: "diff.expand_all",
+  diff_collapse: "diff.collapse",
+  diff_switch_focus: "diff.switch_focus",
+  diff_next_file: "diff.next_file",
+  diff_previous_file: "diff.previous_file",
+  diff_toggle_file_tree: "diff.toggle_file_tree",
+  diff_single_patch: "diff.single_patch",
+  diff_switch_source: "diff.switch_source",
+  diff_toggle_view: "diff.toggle_view",
+  diff_help: "diff.help",
   editor_open: "prompt.editor",
   theme_list: "theme.switch",
   theme_switch_mode: "theme.switch_mode",
@@ -257,6 +296,16 @@ export const CommandMap = {
   session_child_cycle: "session.child.next",
   session_child_cycle_reverse: "session.child.previous",
   session_parent: "session.parent",
+  session_pin_toggle: "session.pin.toggle",
+  session_quick_switch_1: "session.quick_switch.1",
+  session_quick_switch_2: "session.quick_switch.2",
+  session_quick_switch_3: "session.quick_switch.3",
+  session_quick_switch_4: "session.quick_switch.4",
+  session_quick_switch_5: "session.quick_switch.5",
+  session_quick_switch_6: "session.quick_switch.6",
+  session_quick_switch_7: "session.quick_switch.7",
+  session_quick_switch_8: "session.quick_switch.8",
+  session_quick_switch_9: "session.quick_switch.9",
   stash_delete: "stash.delete",
   model_provider_list: "model.dialog.provider",
   model_favorite_toggle: "model.dialog.favorite",
@@ -361,8 +410,8 @@ const CommandDescriptions = Object.fromEntries(
   ]),
 ) as Record<string, string>
 
-export type Keybinds = z.output<typeof Keybinds>
-export type KeybindOverrides = z.output<typeof KeybindOverrides>
+export type Keybinds = { [K in KeybindName]: BindingValueSchema }
+export type KeybindOverrides = Partial<Keybinds>
 export type BindingLookupView = {
   readonly bindings: readonly Binding<Renderable, KeyEvent>[]
   get(command: string): readonly Binding<Renderable, KeyEvent>[]
@@ -374,6 +423,29 @@ export type BindingLookupView = {
 
 export function toBindingConfig(keybinds: Keybinds): BindingConfig<Renderable, KeyEvent> {
   return Object.fromEntries(Object.entries(keybinds)) as BindingConfig<Renderable, KeyEvent>
+}
+
+const decodeBindingValue = Schema.decodeUnknownSync(BindingValueSchema)
+
+export function defaultValue(name: KeybindName) {
+  return Definitions[name].default
+}
+
+export function parse(keybinds: KeybindOverrides): Keybinds {
+  const invalid = unknownKeys(keybinds)
+  if (invalid.length) throw new Error(`Unrecognized keybind${invalid.length === 1 ? "" : "s"}: ${invalid.join(", ")}`)
+  return Object.fromEntries(
+    Object.entries(Definitions).map(([name, item]) => [
+      name,
+      decodeBindingValue(keybinds[name as KeybindName] ?? item.default),
+    ]),
+  ) as Keybinds
+}
+
+export const Keybinds = { parse }
+
+export function unknownKeys(input: object) {
+  return Object.keys(input).filter((key) => !KeybindNames.has(key))
 }
 
 export function bindingDefaults(): BindingDefaults<Renderable, KeyEvent> {

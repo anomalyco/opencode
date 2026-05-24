@@ -67,11 +67,11 @@ Most exported tools are already on the intended Effect-native shape. The remaini
 
 Current spot cleanups worth tracking:
 
-- [ ] `read.ts` — still bridges to Node stream / `readline` helpers and Promise-based binary detection
+- [x] `read.ts` — streams through `AppFileSystem.Service.stream` with `Stream.splitLines`; the legacy Node stream / `readline` helper is gone
 - [ ] `bash.ts` — already uses Effect child-process primitives; only keep tracking shell-specific platform bridges and parser/loading details as they come up
 - [ ] `webfetch.ts` — already uses `HttpClient`; remaining work is limited to smaller boundary helpers like HTML text extraction
 - [ ] `file/ripgrep.ts` — adjacent to tool migration; still has raw fs/process usage that affects `grep.ts` and file-search routes
-- [ ] `patch/index.ts` — adjacent to tool migration; still has raw fs usage behind patch application
+- [x] `patch/index.ts` — apply path now returns `Effect` over `AppFileSystem.Service`; the parser and chunk replacer stay pure
 
 Notable items that are already effectively on the target path and do not need separate migration bullets right now:
 
@@ -85,6 +85,4 @@ Notable items that are already effectively on the target path and do not need se
 
 Current raw fs users that still appear relevant here:
 
-- `tool/read.ts` — `fs.createReadStream`, `readline`
 - `file/ripgrep.ts` — `fs/promises`
-- `patch/index.ts` — `fs`, `fs/promises`

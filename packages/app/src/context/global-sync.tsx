@@ -1,12 +1,4 @@
-import type {
-  Config,
-  OpencodeClient,
-  Path,
-  Project,
-  ProviderAuthResponse,
-  ProviderListResponse,
-  Todo,
-} from "@opencode-ai/sdk/v2/client"
+import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
@@ -18,8 +10,10 @@ import {
   bootstrapDirectory,
   bootstrapGlobal,
   clearProviderRev,
+  loadAgentsQuery,
   loadGlobalConfigQuery,
   loadPathQuery,
+  loadProjectsQuery,
   loadProvidersQuery,
 } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
@@ -33,6 +27,9 @@ import { formatServerError } from "@/utils/server-errors"
 import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createRefreshQueue } from "./global-sync/queue"
 import { directoryKey } from "./global-sync/utils"
+import { PathKey } from "@/utils/path-key"
+import { createDirSyncContext } from "./directory-sync"
+import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
 
 type GlobalStore = {
   ready: boolean
@@ -42,29 +39,38 @@ type GlobalStore = {
   session_todo: {
     [sessionID: string]: Todo[]
   }
-  provider: ProviderListResponse
+  provider: NormalizedProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
   reload: undefined | "pending" | "complete"
 }
 
-export const loadSessionsQueryKey = (directory: string) => [directory, "loadSessions"] as const
-
-export const mcpQueryKey = (directory: string) => [directory, "mcp"] as const
-
 export const loadMcpQuery = (directory: string, sdk: OpencodeClient) =>
   queryOptions({
-    queryKey: mcpQueryKey(directory),
+    queryKey: [directory, "mcp"] as const,
     queryFn: () => sdk.mcp.status().then((r) => r.data ?? {}),
   })
 
-export const lspQueryKey = (directory: string) => [directory, "lsp"] as const
-
 export const loadLspQuery = (directory: string, sdk: OpencodeClient) =>
   queryOptions({
-    queryKey: lspQueryKey(directory),
+    queryKey: [directory, "lsp"] as const,
     queryFn: () => sdk.lsp.status().then((r) => r.data ?? []),
   })
+
+function makeQueryOptionsApi(globalSDK: () => OpencodeClient, sdkFor: (dir: PathKey) => OpencodeClient) {
+  return {
+    globalConfig: () => loadGlobalConfigQuery(globalSDK()),
+    projects: () => loadProjectsQuery(globalSDK()),
+    providers: (directory: PathKey | null) =>
+      loadProvidersQuery(directory, directory === null ? globalSDK() : sdkFor(directory)),
+    path: (directory: PathKey | null) => loadPathQuery(directory, directory === null ? globalSDK() : sdkFor(directory)),
+    agents: (directory: PathKey) => loadAgentsQuery(directory, sdkFor(directory)),
+    mcp: (directory: PathKey) => loadMcpQuery(directory, sdkFor(directory)),
+    lsp: (directory: PathKey) => loadLspQuery(directory, sdkFor(directory)),
+    sessions: (directory: PathKey) => ({ queryKey: [directory, "loadSessions"] as const }),
+  }
+}
+export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
 
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
@@ -77,12 +83,22 @@ function createGlobalSync() {
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
 
+  const sdkFor = (directory: string) => {
+    const key = directoryKey(directory)
+    const cached = sdkCache.get(key)
+    if (cached) return cached
+    const sdk = globalSDK.createClient({
+      directory,
+      throwOnError: true,
+    })
+    sdkCache.set(key, sdk)
+    return sdk
+  }
+
+  const queryOptionsApi = makeQueryOptionsApi(() => globalSDK.client, sdkFor)
+
   const [configQuery, providerQuery, pathQuery] = useQueries(() => ({
-    queries: [
-      loadGlobalConfigQuery(globalSDK.client),
-      loadProvidersQuery(null, globalSDK.client),
-      loadPathQuery(null, globalSDK.client),
-    ],
+    queries: [queryOptionsApi.globalConfig(), queryOptionsApi.providers(null), queryOptionsApi.path(null)],
   }))
 
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
@@ -98,7 +114,7 @@ function createGlobalSync() {
       return pathQuery.data ?? EMPTY
     },
     get provider() {
-      const EMPTY = { all: [], connected: [], default: {} }
+      const EMPTY = { all: new Map(), connected: [], default: {} }
       if (providerQuery.isLoading) return EMPTY
       return providerQuery.data ?? EMPTY
     },
@@ -181,18 +197,6 @@ function createGlobalSync() {
     bootstrapInstance,
   })
 
-  const sdkFor = (directory: string) => {
-    const key = directoryKey(directory)
-    const cached = sdkCache.get(key)
-    if (cached) return cached
-    const sdk = globalSDK.createClient({
-      directory,
-      throwOnError: true,
-    })
-    sdkCache.set(key, sdk)
-    return sdk
-  }
-
   const children = createChildStoreManager({
     owner,
     isBooting: (directory) => booting.has(directory),
@@ -209,7 +213,7 @@ function createGlobalSync() {
       clearSessionPrefetchDirectory(key)
     },
     translate: language.t,
-    getSdk: sdkFor,
+    queryOptions: queryOptionsApi,
     global: {
       provider: globalStore.provider,
     },
@@ -239,7 +243,7 @@ function createGlobalSync() {
     const limit = Math.max(store.limit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
     const promise = queryClient
       .fetchQuery({
-        queryKey: loadSessionsQueryKey(key),
+        ...queryOptionsApi.sessions(key),
         queryFn: () =>
           loadRootSessionsWithFallback({
             directory,
@@ -368,7 +372,7 @@ function createGlobalSync() {
       setSessionTodo,
       vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
-        void queryClient.fetchQuery(loadLspQuery(key, sdkFor(directory)))
+        void queryClient.fetchQuery(queryOptionsApi.lsp(key))
       },
     })
   })
@@ -412,8 +416,17 @@ function createGlobalSync() {
 
   const updateConfigMutation = useMutation(() => ({
     mutationFn: (config: Config) => globalSDK.client.global.config.update({ config }),
-    onSuccess: () => bootstrap.refetch(),
+    onSuccess: () => {
+      bootstrap.refetch()
+      // Invalidate all provider queries so newly configured custom providers
+      // appear immediately in the available provider list across all directories.
+      queryClient.invalidateQueries({ queryKey: [null, "providers"] })
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[1] === "providers" })
+    },
   }))
+
+  const dirSyncContexts = new Map<string, ReturnType<typeof createDirSyncContext>>()
+  const dirSyncContextRefCounts = new Map<string, number>()
 
   return {
     data: globalStore,
@@ -426,11 +439,32 @@ function createGlobalSync() {
     },
     child: children.child,
     peek: children.peek,
+    queryOptions: queryOptionsApi,
     // bootstrap,
     updateConfig: updateConfigMutation.mutateAsync,
     project: projectApi,
     todo: {
       set: setSessionTodo,
+    },
+    createDirSyncContext: (directory: string) => {
+      onCleanup(() => {
+        dirSyncContextRefCounts.set(directory, (dirSyncContextRefCounts.get(directory) ?? 0) - 1)
+        if (dirSyncContextRefCounts.get(directory) === 0) {
+          dirSyncContexts.delete(directory)
+          dirSyncContextRefCounts.delete(directory)
+        }
+      })
+
+      const cached = dirSyncContexts.get(directory)
+      if (cached) {
+        dirSyncContextRefCounts.set(directory, (dirSyncContextRefCounts.get(directory) ?? 0) + 1)
+        return cached
+      }
+      const ctx = createDirSyncContext(globalSDK.createClient({ directory, throwOnError: true }), directory)
+      dirSyncContexts.set(directory, ctx)
+      dirSyncContextRefCounts.set(directory, 1)
+
+      return ctx
     },
   }
 }
@@ -446,4 +480,8 @@ export function useGlobalSync() {
   const context = useContext(GlobalSyncContext)
   if (!context) throw new Error("useGlobalSync must be used within GlobalSyncProvider")
   return context
+}
+
+export function useQueryOptions() {
+  return useGlobalSync().queryOptions
 }
