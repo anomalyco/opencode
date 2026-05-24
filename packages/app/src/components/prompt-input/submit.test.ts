@@ -1,7 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
-import type { Prompt } from "@/context/prompt"
+import type { ContextItem, Prompt } from "@/context/prompt"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
+type FollowupDraft = import("./submit").FollowupDraft
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
@@ -20,10 +21,13 @@ const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
+const removedContextKeys: string[] = []
 
 let params: { id?: string } = {}
 let selected = "/repo/worktree-a"
 let variant: string | undefined
+let promptContextItems: Array<ContextItem & { key: string }> = []
+let promptResetCount = 0
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 
@@ -106,12 +110,17 @@ beforeAll(async () => {
   mock.module("@/context/prompt", () => ({
     usePrompt: () => ({
       current: () => promptValue,
-      reset: () => undefined,
+      reset: () => {
+        promptResetCount += 1
+      },
       set: () => undefined,
       context: {
         add: () => undefined,
-        remove: () => undefined,
-        items: () => [],
+        remove: (key: string) => {
+          removedContextKeys.push(key)
+          promptContextItems = promptContextItems.filter((item) => item.key !== key)
+        },
+        items: () => promptContextItems,
       },
     }),
   }))
@@ -211,8 +220,11 @@ beforeEach(() => {
   params = {}
   sentShell.length = 0
   syncedDirectories.length = 0
+  removedContextKeys.length = 0
   selected = "/repo/worktree-a"
   variant = undefined
+  promptContextItems = []
+  promptResetCount = 0
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
 
@@ -341,5 +353,83 @@ describe("prompt submit worktree selection", () => {
 
     expect(storedSessions["/repo/worktree-a"]).toEqual([{ id: "session-1", title: "New session 1" }])
     expect(optimisticSeeded).toEqual([true])
+  })
+})
+
+describe("queued followups", () => {
+  test("queues followup drafts instead of sending immediately", async () => {
+    params = { id: "session-1" }
+    variant = "high"
+    promptContextItems = [
+      {
+        key: "context-1",
+        type: "file",
+        path: "src/index.ts",
+        selection: undefined,
+        comment: "Check this",
+        commentID: "comment-1",
+        commentOrigin: "file",
+        preview: "const value = 1",
+      },
+    ]
+
+    const queued: FollowupDraft[] = []
+    const modes: Array<"normal" | "shell"> = []
+    const popovers: Array<"at" | "slash" | null> = []
+    let submitCalls = 0
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 1,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => true,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: (mode) => modes.push(mode),
+      setPopover: (popover) => popovers.push(popover),
+      shouldQueue: () => true,
+      onQueue: (draft) => queued.push(draft),
+      onSubmit: () => {
+        submitCalls += 1
+      },
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+
+    expect(queued).toHaveLength(1)
+    expect(queued[0]).toMatchObject({
+      sessionID: "session-1",
+      sessionDirectory: "/repo/main",
+      prompt: promptValue,
+      context: [
+        {
+          key: "context-1",
+          type: "file",
+          path: "src/index.ts",
+          comment: "Check this",
+          commentID: "comment-1",
+          commentOrigin: "file",
+          preview: "const value = 1",
+        },
+      ],
+      agent: "agent",
+      model: { providerID: "provider", modelID: "model" },
+      variant: "high",
+    })
+    expect(promptResetCount).toBe(1)
+    expect(promptContextItems).toEqual([])
+    expect(removedContextKeys).toEqual(["context-1"])
+    expect(modes).toEqual(["normal"])
+    expect(popovers).toEqual([null])
+    expect(submitCalls).toBe(0)
+    expect(optimistic).toEqual([])
+    expect(createdSessions).toEqual([])
   })
 })

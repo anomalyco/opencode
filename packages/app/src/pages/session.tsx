@@ -58,6 +58,7 @@ import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
+import { shouldAutoSendFollowup, shouldQueueFollowup } from "@/pages/session/session-followup-state"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { shouldUseV2NewSessionPage } from "@/pages/session/new-session-layout"
 import { Identifier } from "@/utils/id"
@@ -1414,7 +1415,12 @@ export default function Page() {
   const queueEnabled = createMemo(() => {
     const id = params.id
     if (!id) return false
-    return settings.general.followup() === "queue" && busy(id) && !composer.blocked() && !isChildSession()
+    return shouldQueueFollowup({
+      followup: settings.general.followup(),
+      busy: busy(id),
+      blocked: composer.blocked(),
+      child: isChildSession(),
+    })
   })
 
   const followupText = (item: FollowupDraft) => {
@@ -1573,15 +1579,21 @@ export default function Page() {
     if (!sessionID) return
 
     const item = queuedFollowups()[0]
-    if (!item) return
-    if (followupBusy(sessionID)) return
-    if (followup.failed[sessionID] === item.id) return
-    if (followup.paused[sessionID]) return
-    if (isChildSession()) return
-    if (composer.blocked()) return
-    if (busy(sessionID)) return
+    if (
+      !shouldAutoSendFollowup({
+        hasItem: !!item,
+        sending: followupBusy(sessionID),
+        failed: followup.failed[sessionID] === item?.id,
+        paused: !!followup.paused[sessionID],
+        blocked: composer.blocked(),
+        busy: busy(sessionID),
+        child: isChildSession(),
+      })
+    ) {
+      return
+    }
 
-    void sendFollowup(sessionID, item.id)
+    void sendFollowup(sessionID, item!.id)
   })
 
   createResizeObserver(
