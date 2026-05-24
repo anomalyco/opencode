@@ -370,6 +370,7 @@ You can customize TUI behavior through `tui.json` (or `tui.jsonc`).
   },
   "diff_style": "auto",
   "mouse": true,
+  "timestamps_mode": "hide",
   "attention": {
     "enabled": true,
     "notifications": true,
@@ -396,6 +397,7 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `0.001`, supports decimal values). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
+- `timestamps_mode` - Sets the initial timestamp display mode for user messages. `"hide"` (default) shows nothing, `"footer"` shows the time under each user message, `"gutter"` shows a fixed `HH:MM` column to the left of each user message (click it to see the full date). The `/timestamps` slash command cycles between all three modes at runtime; the config key only seeds the default for new sessions.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.

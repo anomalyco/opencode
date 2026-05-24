@@ -52,6 +52,11 @@ export const DiffStyle = Schema.Literals(["auto", "stacked"]).annotate({
   description: "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
 })
 
+export const TimestampsMode = Schema.Literals(["hide", "footer", "gutter"]).annotate({
+  description:
+    "Control how message timestamps render: 'hide' (default) shows nothing, 'footer' shows the time under each user message, 'gutter' shows a HH:MM column to the left of each user message that opens a full date popup on click",
+})
+
 export const Attention = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean),
   notifications: Schema.optional(Schema.Boolean),
@@ -75,4 +80,5 @@ export const TuiInfo = Schema.Struct({
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  timestamps_mode: Schema.optional(TimestampsMode),
 })

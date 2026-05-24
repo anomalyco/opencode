@@ -56,6 +56,7 @@ import { useEditorContext } from "@tui/context/editor"
 import { useDialog } from "../../ui/dialog"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
+import { DialogTimestamp } from "./dialog-timestamp"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
@@ -83,6 +84,13 @@ import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
 import { nextThinkingMode, reasoningTitle, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
+import {
+  getTimestampsMode,
+  hourMinute,
+  nextTimestampsMode,
+  normalizeTimestampsMode,
+  type TimestampsMode,
+} from "../../util/timestamps"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
@@ -160,6 +168,7 @@ const context = createContext<{
   thinkingMode: () => ThinkingMode
   showThinking: () => boolean
   showTimestamps: () => boolean
+  timestampsMode: () => TimestampsMode
   showDetails: () => boolean
   showGenericToolOutput: () => boolean
   diffWrapMode: () => "word" | "none"
@@ -218,7 +227,12 @@ export function Session() {
   const thinking = useThinkingMode()
   const thinkingMode = thinking.mode
   const showThinking = createMemo(() => true)
-  const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
+  // The kv signal was historically "hide" | "show"; expanded to include "footer"
+  // and "gutter". Default seeded from tui.json (timestamps_mode, default "hide").
+  // Legacy "show" values are normalized to "footer" so users keep their toggle.
+  const timestampsDefault: TimestampsMode = getTimestampsMode(tuiConfig)
+  const [timestampsRaw, setTimestamps] = kv.signal<TimestampsMode>("timestamps", timestampsDefault)
+  const timestamps = createMemo(() => normalizeTimestampsMode(timestampsRaw(), timestampsDefault))
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
   const [showAssistantMetadata, _setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
@@ -233,7 +247,11 @@ export function Session() {
     if (sidebar() === "auto" && wide()) return true
     return false
   })
-  const showTimestamps = createMemo(() => timestamps() === "show")
+  // Backwards-compatible alias: existing call sites that gate the footer-style
+  // timestamp render check `showTimestamps()`. It now means "render the footer",
+  // which is the "footer" mode only — gutter mode renders the time elsewhere.
+  const timestampsMode = createMemo<TimestampsMode>(() => timestamps())
+  const showTimestamps = createMemo(() => timestampsMode() === "footer")
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
   const providers = createMemo(() => Model.index(sync.data.provider))
 
@@ -673,7 +691,12 @@ export function Session() {
       },
     },
     {
-      title: showTimestamps() ? "Hide timestamps" : "Show timestamps",
+      title: (() => {
+        const next = nextTimestampsMode(timestampsMode())
+        if (next === "hide") return "Hide timestamps"
+        if (next === "footer") return "Show timestamps under message"
+        return "Show timestamps in gutter"
+      })(),
       value: "session.toggle.timestamps",
       category: "Session",
       slash: {
@@ -681,7 +704,8 @@ export function Session() {
         aliases: ["toggle-timestamps"],
       },
       run: () => {
-        setTimestamps((prev) => (prev === "show" ? "hide" : "show"))
+        const next = nextTimestampsMode(timestampsMode())
+        setTimestamps(() => next)
         dialog.clear()
       },
     },
@@ -1096,6 +1120,7 @@ export function Session() {
           thinkingMode,
           showThinking,
           showTimestamps,
+          timestampsMode,
           showDetails,
           showGenericToolOutput,
           diffWrapMode,
@@ -1293,6 +1318,10 @@ const MIME_BADGE: Record<string, string> = {
   "application/x-directory": "dir",
 }
 
+// Fixed gutter width: 5 cells for "HH:MM" + 1 trailing space. Hardcoded so the
+// gutter column stays aligned across messages and never depends on locale.
+const TIMESTAMP_GUTTER_WIDTH = 6
+
 function UserMessage(props: {
   message: UserMessage
   parts: Part[]
@@ -1302,6 +1331,7 @@ function UserMessage(props: {
 }) {
   const ctx = use()
   const local = useLocal()
+  const dialog = useDialog()
   const text = createMemo(() => {
     const texts = props.parts
       .map((x) => {
@@ -1320,69 +1350,88 @@ function UserMessage(props: {
   const color = createMemo(() => local.agent.color(props.message.agent))
   const queuedFg = createMemo(() => selectedForeground(theme, color()))
   const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
+  const isGutter = createMemo(() => ctx.timestampsMode() === "gutter")
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
 
   return (
     <>
       <Show when={text()}>
-        <box
-          id={props.message.id}
-          border={["left"]}
-          borderColor={color()}
-          customBorderChars={SplitBorder.customBorderChars}
-          marginTop={props.index === 0 ? 0 : 1}
-        >
-          <box
-            onMouseOver={() => {
-              setHover(true)
-            }}
-            onMouseOut={() => {
-              setHover(false)
-            }}
-            onMouseUp={props.onMouseUp}
-            paddingTop={1}
-            paddingBottom={1}
-            paddingLeft={2}
-            backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
-            flexShrink={0}
-          >
-            <text fg={theme.text}>{text()}</text>
-            <Show when={files().length}>
-              <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
-                <For each={files()}>
-                  {(file) => {
-                    const bg = createMemo(() => {
-                      if (file.mime.startsWith("image/")) return theme.accent
-                      if (file.mime === "application/pdf") return theme.primary
-                      return theme.secondary
-                    })
-                    return (
-                      <text fg={theme.text}>
-                        <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
-                        <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
-                      </text>
-                    )
-                  }}
-                </For>
-              </box>
-            </Show>
-            <Show
-              when={queued()}
-              fallback={
-                <Show when={ctx.showTimestamps()}>
-                  <text fg={theme.textMuted}>
-                    <span style={{ fg: theme.textMuted }}>
-                      {Locale.todayTimeOrDateTime(props.message.time.created)}
-                    </span>
-                  </text>
-                </Show>
-              }
+        <box flexDirection="row" marginTop={props.index === 0 ? 0 : 1} flexShrink={0}>
+          <Show when={isGutter()}>
+            <box
+              width={TIMESTAMP_GUTTER_WIDTH}
+              paddingTop={1}
+              flexShrink={0}
+              onMouseUp={() => DialogTimestamp.show(dialog, props.message.time.created)}
             >
-              <text fg={theme.textMuted}>
-                <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
-              </text>
-            </Show>
+              <text fg={theme.textMuted}>{hourMinute(props.message.time.created)}</text>
+            </box>
+          </Show>
+          <box
+            id={props.message.id}
+            border={["left"]}
+            borderColor={color()}
+            customBorderChars={SplitBorder.customBorderChars}
+            flexGrow={1}
+          >
+            <box
+              onMouseOver={() => {
+                setHover(true)
+              }}
+              onMouseOut={() => {
+                setHover(false)
+              }}
+              onMouseUp={props.onMouseUp}
+              paddingTop={1}
+              paddingBottom={1}
+              paddingLeft={2}
+              backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+              flexShrink={0}
+            >
+              <text fg={theme.text}>{text()}</text>
+              <Show when={files().length}>
+                <box
+                  flexDirection="row"
+                  paddingBottom={metadataVisible() ? 1 : 0}
+                  paddingTop={1}
+                  gap={1}
+                  flexWrap="wrap"
+                >
+                  <For each={files()}>
+                    {(file) => {
+                      const bg = createMemo(() => {
+                        if (file.mime.startsWith("image/")) return theme.accent
+                        if (file.mime === "application/pdf") return theme.primary
+                        return theme.secondary
+                      })
+                      return (
+                        <text fg={theme.text}>
+                          <span style={{ bg: bg(), fg: theme.background }}> {MIME_BADGE[file.mime] ?? file.mime} </span>
+                          <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {file.filename} </span>
+                        </text>
+                      )
+                    }}
+                  </For>
+                </box>
+              </Show>
+              <Show
+                when={queued()}
+                fallback={
+                  <Show when={ctx.showTimestamps()}>
+                    <text fg={theme.textMuted}>
+                      <span style={{ fg: theme.textMuted }}>
+                        {Locale.todayTimeOrDateTime(props.message.time.created)}
+                      </span>
+                    </text>
+                  </Show>
+                }
+              >
+                <text fg={theme.textMuted}>
+                  <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+                </text>
+              </Show>
+            </box>
           </box>
         </box>
       </Show>
