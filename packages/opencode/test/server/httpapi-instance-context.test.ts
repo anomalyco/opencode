@@ -74,7 +74,7 @@ const createLocalWorkspace = (input: { projectID: Project.Info["id"]; type: stri
         projectID: input.projectID,
       })
     }),
-    (info) => Workspace.Service.use((workspace) => workspace.remove(info.id)).pipe(Effect.ignore),
+    (info) => Workspace.use.remove(info.id).pipe(Effect.ignore),
   )
 
 const probeInstanceContext = Effect.gen(function* () {

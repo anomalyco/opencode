@@ -5,6 +5,7 @@ import path from "node:path"
 import { Effect, Layer } from "effect"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { registerAdapter } from "../../src/control-plane/adapters"
+import { WorkspaceID } from "../../src/control-plane/schema"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
@@ -208,7 +209,7 @@ describe("workspace HttpApi", () => {
       const workspace = (yield* Effect.promise(() => created.json())) as Workspace.Info
       expect(workspace).toMatchObject({ type: "local-test", name: "local-test" })
 
-      const session = yield* Session.Service.use((svc) => svc.create({})).pipe(provideInstance(dir))
+      const session = yield* Session.use.create({}).pipe(provideInstance(dir))
       const warped = yield* request(WorkspacePaths.warp, dir, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -247,6 +248,26 @@ describe("workspace HttpApi", () => {
           extra: { listed: true },
         },
       ])
+    }),
+  )
+
+  it.live("returns a declared not found error when warping into a missing workspace", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const session = yield* Session.use.create({}).pipe(provideInstance(dir))
+      const workspaceID = WorkspaceID.ascending("wrk_missing_warp")
+
+      const response = yield* request(WorkspacePaths.warp, dir, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: workspaceID, sessionID: session.id }),
+      })
+
+      expect(response.status).toBe(404)
+      expect(yield* Effect.promise(() => response.json())).toEqual({
+        name: "NotFoundError",
+        data: { message: `Workspace not found: ${workspaceID}` },
+      })
     }),
   )
 
@@ -424,10 +445,9 @@ describe("workspace HttpApi", () => {
         body: JSON.stringify({ type: "remote-session-target", branch: null }),
       })
       const workspace = (yield* Effect.promise(() => created.json())) as Workspace.Info
-      const session = yield* Session.Service.use((svc) => svc.create()).pipe(
-        Effect.provideService(WorkspaceRef, workspace.id),
-        provideInstance(dir),
-      )
+      const session = yield* Session.use
+        .create()
+        .pipe(Effect.provideService(WorkspaceRef, workspace.id), provideInstance(dir))
 
       try {
         const response = yield* request(`http://localhost/session/${session.id}/message`, dir, {

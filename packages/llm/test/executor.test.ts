@@ -106,8 +106,8 @@ describe("RequestExecutor", () => {
       expect(errorHttp(error)?.body).toBe("rate limited")
     }).pipe(
       Effect.provide(
-        responsesLayer([
-          ...Array.from(
+        responsesLayer(
+          Array.from(
             { length: 3 },
             () =>
               new Response("rate limited", {
@@ -115,7 +115,7 @@ describe("RequestExecutor", () => {
                 headers: { "retry-after-ms": "0", "x-request-id": "req_123", "x-api-key": "secret" },
               }),
           ),
-        ]),
+        ),
       ),
     ),
   )
@@ -388,7 +388,9 @@ describe("RequestExecutor", () => {
   it.effect("does not retry after a successful response reaches stream parsing", () =>
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0)
-      const model = OpenAIChat.model({ id: "gpt-4o-mini", baseURL: "https://api.openai.test/v1" })
+      const model = OpenAIChat.route
+        .with({ endpoint: { baseURL: "https://api.openai.test/v1" } })
+        .model({ id: "gpt-4o-mini" })
       const error = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
         Effect.provide(
           dynamicResponse((input) =>

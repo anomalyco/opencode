@@ -1085,10 +1085,15 @@ describe("tool.shell abort", () => {
       runIn(
         projectRoot,
         Effect.gen(function* () {
-          const result = yield* run({
-            command: `echo started && sleep 60`,
-            description: "Default timeout test",
-          })
+          const tool = yield* initShell()
+          expect(tool.description).toContain("commands will time out after 500ms")
+          const result = yield* tool.execute(
+            {
+              command: `echo started && sleep 60`,
+              description: "Default timeout test",
+            },
+            ctx,
+          )
           expect(result.output).toContain("started")
           expect(result.output).toContain("exceeding timeout 500 ms")
         }),

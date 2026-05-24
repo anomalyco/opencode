@@ -232,6 +232,9 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       throwOnError: true,
     })
 
+    const dirSyncContexts = new Map<string, ReturnType<typeof createDirSdkContext>>()
+    const dirSdkContextRefCounts = new Map<string, number>()
+
     return {
       url: currentServer.http.url,
       client: sdk,
@@ -249,6 +252,58 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
           ...opts,
         })
       },
+      createDirSyncContext: (directory: string) => {
+        onCleanup(() => {
+          dirSdkContextRefCounts.set(directory, (dirSdkContextRefCounts.get(directory) ?? 0) - 1)
+          if (dirSdkContextRefCounts.get(directory) === 0) {
+            dirSyncContexts.delete(directory)
+            dirSdkContextRefCounts.delete(directory)
+          }
+        })
+
+        const cached = dirSyncContexts.get(directory)
+        if (cached) {
+          dirSdkContextRefCounts.set(directory, (dirSdkContextRefCounts.get(directory) ?? 0) + 1)
+          return cached
+        }
+        const ctx = createDirSdkContext(directory)
+        dirSyncContexts.set(directory, ctx)
+        dirSdkContextRefCounts.set(directory, 1)
+
+        return ctx
+      },
     }
   },
 })
+
+type SDKEventMap = {
+  [key in Event["type"]]: Extract<Event, { type: key }>
+}
+
+function createDirSdkContext(directory: string) {
+  const globalSDK = useGlobalSDK()
+
+  const client = globalSDK.createClient({
+    directory,
+    throwOnError: true,
+  })
+
+  const emitter = createGlobalEmitter<SDKEventMap>()
+
+  const unsub = globalSDK.event.on(directory, (event) => {
+    emitter.emit(event.type, event)
+  })
+  onCleanup(unsub)
+
+  return {
+    directory,
+    client,
+    event: emitter,
+    get url() {
+      return globalSDK.url
+    },
+    createClient(opts: Parameters<typeof globalSDK.createClient>[0]) {
+      return globalSDK.createClient(opts)
+    },
+  }
+}
