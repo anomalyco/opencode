@@ -6,165 +6,127 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 
 # feishu-attach-upload-robustness — 3-changelog
 
-> **状态**:✅ iter 3 代码落地(2026-05-24,等用户再次实测)
-> **commit 链**:3 commits(spec/plan + iter 2 实施 + iter 3 修正)
-> **规模**:Medium-(~200 行代码 + ~280 行测试,纯 fork-only,0 上游侵入)
+> **状态**:✅ iter 4 + follow-up 落地实测通过(2026-05-24,中文名飞书显示正常)
+> **commit 链**:7 commits(spec/plan + iter 2 + iter 2-doc + iter 3 + iter 3-doc + iter 4 + iter 4 follow-up)
+> **规模**:Medium ~210 行代码 + ~340 行测试,纯 fork-only,0 上游侵入
 
-## commit 链
+## commit 链(完整 iter 0~4 时间轴)
 
-| hash | 内容 |
-|---|---|
-| `983f54646` | docs: 1-spec + 2-plan |
-| `645bf2a31` | feat (iter 2): file-uploader stream→Buffer + retryUpload + withTimeout + 27 单测 |
-| `de3904512` | fix (iter 3): Readable.from(buffer) → raw Buffer + sanitizeFileNameForUpload + 6 单测 |
+| hash | iter | 内容 | 实测结果 |
+|---|---|---|---|
+| `983f54646` | docs | 1-spec + 2-plan | — |
+| `645bf2a31` | iter 1 | createReadStream → readFileSync raw Buffer + retryUpload + withTimeout + 27 单测 | 装上撞 `source.on is not a function`(被误诊为"SDK 期待 Stream") |
+| `ef1b6ae4a` | docs | 3-changelog + INDEX + 改动日志 + 状态置 done | — |
+| `83295c161` | iter 2 | Buffer → `Readable.from(buffer)` 包成 in-memory stream(误诊修法) | 装上撞 30s timeout × 3 retry 全 hang |
+| `de3904512` | iter 3 | Readable.from → raw Buffer + sanitizeFileNameForUpload + 6 单测 | 装上又撞 `source.on is not a function`(回到 iter 1 同款) |
+| `1f6d3cda4` | docs | 回填 iter 3 hash + 改动日志 follow-up | — |
+| `8e83f91e6` | **iter 4** | **绕开 SDK,Bun-native fetch + FormData + Blob**;tokenManager 借 token;测试 SDK mock → fetch mock | ✅ 文件传输成功 |
+| `6f8fb3746` | iter 4 follow-up | 移除 sanitizeFileNameForUpload 调用 — 中文名展示乱码 | ✅ 中文名正常显示 |
 
-## iter 2 → iter 3 修正(2026-05-24)
+## 教训(2026-05-24 落地,值得未来 plugin/bundle work 反复回顾)
 
-### 触发
+### 教训 1:**iter 1~3 全部死在同一个 axios+form-data 调用栈**,但症状各异让我误诊三次
 
-user 装 iter 2 .app 实测仍失败,日志显示 ATTACH `notes.md` (4.7KB) 上传:
-```
-[file-uploader] file notes.md 第 1 次失败,1000ms 后重试: file notes.md timeout after 30000ms
-[file-uploader] file notes.md 重试 2 次最终失败: file notes.md timeout after 30000ms
-```
-30s 超时 × 3 retry 全失败 → 请求**完全 hang**,不是 socket 断。
+| iter | 调用形态 | 报错 | 真正机制(事后看清) |
+|---|---|---|---|
+| 0 / iter 1 | `createReadStream` / raw `Buffer` | `socket connection closed unexpectedly` / `source.on is not a function` | Bun 跨 axios chunked encoding 路径 fail / form-data `Buffer.isBuffer(buf) === false` 把 Buffer 当 stream 处理调 source.on |
+| iter 2 | `Readable.from(buffer)` | 30s timeout × 3 hang | form-data 算不出 Content-Length(Readable.from 无 path / _lengthRetrievers)→ 强制 chunked → Feishu server hang |
+| iter 3 | raw Buffer 再来一次 | `source.on is not a function`(同 iter 1) | 同 iter 1 — `Buffer.isBuffer` 在 plugin bundle 里 false |
 
-### 根因(参考 OpenClaw 反查)
+**所有迭代都在 axios(SDK 内置 HTTP transport)+ Node form-data 这条调用链上打转**,每次只换 Buffer / Stream 的形态,本质上根因(plugin bundle 跟 Bun runtime 的 Node 生态包 interop)从来没碰。**iter 4 跳出这条链才一次过**。
 
-OpenClaw `extensions/feishu/src/media.ts:193-195` 明确注释:
-> "SDK accepts Buffer directly or fs.ReadStream for file paths. **Using Readable.from(buffer) causes issues with form-data library**. See: https://github.com/larksuite/node-sdk/issues/121"
+### 教训 2:Bun + Node 生态 CJS 包 + bundle 的 Buffer interop 陷阱
 
-机制:`Readable.from(buffer)` 包出来的 stream **无 `path` 字段、无 `_lengthRetrievers` 可计算长度** → `form-data` 库算不出 Content-Length → 写 `Transfer-Encoding: chunked` → 飞书 `/im/v1/files` 服务端处理 chunked 上传**完全 hang** → 30s 客户端 timeout × 3 retry。
+`bun build --target=bun` 把 form-data CJS 打进 bundle 时,form-data 内部引用的 `Buffer` 全局跟 runtime `node:fs.readFileSync()` 返回的 Buffer **不是同一个 class**。`Buffer.isBuffer(buf)` instanceof 判断 fail → 误判 stream → 调 `.on()` crash。
 
-iter 2 的 Readable.from 是 over-engineering — SDK v1.50 类型签名 `Buffer | fs.ReadStream`(`types/index.d.ts:226151`)明确接受 Buffer。
+**Workaround**:能绕开 Node 生态 CJS 包就绕开,走 Bun-native API(`fetch + FormData + Blob`)— 标准 Web API 在 Bun runtime 内一等公民,无 interop 风险。
 
-### 修正
+### 教训 3:**先认真读 stack trace 再动手改**
 
-`file-uploader.ts`:
-1. 删 `bufferToStream` helper
-2. `uploadImage` / `uploadFile` 直接传 `readFileSync()` 返回的 Buffer 给 SDK
-3. 新增 `sanitizeFileNameForUpload(fileName)`:RFC 5987 percent-encoding
-   - 非 ASCII 文件名(中文 / em-dash / 全角)直传会让飞书服务端**静默失败**(返 200 + 空 file_key),OpenClaw 同款修法
-4. `uploadFile` 把 `basename(path)` 用 sanitize 包一下再传
+iter 3 装完看到 `source.on is not a function`,我没仔细读完整 stack 就当成 iter 1 误诊的延续(以为是"SDK 期待 Stream")。**stack trace 写得很清楚错误在 `plugin/feishu-bridge/dist/plugin.js:2392`,这是 plugin bundle 里的 form-data 代码,跟 SDK 业务调用无关**。早一步看清,iter 4 可以省 2 次失败迭代。
 
-新增 6 个单测:
-- `sanitizeFileNameForUpload` 5 case(ASCII no-op / 中文 / 中英混 / 引号括号 / em-dash)
-- `uploadFile` 集成:中文名 → file_name percent-encoded 透传
+### 教训 4:**别把 OpenClaw 修法照搬,先弄清它在哪个调用链**
 
-### 套件状态
+OpenClaw `sanitizeFileNameForUpload`(RFC 5987 percent-encoding)是给 **Node form-data 库走 SDK 路径**用的 — 那个路径上 Content-Disposition header 不能含非 ASCII(老 form-data 用 latin-1 编码 header)。iter 4 改用 **Bun-native FormData** 后,Bun 标准走 RFC 8187 自动处理 UTF-8 filename,**percent-encoding 反而会让飞书 server 把 raw 字符串当显示名**(实测中文名变 `%E6%8A%A5%E5%91%8A.md`)。
 
-- typecheck 16/16
-- adapter 套件 518/518(原 512 + 6 新)
+**Workaround**:**移植兜底逻辑前先想清楚它在哪个调用链生效 / 我们走的是不是同一条链**。iter 3 我直接 `import OpenClaw 同款实现` 没想清这点。
 
-## 改动文件
+### 教训 5:**sidecar / plugin 重建陷阱 — `need_rebuild_*` 时间戳检查范围太窄**
 
-| 文件 | 净行数 | 改动 |
-|---|---|---|
-| `packages/adapter-feishu-lark/src/feishu/file-uploader.ts` | +115 | createReadStream→readFileSync raw Buffer + sanitizeFileNameForUpload + retryUpload + withTimeout + isRecoverableError(iter 3 已删 bufferToStream)|
-| `packages/adapter-feishu-lark/src/feishu/__tests__/file-uploader.test.ts` | +290 | 33 新单测(helper extract 12+3+6 + 集成 4+3 + sanitizer 5)+ 既有 SDK 抛错测试改用 non-recoverable error |
-| `packages/adapter-feishu-lark/src/feishu/__tests__/message-pipeline.test.ts` | +3 | 既有"上传抛错"测试改用 401 而非 502,避免 retry 拖慢 |
+- `build-deskfox.sh:121-130` 的 `need_rebuild_sidecar` 只看 `packages/opencode/src/**/*.ts`,**adapter-feishu-lark / branding 改动不会触发**
+- `build-feishu-plugin.sh:28-38` 的 `need_rebuild` 看 `packages/adapter-feishu-lark/src/**/*.ts`(还行),但**没考虑 transitive deps**
 
-## 关键设计点
+本次撞 iter 2 → iter 3 → iter 4 每次都要**手动删 sidecar binary + plugin.js** 才能确保新代码进 bundle。Backlog 应该补:`packages/adapter-feishu-lark/src` 新于 sidecar mtime → 也要重建 sidecar(adapter 通过 sidecar 内的 plugin loader 跑)。
 
-### 1. stream → Buffer 取舍
-**为什么**:Bun runtime fetch 跟 Node `createReadStream` 多部分编码 100% 不兼容(实测 4.7KB 都断),原因可能在 Bun fetch internal stream handling 跟 Node Readable stream 互操作。**Buffer 直传简单可靠**,SDK 内部转 multipart 不依赖 stream pipe,绕开兼容性问题。
+## iter 4 核心改动
 
-**内存代价**:30MB 上限 ≪ Bun VM 默认 4GB,short-lived 无 OOM 风险。read+upload+gc 单次循环很快。
+### 文件:`packages/adapter-feishu-lark/src/feishu/file-uploader.ts`
 
-**实测 user 4.7KB notes.md 改 Buffer 后期待成功**(留实测验证)。
+新增 2 个 export helper(R5 helper extract 模式):
+- `getClientAuthContext(client)`:从 SDK Client 内部 `tokenManager.getTenantAccessToken({})` 借 tenant_access_token + `client.domain` 拿 domain URL(SDK 内部 cache,免 boilerplate)
+- `uploadMultipartViaFetch({endpoint, token, fields, fileFieldName, fileBuffer, fileName, keyField})`:Bun-native `fetch + FormData + Blob` 实现 multipart upload,飞书业务错误 code/msg 翻译成 Error message 让 retry 层 isRecoverableError 判断
 
-### 2. retry 模式(helper extract,3 次尝试,指数退避)
-- 初次 + 2 retry = 3 总尝试
-- 退避 1s/3s(prod 默认),给网络/服务端缓冲时间
-- options.delaysMs 可覆盖让测试用 10ms 快退避
+重写 `uploadImage` / `uploadFile`:
+- size 预检不变
+- `readFileSync(path)` 拿 Buffer 不变
+- `retryUpload(...)` 包不变
+- **内部不再调 `client.im.v1.image.create / .file.create`**,改 `uploadMultipartViaFetch({ endpoint: ${domain}/open-apis/im/v1/{images,files}, ... })`
 
-### 3. 可恢复错误白名单(保守)
-仅以下 patterns 触发 retry,业务错误立即失败:
-- `socket.*closed` — 飞书 SDK 报的"The socket connection was closed unexpectedly"
-- `econnreset` / `epipe` — Node 网络层
-- `network.*error` / `timeout` — 通用网络
-- `\b5\d{2}\b` — 5xx HTTP status
+`sendImageMessage` / `sendFileMessage` **保留 SDK 调用不动**(`client.im.v1.message.create` 非 multipart 工作正常,不需要换)。
 
-**不重试**:4xx / 401 / size 超限 / file_type 不支持 / 其他业务错误。
+### 文件:`packages/adapter-feishu-lark/src/feishu/__tests__/file-uploader.test.ts`
 
-### 4. 显式 timeout(Promise.race 实现)
-- 30s 默认(对 30MB 上限 + 1MB/s 慢速估算 + 缓冲)
-- Lark SDK 不接 AbortSignal,只能软超时(后端请求 Promise reject 但实际请求可能仍跑,GC 处理)
-- timeout 抛错触发 retry(timeout 在 RECOVERABLE_ERROR_PATTERNS 内)
+- `makeFakeClient` 重构:`client` 只提供 `tokenManager.getTenantAccessToken` + `domain` + `im.v1.message.create`
+- 新加 `installFetchMock / uninstallFetchMock`:`globalThis.fetch` 接管,按 URL 分流 image/file,从 FormData entries 提 fields 字典,按 `imageError / fileError / imageErrorsPerCall / fileErrorsPerCall` opts 抛错
+- `makeMock` 包装:auto install + 注册 afterEach uninstall
+- 断言改 shape:`imageCalls[0].image_type` → `imageCalls[0].fields.image_type`(同等语义)
 
-### 5. helper extract 模式(R5 v2 双清单)
-3 个 helper 全部 `export`(`isRecoverableError` / `withTimeout` / `retryUpload`),纯函数独立可单测,跟 SDK IO 解耦:
-- isRecoverableError:input Error → boolean(行覆盖 100%)
-- withTimeout:input Promise + ms → Promise(行覆盖 100%)
-- retryUpload:input fn + label + opts → Promise(行覆盖 100%)
+### 文件:`packages/adapter-feishu-lark/src/feishu/__tests__/message-pipeline.test.ts`
+
+- `makeAttachFakes` 同款重构:加 tokenManager + domain + fetch mock(install/uninstall)
+- `processAttachments` 集成测的 `imageCalls` / `fileCalls` 形式不变(对外接口稳定)
+- 1 处 `imageError` 测试加 `uninstall → 重新构造 → install` 替换 mock
+
+## iter 4 follow-up:中文名乱码修法
+
+iter 4 完成后,user 测中文名 `报告.md` 飞书展示成 `%E6%8A%A5%E5%91%8A.md` raw 字符串。
+**根因**:iter 3 加的 `sanitizeFileNameForUpload(fileName)` 在 iter 4 的 `uploadFile` 里还在调,把中文 percent-encoded 后塞进 `fields.file_name`,**Bun-native FormData 不需要这个 sanitize**(RFC 8187 自动处理 UTF-8 filename),反而让飞书 server 把 raw encoded 字符串当显示名。
+
+**修法**(commit `6f8fb3746`):`uploadFile` 里 `fields.file_name` 由 `safeName`(sanitized)改回原 `fileName`(中文)。1 行改动。
+
+`sanitizeFileNameForUpload` 函数本身和 5 个单测保留(纯函数无副作用,未来可能用到)— 只是从 `uploadFile` 内部拆掉调用。
 
 ## 测试
 
-### 27 个新测试(R5 Medium ≥ 3 unit 远超达标)
+- typecheck:16/16
+- adapter-feishu-lark 套件:518/518(完整 file-uploader 43 个测试 + 全套集成)
 
-**isRecoverableError (12 case)**:覆盖所有 RECOVERABLE_ERROR_PATTERNS 命中 + 业务错误不命中 + 空 / undefined 防御
+### file-uploader 测试明细
 
-**withTimeout (3 case)**:resolve before timeout / 超 timeout / 透传错误
-
-**retryUpload (6 case)**:成功一次 / 1 错+成功 / 2 错+成功 / 3 错 throw / 非可恢复立即 throw / timeout 触发重试
-
-**uploadImage retry 集成 (4 case)**:1 错+成功 / 3 错 throw / size 超限 0 调 / 非可恢复立即失败
-
-**uploadFile retry 集成 (2 case)**:1 错+成功 / 3 错 throw
-
-### 全套套件
-- 512/512 全 adapter 套件全过(原 485 + 新 27)
-- 16/16 bun run typecheck monorepo 全过
-
-### 既有测试更新(2 处)
-- `file-uploader.test.ts` "SDK 抛 → 透传":错误从 `lark 502`(可恢复)改 `401 Unauthorized`(不可恢复)避免 retry 触发拖慢
-- `message-pipeline.test.ts` "上传抛错 → 不阻断":同样改 401
-
-### 实测脚本(2026-05-24,user 验收)
-
-build dev .app 装 `/Applications/DeskFox Dev.app` 后:
-
-1. **场景 1 — 灵狐 (MiniMax) 发 notes.md**:私聊里说"workspace 里有个 md 文件传给我吧"
-   - **预期**:bot reply "好,发给你 [ATTACH:...]" → 系统真上传成功 → 飞书收到文件
-   - 日志层面:`[file-uploader] image notes.md 重试第 X 次成功` 或一次通过无 retry log
-
-2. **场景 2 — 测试 retry 自愈**:网络抖动(可关 wifi 1s 再开,模拟瞬时断)
-   - **预期**:bot 日志 `第 1 次失败,1000ms 后重试` 然后 `重试第 1 次成功`,user 看不到 warning
-
-3. **场景 3 — 测试 timeout**:模拟难,可暂不测
-
-4. **场景 4 — 测试不重试 size 超限**:让 bot 发 > 10MB 图片
-   - **预期**:立即抛 size 错误 warning(不浪费 3 次重试)
-
-## 三铁律走流程
-
-| 步骤 | 状态 |
-|---|---|
-| 开 feat 分支 `feat/feishu-attach-upload-robustness` | ✅ |
-| 本地 commit 不动 main | ✅ |
-| → main merge user 同意 | (待 user 拍)|
-| → origin/main push user 同意 | (待 user 拍)|
+- isRecoverableError(12 case):RECOVERABLE_ERROR_PATTERNS 全覆盖 + 业务错误 + 空 / undefined 防御
+- withTimeout(3 case):resolve 先 / timeout 先 / 透传错误
+- retryUpload(6 case):成功一次 / 1 错+成功 / 2 错+成功 / 3 错 throw / 非可恢复立即 throw / timeout 触发重试
+- uploadImage(集成 4 case + retry 4 case)
+- uploadFile(集成 5 case + retry 2 case)
+- sanitizeFileNameForUpload(5 case,纯函数保留)
+- sendImageMessage / sendFileMessage(2 case)
 
 ## 风险 / 已知限制
 
-1. **Bun fetch 兼容性是不是真原因不能 100% 确认**:Buffer 修法是基于假设;如果 user 实测 Buffer 也挂,说明 root cause 在更深层(SDK 内部 / 网络栈 / 飞书 server),需 Layer 2(自实现 fetch + form-data)
-2. **30MB 文件占 30MB 内存**:短时,VM 4GB 远超,但极端并发上传 N 个大文件可能 spike — 当前飞书桥接架构是顺序处理,无并发风险
-3. **timeout 30s 对真慢网络可能不够**:30MB / 100KB/s = 300s 才能传完;30s 超时会触发 retry 但 3 次都超时 → 总耗 90s 后失败(user 看到 warning)— 现实合理
-4. **Lark SDK 内部不支持 AbortSignal**:Promise reject 后请求可能仍在后台跑(无害)— SDK 限制接受
-5. **跨平台**:Win 端未测;Bun + Lark SDK 在 Win 应该同样行为(Bun runtime 跨平台),但实际是否如此等下次双端协作再验
+1. **tokenManager 是 SDK internal 字段**(`(client as any).tokenManager`)— SDK 升级如果改名,getClientAuthContext 会抛 "SDK Client 缺 tokenManager"。已加显式错误信息让排查 5 分钟内定位。SDK v1.50 至今未改这两个字段(verified `node_modules/.../lib/index.js:81550-81553`)。
+2. **30s timeout 对真慢网络仍可能不够**:30MB / 100KB/s = 300s,iter 4 走 Bun fetch 行为跟 axios 不同,但软 timeout(Promise.race)依然是 timeout 触发 retry → 3 次都超时 → 90s 后失败。
+3. **跨平台**:Win 端未测;Bun + native FormData 行为应跟 Mac 一致(Bun runtime 跨平台标准 Web API),但实测等下次双端协作再验。
 
 ## 回退方法
 
-`git revert -m 1 <merge-commit-hash>` 直接退回。或手动:
-- `file-uploader.ts` 改回 `createReadStream` + 删 retry helper
-- 删测试新增段
-- 旧 lark 502 测试改回
+`git revert <iter 4 follow-up commit> <iter 4 commit>` 退回 iter 3,但 iter 3 已知不工作(`source.on` crash)— 真要 rollback 需要 revert 到 `645bf2a31` 之前的 `a1fea3053`(原始 createReadStream 版,首批 bug 报告版)。
 
 ## 关联
 
-- 上游 ATTACH 实现:`feishu-bridge-light`(2026-05-23,marker 协议 + 原始 uploadImage/uploadFile)
-- 失败实测 trace:`opencode-desktop_2026-05-24_16-03-02.log`(socket disconnect 4 次以上复现)
-- 触动文件:`packages/adapter-feishu-lark/src/feishu/file-uploader.ts`(核心)
-- 不动:`reply-actions.ts`(marker 解析 / 白名单)+ `message-pipeline.ts` 主逻辑(retry 内部封装,pipeline 透明)
-- 留 backlog:Proxy-aware fetch dispatcher(Layer 2,有/无代理 user 都好用)— 单独 feat `feishu-network-proxy-policy`
-- 留 backlog:confirm-card 方案 D 白名单扩展(`~/Documents` 等外部目录)— 单独 feat `feishu-attach-confirm-card`
+- 上游 ATTACH 实现:`feishu-bridge-light`(2026-05-23)
+- 触动文件:`packages/adapter-feishu-lark/src/feishu/file-uploader.ts`(核心)+ 两个测试文件
+- 不动:`reply-actions.ts`(ATTACH marker 解析 / 白名单)+ `message-pipeline.ts` 主逻辑(retry/timeout/fetch 都在 file-uploader 内部封装)
+- 留 backlog:
+  - **`build-deskfox.sh` 时间戳判断扩 adapter-feishu-lark/src** — sidecar 重建陷阱(本 feat 撞 3 次手动删 sidecar)
+  - Proxy-aware fetch dispatcher(Layer 2,有/无 VPN 都好用)— `feishu-network-proxy-policy`
+  - confirm-card 方案 D 白名单扩展(`~/Documents` 等外部目录)— `feishu-attach-confirm-card`
