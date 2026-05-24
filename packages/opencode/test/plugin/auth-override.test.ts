@@ -72,13 +72,10 @@ describe("plugin.auth-override", () => {
 
         const plain = yield* tmpdirScoped({ git: true })
         const plugin = pathToFileURL(path.join(pluginDir, "custom-copilot-auth.ts")).href
-        const methods = yield* ProviderAuth.Service.use((svc) => svc.methods()).pipe(
-          Effect.provide(layer(tmp.directory, [plugin])),
-        )
-        const plainMethods = yield* ProviderAuth.Service.use((svc) => svc.methods()).pipe(
-          Effect.provide(layer(plain, [])),
-          provideInstance(plain),
-        )
+        const methods = yield* ProviderAuth.use.methods().pipe(Effect.provide(layer(tmp.directory, [plugin])))
+        const plainMethods = yield* ProviderAuth.use
+          .methods()
+          .pipe(Effect.provide(layer(plain, [])), provideInstance(plain))
 
         const copilot = methods[ProviderID.make("github-copilot")]
         expect(copilot).toBeDefined()

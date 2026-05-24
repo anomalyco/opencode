@@ -359,6 +359,73 @@ describe("run entry body", () => {
     })
   })
 
+  test("renders command-only bash starts without the shell header", () => {
+    expect(
+      entryBody(
+        toolCommit({
+          tool: "bash",
+          phase: "start",
+          toolState: "running",
+          text: "running shell",
+          state: {
+            status: "running",
+            input: {
+              command: "ls",
+            },
+            time: { start: 1 },
+          },
+        }),
+      ),
+    ).toEqual({
+      type: "text",
+      content: "$ ls",
+    })
+  })
+
+  test("renders direct shell commits without a synthetic shell header", () => {
+    expect(
+      entryBody(
+        commit({
+          kind: "tool",
+          text: "running shell",
+          phase: "start",
+          source: "tool",
+          tool: "bash",
+          partID: "shell:call-1",
+          toolState: "running",
+          shell: {
+            callID: "call-1",
+            command: "pwd",
+          },
+        }),
+      ),
+    ).toEqual({
+      type: "text",
+      content: "$ pwd",
+    })
+
+    expect(
+      entryBody(
+        commit({
+          kind: "tool",
+          text: "/tmp/demo\n",
+          phase: "progress",
+          source: "tool",
+          tool: "bash",
+          partID: "shell:call-1",
+          toolState: "completed",
+          shell: {
+            callID: "call-1",
+            command: "pwd",
+          },
+        }),
+      ),
+    ).toEqual({
+      type: "text",
+      content: "\n/tmp/demo",
+    })
+  })
+
   test("falls back to patch summary when apply_patch has no visible diff items", () => {
     expect(
       entryBody(

@@ -1,6 +1,7 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { describe, expect } from "bun:test"
+import { ConfigError } from "../../src/config/error"
 import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
 import { errorLayer } from "../../src/server/routes/instance/httpapi/middleware/error"
@@ -8,6 +9,14 @@ import { NotFoundError } from "../../src/storage/storage"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(NodeHttpServer.layerTest, NodeServices.layer))
+
+function expectUnknownErrorBody(body: unknown) {
+  expect(body).toMatchObject({
+    name: "UnknownError",
+    data: { message: "Unexpected server error. Check server logs for details." },
+  })
+  expect((body as { data?: { ref?: unknown } }).data?.ref).toMatch(/^err_[0-9a-f-]{8}$/)
+}
 
 describe("HttpApi error middleware", () => {
   it.live("returns a safe body for unknown 500 defects", () =>
@@ -22,10 +31,7 @@ describe("HttpApi error middleware", () => {
       const body = yield* response.json
 
       expect(response.status).toBe(500)
-      expect(body).toEqual({
-        name: "UnknownError",
-        data: { message: "Unexpected server error. Check server logs for details." },
-      })
+      expectUnknownErrorBody(body)
       expect(JSON.stringify(body)).not.toContain("secret stack marker")
     }),
   )
@@ -42,11 +48,33 @@ describe("HttpApi error middleware", () => {
       const body = yield* response.json
 
       expect(response.status).toBe(500)
-      expect(body).toEqual({
-        name: "UnknownError",
-        data: { message: "Unexpected server error. Check server logs for details." },
-      })
+      expectUnknownErrorBody(body)
       expect(JSON.stringify(body)).not.toContain("secret named marker")
+    }),
+  )
+
+  it.live("does not expose config defects from generic middleware", () =>
+    Effect.gen(function* () {
+      const configError = new ConfigError.InvalidError({
+        path: "/tmp/opencode.json",
+        issues: [{ message: "Expected object", path: ["provider", "anthropic", "options"] }],
+      })
+
+      yield* HttpRouter.add("GET", "/config-error", Effect.die(configError)).pipe(
+        Layer.provide(errorLayer),
+        HttpRouter.serve,
+        Layer.build,
+      )
+
+      const response = yield* HttpClientRequest.get("/config-error").pipe(HttpClient.execute)
+      const body = yield* response.json
+      const serialized = JSON.stringify(body)
+
+      expect(response.status).toBe(500)
+      expectUnknownErrorBody(body)
+      expect(serialized).not.toContain("/tmp/opencode.json")
+      expect(serialized).not.toContain("provider")
+      expect(serialized).not.toContain("anthropic")
     }),
   )
 
@@ -62,10 +90,7 @@ describe("HttpApi error middleware", () => {
       const body = yield* response.json
 
       expect(response.status).toBe(500)
-      expect(body).toEqual({
-        name: "UnknownError",
-        data: { message: "Unexpected server error. Check server logs for details." },
-      })
+      expectUnknownErrorBody(body)
     }),
   )
 })

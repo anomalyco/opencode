@@ -1,9 +1,11 @@
 import { Slug } from "@opencode-ai/core/util/slug"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
+import { BackgroundJob } from "@/background/job"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
-import { type ProviderMetadata, type LanguageModelUsage } from "ai"
+import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
 import { Database } from "@/storage/db"
@@ -24,7 +26,7 @@ import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import * as Log from "@opencode-ai/core/util/log"
 import { MessageV2 } from "./message-v2"
-import type { InstanceContext } from "../project/instance"
+import type { InstanceContext } from "../project/instance-context"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
@@ -99,7 +101,7 @@ export function fromRow(row: SessionRow): Info {
     },
     share,
     revert,
-    permission: row.permission ?? undefined,
+    permission: row.permission ? [...row.permission] : undefined,
     time: {
       created: row.time_created,
       updated: row.time_updated,
@@ -373,21 +375,19 @@ export function plan(input: { slug: string; time: { created: number } }, instanc
   return path.join(base, [input.time.created, input.slug].join("-") + ".md")
 }
 
-export const getUsage = (input: { model: Provider.Model; usage: LanguageModelUsage; metadata?: ProviderMetadata }) => {
+export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?: ProviderMetadata }) => {
   const safe = (value: number) => {
     if (!Number.isFinite(value)) return 0
     return Math.max(0, value)
   }
   const inputTokens = safe(input.usage.inputTokens ?? 0)
   const outputTokens = safe(input.usage.outputTokens ?? 0)
-  const reasoningTokens = safe(input.usage.outputTokenDetails?.reasoningTokens ?? input.usage.reasoningTokens ?? 0)
+  const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
 
-  const cacheReadInputTokens = safe(
-    input.usage.inputTokenDetails?.cacheReadTokens ?? input.usage.cachedInputTokens ?? 0,
-  )
+  const cacheReadInputTokens = safe(input.usage.cacheReadInputTokens ?? 0)
   const cacheWriteInputTokens = safe(
     Number(
-      input.usage.inputTokenDetails?.cacheWriteTokens ??
+      input.usage.cacheWriteInputTokens ??
         input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
         // google-vertex-anthropic returns metadata under "vertex" key
         // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
@@ -500,6 +500,8 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
 
+export const use = serviceUse(Service)
+
 export type Patch = Types.DeepMutable<SyncEvent.Event<typeof Event.Updated>["data"]["info"]>
 
 const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
@@ -508,10 +510,11 @@ const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D)
 export const layer: Layer.Layer<
   Service,
   never,
-  Bus.Service | Storage.Service | SyncEvent.Service | RuntimeFlags.Service
+  BackgroundJob.Service | Bus.Service | Storage.Service | SyncEvent.Service | RuntimeFlags.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const background = yield* BackgroundJob.Service
     const bus = yield* Bus.Service
     const storage = yield* Storage.Service
     const sync = yield* SyncEvent.Service
@@ -541,7 +544,7 @@ export const layer: Layer.Layer<
         title: input.title ?? createDefaultTitle(!!input.parentID),
         agent: input.agent,
         model: input.model,
-        permission: input.permission,
+        permission: input.permission ? [...input.permission] : undefined,
         cost: 0,
         tokens: EmptyTokens,
         time: {
@@ -592,19 +595,18 @@ export const layer: Layer.Layer<
     const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
       const session = yield* get(sessionID)
       try {
-        const kids = yield* children(sessionID)
-        for (const child of kids) {
-          yield* remove(child.id)
-        }
-
-        // `remove` needs to work in all cases, such as a broken
-        // sessions that run cleanup. In certain cases these will
-        // run without any instance state, so we need to turn off
-        // publishing of events in that case
+        // `remove` needs to work in all cases, such as broken sessions that
+        // run cleanup without instance state.
         const hasInstance = yield* InstanceState.directory.pipe(
           Effect.as(true),
           Effect.catchCause(() => Effect.succeed(false)),
         )
+
+        if (hasInstance) yield* cancelBackgroundJobs(background, sessionID)
+        const kids = yield* children(sessionID)
+        for (const child of kids) {
+          yield* remove(child.id)
+        }
 
         yield* sync.run(Event.Deleted, { sessionID, info: session }, { publish: hasInstance })
         yield* sync.remove(sessionID)
@@ -734,7 +736,7 @@ export const layer: Layer.Layer<
       sessionID: SessionID
       permission: Permission.Ruleset
     }) {
-      yield* patch(input.sessionID, { permission: input.permission, time: { updated: Date.now() } })
+      yield* patch(input.sessionID, { permission: [...input.permission], time: { updated: Date.now() } })
     })
 
     const setRevert = Effect.fn("Session.setRevert")(function* (input: {
@@ -862,11 +864,29 @@ export const layer: Layer.Layer<
 )
 
 export const defaultLayer = layer.pipe(
+  Layer.provide(BackgroundJob.defaultLayer),
   Layer.provide(Bus.layer),
   Layer.provide(Storage.defaultLayer),
   Layer.provide(SyncEvent.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )
+
+const cancelBackgroundJobs = Effect.fn("Session.cancelBackgroundJobs")(function* (
+  background: BackgroundJob.Interface,
+  sessionID: SessionID,
+) {
+  const jobs = yield* background.list()
+  yield* Effect.forEach(
+    jobs.filter((job) => {
+      if (job.status !== "running") return false
+      if (job.id === sessionID) return true
+      if (job.metadata?.sessionId === sessionID) return true
+      return job.metadata?.parentSessionId === sessionID
+    }),
+    (job) => background.cancel(job.id),
+    { concurrency: "unbounded", discard: true },
+  )
+})
 
 function* listByProject(
   input: ListInput & {
