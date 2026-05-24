@@ -16,7 +16,7 @@ related: ./1-spec.md ./2-plan.md ./3-changelog.md
 |---|---|
 | `983f54646` | docs: 1-spec + 2-plan |
 | `645bf2a31` | feat (iter 2): file-uploader stream→Buffer + retryUpload + withTimeout + 27 单测 |
-| (待 commit) | fix (iter 3): Readable.from(buffer) → raw Buffer + sanitizeFileNameForUpload + 6 单测 |
+| `de3904512` | fix (iter 3): Readable.from(buffer) → raw Buffer + sanitizeFileNameForUpload + 6 单测 |
 
 ## iter 2 → iter 3 修正(2026-05-24)
 
