@@ -194,3 +194,94 @@ export default tool({
 ```
 
 Here we are using the [`Bun.$`](https://bun.com/docs/runtime/shell) utility to run the Python script.
+
+### Run apt through Polkit
+
+On Linux desktops, commands like `sudo apt install` can get stuck because the built-in bash tool does not accept
+interactive password input. A custom tool can use `pkexec` instead, which asks for authentication through your system's
+Polkit prompt.
+
+```ts title="~/.config/opencode/tools/elevated_apt.ts"
+import { tool } from "@opencode-ai/plugin"
+
+const packageName = /^[a-z0-9][a-z0-9+.-]+$/
+
+function packages(input: string[]) {
+  return input.map((item) => {
+    if (!packageName.test(item)) throw new Error(`Invalid package name: ${item}`)
+    return item
+  })
+}
+
+function apt(args: { action: "update" | "install" | "upgrade"; packages: string[] }) {
+  if (args.action === "update") {
+    if (args.packages.length > 0) throw new Error("update does not accept package names")
+    return ["/usr/bin/pkexec", "/usr/bin/apt-get", "update"]
+  }
+
+  const names = packages(args.packages)
+  if (names.length === 0) throw new Error(`${args.action} requires at least one package`)
+
+  if (args.action === "install") {
+    return ["/usr/bin/pkexec", "/usr/bin/apt-get", "install", "-y", "--", ...names]
+  }
+
+  if (args.action === "upgrade") {
+    return ["/usr/bin/pkexec", "/usr/bin/apt-get", "install", "--only-upgrade", "-y", "--", ...names]
+  }
+
+  throw new Error(`Unsupported action: ${args.action}`)
+}
+
+export default tool({
+  description: "Run a small set of apt-get operations through pkexec/Polkit",
+  args: {
+    action: tool.schema.enum(["update", "install", "upgrade"]).describe("apt-get operation to run"),
+    packages: tool.schema
+      .array(tool.schema.string())
+      .default([])
+      .describe("Package names for install or upgrade; leave empty for update"),
+  },
+  async execute(args, context) {
+    const child = Bun.spawn(apt(args), {
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "ignore",
+      signal: context.abort,
+    })
+
+    const [stdout, stderr, exit] = await Promise.all([
+      child.stdout.text(),
+      child.stderr.text(),
+      child.exited,
+    ])
+    if (exit !== 0) throw new Error(stderr || `apt-get exited with code ${exit}`)
+    return stdout || stderr || "apt-get completed"
+  },
+})
+```
+
+Then require approval for the elevated tool and for direct package-manager commands:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "elevated_apt": "ask",
+    "bash": {
+      "*": "allow",
+      "sudo *": "ask",
+      "pkexec *": "ask",
+      "apt *": "ask",
+      "apt-get *": "ask"
+    }
+  }
+}
+```
+
+:::note
+This is useful for local Linux desktop sessions with `pkexec` and a Polkit authentication agent. It does not replace
+interactive terminal support for SSH, GPG, Ansible, or headless servers. Packages that require maintainer-script,
+debconf, or conffile interaction may still fail and should be handled manually. Keep elevated tools narrow and avoid
+exposing unrestricted root access.
+:::
