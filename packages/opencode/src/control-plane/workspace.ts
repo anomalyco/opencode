@@ -575,22 +575,40 @@ export const layer = Layer.effect(
         OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
       }
 
-      yield* WorkspaceAdapterRuntime.create(adapter, config, env)
-      yield* Effect.all(
-        [
-          waitEvent({
-            timeout: TIMEOUT,
-            fn(event) {
-              if (event.workspace === info.id && event.payload.type === Event.Status.type) {
-                const { status } = event.payload.properties
-                return status === "error" || status === "connected"
-              }
-              return false
-            },
+      yield* Effect.gen(function* () {
+        yield* WorkspaceAdapterRuntime.create(adapter, config, env)
+        yield* Effect.all(
+          [
+            waitEvent({
+              timeout: TIMEOUT,
+              fn(event) {
+                if (event.workspace === info.id && event.payload.type === Event.Status.type) {
+                  const { status } = event.payload.properties
+                  return status === "error" || status === "connected"
+                }
+                return false
+              },
+            }),
+            startSync(info),
+          ],
+          { concurrency: 2, discard: true },
+        )
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.gen(function* () {
+            log.warn("workspace create failed, rolling back", {
+              workspaceID: info.id,
+            })
+            yield* stopSync(info.id)
+            yield* db((db) =>
+              db.delete(WorkspaceTable).where(eq(WorkspaceTable.id, info.id)).run(),
+            )
+            yield* WorkspaceAdapterRuntime.remove(info).pipe(
+              Effect.catch(() => Effect.void),
+            )
+            return yield* Effect.fail(error)
           }),
-          startSync(info),
-        ],
-        { concurrency: 2, discard: true },
+        ),
       )
 
       return info
