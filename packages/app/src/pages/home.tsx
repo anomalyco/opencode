@@ -563,10 +563,10 @@ function HomeSessionGroupHeader(props: { title: string; onNewSession?: () => voi
         {(onNewSession) => (
           <ButtonV2
             data-action="home-new-session"
-            variant="ghost"
+            variant="ghost-muted"
             size="normal"
             icon="edit"
-            class="h-7 px-2 text-v2-text-text-muted"
+            class="h-7 px-2 text-v2-text-text-muted [font-weight:530]"
             onClick={onNewSession()}
           >
             {language.t("command.session.new")}
