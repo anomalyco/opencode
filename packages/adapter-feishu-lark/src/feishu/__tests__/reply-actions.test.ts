@@ -6,6 +6,7 @@ import { join } from "node:path"
 import { describe, expect, test } from "bun:test"
 import {
   classifyAttachment,
+  extractGroupName,
   FEISHU_WORKSPACE_ROOT,
   isGroupCreationIntent,
   parseAttachMarkers,
@@ -336,5 +337,92 @@ describe("isGroupCreationIntent", () => {
 
   test("'set up a group for the team' → true(英文 'set up a group')", () => {
     expect(isGroupCreationIntent("set up a group for the team")).toBe(true)
+  })
+})
+
+// ============================================================
+// extractGroupName — 群名提取(direct dispatch 用)
+// [feat: feishu-create-group-hard-block] 2026-05-24
+// ============================================================
+
+describe("extractGroupName", () => {
+  // 中文 "叫" 模式
+  test("'帮我建群叫 test 006' → 'test 006'", () => {
+    expect(extractGroupName("帮我建群叫 test 006")).toBe("test 006")
+  })
+
+  test("'建个群叫做 X' → 'X'", () => {
+    expect(extractGroupName("建个群叫做 X")).toBe("X")
+  })
+
+  // 中文 "名字" / "名为" 模式
+  test("'建群名字叫 我的群' → '我的群'", () => {
+    expect(extractGroupName("建群名字叫 我的群")).toBe("我的群")
+  })
+
+  test("'建群名字为 工作组' → '工作组'", () => {
+    expect(extractGroupName("建群名字为 工作组")).toBe("工作组")
+  })
+
+  test("'建群名为 团队会' → '团队会'", () => {
+    expect(extractGroupName("建群名为 团队会")).toBe("团队会")
+  })
+
+  test("'拉个群命名 项目讨论' → '项目讨论'", () => {
+    expect(extractGroupName("拉个群命名 项目讨论")).toBe("项目讨论")
+  })
+
+  test("'建群命名为 一个组' → '一个组'", () => {
+    expect(extractGroupName("建群命名为 一个组")).toBe("一个组")
+  })
+
+  // 英文模式
+  test("'create group called test' → 'test'", () => {
+    expect(extractGroupName("create group called test")).toBe("test")
+  })
+
+  test("'create new group named foo' → 'foo'", () => {
+    expect(extractGroupName("create new group named foo")).toBe("foo")
+  })
+
+  test("'CREATE GROUP CALLED Test' → 'Test'(大小写不敏感)", () => {
+    expect(extractGroupName("CREATE GROUP CALLED Test")).toBe("Test")
+  })
+
+  // 分隔符锚定 — 多句不贪婪
+  test("'建群叫 Foo, 然后把人拉进来' → 'Foo'(逗号锚定)", () => {
+    expect(extractGroupName("建群叫 Foo, 然后把人拉进来")).toBe("Foo")
+  })
+
+  test("'建群叫 X。把所有人拉进来' → 'X'(句号锚定)", () => {
+    expect(extractGroupName("建群叫 X。把所有人拉进来")).toBe("X")
+  })
+
+  // 不提取(没 name keyword)
+  test("'帮我建群' → null(没说群名)", () => {
+    expect(extractGroupName("帮我建群")).toBeNull()
+  })
+
+  test("'建一个项目讨论群' → null(没 name keyword)", () => {
+    expect(extractGroupName("建一个项目讨论群")).toBeNull()
+  })
+
+  test("'create a group for us' → null(没 called/named)", () => {
+    expect(extractGroupName("create a group for us")).toBeNull()
+  })
+
+  // 边界
+  test("空串 → null", () => {
+    expect(extractGroupName("")).toBeNull()
+  })
+
+  test("undefined / null → null(防御)", () => {
+    expect(extractGroupName(undefined as unknown as string)).toBeNull()
+    expect(extractGroupName(null as unknown as string)).toBeNull()
+  })
+
+  // trim
+  test("群名前后空格 → trim", () => {
+    expect(extractGroupName("建群叫   test  ,然后...")).toBe("test")
   })
 })

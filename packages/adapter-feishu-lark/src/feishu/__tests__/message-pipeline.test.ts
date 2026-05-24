@@ -523,12 +523,45 @@ describe("CREATE_GROUP hard-block (feat: feishu-create-group-hard-block)", () =>
     expect(fakes.sentTexts.find((s) => s.text.includes("未启用自动建群"))).toBeUndefined()
   })
 
-  test("enabled + p2p + '帮我建群' → 不拦截(flag gate,让 LLM 走 marker 路径)", async () => {
+  test("enabled + p2p + '帮我建群'(无群名)→ direct-dispatch 提示 user 说群名,不调 LLM", async () => {
+    // [feat: feishu-create-group-hard-block] 2026-05-24 direct-dispatch 路径
+    // flag=true 时也走 pipeline 早退,不进 LLM(provider-agnostic)
     const pipeline = makePipeline({ enable: true })
-    void pipeline.testHandle(makeEvent({ content: JSON.stringify({ text: "帮我建群" }) }))
+    let promptAsyncCalled = false
+    fakes.opencodeClient.session.promptAsync = async () => {
+      promptAsyncCalled = true
+      return { data: {} } as any
+    }
+    await pipeline.testHandle(makeEvent({ content: JSON.stringify({ text: "帮我建群" }) }))
+
+    expect(promptAsyncCalled).toBe(false)
+    expect(fakes.sentTexts).toHaveLength(1)
+    expect(fakes.sentTexts[0]!.text).toContain("好的,要建群")
+    expect(fakes.sentTexts[0]!.text).toContain("群叫什么名字")
+    // direct-dispatch 早退,ack 不应触发(ackMessage 在 dispatch 之后)
+    expect(fakes.ackedMessages).toHaveLength(0)
+  })
+
+  test("enabled + p2p + '帮我建群叫 test 007' → direct-dispatch 发 confirm card,不调 LLM", async () => {
+    const pipeline = makePipeline({ enable: true })
+    let promptAsyncCalled = false
+    fakes.opencodeClient.session.promptAsync = async () => {
+      promptAsyncCalled = true
+      return { data: {} } as any
+    }
+    await pipeline.testHandle(
+      makeEvent({ content: JSON.stringify({ text: "帮我建群叫 test 007" }) }),
+    )
+    // 给 fire-and-forget confirm card 发送一点时间
     await new Promise((r) => setTimeout(r, 50))
-    expect(fakes.ackedMessages).toEqual(["om_test_1"])
-    expect(fakes.sentTexts.find((s) => s.text.includes("未启用自动建群"))).toBeUndefined()
+
+    expect(promptAsyncCalled).toBe(false)
+    // 应发了一张 confirm card(走 confirmController.start,内部 sendCard 调 lark im.v1.message.create)
+    // confirm card 用 interactive msg_type,fake 解 JSON 时 text 字段是 undefined
+    // 验"不应有"GUI 引导文字 / "未启用"文字,用 optional chaining 防 text undefined
+    expect(fakes.sentTexts.find((s) => s.text?.includes("好的,要建群"))).toBeUndefined()
+    expect(fakes.sentTexts.find((s) => s.text?.includes("未启用自动建群"))).toBeUndefined()
+    expect(fakes.ackedMessages).toHaveLength(0)
   })
 
   test("disabled + p2p + '@bot 帮我建群' → strip mention 后命中,硬拦截", async () => {

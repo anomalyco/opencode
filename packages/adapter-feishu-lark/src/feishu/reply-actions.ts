@@ -207,3 +207,45 @@ export function isGroupCreationIntent(text: string): boolean {
   }
   return false
 }
+
+/**
+ * 中文群名提取 — 关键字"叫" / "叫做" / "名字叫" / "名为" / "命名" 等 + 后续字符。
+ *
+ * 锚到分隔符(逗号 / 句号 / 行尾)避免吞掉后续语句:
+ *   "建群叫 X 把所有人拉进来" → 应只提到"X"(理论上,但当前 regex 简化会贪婪)
+ *
+ * 简化策略:non-greedy + 停在 [,，。;\n] 或行尾。复杂多句场景 user 自己分开说。
+ */
+const ZH_NAME_PATTERN =
+  /(?:命名为|命名|名字叫|名字为|名为|叫做|叫)\s*["「『'"`]?([^"「『」』'"`,，。;；\n]{1,40}?)["」』'"`]?\s*(?:$|[,，。;；])/
+
+const EN_NAME_PATTERN =
+  /(?:called|named?)\s+["'`]?([^"'`,;\n]{1,40}?)["'`]?\s*(?:$|[,;.])/i
+
+/**
+ * 从 user message 提取群名。
+ *
+ * 输入约定:已 strip mention 的 cleaned text。
+ * 返回:成功 = 群名字符串(已 trim);失败 = null(没找到 name keyword,或匹配失败)。
+ *
+ * 用法:配合 isGroupCreationIntent() 在 pipeline 检测到建群意图后,提取群名
+ * 直接走 confirm card 流程(bypass LLM,provider-agnostic)。
+ *
+ * 误判权衡:支持中文 "叫 X" / "叫做 X" / "名字叫 X" / "名字为 X" / "名为 X" /
+ * "命名 X" / "命名为 X",和英文 "called X" / "named X"。不支持的表达(如
+ * "起名 X" / "title X")返 null,fallback 路径会回复"群名是什么?"提示 user。
+ */
+export function extractGroupName(text: string): string | null {
+  if (!text || typeof text !== "string") return null
+  const zhMatch = text.match(ZH_NAME_PATTERN)
+  if (zhMatch && zhMatch[1]) {
+    const name = zhMatch[1].trim()
+    if (name.length > 0) return name
+  }
+  const enMatch = text.match(EN_NAME_PATTERN)
+  if (enMatch && enMatch[1]) {
+    const name = enMatch[1].trim()
+    if (name.length > 0) return name
+  }
+  return null
+}

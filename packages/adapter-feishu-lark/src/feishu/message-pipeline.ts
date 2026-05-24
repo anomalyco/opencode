@@ -41,6 +41,7 @@ import {
 import type { PromptDispatcher } from "./prompt-dispatcher"
 import {
   classifyAttachment,
+  extractGroupName,
   isGroupCreationIntent,
   parseAttachMarkers,
   parseCreateGroupMarkers,
@@ -334,23 +335,65 @@ export class MessagePipeline {
     }
 
     // [feat: feishu-create-group-hard-block] 2026-05-24
-    // 硬拦截:flag=false + p2p + 含建群关键字 → 不调 LLM,直接系统回复 GUI 引导。
-    // 起因:claude-code 等 spawn-based provider 跳过 role=system 消息,
-    // system prompt 软约束失效(详 feishu-create-group-hard-block/1-spec.md 漏洞分析)。
-    // 硬拦截是 provider-agnostic 兜底,任何 provider 表现一致;flag=true 时跳过让
-    // LLM 走 marker 路径;群聊跳过避免误拦"群是怎么建的"等学术问题。
-    if (
-      !this.opts.account.enableAutoGroupCreate &&
-      event.chatType === "p2p" &&
-      isGroupCreationIntent(cleaned)
-    ) {
+    // 建群意图 provider-agnostic 处理(p2p only,群聊跳过避免误拦"群是怎么建的"
+    // 学术问题)。两条路径根据 flag 分流,都不依赖 LLM 处理"建群"transactional 操作:
+    //
+    // 1. flag=false(disabled)→ hard-block:不调 LLM,直接发 GUI 引导
+    // 2. flag=true(enabled)→ direct-dispatch:提取群名 + 直发 confirm card(bypass LLM)
+    //
+    // 起因:claude-code 等 spawn-based provider 跳过 role=system 消息,导致 system
+    // prompt 软约束失效 + marker 协议教学也失效(LLM 不知道 [CREATE_GROUP:] 协议)。
+    // 此 pipeline 早退分支保证任何 provider 都行为一致。
+    if (event.chatType === "p2p" && isGroupCreationIntent(cleaned)) {
+      const enabled = this.opts.account.enableAutoGroupCreate
+      if (!enabled) {
+        console.log(
+          `[pipeline ${this.opts.accountId}] hard-block CREATE_GROUP intent ` +
+            `(text="${cleaned.slice(0, 50)}", flag=false, p2p) — skip LLM, send GUI guidance`,
+        )
+        await this.sendFeishuText(
+          event.chatId,
+          "此账号未启用自动建群能力。如需启用请在 DeskFox 设置 → 飞书桥接 → 选此账号点【编辑】→ 高级能力 → 勾选「允许 AI 自动创建新群」后重试。",
+        )
+        return
+      }
+      // flag=true 直发 confirm card(bypass LLM)
+      const name = extractGroupName(cleaned)
+      if (name) {
+        console.log(
+          `[pipeline ${this.opts.accountId}] direct-dispatch CREATE_GROUP name="${name}" — skip LLM, send confirm card`,
+        )
+        const requestID = `cg_${event.messageId}_${++this.confirmCounter}`
+        const spec = {
+          title: `🆕 创建群【${name}】?`,
+          body: `你请求创建群 **${name}** 并把你拉进群。点【✅ 确认】才会建,【❌ 拒绝】不动。`,
+        }
+        // fire-and-forget:卡片发送 + user 后续点击都是 async
+        void this.confirmController
+          .start(requestID, event.chatId, spec, async (confirmed) => {
+            if (!confirmed) {
+              console.log(
+                `[pipeline ${this.opts.accountId}] user rejected direct-dispatch group create '${name}'`,
+              )
+              return
+            }
+            await this.executeGroupCreate(name, event.chatId, event.senderOpenId)
+          })
+          .catch((err) => {
+            console.error(
+              `[pipeline ${this.opts.accountId}] direct-dispatch confirmController.start error:`,
+              err,
+            )
+          })
+        return
+      }
+      // 提取群名失败 → 友好提示 user,不调 LLM(provider-agnostic UX)
       console.log(
-        `[pipeline ${this.opts.accountId}] hard-block CREATE_GROUP intent ` +
-          `(text="${cleaned.slice(0, 50)}", flag=false, p2p) — skip LLM, send GUI guidance`,
+        `[pipeline ${this.opts.accountId}] direct-dispatch intent without name — prompting user`,
       )
       await this.sendFeishuText(
         event.chatId,
-        "此账号未启用自动建群能力。如需启用请在 DeskFox 设置 → 飞书桥接 → 选此账号点【编辑】→ 高级能力 → 勾选「允许 AI 自动创建新群」后重试。",
+        "好的,要建群。请告诉我群叫什么名字?例如:「帮我建群叫 项目讨论」",
       )
       return
     }
